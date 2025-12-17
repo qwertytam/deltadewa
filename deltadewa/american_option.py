@@ -81,8 +81,9 @@ class AmericanOption:
         # Create the option
         self.option = ql.VanillaOption(payoff, exercise)
 
-        # Set up market data
-        self.spot_handle = ql.QuoteHandle(ql.SimpleQuote(self.spot_price))
+        # Set up market data with SimpleQuote for spot (allows updates)
+        self.spot_quote = ql.SimpleQuote(self.spot_price)
+        self.spot_handle = ql.QuoteHandle(self.spot_quote)
         self.flat_ts = ql.YieldTermStructureHandle(
             ql.FlatForward(self.ql_valuation_date, self.risk_free_rate, ql.Actual365Fixed())
         )
@@ -100,8 +101,11 @@ class AmericanOption:
             self.spot_handle, self.dividend_ts, self.flat_ts, self.flat_vol_ts
         )
 
-        # Use Bjerksund-Stensland approximation for American options
-        self.option.setPricingEngine(ql.FdBlackScholesVanillaEngine(self.bsm_process, 100, 100))
+        # Use Finite Difference engine for American options with Greeks support
+        # This uses implicit finite differences which provides accurate Greeks
+        self.option.setPricingEngine(
+            ql.FdBlackScholesVanillaEngine(self.bsm_process, 200, 200)
+        )
 
     def price(self) -> float:
         """Calculate the option price."""
@@ -109,23 +113,80 @@ class AmericanOption:
 
     def delta(self) -> float:
         """Calculate Delta (sensitivity to underlying price)."""
-        return self.option.delta()
+        try:
+            return self.option.delta()
+        except RuntimeError:
+            # If delta not available, compute numerically
+            h = 0.01
+            original_spot = self.spot_price
+            self.update_spot_price(original_spot + h)
+            price_up = self.option.NPV()
+            self.update_spot_price(original_spot - h)
+            price_down = self.option.NPV()
+            self.update_spot_price(original_spot)
+            return (price_up - price_down) / (2 * h)
 
     def gamma(self) -> float:
         """Calculate Gamma (second derivative with respect to underlying price)."""
-        return self.option.gamma()
+        try:
+            return self.option.gamma()
+        except RuntimeError:
+            # If gamma not available, compute numerically
+            h = 0.01
+            original_spot = self.spot_price
+            self.update_spot_price(original_spot + h)
+            delta_up = self.delta()
+            self.update_spot_price(original_spot - h)
+            delta_down = self.delta()
+            self.update_spot_price(original_spot)
+            return (delta_up - delta_down) / (2 * h)
 
     def vega(self) -> float:
         """Calculate Vega (sensitivity to volatility)."""
-        return self.option.vega() / 100.0  # Convert to 1% change
+        try:
+            return self.option.vega() / 100.0  # Convert to 1% change
+        except RuntimeError:
+            # If vega not available, compute numerically
+            h = 0.01
+            original_vol = self.volatility
+            self.update_volatility(original_vol + h)
+            price_up = self.option.NPV()
+            self.update_volatility(original_vol - h)
+            price_down = self.option.NPV()
+            self.update_volatility(original_vol)
+            return (price_up - price_down) / 2.0  # Already in terms of 1% change
 
     def theta(self) -> float:
         """Calculate Theta (time decay per day)."""
-        return self.option.theta() / 365.0  # Convert to per day
+        try:
+            return self.option.theta() / 365.0  # Convert to per day
+        except RuntimeError:
+            # If theta not available, compute numerically
+            # Move evaluation date forward by 1 day
+            current_date = ql.Settings.instance().evaluationDate
+            ql.Settings.instance().evaluationDate = current_date + 1
+            price_tomorrow = self.option.NPV()
+            ql.Settings.instance().evaluationDate = current_date
+            price_today = self.option.NPV()
+            return price_tomorrow - price_today
 
     def rho(self) -> float:
         """Calculate Rho (sensitivity to interest rate)."""
-        return self.option.rho() / 100.0  # Convert to 1% change
+        try:
+            return self.option.rho() / 100.0  # Convert to 1% change
+        except RuntimeError:
+            # If rho not available, compute numerically
+            h = 0.01
+            original_rate = self.risk_free_rate
+            self.risk_free_rate = original_rate + h
+            self._setup_quantlib()
+            price_up = self.option.NPV()
+            self.risk_free_rate = original_rate - h
+            self._setup_quantlib()
+            price_down = self.option.NPV()
+            self.risk_free_rate = original_rate
+            self._setup_quantlib()
+            return (price_up - price_down) / 2.0  # Already in terms of 1% change
 
     def greeks(self) -> dict:
         """Calculate all Greeks."""
@@ -152,7 +213,7 @@ class AmericanOption:
     def update_spot_price(self, new_spot_price: float):
         """Update the spot price and recalculate."""
         self.spot_price = new_spot_price
-        self.spot_handle.linkTo(ql.SimpleQuote(new_spot_price))
+        self.spot_quote.setValue(new_spot_price)
 
     def update_volatility(self, new_volatility: float):
         """Update the volatility and recalculate."""
