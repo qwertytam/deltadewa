@@ -14,6 +14,14 @@ class AmericanOption:
     This class provides pricing and Greeks calculation for American options.
     """
 
+    # Numerical differentiation parameters
+    _SPOT_BUMP = 0.01  # Bump size for delta/gamma calculation
+    _VOL_BUMP = 0.01   # Bump size for vega calculation
+    
+    # Grid dimensions for finite difference engine
+    _TIME_STEPS = 200
+    _PRICE_STEPS = 200
+
     def __init__(
         self,
         spot_price: float,
@@ -104,7 +112,7 @@ class AmericanOption:
         # Use Finite Difference engine for American options with Greeks support
         # This uses implicit finite differences which provides accurate Greeks
         self.option.setPricingEngine(
-            ql.FdBlackScholesVanillaEngine(self.bsm_process, 200, 200)
+            ql.FdBlackScholesVanillaEngine(self.bsm_process, self._TIME_STEPS, self._PRICE_STEPS)
         )
 
     def price(self) -> float:
@@ -117,7 +125,7 @@ class AmericanOption:
             return self.option.delta()
         except RuntimeError:
             # If delta not available, compute numerically
-            h = 0.01
+            h = self._SPOT_BUMP
             original_spot = self.spot_price
             self.update_spot_price(original_spot + h)
             price_up = self.option.NPV()
@@ -132,7 +140,7 @@ class AmericanOption:
             return self.option.gamma()
         except RuntimeError:
             # If gamma not available, compute numerically
-            h = 0.01
+            h = self._SPOT_BUMP
             original_spot = self.spot_price
             self.update_spot_price(original_spot + h)
             delta_up = self.delta()
@@ -147,7 +155,7 @@ class AmericanOption:
             return self.option.vega() / 100.0  # Convert to 1% change
         except RuntimeError:
             # If vega not available, compute numerically
-            h = 0.01
+            h = self._VOL_BUMP
             original_vol = self.volatility
             self.update_volatility(original_vol + h)
             price_up = self.option.NPV()
@@ -176,7 +184,7 @@ class AmericanOption:
             return self.option.rho() / 100.0  # Convert to 1% change
         except RuntimeError:
             # If rho not available, compute numerically
-            h = 0.01
+            h = self._VOL_BUMP  # Use same bump size
             original_rate = self.risk_free_rate
             self.risk_free_rate = original_rate + h
             self._setup_quantlib()
