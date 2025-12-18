@@ -1,7 +1,7 @@
 """Option portfolio management and hedge analysis."""
 
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Optional
 import pandas as pd
 import numpy as np
 
@@ -11,7 +11,7 @@ from .american_option import AmericanOption
 class OptionPosition:
     """Represents a position in an option."""
 
-    def __init__(self, option: AmericanOption, quantity: int):
+    def __init__(self, option: AmericanOption, quantity: int, contract_size: int = 100):
         """
         Initialize an option position.
 
@@ -21,30 +21,37 @@ class OptionPosition:
         """
         self.option = option
         self.quantity = quantity
+        # Number of underlying shares per option contract (e.g. 100)
+        self.contract_size = contract_size
 
     def position_value(self) -> float:
-        """Calculate the total value of the position."""
-        return self.option.price() * self.quantity
+        """Calculate the total value of the position.
+
+        This multiplies the per-share option price by the number of contracts
+        and the contract size (shares per contract).
+        """
+        return self.option.price() * self.quantity * self.contract_size
 
     def position_delta(self) -> float:
-        """Calculate the total delta of the position."""
-        return self.option.delta() * self.quantity
+        """Calculate the total delta of the position (in shares)."""
+        # option.delta() is per-share; multiply by contract size and number of contracts
+        return self.option.delta() * self.quantity * self.contract_size
 
     def position_gamma(self) -> float:
         """Calculate the total gamma of the position."""
-        return self.option.gamma() * self.quantity
+        return self.option.gamma() * self.quantity * self.contract_size
 
     def position_vega(self) -> float:
         """Calculate the total vega of the position."""
-        return self.option.vega() * self.quantity
+        return self.option.vega() * self.quantity * self.contract_size
 
     def position_theta(self) -> float:
-        """Calculate the total theta of the position."""
-        return self.option.theta() * self.quantity
+        """Calculate the total theta of the position (per day)."""
+        return self.option.theta() * self.quantity * self.contract_size
 
     def position_rho(self) -> float:
         """Calculate the total rho of the position."""
-        return self.option.rho() * self.quantity
+        return self.option.rho() * self.quantity * self.contract_size
 
     def to_dict(self) -> dict:
         """Convert position to dictionary."""
@@ -66,6 +73,7 @@ class OptionPosition:
             "position_theta": self.position_theta(),
             "rho": greeks["rho"],
             "position_rho": self.position_rho(),
+            "contract_size": self.contract_size,
         }
 
 
@@ -131,6 +139,14 @@ class OptionPortfolio:
         """Calculate total portfolio value."""
         return sum(pos.position_value() for pos in self.positions)
 
+    def total_underlying_value(self) -> float:
+        """Calculate the value of the underlying notional position."""
+        return self.notional_position * self.spot_price
+
+    def total_portfolio_value(self) -> float:
+        """Total portfolio value including options and underlying notional."""
+        return self.total_value() + self.total_underlying_value()
+
     def total_delta(self) -> float:
         """Calculate total portfolio delta."""
         return sum(pos.position_delta() for pos in self.positions)
@@ -154,7 +170,7 @@ class OptionPortfolio:
     def net_delta(self) -> float:
         """
         Calculate net delta including the notional position.
-        
+
         Returns:
             Net delta exposure (positive = net long, negative = net short)
         """
@@ -163,7 +179,7 @@ class OptionPortfolio:
     def hedge_ratio(self) -> float:
         """
         Calculate the hedge ratio (how much of the notional is hedged).
-        
+
         Returns:
             Hedge ratio as a percentage
         """
@@ -174,7 +190,7 @@ class OptionPortfolio:
     def delta_adjustment_needed(self) -> float:
         """
         Calculate the delta adjustment needed to achieve delta neutrality.
-        
+
         Returns:
             Number of shares to buy/sell to achieve delta neutrality
         """
@@ -185,6 +201,8 @@ class OptionPortfolio:
         return {
             "total_positions": len(self.positions),
             "total_value": self.total_value(),
+            "total_underlying_value": self.total_underlying_value(),
+            "total_portfolio_value": self.total_portfolio_value(),
             "total_delta": self.total_delta(),
             "notional_position": self.notional_position,
             "net_delta": self.net_delta(),
@@ -203,10 +221,10 @@ class OptionPortfolio:
 
         data = [pos.to_dict() for pos in self.positions]
         df = pd.DataFrame(data)
-        
+
         # Format maturity dates
         df["maturity"] = pd.to_datetime(df["maturity"]).dt.strftime("%Y-%m-%d")
-        
+
         return df
 
     def update_market_conditions(
@@ -271,24 +289,26 @@ class OptionPortfolio:
             DataFrame with scenario results
         """
         results = []
-        
+
         if vol_range is None:
             # Single volatility analysis
             for spot in spot_range:
                 # Temporarily update spot
                 original_spot = self.spot_price
                 self.update_market_conditions(spot_price=spot)
-                
-                results.append({
-                    "spot_price": spot,
-                    "volatility": self.volatility,
-                    "portfolio_value": self.total_value(),
-                    "total_delta": self.total_delta(),
-                    "net_delta": self.net_delta(),
-                    "total_gamma": self.total_gamma(),
-                    "total_vega": self.total_vega(),
-                })
-                
+
+                results.append(
+                    {
+                        "spot_price": spot,
+                        "volatility": self.volatility,
+                        "portfolio_value": self.total_value(),
+                        "total_delta": self.total_delta(),
+                        "net_delta": self.net_delta(),
+                        "total_gamma": self.total_gamma(),
+                        "total_vega": self.total_vega(),
+                    }
+                )
+
                 # Restore original spot
                 self.update_market_conditions(spot_price=original_spot)
         else:
@@ -297,21 +317,23 @@ class OptionPortfolio:
                 for vol in vol_range:
                     original_spot = self.spot_price
                     original_vol = self.volatility
-                    
+
                     self.update_market_conditions(spot_price=spot, volatility=vol)
-                    
-                    results.append({
-                        "spot_price": spot,
-                        "volatility": vol,
-                        "portfolio_value": self.total_value(),
-                        "total_delta": self.total_delta(),
-                        "net_delta": self.net_delta(),
-                        "total_gamma": self.total_gamma(),
-                        "total_vega": self.total_vega(),
-                    })
-                    
+
+                    results.append(
+                        {
+                            "spot_price": spot,
+                            "volatility": vol,
+                            "portfolio_value": self.total_value(),
+                            "total_delta": self.total_delta(),
+                            "net_delta": self.net_delta(),
+                            "total_gamma": self.total_gamma(),
+                            "total_vega": self.total_vega(),
+                        }
+                    )
+
                     self.update_market_conditions(spot_price=original_spot, volatility=original_vol)
-        
+
         return pd.DataFrame(results)
 
     def clear_positions(self):

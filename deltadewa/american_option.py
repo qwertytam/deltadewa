@@ -4,20 +4,19 @@ from datetime import datetime
 from typing import Optional
 
 import QuantLib as ql
-import numpy as np
 
 
 class AmericanOption:
     """
     American option pricing using the Bjerksund-Stensland approximation model.
-    
+
     This class provides pricing and Greeks calculation for American options.
     """
 
     # Numerical differentiation parameters
     _SPOT_BUMP = 0.01  # Bump size for delta/gamma calculation
-    _VOL_BUMP = 0.01   # Bump size for vega calculation
-    
+    _VOL_BUMP = 0.01  # Bump size for vega calculation
+
     # Grid dimensions for finite difference engine
     _TIME_STEPS = 200
     _PRICE_STEPS = 200
