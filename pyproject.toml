@@ -1,25 +1,30 @@
-[tool.poetry]
+[project]
 name = "deltadewa"
 version = "0.1.0"
 description = "American options dashboard using QuantLib"
-authors = ["qwertytam"]
 readme = "README.md"
+authors = [{ name = "qwertytam" }]
+requires-python = ">=3.10"
 
-[tool.poetry.dependencies]
-python = "^3.9"
-QuantLib = "^1.32"
-jupyter = "^1.0.0"
-jupyterlab = "^4.0.0"
-pandas = "^2.0.0"
-numpy = "^1.24.0"
-matplotlib = "^3.7.0"
-ipywidgets = "^8.1.0"
-plotly = "^5.18.0"
+dependencies = [
+	"QuantLib>=1.32",
+	"jupyter>=1.0.0",
+	"jupyterlab>=4.0.0",
+	"pandas>=2.0.0",
+	"numpy>=1.24.0",
+	"matplotlib>=3.7.0",
+	"ipywidgets>=8.1.0",
+	"plotly>=5.18.0",
+	"seaborn>=0.13.2",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-black = "^23.12.0"
-ruff = "^0.1.9"
+[project.optional-dependencies]
+dev = [
+	"pytest>=7.4.0",
+	"black>=23.12.0",
+	"ruff>=0.1.9",
+	"pandas-stubs>=2.3.3.251201",
+]
 
 [build-system]
 requires = ["poetry-core"]
