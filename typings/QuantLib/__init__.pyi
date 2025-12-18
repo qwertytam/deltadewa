@@ -1,3 +1,7 @@
+"""Typing stubs for QuantLib."""
+
+# pylint: disable=unused-argument missing-class-docstring missing-function-docstring
+# pylint: disable=invalid-name
 from typing import Any
 
 # Minimal, hand-maintained stubs for the QuantLib symbols used in this project.
