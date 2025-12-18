@@ -37,3 +37,8 @@ target-version = ['py39']
 [tool.ruff]
 line-length = 100
 target-version = "py39"
+
+[dependency-groups]
+dev = [
+    "ruff (>=0.5.3)"
+]
