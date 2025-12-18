@@ -5,10 +5,11 @@ This script creates a sample portfolio and demonstrates key functionality.
 """
 
 from datetime import datetime, timedelta
-from deltadewa import AmericanOption, OptionPortfolio
+from deltadewa import OptionPortfolio
 
 
 def main():
+    """Main execution function for the example script."""
     print("=" * 70)
     print("DELTADEWA - American Options Portfolio Management Example")
     print("=" * 70)
@@ -48,7 +49,7 @@ def main():
     # Long puts for downside protection
     portfolio.add_position(95, maturity_30d, 5, "put")
     portfolio.add_position(95, maturity_60d, 5, "put")
-    portfolio.add_position(100, maturity_60d, 10, "put")
+    portfolio.add_position(100, maturity_90d, 10, "put")
 
     # Short calls for income
     portfolio.add_position(105, maturity_30d, -5, "call")
@@ -74,11 +75,11 @@ def main():
     print("Portfolio Summary:")
     print("-" * 70)
     stats = portfolio.summary_stats()
-    
+
     print(f"Total Positions: {stats['total_positions']}")
     print(f"Total Portfolio Value: ${stats['total_value']:,.2f}")
     print()
-    
+
     print("Delta Analysis:")
     print(f"  Portfolio Delta: {stats['total_delta']:,.2f}")
     print(f"  Notional Position: {stats['notional_position']:,.2f}")
@@ -86,7 +87,7 @@ def main():
     print(f"  Hedge Ratio: {stats['hedge_ratio']:.2f}%")
     print(f"  Delta Adjustment Needed: {stats['delta_adjustment']:.2f} shares")
     print()
-    
+
     print("Other Greeks:")
     print(f"  Total Gamma: {stats['total_gamma']:.4f}")
     print(f"  Total Vega: {stats['total_vega']:.2f}")
@@ -97,17 +98,19 @@ def main():
     # Interpretation
     print("Hedge Analysis:")
     print("-" * 70)
-    if abs(stats['net_delta']) < abs(stats['notional_position']) * 0.1:
+    if abs(stats["net_delta"]) < abs(stats["notional_position"]) * 0.1:
         print("✓ Portfolio is well-hedged (net delta < 10% of notional)")
-    elif stats['net_delta'] * stats['notional_position'] > 0:
+    elif stats["net_delta"] * stats["notional_position"] > 0:
         print("⚠ Portfolio is under-hedged (same direction as notional)")
     else:
         print("⚠ Portfolio may be over-hedged (opposite direction to notional)")
-    
-    if stats['delta_adjustment'] > 0:
+
+    if stats["delta_adjustment"] > 0:
         print(f"→ Consider BUYING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality")
-    elif stats['delta_adjustment'] < 0:
-        print(f"→ Consider SELLING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality")
+    elif stats["delta_adjustment"] < 0:
+        print(
+            f"→ Consider SELLING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality"
+        )
     else:
         print("✓ Portfolio is delta neutral")
     print()
@@ -127,25 +130,25 @@ def main():
         ("Current", spot_price),
         ("Up 10%", spot_price * 1.1),
     ]
-    
+
     current_value = portfolio.total_value()
-    
+
     for name, new_spot in scenarios:
         portfolio.update_market_conditions(spot_price=new_spot)
         new_value = portfolio.total_value()
         pnl = new_value - current_value
         underlying_pnl = (new_spot - spot_price) * notional_position
         total_pnl = pnl + underlying_pnl
-        
+
         print(f"\n{name} (Spot = ${new_spot:.2f}):")
         print(f"  Options P&L: ${pnl:+,.2f}")
         print(f"  Underlying P&L: ${underlying_pnl:+,.2f}")
         print(f"  Total P&L: ${total_pnl:+,.2f}")
         print(f"  Net Delta: {portfolio.net_delta():.2f}")
-    
+
     # Reset to original spot
     portfolio.update_market_conditions(spot_price=spot_price)
-    
+
     print()
     print("=" * 70)
     print("For full interactive analysis, run: jupyter lab options_dashboard.ipynb")
