@@ -26,22 +26,26 @@ American Options Dashboard using QuantLib - Bjerksund-Stensland Model
 ### Setup
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/qwertytam/deltadewa.git
 cd deltadewa
 ```
 
 2. Install Poetry (if not already installed):
+
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
 3. Install dependencies:
+
 ```bash
 poetry install
 ```
 
 4. Activate the virtual environment:
+
 ```bash
 poetry shell
 ```
@@ -128,6 +132,7 @@ This creates a **collar-like** strategy that protects the downside while generat
 ### Bjerksund-Stensland Model
 
 The Bjerksund-Stensland model is an analytical approximation for American option pricing that:
+
 - Provides fast, closed-form solutions
 - Accurately handles early exercise features
 - Works well for both calls and puts
@@ -144,6 +149,7 @@ The Bjerksund-Stensland model is an analytical approximation for American option
 ### Hedge Management
 
 The dashboard helps you:
+
 - Monitor net delta exposure (portfolio + notional)
 - Calculate hedge ratio (% of notional hedged)
 - Determine adjustments needed for delta neutrality
@@ -151,7 +157,7 @@ The dashboard helps you:
 
 ## Project Structure
 
-```
+```ini
 deltadewa/
 ├── deltadewa/                 # Python package
 │   ├── __init__.py

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-import QuantLib as ql
+import QuantLib as ql  # type: ignore
 
 
 class AmericanOption:
@@ -60,47 +60,62 @@ class AmericanOption:
     def _setup_quantlib(self):
         """Set up QuantLib calculation environment."""
         # Convert dates to QuantLib dates
-        self.ql_valuation_date = ql.Date(
+        self.ql_valuation_date = ql.Date(  # type: ignore
             self.valuation_date.day,
             self.valuation_date.month,
             self.valuation_date.year,
         )
-        self.ql_maturity_date = ql.Date(
+        self.ql_maturity_date = ql.Date(  # type: ignore
             self.maturity_date.day,
             self.maturity_date.month,
             self.maturity_date.year,
         )
 
         # Set the evaluation date
+        # type: ignore
         ql.Settings.instance().evaluationDate = self.ql_valuation_date
 
         # Set up the option
         if self.option_type == "call":
+            # type: ignore
             payoff = ql.PlainVanillaPayoff(ql.Option.Call, self.strike_price)
         elif self.option_type == "put":
+            # type: ignore
             payoff = ql.PlainVanillaPayoff(ql.Option.Put, self.strike_price)
         else:
             raise ValueError(f"Invalid option type: {self.option_type}")
 
         # American exercise
+        # type: ignore
         exercise = ql.AmericanExercise(self.ql_valuation_date, self.ql_maturity_date)
 
         # Create the option
+        # type: ignore
         self.option = ql.VanillaOption(payoff, exercise)
 
         # Set up market data with SimpleQuote for spot (allows updates)
         self.spot_quote = ql.SimpleQuote(self.spot_price)
         self.spot_handle = ql.QuoteHandle(self.spot_quote)
         self.flat_ts = ql.YieldTermStructureHandle(
-            ql.FlatForward(self.ql_valuation_date, self.risk_free_rate, ql.Actual365Fixed())
+            # type: ignore
+            ql.FlatForward(
+                self.ql_valuation_date, self.risk_free_rate, ql.Actual365Fixed()  # type: ignore
+            )  # type: ignore
         )
         self.dividend_ts = ql.YieldTermStructureHandle(
-            ql.FlatForward(self.ql_valuation_date, self.dividend_yield, ql.Actual365Fixed())
+            # type: ignore
+            ql.FlatForward(
+                self.ql_valuation_date, self.dividend_yield, ql.Actual365Fixed()  # type: ignore
+            )  # type: ignore
         )
         self.flat_vol_ts = ql.BlackVolTermStructureHandle(
+            # type: ignore
             ql.BlackConstantVol(
-                self.ql_valuation_date, ql.NullCalendar(), self.volatility, ql.Actual365Fixed()
-            )
+                self.ql_valuation_date,
+                ql.NullCalendar(),
+                self.volatility,
+                ql.Actual365Fixed(),  # type: ignore
+            )  # type: ignore
         )
 
         # Black-Scholes-Merton process
@@ -171,7 +186,7 @@ class AmericanOption:
             # If theta not available, compute numerically
             # Move evaluation date forward by 1 day
             current_date = ql.Settings.instance().evaluationDate
-            ql.Settings.instance().evaluationDate = current_date + 1
+            ql.Settings.instance().evaluationDate = current_date + 1  # type: ignore
             price_tomorrow = self.option.NPV()
             ql.Settings.instance().evaluationDate = current_date
             price_today = self.option.NPV()
