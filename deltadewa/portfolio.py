@@ -11,18 +11,26 @@ from .american_option import AmericanOption
 class OptionPosition:
     """Represents a position in an option."""
 
-    def __init__(self, option: AmericanOption, quantity: int, contract_size: int = 100):
+    def __init__(
+        self,
+        option: AmericanOption,
+        quantity: int,
+        contract_size: int = 100,
+        symbol: str = "UNKNOWN",
+    ):
         """
         Initialize an option position.
 
         Args:
             option: AmericanOption instance
             quantity: Number of contracts (positive for long, negative for short)
+            contract_size: Number of underlying shares per option contract (e.g. 100)
+            symbol: Underlying symbol or identifier for display/export
         """
         self.option = option
         self.quantity = quantity
-        # Number of underlying shares per option contract (e.g. 100)
         self.contract_size = contract_size
+        self.symbol = symbol
 
     def position_value(self) -> float:
         """Calculate the total value of the position.
@@ -57,6 +65,7 @@ class OptionPosition:
         """Convert position to dictionary."""
         greeks = self.option.greeks()
         return {
+            "symbol": self.symbol,
             "type": self.option.option_type,
             "strike": self.option.strike_price,
             "maturity": self.option.maturity_date,
@@ -89,6 +98,7 @@ class OptionPortfolio:
         volatility: float = 0.2,
         risk_free_rate: float = 0.05,
         dividend_yield: float = 0.0,
+        valuation_date: Optional[datetime] = None,
     ):
         """
         Initialize option portfolio.
@@ -99,6 +109,7 @@ class OptionPortfolio:
             volatility: Market volatility
             risk_free_rate: Risk-free rate
             dividend_yield: Dividend yield
+            valuation_date: Valuation date for all options (defaults to now)
         """
         self.positions: List[OptionPosition] = []
         self.notional_position = notional_position
@@ -106,6 +117,7 @@ class OptionPortfolio:
         self.volatility = volatility
         self.risk_free_rate = risk_free_rate
         self.dividend_yield = dividend_yield
+        self.valuation_date = valuation_date or datetime.now()
 
     def add_position(
         self,
@@ -113,6 +125,8 @@ class OptionPortfolio:
         maturity_date: datetime,
         quantity: int,
         option_type: str = "call",
+        symbol: str = "UNKNOWN",
+        contract_size: int = 100,
     ):
         """
         Add an option position to the portfolio.
@@ -122,6 +136,8 @@ class OptionPortfolio:
             maturity_date: Maturity date of the option
             quantity: Number of contracts
             option_type: "call" or "put"
+            symbol: Underlying symbol or identifier for display/export
+            contract_size: Number of underlying shares per option contract
         """
         option = AmericanOption(
             spot_price=self.spot_price,
@@ -131,8 +147,14 @@ class OptionPortfolio:
             risk_free_rate=self.risk_free_rate,
             dividend_yield=self.dividend_yield,
             option_type=option_type,
+            valuation_date=self.valuation_date,
         )
-        position = OptionPosition(option, quantity)
+        position = OptionPosition(
+            option,
+            quantity,
+            contract_size=contract_size,
+            symbol=symbol,
+        )
         self.positions.append(position)
 
     def total_value(self) -> float:
@@ -214,6 +236,82 @@ class OptionPortfolio:
             "total_rho": self.total_rho(),
         }
 
+    def summary(self) -> str:
+        """Return a human-readable summary of the portfolio."""
+        stats = self.summary_stats()
+        return (
+            f"Positions: {stats['total_positions']}, "
+            f"Value: ${stats['total_value']:,.2f}, "
+            f"Net Delta: {stats['net_delta']:,.2f}, "
+            f"Gamma: {stats['total_gamma']:.4f}, "
+            f"Vega: {stats['total_vega']:.2f}, "
+            f"Theta: {stats['total_theta']:.2f}"
+        )
+
+    def get_positions(self) -> List[dict]:
+        """Return positions in a format suitable for widgets/UI."""
+        positions = []
+        for pos in self.positions:
+            positions.append(
+                {
+                    "symbol": pos.symbol,
+                    "type": pos.option.option_type.capitalize(),
+                    "strike": pos.option.strike_price,
+                    "expiry": pos.option.maturity_date.date(),
+                    "quantity": pos.quantity,
+                    "contract_size": pos.contract_size,
+                }
+            )
+        return positions
+
+    def remove_position(self, index: int):
+        """Remove a position by index."""
+        if index < 0 or index >= len(self.positions):
+            raise IndexError("Position index out of range")
+        self.positions.pop(index)
+
+    def update_position(
+        self,
+        index: int,
+        quantity: Optional[int] = None,
+        strike: Optional[float] = None,
+        expiry: Optional[datetime] = None,
+        option_type: Optional[str] = None,
+        symbol: Optional[str] = None,
+        contract_size: Optional[int] = None,
+    ):
+        """Update a position's properties by index."""
+        if index < 0 or index >= len(self.positions):
+            raise IndexError("Position index out of range")
+
+        pos = self.positions[index]
+        if quantity is not None:
+            pos.quantity = quantity
+        if contract_size is not None:
+            pos.contract_size = contract_size
+        if symbol is not None:
+            pos.symbol = symbol
+
+        strike_price = strike if strike is not None else pos.option.strike_price
+        maturity_date = expiry if expiry is not None else pos.option.maturity_date
+        opt_type = option_type if option_type is not None else pos.option.option_type
+
+        if (
+            strike_price != pos.option.strike_price
+            or maturity_date != pos.option.maturity_date
+            or opt_type != pos.option.option_type
+        ):
+            pos.option = AmericanOption(
+                spot_price=self.spot_price,
+                strike_price=strike_price,
+                maturity_date=maturity_date,
+                volatility=self.volatility,
+                risk_free_rate=self.risk_free_rate,
+                dividend_yield=self.dividend_yield,
+                option_type=opt_type,
+                valuation_date=self.valuation_date,
+            )
+
     def to_dataframe(self) -> pd.DataFrame:
         """Convert portfolio to pandas DataFrame."""
         if not self.positions:
@@ -233,6 +331,7 @@ class OptionPortfolio:
         volatility: Optional[float] = None,
         risk_free_rate: Optional[float] = None,
         dividend_yield: Optional[float] = None,
+        valuation_date: Optional[datetime] = None,
     ):
         """
         Update market conditions for all positions.
@@ -242,6 +341,7 @@ class OptionPortfolio:
             volatility: New volatility
             risk_free_rate: New risk-free rate
             dividend_yield: New dividend yield
+            valuation_date: New valuation date
         """
         if spot_price is not None:
             self.spot_price = spot_price
@@ -252,6 +352,11 @@ class OptionPortfolio:
             self.volatility = volatility
             for pos in self.positions:
                 pos.option.update_volatility(volatility)
+
+        if valuation_date is not None:
+            self.valuation_date = valuation_date
+            for pos in self.positions:
+                pos.option.update_valuation_date(valuation_date)
 
         # For rate changes, need to recreate options
         if risk_free_rate is not None or dividend_yield is not None:
@@ -271,6 +376,7 @@ class OptionPortfolio:
                     risk_free_rate=self.risk_free_rate,
                     dividend_yield=self.dividend_yield,
                     option_type=pos.option.option_type,
+                    valuation_date=self.valuation_date,
                 )
                 new_positions.append(OptionPosition(new_option, pos.quantity, pos.contract_size))
             self.positions = new_positions
@@ -289,19 +395,35 @@ class OptionPortfolio:
             DataFrame with scenario results
         """
         results = []
+        original_spot = self.spot_price
+        original_vol = self.volatility
 
         if vol_range is None:
             # Single volatility analysis
             for spot in spot_range:
-                # Temporarily update spot
-                original_spot = self.spot_price
-                try:
-                    self.update_market_conditions(spot_price=spot)
+                self.update_market_conditions(spot_price=spot)
+
+                results.append(
+                    {
+                        "spot_price": spot,
+                        "volatility": self.volatility,
+                        "portfolio_value": self.total_value(),
+                        "total_delta": self.total_delta(),
+                        "net_delta": self.net_delta(),
+                        "total_gamma": self.total_gamma(),
+                        "total_vega": self.total_vega(),
+                    }
+                )
+        else:
+            # Full grid analysis
+            for spot in spot_range:
+                for vol in vol_range:
+                    self.update_market_conditions(spot_price=spot, volatility=vol)
 
                     results.append(
                         {
                             "spot_price": spot,
-                            "volatility": self.volatility,
+                            "volatility": vol,
                             "portfolio_value": self.total_value(),
                             "total_delta": self.total_delta(),
                             "net_delta": self.net_delta(),
@@ -309,31 +431,8 @@ class OptionPortfolio:
                             "total_vega": self.total_vega(),
                         }
                     )
-                finally:
-                    # Restore original spot
-                    self.update_market_conditions(spot_price=original_spot)
-        else:
-            # Full grid analysis
-            for spot in spot_range:
-                for vol in vol_range:
-                    original_spot = self.spot_price
-                    original_vol = self.volatility
-                    try:
-                        self.update_market_conditions(spot_price=spot, volatility=vol)
 
-                        results.append(
-                            {
-                                "spot_price": spot,
-                                "volatility": vol,
-                                "portfolio_value": self.total_value(),
-                                "total_delta": self.total_delta(),
-                                "net_delta": self.net_delta(),
-                                "total_gamma": self.total_gamma(),
-                                "total_vega": self.total_vega(),
-                            }
-                        )
-                    finally:
-                        self.update_market_conditions(spot_price=original_spot, volatility=original_vol)
+        self.update_market_conditions(spot_price=original_spot, volatility=original_vol)
 
         return pd.DataFrame(results)
 

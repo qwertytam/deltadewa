@@ -242,6 +242,11 @@ class AmericanOption:
         self.volatility = new_volatility
         self._setup_quantlib()
 
+    def update_valuation_date(self, new_valuation_date: datetime):
+        """Update the valuation date and recalculate."""
+        self.valuation_date = new_valuation_date
+        self._setup_quantlib()
+
     def __repr__(self) -> str:
         """String representation of the option."""
         return (
