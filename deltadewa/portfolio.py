@@ -272,7 +272,7 @@ class OptionPortfolio:
                     dividend_yield=self.dividend_yield,
                     option_type=pos.option.option_type,
                 )
-                new_positions.append(OptionPosition(new_option, pos.quantity))
+                new_positions.append(OptionPosition(new_option, pos.quantity, pos.contract_size))
             self.positions = new_positions
 
     def scenario_analysis(
@@ -295,35 +295,13 @@ class OptionPortfolio:
             for spot in spot_range:
                 # Temporarily update spot
                 original_spot = self.spot_price
-                self.update_market_conditions(spot_price=spot)
-
-                results.append(
-                    {
-                        "spot_price": spot,
-                        "volatility": self.volatility,
-                        "portfolio_value": self.total_value(),
-                        "total_delta": self.total_delta(),
-                        "net_delta": self.net_delta(),
-                        "total_gamma": self.total_gamma(),
-                        "total_vega": self.total_vega(),
-                    }
-                )
-
-                # Restore original spot
-                self.update_market_conditions(spot_price=original_spot)
-        else:
-            # Full grid analysis
-            for spot in spot_range:
-                for vol in vol_range:
-                    original_spot = self.spot_price
-                    original_vol = self.volatility
-
-                    self.update_market_conditions(spot_price=spot, volatility=vol)
+                try:
+                    self.update_market_conditions(spot_price=spot)
 
                     results.append(
                         {
                             "spot_price": spot,
-                            "volatility": vol,
+                            "volatility": self.volatility,
                             "portfolio_value": self.total_value(),
                             "total_delta": self.total_delta(),
                             "net_delta": self.net_delta(),
@@ -331,8 +309,31 @@ class OptionPortfolio:
                             "total_vega": self.total_vega(),
                         }
                     )
+                finally:
+                    # Restore original spot
+                    self.update_market_conditions(spot_price=original_spot)
+        else:
+            # Full grid analysis
+            for spot in spot_range:
+                for vol in vol_range:
+                    original_spot = self.spot_price
+                    original_vol = self.volatility
+                    try:
+                        self.update_market_conditions(spot_price=spot, volatility=vol)
 
-                    self.update_market_conditions(spot_price=original_spot, volatility=original_vol)
+                        results.append(
+                            {
+                                "spot_price": spot,
+                                "volatility": vol,
+                                "portfolio_value": self.total_value(),
+                                "total_delta": self.total_delta(),
+                                "net_delta": self.net_delta(),
+                                "total_gamma": self.total_gamma(),
+                                "total_vega": self.total_vega(),
+                            }
+                        )
+                    finally:
+                        self.update_market_conditions(spot_price=original_spot, volatility=original_vol)
 
         return pd.DataFrame(results)
 
