@@ -1,0 +1,38 @@
+# Long Straddle Strategy Example
+# A long straddle profits from large price movements in either direction
+# Buy both calls and puts at the same strike (usually ATM)
+
+market_parameters:
+  spot_price: 100.0
+  volatility: 0.30           # Higher vol helps this strategy
+  risk_free_rate: 0.05
+  dividend_yield: 0.02
+  notional_position: 0.0     # No underlying position
+  symbol: "SPY"
+
+positions:
+  # Long ATM Calls - Profit from upside moves
+  - option_type: "call"
+    strike_price: 100.0
+    maturity_days: 30
+    quantity: 10
+  
+  - option_type: "call"
+    strike_price: 100.0
+    maturity_days: 60
+    quantity: 10
+  
+  # Long ATM Puts - Profit from downside moves
+  - option_type: "put"
+    strike_price: 100.0
+    maturity_days: 30
+    quantity: 10
+  
+  - option_type: "put"
+    strike_price: 100.0
+    maturity_days: 60
+    quantity: 10
+
+# This strategy has negative theta (time decay hurts)
+# but profits from large moves in either direction
+# Maximum loss is limited to premium paid

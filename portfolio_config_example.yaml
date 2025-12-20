@@ -1,0 +1,106 @@
+# Portfolio Configuration Example
+# This file demonstrates how to configure market parameters and portfolio positions
+# Copy this file to 'portfolio_config.yaml' in the notebook directory to use it
+
+# Market Parameters
+# These define the underlying asset and market conditions
+market_parameters:
+  spot_price: 100.0          # Current price of underlying asset
+  volatility: 0.25           # Annual volatility (0.25 = 25%)
+  risk_free_rate: 0.05       # Annual risk-free rate (0.05 = 5%)
+  dividend_yield: 0.02       # Annual dividend yield (0.02 = 2%)
+  notional_position: 1000.0  # Underlying position size (shares)
+  symbol: "SPY"              # Default symbol for positions (optional)
+
+# Portfolio Positions
+# Define options positions with strikes, maturities, and quantities
+positions:
+  # Long Puts - Downside Protection
+  # You can specify maturity as days from today (maturity_days)
+  # or as an absolute date (maturity_date: "2026-01-18")
+  
+  - option_type: "put"
+    strike_price: 90.0
+    maturity_days: 30        # 30 days from today
+    quantity: 3              # Number of contracts (positive = long)
+    symbol: "SPY"            # Optional: override default symbol
+  
+  - option_type: "put"
+    strike_price: 90.0
+    maturity_days: 60
+    quantity: 3
+  
+  - option_type: "put"
+    strike_price: 90.0
+    maturity_days: 90
+    quantity: 3
+  
+  - option_type: "put"
+    strike_price: 95.0
+    maturity_days: 30
+    quantity: 2
+  
+  - option_type: "put"
+    strike_price: 95.0
+    maturity_days: 60
+    quantity: 2
+  
+  - option_type: "put"
+    strike_price: 95.0
+    maturity_days: 90
+    quantity: 2
+  
+  - option_type: "put"
+    strike_price: 100.0
+    maturity_days: 30
+    quantity: 3
+  
+  - option_type: "put"
+    strike_price: 100.0
+    maturity_days: 60
+    quantity: 3
+  
+  - option_type: "put"
+    strike_price: 100.0
+    maturity_days: 90
+    quantity: 3
+  
+  # Short Calls - Upside Income (Covered Calls)
+  # Negative quantity indicates short positions
+  
+  - option_type: "call"
+    strike_price: 105.0
+    maturity_days: 30
+    quantity: -2             # Negative = short position
+  
+  - option_type: "call"
+    strike_price: 105.0
+    maturity_days: 60
+    quantity: -2
+  
+  - option_type: "call"
+    strike_price: 110.0
+    maturity_days: 30
+    quantity: -2
+  
+  - option_type: "call"
+    strike_price: 110.0
+    maturity_days: 60
+    quantity: -2
+  
+  - option_type: "call"
+    strike_price: 115.0
+    maturity_days: 30
+    quantity: -2
+  
+  - option_type: "call"
+    strike_price: 115.0
+    maturity_days: 60
+    quantity: -2
+
+# Notes:
+# - All option_type values should be either "call" or "put" (case insensitive)
+# - Quantities: positive = long position, negative = short position
+# - For maturity, use either 'maturity_days' (relative) or 'maturity_date' (absolute)
+# - maturity_date format: "YYYY-MM-DD" (e.g., "2026-01-18")
+# - Symbol is optional and defaults to the value in market_parameters
