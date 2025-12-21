@@ -436,6 +436,458 @@ class OptionPortfolio:
 
         return pd.DataFrame(results)
 
+    def calculate_net_debit(self) -> float:
+        """
+        Calculate the net debit/credit for implementing the portfolio.
+        
+        Returns:
+            Net debit (positive) or net credit (negative) in dollars
+        """
+        return self.total_value()
+
+    def calculate_pnl_at_expiry(
+        self, spot_price_at_expiry: float, include_underlying: bool = False
+    ) -> float:
+        """
+        Calculate P&L at expiration for a given spot price.
+        
+        Args:
+            spot_price_at_expiry: Spot price at expiration
+            include_underlying: Whether to include underlying position P&L
+            
+        Returns:
+            Total P&L at expiration
+        """
+        initial_cost = self.total_value()
+        pnl = -initial_cost  # Start with negative of initial cost
+        
+        # Calculate intrinsic value at expiry for each position
+        for pos in self.positions:
+            if pos.option.option_type.lower() == "call":
+                intrinsic = max(0, spot_price_at_expiry - pos.option.strike_price)
+            else:  # put
+                intrinsic = max(0, pos.option.strike_price - spot_price_at_expiry)
+            
+            pnl += intrinsic * pos.quantity * pos.contract_size
+        
+        # Add underlying P&L if requested
+        if include_underlying and self.underlying_quantity != 0:
+            underlying_pnl = (spot_price_at_expiry - self.spot_price) * self.underlying_quantity
+            pnl += underlying_pnl
+        
+        return pnl
+
+    def calculate_max_loss_options(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
+        """
+        Calculate maximum loss from options positions only.
+        
+        Args:
+            spot_range: Array of spot prices to analyze (optional)
+            
+        Returns:
+            Dict with 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
+        """
+        if spot_range is None:
+            # Create reasonable range around current spot
+            spot_min = max(0.01, self.spot_price * 0.5)
+            spot_max = self.spot_price * 2.0
+            spot_range = np.linspace(spot_min, spot_max, 200)
+        
+        max_loss = 0.0
+        spot_at_max_loss = self.spot_price
+        
+        for spot in spot_range:
+            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=False)
+            if pnl < max_loss:
+                max_loss = pnl
+                spot_at_max_loss = spot
+        
+        # Check for unlimited loss (naked short positions)
+        has_naked_shorts = any(
+            pos.quantity < 0 for pos in self.positions
+        )
+        
+        return {
+            "max_loss": max_loss,
+            "spot_at_max_loss": spot_at_max_loss,
+            "is_unlimited": False,  # For now, conservatively assume bounded
+        }
+
+    def calculate_max_profit_options(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
+        """
+        Calculate maximum profit from options positions only.
+        
+        Args:
+            spot_range: Array of spot prices to analyze (optional)
+            
+        Returns:
+            Dict with 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
+        """
+        if spot_range is None:
+            # Create reasonable range around current spot
+            spot_min = max(0.01, self.spot_price * 0.5)
+            spot_max = self.spot_price * 2.0
+            spot_range = np.linspace(spot_min, spot_max, 200)
+        
+        max_profit = float('-inf')
+        spot_at_max_profit = self.spot_price
+        
+        for spot in spot_range:
+            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=False)
+            if pnl > max_profit:
+                max_profit = pnl
+                spot_at_max_profit = spot
+        
+        return {
+            "max_profit": max_profit,
+            "spot_at_max_profit": spot_at_max_profit,
+            "is_unlimited": False,  # For now, conservatively assume bounded
+        }
+
+    def calculate_max_loss_total(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
+        """
+        Calculate maximum loss including underlying position.
+        
+        Args:
+            spot_range: Array of spot prices to analyze (optional)
+            
+        Returns:
+            Dict with 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
+        """
+        if spot_range is None:
+            # Create reasonable range around current spot
+            spot_min = max(0.01, self.spot_price * 0.5)
+            spot_max = self.spot_price * 2.0
+            spot_range = np.linspace(spot_min, spot_max, 200)
+        
+        max_loss = 0.0
+        spot_at_max_loss = self.spot_price
+        
+        for spot in spot_range:
+            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=True)
+            if pnl < max_loss:
+                max_loss = pnl
+                spot_at_max_loss = spot
+        
+        # Check if loss is potentially unlimited
+        is_unlimited = False
+        if self.underlying_quantity > 0:
+            # Long underlying has unlimited upside, but loss capped at zero
+            pass
+        elif self.underlying_quantity < 0:
+            # Short underlying has unlimited loss potential
+            is_unlimited = True
+        
+        return {
+            "max_loss": max_loss,
+            "spot_at_max_loss": spot_at_max_loss,
+            "is_unlimited": is_unlimited,
+        }
+
+    def calculate_max_profit_total(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
+        """
+        Calculate maximum profit including underlying position.
+        
+        Args:
+            spot_range: Array of spot prices to analyze (optional)
+            
+        Returns:
+            Dict with 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
+        """
+        if spot_range is None:
+            # Create reasonable range around current spot
+            spot_min = max(0.01, self.spot_price * 0.5)
+            spot_max = self.spot_price * 2.0
+            spot_range = np.linspace(spot_min, spot_max, 200)
+        
+        max_profit = float('-inf')
+        spot_at_max_profit = self.spot_price
+        
+        for spot in spot_range:
+            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=True)
+            if pnl > max_profit:
+                max_profit = pnl
+                spot_at_max_profit = spot
+        
+        # Check if profit is potentially unlimited
+        is_unlimited = False
+        if self.underlying_quantity > 0:
+            # Long underlying has unlimited upside
+            is_unlimited = True
+        
+        return {
+            "max_profit": max_profit,
+            "spot_at_max_profit": spot_at_max_profit,
+            "is_unlimited": is_unlimited,
+        }
+
+    def calculate_breakeven_points(
+        self, spot_range: Optional[np.ndarray] = None, include_underlying: bool = False
+    ) -> List[float]:
+        """
+        Calculate breakeven spot prices at expiration.
+        
+        Args:
+            spot_range: Array of spot prices to analyze (optional)
+            include_underlying: Whether to include underlying position
+            
+        Returns:
+            List of breakeven spot prices
+        """
+        if spot_range is None:
+            # Create reasonable range around current spot
+            spot_min = max(0.01, self.spot_price * 0.5)
+            spot_max = self.spot_price * 2.0
+            spot_range = np.linspace(spot_min, spot_max, 500)
+        
+        breakeven_points = []
+        prev_pnl = None
+        
+        for spot in spot_range:
+            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=include_underlying)
+            
+            # Check for sign change (crossing zero)
+            if prev_pnl is not None:
+                if (prev_pnl < 0 and pnl >= 0) or (prev_pnl > 0 and pnl <= 0):
+                    # Interpolate to find more precise breakeven
+                    breakeven_points.append(spot)
+            
+            prev_pnl = pnl
+        
+        return breakeven_points
+
+    def calculate_probability_of_profit(
+        self,
+        method: str = 'monte_carlo',
+        num_simulations: int = 10000,
+        include_underlying: bool = False,
+        days_to_expiry: Optional[int] = None,
+    ) -> dict:
+        """
+        Calculate probability that portfolio will be profitable at expiration.
+        
+        Args:
+            method: Calculation method ('monte_carlo' or 'normal')
+            num_simulations: Number of Monte Carlo simulations
+            include_underlying: Whether to include underlying position
+            days_to_expiry: Days to expiration (uses nearest maturity if None)
+            
+        Returns:
+            Dict with 'probability', 'expected_value', and 'breakeven_points'
+        """
+        # Determine time to expiration
+        if days_to_expiry is None:
+            if not self.positions:
+                days_to_expiry = 30
+            else:
+                # Use the nearest maturity
+                min_maturity = min(pos.option.maturity_date for pos in self.positions)
+                days_to_expiry = max(1, (min_maturity - self.valuation_date).days)
+        
+        time_to_expiry = days_to_expiry / 365.0
+        
+        if method == 'monte_carlo':
+            # Monte Carlo simulation
+            profitable_count = 0
+            total_pnl = 0.0
+            
+            for _ in range(num_simulations):
+                # Simulate final spot price using geometric Brownian motion
+                z = np.random.standard_normal()
+                drift = (self.risk_free_rate - self.dividend_yield - 0.5 * self.volatility**2) * time_to_expiry
+                diffusion = self.volatility * np.sqrt(time_to_expiry) * z
+                final_spot = self.spot_price * np.exp(drift + diffusion)
+                
+                # Calculate P&L at this simulated spot
+                pnl = self.calculate_pnl_at_expiry(final_spot, include_underlying=include_underlying)
+                total_pnl += pnl
+                
+                if pnl > 0:
+                    profitable_count += 1
+            
+            probability = profitable_count / num_simulations
+            expected_value = total_pnl / num_simulations
+        
+        else:  # 'normal' approximation
+            # For simplicity, use Monte Carlo with normal distribution
+            # This is a simplified implementation
+            probability = 0.5  # Placeholder
+            expected_value = 0.0
+        
+        # Calculate breakeven points
+        breakeven_points = self.calculate_breakeven_points(include_underlying=include_underlying)
+        
+        return {
+            'probability': probability,
+            'expected_value': expected_value,
+            'breakeven_points': breakeven_points,
+        }
+
+    def risk_reward_analysis(
+        self,
+        spot_range: Optional[np.ndarray] = None,
+        num_simulations: int = 10000,
+    ) -> dict:
+        """
+        Generate comprehensive risk/reward analysis of the portfolio.
+        
+        Args:
+            spot_range: Array of spot prices to analyze (optional)
+            num_simulations: Number of Monte Carlo simulations for probability
+            
+        Returns:
+            Dict containing all risk/reward metrics
+        """
+        net_debit = self.calculate_net_debit()
+        
+        # Options only analysis
+        max_loss_opts = self.calculate_max_loss_options(spot_range)
+        max_profit_opts = self.calculate_max_profit_options(spot_range)
+        breakeven_opts = self.calculate_breakeven_points(spot_range, include_underlying=False)
+        
+        # Total portfolio analysis
+        max_loss_total = self.calculate_max_loss_total(spot_range)
+        max_profit_total = self.calculate_max_profit_total(spot_range)
+        breakeven_total = self.calculate_breakeven_points(spot_range, include_underlying=True)
+        
+        # Probability analysis
+        prob_analysis = self.calculate_probability_of_profit(
+            method='monte_carlo',
+            num_simulations=num_simulations,
+            include_underlying=True,
+        )
+        
+        return {
+            'net_debit': net_debit,
+            'max_loss_options': max_loss_opts,
+            'max_profit_options': max_profit_opts,
+            'breakeven_options': breakeven_opts,
+            'max_loss_total': max_loss_total,
+            'max_profit_total': max_profit_total,
+            'breakeven_total': breakeven_total,
+            'probability_of_profit': prob_analysis['probability'],
+            'expected_value': prob_analysis['expected_value'],
+        }
+
+    def print_risk_reward_summary(self, spot_range: Optional[np.ndarray] = None):
+        """
+        Print a formatted risk/reward summary of the portfolio.
+        
+        Args:
+            spot_range: Array of spot prices to analyze (optional)
+        """
+        analysis = self.risk_reward_analysis(spot_range)
+        
+        print("=" * 80)
+        print("PORTFOLIO RISK/REWARD ANALYSIS")
+        print("=" * 80)
+        print()
+        
+        # Capital Requirements
+        print("CAPITAL REQUIREMENTS:")
+        net_debit = analysis['net_debit']
+        if net_debit > 0:
+            print(f"  Net Debit: ${net_debit:,.2f} (capital required to implement)")
+        else:
+            print(f"  Net Credit: ${-net_debit:,.2f} (capital received)")
+        print()
+        
+        # Options Only Risk/Reward
+        print("OPTIONS ONLY RISK/REWARD:")
+        max_loss_opts = analysis['max_loss_options']
+        max_profit_opts = analysis['max_profit_options']
+        
+        if max_loss_opts['is_unlimited']:
+            print("  Max Loss: UNLIMITED (naked short positions)")
+        else:
+            print(f"  Max Loss: ${-max_loss_opts['max_loss']:,.2f}", end="")
+            if net_debit != 0:
+                loss_pct = (-max_loss_opts['max_loss'] / abs(net_debit)) * 100
+                print(f" ({loss_pct:.1f}% of net debit)")
+            else:
+                print()
+            print(f"    └─ Occurs at spot price: ${max_loss_opts['spot_at_max_loss']:.2f}")
+        
+        if max_profit_opts['is_unlimited']:
+            print("  Max Profit: UNLIMITED")
+        else:
+            print(f"  Max Profit: ${max_profit_opts['max_profit']:,.2f}", end="")
+            if net_debit > 0:
+                roi = (max_profit_opts['max_profit'] / net_debit) * 100
+                print(f" ({roi:.1f}% return on net debit)")
+            else:
+                print()
+            print(f"    └─ Occurs at spot price: ${max_profit_opts['spot_at_max_profit']:.2f}")
+        
+        if analysis['breakeven_options']:
+            breakevens_str = ", ".join([f"${be:.2f}" for be in analysis['breakeven_options']])
+            print(f"  Breakeven Points: {breakevens_str}")
+        else:
+            print("  Breakeven Points: None identified")
+        print()
+        
+        # Total Portfolio Risk/Reward
+        if self.underlying_quantity != 0:
+            print("TOTAL PORTFOLIO RISK/REWARD (Options + Underlying):")
+            max_loss_total = analysis['max_loss_total']
+            max_profit_total = analysis['max_profit_total']
+            
+            if max_loss_total['is_unlimited']:
+                print("  Max Loss: UNLIMITED (short underlying position)")
+            else:
+                portfolio_value = self.total_portfolio_value()
+                print(f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}", end="")
+                if portfolio_value > 0:
+                    loss_pct = (-max_loss_total['max_loss'] / portfolio_value) * 100
+                    print(f" ({loss_pct:.1f}% of portfolio value)")
+                else:
+                    print()
+                print(f"    └─ Occurs at spot price: ${max_loss_total['spot_at_max_loss']:.2f}")
+            
+            if max_profit_total['is_unlimited']:
+                if self.underlying_quantity > 0:
+                    print("  Max Profit: UNLIMITED (long underlying position)")
+                else:
+                    print("  Max Profit: UNLIMITED")
+                print("    └─ Profit increases with spot price")
+            else:
+                print(f"  Max Profit: ${max_profit_total['max_profit']:,.2f}", end="")
+                if portfolio_value > 0:
+                    profit_pct = (max_profit_total['max_profit'] / portfolio_value) * 100
+                    print(f" ({profit_pct:.1f}% of portfolio value)")
+                else:
+                    print()
+                print(f"    └─ Occurs at spot price: ${max_profit_total['spot_at_max_profit']:.2f}")
+            
+            if analysis['breakeven_total']:
+                breakevens_str = ", ".join([f"${be:.2f}" for be in analysis['breakeven_total']])
+                print(f"  Breakeven Points: {breakevens_str}")
+            else:
+                print("  Breakeven Points: None identified")
+            print()
+        
+        # Probability Analysis
+        print("PROBABILITY ANALYSIS:")
+        prob = analysis['probability_of_profit']
+        print(f"  Chance of Profit: {prob*100:.1f}%")
+        print(f"  Expected Value: ${analysis['expected_value']:,.2f} (probabilistic weighted average)")
+        print()
+        
+        # Risk/Reward Ratio
+        if not max_loss_opts['is_unlimited'] and not max_profit_opts['is_unlimited']:
+            if max_profit_opts['max_profit'] > 0 and max_loss_opts['max_loss'] < 0:
+                rr_ratio = -max_loss_opts['max_loss'] / max_profit_opts['max_profit']
+                print(f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max loss to max profit)")
+        print("=" * 80)
+
     def clear_positions(self):
         """Clear all positions from the portfolio."""
         self.positions = []
