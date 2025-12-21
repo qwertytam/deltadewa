@@ -504,15 +504,16 @@ class OptionPortfolio:
                 max_loss = pnl
                 spot_at_max_loss = spot
         
-        # Check for unlimited loss (naked short positions)
-        has_naked_shorts = any(
-            pos.quantity < 0 for pos in self.positions
+        # Check for unlimited loss (naked short calls have unlimited loss potential)
+        has_naked_short_calls = any(
+            pos.quantity < 0 and pos.option.option_type.lower() == "call" 
+            for pos in self.positions
         )
         
         return {
             "max_loss": max_loss,
             "spot_at_max_loss": spot_at_max_loss,
-            "is_unlimited": False,  # For now, conservatively assume bounded
+            "is_unlimited": has_naked_short_calls,
         }
 
     def calculate_max_profit_options(
@@ -542,10 +543,16 @@ class OptionPortfolio:
                 max_profit = pnl
                 spot_at_max_profit = spot
         
+        # Check for unlimited profit (long calls have unlimited profit potential)
+        has_long_calls = any(
+            pos.quantity > 0 and pos.option.option_type.lower() == "call" 
+            for pos in self.positions
+        )
+        
         return {
             "max_profit": max_profit,
             "spot_at_max_profit": spot_at_max_profit,
-            "is_unlimited": False,  # For now, conservatively assume bounded
+            "is_unlimited": has_long_calls,
         }
 
     def calculate_max_loss_total(
@@ -716,11 +723,26 @@ class OptionPortfolio:
             probability = profitable_count / num_simulations
             expected_value = total_pnl / num_simulations
         
-        else:  # 'normal' approximation
-            # For simplicity, use Monte Carlo with normal distribution
-            # This is a simplified implementation
-            probability = 0.5  # Placeholder
+        else:
+            # Normal distribution method not fully implemented
+            # Fall back to Monte Carlo
+            probability = 0.0
             expected_value = 0.0
+            
+            for _ in range(num_simulations):
+                z = np.random.standard_normal()
+                drift = (self.risk_free_rate - self.dividend_yield - 0.5 * self.volatility**2) * time_to_expiry
+                diffusion = self.volatility * np.sqrt(time_to_expiry) * z
+                final_spot = self.spot_price * np.exp(drift + diffusion)
+                
+                pnl = self.calculate_pnl_at_expiry(final_spot, include_underlying=include_underlying)
+                expected_value += pnl
+                
+                if pnl > 0:
+                    probability += 1
+            
+            probability = probability / num_simulations
+            expected_value = expected_value / num_simulations
         
         # Calculate breakeven points
         breakeven_points = self.calculate_breakeven_points(include_underlying=include_underlying)
@@ -884,8 +906,9 @@ class OptionPortfolio:
         # Risk/Reward Ratio
         if not max_loss_opts['is_unlimited'] and not max_profit_opts['is_unlimited']:
             if max_profit_opts['max_profit'] > 0 and max_loss_opts['max_loss'] < 0:
-                rr_ratio = -max_loss_opts['max_loss'] / max_profit_opts['max_profit']
-                print(f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max loss to max profit)")
+                # Standard risk/reward ratio: profit potential to loss potential
+                rr_ratio = max_profit_opts['max_profit'] / -max_loss_opts['max_loss']
+                print(f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)")
         print("=" * 80)
 
     def clear_positions(self):
