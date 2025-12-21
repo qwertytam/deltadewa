@@ -87,7 +87,7 @@ from deltadewa import AmericanOption, OptionPortfolio
 
 # Create a portfolio
 portfolio = OptionPortfolio(
-    notional_position=1000.0,  # Long 1000 shares
+    underlying_quantity=1000.0,  # Long 1000 shares
     spot_price=100.0,
     volatility=0.25,
     risk_free_rate=0.05,

@@ -20,19 +20,19 @@ def main():
     volatility = 0.25
     risk_free_rate = 0.05
     dividend_yield = 0.02
-    notional_position = 1000.0  # Long 1000 shares
+    underlying_quantity = 1000.0  # Long 1000 shares
 
     print("Market Parameters:")
     print(f"  Spot Price: ${spot_price}")
     print(f"  Volatility: {volatility*100}%")
     print(f"  Risk-Free Rate: {risk_free_rate*100}%")
     print(f"  Dividend Yield: {dividend_yield*100}%")
-    print(f"  Notional Position: {notional_position:,.0f} shares")
+    print(f"  Notional Position: {underlying_quantity:,.0f} shares")
     print()
 
     # Create portfolio
     portfolio = OptionPortfolio(
-        notional_position=notional_position,
+        underlying_quantity=underlying_quantity,
         spot_price=spot_price,
         volatility=volatility,
         risk_free_rate=risk_free_rate,
@@ -82,7 +82,7 @@ def main():
 
     print("Delta Analysis:")
     print(f"  Portfolio Delta: {stats['total_delta']:,.2f}")
-    print(f"  Notional Position: {stats['notional_position']:,.2f}")
+    print(f"  Notional Position: {stats['underlying_quantity']:,.2f}")
     print(f"  Net Delta Exposure: {stats['net_delta']:,.2f}")
     print(f"  Hedge Ratio: {stats['hedge_ratio']:.2f}%")
     print(f"  Delta Adjustment Needed: {stats['delta_adjustment']:.2f} shares")
@@ -98,9 +98,9 @@ def main():
     # Interpretation
     print("Hedge Analysis:")
     print("-" * 70)
-    if abs(stats["net_delta"]) < abs(stats["notional_position"]) * 0.1:
+    if abs(stats["net_delta"]) < abs(stats["underlying_quantity"]) * 0.1:
         print("✓ Portfolio is well-hedged (net delta < 10% of notional)")
-    elif stats["net_delta"] * stats["notional_position"] > 0:
+    elif stats["net_delta"] * stats["underlying_quantity"] > 0:
         print("⚠ Portfolio is under-hedged (same direction as notional)")
     else:
         print("⚠ Portfolio may be over-hedged (opposite direction to notional)")
@@ -137,7 +137,7 @@ def main():
         portfolio.update_market_conditions(spot_price=new_spot)
         new_value = portfolio.total_value()
         pnl = new_value - current_value
-        underlying_pnl = (new_spot - spot_price) * notional_position
+        underlying_pnl = (new_spot - spot_price) * underlying_quantity
         total_pnl = pnl + underlying_pnl
 
         print(f"\n{name} (Spot = ${new_spot:.2f}):")

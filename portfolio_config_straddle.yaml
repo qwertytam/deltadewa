@@ -7,7 +7,7 @@ market_parameters:
   volatility: 0.30           # Higher vol helps this strategy
   risk_free_rate: 0.05
   dividend_yield: 0.02
-  notional_position: 0.0     # No underlying position
+  underlying_quantity: 0.0     # No underlying position
   symbol: "SPY"
 
 positions:

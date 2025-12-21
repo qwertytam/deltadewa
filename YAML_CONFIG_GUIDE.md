@@ -38,7 +38,7 @@ market_parameters:
   volatility: 0.25           # 25% annual volatility
   risk_free_rate: 0.05       # 5% annual rate
   dividend_yield: 0.02       # 2% annual yield
-  notional_position: 1000.0  # Underlying shares position
+  underlying_quantity: 1000.0  # Underlying shares position
   symbol: "SPY"              # Optional default symbol
 
 positions:
@@ -64,7 +64,7 @@ positions:
 | `volatility` | float | Annual volatility (e.g., 0.25 = 25%) |
 | `risk_free_rate` | float | Annual risk-free rate (e.g., 0.05 = 5%) |
 | `dividend_yield` | float | Annual dividend yield (e.g., 0.02 = 2%) |
-| `notional_position` | float | Size of underlying position in shares (optional, default: 0) |
+| `underlying_quantity` | float | Size of underlying position in shares (optional, default: 0) |
 | `symbol` | string | Default symbol for positions (optional, default: "UNKNOWN") |
 
 ### Position Configuration

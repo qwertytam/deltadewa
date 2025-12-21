@@ -93,7 +93,7 @@ class OptionPortfolio:
 
     def __init__(
         self,
-        notional_position: float = 0.0,
+        underlying_quantity: float = 0.0,
         spot_price: float = 100.0,
         volatility: float = 0.2,
         risk_free_rate: float = 0.05,
@@ -104,7 +104,7 @@ class OptionPortfolio:
         Initialize option portfolio.
 
         Args:
-            notional_position: The underlying notional position to hedge
+            underlying_quantity: The underlying notional position to hedge
             spot_price: Current spot price of the underlying
             volatility: Market volatility
             risk_free_rate: Risk-free rate
@@ -112,7 +112,7 @@ class OptionPortfolio:
             valuation_date: Valuation date for all options (defaults to now)
         """
         self.positions: List[OptionPosition] = []
-        self.notional_position = notional_position
+        self.underlying_quantity = underlying_quantity
         self.spot_price = spot_price
         self.volatility = volatility
         self.risk_free_rate = risk_free_rate
@@ -163,7 +163,7 @@ class OptionPortfolio:
 
     def total_underlying_value(self) -> float:
         """Calculate the value of the underlying notional position."""
-        return self.notional_position * self.spot_price
+        return self.underlying_quantity * self.spot_price
 
     def total_portfolio_value(self) -> float:
         """Total portfolio value including options and underlying notional."""
@@ -196,7 +196,7 @@ class OptionPortfolio:
         Returns:
             Net delta exposure (positive = net long, negative = net short)
         """
-        return self.total_delta() + self.notional_position
+        return self.total_delta() + self.underlying_quantity
 
     def hedge_ratio(self) -> float:
         """
@@ -205,9 +205,9 @@ class OptionPortfolio:
         Returns:
             Hedge ratio as a percentage
         """
-        if self.notional_position == 0:
+        if self.underlying_quantity == 0:
             return 0.0
-        return -(self.total_delta() / self.notional_position) * 100
+        return -(self.total_delta() / self.underlying_quantity) * 100
 
     def delta_adjustment_needed(self) -> float:
         """
@@ -226,7 +226,7 @@ class OptionPortfolio:
             "total_underlying_value": self.total_underlying_value(),
             "total_portfolio_value": self.total_portfolio_value(),
             "total_delta": self.total_delta(),
-            "notional_position": self.notional_position,
+            "underlying_quantity": self.underlying_quantity,
             "net_delta": self.net_delta(),
             "hedge_ratio": self.hedge_ratio(),
             "delta_adjustment": self.delta_adjustment_needed(),

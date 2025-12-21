@@ -47,7 +47,7 @@ from deltadewa import OptionPortfolio
 
 # Create portfolio with a notional position
 portfolio = OptionPortfolio(
-    notional_position=1000.0,  # Long 1000 shares
+    underlying_quantity=1000.0,  # Long 1000 shares
     spot_price=100.0,
     volatility=0.25,
     risk_free_rate=0.05,
@@ -100,7 +100,7 @@ jupyter notebook options_dashboard.ipynb
 
 ```python
 # Long underlying position
-portfolio = OptionPortfolio(notional_position=1000, spot_price=100)
+portfolio = OptionPortfolio(underlying_quantity=1000, spot_price=100)
 
 # Buy protective puts (downside protection)
 portfolio.add_position(95, maturity_30d, 10, "put")

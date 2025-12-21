@@ -9,7 +9,7 @@ market_parameters:
   volatility: 0.25           # Annual volatility (0.25 = 25%)
   risk_free_rate: 0.05       # Annual risk-free rate (0.05 = 5%)
   dividend_yield: 0.02       # Annual dividend yield (0.02 = 2%)
-  notional_position: 1000.0  # Underlying position size (shares)
+  underlying_quantity: 1000.0  # Underlying position size (shares)
   symbol: "SPY"              # Default symbol for positions (optional)
 
 # Portfolio Positions
