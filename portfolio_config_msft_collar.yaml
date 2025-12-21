@@ -1,0 +1,24 @@
+market_parameters:
+  spot_price: 485.92
+  volatility: 0.266
+  risk_free_rate: 0.045
+  dividend_yield: 0.0075
+  underlying_quantity: 100.0
+  symbol: "MSFT"
+
+positions:
+  # Long Puts - Downside Protection at 5% below spot
+  - option_type: "put"
+    strike_price: 460.0
+    maturity_date: '2026-06-18'
+    quantity: 1              # 1 contract = 100 shares protected
+  
+  # Short Calls - Income Generation at 5% above spot
+  - option_type: "call"
+    strike_price: 510.0
+    maturity_date: '2026-06-18'
+    quantity: -1             # Short 1 contract
+
+# This collar protects the 100 share position with 460 put floor
+# and caps upside at 510 with short calls
+# The short call premium helps offset the cost of the protective puts

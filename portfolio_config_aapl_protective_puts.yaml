@@ -1,0 +1,18 @@
+market_parameters:
+  spot_price: 273.67
+  volatility: 0.285
+  risk_free_rate: 0.044
+  dividend_yield: 0.004
+  underlying_quantity: 3654.0
+  symbol: "AAPL"
+
+positions:
+  - option_type: "put"
+    strike_price: 240
+    maturity_date: "2026-12-18"
+    quantity: 36
+  
+  - option_type: "put"
+    strike_price: 240
+    maturity_date: "2026-06-18"
+    quantity: 36
