@@ -22,6 +22,7 @@ Three example YAML configuration files are provided:
 To use any of these:
 
 1. Copy the desired example to `portfolio_config.yaml`:
+
    ```bash
    cp portfolio_config_example.yaml portfolio_config.yaml
    ```
@@ -59,7 +60,7 @@ positions:
 ### Market Parameters (Required)
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
+| ----------- | ------ | ------------- |
 | `spot_price` | float | Current price of underlying asset |
 | `volatility` | float | Annual volatility (e.g., 0.25 = 25%) |
 | `risk_free_rate` | float | Annual risk-free rate (e.g., 0.05 = 5%) |
@@ -72,13 +73,14 @@ positions:
 Each position requires:
 
 | Field | Type | Description |
-|-------|------|-------------|
+| ------- | ------ | ------------- |
 | `option_type` | string | "call" or "put" (case insensitive) |
 | `strike_price` | float | Strike price of the option |
 | `quantity` | integer | Number of contracts (positive = long, negative = short) |
 | `symbol` | string | Underlying symbol (optional, inherits from market_parameters) |
 
 **Maturity Date** - Use ONE of these:
+
 - `maturity_days`: integer - Days from today (e.g., 30)
 - `maturity_date`: string - Absolute date in ISO format (e.g., "2026-01-18")
 
@@ -89,12 +91,14 @@ Each position requires:
 The notebook's Section 11 provides interactive widgets for exporting:
 
 **Export Formats:**
+
 - **JSON** - Complete portfolio state with all greeks and metadata
 - **CSV** - Positions and risk metrics in spreadsheet format
 - **YAML** - Configuration format (easy to edit and version control)
 - **All Formats** - Export to all three formats at once
 
 **To Export:**
+
 1. Navigate to Section 11 in the notebook
 2. Select desired format
 3. Enter filename prefix
@@ -105,14 +109,17 @@ The notebook's Section 11 provides interactive widgets for exporting:
 The import widgets support:
 
 **Import Sources:**
+
 - **File Upload** - Upload JSON or YAML files directly in the browser
 - **Filename** - Load files from the exports directory
 
 **Import Options:**
+
 - **Preview** - View portfolio contents before importing
 - **Replace current portfolio** - Update the active `portfolio` variable (checkbox)
 
 **To Import:**
+
 1. Navigate to Section 11 in the notebook
 2. Choose JSON or YAML format
 3. Either upload a file or enter filename
