@@ -132,6 +132,7 @@ The import widgets support:
 If no `portfolio_config.yaml` file exists, the notebook will use the hardcoded default portfolio (puts and calls at various strikes and maturities). This ensures existing workflows continue to work.
 
 Status messages will indicate:
+
 - 📁 "MARKET PARAMETERS LOADED FROM YAML" - when YAML is found
 - 📝 "USING DEFAULT MARKET PARAMETERS" - when no YAML exists
 
@@ -154,11 +155,13 @@ cp portfolio_config_straddle.yaml portfolio_config.yaml
 ## Validation and Error Handling
 
 The YAML loader validates:
+
 - Required market parameters are present
 - YAML syntax is correct
 - Position structures are valid
 
 Error messages will indicate:
+
 - Missing required fields
 - Invalid YAML syntax
 - File not found
@@ -181,21 +184,25 @@ Error messages will indicate:
 
 ## Troubleshooting
 
-**"No YAML config found" message**
+### "No YAML config found" message
+
 - File must be named exactly `portfolio_config.yaml`
 - File must be in the same directory as the notebook
 - Check file permissions
 
-**"Missing required market parameter" error**
+### "Missing required market parameter" error
+
 - Ensure all required parameters are present in `market_parameters` section
 - Check spelling of parameter names
 
-**Import fails with FileNotFoundError**
+### Import fails with FileNotFoundError
+
 - Check that file exists in `exports/` directory
 - Verify filename matches exactly (case sensitive)
 - Try using the file upload widget instead
 
-**Positions not loading from YAML**
+### Positions not loading from YAML
+
 - Ensure each position has either `maturity_days` or `maturity_date`
 - Check that `option_type` is "call" or "put"
 - Verify `strike_price` and `quantity` are present

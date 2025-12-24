@@ -32,18 +32,21 @@ git clone https://github.com/qwertytam/deltadewa.git
 cd deltadewa
 ```
 
+<!-- markdownlint-disable-next-line -->
 2. Install Poetry (if not already installed):
 
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
+<!-- markdownlint-disable-next-line -->
 3. Install dependencies:
 
 ```bash
 poetry install
 ```
 
+<!-- markdownlint-disable-next-line -->
 4. Activate the virtual environment:
 
 ```bash
