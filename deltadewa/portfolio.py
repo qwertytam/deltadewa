@@ -916,6 +916,157 @@ class OptionPortfolio:
         """Clear all positions from the portfolio."""
         self.positions = []
 
+    def analyze_roll(
+        self,
+        position_index: int,
+        new_strike: Optional[float] = None,
+        new_maturity: Optional[datetime] = None,
+        new_quantity: Optional[int] = None
+    ) -> pd.DataFrame:
+        """
+        Analyze the impact of rolling a position to new parameters.
+        
+        Creates a comparison DataFrame showing current vs proposed position metrics
+        including price, greeks, and position values.
+        
+        Args:
+            position_index: Index of position to analyze
+            new_strike: New strike price (None = keep current)
+            new_maturity: New maturity date (None = keep current)
+            new_quantity: New quantity (None = keep current)
+        
+        Returns:
+            DataFrame with columns: Current, Proposed, Delta
+            
+        Raises:
+            IndexError: If position_index is out of range
+        """
+        if position_index < 0 or position_index >= len(self.positions):
+            raise IndexError(f"Position index {position_index} out of range (0-{len(self.positions)-1})")
+        
+        current_pos = self.positions[position_index]
+        
+        # Determine new parameters (use current if not specified)
+        strike = new_strike if new_strike is not None else current_pos.option.strike_price
+        maturity = new_maturity if new_maturity is not None else current_pos.option.maturity_date
+        quantity = new_quantity if new_quantity is not None else current_pos.quantity
+        
+        # Create proposed option
+        proposed_option = AmericanOption(
+            spot_price=self.spot_price,
+            strike_price=strike,
+            maturity_date=maturity,
+            volatility=self.volatility,
+            risk_free_rate=self.risk_free_rate,
+            dividend_yield=self.dividend_yield,
+            option_type=current_pos.option.option_type,
+            valuation_date=self.valuation_date
+        )
+        
+        proposed_position = OptionPosition(
+            proposed_option,
+            quantity,
+            contract_size=current_pos.contract_size,
+            symbol=current_pos.symbol
+        )
+        
+        # Calculate metrics for comparison
+        current_metrics = {
+            'Quantity': current_pos.quantity,
+            'Strike': current_pos.option.strike_price,
+            'Maturity': current_pos.option.maturity_date.strftime('%Y-%m-%d'),
+            'Days to Exp': (current_pos.option.maturity_date - self.valuation_date).days,
+            'Price': current_pos.option.price(),
+            'Delta': current_pos.position_delta(),
+            'Gamma': current_pos.position_gamma(),
+            'Vega': current_pos.position_vega(),
+            'Theta': current_pos.position_theta(),
+            'Position Value': current_pos.position_value(),
+        }
+        
+        proposed_metrics = {
+            'Quantity': proposed_position.quantity,
+            'Strike': proposed_position.option.strike_price,
+            'Maturity': proposed_position.option.maturity_date.strftime('%Y-%m-%d'),
+            'Days to Exp': (proposed_position.option.maturity_date - self.valuation_date).days,
+            'Price': proposed_position.option.price(),
+            'Delta': proposed_position.position_delta(),
+            'Gamma': proposed_position.position_gamma(),
+            'Vega': proposed_position.position_vega(),
+            'Theta': proposed_position.position_theta(),
+            'Position Value': proposed_position.position_value(),
+        }
+        
+        # Calculate deltas
+        deltas = {}
+        for key in current_metrics:
+            if key in ['Maturity']:
+                deltas[key] = proposed_metrics[key]  # Just show new value for dates
+            elif isinstance(current_metrics[key], (int, float)):
+                deltas[key] = proposed_metrics[key] - current_metrics[key]
+            else:
+                deltas[key] = proposed_metrics[key]
+        
+        # Create comparison DataFrame
+        comparison_df = pd.DataFrame({
+            'Current': current_metrics,
+            'Proposed': proposed_metrics,
+            'Delta': deltas
+        })
+        
+        return comparison_df
+
+    def commit_roll(
+        self,
+        position_index: int,
+        new_strike: Optional[float] = None,
+        new_maturity: Optional[datetime] = None,
+        new_quantity: Optional[int] = None
+    ) -> None:
+        """
+        Execute a position roll after analysis.
+        
+        Replaces the position at position_index with new parameters.
+        
+        Args:
+            position_index: Index of position to roll
+            new_strike: New strike price (None = keep current)
+            new_maturity: New maturity date (None = keep current)
+            new_quantity: New quantity (None = keep current)
+            
+        Raises:
+            IndexError: If position_index is out of range
+        """
+        if position_index < 0 or position_index >= len(self.positions):
+            raise IndexError(f"Position index {position_index} out of range (0-{len(self.positions)-1})")
+        
+        current_pos = self.positions[position_index]
+        
+        # Determine new parameters (use current if not specified)
+        strike = new_strike if new_strike is not None else current_pos.option.strike_price
+        maturity = new_maturity if new_maturity is not None else current_pos.option.maturity_date
+        quantity = new_quantity if new_quantity is not None else current_pos.quantity
+        
+        # Create new option with rolled parameters
+        new_option = AmericanOption(
+            spot_price=self.spot_price,
+            strike_price=strike,
+            maturity_date=maturity,
+            volatility=self.volatility,
+            risk_free_rate=self.risk_free_rate,
+            dividend_yield=self.dividend_yield,
+            option_type=current_pos.option.option_type,
+            valuation_date=self.valuation_date
+        )
+        
+        # Replace the position
+        self.positions[position_index] = OptionPosition(
+            new_option,
+            quantity,
+            contract_size=current_pos.contract_size,
+            symbol=current_pos.symbol
+        )
+
     def __repr__(self) -> str:
         """String representation of the portfolio."""
         return (
