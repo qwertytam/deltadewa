@@ -41,5 +41,6 @@ target-version = "py39"
 
 [dependency-groups]
 dev = [
-    "ruff (>=0.5.3)"
+    "ruff (>=0.5.3)",
+    "debugpy (>=1.8.19,<2.0.0)"
 ]
