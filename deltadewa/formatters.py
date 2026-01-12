@@ -24,9 +24,9 @@ Author: DeltaDewa Team
 Date: 2026-01-12
 """
 
-import pandas as pd
-from typing import Dict, List, Optional, Union, Callable
+from typing import Any, Mapping, Dict, List, Optional, Union, Callable, Literal
 import warnings
+import pandas as pd
 
 # Try to import IPython display for notebook environments
 try:
@@ -45,7 +45,7 @@ except ImportError:
 def prepare_dataframe_display(
     df: pd.DataFrame,
     title_case: bool = True,
-    start_index: int = 1,
+    start_index: Optional[int] = 1,
     index_name: Optional[str] = None,
 ) -> pd.DataFrame:
     """
@@ -54,7 +54,7 @@ def prepare_dataframe_display(
     Args:
         df: Input DataFrame
         title_case: Convert column names to title case
-        start_index: Starting index number (1-based by default)
+        start_index: Starting index number (1-based by default) or None to preserve original index
         index_name: Optional name for the index
 
     Returns:
@@ -68,7 +68,7 @@ def prepare_dataframe_display(
 
     # Reset index with custom numbering
     if start_index is not None:
-        df_display.index = list(range(start_index, len(df_display) + start_index))
+        df_display.index = pd.RangeIndex(start=start_index, stop=start_index + len(df_display))
 
     if index_name:
         df_display.index.name = index_name
@@ -82,7 +82,7 @@ def apply_gradient_style(
     cmap: str = "RdYlGn",
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-    axis: Optional[int] = None,
+    axis: Optional[Literal["index", "columns", 0, 1]] = None,
 ) -> pd.io.formats.style.Styler:
     """
     Apply color gradient to specified columns.
@@ -93,7 +93,7 @@ def apply_gradient_style(
         cmap: Colormap name (default: 'RdYlGn' for red-yellow-green)
         vmin: Minimum value for color scale
         vmax: Maximum value for color scale
-        axis: Axis along which to apply gradient (None = entire DataFrame)
+        axis: Axis along which to apply gradient (one of 'index', 'columns', 0, 1, or None)
 
     Returns:
         Styler with gradient applied
@@ -105,19 +105,22 @@ def apply_gradient_style(
 
 
 def apply_format_dict(
-    styler: pd.io.formats.style.Styler, format_dict: Dict[str, Union[str, Callable]]
+    styler: pd.io.formats.style.Styler,
+    format_dict: Mapping[Any, Optional[Union[str, Callable[[object], str]]]],
 ) -> pd.io.formats.style.Styler:
     """
     Apply formatting to columns based on format dictionary.
 
     Args:
         styler: Pandas Styler object
-        format_dict: Dictionary mapping column names to format strings or callables
+        format_dict: Mapping of column names to format strings or callables compatible with
+                     pandas.Styler.format (values: str | Callable[[object], str] | None)
 
     Returns:
         Styler with formatting applied
     """
-    return styler.format(format_dict, na_rep="-")
+    # Ensure we pass a concrete dict to Styler.format to satisfy type checkers
+    return styler.format(dict(format_dict), na_rep="-")
 
 
 # ============================================================================
@@ -173,8 +176,8 @@ def format_portfolio_dataframe(
         }
         fmt.update(greek_fmt)
 
-    # Create styled DataFrame
-    styled = df_display.style.format(fmt, na_rep="-")
+    # Create styled DataFrame (use apply_format_dict to satisfy typing)
+    styled = apply_format_dict(df_display.style, fmt)
 
     # Apply gradient if column exists
     gradient_col_display = (
@@ -256,7 +259,7 @@ def format_risk_metrics_dataframe(
             if col_display in df_display.columns:
                 fmt[col_display] = "{:.2%}"
 
-    styled = df_display.style.format(fmt, na_rep="-")
+    styled = apply_format_dict(df_display.style, fmt)
     return styled
 
 
@@ -291,7 +294,8 @@ def format_scenario_dataframe(
         "Total Vega" if title_case else "total_vega": "{:,.2f}",
     }
 
-    styled = df_display.style.format(fmt, na_rep="-")
+    # Use typed helper to apply format mappings to avoid mypy typing issues
+    styled = apply_format_dict(df_display.style, fmt)
 
     # Apply gradient to metric column
     metric_col_display = metric_column.replace("_", " ").title() if title_case else metric_column
@@ -310,7 +314,7 @@ def create_heatmap_style(
     df: pd.DataFrame,
     cmap: str = "RdYlGn",
     format_str: str = "{:,.2f}",
-    center_value: Optional[float] = None,
+    center_value: Optional[float] = None,  # pylint: disable=unused-argument
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
 ) -> pd.io.formats.style.Styler:
@@ -332,8 +336,11 @@ def create_heatmap_style(
 
     styled = styled.format(format_str, na_rep="-")
 
-    # Apply borders for readability
-    styled = styled.set_properties(**{"border": "1px solid #ddd", "text-align": "right"})
+    # Apply borders and alignment for readability using table styles
+    styled = styled.set_table_styles(
+        [{"selector": "td", "props": [("border", "1px solid #ddd"), ("text-align", "right")]}],
+        overwrite=False,
+    )
 
     return styled
 
@@ -382,7 +389,7 @@ def apply_traffic_light_colors(
             else:
                 return "background-color: #ccffcc"  # light green
 
-    return styler.applymap(color_traffic_light, subset=[column])
+    return styler.apply(lambda col: col.map(color_traffic_light), subset=[column])
 
 
 # ============================================================================
@@ -394,7 +401,7 @@ def format_pivot_table(
     pivot: pd.DataFrame,
     format_str: str = "{:,.2f}",
     cmap: str = "RdYlGn",
-    highlight_zeros: bool = True,
+    highlight_zeros: bool = True,  # pylint: disable=unused-argument
 ) -> pd.io.formats.style.Styler:
     """
     Format pivot table with consistent styling.
@@ -411,9 +418,19 @@ def format_pivot_table(
     styled = pivot.style.background_gradient(cmap=cmap, axis=None)
     styled = styled.format(format_str, na_rep="-")
 
-    # Add borders for better readability
-    styled = styled.set_properties(
-        **{"border": "1px solid #ddd", "padding": "5px", "text-align": "center"}
+    # Add borders for better readability (use set_table_styles to avoid typing issues)
+    styled = styled.set_table_styles(
+        [
+            {
+                "selector": "td",
+                "props": [
+                    ("border", "1px solid #ddd"),
+                    ("padding", "5px"),
+                    ("text-align", "center"),
+                ],
+            }
+        ],
+        overwrite=False,
     )
 
     # Style the headers
@@ -462,9 +479,9 @@ def highlight_negative_values(
             return ""
 
     if columns:
-        return styler.applymap(highlight_neg, subset=columns)
+        return styler.apply(lambda col: col.map(highlight_neg), subset=columns)
     else:
-        return styler.applymap(highlight_neg)
+        return styler.apply(lambda col: col.map(highlight_neg))
 
 
 def highlight_max_min(
@@ -571,7 +588,7 @@ def apply_table_preset(
             {"selector": "td", "props": [("padding", "8px"), ("border", "1px solid #ddd")]},
         ]
 
-    return styler.set_table_styles(styles)
+    return styler.set_table_styles(styles)  # type: ignore[arg-type]
 
 
 # ============================================================================
@@ -604,7 +621,7 @@ def to_excel_styled(
         else:
             df.to_excel(filepath, sheet_name=sheet_name, engine="openpyxl")
         print(f"✓ DataFrame exported to {filepath}")
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-except
         warnings.warn(f"Error exporting to Excel: {e}")
         # Fallback to CSV
         csv_path = filepath.replace(".xlsx", ".csv")
