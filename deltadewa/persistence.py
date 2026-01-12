@@ -8,6 +8,7 @@ in multiple formats (JSON, CSV, YAML).
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Union
 import pandas as pd
 from deltadewa import OptionPortfolio
 
@@ -22,7 +23,7 @@ except ImportError:
 class PortfolioSerializer:
     """Handle portfolio export/import in multiple formats."""
 
-    def __init__(self, export_dir="exports"):
+    def __init__(self, export_dir: Union[str, Path] = "exports"):
         """
         Initialize the serializer.
 
