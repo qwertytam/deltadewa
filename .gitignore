@@ -44,6 +44,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 exports/
+.migrations/
 
 # User-specific portfolio configuration
 # Keep example configs but ignore user's custom config
