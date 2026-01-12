@@ -17,13 +17,15 @@ Author: DeltaDewa Team
 Date: 2026-01-12
 """
 
+from typing import Optional, List, Dict, Tuple
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 from matplotlib.ticker import FuncFormatter
-from typing import Optional, List, Dict, Tuple, Union
-import warnings
+from matplotlib.container import BarContainer
 
 
 class OptionCharts:
@@ -55,7 +57,7 @@ class OptionCharts:
         """Apply matplotlib style if available."""
         try:
             plt.style.use(self.style)
-        except:
+        except Exception:  # pylint: disable=broad-except
             warnings.warn(f"Style '{self.style}' not available, using default")
 
     @staticmethod
@@ -74,6 +76,7 @@ class OptionCharts:
         Returns:
             Formatted string
         """
+        _ = pos
         if abs(x) < 10_000:
             return f"${x:,.0f}"
         elif abs(x) < 10_000_000:
@@ -129,7 +132,8 @@ class OptionCharts:
         analysis = self.portfolio.risk_reward_analysis()
 
         # Determine expiration label
-        expiry_label = self._get_expiry_label()
+        expiry_label = self._get_expiry_label()  # pylint: disable=unused-variable
+        _ = expiry_label  # To avoid unused variable warning
 
         # Create figure
         nrows = 2 if (show_underlying and self.portfolio.underlying_quantity != 0) else 1
@@ -163,7 +167,7 @@ class OptionCharts:
 
     def _plot_pnl_panel(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         spot_range: np.ndarray,
         pnl_values: List[float],
         analysis: Dict,
@@ -198,7 +202,7 @@ class OptionCharts:
             spot_range,
             pnl_values,
             0,
-            where=pnl_array >= 0,
+            where=(pnl_array >= 0).tolist(),
             color="green",
             alpha=0.2,
             label="Profit Zone",
@@ -207,7 +211,7 @@ class OptionCharts:
             spot_range,
             pnl_values,
             0,
-            where=pnl_array < 0,
+            where=(pnl_array < 0).tolist(),
             color="red",
             alpha=0.2,
             label="Loss Zone",
@@ -290,7 +294,7 @@ class OptionCharts:
 
     def plot_greeks_by_strike(
         self, metrics: Optional[List[str]] = None, figsize: Tuple[int, int] = (18, 16)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Create stacked bar charts of Greeks by strike price.
 
@@ -360,7 +364,7 @@ class OptionCharts:
 
     def _plot_greek_by_dimension(
         self,
-        ax: plt.Axes,
+        ax: Axes,
         df: pd.DataFrame,
         metric: str,
         dimension: str,
@@ -401,7 +405,8 @@ class OptionCharts:
 
         # Add total annotations on bars
         for container in ax.containers:
-            ax.bar_label(container, fmt="%.0f", label_type="edge", fontsize=8)
+            if isinstance(container, BarContainer):
+                ax.bar_label(container, fmt="%.0f", label_type="edge", fontsize=8)
 
     # ========================================================================
     # Theta Decay Visualization
@@ -484,7 +489,7 @@ class OptionCharts:
 
         return df_carry, theta_metrics
 
-    def _plot_theta_by_bucket(self, ax: plt.Axes, df_carry: pd.DataFrame):
+    def _plot_theta_by_bucket(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot theta by maturity bucket."""
         theta_by_bucket = (
             df_carry.groupby(["maturity_bucket", "type"])
@@ -527,7 +532,7 @@ class OptionCharts:
         ax.grid(True, alpha=0.3, axis="y")
         ax.legend(loc="best")
 
-    def _plot_theta_projection(self, ax: plt.Axes, theta_metrics: Dict, projection_days: int):
+    def _plot_theta_projection(self, ax: Axes, theta_metrics: Dict, projection_days: int):
         """Plot cumulative theta projection."""
         days_range = np.arange(0, projection_days + 1)
         cumulative_theta = days_range * theta_metrics["daily"]
@@ -554,7 +559,7 @@ class OptionCharts:
         ax.set_title("Projected Theta Accumulation", fontsize=12, fontweight="bold")
         ax.grid(True, alpha=0.3)
 
-    def _plot_carry_efficiency(self, ax: plt.Axes, df_carry: pd.DataFrame):
+    def _plot_carry_efficiency(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot theta/value ratio by bucket."""
         bucket_order = ["0-7 days", "8-30 days", "31-60 days", "61-90 days", "90+ days"]
 
@@ -585,7 +590,7 @@ class OptionCharts:
         ax.set_title("Carry Efficiency by Bucket", fontsize=12, fontweight="bold")
         ax.grid(True, alpha=0.3, axis="x")
 
-    def _plot_theta_vs_contracts(self, ax: plt.Axes, df_carry: pd.DataFrame):
+    def _plot_theta_vs_contracts(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot contract count vs theta contribution."""
         bucket_order = ["0-7 days", "8-30 days", "31-60 days", "61-90 days", "90+ days"]
 
@@ -656,7 +661,7 @@ class OptionCharts:
     @staticmethod
     def create_chart_grid(
         rows: int, cols: int, titles: List[str], figsize: Optional[Tuple[int, int]] = None
-    ) -> Tuple[plt.Figure, np.ndarray]:
+    ) -> Tuple[Figure, np.ndarray]:
         """
         Create standardized multi-panel chart grid with consistent styling.
 
