@@ -1,0 +1,679 @@
+"""
+Portfolio Analysis Module for Options Portfolios
+
+This module provides advanced analytical utilities for options portfolio management,
+including carry analysis, risk concentration, maturity classification, scenario
+generation, and hedge recommendation logic.
+
+Usage:
+    from deltadewa.analysis import PortfolioAnalyzer
+
+    analyzer = PortfolioAnalyzer(portfolio)
+    carry_metrics = analyzer.calculate_carry_metrics()
+    concentration = analyzer.analyze_risk_concentration()
+
+Author: DeltaDewa Team
+Date: 2026-01-12
+"""
+
+from typing import Dict, List, Tuple, Optional, Any
+from datetime import datetime, timedelta
+import pandas as pd
+import numpy as np
+import numbers
+
+
+class PortfolioAnalyzer:
+    """
+    Advanced portfolio analysis utilities.
+
+    Provides methods for:
+    - Maturity bucket classification
+    - Theta/carry analysis
+    - Risk concentration identification
+    - Hedge recommendations
+    - Scenario grid generation
+    """
+
+    def __init__(self, portfolio):
+        """
+        Initialize analyzer with portfolio.
+
+        Args:
+            portfolio: OptionPortfolio instance to analyze
+        """
+        self.portfolio = portfolio
+
+    # ========================================================================
+    # Maturity Classification
+    # ========================================================================
+
+    @staticmethod
+    def classify_maturity_bucket(days_to_expiry: int) -> str:
+        """
+        Classify option by time to expiration bucket.
+
+        Buckets:
+        - 0-7 days: Weekly options (high theta, significant gamma)
+        - 8-30 days: Monthly options (moderate theta)
+        - 31-60 days: 2-month options (lower theta)
+        - 61-90 days: 3-month options (very low theta)
+        - 90+ days: Long-term options (minimal theta)
+
+        Args:
+            days_to_expiry: Days until option expiration
+
+        Returns:
+            Bucket label string
+        """
+        if days_to_expiry <= 7:
+            return "0-7 days (Weekly)"
+        elif days_to_expiry <= 30:
+            return "8-30 days (Monthly)"
+        elif days_to_expiry <= 60:
+            return "31-60 days (2M)"
+        elif days_to_expiry <= 90:
+            return "61-90 days (3M)"
+        else:
+            return "90+ days (Long-term)"
+
+    def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Add maturity bucket column to positions DataFrame.
+
+        Args:
+            df: DataFrame with 'maturity' column
+
+        Returns:
+            DataFrame with added 'maturity_bucket' and 'days_to_expiry' columns
+        """
+        df = df.copy()
+
+        # Calculate days to expiry
+        df["days_to_expiry"] = df["maturity"].apply(
+            lambda x: (pd.to_datetime(x) - pd.Timestamp.now()).days
+        )
+
+        # Classify into buckets
+        df["maturity_bucket"] = df["days_to_expiry"].apply(self.classify_maturity_bucket)
+
+        return df
+
+    # ========================================================================
+    # Carry / Theta Analysis
+    # ========================================================================
+
+    def calculate_carry_metrics(self) -> Dict:
+        """
+        Calculate comprehensive theta and carry metrics.
+
+        Returns:
+            Dictionary containing:
+            - total_theta_daily: Total daily theta
+            - total_theta_weekly: Weekly theta (daily * 7)
+            - total_theta_monthly: Monthly theta (daily * 30)
+            - total_theta_annual: Annual theta (daily * 365)
+            - theta_by_bucket: Dict of theta totals per maturity bucket
+            - theta_by_type: Dict of theta totals by option type
+            - covered_call_theta: Theta from short calls
+            - hedge_put_theta: Theta cost from long puts
+            - net_carry: Net daily carry (calls - puts)
+            - carry_efficiency: Theta / position value ratio by bucket
+        """
+        df = self.portfolio.to_dataframe()
+        if df.empty:
+            return self._empty_carry_metrics()
+
+        df = self.add_maturity_buckets(df)
+
+        # Total theta metrics
+        total_theta_daily = df["position_theta"].sum()
+
+        # Theta by bucket
+        theta_by_bucket = df.groupby("maturity_bucket")["position_theta"].sum().to_dict()
+
+        # Theta by type
+        theta_by_type = df.groupby("type")["position_theta"].sum().to_dict()
+
+        # Covered call analysis (short calls)
+        short_calls = df[(df["type"] == "call") & (df["quantity"] < 0)]
+        covered_call_theta = short_calls["position_theta"].sum() if len(short_calls) > 0 else 0.0
+        covered_call_premium = short_calls["position_value"].sum() if len(short_calls) > 0 else 0.0
+
+        # Hedge put analysis (long puts)
+        long_puts = df[(df["type"] == "put") & (df["quantity"] > 0)]
+        hedge_put_theta = long_puts["position_theta"].sum() if len(long_puts) > 0 else 0.0
+        hedge_put_delta = long_puts["position_delta"].sum() if len(long_puts) > 0 else 0.0
+
+        # Net carry
+        net_carry = covered_call_theta + hedge_put_theta  # hedge_put_theta is negative
+
+        # Carry efficiency by bucket (annualized theta / position value)
+        bucket_summary = df.groupby("maturity_bucket").agg(
+            {"position_theta": "sum", "position_value": lambda x: x.abs().sum()}
+        )
+        bucket_summary["carry_efficiency_pct"] = (
+            (bucket_summary["position_theta"] / bucket_summary["position_value"]) * 100 * 365
+        )
+        carry_efficiency = bucket_summary["carry_efficiency_pct"].to_dict()
+
+        return {
+            "total_theta_daily": total_theta_daily,
+            "total_theta_weekly": total_theta_daily * 7,
+            "total_theta_monthly": total_theta_daily * 30,
+            "total_theta_annual": total_theta_daily * 365,
+            "theta_by_bucket": theta_by_bucket,
+            "theta_by_type": theta_by_type,
+            "covered_call_theta": covered_call_theta,
+            "covered_call_premium": covered_call_premium,
+            "hedge_put_theta": hedge_put_theta,
+            "hedge_put_delta": hedge_put_delta,
+            "net_carry": net_carry,
+            "carry_efficiency": carry_efficiency,
+            "is_positive_carry": net_carry > 0,
+        }
+
+    def _empty_carry_metrics(self) -> Dict:
+        """Return empty carry metrics structure."""
+        return {
+            "total_theta_daily": 0.0,
+            "total_theta_weekly": 0.0,
+            "total_theta_monthly": 0.0,
+            "total_theta_annual": 0.0,
+            "theta_by_bucket": {},
+            "theta_by_type": {},
+            "covered_call_theta": 0.0,
+            "covered_call_premium": 0.0,
+            "hedge_put_theta": 0.0,
+            "hedge_put_delta": 0.0,
+            "net_carry": 0.0,
+            "carry_efficiency": {},
+            "is_positive_carry": False,
+        }
+
+    # ========================================================================
+    # Risk Concentration
+    # ========================================================================
+
+    def analyze_risk_concentration(
+        self, metrics: Optional[List[str]] = None, top_n: int = 3
+    ) -> Dict:
+        """
+        Identify concentrated risk by strike and maturity.
+
+        Analyzes which strikes/maturities contribute most to portfolio Greeks.
+        Useful for identifying over-concentration that should be diversified.
+
+        Args:
+            metrics: List of Greeks to analyze (default: ['delta', 'gamma', 'vega'])
+            top_n: Number of top contributors to identify
+
+        Returns:
+            Dictionary with concentration analysis:
+            - by_strike: Top strikes for each Greek
+            - by_maturity: Top maturities for each Greek
+            - concentration_scores: Percentage contribution of top strikes/maturities
+        """
+        if metrics is None:
+            metrics = ["delta", "gamma", "vega"]
+
+        df = self.portfolio.to_dataframe()
+        if df.empty:
+            return self._empty_concentration()
+
+        df = self.add_maturity_buckets(df)
+
+        result: Dict[str, Any] = {"by_strike": {}, "by_maturity": {}, "concentration_scores": {}}
+
+        for metric in metrics:
+            column = f"position_{metric}"
+            if column not in df.columns:
+                continue
+
+            # Concentration by strike
+            by_strike = df.groupby("strike")[column].sum().abs()
+            total_abs = by_strike.sum()
+
+            if total_abs > 0:
+                top_strikes = by_strike.nlargest(top_n)
+
+                def _safe_to_number(val):
+                    # If val is a native numeric type or numpy numeric, return float; otherwise preserve original
+                    if isinstance(val, (int, float, np.integer, np.floating, numbers.Real)):
+                        return float(val)
+                    try:
+                        return float(val)
+                    except (TypeError, ValueError):
+                        return val
+
+                result["by_strike"][metric] = [
+                    {
+                        "strike": _safe_to_number(strike),
+                        "value": float(value),
+                        "percentage": float((value / total_abs) * 100),
+                    }
+                    for strike, value in top_strikes.items()
+                ]
+
+                # Concentration score (% held by top strike)
+                top_pct = (top_strikes.iloc[0] / total_abs) * 100 if len(top_strikes) > 0 else 0
+                result["concentration_scores"][f"{metric}_strike"] = float(top_pct)
+
+            # Concentration by maturity
+            by_maturity = df.groupby("maturity_bucket")[column].sum().abs()
+            total_abs_mat = by_maturity.sum()
+
+            if total_abs_mat > 0:
+                top_maturities = by_maturity.nlargest(top_n)
+                result["by_maturity"][metric] = [
+                    {
+                        "bucket": bucket,
+                        "value": float(value),
+                        "percentage": float((value / total_abs_mat) * 100),
+                    }
+                    for bucket, value in top_maturities.items()
+                ]
+
+                # Concentration score (% held by top bucket)
+                top_pct = (
+                    (top_maturities.iloc[0] / total_abs_mat) * 100 if len(top_maturities) > 0 else 0
+                )
+                result["concentration_scores"][f"{metric}_maturity"] = float(top_pct)
+
+        return result
+
+    def _empty_concentration(self) -> Dict:
+        """Return empty concentration structure."""
+        return {"by_strike": {}, "by_maturity": {}, "concentration_scores": {}}
+
+    # ========================================================================
+    # Hedge Recommendations
+    # ========================================================================
+
+    def calculate_hedge_actions(
+        self,
+        target_hedge_ratio: float,
+        include_option_alternatives: bool = True,
+        max_alternatives: int = 10,
+    ) -> Dict:
+        """
+        Generate specific hedge recommendations to achieve target hedge ratio.
+
+        Args:
+            target_hedge_ratio: Target hedge ratio (0-100, where 100 = fully hedged)
+            include_option_alternatives: Whether to suggest option-based hedges
+            max_alternatives: Maximum number of option alternatives to return
+
+        Returns:
+            Dictionary containing:
+            - current_state: Current portfolio metrics
+            - target_state: Target metrics
+            - delta_change_needed: Delta adjustment required
+            - underlying_trade: Shares to buy/sell
+            - underlying_cost: Estimated cost of share trade
+            - option_alternatives: List of option trades to achieve same delta (if enabled)
+        """
+        stats = self.portfolio.summary_stats()
+
+        current_delta = stats["total_delta"]
+        notional = stats["underlying_quantity"]
+        current_ratio = stats["hedge_ratio"]
+        spot_price = self.portfolio.spot_price
+
+        # Calculate target delta
+        target_delta = -notional * (target_hedge_ratio / 100.0)
+        delta_change_needed = target_delta - current_delta
+
+        # Underlying trade recommendation
+        underlying_trade = {
+            "action": "BUY" if delta_change_needed > 0 else "SELL",
+            "shares": abs(delta_change_needed),
+            "cost": abs(delta_change_needed * spot_price),
+        }
+
+        result = {
+            "current_state": {
+                "portfolio_delta": current_delta,
+                "notional_position": notional,
+                "hedge_ratio": current_ratio,
+            },
+            "target_state": {
+                "target_hedge_ratio": target_hedge_ratio,
+                "target_portfolio_delta": target_delta,
+                "delta_change_needed": delta_change_needed,
+            },
+            "underlying_trade": underlying_trade,
+            "underlying_cost": underlying_trade["cost"],
+        }
+
+        # Add option alternatives if requested
+        if include_option_alternatives and abs(delta_change_needed) >= 1:
+            result["option_alternatives"] = self._calculate_option_alternatives(
+                delta_change_needed, max_alternatives
+            )
+        else:
+            result["option_alternatives"] = []
+
+        return result
+
+    def _calculate_option_alternatives(
+        self, delta_change_needed: float, max_alternatives: int
+    ) -> List[Dict]:
+        """
+        Calculate option-based hedge alternatives.
+
+        Args:
+            delta_change_needed: Delta adjustment required
+            max_alternatives: Maximum alternatives to return
+
+        Returns:
+            List of option trade recommendations
+        """
+        alternatives = []
+
+        for pos in self.portfolio.positions:
+            per_contract_delta = pos.position_delta() / pos.quantity if pos.quantity != 0 else 0
+
+            if abs(per_contract_delta) > 0.01:  # Only meaningful deltas
+                contracts_needed = delta_change_needed / per_contract_delta
+                price = pos.option.price()
+
+                alternatives.append(
+                    {
+                        "action": "BUY" if contracts_needed > 0 else "SELL",
+                        "type": pos.option.option_type.upper(),
+                        "strike": float(pos.option.strike_price),
+                        "maturity": pos.option.maturity_date.strftime("%Y-%m-%d"),
+                        "delta_per_contract": float(per_contract_delta),
+                        "contracts_needed": abs(contracts_needed),
+                        "price": float(price),
+                        "cost": abs(contracts_needed) * price * 100,  # Per contract
+                    }
+                )
+
+        # Sort by number of contracts (prefer fewer contracts)
+        alternatives.sort(key=lambda x: x["contracts_needed"])
+
+        return alternatives[:max_alternatives]
+
+    # ========================================================================
+    # Scenario Grid Generation
+    # ========================================================================
+
+    def scenario_grid(
+        self, spot_scenarios: np.ndarray, time_points: List[datetime], metric: str = "pnl"
+    ) -> pd.DataFrame:
+        """
+        Calculate portfolio metrics across 2D grid of spot prices and time.
+
+        Useful for heatmap generation showing how portfolio evolves across
+        different price levels and time horizons.
+
+        Args:
+            spot_scenarios: Array of spot prices to test
+            time_points: List of valuation dates to test
+            metric: Metric to calculate ('pnl', 'delta', 'gamma', 'vega', 'theta')
+
+        Returns:
+            DataFrame with columns: spot_price, valuation_date, metric_value
+        """
+        from deltadewa.american_option import AmericanOption
+
+        results = []
+        original_spot = self.portfolio.spot_price
+        original_date = self.portfolio.valuation_date
+        current_value = self.portfolio.total_value()
+
+        for time_point in time_points:
+            for spot in spot_scenarios:
+                # Calculate metric at this scenario
+                if metric == "pnl":
+                    # Calculate P&L at this spot/time
+                    scenario_value = 0.0
+
+                    for position in self.portfolio.positions:
+                        days_to_maturity = (position.option.maturity_date - time_point).days
+
+                        if days_to_maturity <= 0:
+                            # Option expired - use intrinsic value
+                            if position.option.option_type == "call":
+                                intrinsic = max(0, spot - position.option.strike_price)
+                            else:
+                                intrinsic = max(0, position.option.strike_price - spot)
+                            scenario_value += intrinsic * position.quantity * position.contract_size
+                        else:
+                            # Option still alive - price it
+                            opt = AmericanOption(
+                                spot_price=spot,
+                                strike_price=position.option.strike_price,
+                                maturity_date=position.option.maturity_date,
+                                volatility=self.portfolio.volatility,
+                                risk_free_rate=self.portfolio.risk_free_rate,
+                                dividend_yield=self.portfolio.dividend_yield,
+                                option_type=position.option.option_type,
+                                valuation_date=time_point,
+                            )
+                            scenario_value += (
+                                opt.price() * position.quantity * position.contract_size
+                            )
+
+                    # Add underlying position value
+                    scenario_value += self.portfolio.underlying_quantity * spot
+
+                    metric_value = scenario_value - current_value
+
+                else:
+                    # For Greeks, update portfolio and calculate
+                    self.portfolio.update_market_conditions(
+                        spot_price=spot, valuation_date=time_point
+                    )
+
+                    if metric == "delta":
+                        metric_value = self.portfolio.total_delta()
+                    elif metric == "gamma":
+                        metric_value = self.portfolio.total_gamma()
+                    elif metric == "vega":
+                        metric_value = self.portfolio.total_vega()
+                    elif metric == "theta":
+                        metric_value = self.portfolio.total_theta()
+                    else:
+                        metric_value = 0.0
+
+                results.append(
+                    {
+                        "spot_price": spot,
+                        "valuation_date": time_point,
+                        "days_forward": (time_point - original_date).days,
+                        "metric": metric,
+                        "value": metric_value,
+                    }
+                )
+
+        # Restore original state
+        self.portfolio.update_market_conditions(
+            spot_price=original_spot, valuation_date=original_date
+        )
+
+        return pd.DataFrame(results)
+
+    # ========================================================================
+    # Risk Summary Formatting
+    # ========================================================================
+
+    def format_risk_summary(self, stats: Optional[Dict] = None) -> str:
+        """
+        Generate formatted risk summary text.
+
+        Args:
+            stats: Portfolio summary stats (uses current if None)
+
+        Returns:
+            Formatted string with risk analysis
+        """
+        if stats is None:
+            stats = self.portfolio.summary_stats()
+        if stats is None:
+            return "No portfolio data available."
+
+        lines = []
+        lines.append("=" * 70)
+        lines.append("PORTFOLIO RISK SUMMARY")
+        lines.append("=" * 70)
+        lines.append("")
+
+        # Delta analysis
+        lines.append("DIRECTIONAL RISK (DELTA):")
+        lines.append(f"  Portfolio Delta: {stats['total_delta']:,.2f}")
+        lines.append(f"  Notional Position: {stats['underlying_quantity']:,.2f}")
+        lines.append(f"  Net Delta: {stats['net_delta']:,.2f}")
+        lines.append(f"  Hedge Ratio: {stats['hedge_ratio']:.2f}%")
+
+        if abs(stats["net_delta"]) < abs(stats["underlying_quantity"]) * 0.1:
+            lines.append("  ✓ Well hedged (net delta < 10% of notional)")
+        elif stats["net_delta"] > 0:
+            lines.append("  ⚠ Net long exposure - vulnerable to price decline")
+        else:
+            lines.append("  ⚠ Net short exposure - vulnerable to price increase")
+
+        lines.append("")
+
+        # Gamma analysis
+        lines.append("CONVEXITY RISK (GAMMA):")
+        lines.append(f"  Total Gamma: {stats['total_gamma']:.4f}")
+        if stats["total_gamma"] > 0:
+            lines.append("  → Long gamma: Delta increases as spot rises")
+        else:
+            lines.append("  → Short gamma: Delta decreases as spot rises")
+
+        lines.append("")
+
+        # Vega analysis
+        lines.append("VOLATILITY RISK (VEGA):")
+        lines.append(f"  Total Vega: {stats['total_vega']:.2f}")
+        if stats["total_vega"] > 0:
+            lines.append("  → Long vega: Benefits from volatility increase")
+        else:
+            lines.append("  → Short vega: Benefits from volatility decrease")
+
+        lines.append("")
+
+        # Theta analysis
+        lines.append("TIME DECAY (THETA):")
+        lines.append(f"  Total Theta: ${stats['total_theta']:.2f}/day")
+        if stats["total_theta"] > 0:
+            lines.append("  → Positive theta: Earning from time decay")
+        else:
+            lines.append("  → Negative theta: Paying for time decay")
+
+        lines.append("")
+        lines.append("=" * 70)
+
+        return "\n".join(lines)
+
+    # ========================================================================
+    # Actionable Insights
+    # ========================================================================
+
+    def generate_insights(self) -> List[str]:
+        """
+        Generate actionable insights based on portfolio analysis.
+
+        Returns:
+            List of insight strings
+        """
+        insights = []
+        stats = self.portfolio.summary_stats()
+        carry_metrics = self.calculate_carry_metrics()
+        concentration = self.analyze_risk_concentration()
+
+        # Delta insights
+        if abs(stats["net_delta"]) > abs(stats["underlying_quantity"]) * 0.2:
+            insights.append(
+                f"⚠ High net delta exposure ({stats['net_delta']:.0f}) - "
+                "consider rebalancing hedge"
+            )
+
+        # Theta insights
+        if carry_metrics["is_positive_carry"]:
+            insights.append(
+                f"✓ Positive carry: Earning ${carry_metrics['total_theta_daily']:.2f}/day "
+                f"(${carry_metrics['total_theta_monthly']:.0f}/month)"
+            )
+        else:
+            insights.append(
+                f"⚠ Negative carry: Paying ${-carry_metrics['total_theta_daily']:.2f}/day "
+                "for options positions"
+            )
+
+        # Concentration insights
+        for metric, score in concentration["concentration_scores"].items():
+            if "strike" in metric and score > 30:
+                insights.append(
+                    f"⚠ {metric.split('_')[0].upper()} concentrated in single strike "
+                    f"({score:.1f}%) - consider diversifying"
+                )
+
+        # Gamma insights
+        if abs(stats["total_gamma"]) > 0.1:
+            direction = "long" if stats["total_gamma"] > 0 else "short"
+            insights.append(
+                f"ℹ High {direction} gamma ({abs(stats['total_gamma']):.4f}) - "
+                "delta will change significantly with spot moves"
+            )
+
+        # Vega insights
+        if abs(stats["total_vega"]) > 100:
+            direction = "benefits from" if stats["total_vega"] > 0 else "hurt by"
+            insights.append(
+                f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f}) - "
+                f"portfolio {direction} volatility increases"
+            )
+
+        return insights
+
+
+# ============================================================================
+# Module-Level Convenience Functions
+# ============================================================================
+
+
+def classify_maturity_bucket(days_to_expiry: int) -> str:
+    """
+    Convenience function for maturity classification.
+
+    Args:
+        days_to_expiry: Days until expiration
+
+    Returns:
+        Bucket label string
+    """
+    return PortfolioAnalyzer.classify_maturity_bucket(days_to_expiry)
+
+
+def quick_carry_analysis(portfolio) -> Dict:
+    """
+    Quick carry analysis for a portfolio.
+
+    Args:
+        portfolio: OptionPortfolio instance
+
+    Returns:
+        Dictionary with carry metrics
+    """
+    analyzer = PortfolioAnalyzer(portfolio)
+    return analyzer.calculate_carry_metrics()
+
+
+def quick_risk_concentration(portfolio, metrics: Optional[List[str]] = None) -> Dict:
+    """
+    Quick risk concentration analysis.
+
+    Args:
+        portfolio: OptionPortfolio instance
+        metrics: Greeks to analyze (default: ['delta', 'gamma', 'vega'])
+
+    Returns:
+        Dictionary with concentration analysis
+    """
+    analyzer = PortfolioAnalyzer(portfolio)
+    return analyzer.analyze_risk_concentration(metrics=metrics)
