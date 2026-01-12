@@ -7,8 +7,7 @@ and displaying data in notebooks and scripts.
 
 from typing import Optional, Union
 import pandas as pd
-from IPython.display import display
-
+from IPython.display import clear_output
 
 # ========== Print Formatting Utilities ==========
 
@@ -184,7 +183,7 @@ def display_styled_dataframe(
         df_display = df_display.rename(columns=lambda s: s.replace("_", " ").title())
 
     # Reset index to start at specified value
-    df_display.index = list(range(start_index, len(df_display) + start_index))
+    df_display.index = pd.RangeIndex(start=start_index, stop=len(df_display) + start_index)
 
     # Apply formatting
     styled = df_display.style
@@ -412,7 +411,6 @@ def clear_output_and_print(message: str, wait: bool = True) -> None:
     Note:
         This is a convenience wrapper for Jupyter output clearing
     """
-    from IPython.display import clear_output
 
     clear_output(wait=wait)
     print(message)
@@ -438,7 +436,7 @@ def print_progress(
     """
     percent = f"{100 * (current / float(total)):.1f}"
     filled_length = int(length * current // total)
-    bar = fill * filled_length + "-" * (length - filled_length)
-    print(f"\r{prefix} |{bar}| {percent}% {suffix}", end="")
+    progress_bar = fill * filled_length + "-" * (length - filled_length)
+    print(f"\r{prefix} |{progress_bar}| {percent}% {suffix}", end="")
     if current == total:
         print()  # New line on completion
