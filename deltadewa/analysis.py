@@ -16,11 +16,12 @@ Author: DeltaDewa Team
 Date: 2026-01-12
 """
 
-from typing import Dict, List, Tuple, Optional, Any
-from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+import numbers
 import pandas as pd
 import numpy as np
-import numbers
+from deltadewa.american_option import AmericanOption
 
 
 class PortfolioAnalyzer:
@@ -238,7 +239,8 @@ class PortfolioAnalyzer:
                 top_strikes = by_strike.nlargest(top_n)
 
                 def _safe_to_number(val):
-                    # If val is a native numeric type or numpy numeric, return float; otherwise preserve original
+                    # If val is a native numeric type or numpy numeric,
+                    # return float; otherwise preserve original
                     if isinstance(val, (int, float, np.integer, np.floating, numbers.Real)):
                         return float(val)
                     try:
@@ -417,7 +419,6 @@ class PortfolioAnalyzer:
         Returns:
             DataFrame with columns: spot_price, valuation_date, metric_value
         """
-        from deltadewa.american_option import AmericanOption
 
         results = []
         original_spot = self.portfolio.spot_price
