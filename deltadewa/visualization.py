@@ -114,17 +114,23 @@ class OptionCharts:
             Matplotlib Figure object
         """
         # Create spot price range
-        spot_min = max(0.01, self.portfolio.spot_price * (1 - spot_range_pct / 100))
+        spot_min = max(
+            0.01, self.portfolio.spot_price * (1 - spot_range_pct / 100)
+        )
         spot_max = self.portfolio.spot_price * (1 + spot_range_pct / 100)
         spot_range = np.linspace(spot_min, spot_max, num_points)
 
         # Calculate P&L curves
         pnl_options = [
-            self.portfolio.calculate_pnl_at_expiry(spot, include_underlying=False)
+            self.portfolio.calculate_pnl_at_expiry(
+                spot, include_underlying=False
+            )
             for spot in spot_range
         ]
         pnl_total = [
-            self.portfolio.calculate_pnl_at_expiry(spot, include_underlying=True)
+            self.portfolio.calculate_pnl_at_expiry(
+                spot, include_underlying=True
+            )
             for spot in spot_range
         ]
 
@@ -132,11 +138,17 @@ class OptionCharts:
         analysis = self.portfolio.risk_reward_analysis()
 
         # Determine expiration label
-        expiry_label = self._get_expiry_label()  # pylint: disable=unused-variable
+        expiry_label = (
+            self._get_expiry_label()
+        )  # pylint: disable=unused-variable
         _ = expiry_label  # To avoid unused variable warning
 
         # Create figure
-        nrows = 2 if (show_underlying and self.portfolio.underlying_quantity != 0) else 1
+        nrows = (
+            2
+            if (show_underlying and self.portfolio.underlying_quantity != 0)
+            else 1
+        )
         fig, axes = plt.subplots(nrows, 1, figsize=figsize)
         if nrows == 1:
             axes = [axes]
@@ -281,19 +293,25 @@ class OptionCharts:
             )
 
         # Formatting
-        ax.set_xlabel("Spot Price at Expiration ($)", fontsize=12, fontweight="bold")
+        ax.set_xlabel(
+            "Spot Price at Expiration ($)", fontsize=12, fontweight="bold"
+        )
         ax.set_ylabel("P&L ($)", fontsize=12, fontweight="bold")
         ax.set_title(title, fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)
         ax.legend(loc="best", fontsize=10)
-        ax.yaxis.set_major_formatter(FuncFormatter(self.format_currency_compact))
+        ax.yaxis.set_major_formatter(
+            FuncFormatter(self.format_currency_compact)
+        )
 
     # ========================================================================
     # Greek Visualization
     # ========================================================================
 
     def plot_greeks_by_strike(
-        self, metrics: Optional[List[str]] = None, figsize: Tuple[int, int] = (18, 16)
+        self,
+        metrics: Optional[List[str]] = None,
+        figsize: Tuple[int, int] = (18, 16),
     ) -> Figure:
         """
         Create stacked bar charts of Greeks by strike price.
@@ -317,14 +335,20 @@ class OptionCharts:
 
         for ax, metric in zip(axes, metrics):
             self._plot_greek_by_dimension(
-                ax, df_positions, metric, "strike", f"{metric.title()} Exposure by Strike"
+                ax,
+                df_positions,
+                metric,
+                "strike",
+                f"{metric.title()} Exposure by Strike",
             )
 
         plt.tight_layout()
         return fig
 
     def plot_greeks_by_maturity(
-        self, metrics: Optional[List[str]] = None, figsize: Tuple[int, int] = (18, 16)
+        self,
+        metrics: Optional[List[str]] = None,
+        figsize: Tuple[int, int] = (18, 16),
     ) -> Figure:
         """
         Create stacked bar charts of Greeks by maturity date.
@@ -340,9 +364,9 @@ class OptionCharts:
             metrics = ["delta", "gamma", "vega"]
 
         df_positions = self.portfolio.to_dataframe()
-        df_positions["maturity_label"] = pd.to_datetime(df_positions["maturity"]).dt.strftime(
-            "%Y-%m-%d"
-        )
+        df_positions["maturity_label"] = pd.to_datetime(
+            df_positions["maturity"]
+        ).dt.strftime("%Y-%m-%d")
 
         nrows = len(metrics)
         fig, axes = plt.subplots(nrows, 1, figsize=figsize)
@@ -386,7 +410,11 @@ class OptionCharts:
 
         # Create pivot table
         pivot = df.pivot_table(
-            values=position_metric, index=dimension, columns="type", aggfunc="sum", fill_value=0
+            values=position_metric,
+            index=dimension,
+            columns="type",
+            aggfunc="sum",
+            fill_value=0,
         )
 
         # Plot stacked bar chart
@@ -406,7 +434,9 @@ class OptionCharts:
         # Add total annotations on bars
         for container in ax.containers:
             if isinstance(container, BarContainer):
-                ax.bar_label(container, fmt="%.0f", label_type="edge", fontsize=8)
+                ax.bar_label(
+                    container, fmt="%.0f", label_type="edge", fontsize=8
+                )
 
     # ========================================================================
     # Theta Decay Visualization
@@ -454,7 +484,9 @@ class OptionCharts:
         plt.tight_layout()
         return fig
 
-    def _prepare_theta_data(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+    def _prepare_theta_data(
+        self, df: pd.DataFrame
+    ) -> Tuple[pd.DataFrame, Dict]:
         """Prepare data for theta analysis."""
         df_carry = df.copy()
 
@@ -476,7 +508,9 @@ class OptionCharts:
             else:
                 return "90+ days"
 
-        df_carry["maturity_bucket"] = df_carry["days_to_expiry"].apply(classify_maturity)
+        df_carry["maturity_bucket"] = df_carry["days_to_expiry"].apply(
+            classify_maturity
+        )
 
         # Calculate theta metrics
         total_theta_daily = df_carry["position_theta"].sum()
@@ -506,11 +540,21 @@ class OptionCharts:
         )
 
         # Sort by bucket order
-        bucket_order = ["0-7 days", "8-30 days", "31-60 days", "61-90 days", "90+ days"]
-        theta_pivot = theta_pivot.reindex([b for b in bucket_order if b in theta_pivot.index])
+        bucket_order = [
+            "0-7 days",
+            "8-30 days",
+            "31-60 days",
+            "61-90 days",
+            "90+ days",
+        ]
+        theta_pivot = theta_pivot.reindex(
+            [b for b in bucket_order if b in theta_pivot.index]
+        )
 
         if len(theta_pivot) > 0:
-            theta_pivot.plot(kind="bar", stacked=True, ax=ax, alpha=0.8, width=0.7)
+            theta_pivot.plot(
+                kind="bar", stacked=True, ax=ax, alpha=0.8, width=0.7
+            )
             ax.axhline(y=0, color="black", linestyle="--", linewidth=1)
 
             # Net theta annotations
@@ -524,20 +568,38 @@ class OptionCharts:
                     va="bottom" if net_theta > 0 else "top",
                 )
         else:
-            ax.text(0.5, 0.5, "No data available", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data available",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
 
         ax.set_xlabel("Maturity Bucket")
         ax.set_ylabel("Daily Theta ($)")
-        ax.set_title("Daily Theta by Maturity Bucket", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Daily Theta by Maturity Bucket", fontsize=12, fontweight="bold"
+        )
         ax.grid(True, alpha=0.3, axis="y")
         ax.legend(loc="best")
 
-    def _plot_theta_projection(self, ax: Axes, theta_metrics: Dict, projection_days: int):
+    def _plot_theta_projection(
+        self, ax: Axes, theta_metrics: Dict, projection_days: int
+    ):
         """Plot cumulative theta projection."""
         days_range = np.arange(0, projection_days + 1)
         cumulative_theta = days_range * theta_metrics["daily"]
 
-        ax.plot(days_range, cumulative_theta, linewidth=2, marker="o", markersize=4, markevery=5)
+        ax.plot(
+            days_range,
+            cumulative_theta,
+            linewidth=2,
+            marker="o",
+            markersize=4,
+            markevery=5,
+        )
         ax.axhline(y=0, color="gray", linestyle=":", linewidth=1)
         ax.fill_between(days_range, 0, cumulative_theta, alpha=0.2)
 
@@ -551,26 +613,46 @@ class OptionCharts:
                     xytext=(5, 5),
                     textcoords="offset points",
                     fontsize=9,
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3),
+                    bbox=dict(
+                        boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3
+                    ),
                 )
 
         ax.set_xlabel("Days Forward")
         ax.set_ylabel("Cumulative Theta P&L ($)")
-        ax.set_title("Projected Theta Accumulation", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Projected Theta Accumulation", fontsize=12, fontweight="bold"
+        )
         ax.grid(True, alpha=0.3)
 
     def _plot_carry_efficiency(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot theta/value ratio by bucket."""
-        bucket_order = ["0-7 days", "8-30 days", "31-60 days", "61-90 days", "90+ days"]
+        bucket_order = [
+            "0-7 days",
+            "8-30 days",
+            "31-60 days",
+            "61-90 days",
+            "90+ days",
+        ]
 
         bucket_summary = (
             df_carry.groupby("maturity_bucket")
-            .agg({"position_theta": "sum", "position_value": lambda x: x.abs().sum()})
+            .agg(
+                {
+                    "position_theta": "sum",
+                    "position_value": lambda x: x.abs().sum(),
+                }
+            )
             .reset_index()
         )
 
         bucket_summary["theta_pct"] = (
-            (bucket_summary["position_theta"] / bucket_summary["position_value"]) * 100 * 365
+            (
+                bucket_summary["position_theta"]
+                / bucket_summary["position_value"]
+            )
+            * 100
+            * 365
         )
 
         bucket_summary = bucket_summary.set_index("maturity_bucket")
@@ -578,21 +660,43 @@ class OptionCharts:
             [b for b in bucket_order if b in bucket_summary.index]
         )
 
-        if len(bucket_summary) > 0 and not bucket_summary["theta_pct"].isna().all():
-            colors = ["green" if x > 0 else "red" for x in bucket_summary["theta_pct"]]
-            bucket_summary["theta_pct"].plot(kind="barh", ax=ax, color=colors, alpha=0.7)
+        if (
+            len(bucket_summary) > 0
+            and not bucket_summary["theta_pct"].isna().all()
+        ):
+            colors = [
+                "green" if x > 0 else "red" for x in bucket_summary["theta_pct"]
+            ]
+            bucket_summary["theta_pct"].plot(
+                kind="barh", ax=ax, color=colors, alpha=0.7
+            )
             ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
         else:
-            ax.text(0.5, 0.5, "No data available", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data available",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
 
         ax.set_xlabel("Annualized Theta / Position Value (%)")
         ax.set_ylabel("Maturity Bucket")
-        ax.set_title("Carry Efficiency by Bucket", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Carry Efficiency by Bucket", fontsize=12, fontweight="bold"
+        )
         ax.grid(True, alpha=0.3, axis="x")
 
     def _plot_theta_vs_contracts(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot contract count vs theta contribution."""
-        bucket_order = ["0-7 days", "8-30 days", "31-60 days", "61-90 days", "90+ days"]
+        bucket_order = [
+            "0-7 days",
+            "8-30 days",
+            "31-60 days",
+            "61-90 days",
+            "90+ days",
+        ]
 
         bucket_summary = (
             df_carry.groupby("maturity_bucket")
@@ -635,10 +739,19 @@ class OptionCharts:
             ax.legend(loc="upper left")
             ax_twin.legend(loc="upper right")
         else:
-            ax.text(0.5, 0.5, "No data available", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data available",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
 
         ax.set_xlabel("Maturity Bucket")
-        ax.set_title("Contracts vs Theta Contribution", fontsize=12, fontweight="bold")
+        ax.set_title(
+            "Contracts vs Theta Contribution", fontsize=12, fontweight="bold"
+        )
         ax.tick_params(axis="x", rotation=45)
         ax.grid(True, alpha=0.3, axis="y")
 
@@ -649,18 +762,132 @@ class OptionCharts:
     def _get_expiry_label(self) -> str:
         """Get expiry label for chart titles."""
         if self.portfolio.positions:
-            maturities = sorted({pos.option.maturity_date for pos in self.portfolio.positions})
+            maturities = sorted(
+                {pos.option.maturity_date for pos in self.portfolio.positions}
+            )
             if len(maturities) == 1:
                 return maturities[0].strftime("%Y-%m-%d")
             else:
-                return (
-                    f"{maturities[0].strftime('%Y-%m-%d')} → {maturities[-1].strftime('%Y-%m-%d')}"
-                )
+                return f"{maturities[0].strftime('%Y-%m-%d')} → {maturities[-1].strftime('%Y-%m-%d')}"
         return "N/A"
+
+    # ========================================================================
+    # Scenario Analysis (Forward Date)
+    # ========================================================================
+
+    def plot_scenario_analysis(
+        self,
+        scenario_df: pd.DataFrame,
+        days_forward: int,
+        valuation_date,
+        current_spot: float,
+        figsize: Tuple[int, int] = (14, 10),
+    ) -> Figure:
+        """
+        Plot P&L and delta profiles for a scenario analysis at a forward date.
+
+        Args:
+            scenario_df: DataFrame with columns: spot_price, portfolio_pnl,
+                        underlying_pnl, total_pnl, total_delta, net_delta
+            days_forward: Days forward from today
+            valuation_date: The valuation date for the analysis
+            current_spot: Current spot price for reference line
+            figsize: Figure size tuple
+
+        Returns:
+            Matplotlib Figure
+        """
+        fig, axes = plt.subplots(2, 1, figsize=figsize)
+
+        # P&L Breakdown
+        ax1 = axes[0]
+        ax1.plot(
+            scenario_df["spot_price"],
+            scenario_df["portfolio_pnl"],
+            label="Options P&L",
+            linewidth=2.5,
+        )
+        ax1.plot(
+            scenario_df["spot_price"],
+            scenario_df["underlying_pnl"],
+            label="Underlying P&L",
+            linewidth=2.5,
+        )
+        ax1.plot(
+            scenario_df["spot_price"],
+            scenario_df["total_pnl"],
+            label="Total P&L",
+            linewidth=2.5,
+            linestyle="--",
+            color="black",
+        )
+        ax1.axhline(y=0, color="gray", linestyle=":", linewidth=1)
+        ax1.axvline(
+            x=current_spot,
+            color="red",
+            linestyle=":",
+            linewidth=1,
+            label="Current Spot",
+        )
+        ax1.set_xlabel("Spot Price", fontsize=11)
+        ax1.set_ylabel("P&L ($)", fontsize=11)
+        ax1.yaxis.set_major_formatter(
+            FuncFormatter(self.format_currency_compact)
+        )
+
+        # Add date info to title
+        date_str = valuation_date.strftime("%Y-%m-%d")
+        if days_forward == 0:
+            title_suffix = f" (Today - {date_str})"
+        else:
+            title_suffix = f" ({days_forward} days forward - {date_str})"
+        ax1.set_title(
+            f"P&L Scenario Analysis{title_suffix}",
+            fontsize=13,
+            fontweight="bold",
+        )
+        ax1.legend(loc="best")
+        ax1.grid(True, alpha=0.3)
+
+        # Delta Profile
+        ax2 = axes[1]
+        ax2.plot(
+            scenario_df["spot_price"],
+            scenario_df["total_delta"],
+            label="Portfolio Delta",
+            linewidth=2.5,
+        )
+        ax2.plot(
+            scenario_df["spot_price"],
+            scenario_df["net_delta"],
+            label="Net Delta (with Notional)",
+            linewidth=2.5,
+        )
+        ax2.axhline(y=0, color="gray", linestyle=":", linewidth=1)
+        ax2.axvline(
+            x=current_spot,
+            color="red",
+            linestyle=":",
+            linewidth=1,
+            label="Current Spot",
+        )
+        ax2.set_xlabel("Spot Price", fontsize=11)
+        ax2.set_ylabel("Delta", fontsize=11)
+        ax2.set_title(
+            "Delta Profile Across Spot Prices", fontsize=13, fontweight="bold"
+        )
+        ax2.legend(loc="best")
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        return fig
 
     @staticmethod
     def create_chart_grid(
-        rows: int, cols: int, titles: List[str], figsize: Optional[Tuple[int, int]] = None
+        rows: int,
+        cols: int,
+        titles: List[str],
+        figsize: Optional[Tuple[int, int]] = None,
     ) -> Tuple[Figure, np.ndarray]:
         """
         Create standardized multi-panel chart grid with consistent styling.
