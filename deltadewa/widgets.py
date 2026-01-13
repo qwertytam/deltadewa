@@ -19,9 +19,13 @@ Usage:
 
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Callable, List, Dict, Any, Tuple
+from typing import TYPE_CHECKING, Optional, Callable, List, Dict, Any, Tuple
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
+
+if TYPE_CHECKING:
+    # Import only for type annotations
+    from ipywidgets import Dropdown, VBox  # type: ignore[import-untyped]
 
 
 class InteractiveOutput:
@@ -102,7 +106,7 @@ class PortfolioWidgets:
         description: str = "Select Position:",
         width: str = "500px",
         include_index: bool = True,
-    ) -> widgets.Dropdown:
+    ) -> "Dropdown":
         """
         Create dropdown for position selection.
 
@@ -142,7 +146,7 @@ class PortfolioWidgets:
 
     def create_position_editor(
         self, on_change_callback: Optional[Callable] = None
-    ) -> widgets.VBox:
+    ) -> "VBox":
         """
         Create complete position editor interface.
 
@@ -381,7 +385,7 @@ class PortfolioWidgets:
         spot_range: float = 0.3,
         vol_range: Tuple[float, float] = (0.05, 0.5),
         continuous_update: bool = False,
-    ) -> Dict[str, widgets.Widget]:
+    ) -> Dict[str, Any]:
         """
         Create slider controls for market parameters.
 
@@ -556,7 +560,7 @@ class PortfolioWidgets:
 
     def create_transaction_cost_controls(
         self, default_slippage_bps: int = 10, default_commission: float = 0.65
-    ) -> Dict[str, widgets.Widget]:
+    ) -> Dict[str, Any]:
         """
         Create transaction cost parameter controls.
 
@@ -620,7 +624,7 @@ class PortfolioWidgets:
 
     def create_roll_controls(
         self, default_days_forward: int = 30
-    ) -> Dict[str, widgets.Widget]:
+    ) -> Dict[str, Any]:
         """
         Create complete roll analysis control panel.
 
@@ -706,7 +710,7 @@ class PortfolioWidgets:
 
     def create_export_controls(
         self, default_format: str = "JSON"
-    ) -> Dict[str, widgets.Widget]:
+    ) -> Dict[str, Any]:
         """
         Create export format selection and execution controls.
 
@@ -744,7 +748,7 @@ class PortfolioWidgets:
             "export_button": export_button,
         }
 
-    def create_import_controls(self) -> Dict[str, widgets.Widget]:
+    def create_import_controls(self) -> Dict[str, Any]:
         """
         Create import file selection and preview controls.
 
@@ -807,7 +811,7 @@ class PortfolioWidgets:
 
     def create_heatmap_controls(
         self, metrics: Optional[List[Tuple[str, str]]] = None
-    ) -> Dict[str, widgets.Widget]:
+    ) -> Dict[str, Any]:
         """
         Create complete heatmap configuration controls.
 

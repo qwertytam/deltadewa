@@ -296,7 +296,7 @@ class AmericanOption:
 
         try:
             self._setup_quantlib()
-        except RuntimeError:
+        except RuntimeError:  # pylint: disable=try-except-raise
             # If QuantLib raises due to date issues or other setup problems,
             # fall back to a safe state where Greeks/price may be computed
             # using intrinsic / simplified logic elsewhere in the code.
