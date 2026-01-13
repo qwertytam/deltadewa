@@ -57,6 +57,10 @@ class AmericanOption:
         # Set up QuantLib objects
         self._setup_quantlib()
 
+    def _is_expired_or_at_expiry(self) -> bool:
+        """Check if option is at or past expiry."""
+        return self.valuation_date >= self.maturity_date
+
     def _setup_quantlib(self):
         """Set up QuantLib calculation environment."""
         # Convert dates to QuantLib dates
@@ -87,7 +91,9 @@ class AmericanOption:
 
         # American exercise
         # type: ignore
-        exercise = ql.AmericanExercise(self.ql_valuation_date, self.ql_maturity_date)
+        exercise = ql.AmericanExercise(
+            self.ql_valuation_date, self.ql_maturity_date
+        )
 
         # Create the option
         # type: ignore
@@ -126,45 +132,66 @@ class AmericanOption:
         # Use Finite Difference engine for American options with Greeks support
         # This uses implicit finite differences which provides accurate Greeks
         self.option.setPricingEngine(
-            ql.FdBlackScholesVanillaEngine(self.bsm_process, self._TIME_STEPS, self._PRICE_STEPS)
+            ql.FdBlackScholesVanillaEngine(
+                self.bsm_process, self._TIME_STEPS, self._PRICE_STEPS
+            )
         )
 
     def price(self) -> float:
         """Calculate the option price."""
+        # At or past expiry, return intrinsic value
+        if self._is_expired_or_at_expiry():
+            return self.intrinsic_value()
         return self.option.NPV()
 
     def delta(self) -> float:
         """Calculate Delta (sensitivity to underlying price)."""
+        # At or past expiry, delta is 1.0 if in-the-money, 0.0 otherwise
+        if self._is_expired_or_at_expiry():
+            if self.option_type == "call":
+                return 1.0 if self.spot_price > self.strike_price else 0.0
+            else:
+                return -1.0 if self.spot_price < self.strike_price else 0.0
         try:
             return self.option.delta()
         except RuntimeError:
             # If delta not available, compute numerically
             h = self._SPOT_BUMP
             original_spot = self.spot_price
-            self.update_spot_price(original_spot + h)
+            up_spot = max(original_spot + h, 1e-8)
+            down_spot = max(original_spot - h, 1e-8)
+            self.update_spot_price(up_spot)
             price_up = self.option.NPV()
-            self.update_spot_price(original_spot - h)
+            self.update_spot_price(down_spot)
             price_down = self.option.NPV()
             self.update_spot_price(original_spot)
-            return (price_up - price_down) / (2 * h)
+            return (price_up - price_down) / (up_spot - down_spot)
 
     def gamma(self) -> float:
         """Calculate Gamma (second derivative with respect to underlying price)."""
+        # At or past expiry, gamma is zero (no curvature)
+        if self._is_expired_or_at_expiry():
+            return 0.0
         try:
             return self.option.gamma()
         except RuntimeError:
             # If gamma not available, compute numerically
             h = self._SPOT_BUMP
             original_spot = self.spot_price
-            self.update_spot_price(original_spot + h)
+            up_spot = max(original_spot + h, 1e-8)
+            down_spot = max(original_spot - h, 1e-8)
+            self.update_spot_price(up_spot)
             delta_up = self.delta()
-            self.update_spot_price(original_spot - h)
+            self.update_spot_price(down_spot)
             delta_down = self.delta()
             self.update_spot_price(original_spot)
-            return (delta_up - delta_down) / (2 * h)
+            return (delta_up - delta_down) / (up_spot - down_spot)
 
     def vega(self) -> float:
         """Calculate Vega (sensitivity to volatility)."""
+        # At or past expiry, vega is zero (no time value)
+        if self._is_expired_or_at_expiry():
+            return 0.0
         try:
             return self.option.vega() / 100.0  # Convert to 1% change
         except RuntimeError:
@@ -176,10 +203,15 @@ class AmericanOption:
             self.update_volatility(original_vol - h)
             price_down = self.option.NPV()
             self.update_volatility(original_vol)
-            return (price_up - price_down) / 2.0  # Already in terms of 1% change
+            return (
+                price_up - price_down
+            ) / 2.0  # Already in terms of 1% change
 
     def theta(self) -> float:
         """Calculate Theta (time decay per day)."""
+        # At or past expiry, theta is zero (no time decay)
+        if self._is_expired_or_at_expiry():
+            return 0.0
         try:
             return self.option.theta() / 365.0  # Convert to per day
         except RuntimeError:
@@ -194,6 +226,9 @@ class AmericanOption:
 
     def rho(self) -> float:
         """Calculate Rho (sensitivity to interest rate)."""
+        # At or past expiry, rho is zero (no time value)
+        if self._is_expired_or_at_expiry():
+            return 0.0
         try:
             return self.option.rho() / 100.0  # Convert to 1% change
         except RuntimeError:
@@ -208,7 +243,9 @@ class AmericanOption:
             price_down = self.option.NPV()
             self.risk_free_rate = original_rate
             self._setup_quantlib()
-            return (price_up - price_down) / 2.0  # Already in terms of 1% change
+            return (
+                price_up - price_down
+            ) / 2.0  # Already in terms of 1% change
 
     def greeks(self) -> dict:
         """Calculate all Greeks."""
@@ -234,8 +271,10 @@ class AmericanOption:
 
     def update_spot_price(self, new_spot_price: float):
         """Update the spot price and recalculate."""
-        self.spot_price = new_spot_price
-        self.spot_quote.setValue(new_spot_price)
+        # Ensure spot remains strictly positive for QuantLib engines
+        safe_spot = max(new_spot_price, 1e-8)
+        self.spot_price = safe_spot
+        self.spot_quote.setValue(safe_spot)
 
     def update_volatility(self, new_volatility: float):
         """Update the volatility and recalculate."""
@@ -244,8 +283,25 @@ class AmericanOption:
 
     def update_valuation_date(self, new_valuation_date: datetime):
         """Update the valuation date and recalculate."""
-        self.valuation_date = new_valuation_date
-        self._setup_quantlib()
+        # If the requested valuation date is after maturity, clamp to maturity
+        if new_valuation_date is None:
+            return
+
+        if new_valuation_date > self.maturity_date:
+            # Avoid creating an AmericanExercise with earliest > latest
+            # by clamping the valuation date to the maturity date.
+            self.valuation_date = self.maturity_date
+        else:
+            self.valuation_date = new_valuation_date
+
+        try:
+            self._setup_quantlib()
+        except RuntimeError:
+            # If QuantLib raises due to date issues or other setup problems,
+            # fall back to a safe state where Greeks/price may be computed
+            # using intrinsic / simplified logic elsewhere in the code.
+            # Re-raise only if necessary for debugging.
+            raise
 
     def __repr__(self) -> str:
         """String representation of the option."""
