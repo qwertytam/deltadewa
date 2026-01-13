@@ -17,11 +17,11 @@ Usage:
     display(position_editor)
 """
 
-import ipywidgets as widgets
-from IPython.display import display
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Callable, List, Dict, Any, Tuple
+
+import ipywidgets as widgets  # type: ignore[import-untyped]
 
 
 class InteractiveOutput:
@@ -230,7 +230,7 @@ class PortfolioWidgets:
                 position_selector.options = ["No positions"]
                 position_selector.disabled = True
 
-        def on_position_selected(change):
+        def on_position_selected(change):  # pylint: disable=unused-argument
             """Load selected position data into input fields."""
             if (
                 position_selector.value
@@ -250,7 +250,7 @@ class PortfolioWidgets:
                         expiry_input.value = p["expiry"]
                         break
 
-        def on_add_clicked(b):
+        def on_add_clicked(b):  # pylint: disable=unused-argument
             """Add a new position."""
             try:
                 self.portfolio.add_position(
@@ -266,7 +266,10 @@ class PortfolioWidgets:
                     quantity=quantity_input.value,
                     symbol="SPY",
                 )
-                status_label.value = f"✓ Added {quantity_input.value} {option_type_selector.value} @ {strike_input.value}"
+                status_label.value = (
+                    f"✓ Added {quantity_input.value} "
+                    + f"{option_type_selector.value} @ {strike_input.value}"
+                )
                 refresh_position_list()
                 with output:
                     output.clear_output()
@@ -274,10 +277,10 @@ class PortfolioWidgets:
 
                 if on_change_callback:
                     on_change_callback()
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 status_label.value = f"✗ Error: {str(e)}"
 
-        def on_remove_clicked(b):
+        def on_remove_clicked(b):  # pylint: disable=unused-argument
             """Remove selected position."""
             if (
                 position_selector.value
@@ -302,10 +305,10 @@ class PortfolioWidgets:
                             if on_change_callback:
                                 on_change_callback()
                             break
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-except
                     status_label.value = f"✗ Error: {str(e)}"
 
-        def on_update_clicked(b):
+        def on_update_clicked(b):  # pylint: disable=unused-argument
             """Update selected position."""
             if (
                 position_selector.value
@@ -342,7 +345,7 @@ class PortfolioWidgets:
                             if on_change_callback:
                                 on_change_callback()
                             break
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-except
                     status_label.value = f"✗ Error: {str(e)}"
 
         # Connect event handlers
@@ -449,8 +452,9 @@ class PortfolioWidgets:
                     pos.option.maturity_date for pos in self.portfolio.positions
                 )
                 max_days = (max_maturity - self.portfolio.valuation_date).days
-            else:
-                max_days = 90  # Default fallback
+
+        if max_days is None:
+            max_days = 90  # Default fallback
 
         max_days = max(1, max_days)
         step_size = max(1, max_days // num_steps)
@@ -462,7 +466,8 @@ class PortfolioWidgets:
 
         date_options = [
             (
-                f"Day {d}: {(self.portfolio.valuation_date + timedelta(days=d)).strftime('%Y-%m-%d')}",
+                f"Day {d}: "
+                + f"{(self.portfolio.valuation_date + timedelta(days=d)).strftime('%Y-%m-%d')}",
                 d,
             )
             for d in date_range_days
@@ -853,7 +858,7 @@ class PortfolioWidgets:
 
     def create_interactive_dashboard(
         self, spot_price: float, volatility: float, spot_range: float = 0.3
-    ) -> Tuple[widgets.Widget, Dict[str, widgets.Widget]]:
+    ) -> Tuple[widgets.Widget, Dict[str, Any]]:
         """
         Create complete interactive dashboard with market controls.
 
