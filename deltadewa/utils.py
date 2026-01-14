@@ -64,7 +64,9 @@ def print_divider(width: int = 80, char: str = "-") -> None:
     print(char * width)
 
 
-def print_section(title: str, content: Optional[str] = None, width: int = 80) -> None:
+def print_section(
+    title: str, content: Optional[str] = None, width: int = 80
+) -> None:
     """
     Print a complete section with header and optional content.
 
@@ -85,7 +87,9 @@ def print_section(title: str, content: Optional[str] = None, width: int = 80) ->
         print(content)
 
 
-def print_key_value(key: str, value, width: int = 40, align: str = "left") -> None:
+def print_key_value(
+    key: str, value, width: int = 40, align: str = "left"
+) -> None:
     """
     Print a key-value pair with aligned formatting.
 
@@ -105,7 +109,9 @@ def print_key_value(key: str, value, width: int = 40, align: str = "left") -> No
         print(f"{key}: {value}")
 
 
-def print_metric_summary(metrics: dict, title: Optional[str] = None, width: int = 80) -> None:
+def print_metric_summary(
+    metrics: dict, title: Optional[str] = None, width: int = 80
+) -> None:
     """
     Print a formatted summary of metrics.
 
@@ -130,9 +136,15 @@ def print_metric_summary(metrics: dict, title: Optional[str] = None, width: int 
 
     for key, value in metrics.items():
         if isinstance(value, float):
-            if abs(value) >= 1000:
-                print(f"{key}: {value:,.2f}")
-            elif abs(value) >= 1:
+            if abs(value) >= 10**6:
+                print(f"{key}: {value:,.0f}")
+            elif abs(value) >= 10000:
+                print(f"{key}: {value:.0f}")
+            elif abs(value) >= 100:
+                print(f"{key}: {value:.2f}")
+            elif abs(value) >= 10:
+                print(f"{key}: {value:.3f}")
+            elif abs(value) >= 0.1:
                 print(f"{key}: {value:.4f}")
             else:
                 print(f"{key}: {value:.6f}")
@@ -180,26 +192,38 @@ def display_styled_dataframe(
 
     # Convert column names to title case if requested
     if title_case:
-        df_display = df_display.rename(columns=lambda s: s.replace("_", " ").title())
+        df_display = df_display.rename(
+            columns=lambda s: s.replace("_", " ").title()
+        )
 
     # Reset index to start at specified value
-    df_display.index = pd.RangeIndex(start=start_index, stop=len(df_display) + start_index)
+    df_display.index = pd.RangeIndex(
+        start=start_index, stop=len(df_display) + start_index
+    )
 
     # Apply formatting
     styled = df_display.style
     if format_dict:
         # Update format_dict keys if title case was applied
         if title_case:
-            format_dict_updated = {k.replace("_", " ").title(): v for k, v in format_dict.items()}
+            format_dict_updated = {
+                k.replace("_", " ").title(): v for k, v in format_dict.items()
+            }
         else:
             format_dict_updated = format_dict
         styled = styled.format(format_dict_updated)
 
     # Apply background gradient if specified
     if gradient_column:
-        gradient_col = gradient_column.replace("_", " ").title() if title_case else gradient_column
+        gradient_col = (
+            gradient_column.replace("_", " ").title()
+            if title_case
+            else gradient_column
+        )
         if gradient_col in df_display.columns:
-            styled = styled.background_gradient(subset=[gradient_col], cmap=cmap)
+            styled = styled.background_gradient(
+                subset=[gradient_col], cmap=cmap
+            )
 
     return styled
 
@@ -257,7 +281,9 @@ def format_percentage(value: float, decimals: int = 2) -> str:
     return f"{value * 100:.{decimals}f}%"
 
 
-def format_number(value: Union[int, float], decimals: int = 2, thousands_sep: bool = True) -> str:
+def format_number(
+    value: Union[int, float], decimals: int = 2, thousands_sep: bool = True
+) -> str:
     """
     Format a number with appropriate precision.
 
@@ -360,11 +386,15 @@ def print_table_row(columns: list, widths: list, separator: str = "|") -> None:
         >>> print_table_row(['Name', 'Value', 'Delta'], [20, 15, 10])
         Name                | Value         | Delta
     """
-    row = separator.join(f" {str(col):<{w-2}} " for col, w in zip(columns, widths))
+    row = separator.join(
+        f" {str(col):<{w-2}} " for col, w in zip(columns, widths)
+    )
     print(row)
 
 
-def print_table(data: list, headers: list, widths: Optional[list] = None) -> None:
+def print_table(
+    data: list, headers: list, widths: Optional[list] = None
+) -> None:
     """
     Print a simple formatted table.
 
@@ -417,7 +447,12 @@ def clear_output_and_print(message: str, wait: bool = True) -> None:
 
 
 def print_progress(
-    current: int, total: int, prefix: str = "", suffix: str = "", length: int = 50, fill: str = "█"
+    current: int,
+    total: int,
+    prefix: str = "",
+    suffix: str = "",
+    length: int = 50,
+    fill: str = "█",
 ) -> None:
     """
     Print a progress bar.
