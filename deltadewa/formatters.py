@@ -46,6 +46,7 @@ def prepare_dataframe_display(
     df: pd.DataFrame,
     title_case: bool = True,
     start_index: Optional[int] = 1,
+    sort_by: Optional[List[str]] = None,
     index_name: Optional[str] = None,
 ) -> pd.DataFrame:
     """
@@ -56,6 +57,7 @@ def prepare_dataframe_display(
         title_case: Convert column names to title case
         start_index: Starting index number (1-based by default) or None to preserve original index
         index_name: Optional name for the index
+        sort_by: Optional list of columns to sort by
 
     Returns:
         Formatted DataFrame (copy)
@@ -64,14 +66,26 @@ def prepare_dataframe_display(
 
     # Format column names
     if title_case:
-        df_display = df_display.rename(columns=lambda s: s.replace("_", " ").title())
+        df_display = df_display.rename(
+            columns=lambda s: s.replace("_", " ").title()
+        )
 
     # Reset index with custom numbering
     if start_index is not None:
-        df_display.index = pd.RangeIndex(start=start_index, stop=start_index + len(df_display))
+        df_display.index = pd.RangeIndex(
+            start=start_index, stop=start_index + len(df_display)
+        )
 
     if index_name:
         df_display.index.name = index_name
+
+    # Sort by specified columns
+    if sort_by:
+        sort_by_display = [
+            col.replace("_", " ").title() if title_case else col
+            for col in sort_by
+        ]
+        df_display = df_display.sort_values(by=sort_by_display)
 
     return df_display
 
@@ -101,7 +115,9 @@ def apply_gradient_style(
     if isinstance(columns, str):
         columns = [columns]
 
-    return styler.background_gradient(subset=columns, cmap=cmap, vmin=vmin, vmax=vmax, axis=axis)
+    return styler.background_gradient(
+        subset=columns, cmap=cmap, vmin=vmin, vmax=vmax, axis=axis
+    )
 
 
 def apply_format_dict(
@@ -135,6 +151,7 @@ def format_portfolio_dataframe(
     title_case: bool = True,
     cmap: str = "RdYlGn",
     include_greeks: bool = True,
+    sort_by: Optional[list[str]] = None,
 ) -> pd.io.formats.style.Styler:
     """
     Format portfolio positions DataFrame with standard styling.
@@ -146,12 +163,15 @@ def format_portfolio_dataframe(
         title_case: Convert column names to title case
         cmap: Colormap for gradient
         include_greeks: Include Greek columns in formatting
+        sort_by: Optional list of columns to sort by
 
     Returns:
         Styled DataFrame ready for display
     """
     # Prepare display DataFrame
-    df_display = prepare_dataframe_display(df, title_case, start_index)
+    df_display = prepare_dataframe_display(
+        df=df, title_case=title_case, start_index=start_index, sort_by=sort_by
+    )
 
     # Define format dictionary
     fmt = {
@@ -181,7 +201,9 @@ def format_portfolio_dataframe(
 
     # Apply gradient if column exists
     gradient_col_display = (
-        gradient_column.replace("_", " ").title() if title_case else gradient_column
+        gradient_column.replace("_", " ").title()
+        if title_case
+        else gradient_column
     )
     if gradient_col_display in df_display.columns:
         styled = apply_gradient_style(styled, gradient_col_display, cmap=cmap)
@@ -195,6 +217,7 @@ def format_greeks_dataframe(
     title_case: bool = True,
     cmap: str = "RdBu_r",
     precision: int = 4,
+    sort_by: Optional[list[str]] = None,
 ) -> pd.io.formats.style.Styler:
     """
     Format Greeks analysis DataFrame (e.g., delta by strike/maturity).
@@ -205,11 +228,14 @@ def format_greeks_dataframe(
         title_case: Convert column names to title case
         cmap: Colormap for gradient
         precision: Decimal precision for display
+        sort_by: Optional list of columns to sort by
 
     Returns:
         Styled DataFrame
     """
-    df_display = prepare_dataframe_display(df, title_case, start_index=None)
+    df_display = prepare_dataframe_display(
+        df, title_case, sort_by=sort_by, start_index=None
+    )
 
     # Determine format based on metric
     if metric.lower() in ["delta", "gamma", "vega", "theta", "rho"]:
@@ -229,6 +255,7 @@ def format_risk_metrics_dataframe(
     currency_columns: Optional[List[str]] = None,
     percentage_columns: Optional[List[str]] = None,
     title_case: bool = True,
+    sort_by: Optional[list[str]] = None,
 ) -> pd.io.formats.style.Styler:
     """
     Format risk metrics DataFrame with appropriate numeric formatting.
@@ -238,11 +265,14 @@ def format_risk_metrics_dataframe(
         currency_columns: Columns to format as currency
         percentage_columns: Columns to format as percentages
         title_case: Convert column names to title case
+        sort_by: Optional list of columns to sort by
 
     Returns:
         Styled DataFrame
     """
-    df_display = prepare_dataframe_display(df, title_case, start_index=None)
+    df_display = prepare_dataframe_display(
+        df, title_case, sort_by=sort_by, start_index=None
+    )
 
     # Build format dictionary
     fmt = {}
@@ -268,6 +298,7 @@ def format_scenario_dataframe(
     metric_column: str = "portfolio_value",
     title_case: bool = True,
     cmap: str = "RdYlGn",
+    sort_by: Optional[list[str]] = None,
 ) -> pd.io.formats.style.Styler:
     """
     Format scenario analysis DataFrame with color gradients.
@@ -277,11 +308,14 @@ def format_scenario_dataframe(
         metric_column: Column to highlight with gradient
         title_case: Convert column names to title case
         cmap: Colormap for gradient
+        sort_by: Optional list of columns to sort by
 
     Returns:
         Styled DataFrame
     """
-    df_display = prepare_dataframe_display(df, title_case, start_index=1)
+    df_display = prepare_dataframe_display(
+        df, title_case, sort_by=sort_by, start_index=1
+    )
 
     # Format dictionary
     fmt = {
@@ -298,7 +332,9 @@ def format_scenario_dataframe(
     styled = apply_format_dict(df_display.style, fmt)
 
     # Apply gradient to metric column
-    metric_col_display = metric_column.replace("_", " ").title() if title_case else metric_column
+    metric_col_display = (
+        metric_column.replace("_", " ").title() if title_case else metric_column
+    )
     if metric_col_display in df_display.columns:
         styled = apply_gradient_style(styled, metric_col_display, cmap=cmap)
 
@@ -332,13 +368,23 @@ def create_heatmap_style(
     Returns:
         Styled DataFrame with heatmap coloring
     """
-    styled = df.style.background_gradient(cmap=cmap, axis=None, vmin=vmin, vmax=vmax)
+    styled = df.style.background_gradient(
+        cmap=cmap, axis=None, vmin=vmin, vmax=vmax
+    )
 
     styled = styled.format(format_str, na_rep="-")
 
     # Apply borders and alignment for readability using table styles
     styled = styled.set_table_styles(
-        [{"selector": "td", "props": [("border", "1px solid #ddd"), ("text-align", "right")]}],
+        [
+            {
+                "selector": "td",
+                "props": [
+                    ("border", "1px solid #ddd"),
+                    ("text-align", "right"),
+                ],
+            }
+        ],
         overwrite=False,
     )
 
@@ -389,7 +435,9 @@ def apply_traffic_light_colors(
             else:
                 return "background-color: #ccffcc"  # light green
 
-    return styler.apply(lambda col: col.map(color_traffic_light), subset=[column])
+    return styler.apply(
+        lambda col: col.map(color_traffic_light), subset=[column]
+    )
 
 
 # ============================================================================
@@ -458,7 +506,9 @@ def format_pivot_table(
 
 
 def highlight_negative_values(
-    styler: pd.io.formats.style.Styler, columns: Optional[List[str]] = None, color: str = "#ffcccc"
+    styler: pd.io.formats.style.Styler,
+    columns: Optional[List[str]] = None,
+    color: str = "#ffcccc",
 ) -> pd.io.formats.style.Styler:
     """
     Highlight negative values in specified columns.
@@ -544,7 +594,13 @@ def apply_table_preset(
                     ("padding", "8px"),
                 ],
             },
-            {"selector": "td", "props": [("border-bottom", "1px solid #ddd"), ("padding", "8px")]},
+            {
+                "selector": "td",
+                "props": [
+                    ("border-bottom", "1px solid #ddd"),
+                    ("padding", "8px"),
+                ],
+            },
         ]
     elif preset == "fancy":
         styles = [
@@ -565,8 +621,17 @@ def apply_table_preset(
                     ("font-weight", "bold"),
                 ],
             },
-            {"selector": "tr:nth-child(even)", "props": [("background-color", "#f9f9f9")]},
-            {"selector": "td", "props": [("padding", "10px"), ("border-bottom", "1px solid #ddd")]},
+            {
+                "selector": "tr:nth-child(even)",
+                "props": [("background-color", "#f9f9f9")],
+            },
+            {
+                "selector": "td",
+                "props": [
+                    ("padding", "10px"),
+                    ("border-bottom", "1px solid #ddd"),
+                ],
+            },
         ]
     elif preset == "compact":
         styles = [
@@ -585,7 +650,10 @@ def apply_table_preset(
                     ("border", "1px solid #ddd"),
                 ],
             },
-            {"selector": "td", "props": [("padding", "8px"), ("border", "1px solid #ddd")]},
+            {
+                "selector": "td",
+                "props": [("padding", "8px"), ("border", "1px solid #ddd")],
+            },
         ]
 
     return styler.set_table_styles(styles)  # type: ignore[arg-type]
