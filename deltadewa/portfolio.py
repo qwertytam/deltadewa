@@ -248,6 +248,18 @@ class OptionPortfolio:
             f"Theta: {stats['total_theta']:.2f}"
         )
 
+    def summary_market(self) -> str:
+        """Return a summary of the market conditions."""
+        return (
+            f"Symbol: {self.positions[0].symbol if self.positions else 'N/A'}, "
+            f"Underlying Quantity: {self.underlying_quantity:,.0f} shares, "
+            f"Spot Price: ${self.spot_price:,.2f}, "
+            f"Volatility: {self.volatility:.2%}, "
+            f"Risk-free Rate: {self.risk_free_rate:.2%}, "
+            f"Dividend Yield: {self.dividend_yield:.2%}, "
+            f"Valuation Date: {self.valuation_date.date()}"
+        )
+
     def get_positions(self) -> List[dict]:
         """Return positions in a format suitable for widgets/UI."""
         positions = []
@@ -293,8 +305,12 @@ class OptionPortfolio:
             pos.symbol = symbol
 
         strike_price = strike if strike is not None else pos.option.strike_price
-        maturity_date = expiry if expiry is not None else pos.option.maturity_date
-        opt_type = option_type if option_type is not None else pos.option.option_type
+        maturity_date = (
+            expiry if expiry is not None else pos.option.maturity_date
+        )
+        opt_type = (
+            option_type if option_type is not None else pos.option.option_type
+        )
 
         if (
             strike_price != pos.option.strike_price
@@ -378,7 +394,9 @@ class OptionPortfolio:
                     option_type=pos.option.option_type,
                     valuation_date=self.valuation_date,
                 )
-                new_positions.append(OptionPosition(new_option, pos.quantity, pos.contract_size))
+                new_positions.append(
+                    OptionPosition(new_option, pos.quantity, pos.contract_size)
+                )
             self.positions = new_positions
 
     def scenario_analysis(
@@ -418,7 +436,9 @@ class OptionPortfolio:
             # Full grid analysis
             for spot in spot_range:
                 for vol in vol_range:
-                    self.update_market_conditions(spot_price=spot, volatility=vol)
+                    self.update_market_conditions(
+                        spot_price=spot, volatility=vol
+                    )
 
                     results.append(
                         {
@@ -432,7 +452,9 @@ class OptionPortfolio:
                         }
                     )
 
-        self.update_market_conditions(spot_price=original_spot, volatility=original_vol)
+        self.update_market_conditions(
+            spot_price=original_spot, volatility=original_vol
+        )
 
         return pd.DataFrame(results)
 
@@ -464,20 +486,28 @@ class OptionPortfolio:
         # Calculate intrinsic value at expiry for each position
         for pos in self.positions:
             if pos.option.option_type.lower() == "call":
-                intrinsic = max(0, spot_price_at_expiry - pos.option.strike_price)
+                intrinsic = max(
+                    0, spot_price_at_expiry - pos.option.strike_price
+                )
             else:  # put
-                intrinsic = max(0, pos.option.strike_price - spot_price_at_expiry)
+                intrinsic = max(
+                    0, pos.option.strike_price - spot_price_at_expiry
+                )
 
             pnl += intrinsic * pos.quantity * pos.contract_size
 
         # Add underlying P&L if requested
         if include_underlying and self.underlying_quantity != 0:
-            underlying_pnl = (spot_price_at_expiry - self.spot_price) * self.underlying_quantity
+            underlying_pnl = (
+                spot_price_at_expiry - self.spot_price
+            ) * self.underlying_quantity
             pnl += underlying_pnl
 
         return pnl
 
-    def calculate_max_loss_options(self, spot_range: Optional[np.ndarray] = None) -> dict:
+    def calculate_max_loss_options(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
         """
         Calculate maximum loss from options positions only.
 
@@ -504,7 +534,8 @@ class OptionPortfolio:
 
         # Check for unlimited loss (naked short calls have unlimited loss potential)
         has_naked_short_calls = any(
-            pos.quantity < 0 and pos.option.option_type.lower() == "call" for pos in self.positions
+            pos.quantity < 0 and pos.option.option_type.lower() == "call"
+            for pos in self.positions
         )
 
         return {
@@ -513,7 +544,9 @@ class OptionPortfolio:
             "is_unlimited": has_naked_short_calls,
         }
 
-    def calculate_max_profit_options(self, spot_range: Optional[np.ndarray] = None) -> dict:
+    def calculate_max_profit_options(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
         """
         Calculate maximum profit from options positions only.
 
@@ -540,7 +573,8 @@ class OptionPortfolio:
 
         # Check for unlimited profit (long calls have unlimited profit potential)
         has_long_calls = any(
-            pos.quantity > 0 and pos.option.option_type.lower() == "call" for pos in self.positions
+            pos.quantity > 0 and pos.option.option_type.lower() == "call"
+            for pos in self.positions
         )
 
         return {
@@ -549,7 +583,9 @@ class OptionPortfolio:
             "is_unlimited": has_long_calls,
         }
 
-    def calculate_max_loss_total(self, spot_range: Optional[np.ndarray] = None) -> dict:
+    def calculate_max_loss_total(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
         """
         Calculate maximum loss including underlying position.
 
@@ -589,7 +625,9 @@ class OptionPortfolio:
             "is_unlimited": is_unlimited,
         }
 
-    def calculate_max_profit_total(self, spot_range: Optional[np.ndarray] = None) -> dict:
+    def calculate_max_profit_total(
+        self, spot_range: Optional[np.ndarray] = None
+    ) -> dict:
         """
         Calculate maximum profit including underlying position.
 
@@ -627,7 +665,9 @@ class OptionPortfolio:
         }
 
     def calculate_breakeven_points(
-        self, spot_range: Optional[np.ndarray] = None, include_underlying: bool = False
+        self,
+        spot_range: Optional[np.ndarray] = None,
+        include_underlying: bool = False,
     ) -> List[float]:
         """
         Calculate breakeven spot prices at expiration.
@@ -649,7 +689,9 @@ class OptionPortfolio:
         prev_pnl = None
 
         for spot in spot_range:
-            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=include_underlying)
+            pnl = self.calculate_pnl_at_expiry(
+                spot, include_underlying=include_underlying
+            )
 
             # Check for sign change (crossing zero)
             if prev_pnl is not None:
@@ -686,8 +728,12 @@ class OptionPortfolio:
                 days_to_expiry = 30
             else:
                 # Use the nearest maturity
-                min_maturity = min(pos.option.maturity_date for pos in self.positions)
-                days_to_expiry = max(1, (min_maturity - self.valuation_date).days)
+                min_maturity = min(
+                    pos.option.maturity_date for pos in self.positions
+                )
+                days_to_expiry = max(
+                    1, (min_maturity - self.valuation_date).days
+                )
 
         time_to_expiry = days_to_expiry / 365.0
 
@@ -700,7 +746,9 @@ class OptionPortfolio:
                 # Simulate final spot price using geometric Brownian motion
                 z = np.random.standard_normal()
                 drift = (
-                    self.risk_free_rate - self.dividend_yield - 0.5 * self.volatility**2
+                    self.risk_free_rate
+                    - self.dividend_yield
+                    - 0.5 * self.volatility**2
                 ) * time_to_expiry
                 diffusion = self.volatility * np.sqrt(time_to_expiry) * z
                 final_spot = self.spot_price * np.exp(drift + diffusion)
@@ -726,7 +774,9 @@ class OptionPortfolio:
             for _ in range(num_simulations):
                 z = np.random.standard_normal()
                 drift = (
-                    self.risk_free_rate - self.dividend_yield - 0.5 * self.volatility**2
+                    self.risk_free_rate
+                    - self.dividend_yield
+                    - 0.5 * self.volatility**2
                 ) * time_to_expiry
                 diffusion = self.volatility * np.sqrt(time_to_expiry) * z
                 final_spot = self.spot_price * np.exp(drift + diffusion)
@@ -743,7 +793,9 @@ class OptionPortfolio:
             expected_value = expected_value / num_simulations
 
         # Calculate breakeven points
-        breakeven_points = self.calculate_breakeven_points(include_underlying=include_underlying)
+        breakeven_points = self.calculate_breakeven_points(
+            include_underlying=include_underlying
+        )
 
         return {
             "probability": probability,
@@ -771,12 +823,16 @@ class OptionPortfolio:
         # Options only analysis
         max_loss_opts = self.calculate_max_loss_options(spot_range)
         max_profit_opts = self.calculate_max_profit_options(spot_range)
-        breakeven_opts = self.calculate_breakeven_points(spot_range, include_underlying=False)
+        breakeven_opts = self.calculate_breakeven_points(
+            spot_range, include_underlying=False
+        )
 
         # Total portfolio analysis
         max_loss_total = self.calculate_max_loss_total(spot_range)
         max_profit_total = self.calculate_max_profit_total(spot_range)
-        breakeven_total = self.calculate_breakeven_points(spot_range, include_underlying=True)
+        breakeven_total = self.calculate_breakeven_points(
+            spot_range, include_underlying=True
+        )
 
         # Probability analysis
         prob_analysis = self.calculate_probability_of_profit(
@@ -797,7 +853,9 @@ class OptionPortfolio:
             "expected_value": prob_analysis["expected_value"],
         }
 
-    def print_risk_reward_summary(self, spot_range: Optional[np.ndarray] = None):
+    def print_risk_reward_summary(
+        self, spot_range: Optional[np.ndarray] = None
+    ):
         """
         Print a formatted risk/reward summary of the portfolio.
 
@@ -816,7 +874,9 @@ class OptionPortfolio:
         print("CAPITAL REQUIREMENTS:")
         net_debit = analysis["net_debit"]
         if net_debit > 0:
-            print(f"  Net Debit: ${net_debit:,.2f} (capital required to implement)")
+            print(
+                f"  Net Debit: ${net_debit:,.2f} (capital required to implement)"
+            )
         else:
             print(f"  Net Credit: ${-net_debit:,.2f} (capital received)")
         print()
@@ -835,21 +895,29 @@ class OptionPortfolio:
                 print(f" ({loss_pct:.1f}% of net debit)")
             else:
                 print()
-            print(f"    └─ Occurs at spot price: ${max_loss_opts['spot_at_max_loss']:.2f}")
+            print(
+                f"    └─ Occurs at spot price: ${max_loss_opts['spot_at_max_loss']:.2f}"
+            )
 
         if max_profit_opts["is_unlimited"]:
             print("  Max Profit: UNLIMITED")
         else:
-            print(f"  Max Profit: ${max_profit_opts['max_profit']:,.2f}", end="")
+            print(
+                f"  Max Profit: ${max_profit_opts['max_profit']:,.2f}", end=""
+            )
             if net_debit > 0:
                 roi = (max_profit_opts["max_profit"] / net_debit) * 100
                 print(f" ({roi:.1f}% return on net debit)")
             else:
                 print()
-            print(f"    └─ Occurs at spot price: ${max_profit_opts['spot_at_max_profit']:.2f}")
+            print(
+                f"    └─ Occurs at spot price: ${max_profit_opts['spot_at_max_profit']:.2f}"
+            )
 
         if analysis["breakeven_options"]:
-            breakevens_str = ", ".join([f"${be:.2f}" for be in analysis["breakeven_options"]])
+            breakevens_str = ", ".join(
+                [f"${be:.2f}" for be in analysis["breakeven_options"]]
+            )
             print(f"  Breakeven Points: {breakevens_str}")
         else:
             print("  Breakeven Points: None identified")
@@ -865,13 +933,19 @@ class OptionPortfolio:
                 print("  Max Loss: UNLIMITED (short underlying position)")
             else:
                 portfolio_value = self.total_portfolio_value()
-                print(f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}", end="")
+                print(
+                    f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}", end=""
+                )
                 if portfolio_value > 0:
-                    loss_pct = (-max_loss_total["max_loss"] / portfolio_value) * 100
+                    loss_pct = (
+                        -max_loss_total["max_loss"] / portfolio_value
+                    ) * 100
                     print(f" ({loss_pct:.1f}% of portfolio value)")
                 else:
                     print()
-                print(f"    └─ Occurs at spot price: ${max_loss_total['spot_at_max_loss']:.2f}")
+                print(
+                    f"    └─ Occurs at spot price: ${max_loss_total['spot_at_max_loss']:.2f}"
+                )
 
             if max_profit_total["is_unlimited"]:
                 if self.underlying_quantity > 0:
@@ -880,16 +954,25 @@ class OptionPortfolio:
                     print("  Max Profit: UNLIMITED")
                 print("    └─ Profit increases with spot price")
             else:
-                print(f"  Max Profit: ${max_profit_total['max_profit']:,.2f}", end="")
+                print(
+                    f"  Max Profit: ${max_profit_total['max_profit']:,.2f}",
+                    end="",
+                )
                 if portfolio_value > 0:
-                    profit_pct = (max_profit_total["max_profit"] / portfolio_value) * 100
+                    profit_pct = (
+                        max_profit_total["max_profit"] / portfolio_value
+                    ) * 100
                     print(f" ({profit_pct:.1f}% of portfolio value)")
                 else:
                     print()
-                print(f"    └─ Occurs at spot price: ${max_profit_total['spot_at_max_profit']:.2f}")
+                print(
+                    f"    └─ Occurs at spot price: ${max_profit_total['spot_at_max_profit']:.2f}"
+                )
 
             if analysis["breakeven_total"]:
-                breakevens_str = ", ".join([f"${be:.2f}" for be in analysis["breakeven_total"]])
+                breakevens_str = ", ".join(
+                    [f"${be:.2f}" for be in analysis["breakeven_total"]]
+                )
                 print(f"  Breakeven Points: {breakevens_str}")
             else:
                 print("  Breakeven Points: None identified")
@@ -905,11 +988,21 @@ class OptionPortfolio:
         print()
 
         # Risk/Reward Ratio
-        if not max_loss_opts["is_unlimited"] and not max_profit_opts["is_unlimited"]:
-            if max_profit_opts["max_profit"] > 0 and max_loss_opts["max_loss"] < 0:
+        if (
+            not max_loss_opts["is_unlimited"]
+            and not max_profit_opts["is_unlimited"]
+        ):
+            if (
+                max_profit_opts["max_profit"] > 0
+                and max_loss_opts["max_loss"] < 0
+            ):
                 # Standard risk/reward ratio: profit potential to loss potential
-                rr_ratio = max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
-                print(f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)")
+                rr_ratio = (
+                    max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
+                )
+                print(
+                    f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)"
+                )
         print("=" * 80)
 
     def clear_positions(self):
