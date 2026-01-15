@@ -307,6 +307,16 @@ def format_number(
         return f"{value:.{decimals}f}"
 
 
+def format_currency_compact(x, pos) -> str:  # pylint: disable=unused-argument
+    """Format currency: <$10k as $x,xxx, <$10M as $x,xxxk, else $x,xxxM"""
+    if abs(x) < 10_000:
+        return f"${x:,.0f}"
+    elif abs(x) < 10_000_000:
+        return f"${x/1_000:,.0f}k"
+    else:
+        return f"${x/1_000_000:,.1f}M"
+
+
 # ========== Status/Alert Utilities ==========
 
 
