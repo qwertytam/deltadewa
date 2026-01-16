@@ -1,0 +1,20 @@
+# Portfolio Configuration Example
+# Simple example of a protective put strategy on NFLX
+
+# Market Parameters
+# These define the underlying asset and market conditions
+market_parameters:
+  spot_price: 88.12           # Current price of underlying asset
+  volatility: 0.395           # Annualized volatility of the underlying asset
+  risk_free_rate: 0.0401       # Risk-free interest rate
+  dividend_yield: 0.0         # Dividend yield of the underlying asset
+  underlying_quantity: 100.0  # Underlying position size (shares)
+  symbol: "NFLX"              # Default symbol for positions (optional)
+
+# Option Positions
+# Define the options in the portfolio
+positions:
+  - option_type: "put"        # Option type ("put" or "call")
+    strike_price: 78          # Strike price of the option
+    maturity_days: 364        # Maturity in days from today
+    quantity: 1               # Number of contracts (positive = long, negative = short)
