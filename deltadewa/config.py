@@ -4,9 +4,11 @@ Configuration utilities for DeltaDewa dashboard.
 Provides interactive configuration widgets and default settings management.
 """
 
+import platform
+import subprocess
 from pathlib import Path
 from typing import Optional, Callable
-import ipywidgets as widgets
+import ipywidgets as widgets  # type: ignore[import-untyped]
 
 
 def create_export_dir_widget(
@@ -86,9 +88,11 @@ def create_export_dir_widget(
 
     status_output = widgets.Output()
 
-    # Store current directory in widget metadata
+    # Store current directory in widget metadata (public attribute to avoid protected access)
     widget_container = widgets.VBox()
-    widget_container._export_dir = Path(default_dir)
+    # store as a public attribute; use setattr to avoid static analyzer
+    # complaints on unknown attributes
+    setattr(widget_container, "export_dir", Path(default_dir))
 
     def on_location_change(change):
         if change["new"] == "custom":
@@ -97,7 +101,7 @@ def create_export_dir_widget(
         else:
             custom_path_input.disabled = True
 
-    def on_create_click(b):
+    def on_create_click(b):  # pylint: disable=unused-argument
         with status_output:
             status_output.clear_output(wait=True)
 
@@ -117,7 +121,7 @@ def create_export_dir_widget(
                 test_file.touch()
                 test_file.unlink()
 
-                widget_container._export_dir = export_dir
+                setattr(widget_container, "export_dir", export_dir)
 
                 print(f"✅ Export directory:  {export_dir}")
 
@@ -132,7 +136,7 @@ def create_export_dir_widget(
                         f"   Found:  {json_count} JSON, {yaml_count} YAML, {csv_count} CSV"
                     )
                 else:
-                    print(f"   Directory is empty")
+                    print("   Directory is empty")
 
                 open_button.disabled = False
 
@@ -140,22 +144,19 @@ def create_export_dir_widget(
                 if on_change_callback:
                     on_change_callback(export_dir)
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 print(f"❌ Error:  {str(e)}")
 
-    def on_open_click(b):
-        import platform
-        import subprocess
-
+    def on_open_click(b):  # pylint: disable=unused-argument
         try:
-            export_dir = widget_container._export_dir
+            export_dir = getattr(widget_container, "export_dir", Path.cwd())
             if platform.system() == "Darwin":
-                subprocess.run(["open", str(export_dir)])
+                subprocess.run(["open", str(export_dir)], check=False)
             elif platform.system() == "Windows":
-                subprocess.run(["explorer", str(export_dir)])
+                subprocess.run(["explorer", str(export_dir)], check=False)
             else:
-                subprocess.run(["xdg-open", str(export_dir)])
-        except Exception as e:
+                subprocess.run(["xdg-open", str(export_dir)], check=False)
+        except Exception as e:  # pylint: disable=broad-exception-caught
             with status_output:
                 print(f"⚠️  Could not open:  {e}")
 
@@ -178,8 +179,9 @@ def create_export_dir_widget(
     ]
 
     # Auto-initialize default
-    default_path = Path(default_dir)
+    default_path = Path(default_dir).expanduser().resolve()
     default_path.mkdir(parents=True, exist_ok=True)
+    setattr(widget_container, "export_dir", default_path)
 
     return widget_container
 
@@ -194,4 +196,4 @@ def get_export_dir_from_widget(widget: widgets.VBox) -> Path:
     Returns:
         Path object for export directory
     """
-    return widget._export_dir
+    return getattr(widget, "export_dir")
