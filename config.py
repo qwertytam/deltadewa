@@ -1,0 +1,197 @@
+"""
+Configuration utilities for DeltaDewa dashboard.
+
+Provides interactive configuration widgets and default settings management.
+"""
+
+from pathlib import Path
+from typing import Optional, Callable
+import ipywidgets as widgets
+
+
+def create_export_dir_widget(
+    default_dir: str = "exports",
+    on_change_callback: Optional[Callable] = None,
+    show_browser: bool = True,
+) -> widgets.VBox:
+    """
+    Create interactive export directory configuration widget.
+
+    Args:
+        default_dir: Default export directory name
+        on_change_callback:  Optional callback when directory changes
+        show_browser:  Whether to show "Open in Finder" button
+
+    Returns:
+        VBox widget with complete directory configuration interface
+
+    Example:
+        from deltadewa.config import create_export_dir_widget
+
+        def on_dir_change(export_dir):
+            print(f"Directory changed to: {export_dir}")
+
+        widget = create_export_dir_widget(
+            default_dir='my_exports',
+            on_change_callback=on_dir_change
+        )
+        display(widget)
+    """
+
+    # Common location presets
+    common_locations = [
+        ("Current Directory (./exports)", "exports"),
+        (
+            "Home Directory (~/deltadewa_exports)",
+            str(Path.home() / "deltadewa_exports"),
+        ),
+        (
+            "Documents (~/Documents/deltadewa)",
+            str(Path.home() / "Documents" / "deltadewa"),
+        ),
+        ("Custom...", "custom"),
+    ]
+
+    location_selector = widgets.Dropdown(
+        options=common_locations,
+        value=default_dir,
+        description="Location:",
+        style={"description_width": "120px"},
+        layout=widgets.Layout(width="500px"),
+    )
+
+    custom_path_input = widgets.Text(
+        value="",
+        placeholder="Enter custom path",
+        description="Custom Path:",
+        style={"description_width": "120px"},
+        layout=widgets.Layout(width="500px"),
+        disabled=True,
+    )
+
+    create_button = widgets.Button(
+        description="Set Directory",
+        button_style="success",
+        icon="folder-open",
+        layout=widgets.Layout(width="150px"),
+    )
+
+    open_button = widgets.Button(
+        description="Open in Finder",
+        button_style="info",
+        icon="external-link",
+        layout=widgets.Layout(width="180px"),
+        disabled=True,
+    )
+
+    status_output = widgets.Output()
+
+    # Store current directory in widget metadata
+    widget_container = widgets.VBox()
+    widget_container._export_dir = Path(default_dir)
+
+    def on_location_change(change):
+        if change["new"] == "custom":
+            custom_path_input.disabled = False
+            custom_path_input.value = str(Path.cwd() / "exports")
+        else:
+            custom_path_input.disabled = True
+
+    def on_create_click(b):
+        with status_output:
+            status_output.clear_output(wait=True)
+
+            # Determine path
+            if location_selector.value == "custom":
+                dir_path = custom_path_input.value
+            else:
+                dir_path = location_selector.value
+
+            export_dir = Path(dir_path).expanduser().resolve()
+
+            try:
+                export_dir.mkdir(parents=True, exist_ok=True)
+
+                # Test write permission
+                test_file = export_dir / ".test_write"
+                test_file.touch()
+                test_file.unlink()
+
+                widget_container._export_dir = export_dir
+
+                print(f"✅ Export directory:  {export_dir}")
+
+                # Count existing files
+                json_count = len(list(export_dir.glob("*.json")))
+                yaml_count = len(list(export_dir.glob("*. yaml")))
+                csv_count = len(list(export_dir.glob("*. csv")))
+                total = json_count + yaml_count + csv_count
+
+                if total > 0:
+                    print(
+                        f"   Found:  {json_count} JSON, {yaml_count} YAML, {csv_count} CSV"
+                    )
+                else:
+                    print(f"   Directory is empty")
+
+                open_button.disabled = False
+
+                # Trigger callback
+                if on_change_callback:
+                    on_change_callback(export_dir)
+
+            except Exception as e:
+                print(f"❌ Error:  {str(e)}")
+
+    def on_open_click(b):
+        import platform
+        import subprocess
+
+        try:
+            export_dir = widget_container._export_dir
+            if platform.system() == "Darwin":
+                subprocess.run(["open", str(export_dir)])
+            elif platform.system() == "Windows":
+                subprocess.run(["explorer", str(export_dir)])
+            else:
+                subprocess.run(["xdg-open", str(export_dir)])
+        except Exception as e:
+            with status_output:
+                print(f"⚠️  Could not open:  {e}")
+
+    location_selector.observe(on_location_change, names="value")
+    create_button.on_click(on_create_click)
+    open_button.on_click(on_open_click)
+
+    # Assemble widget
+    buttons = [create_button, open_button] if show_browser else [create_button]
+
+    widget_container.children = [
+        widgets.HTML("<h4>📁 Export Directory Configuration</h4>"),
+        widgets.HTML(
+            "<p style='color: #666;'>Choose where to save portfolio exports</p>"
+        ),
+        location_selector,
+        custom_path_input,
+        widgets.HBox(buttons),
+        status_output,
+    ]
+
+    # Auto-initialize default
+    default_path = Path(default_dir)
+    default_path.mkdir(parents=True, exist_ok=True)
+
+    return widget_container
+
+
+def get_export_dir_from_widget(widget: widgets.VBox) -> Path:
+    """
+    Extract export directory Path from configuration widget.
+
+    Args:
+        widget: Widget created by create_export_dir_widget()
+
+    Returns:
+        Path object for export directory
+    """
+    return widget._export_dir
