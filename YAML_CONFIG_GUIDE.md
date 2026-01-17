@@ -89,7 +89,8 @@ Each position requires:
 
 - If `volatility` is specified for a position, that specific value will be used
 - If `volatility` is omitted, the portfolio-level `market_parameters.volatility` will be used
-- This allows modeling positions with different implied volatilities
+- This allows modeling positions with different implied volatilities (volatility skew/smile)
+- When a position has custom volatility, the `custom_volatility` flag is automatically set
 
 Example with mixed volatilities:
 
@@ -112,6 +113,40 @@ positions:
     quantity: -3
     # No volatility specified - uses default 25%
 ```
+
+### Volatility Analysis Behavior
+
+When performing volatility sensitivity analysis (stress tests, scenario analysis, etc.), the dashboard uses **proportional volatility scaling** to maintain the relative volatility structure:
+
+**How it works:**
+
+1. The system calculates a **vega-weighted average volatility** across all positions
+2. Volatility scenarios are defined as percentages of this average (e.g., ±50%)
+3. When testing a scenario, each position's volatility is scaled proportionally
+4. This preserves the volatility skew/smile structure across strikes
+
+**Example:**
+
+If you have positions with volatilities [35%, 30%, 25%, 22%]:
+- Vega-weighted average might be 28.3%
+- Testing +20% scenario (34% average):
+  - Positions scale to [42%, 36%, 30%, 26.4%]
+  - All scaled by the same factor (1.2×)
+  - Relative differences preserved
+
+**Benefits:**
+
+- **Realistic modeling** - Maintains market volatility structure
+- **Accurate vega** - Position sensitivities remain proportional
+- **Consistent analysis** - All positions shocked consistently
+
+**Displaying volatility profile:**
+
+The notebook's volatility profile section shows:
+- Vega-weighted average volatility
+- Volatility range (min/max/std)
+- Which positions have custom volatility
+- Warning if volatility skew is detected
 
 ## Export and Import Features
 
