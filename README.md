@@ -199,6 +199,57 @@ The dashboard helps you:
 - Determine adjustments needed for delta neutrality
 - Understand gamma risk and how delta will change
 
+### Volatility Analysis
+
+The dashboard includes sophisticated volatility sensitivity analysis that properly handles portfolios with position-level volatilities:
+
+**Proportional Volatility Scaling**
+
+When testing volatility scenarios (stress tests, scenario grids), the system:
+
+1. Calculates a **vega-weighted average volatility** across all positions
+2. Scales each position's volatility proportionally to maintain the volatility skew/smile
+3. Preserves the relative volatility structure between positions
+
+**Example:**
+
+```python
+# Portfolio with volatility skew
+positions = [
+    {"strike": 90, "vol": 0.35},   # OTM put - higher IV
+    {"strike": 95, "vol": 0.30},   # Nearer put
+    {"strike": 100, "vol": 0.25},  # ATM - default IV
+    {"strike": 105, "vol": 0.22},  # OTM call - lower IV
+]
+
+# Vega-weighted average: 0.283
+# Testing +20% vol scenario (avg becomes 0.34):
+#   90 strike: 0.35 → 0.42 (scaled by 1.2×)
+#   95 strike: 0.30 → 0.36 (scaled by 1.2×)
+#   100 strike: 0.25 → 0.30 (scaled by 1.2×)
+#   105 strike: 0.22 → 0.264 (scaled by 1.2×)
+# Skew structure preserved!
+```
+
+**Benefits:**
+
+- **Accurate vega analysis** - Position sensitivities remain proportional
+- **Realistic scenarios** - Models real market volatility behavior
+- **Proper risk assessment** - Captures volatility skew effects
+
+**Volatility Statistics:**
+
+Use the utility functions to analyze your portfolio's volatility profile:
+
+```python
+from deltadewa.utils import get_volatility_stats, calculate_portfolio_avg_volatility
+
+stats = get_volatility_stats(portfolio)
+print(f"Vega-weighted avg: {stats['avg_volatility']:.2%}")
+print(f"Volatility range: {stats['min_volatility']:.2%} - {stats['max_volatility']:.2%}")
+print(f"Positions with custom vol: {stats['num_custom_vol']}/{stats['num_positions']}")
+```
+
 ## Project Structure
 
 ```ini
