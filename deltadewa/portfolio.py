@@ -342,7 +342,7 @@ class OptionPortfolio:
             option_volatility = volatility
             pos.custom_volatility = True
         else:
-            # Keep existing volatility if nothing changed, otherwise use existing
+            # Keep existing volatility
             option_volatility = pos.option.volatility
 
         if (

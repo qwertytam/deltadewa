@@ -345,16 +345,16 @@ class PortfolioSerializer:
             )
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
             
-            # Handle volatility - use custom if specified, otherwise None to use portfolio default
-            position_volatility = pos_data.get('volatility', market_params['volatility'])
+            # Handle volatility - only use custom if explicitly marked
             custom_volatility = pos_data.get('custom_volatility', False)
+            position_volatility = pos_data.get('volatility') if custom_volatility else None
 
             imported_portfolio.add_position(
                 strike_price=strike,
                 maturity_date=maturity,
                 option_type=option_type,
                 quantity=quantity,
-                volatility=position_volatility if custom_volatility else None,
+                volatility=position_volatility,
             )
 
         return {
