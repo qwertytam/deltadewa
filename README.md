@@ -144,7 +144,7 @@ portfolio.add_position(
     strike_price=100.0,
     maturity_date=maturity,
     quantity=-5,
-    option_type="call"
+    option_type="call",
     # No volatility specified - uses portfolio default of 0.25
 )
 
