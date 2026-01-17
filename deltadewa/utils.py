@@ -13,6 +13,38 @@ from IPython.display import clear_output
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
+__all__ = [
+    # Print formatting utilities
+    "print_header",
+    "print_subheader",
+    "print_divider",
+    "print_section",
+    "print_key_value",
+    "print_metric_summary",
+    # DataFrame display utilities
+    "display_styled_dataframe",
+    "format_currency",
+    "format_percentage",
+    "format_number",
+    "format_currency_compact",
+    # Status/alert utilities
+    "print_success",
+    "print_warning",
+    "print_error",
+    "print_info",
+    # Table utilities
+    "print_table_row",
+    "print_table",
+    # Convenience functions
+    "clear_output_and_print",
+    "print_progress",
+    # Volatility analysis utilities
+    "calculate_portfolio_avg_volatility",
+    "apply_proportional_volatility_shift",
+    "restore_volatilities",
+    "get_volatility_stats",
+]
+
 # ========== Print Formatting Utilities ==========
 
 
