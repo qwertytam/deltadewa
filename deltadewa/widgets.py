@@ -266,22 +266,19 @@ class PortfolioWidgets:
                 position_selector.value
                 and position_selector.value != "No positions"
             ):
-                positions = self.portfolio.get_positions()
-                for i, p in enumerate(positions):
-                    if (
-                        position_selector.value
-                        == f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                    ):
-                        quantity_input.value = p["quantity"]
-                        strike_input.value = p["strike"]
+                # Find the matching position by comparing display strings
+                for pos in self.portfolio.positions:
+                    display_str = f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
+                    if position_selector.value == display_str:
+                        quantity_input.value = pos.quantity
+                        strike_input.value = pos.option.strike_price
                         option_type_selector.value = (
-                            "Call" if p["type"] == "Call" else "Put"
+                            "Call" if pos.option.option_type.lower() == "call" else "Put"
                         )
-                        expiry_input.value = p["expiry"]
+                        expiry_input.value = pos.option.maturity_date.date()
                         # Update volatility input based on position
-                        selected_position = self.portfolio.positions[i]
-                        volatility_input.value = selected_position.option.volatility
-                        use_default_vol.value = not selected_position.custom_volatility
+                        volatility_input.value = pos.option.volatility
+                        use_default_vol.value = not pos.custom_volatility
                         break
 
         def on_add_clicked(b):  # pylint: disable=unused-argument
@@ -325,12 +322,10 @@ class PortfolioWidgets:
                 and position_selector.value != "No positions"
             ):
                 try:
-                    positions = self.portfolio.get_positions()
-                    for i, p in enumerate(positions):
-                        if (
-                            position_selector.value
-                            == f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                        ):
+                    # Find the matching position index
+                    for i, pos in enumerate(self.portfolio.positions):
+                        display_str = f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
+                        if position_selector.value == display_str:
                             self.portfolio.remove_position(i)
                             status_label.value = (
                                 f"✓ Removed position {position_selector.value}"
@@ -353,12 +348,10 @@ class PortfolioWidgets:
                 and position_selector.value != "No positions"
             ):
                 try:
-                    positions = self.portfolio.get_positions()
-                    for i, p in enumerate(positions):
-                        if (
-                            position_selector.value
-                            == f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                        ):
+                    # Find the matching position index
+                    for i, pos in enumerate(self.portfolio.positions):
+                        display_str = f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
+                        if position_selector.value == display_str:
                             # Determine volatility parameter
                             position_volatility = None if use_default_vol.value else volatility_input.value
                             
