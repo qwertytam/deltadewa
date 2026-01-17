@@ -182,7 +182,15 @@ class OptionPortfolio:
         return self.total_value() + self.total_underlying_value()
 
     def total_delta(self) -> float:
-        """Calculate total portfolio delta."""
+        """
+        Calculate total portfolio delta from option positions only.
+        
+        This is the sum of all option position deltas, excluding the underlying position.
+        Also referred to as "Portfolio Delta" or "Total Delta".
+        
+        Returns:
+            Total delta from options only (positive = net long options, negative = net short options)
+        """
         return sum(pos.position_delta() for pos in self.positions)
 
     def total_gamma(self) -> float:
@@ -203,10 +211,21 @@ class OptionPortfolio:
 
     def net_delta(self) -> float:
         """
-        Calculate net delta including the notional position.
-
+        Calculate net delta including both options and underlying position.
+        
+        This is the total directional exposure combining:
+        - Portfolio delta (from all option positions)
+        - Underlying position quantity
+        
+        Also referred to as "Net Position Delta" or "Total Exposure".
+        
         Returns:
             Net delta exposure (positive = net long, negative = net short)
+            
+        Example:
+            - Portfolio delta (options): -100
+            - Underlying position: +100 shares
+            - Net delta: 0 (perfectly hedged)
         """
         return self.total_delta() + self.underlying_quantity
 
@@ -231,7 +250,24 @@ class OptionPortfolio:
         return -self.net_delta()
 
     def summary_stats(self) -> dict:
-        """Get summary statistics of the portfolio."""
+        """
+        Get summary statistics of the portfolio.
+        
+        Returns:
+            Dictionary containing:
+            - total_positions: Number of option positions
+            - total_value: Value of option positions only
+            - total_underlying_value: Value of underlying position
+            - total_portfolio_value: Total value (options + underlying)
+            - total_delta: Portfolio delta from options only
+            - underlying_quantity: Number of underlying shares
+            - net_delta: Total delta exposure (options + underlying)
+            - hedge_ratio: Percentage of underlying hedged by options
+            - delta_adjustment: Shares needed for delta neutrality
+            - total_gamma, total_vega, total_theta, total_rho: Greek totals
+            - volatility_min, volatility_max: Volatility range
+            - custom_volatility_count: Positions with custom volatility
+        """
         stats = {
             "total_positions": len(self.positions),
             "total_value": self.total_value(),
