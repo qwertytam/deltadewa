@@ -117,6 +117,47 @@ df = portfolio.to_dataframe()
 print(df)
 ```
 
+### Per-Position Volatility
+
+You can specify different implied volatilities for individual positions to model volatility skew or smile:
+
+```python
+portfolio = OptionPortfolio(
+    underlying_quantity=1000.0,
+    spot_price=100.0,
+    volatility=0.25,  # Default volatility
+    risk_free_rate=0.05,
+    dividend_yield=0.02
+)
+
+# Add position with custom volatility (e.g., modeling volatility skew)
+portfolio.add_position(
+    strike_price=95.0,
+    maturity_date=maturity,
+    quantity=10,
+    option_type="put",
+    volatility=0.35  # Custom volatility for this position (35%)
+)
+
+# Add position using default portfolio volatility
+portfolio.add_position(
+    strike_price=100.0,
+    maturity_date=maturity,
+    quantity=-5,
+    option_type="call"
+    # No volatility specified - uses portfolio default of 0.25
+)
+
+# View volatility per position
+df = portfolio.to_dataframe()
+print(df[['type', 'strike', 'volatility', 'custom_volatility']])
+
+# Check volatility statistics
+stats = portfolio.summary_stats()
+print(f"Volatility range: {stats['volatility_min']:.2%} - {stats['volatility_max']:.2%}")
+print(f"Positions with custom volatility: {stats['custom_volatility_count']}")
+```
+
 ## Example Scenario
 
 The default dashboard configuration includes:

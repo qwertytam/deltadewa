@@ -47,6 +47,8 @@ def main():
     maturity_90d = today + timedelta(days=90)
 
     # Long puts for downside protection
+    # Optional: Add volatility parameter to specify position-specific volatility
+    # Example: portfolio.add_position(95, maturity_30d, 5, "put", volatility=0.30)
     portfolio.add_position(95, maturity_30d, 5, "put")
     portfolio.add_position(95, maturity_60d, 5, "put")
     portfolio.add_position(100, maturity_90d, 10, "put")
