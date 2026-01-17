@@ -448,7 +448,7 @@ class PortfolioAnalyzer:
                                 spot_price=spot,
                                 strike_price=position.option.strike_price,
                                 maturity_date=position.option.maturity_date,
-                                volatility=self.portfolio.volatility,
+                                volatility=position.option.volatility,
                                 risk_free_rate=self.portfolio.risk_free_rate,
                                 dividend_yield=self.portfolio.dividend_yield,
                                 option_type=position.option.option_type,
