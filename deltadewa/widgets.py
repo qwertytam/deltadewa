@@ -247,13 +247,16 @@ class PortfolioWidgets:
         output = widgets.Output()
 
         # Helper functions
+        def get_position_display_string(pos):
+            """Generate consistent display string for a position."""
+            return f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
+        
         def refresh_position_list():
             """Update dropdown with current positions."""
-            positions = self.portfolio.get_positions()
-            if positions:
+            if self.portfolio.positions:
                 position_selector.options = [
-                    f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                    for p in positions
+                    get_position_display_string(pos)
+                    for pos in self.portfolio.positions
                 ]
                 position_selector.disabled = False
             else:
@@ -266,10 +269,9 @@ class PortfolioWidgets:
                 position_selector.value
                 and position_selector.value != "No positions"
             ):
-                # Find the matching position by comparing display strings
+                # Find the matching position
                 for pos in self.portfolio.positions:
-                    display_str = f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
-                    if position_selector.value == display_str:
+                    if position_selector.value == get_position_display_string(pos):
                         quantity_input.value = pos.quantity
                         strike_input.value = pos.option.strike_price
                         option_type_selector.value = (
@@ -324,8 +326,7 @@ class PortfolioWidgets:
                 try:
                     # Find the matching position index
                     for i, pos in enumerate(self.portfolio.positions):
-                        display_str = f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
-                        if position_selector.value == display_str:
+                        if position_selector.value == get_position_display_string(pos):
                             self.portfolio.remove_position(i)
                             status_label.value = (
                                 f"✓ Removed position {position_selector.value}"
@@ -350,8 +351,7 @@ class PortfolioWidgets:
                 try:
                     # Find the matching position index
                     for i, pos in enumerate(self.portfolio.positions):
-                        display_str = f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
-                        if position_selector.value == display_str:
+                        if position_selector.value == get_position_display_string(pos):
                             # Determine volatility parameter
                             position_volatility = None if use_default_vol.value else volatility_input.value
                             

@@ -439,9 +439,9 @@ class OptionPortfolio:
                     OptionPosition(
                         new_option, 
                         pos.quantity, 
-                        pos.contract_size,
-                        pos.symbol,
-                        pos.custom_volatility,  # Preserve custom volatility flag
+                        contract_size=pos.contract_size,
+                        symbol=pos.symbol,
+                        custom_volatility=pos.custom_volatility,  # Preserve custom volatility flag
                     )
                 )
             self.positions = new_positions

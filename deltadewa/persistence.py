@@ -345,9 +345,10 @@ class PortfolioSerializer:
             )
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
             
-            # Handle volatility - only use custom if explicitly marked
+            # Handle volatility - check for both explicit flag and presence of volatility data
             custom_volatility = pos_data.get('custom_volatility', False)
-            position_volatility = pos_data.get('volatility') if custom_volatility else None
+            # Use custom volatility if explicitly marked OR if volatility data exists without flag
+            position_volatility = pos_data.get('volatility') if (custom_volatility or 'volatility' in pos_data) else None
 
             imported_portfolio.add_position(
                 strike_price=strike,
