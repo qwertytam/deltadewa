@@ -1,0 +1,58 @@
+# Example Portfolio with Mixed Volatilities
+# Demonstrates per-position volatility modeling for volatility skew/smile
+
+market_parameters:
+  spot_price: 100.0
+  volatility: 0.25        # Default 25% volatility for ATM options
+  risk_free_rate: 0.05
+  dividend_yield: 0.02
+  underlying_quantity: 1000.0
+  symbol: "SPY"
+
+positions:
+  # Downside puts with higher implied volatility (volatility skew)
+  # Out-of-the-money puts typically have higher IV due to demand for downside protection
+  - option_type: "put"
+    strike_price: 90.0
+    maturity_days: 30
+    quantity: 5
+    volatility: 0.35      # 35% IV for deep OTM put
+    
+  - option_type: "put"
+    strike_price: 95.0
+    maturity_days: 30
+    quantity: 10
+    volatility: 0.30      # 30% IV for OTM put
+    
+  # ATM options using default volatility
+  # At-the-money options often have mid-range implied volatility
+  - option_type: "call"
+    strike_price: 100.0
+    maturity_days: 30
+    quantity: -5
+    # No volatility specified - uses default 25%
+    
+  - option_type: "put"
+    strike_price: 100.0
+    maturity_days: 30
+    quantity: -5
+    # No volatility specified - uses default 25%
+    
+  # Upside calls with lower implied volatility
+  # Out-of-the-money calls often have lower IV
+  - option_type: "call"
+    strike_price: 105.0
+    maturity_days: 30
+    quantity: 3
+    volatility: 0.22      # 22% IV for OTM call
+    
+  - option_type: "call"
+    strike_price: 110.0
+    maturity_days: 30
+    quantity: 2
+    volatility: 0.20      # 20% IV for further OTM call
+
+# This configuration demonstrates:
+# - Volatility skew: Higher IV for downside puts, lower IV for upside calls
+# - Mixed volatility portfolio: Some positions use custom IV, others use default
+# - Realistic market conditions: Models actual implied volatility patterns

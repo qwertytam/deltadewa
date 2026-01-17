@@ -156,6 +156,8 @@ class PortfolioSerializer:
                 "maturity_date": pos.option.maturity_date.isoformat(),
                 "quantity": pos.quantity,
                 "contract_size": pos.contract_size,
+                "volatility": pos.option.volatility,
+                "custom_volatility": pos.custom_volatility,
                 "greeks": {
                     "delta": pos.option.delta(),
                     "gamma": pos.option.gamma(),
@@ -199,6 +201,8 @@ class PortfolioSerializer:
                     "maturity": pos.option.maturity_date.strftime("%Y-%m-%d"),
                     "quantity": pos.quantity,
                     "contract_size": pos.contract_size,
+                    "volatility": pos.option.volatility,
+                    "custom_volatility": pos.custom_volatility,
                     "price": pos.option.price(),
                     "value": pos.option.price()
                     * pos.quantity
@@ -277,6 +281,9 @@ class PortfolioSerializer:
                 "quantity": int(pos.quantity),
                 "symbol": getattr(pos, "symbol", None),
             }
+            # Include volatility if it's custom
+            if pos.custom_volatility:
+                position_data["volatility"] = float(pos.option.volatility)
             config["positions"].append(position_data)
 
         output_path = self.export_dir / filename
@@ -337,12 +344,18 @@ class PortfolioSerializer:
                 pos_data.get("option_type") or pos_data.get("type") or "call"
             )
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
+            
+            # Handle volatility - check for both explicit flag and presence of volatility data
+            custom_volatility = pos_data.get('custom_volatility', False)
+            # Use custom volatility if explicitly marked OR if volatility data exists without flag
+            position_volatility = pos_data.get('volatility') if (custom_volatility or 'volatility' in pos_data) else None
 
             imported_portfolio.add_position(
                 strike_price=strike,
                 maturity_date=maturity,
                 option_type=option_type,
                 quantity=quantity,
+                volatility=position_volatility,
             )
 
         return {
@@ -396,6 +409,9 @@ class PortfolioSerializer:
             else:
                 continue
 
+            # Get optional position-specific volatility
+            position_volatility = pos_config.get('volatility', None)
+
             imported_portfolio.add_position(
                 strike_price=pos_config["strike_price"],
                 maturity_date=maturity,
@@ -404,6 +420,7 @@ class PortfolioSerializer:
                 symbol=pos_config.get(
                     "symbol", market_params.get("symbol", "UNKNOWN")
                 ),
+                volatility=position_volatility,
             )
 
         return {

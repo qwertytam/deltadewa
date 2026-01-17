@@ -78,11 +78,40 @@ Each position requires:
 | `strike_price` | float | Strike price of the option |
 | `quantity` | integer | Number of contracts (positive = long, negative = short) |
 | `symbol` | string | Underlying symbol (optional, inherits from market_parameters) |
+| `volatility` | float | Position-specific volatility (optional, inherits from market_parameters) |
 
 **Maturity Date** - Use ONE of these:
 
 - `maturity_days`: integer - Days from today (e.g., 30)
 - `maturity_date`: string - Absolute date in ISO format (e.g., "2026-01-18")
+
+**Volatility Configuration:**
+
+- If `volatility` is specified for a position, that specific value will be used
+- If `volatility` is omitted, the portfolio-level `market_parameters.volatility` will be used
+- This allows modeling positions with different implied volatilities
+
+Example with mixed volatilities:
+
+```yaml
+market_parameters:
+  spot_price: 100.0
+  volatility: 0.25  # Default 25% volatility
+  # ... other params ...
+
+positions:
+  - option_type: "put"
+    strike_price: 95.0
+    maturity_days: 30
+    quantity: 5
+    volatility: 0.30  # This put has higher volatility (30%)
+  
+  - option_type: "call"
+    strike_price: 105.0
+    maturity_days: 30
+    quantity: -3
+    # No volatility specified - uses default 25%
+```
 
 ## Export and Import Features
 

@@ -198,6 +198,32 @@ class PortfolioWidgets:
             layout=widgets.Layout(width="300px"),
         )
 
+        # Volatility input
+        volatility_input = widgets.FloatText(
+            value=self.portfolio.volatility,
+            description="Volatility:",
+            min=0.01,
+            max=2.0,
+            step=0.01,
+            style={"description_width": "120px"},
+            layout=widgets.Layout(width="300px"),
+        )
+
+        use_default_vol = widgets.Checkbox(
+            value=True,
+            description="Use portfolio default volatility",
+            style={"description_width": "initial"},
+        )
+
+        # Link checkbox to volatility input disabled state
+        def on_checkbox_change(change):
+            volatility_input.disabled = change['new']
+            if change['new']:
+                volatility_input.value = self.portfolio.volatility
+
+        use_default_vol.observe(on_checkbox_change, 'value')
+        volatility_input.disabled = True  # Initially disabled
+
         # Action buttons
         add_button = widgets.Button(
             description="Add Position",
@@ -221,13 +247,16 @@ class PortfolioWidgets:
         output = widgets.Output()
 
         # Helper functions
+        def get_position_display_string(pos):
+            """Generate consistent display string for a position."""
+            return f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
+        
         def refresh_position_list():
             """Update dropdown with current positions."""
-            positions = self.portfolio.get_positions()
-            if positions:
+            if self.portfolio.positions:
                 position_selector.options = [
-                    f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                    for p in positions
+                    get_position_display_string(pos)
+                    for pos in self.portfolio.positions
                 ]
                 position_selector.disabled = False
             else:
@@ -240,23 +269,26 @@ class PortfolioWidgets:
                 position_selector.value
                 and position_selector.value != "No positions"
             ):
-                positions = self.portfolio.get_positions()
-                for p in positions:
-                    if (
-                        position_selector.value
-                        == f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                    ):
-                        quantity_input.value = p["quantity"]
-                        strike_input.value = p["strike"]
+                # Find the matching position
+                for pos in self.portfolio.positions:
+                    if position_selector.value == get_position_display_string(pos):
+                        quantity_input.value = pos.quantity
+                        strike_input.value = pos.option.strike_price
                         option_type_selector.value = (
-                            "Call" if p["type"] == "Call" else "Put"
+                            "Call" if pos.option.option_type.lower() == "call" else "Put"
                         )
-                        expiry_input.value = p["expiry"]
+                        expiry_input.value = pos.option.maturity_date.date()
+                        # Update volatility input based on position
+                        volatility_input.value = pos.option.volatility
+                        use_default_vol.value = not pos.custom_volatility
                         break
 
         def on_add_clicked(b):  # pylint: disable=unused-argument
             """Add a new position."""
             try:
+                # Determine volatility parameter
+                position_volatility = None if use_default_vol.value else volatility_input.value
+                
                 self.portfolio.add_position(
                     strike_price=strike_input.value,
                     maturity_date=datetime.combine(
@@ -269,6 +301,7 @@ class PortfolioWidgets:
                     ),
                     quantity=quantity_input.value,
                     symbol="SPY",
+                    volatility=position_volatility,
                 )
                 status_label.value = (
                     f"✓ Added {quantity_input.value} "
@@ -291,12 +324,9 @@ class PortfolioWidgets:
                 and position_selector.value != "No positions"
             ):
                 try:
-                    positions = self.portfolio.get_positions()
-                    for i, p in enumerate(positions):
-                        if (
-                            position_selector.value
-                            == f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                        ):
+                    # Find the matching position index
+                    for i, pos in enumerate(self.portfolio.positions):
+                        if position_selector.value == get_position_display_string(pos):
                             self.portfolio.remove_position(i)
                             status_label.value = (
                                 f"✓ Removed position {position_selector.value}"
@@ -319,12 +349,12 @@ class PortfolioWidgets:
                 and position_selector.value != "No positions"
             ):
                 try:
-                    positions = self.portfolio.get_positions()
-                    for i, p in enumerate(positions):
-                        if (
-                            position_selector.value
-                            == f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
-                        ):
+                    # Find the matching position index
+                    for i, pos in enumerate(self.portfolio.positions):
+                        if position_selector.value == get_position_display_string(pos):
+                            # Determine volatility parameter
+                            position_volatility = None if use_default_vol.value else volatility_input.value
+                            
                             self.portfolio.update_position(
                                 i,
                                 quantity=quantity_input.value,
@@ -337,6 +367,7 @@ class PortfolioWidgets:
                                     if option_type_selector.value == "Call"
                                     else "put"
                                 ),
+                                volatility=position_volatility,
                             )
                             status_label.value = (
                                 f"✓ Updated position {position_selector.value}"
@@ -368,6 +399,7 @@ class PortfolioWidgets:
                 position_selector,
                 widgets.HBox([quantity_input, strike_input]),
                 widgets.HBox([option_type_selector, expiry_input]),
+                widgets.HBox([volatility_input, use_default_vol]),
                 widgets.HBox([add_button, update_button, remove_button]),
                 status_label,
                 output,

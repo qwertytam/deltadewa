@@ -5,9 +5,12 @@ This module provides common utilities for formatting, printing,
 and displaying data in notebooks and scripts.
 """
 
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 import pandas as pd
 from IPython.display import clear_output
+
+if TYPE_CHECKING:
+    from pandas.io.formats.style import Styler
 
 # ========== Print Formatting Utilities ==========
 
@@ -165,7 +168,7 @@ def display_styled_dataframe(
     start_index: int = 1,
     title_case: bool = True,
     cmap: str = "RdYlGn",
-) -> pd.io.formats.style.Styler:
+) -> "Styler":
     """
     Format and display a DataFrame with consistent styling.
 
