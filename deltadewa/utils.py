@@ -6,6 +6,7 @@ and displaying data in notebooks and scripts.
 """
 
 from typing import TYPE_CHECKING, Optional, Union
+import numpy as np
 import pandas as pd
 from IPython.display import clear_output
 
@@ -511,8 +512,7 @@ def calculate_portfolio_avg_volatility(portfolio) -> float:
     Notes:
         - If total vega is zero or portfolio is empty, returns portfolio.volatility
         - Uses absolute vega values to weight all positions equally regardless of direction
-        - Positions with custom_volatility=True use their custom values
-        - Positions without custom volatility use portfolio.volatility
+        - Each position uses its current volatility value (position.option.volatility)
         
     Example:
         >>> # Portfolio with positions at 30%, 20%, 25% volatility
@@ -667,8 +667,6 @@ def get_volatility_stats(portfolio) -> dict:
     
     volatilities = [pos.option.volatility for pos in portfolio.positions]
     custom_vol_count = sum(1 for pos in portfolio.positions if pos.custom_volatility)
-    
-    import numpy as np
     
     return {
         'avg_volatility': calculate_portfolio_avg_volatility(portfolio),

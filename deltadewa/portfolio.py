@@ -508,26 +508,25 @@ class OptionPortfolio:
                 )
         else:
             # Full grid analysis
-            for spot in spot_range:
-                for vol in vol_range:
-                    if proportional_vol_scaling:
-                        # Use proportional volatility scaling
-                        # First restore original volatilities
-                        restore_volatilities(self, original_position_vols)
-                        # Then apply proportional shift to target vol
-                        apply_proportional_volatility_shift(
-                            self, vol, preserve_structure=True
-                        )
-                        # Update spot price
-                        self.update_market_conditions(spot_price=spot)
-                        # Calculate actual average for reporting
-                        actual_avg_vol = calculate_portfolio_avg_volatility(self)
-                    else:
-                        # Legacy behavior: uniform volatility update
-                        self.update_market_conditions(
-                            spot_price=spot, volatility=vol
-                        )
-                        actual_avg_vol = vol
+            for vol in vol_range:
+                if proportional_vol_scaling:
+                    # Use proportional volatility scaling
+                    # Restore original volatilities first
+                    restore_volatilities(self, original_position_vols)
+                    # Apply proportional shift to target vol once per volatility level
+                    apply_proportional_volatility_shift(
+                        self, vol, preserve_structure=True
+                    )
+                    # Calculate actual average for reporting
+                    actual_avg_vol = calculate_portfolio_avg_volatility(self)
+                else:
+                    # Legacy behavior: uniform volatility update
+                    self.update_market_conditions(volatility=vol)
+                    actual_avg_vol = vol
+                
+                # Now iterate through spot prices for this volatility level
+                for spot in spot_range:
+                    self.update_market_conditions(spot_price=spot)
 
                     results.append(
                         {
