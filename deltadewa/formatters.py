@@ -24,9 +24,14 @@ Author: DeltaDewa Team
 Date: 2026-01-12
 """
 
-from typing import Any, Mapping, Dict, List, Optional, Union, Callable, Literal
+from __future__ import annotations
+
+from typing import Any, Mapping, Dict, List, Optional, Union, Callable, Literal, TYPE_CHECKING
 import warnings
 import pandas as pd
+
+if TYPE_CHECKING:
+    from pandas.io.formats.style import Styler
 
 # Try to import IPython display for notebook environments
 try:
@@ -91,13 +96,13 @@ def prepare_dataframe_display(
 
 
 def apply_gradient_style(
-    styler: pd.io.formats.style.Styler,
+    styler: Styler,
     columns: Union[str, List[str]],
     cmap: str = "RdYlGn",
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     axis: Optional[Literal["index", "columns", 0, 1]] = None,
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Apply color gradient to specified columns.
 
@@ -121,9 +126,9 @@ def apply_gradient_style(
 
 
 def apply_format_dict(
-    styler: pd.io.formats.style.Styler,
+    styler: Styler,
     format_dict: Mapping[Any, Optional[Union[str, Callable[[object], str]]]],
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Apply formatting to columns based on format dictionary.
 
@@ -152,7 +157,7 @@ def format_portfolio_dataframe(
     cmap: str = "RdYlGn",
     include_greeks: bool = True,
     sort_by: Optional[list[str]] = None,
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Format portfolio positions DataFrame with standard styling.
 
@@ -218,7 +223,7 @@ def format_greeks_dataframe(
     cmap: str = "RdBu_r",
     precision: int = 4,
     sort_by: Optional[list[str]] = None,
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Format Greeks analysis DataFrame (e.g., delta by strike/maturity).
 
@@ -256,7 +261,7 @@ def format_risk_metrics_dataframe(
     percentage_columns: Optional[List[str]] = None,
     title_case: bool = True,
     sort_by: Optional[list[str]] = None,
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Format risk metrics DataFrame with appropriate numeric formatting.
 
@@ -299,7 +304,7 @@ def format_scenario_dataframe(
     title_case: bool = True,
     cmap: str = "RdYlGn",
     sort_by: Optional[list[str]] = None,
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Format scenario analysis DataFrame with color gradients.
 
@@ -353,7 +358,7 @@ def create_heatmap_style(
     center_value: Optional[float] = None,  # pylint: disable=unused-argument
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Create a heatmap-style DataFrame (for pivot tables, correlation matrices).
 
@@ -392,11 +397,11 @@ def create_heatmap_style(
 
 
 def apply_traffic_light_colors(
-    styler: pd.io.formats.style.Styler,
+    styler: Styler,
     column: str,
     thresholds: Dict[str, float],
     reverse: bool = False,
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Apply traffic light colors (red/yellow/green) based on thresholds.
 
@@ -445,12 +450,95 @@ def apply_traffic_light_colors(
 # ============================================================================
 
 
+def create_diverging_style(
+    df: pd.DataFrame,
+    value_columns: List[str],
+    cmap: str = "RdYlGn",
+    title_case: bool = True,
+    currency_columns: Optional[List[str]] = None,
+) -> Styler:
+    """
+    Create DataFrame style with diverging colormap and consistent formatting.
+    
+    This function creates a styled DataFrame with a diverging color scale centered
+    at zero (negative=red, zero=white, positive=green) and consistent currency
+    formatting across all tables.
+    
+    Args:
+        df: DataFrame to style
+        value_columns: Columns to apply diverging color scale
+        cmap: Colormap (default: 'RdYlGn' for red-yellow-green diverging)
+        title_case: Convert columns to title case
+        currency_columns: Columns to format as currency (default: value_columns)
+    
+    Returns:
+        Styled DataFrame with diverging colors and currency formatting
+    """
+    df_styled = df.copy()
+    
+    # Title case columns if requested
+    if title_case:
+        df_styled.columns = [c.replace('_', ' ').title() for c in df_styled.columns]
+        value_columns = [c.replace('_', ' ').title() for c in value_columns]
+        if currency_columns:
+            currency_columns = [c.replace('_', ' ').title() for c in currency_columns]
+    
+    if currency_columns is None:
+        currency_columns = value_columns
+    
+    # Create styler
+    styler = df_styled.style
+    
+    # Apply diverging colormap to each value column
+    for col in value_columns:
+        if col not in df_styled.columns:
+            continue
+            
+        col_data = df_styled[col]
+        vmin = col_data.min()
+        vmax = col_data.max()
+        
+        # Skip if all same value
+        if vmin == vmax:
+            continue
+        
+        # Create diverging norm with zero at center
+        # This ensures: negative=red, zero=white, positive=green
+        abs_max = max(abs(vmin), abs(vmax))
+        styler = styler.background_gradient(
+            subset=[col],
+            cmap=cmap,
+            vmin=-abs_max,
+            vmax=abs_max,
+            axis=0
+        )
+    
+    # Format currency columns with consistent formatting
+    def format_currency_consistent(value):
+        """Format currency consistently: -$1,234.56"""
+        if pd.isna(value):
+            return "-"
+        if value < 0:
+            return f"-${abs(value):,.2f}"
+        return f"${value:,.2f}"
+    
+    format_dict = {}
+    for col in currency_columns:
+        if col in df_styled.columns:
+            format_dict[col] = format_currency_consistent
+    
+    if format_dict:
+        styler = styler.format(format_dict, na_rep="-")
+    
+    return styler
+
+
 def format_pivot_table(
     pivot: pd.DataFrame,
     format_str: str = "{:,.2f}",
     cmap: str = "RdYlGn",
     highlight_zeros: bool = True,  # pylint: disable=unused-argument
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Format pivot table with consistent styling.
 
@@ -506,10 +594,10 @@ def format_pivot_table(
 
 
 def highlight_negative_values(
-    styler: pd.io.formats.style.Styler,
+    styler: Styler,
     columns: Optional[List[str]] = None,
     color: str = "#ffcccc",
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Highlight negative values in specified columns.
 
@@ -535,11 +623,11 @@ def highlight_negative_values(
 
 
 def highlight_max_min(
-    styler: pd.io.formats.style.Styler,
+    styler: Styler,
     column: str,
     max_color: str = "#ccffcc",
     min_color: str = "#ffcccc",
-) -> pd.io.formats.style.Styler:
+) -> Styler:
     """
     Highlight maximum and minimum values in a column.
 
@@ -571,8 +659,8 @@ def highlight_max_min(
 
 
 def apply_table_preset(
-    styler: pd.io.formats.style.Styler, preset: str = "default"
-) -> pd.io.formats.style.Styler:
+    styler: Styler, preset: str = "default"
+) -> Styler:
     """
     Apply predefined table styling presets.
 
@@ -667,7 +755,7 @@ def apply_table_preset(
 def to_excel_styled(
     df: pd.DataFrame,
     filepath: str,
-    styler: Optional[pd.io.formats.style.Styler] = None,
+    styler: Optional[Styler] = None,
     sheet_name: str = "Sheet1",
 ):
     """
@@ -745,6 +833,7 @@ __all__ = [
     "format_scenario_dataframe",
     # Heatmap styling
     "create_heatmap_style",
+    "create_diverging_style",
     "apply_traffic_light_colors",
     "format_pivot_table",
     # Conditional formatting
