@@ -206,6 +206,77 @@ class PortfolioAnalyzer:
             "is_positive_carry": False,
         }
 
+    def create_theta_summary_table(self) -> pd.DataFrame:
+        """
+        Create consolidated theta/carry summary table.
+        
+        Returns a DataFrame showing theta breakdown by source (income/cost) and timeframe
+        (daily, weekly, monthly, annual). This provides a clear view of where theta is
+        coming from and going to in the portfolio.
+        
+        Returns:
+            DataFrame with theta breakdown by source (income/cost) and timeframe,
+            with multi-index (category, source) and columns for different time periods
+        """
+        carry_metrics = self.calculate_carry_metrics()
+        
+        data = []
+        
+        # Income sources (positive theta - earning premium)
+        if carry_metrics['covered_call_theta'] != 0:
+            data.append({
+                'category': 'Income',
+                'source': 'Short Calls',
+                'daily': carry_metrics['covered_call_theta'],
+                'weekly': carry_metrics['covered_call_theta'] * 7,
+                'monthly': carry_metrics['covered_call_theta'] * 30,
+                'annual': carry_metrics['covered_call_theta'] * 365,
+            })
+        
+        if carry_metrics['short_put_theta'] != 0:
+            data.append({
+                'category': 'Income',
+                'source': 'Short Puts',
+                'daily': carry_metrics['short_put_theta'],
+                'weekly': carry_metrics['short_put_theta'] * 7,
+                'monthly': carry_metrics['short_put_theta'] * 30,
+                'annual': carry_metrics['short_put_theta'] * 365,
+            })
+        
+        # Cost sources (negative theta - paying premium)
+        if carry_metrics['hedge_put_theta'] != 0:
+            data.append({
+                'category': 'Cost',
+                'source': 'Long Puts (Hedge)',
+                'daily': carry_metrics['hedge_put_theta'],
+                'weekly': carry_metrics['hedge_put_theta'] * 7,
+                'monthly': carry_metrics['hedge_put_theta'] * 30,
+                'annual': carry_metrics['hedge_put_theta'] * 365,
+            })
+        
+        if carry_metrics['long_call_theta'] != 0:
+            data.append({
+                'category': 'Cost',
+                'source': 'Long Calls',
+                'daily': carry_metrics['long_call_theta'],
+                'weekly': carry_metrics['long_call_theta'] * 7,
+                'monthly': carry_metrics['long_call_theta'] * 30,
+                'annual': carry_metrics['long_call_theta'] * 365,
+            })
+        
+        # Net total (always show, even if zero)
+        data.append({
+            'category': 'NET',
+            'source': 'Total Theta/Carry',
+            'daily': carry_metrics['total_theta_daily'],
+            'weekly': carry_metrics['total_theta_weekly'],
+            'monthly': carry_metrics['total_theta_monthly'],
+            'annual': carry_metrics['total_theta_annual'],
+        })
+        
+        df = pd.DataFrame(data)
+        return df.set_index(['category', 'source'])
+
     # ========================================================================
     # Risk Concentration
     # ========================================================================
