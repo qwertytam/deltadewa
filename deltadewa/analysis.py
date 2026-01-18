@@ -402,8 +402,55 @@ class PortfolioAnalyzer:
     # Scenario Grid Generation
     # ========================================================================
 
+    def _calculate_portfolio_value_at(self, spot: float, valuation_date: datetime) -> float:
+        """
+        Calculate total portfolio value at given spot and date.
+        
+        Args:
+            spot: Spot price to use for valuation
+            valuation_date: Date to use for valuation
+            
+        Returns:
+            Total portfolio value (options + underlying)
+        """
+        total_value = 0.0
+        
+        for position in self.portfolio.positions:
+            days_to_maturity = (position.option.maturity_date - valuation_date).days
+
+            if days_to_maturity <= 0:
+                # Option expired - use intrinsic value
+                if position.option.option_type == "call":
+                    intrinsic = max(0, spot - position.option.strike_price)
+                else:
+                    intrinsic = max(0, position.option.strike_price - spot)
+                total_value += intrinsic * position.quantity * position.contract_size
+            else:
+                # Option still alive - price it
+                opt = AmericanOption(
+                    spot_price=spot,
+                    strike_price=position.option.strike_price,
+                    maturity_date=position.option.maturity_date,
+                    volatility=position.option.volatility,  # Use position volatility
+                    risk_free_rate=self.portfolio.risk_free_rate,
+                    dividend_yield=self.portfolio.dividend_yield,
+                    option_type=position.option.option_type,
+                    valuation_date=valuation_date,
+                )
+                total_value += opt.price() * position.quantity * position.contract_size
+
+        # Add underlying position value
+        total_value += self.portfolio.underlying_quantity * spot
+        
+        return total_value
+
     def scenario_grid(
-        self, spot_scenarios: np.ndarray, time_points: List[datetime], metric: str = "pnl"
+        self, 
+        spot_scenarios: np.ndarray, 
+        time_points: List[datetime], 
+        metric: str = "pnl",
+        baseline_spot: Optional[float] = None,
+        baseline_valuation_date: Optional[datetime] = None,
     ) -> pd.DataFrame:
         """
         Calculate portfolio metrics across 2D grid of spot prices and time.
@@ -414,7 +461,9 @@ class PortfolioAnalyzer:
         Args:
             spot_scenarios: Array of spot prices to test
             time_points: List of valuation dates to test
-            metric: Metric to calculate ('pnl', 'delta', 'gamma', 'vega', 'theta')
+            metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta', 'gamma', 'vega', 'theta')
+            baseline_spot: Spot price for P&L baseline (default: current portfolio spot)
+            baseline_valuation_date: Valuation date for P&L baseline (default: current portfolio date)
 
         Returns:
             DataFrame with columns: spot_price, valuation_date, metric_value
@@ -423,45 +472,27 @@ class PortfolioAnalyzer:
         results = []
         original_spot = self.portfolio.spot_price
         original_date = self.portfolio.valuation_date
-        current_value = self.portfolio.total_value()
+        
+        # For P&L calculation, use the baseline values if provided
+        if baseline_spot is None:
+            baseline_spot = original_spot
+        if baseline_valuation_date is None:
+            baseline_valuation_date = original_date
+        
+        # Calculate baseline value at baseline date/spot for P&L calculations
+        baseline_value = self._calculate_portfolio_value_at(baseline_spot, baseline_valuation_date)
 
         for time_point in time_points:
             for spot in spot_scenarios:
                 # Calculate metric at this scenario
                 if metric == "pnl":
-                    # Calculate P&L at this spot/time
-                    scenario_value = 0.0
+                    # Calculate P&L relative to baseline
+                    scenario_value = self._calculate_portfolio_value_at(spot, time_point)
+                    metric_value = scenario_value - baseline_value
 
-                    for position in self.portfolio.positions:
-                        days_to_maturity = (position.option.maturity_date - time_point).days
-
-                        if days_to_maturity <= 0:
-                            # Option expired - use intrinsic value
-                            if position.option.option_type == "call":
-                                intrinsic = max(0, spot - position.option.strike_price)
-                            else:
-                                intrinsic = max(0, position.option.strike_price - spot)
-                            scenario_value += intrinsic * position.quantity * position.contract_size
-                        else:
-                            # Option still alive - price it
-                            opt = AmericanOption(
-                                spot_price=spot,
-                                strike_price=position.option.strike_price,
-                                maturity_date=position.option.maturity_date,
-                                volatility=position.option.volatility,
-                                risk_free_rate=self.portfolio.risk_free_rate,
-                                dividend_yield=self.portfolio.dividend_yield,
-                                option_type=position.option.option_type,
-                                valuation_date=time_point,
-                            )
-                            scenario_value += (
-                                opt.price() * position.quantity * position.contract_size
-                            )
-
-                    # Add underlying position value
-                    scenario_value += self.portfolio.underlying_quantity * spot
-
-                    metric_value = scenario_value - current_value
+                elif metric == "value":
+                    # Calculate absolute portfolio value
+                    metric_value = self._calculate_portfolio_value_at(spot, time_point)
 
                 else:
                     # For Greeks, update portfolio and calculate
@@ -471,6 +502,8 @@ class PortfolioAnalyzer:
 
                     if metric == "delta":
                         metric_value = self.portfolio.total_delta()
+                    elif metric == "net_delta":
+                        metric_value = self.portfolio.net_delta()
                     elif metric == "gamma":
                         metric_value = self.portfolio.total_gamma()
                     elif metric == "vega":
