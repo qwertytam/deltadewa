@@ -106,20 +106,22 @@ class PortfolioAnalyzer:
 
     def calculate_carry_metrics(self) -> Dict:
         """
-        Calculate comprehensive theta and carry metrics.
+        Analyze portfolio carry (theta decay) characteristics.
 
         Returns:
-            Dictionary containing:
-            - total_theta_daily: Total daily theta
-            - total_theta_weekly: Weekly theta (daily * 7)
-            - total_theta_monthly: Monthly theta (daily * 30)
-            - total_theta_annual: Annual theta (daily * 365)
-            - theta_by_bucket: Dict of theta totals per maturity bucket
-            - theta_by_type: Dict of theta totals by option type
-            - covered_call_theta: Theta from short calls
-            - hedge_put_theta: Theta cost from long puts
-            - net_carry: Net daily carry (calls - puts)
-            - carry_efficiency: Theta / position value ratio by bucket
+            Dict containing:
+                - total_theta_daily: Daily theta across all positions
+                - total_theta_weekly: Weekly theta (daily * 7)
+                - total_theta_monthly: Monthly theta (daily * 30)
+                - total_theta_annual: Annual theta (daily * 365)
+                - theta_by_bucket: Dict of theta totals per maturity bucket
+                - theta_by_type: Dict of theta totals by option type
+                - covered_call_theta: Theta from short calls (income)
+                - long_call_theta: Theta from long calls (cost)
+                - hedge_put_theta: Theta cost from long puts (protection)
+                - short_put_theta: Theta from short puts (income)
+                - net_carry: Net daily carry (equals total_theta_daily)
+                - carry_efficiency: Theta / position value ratio by bucket
         """
         df = self.portfolio.to_dataframe()
         if df.empty:
@@ -136,18 +138,26 @@ class PortfolioAnalyzer:
         # Theta by type
         theta_by_type = df.groupby("type")["position_theta"].sum().to_dict()
 
-        # Covered call analysis (short calls)
+        # Covered call analysis (short calls - earning premium)
         short_calls = df[(df["type"] == "call") & (df["quantity"] < 0)]
         covered_call_theta = short_calls["position_theta"].sum() if len(short_calls) > 0 else 0.0
         covered_call_premium = short_calls["position_value"].sum() if len(short_calls) > 0 else 0.0
 
-        # Hedge put analysis (long puts)
+        # Long call analysis (paying premium)
+        long_calls = df[(df["type"] == "call") & (df["quantity"] > 0)]
+        long_call_theta = long_calls["position_theta"].sum() if len(long_calls) > 0 else 0.0
+
+        # Hedge put analysis (long puts - paying for downside protection)
         long_puts = df[(df["type"] == "put") & (df["quantity"] > 0)]
         hedge_put_theta = long_puts["position_theta"].sum() if len(long_puts) > 0 else 0.0
         hedge_put_delta = long_puts["position_delta"].sum() if len(long_puts) > 0 else 0.0
 
-        # Net carry
-        net_carry = covered_call_theta + hedge_put_theta  # hedge_put_theta is negative
+        # Short put analysis (short puts - earning premium)
+        short_puts = df[(df["type"] == "put") & (df["quantity"] < 0)]
+        short_put_theta = short_puts["position_theta"].sum() if len(short_puts) > 0 else 0.0
+
+        # Net carry = total theta (they are identical for options portfolios)
+        net_carry = total_theta_daily
 
         # Carry efficiency by bucket (annualized theta / position value)
         bucket_summary = df.groupby("maturity_bucket").agg(
@@ -167,8 +177,10 @@ class PortfolioAnalyzer:
             "theta_by_type": theta_by_type,
             "covered_call_theta": covered_call_theta,
             "covered_call_premium": covered_call_premium,
+            "long_call_theta": long_call_theta,
             "hedge_put_theta": hedge_put_theta,
             "hedge_put_delta": hedge_put_delta,
+            "short_put_theta": short_put_theta,
             "net_carry": net_carry,
             "carry_efficiency": carry_efficiency,
             "is_positive_carry": net_carry > 0,
@@ -185,8 +197,10 @@ class PortfolioAnalyzer:
             "theta_by_type": {},
             "covered_call_theta": 0.0,
             "covered_call_premium": 0.0,
+            "long_call_theta": 0.0,
             "hedge_put_theta": 0.0,
             "hedge_put_delta": 0.0,
+            "short_put_theta": 0.0,
             "net_carry": 0.0,
             "carry_efficiency": {},
             "is_positive_carry": False,

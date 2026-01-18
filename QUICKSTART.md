@@ -133,7 +133,7 @@ else:
 ```python
 # Check daily theta
 stats = portfolio.summary_stats()
-annual_theta = stats['total_theta'] * 252  # Trading days
+annual_theta = stats['total_theta'] * 365  # Calendar days (industry standard)
 
 print(f"Daily time decay: ${stats['total_theta']:.2f}")
 print(f"Annual time decay: ${annual_theta:.2f}")
