@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """
 Visualization Module for Options Portfolio Analysis
 
@@ -83,6 +84,59 @@ class OptionCharts:
             return f"${x/1_000:,.0f}k"
         else:
             return f"${x/1_000_000:,.1f}M"
+
+    @staticmethod
+    def apply_volatility_percent(ax):
+        """
+        Format the y-axis of an Axes to display percentages for volatility values.
+
+        Assumes the axis values are in decimal form (e.g. 0.25 -> '25%').
+        """
+        ax.yaxis.set_major_formatter(
+            FuncFormatter(lambda x, pos: f"{x*100:.0f}%")
+        )
+
+    @staticmethod
+    def format_currency_full(x, pos=None):
+        """Format currency with full dollar precision and comma separators.
+
+        Args:
+            x: numeric value
+            pos: FuncFormatter position (unused)
+
+        Returns:
+            String like "$1,234"
+        """
+        _ = pos
+        try:
+            return f"${x:,.0f}"
+        except Exception:  # pylint: disable=broad-except
+            return f"${x}"
+
+    @staticmethod
+    def apply_spot_price_with_pct(ax, current_spot: float):
+        """
+        Format the x-axis to show the spot price in currency on the top line
+        and the percent change from `current_spot` on the second line.
+
+        Example tick label:\
+            $420\n+10%
+
+        Assumes axis values are spot prices in the same units as `current_spot`.
+        """
+
+        def _fmt(x, pos):  # pylint: disable=unused-argument
+            # Avoid division by zero
+            try:
+                pct = (x / current_spot - 1) * 100
+            except Exception:  # pylint: disable=broad-except
+                pct = 0
+            curr = OptionCharts.format_currency_full(x)
+            return f"{curr}\n{pct:+.0f}%"
+
+        ax.xaxis.set_major_formatter(FuncFormatter(_fmt))
+        # Slightly tighten tick padding so two-line labels don't overlap title
+        ax.tick_params(axis="x", which="major", pad=6)
 
     # ========================================================================
     # P&L Visualization
@@ -768,7 +822,11 @@ class OptionCharts:
             if len(maturities) == 1:
                 return maturities[0].strftime("%Y-%m-%d")
             else:
-                return f"{maturities[0].strftime('%Y-%m-%d')} → {maturities[-1].strftime('%Y-%m-%d')}"
+                result = (
+                    f"{maturities[0].strftime('%Y-%m-%d')} "
+                    + f"→ {maturities[-1].strftime('%Y-%m-%d')}"
+                )
+                return result
         return "N/A"
 
     # ========================================================================
