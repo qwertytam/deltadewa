@@ -60,8 +60,8 @@ This repository uses `nbstripout` to keep notebook outputs out of version contro
 **Initial Setup:**
 
 ```bash
-# Install nbstripout
-pip install nbstripout
+# Install dev dependencies (includes nbstripout)
+poetry install --with dev
 
 # Configure one-way filter (commit-only)
 ./setup_nbstripout.sh

@@ -7,7 +7,8 @@ echo "Configuring nbstripout one-way filter..."
 # Check if nbstripout is installed
 if ! command -v nbstripout &> /dev/null; then
     echo "❌ nbstripout is not installed"
-    echo "Install with: pip install nbstripout"
+    echo "Install with: poetry install --with dev"
+    echo "Or directly: pip install nbstripout"
     exit 1
 fi
 
