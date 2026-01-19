@@ -2006,6 +2006,22 @@ docs = ["myst-parser", "pydata-sphinx-theme", "sphinx", "sphinxcontrib-github-al
 test = ["pep440", "pre-commit", "pytest", "testpath"]
 
 [[package]]
+name = "nbstripout"
+version = "0.9.0"
+description = "Strips outputs from Jupyter and IPython notebooks"
+optional = true
+python-versions = ">=3.10"
+groups = ["main"]
+markers = "extra == \"dev\""
+files = [
+    {file = "nbstripout-0.9.0-py3-none-any.whl", hash = "sha256:98acb9d8152beeece931564bf1a7b8e7763d9f0919b09103bbb181913bbe0b3d"},
+    {file = "nbstripout-0.9.0.tar.gz", hash = "sha256:4354284d11309f254a6ba4bd9e2f8c5953b16474b7431c278ce67b470e2123a2"},
+]
+
+[package.dependencies]
+nbformat = "*"
+
+[[package]]
 name = "nest-asyncio"
 version = "1.6.0"
 description = "Patch asyncio to allow nested event loops"
@@ -3523,9 +3539,9 @@ files = [
 ]
 
 [extras]
-dev = ["black", "pandas-stubs", "pytest", "ruff"]
+dev = ["black", "nbstripout", "pandas-stubs", "pytest", "ruff"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10"
-content-hash = "7c132a0bfe6091567a25a24950120c10fcd6d8d08360c4f87a5ec72263a5cfc4"
+content-hash = "26af2e967238df17a8e65b67c12f4a55b1573045f9a63030c078fc78b6a1d336"
