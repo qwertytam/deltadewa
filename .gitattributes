@@ -1,4 +1,4 @@
-options_dashboard.ipynb filter=nbstripout
-*.ipynb filter=nbstripout
+# One-way filter: strip outputs on commit, leave them on checkout
+*.ipynb filter=nbstripout-commit
 *.zpln filter=nbstripout
 *.ipynb diff=ipynb

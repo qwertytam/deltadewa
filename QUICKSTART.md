@@ -6,11 +6,14 @@
 # Install Poetry
 curl -sSL https://install.python-poetry.org | python3 -
 
-# Install dependencies
-poetry install
+# Install dependencies (includes nbstripout in dev)
+poetry install --with dev
 
 # Activate environment
 poetry shell
+
+# Configure nbstripout (prevents repeated cell outputs)
+./setup_nbstripout.sh
 ```
 
 ## Quick Examples

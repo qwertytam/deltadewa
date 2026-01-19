@@ -53,6 +53,33 @@ poetry install
 poetry shell
 ```
 
+### Jupyter Notebook Output Management
+
+This repository uses `nbstripout` to keep notebook outputs out of version control while preserving them locally.
+
+**Initial Setup:**
+
+```bash
+# Install dev dependencies (includes nbstripout)
+poetry install --with dev
+
+# Configure one-way filter (commit-only)
+./setup_nbstripout.sh
+
+# Or manually:
+git config filter.nbstripout-commit.clean 'nbstripout'
+git config filter.nbstripout-commit.smudge 'cat'
+git config filter.nbstripout-commit.required true
+```
+
+**Why one-way filtering?**
+
+- Outputs are stripped when you **commit** (keeps repo clean)
+- Outputs are preserved when you **checkout/pull** (no duplicates)
+- Prevents repeated cell outputs in VSCode when pulling agent changes
+
+**If you see repeated outputs:** You need to run the setup script above.
+
 ## Usage
 
 ### Launch Jupyter Dashboard
