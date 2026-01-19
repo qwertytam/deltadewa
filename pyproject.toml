@@ -41,4 +41,4 @@ line-length = 80
 target-version = "py39"
 
 [dependency-groups]
-dev = ["ruff (>=0.5.3)", "debugpy (>=1.8.19,<2.0.0)"]
+dev = ["ruff (>=0.5.3)", "debugpy (>=1.8.19,<2.0.0)", "nbstripout (>=0.9.0,<0.10.0)"]
