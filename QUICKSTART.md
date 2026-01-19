@@ -11,6 +11,10 @@ poetry install
 
 # Activate environment
 poetry shell
+
+# Configure nbstripout (prevents repeated cell outputs)
+pip install nbstripout
+./setup_nbstripout.sh
 ```
 
 ## Quick Examples
