@@ -536,9 +536,6 @@ class NetHedgeSummary:
             + self._format_greek("Net Gamma", stats["total_gamma"])
             + self._format_greek("Net Vega", stats["total_vega"])
             + self._format_greek("Theta (Daily)", stats["total_theta"])
-            + self._format_greek(
-                "Portfolio Cost", stats["total_cost"], is_cost=True
-            )
             + self._format_greek("Current Value", stats["total_value"])
         )
         self.core_metrics_html.value = (
