@@ -208,12 +208,29 @@ class AmericanOption:
             ) / 2.0  # Already in terms of 1% change
 
     def theta(self) -> float:
-        """Calculate Theta (time decay per day)."""
+        """
+        Calculate Theta (time decay per day).
+        
+        Returns theta in dollars per calendar day. Note that the industry
+        standard convention uses 365 calendar days for theta calculations,
+        not 252 trading days. This matches:
+        - Black-Scholes and Bjerksund-Stensland model assumptions
+        - VIX and exchange conventions
+        - Volatility calculations which use calendar time
+        
+        The QuantLib theta() method returns annualized theta, so we divide
+        by 365 to get the daily rate.
+        
+        Returns:
+            float: Theta value ($ per calendar day)
+        """
         # At or past expiry, theta is zero (no time decay)
         if self._is_expired_or_at_expiry():
             return 0.0
         try:
-            return self.option.theta() / 365.0  # Convert to per day
+            # QuantLib returns annualized theta, convert to per calendar day
+            # Using 365 days (not 252) per industry standard
+            return self.option.theta() / 365.0
         except RuntimeError:
             # If theta not available, compute numerically
             # Move evaluation date forward by 1 day

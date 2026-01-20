@@ -83,15 +83,71 @@ scenario_df = portfolio.scenario_analysis(spot_range)
 print(scenario_df[['spot_price', 'portfolio_value', 'net_delta']])
 ```
 
-### Example 4: Interactive Dashboard
+### Example 4: Interactive Dashboard (New 3-Mode Layout)
 
-Run the Jupyter dashboard for full interactive analysis:
+The dashboard is now organized into 3 intuitive modes for a streamlined workflow:
 
 ```bash
 jupyter lab options_dashboard.ipynb
 ```
 
-Or the classic notebook:
+#### **Workflow: BUILD → EXPLAIN → STRESS**
+
+**Step 1: BUILD Mode 🏗️**
+1. **Set Global Assumptions**:
+   - Configure spot price, volatility, interest rates
+   - Select time horizon (T+0, T+7, T+30, T+60, T+90, custom)
+   - Define scenario grid parameters
+
+2. **Build Your Portfolio**:
+   - Use the position editor to add/update/remove positions
+   - Import existing portfolios from JSON/YAML
+   - View portfolio summary table
+
+3. **Monitor KPIs**:
+   - Net Hedge Summary shows real-time Greeks
+   - Crash convexity indicators (-10%, -20%, -30%)
+   - Updates automatically when portfolio changes
+
+**Step 2: EXPLAIN Mode 📊**
+1. **Consolidated Greeks View**:
+   - See net portfolio Greeks in one table
+   - View top 5 contributors for each Greek
+   - Expand detailed breakdowns as needed
+
+2. **P&L Analysis**:
+   - Options-only P&L diagram
+   - Total portfolio P&L (with underlying)
+   - Identify breakeven points and max loss/profit
+
+3. **Position Breakdown**:
+   - Charts by type, strike, maturity
+   - Cashflow tracking
+   - Aging analysis
+
+**Step 3: STRESS Mode ⚡**
+1. **Run Scenario Grids**:
+   - Interactive spot vs volatility heatmaps
+   - Time vs price P&L evolution
+   - Automatic caching for speed
+
+2. **Monte Carlo Analysis**:
+   - Value at Risk (VaR)
+   - Conditional VaR (CVaR)
+   - Probability distributions
+
+3. **3D Visualization**:
+   - Optional 3D P&L surfaces
+   - Interactive Plotly charts
+
+**Key Features:**
+- ✅ Single GlobalAssumptions panel (no duplicate sliders)
+- ✅ Always-visible Net Hedge Summary
+- ✅ Automatic caching for performance
+- ✅ Clear mode separation with visual headers
+- ✅ Consolidated Greeks (80/20 view)
+
+Or use the classic notebook:
 
 ```bash
 jupyter notebook options_dashboard.ipynb
@@ -141,6 +197,12 @@ annual_theta = stats['total_theta'] * 365  # Calendar days (industry standard)
 print(f"Daily time decay: ${stats['total_theta']:.2f}")
 print(f"Annual time decay: ${annual_theta:.2f}")
 ```
+
+**Note on Theta Convention**: This library uses the industry standard of 365 calendar days 
+(not 252 trading days) for theta calculations. This matches:
+- Option pricing model assumptions (Black-Scholes, Bjerksund-Stensland)
+- VIX and exchange conventions
+- How volatility is expressed in time-to-expiration
 
 ## Key Metrics Explained
 
