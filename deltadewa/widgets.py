@@ -78,11 +78,11 @@ class InteractiveOutput:
 class GlobalAssumptions:
     """
     Centralized market parameters and scenario assumptions.
-    
+
     This class provides a single source of truth for all market parameters
     used throughout the dashboard. It eliminates duplicate slider controls
     and ensures consistency across all analysis sections.
-    
+
     Attributes:
         spot_price: Current spot price
         volatility: Portfolio default volatility
@@ -93,19 +93,19 @@ class GlobalAssumptions:
         spot_shock_pct: Spot price shock for scenarios (%)
         vol_shock_pct: Volatility shock for scenarios (%)
         grid_resolution: Number of points in scenario grids
-    
+
     Example:
         assumptions = GlobalAssumptions(spot_price=420.0, volatility=0.25)
         assumptions.display()
-        
+
         # Access current values
         spot = assumptions.spot_price.value
         vol = assumptions.volatility.value
-        
+
         # Register callback for changes
         assumptions.on_change(my_update_function)
     """
-    
+
     def __init__(
         self,
         spot_price: float = 100.0,
@@ -118,7 +118,7 @@ class GlobalAssumptions:
     ):
         """
         Initialize global assumptions panel.
-        
+
         Args:
             spot_price: Initial spot price
             volatility: Initial volatility
@@ -130,11 +130,11 @@ class GlobalAssumptions:
         """
         if valuation_date is None:
             valuation_date = datetime.now()
-        
+
         # Market parameters
         spot_min = spot_price * (1 - spot_range_pct / 100)
         spot_max = spot_price * (1 + spot_range_pct / 100)
-        
+
         self.spot_price = widgets.FloatSlider(
             value=spot_price,
             min=spot_min,
@@ -146,7 +146,7 @@ class GlobalAssumptions:
             continuous_update=False,
             readout_format=".2f",
         )
-        
+
         self.volatility = widgets.FloatSlider(
             value=volatility,
             min=vol_range[0],
@@ -158,7 +158,7 @@ class GlobalAssumptions:
             continuous_update=False,
             readout_format=".2%",
         )
-        
+
         self.risk_free_rate = widgets.FloatSlider(
             value=risk_free_rate,
             min=0.0,
@@ -170,7 +170,7 @@ class GlobalAssumptions:
             continuous_update=False,
             readout_format=".2%",
         )
-        
+
         self.dividend_yield = widgets.FloatSlider(
             value=dividend_yield,
             min=0.0,
@@ -182,14 +182,14 @@ class GlobalAssumptions:
             continuous_update=False,
             readout_format=".2%",
         )
-        
+
         self.valuation_date = widgets.DatePicker(
             value=valuation_date.date(),
             description="Valuation Date:",
             style={"description_width": "150px"},
             layout=widgets.Layout(width="500px"),
         )
-        
+
         # Time horizon selector
         time_horizon_options = [
             ("Today (T+0)", 0),
@@ -199,7 +199,7 @@ class GlobalAssumptions:
             ("3 Months (T+90)", 90),
             ("Custom", -1),
         ]
-        
+
         self.time_horizon = widgets.Dropdown(
             options=time_horizon_options,
             value=0,
@@ -207,7 +207,7 @@ class GlobalAssumptions:
             style={"description_width": "150px"},
             layout=widgets.Layout(width="350px"),
         )
-        
+
         self.custom_days = widgets.IntText(
             value=30,
             description="Custom Days:",
@@ -215,16 +215,16 @@ class GlobalAssumptions:
             layout=widgets.Layout(width="250px"),
             disabled=True,
         )
-        
+
         # Link time horizon selector to custom days field
         def on_horizon_change(change):
             if change["new"] == -1:
                 self.custom_days.disabled = False
             else:
                 self.custom_days.disabled = True
-        
+
         self.time_horizon.observe(on_horizon_change, "value")
-        
+
         # Scenario grid parameters
         self.spot_shock_pct = widgets.FloatSlider(
             value=20.0,
@@ -235,9 +235,9 @@ class GlobalAssumptions:
             style={"description_width": "150px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
-            readout_format=".0f%%",
+            readout_format=".0%",
         )
-        
+
         self.vol_shock_pct = widgets.FloatSlider(
             value=50.0,
             min=10.0,
@@ -247,9 +247,9 @@ class GlobalAssumptions:
             style={"description_width": "150px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
-            readout_format=".0f%%",
+            readout_format=".0%",
         )
-        
+
         self.grid_resolution = widgets.IntSlider(
             value=25,
             min=10,
@@ -260,10 +260,10 @@ class GlobalAssumptions:
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
         )
-        
+
         # Callbacks registry
         self._callbacks: List[Callable] = []
-        
+
         # Register observers for all widgets
         for widget_attr in [
             "spot_price",
@@ -278,36 +278,36 @@ class GlobalAssumptions:
             "grid_resolution",
         ]:
             getattr(self, widget_attr).observe(self._notify_callbacks, "value")
-    
+
     def _notify_callbacks(self, change):
         """Notify all registered callbacks when any parameter changes."""
         for callback in self._callbacks:
             callback(change)
-    
+
     def on_change(self, callback: Callable):
         """
         Register a callback to be called when any parameter changes.
-        
+
         Args:
             callback: Function to call with change dict
         """
         self._callbacks.append(callback)
-    
+
     def get_days_forward(self) -> int:
         """
         Get the selected number of days forward.
-        
+
         Returns:
             Days forward based on time horizon selector
         """
         if self.time_horizon.value == -1:
             return self.custom_days.value
         return self.time_horizon.value
-    
+
     def get_valuation_date_forward(self) -> datetime:
         """
         Get the future valuation date based on time horizon.
-        
+
         Returns:
             Future datetime based on selected horizon
         """
@@ -315,11 +315,11 @@ class GlobalAssumptions:
             self.valuation_date.value, datetime.min.time()
         )
         return val_date + timedelta(days=self.get_days_forward())
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Export current assumptions as dictionary.
-        
+
         Returns:
             Dictionary with all current parameter values
         """
@@ -334,11 +334,11 @@ class GlobalAssumptions:
             "vol_shock_pct": self.vol_shock_pct.value,
             "grid_resolution": self.grid_resolution.value,
         }
-    
+
     def display(self) -> widgets.VBox:
         """
         Create and return the display widget.
-        
+
         Returns:
             VBox widget containing all assumption controls
         """
@@ -352,14 +352,14 @@ class GlobalAssumptions:
                 self.valuation_date,
             ]
         )
-        
+
         time_section = widgets.VBox(
             [
                 widgets.HTML("<h4>Time Horizon</h4>"),
                 widgets.HBox([self.time_horizon, self.custom_days]),
             ]
         )
-        
+
         scenario_section = widgets.VBox(
             [
                 widgets.HTML("<h4>Scenario Grid Parameters</h4>"),
@@ -368,7 +368,7 @@ class GlobalAssumptions:
                 self.grid_resolution,
             ]
         )
-        
+
         return widgets.VBox(
             [
                 widgets.HTML(
@@ -376,8 +376,8 @@ class GlobalAssumptions:
                     'padding:10px; border-radius:5px; margin-bottom:10px;">'
                     '<h3 style="margin:0;">Global Assumptions Panel</h3>'
                     '<p style="margin:5px 0 0 0; font-size:14px;">'
-                    'Single source of truth for all market parameters</p>'
-                    '</div>'
+                    "Single source of truth for all market parameters</p>"
+                    "</div>"
                 ),
                 market_section,
                 time_section,
@@ -392,53 +392,63 @@ class GlobalAssumptions:
 class NetHedgeSummary:
     """
     Always-visible KPI header showing key portfolio hedge metrics.
-    
+
     Displays core Greeks, crash convexity indicators, and probabilistic
     stats in a compact, color-coded format. Designed to be shown at the
     top of all dashboard modes for at-a-glance portfolio health.
-    
+
     Attributes:
         portfolio: OptionPortfolio instance to analyze
         widget: VBox containing the KPI display
-    
+
     Example:
         summary = NetHedgeSummary(portfolio)
         summary.display()
-        
+
         # Update when portfolio changes
         summary.update()
     """
-    
+
     def __init__(self, portfolio):
         """
         Initialize net hedge summary widget.
-        
+
         Args:
             portfolio: OptionPortfolio instance
         """
         self.portfolio = portfolio
         self.widget = None
         self._create_widget()
-    
-    def _format_greek(self, name: str, value: float, is_cost: bool = False) -> str:
+
+    def _format_greek(
+        self, name: str, value: float, is_cost: bool = False
+    ) -> str:
         """
         Format a Greek metric as colored HTML badge.
-        
+
         Args:
             name: Greek name
             value: Greek value
             is_cost: Whether this represents a cost (red) vs profit (green)
-            
+
         Returns:
             HTML string with formatted badge
         """
         if abs(value) < 0.01 and name != "Value":
             value_str = "~0"
         elif abs(value) >= 1000:
-            value_str = f"${value/1000:.1f}k" if "Value" in name or "Cost" in name else f"{value:,.0f}"
+            value_str = (
+                f"${value/1000:.1f}k"
+                if "Value" in name or "Cost" in name
+                else f"{value:,.0f}"
+            )
         else:
-            value_str = f"${value:.2f}" if "Value" in name or "Cost" in name else f"{value:.2f}"
-        
+            value_str = (
+                f"${value:.2f}"
+                if "Value" in name or "Cost" in name
+                else f"{value:.2f}"
+            )
+
         # Color coding
         if is_cost or value < 0:
             color = "#d32f2f"  # Red for costs/negative
@@ -449,24 +459,24 @@ class NetHedgeSummary:
         else:
             color = "#757575"  # Gray for neutral
             text_color = "white"
-        
+
         return (
             f'<div style="display:inline-block; background-color:{color}; '
-            f'color:{text_color}; padding:8px 12px; margin:5px; '
+            f"color:{text_color}; padding:8px 12px; margin:5px; "
             f'border-radius:5px; font-weight:bold; min-width:120px;">'
             f'<div style="font-size:11px; opacity:0.9;">{name}</div>'
             f'<div style="font-size:16px;">{value_str}</div>'
-            f'</div>'
+            f"</div>"
         )
-    
+
     def _format_crash_indicator(self, shock_pct: float, pnl: float) -> str:
         """
         Format crash convexity indicator.
-        
+
         Args:
             shock_pct: Spot price shock percentage
             pnl: P&L at that shock level
-            
+
         Returns:
             HTML string with formatted indicator
         """
@@ -476,61 +486,65 @@ class NetHedgeSummary:
             color = "#f57c00"  # Orange
         else:
             color = "#d32f2f"  # Red
-        
+
         return (
             f'<div style="display:inline-block; background-color:{color}; '
-            f'color:white; padding:6px 10px; margin:3px; '
+            f"color:white; padding:6px 10px; margin:3px; "
             f'border-radius:3px; font-size:12px; min-width:100px;">'
-            f'<strong>{shock_pct:+.0f}%:</strong> ${pnl:,.0f}'
-            f'</div>'
+            f"<strong>{shock_pct:+.0f}%:</strong> ${pnl:,.0f}"
+            f"</div>"
         )
-    
+
     def _create_widget(self):
         """Create the KPI display widget."""
         self.core_metrics_html = widgets.HTML(value="")
         self.crash_indicators_html = widgets.HTML(value="")
         self.prob_stats_html = widgets.HTML(value="")
-        
+
         # Expandable accordion for probabilistic stats
         self.accordion = widgets.Accordion(children=[self.prob_stats_html])
         self.accordion.set_title(0, "📊 Probabilistic Statistics (Expand)")
         self.accordion.selected_index = None  # Collapsed by default
-        
+
         self.widget = widgets.VBox(
             [
                 widgets.HTML(
                     '<div style="background-color:#0F4761; color:white; '
                     'padding:10px; border-radius:5px 5px 0 0;">'
                     '<h3 style="margin:0;">Net Hedge Summary</h3>'
-                    '</div>'
+                    "</div>"
                 ),
                 self.core_metrics_html,
-                widgets.HTML("<h4 style='margin:10px 0 5px 0;'>Crash Convexity Indicators</h4>"),
+                widgets.HTML(
+                    "<h4 style='margin:10px 0 5px 0;'>Crash Convexity Indicators</h4>"
+                ),
                 self.crash_indicators_html,
                 self.accordion,
             ],
-            layout=widgets.Layout(
-                border="2px solid #0F4761", margin="10px 0"
-            ),
+            layout=widgets.Layout(border="2px solid #0F4761", margin="10px 0"),
         )
-        
+
         self.update()
-    
+
     def update(self):
         """Update all metrics with current portfolio data."""
         stats = self.portfolio.summary_stats()
-        
+
         # Core Greeks
         core_html = (
             self._format_greek("Net Delta", stats["total_delta"])
             + self._format_greek("Net Gamma", stats["total_gamma"])
             + self._format_greek("Net Vega", stats["total_vega"])
             + self._format_greek("Theta (Daily)", stats["total_theta"])
-            + self._format_greek("Portfolio Cost", stats["total_cost"], is_cost=True)
+            + self._format_greek(
+                "Portfolio Cost", stats["total_cost"], is_cost=True
+            )
             + self._format_greek("Current Value", stats["total_value"])
         )
-        self.core_metrics_html.value = f'<div style="padding:10px;">{core_html}</div>'
-        
+        self.core_metrics_html.value = (
+            f'<div style="padding:10px;">{core_html}</div>'
+        )
+
         # Crash convexity
         current_spot = self.portfolio.spot_price
         pnl_10 = self.portfolio.calculate_pnl_at_expiry(
@@ -542,46 +556,48 @@ class NetHedgeSummary:
         pnl_30 = self.portfolio.calculate_pnl_at_expiry(
             current_spot * 0.70, include_underlying=True
         )
-        
+
         crash_html = (
             self._format_crash_indicator(-10, pnl_10)
             + self._format_crash_indicator(-20, pnl_20)
             + self._format_crash_indicator(-30, pnl_30)
         )
-        self.crash_indicators_html.value = f'<div style="padding:10px;">{crash_html}</div>'
-        
+        self.crash_indicators_html.value = (
+            f'<div style="padding:10px;">{crash_html}</div>'
+        )
+
         # Probabilistic stats (expandable)
         analysis = self.portfolio.risk_reward_analysis()
         total_analysis = analysis.get("total", {})
-        
+
         prob_html = "<div style='padding:10px;'>"
         prob_html += f"<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
         prob_html += f"<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
-        
+
         max_loss = total_analysis.get("max_loss", {})
         if not max_loss.get("is_unlimited", True):
             prob_html += f"<p><strong>Max Loss:</strong> ${-max_loss.get('max_loss', 0):,.2f}</p>"
         else:
             prob_html += f"<p><strong>Max Loss:</strong> Unlimited</p>"
-        
+
         max_profit = total_analysis.get("max_profit", {})
         if not max_profit.get("is_unlimited", False):
             prob_html += f"<p><strong>Max Profit:</strong> ${max_profit.get('max_profit', 0):,.2f}</p>"
         else:
             prob_html += f"<p><strong>Max Profit:</strong> Unlimited</p>"
-        
+
         breakevens = analysis.get("breakeven_total", [])
         if breakevens:
             be_str = ", ".join([f"${be:.2f}" for be in breakevens])
             prob_html += f"<p><strong>Breakeven Points:</strong> {be_str}</p>"
-        
+
         prob_html += "</div>"
         self.prob_stats_html.value = prob_html
-    
+
     def display(self) -> widgets.VBox:
         """
         Get the display widget.
-        
+
         Returns:
             VBox widget containing the KPI summary
         """
@@ -732,11 +748,11 @@ class PortfolioWidgets:
 
         # Link checkbox to volatility input disabled state
         def on_checkbox_change(change):
-            volatility_input.disabled = change['new']
-            if change['new']:
+            volatility_input.disabled = change["new"]
+            if change["new"]:
                 volatility_input.value = self.portfolio.volatility
 
-        use_default_vol.observe(on_checkbox_change, 'value')
+        use_default_vol.observe(on_checkbox_change, "value")
         volatility_input.disabled = True  # Initially disabled
 
         # Action buttons
@@ -765,7 +781,7 @@ class PortfolioWidgets:
         def get_position_display_string(pos):
             """Generate consistent display string for a position."""
             return f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
-        
+
         def refresh_position_list():
             """Update dropdown with current positions."""
             if self.portfolio.positions:
@@ -786,11 +802,15 @@ class PortfolioWidgets:
             ):
                 # Find the matching position
                 for pos in self.portfolio.positions:
-                    if position_selector.value == get_position_display_string(pos):
+                    if position_selector.value == get_position_display_string(
+                        pos
+                    ):
                         quantity_input.value = pos.quantity
                         strike_input.value = pos.option.strike_price
                         option_type_selector.value = (
-                            "Call" if pos.option.option_type.lower() == "call" else "Put"
+                            "Call"
+                            if pos.option.option_type.lower() == "call"
+                            else "Put"
                         )
                         expiry_input.value = pos.option.maturity_date.date()
                         # Update volatility input based on position
@@ -802,8 +822,10 @@ class PortfolioWidgets:
             """Add a new position."""
             try:
                 # Determine volatility parameter
-                position_volatility = None if use_default_vol.value else volatility_input.value
-                
+                position_volatility = (
+                    None if use_default_vol.value else volatility_input.value
+                )
+
                 self.portfolio.add_position(
                     strike_price=strike_input.value,
                     maturity_date=datetime.combine(
@@ -841,7 +863,10 @@ class PortfolioWidgets:
                 try:
                     # Find the matching position index
                     for i, pos in enumerate(self.portfolio.positions):
-                        if position_selector.value == get_position_display_string(pos):
+                        if (
+                            position_selector.value
+                            == get_position_display_string(pos)
+                        ):
                             self.portfolio.remove_position(i)
                             status_label.value = (
                                 f"✓ Removed position {position_selector.value}"
@@ -866,10 +891,17 @@ class PortfolioWidgets:
                 try:
                     # Find the matching position index
                     for i, pos in enumerate(self.portfolio.positions):
-                        if position_selector.value == get_position_display_string(pos):
+                        if (
+                            position_selector.value
+                            == get_position_display_string(pos)
+                        ):
                             # Determine volatility parameter
-                            position_volatility = None if use_default_vol.value else volatility_input.value
-                            
+                            position_volatility = (
+                                None
+                                if use_default_vol.value
+                                else volatility_input.value
+                            )
+
                             self.portfolio.update_position(
                                 i,
                                 quantity=quantity_input.value,
