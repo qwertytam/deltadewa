@@ -16,8 +16,9 @@ Author: DeltaDewa Team
 Date: 2026-01-12
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+from functools import lru_cache
 import numbers
 import pandas as pd
 import numpy as np
@@ -107,13 +108,19 @@ class PortfolioAnalyzer:
     def calculate_carry_metrics(self) -> Dict:
         """
         Analyze portfolio carry (theta decay) characteristics.
-
+        
+        Note: All theta calculations use the industry standard convention of
+        365 calendar days (not 252 trading days). This matches:
+        - Option pricing model assumptions (Black-Scholes, Bjerksund-Stensland)
+        - VIX and exchange conventions
+        - Volatility calculations which use calendar time in T
+        
         Returns:
             Dict containing:
                 - total_theta_daily: Daily theta across all positions
-                - total_theta_weekly: Weekly theta (daily * 7)
-                - total_theta_monthly: Monthly theta (daily * 30)
-                - total_theta_annual: Annual theta (daily * 365)
+                - total_theta_weekly: Weekly theta (daily * 7 calendar days)
+                - total_theta_monthly: Monthly theta (daily * 30 calendar days)
+                - total_theta_annual: Annual theta (daily * 365 calendar days)
                 - theta_by_bucket: Dict of theta totals per maturity bucket
                 - theta_by_type: Dict of theta totals by option type
                 - covered_call_theta: Theta from short calls (income)
@@ -796,3 +803,176 @@ def quick_risk_concentration(portfolio, metrics: Optional[List[str]] = None) -> 
     """
     analyzer = PortfolioAnalyzer(portfolio)
     return analyzer.analyze_risk_concentration(metrics=metrics)
+
+
+# ============================================================================
+# Scenario Grid Caching Utilities
+# ============================================================================
+
+
+def create_scenario_cache_key(
+    spot_scenarios: np.ndarray,
+    time_points: List[datetime],
+    metric: str,
+    portfolio_state_hash: str,
+) -> Tuple:
+    """
+    Create a hashable cache key for scenario grid results.
+    
+    Args:
+        spot_scenarios: Array of spot prices
+        time_points: List of valuation dates
+        metric: Metric being calculated
+        portfolio_state_hash: Hash representing portfolio state
+        
+    Returns:
+        Tuple suitable for use as dictionary key
+    """
+    # Convert numpy array to tuple for hashing
+    spot_tuple = tuple(spot_scenarios.tolist())
+    time_tuple = tuple(tp.isoformat() for tp in time_points)
+    
+    return (spot_tuple, time_tuple, metric, portfolio_state_hash)
+
+
+def get_portfolio_state_hash(portfolio) -> str:
+    """
+    Generate a hash representing the current portfolio state.
+    
+    This is used for cache invalidation - if the portfolio changes,
+    the hash changes and cached scenario grids are invalidated.
+    
+    Args:
+        portfolio: OptionPortfolio instance
+        
+    Returns:
+        String hash of portfolio state
+    """
+    import hashlib
+    
+    # Collect all relevant state
+    state_elements = [
+        str(portfolio.spot_price),
+        str(portfolio.volatility),
+        str(portfolio.risk_free_rate),
+        str(portfolio.dividend_yield),
+        str(portfolio.valuation_date.isoformat()),
+        str(len(portfolio.positions)),
+    ]
+    
+    # Add position details
+    for pos in portfolio.positions:
+        state_elements.extend([
+            pos.symbol,
+            str(pos.quantity),
+            str(pos.option.strike_price),
+            str(pos.option.maturity_date.isoformat()),
+            pos.option.option_type,
+            str(pos.option.volatility),
+        ])
+    
+    # Create hash
+    state_str = "|".join(state_elements)
+    return hashlib.md5(state_str.encode()).hexdigest()
+
+
+class ScenarioGridCache:
+    """
+    Cache for scenario grid calculations with automatic invalidation.
+    
+    This class provides caching for expensive scenario grid calculations.
+    The cache is automatically invalidated when portfolio state changes.
+    
+    Usage:
+        cache = ScenarioGridCache()
+        
+        # First call calculates and caches
+        result1 = cache.get_or_calculate(
+            portfolio, analyzer, spot_scenarios, time_points, metric
+        )
+        
+        # Second call returns cached result (if portfolio unchanged)
+        result2 = cache.get_or_calculate(
+            portfolio, analyzer, spot_scenarios, time_points, metric
+        )
+    """
+    
+    def __init__(self, max_size: int = 128):
+        """
+        Initialize cache.
+        
+        Args:
+            max_size: Maximum number of cached results (LRU eviction)
+        """
+        self._cache: Dict[Tuple, pd.DataFrame] = {}
+        self._max_size = max_size
+        self._access_order: List[Tuple] = []
+    
+    def get_or_calculate(
+        self,
+        portfolio,
+        analyzer: PortfolioAnalyzer,
+        spot_scenarios: np.ndarray,
+        time_points: List[datetime],
+        metric: str,
+        baseline_spot: Optional[float] = None,
+        baseline_valuation_date: Optional[datetime] = None,
+    ) -> pd.DataFrame:
+        """
+        Get cached result or calculate if not available.
+        
+        Args:
+            portfolio: OptionPortfolio instance
+            analyzer: PortfolioAnalyzer instance
+            spot_scenarios: Array of spot prices
+            time_points: List of valuation dates
+            metric: Metric to calculate
+            baseline_spot: Baseline spot for P&L calculation
+            baseline_valuation_date: Baseline date for P&L calculation
+            
+        Returns:
+            DataFrame with scenario grid results
+        """
+        # Generate cache key
+        portfolio_hash = get_portfolio_state_hash(portfolio)
+        cache_key = create_scenario_cache_key(
+            spot_scenarios, time_points, metric, portfolio_hash
+        )
+        
+        # Check cache
+        if cache_key in self._cache:
+            # Update access order
+            if cache_key in self._access_order:
+                self._access_order.remove(cache_key)
+            self._access_order.append(cache_key)
+            return self._cache[cache_key].copy()
+        
+        # Calculate result
+        result = analyzer.scenario_grid(
+            spot_scenarios=spot_scenarios,
+            time_points=time_points,
+            metric=metric,
+            baseline_spot=baseline_spot,
+            baseline_valuation_date=baseline_valuation_date,
+        )
+        
+        # Store in cache
+        self._cache[cache_key] = result.copy()
+        self._access_order.append(cache_key)
+        
+        # Enforce max size (LRU eviction)
+        while len(self._cache) > self._max_size:
+            oldest_key = self._access_order.pop(0)
+            if oldest_key in self._cache:
+                del self._cache[oldest_key]
+        
+        return result
+    
+    def clear(self):
+        """Clear all cached results."""
+        self._cache.clear()
+        self._access_order.clear()
+    
+    def size(self) -> int:
+        """Return number of cached results."""
+        return len(self._cache)
