@@ -17,6 +17,7 @@ dependencies = [
 	"plotly>=5.18.0",
 	"seaborn>=0.13.2",
 	"PyYAML>=5.3",
+	"nbconvert (>=7.16.6,<8.0.0)",
 ]
 
 [project.optional-dependencies]
