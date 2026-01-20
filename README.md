@@ -82,6 +82,61 @@ git config filter.nbstripout-commit.required true
 
 ## Usage
 
+### Dashboard Organization
+
+The `options_dashboard.ipynb` is organized into **3 intuitive modes** for streamlined workflow:
+
+#### 🏗️ **Mode 1: BUILD (Portfolio Construction)**
+- **Global Assumptions Panel**: Single source of truth for market parameters
+  - Spot price, volatility, interest rates, dividend yield
+  - Time horizon selector (T+0, T+7, T+30, T+60, T+90, custom)
+  - Scenario grid parameters for stress testing
+- **Net Hedge Summary**: Always-visible KPI header showing:
+  - Core Greeks: Delta, Gamma, Vega, Theta
+  - Portfolio cost and current value
+  - Crash convexity indicators (-10%, -20%, -30% scenarios)
+  - Expandable probabilistic statistics
+- **Position Editor**: Interactive widget to add/update/remove positions
+- **Import/Export**: Load/save portfolios in JSON or YAML format
+- **Portfolio Summary**: Detailed position breakdown tables
+
+#### 📊 **Mode 2: EXPLAIN (At-a-Glance Hedge Behavior)**
+- **Consolidated Greeks View**: 80/20 optimized display
+  - Net portfolio Greeks in a single table
+  - Top 5 contributors bar charts for each Greek
+  - Greeks sensitivity heatmap
+  - Expandable detailed breakdowns (on-demand)
+- **P&L Diagrams**: 
+  - Options-only P&L at expiration
+  - Total portfolio P&L (options + underlying)
+  - Breakeven points, max loss/profit markers
+- **Position Breakdown Charts**:
+  - By option type (calls vs puts)
+  - By strike price
+  - By maturity date
+- **Cashflow Tracking**: Premium paid/received analysis
+- **Aging Analysis**: Position maturity profile
+
+#### ⚡ **Mode 3: STRESS (Scenario Analysis)**
+- **Interactive Heatmaps**: 2D scenario grids with caching
+  - Spot vs volatility heatmaps
+  - Time vs price P&L evolution
+  - Greeks sensitivity surfaces
+- **Monte Carlo Analysis**: Risk/reward metrics
+  - Value at Risk (VaR)
+  - Conditional VaR (CVaR)
+  - Probability distributions
+- **3D Visualization**: Optional 3D P&L surfaces (Plotly)
+- **Performance Optimization**: Automatic scenario caching for speed
+
+### Key Improvements
+
+- **No Duplicate Controls**: Single GlobalAssumptions instance replaces scattered sliders
+- **Reactive Updates**: Net Hedge Summary auto-updates on portfolio changes
+- **Efficient Calculations**: ScenarioGridCache optimizes expensive computations
+- **Clear Navigation**: Visual mode headers with gradient styling
+- **Streamlined**: Consolidated Greeks view replaces 5 separate sections
+
 ### Launch Jupyter Dashboard
 
 Start the interactive dashboard:
