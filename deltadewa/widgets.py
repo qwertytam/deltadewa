@@ -582,8 +582,17 @@ class NetHedgeSummary:
         total_analysis = analysis.get("total", {})
 
         prob_html = "<div style='padding:10px;'>"
-        prob_html += f"<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
-        prob_html += f"<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
+        
+        # Check if Monte Carlo results exist
+        mc_results = getattr(self.portfolio, '_monte_carlo_results', None)
+        if mc_results is not None and len(mc_results.get('simulated_pnls', [])) > 0:
+            expected_pnl = mc_results.get('expected_pnl', 0)
+            prob_profit = mc_results.get('probability_of_profit', 0)
+            prob_html += f"<p><strong>Probability of Profit:</strong> {prob_profit:.1f}%</p>"
+            prob_html += f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
+        else:
+            prob_html += f"<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
+            prob_html += f"<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
 
         max_loss = total_analysis.get("max_loss", {})
         if not max_loss.get("is_unlimited", True):
