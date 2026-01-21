@@ -235,7 +235,7 @@ class GlobalAssumptions:
             style={"description_width": "150px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
-            readout_format=".0%",
+            readout_format=".0f",
         )
 
         self.vol_shock_pct = widgets.FloatSlider(
@@ -247,7 +247,7 @@ class GlobalAssumptions:
             style={"description_width": "150px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
-            readout_format=".0%",
+            readout_format=".0f",
         )
 
         self.grid_resolution = widgets.IntSlider(
@@ -1380,6 +1380,120 @@ class PortfolioWidgets:
             "import_button": import_button,
             "replace_checkbox": replace_checkbox,
         }
+
+    def display_import_export(self) -> widgets.VBox:
+        """
+        Create and display combined import/export interface.
+        
+        Returns:
+            VBox widget containing import and export controls
+        """
+        import_controls = self.create_import_controls()
+        export_controls = self.create_export_controls()
+        
+        import_output = widgets.Output()
+        export_output = widgets.Output()
+        
+        # Import button handler
+        def on_import_clicked(b):
+            with import_output:
+                import_output.clear_output()
+                try:
+                    filename = import_controls["filename_input"].value
+                    file_format = import_controls["format_selector"].value.lower()
+                    filepath = self.export_dir / filename
+                    
+                    if not filepath.exists():
+                        print(f"✗ File not found: {filepath}")
+                        return
+                    
+                    from deltadewa.persistence import import_portfolio
+                    
+                    replace = import_controls["replace_checkbox"].value
+                    if replace:
+                        imported_portfolio = import_portfolio(str(filepath))
+                        # Copy all attributes from imported to current
+                        self.portfolio.positions = imported_portfolio.positions
+                        self.portfolio.spot_price = imported_portfolio.spot_price
+                        self.portfolio.volatility = imported_portfolio.volatility
+                        self.portfolio.risk_free_rate = imported_portfolio.risk_free_rate
+                        self.portfolio.dividend_yield = imported_portfolio.dividend_yield
+                        self.portfolio.valuation_date = imported_portfolio.valuation_date
+                        self.portfolio.underlying_quantity = imported_portfolio.underlying_quantity
+                        print(f"✓ Portfolio replaced from {filepath}")
+                    else:
+                        print("✗ Merge mode not yet implemented - use 'Replace' option")
+                        return
+                    
+                    print(f"✓ Loaded {len(self.portfolio.positions)} positions")
+                    
+                except Exception as e:
+                    print(f"✗ Import failed: {e}")
+        
+        # Export button handler
+        def on_export_clicked(b):
+            with export_output:
+                export_output.clear_output()
+                try:
+                    filename = export_controls["filename_input"].value
+                    file_format = export_controls["format_selector"].value.lower()
+                    
+                    # Add extension if not present
+                    if not filename.endswith(f".{file_format}"):
+                        filename = f"{filename}.{file_format}"
+                    
+                    filepath = self.export_dir / filename
+                    
+                    from deltadewa.persistence import (
+                        export_portfolio_to_json,
+                        export_portfolio_to_csv,
+                        export_portfolio_to_yaml,
+                    )
+                    
+                    if file_format == "json":
+                        export_portfolio_to_json(self.portfolio, str(filepath))
+                    elif file_format == "csv":
+                        export_portfolio_to_csv(self.portfolio, str(filepath))
+                    elif file_format == "yaml":
+                        export_portfolio_to_yaml(self.portfolio, str(filepath))
+                    else:
+                        print(f"✗ Unknown format: {file_format}")
+                        return
+                    
+                    print(f"✓ Exported to {filepath}")
+                    
+                except Exception as e:
+                    print(f"✗ Export failed: {e}")
+        
+        # Connect button handlers
+        import_controls["import_button"].on_click(on_import_clicked)
+        export_controls["export_button"].on_click(on_export_clicked)
+        
+        # Assemble interface
+        import_section = widgets.VBox([
+            widgets.HTML("<h3>Import Portfolio</h3>"),
+            import_controls["format_selector"],
+            import_controls["filename_input"],
+            import_controls["replace_checkbox"],
+            import_controls["import_button"],
+            import_output,
+        ])
+        
+        export_section = widgets.VBox([
+            widgets.HTML("<h3>Export Portfolio</h3>"),
+            export_controls["format_selector"],
+            export_controls["filename_input"],
+            export_controls["export_button"],
+            export_output,
+        ])
+        
+        return widgets.VBox([
+            widgets.HTML("<h2>Portfolio Import/Export</h2>"),
+            widgets.HTML("<hr>"),
+            import_section,
+            widgets.HTML("<hr>"),
+            export_section,
+        ])
 
     # ==========================================================================
     # Heatmap Widgets
