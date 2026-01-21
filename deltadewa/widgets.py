@@ -304,6 +304,20 @@ class GlobalAssumptions:
             return self.custom_days.value
         return self.time_horizon.value
 
+    @property
+    def time_horizon_days(self):
+        """
+        Property to get the selected number of days forward.
+        
+        This is a convenience property that wraps get_days_forward()
+        to match the expected interface in the notebook.
+        
+        Returns:
+            Widget-like object with a 'value' attribute containing the days forward
+        """
+        from types import SimpleNamespace
+        return SimpleNamespace(value=self.get_days_forward())
+
     def get_valuation_date_forward(self) -> datetime:
         """
         Get the future valuation date based on time horizon.
