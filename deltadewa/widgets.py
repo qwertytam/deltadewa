@@ -315,15 +315,8 @@ class GlobalAssumptions:
         Returns:
             Widget-like object with a 'value' attribute containing the days forward
         """
-        class TimeHorizonDays:
-            def __init__(self, parent):
-                self.parent = parent
-            
-            @property
-            def value(self):
-                return self.parent.get_days_forward()
-        
-        return TimeHorizonDays(self)
+        from types import SimpleNamespace
+        return SimpleNamespace(value=self.get_days_forward())
 
     def get_valuation_date_forward(self) -> datetime:
         """
