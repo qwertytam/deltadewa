@@ -177,6 +177,12 @@ class OptionPortfolio:
         )
         self.positions.append(position)
 
+    def get_symbol(self) -> str:
+        """Get the symbol of the first position, or 'N/A' if none."""
+        if self.positions:
+            return self.positions[0].symbol
+        return "N/A"
+
     def total_value(self) -> float:
         """Calculate total portfolio value."""
         return sum(pos.position_value() for pos in self.positions)

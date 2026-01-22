@@ -1036,31 +1036,31 @@ def plot_greeks_consolidated(
 ) -> Figure:
     """
     Create consolidated Greeks view optimized for the EXPLAIN mode.
-    
+
     This function provides the default 80% use case view: a compact summary
     showing net portfolio Greeks and top contributors. Detailed breakdowns
     are available via the show_detailed parameter.
-    
+
     Args:
         portfolio: OptionPortfolio instance
         top_n: Number of top contributors to show (default: 5)
         figsize: Figure size tuple
         show_detailed: Whether to include detailed breakdown panels
-        
+
     Returns:
         Matplotlib Figure with consolidated Greeks visualization
-        
+
     Panels (default view):
         1. Net portfolio Greeks (single row table display)
         2. Top N contributors bar chart for each Greek
         3. Greeks sensitivity heatmap (how net Greeks change with spot)
-        
+
     Panels (detailed view):
         4. Strike-by-strike breakdown
         5. Maturity-by-maturity breakdown
     """
     df = portfolio.to_dataframe()
-    
+
     if df.empty:
         # Return empty figure if no positions
         fig, ax = plt.subplots(1, 1, figsize=(10, 6))
@@ -1074,34 +1074,34 @@ def plot_greeks_consolidated(
         )
         ax.axis("off")
         return fig
-    
+
     # Calculate net Greeks
     stats = portfolio.summary_stats()
     net_greeks = {
         "Delta": stats["total_delta"],
+        "Theta": stats["total_theta"],
         "Gamma": stats["total_gamma"],
         "Vega": stats["total_vega"],
-        "Theta": stats["total_theta"],
         "Rho": stats.get("total_rho", 0.0),
     }
-    
+
     # Determine number of panels
     nrows = 2 if not show_detailed else 4
     fig, axes = plt.subplots(nrows, 2, figsize=figsize)
-    
+
     # Panel 1: Net Greeks Summary Table (spans 2 columns visually)
     ax_net = axes[0, 0]
     ax_net.axis("off")
-    
+
     net_table_data = [
         ["Greek", "Net Value"],
         ["Delta", f"{net_greeks['Delta']:.2f}"],
+        ["Theta", f"${net_greeks['Theta']:.2f}/day"],
         ["Gamma", f"{net_greeks['Gamma']:.4f}"],
         ["Vega", f"{net_greeks['Vega']:.2f}"],
-        ["Theta", f"${net_greeks['Theta']:.2f}/day"],
         ["Rho", f"{net_greeks['Rho']:.2f}"],
     ]
-    
+
     table = ax_net.table(
         cellText=net_table_data,
         cellLoc="center",
@@ -1111,12 +1111,12 @@ def plot_greeks_consolidated(
     table.auto_set_font_size(False)
     table.set_fontsize(11)
     table.scale(1, 2)
-    
+
     # Style header row
     for i in range(2):
         table[(0, i)].set_facecolor("#0F4761")
         table[(0, i)].set_text_props(weight="bold", color="white")
-    
+
     # Color code Greek values
     for i in range(1, len(net_table_data)):
         value = net_greeks[net_table_data[i][0]]
@@ -1126,25 +1126,33 @@ def plot_greeks_consolidated(
             table[(i, 1)].set_facecolor("#ffcdd2")  # Light red
         else:
             table[(i, 1)].set_facecolor("#eeeeee")  # Light gray
-    
-    ax_net.set_title("Net Portfolio Greeks", fontsize=14, fontweight="bold", pad=10)
-    
+
+    ax_net.set_title(
+        "Net Portfolio Greeks", fontsize=14, fontweight="bold", pad=10
+    )
+
     # Panel 2: Net Greeks Bar Chart
     ax_bar = axes[0, 1]
     greek_names = list(net_greeks.keys())
     greek_values = list(net_greeks.values())
-    
-    colors = ["green" if v > 0 else "red" if v < 0 else "gray" for v in greek_values]
+
+    colors = [
+        "green" if v > 0 else "red" if v < 0 else "gray" for v in greek_values
+    ]
     bars = ax_bar.barh(greek_names, greek_values, color=colors, alpha=0.7)
     ax_bar.axvline(x=0, color="black", linestyle="--", linewidth=1)
     ax_bar.set_xlabel("Value")
     ax_bar.set_title("Net Greeks Overview", fontsize=12, fontweight="bold")
     ax_bar.grid(True, alpha=0.3, axis="x")
-    
+
     # Add value labels on bars
     for bar, value in zip(bars, greek_values):
         if value != 0:
-            label_x = value + (0.05 * max(abs(v) for v in greek_values) * (1 if value > 0 else -1))
+            label_x = value + (
+                0.05
+                * max(abs(v) for v in greek_values)
+                * (1 if value > 0 else -1)
+            )
             ax_bar.text(
                 label_x,
                 bar.get_y() + bar.get_height() / 2,
@@ -1153,16 +1161,18 @@ def plot_greeks_consolidated(
                 va="center",
                 fontsize=9,
             )
-    
+
     # Panel 3 & 4: Top Contributors for Delta and Gamma
-    for idx, (greek_name, column_name) in enumerate([("Delta", "position_delta"), ("Gamma", "position_gamma")]):
+    for idx, (greek_name, column_name) in enumerate(
+        [("Delta", "position_delta"), ("Gamma", "position_gamma")]
+    ):
         ax = axes[1, idx]
-        
+
         # Calculate top contributors
         df_sorted = df.copy()
         df_sorted["abs_value"] = df_sorted[column_name].abs()
         df_sorted = df_sorted.nlargest(top_n, "abs_value")
-        
+
         if len(df_sorted) > 0:
             # Create labels combining symbol, type, strike
             labels = [
@@ -1171,17 +1181,25 @@ def plot_greeks_consolidated(
             ]
             values = df_sorted[column_name].tolist()
             colors_contrib = ["green" if v > 0 else "red" for v in values]
-            
+
             bars = ax.barh(labels, values, color=colors_contrib, alpha=0.7)
             ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
             ax.set_xlabel(greek_name)
-            ax.set_title(f"Top {top_n} {greek_name} Contributors", fontsize=11, fontweight="bold")
+            ax.set_title(
+                f"Top {top_n} {greek_name} Contributors",
+                fontsize=11,
+                fontweight="bold",
+            )
             ax.grid(True, alpha=0.3, axis="x")
-            
+
             # Add value labels
             for bar, value in zip(bars, values):
                 if value != 0:
-                    label_x = value + (0.05 * max(abs(v) for v in values) * (1 if value > 0 else -1))
+                    label_x = value + (
+                        0.05
+                        * max(abs(v) for v in values)
+                        * (1 if value > 0 else -1)
+                    )
                     ax.text(
                         label_x,
                         bar.get_y() + bar.get_height() / 2,
@@ -1191,9 +1209,16 @@ def plot_greeks_consolidated(
                         fontsize=8,
                     )
         else:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.axis("off")
-    
+
     # Detailed panels (if requested)
     if show_detailed:
         # Panel 5: Top Vega Contributors
@@ -1201,7 +1226,7 @@ def plot_greeks_consolidated(
         df_sorted = df.copy()
         df_sorted["abs_value"] = df_sorted["position_vega"].abs()
         df_sorted = df_sorted.nlargest(top_n, "abs_value")
-        
+
         if len(df_sorted) > 0:
             labels = [
                 f"{row['symbol']} {row['type'].upper()[:1]}{row['strike']:.0f}"
@@ -1209,22 +1234,31 @@ def plot_greeks_consolidated(
             ]
             values = df_sorted["position_vega"].tolist()
             colors_contrib = ["green" if v > 0 else "red" for v in values]
-            
+
             bars = ax.barh(labels, values, color=colors_contrib, alpha=0.7)
             ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
             ax.set_xlabel("Vega")
-            ax.set_title(f"Top {top_n} Vega Contributors", fontsize=11, fontweight="bold")
+            ax.set_title(
+                f"Top {top_n} Vega Contributors", fontsize=11, fontweight="bold"
+            )
             ax.grid(True, alpha=0.3, axis="x")
         else:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.axis("off")
-        
+
         # Panel 6: Top Theta Contributors
         ax = axes[2, 1]
         df_sorted = df.copy()
         df_sorted["abs_value"] = df_sorted["position_theta"].abs()
         df_sorted = df_sorted.nlargest(top_n, "abs_value")
-        
+
         if len(df_sorted) > 0:
             labels = [
                 f"{row['symbol']} {row['type'].upper()[:1]}{row['strike']:.0f}"
@@ -1232,22 +1266,33 @@ def plot_greeks_consolidated(
             ]
             values = df_sorted["position_theta"].tolist()
             colors_contrib = ["green" if v > 0 else "red" for v in values]
-            
+
             bars = ax.barh(labels, values, color=colors_contrib, alpha=0.7)
             ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
             ax.set_xlabel("Theta ($/day)")
-            ax.set_title(f"Top {top_n} Theta Contributors", fontsize=11, fontweight="bold")
+            ax.set_title(
+                f"Top {top_n} Theta Contributors",
+                fontsize=11,
+                fontweight="bold",
+            )
             ax.grid(True, alpha=0.3, axis="x")
         else:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.axis("off")
-        
+
         # Panel 7: Greeks by Strike
         ax = axes[3, 0]
         greek_by_strike = df.groupby("strike").agg(
             {"position_delta": "sum", "position_gamma": "sum"}
         )
-        
+
         if len(greek_by_strike) > 0:
             greek_by_strike.plot(kind="bar", ax=ax, alpha=0.7, width=0.7)
             ax.set_xlabel("Strike Price")
@@ -1257,16 +1302,25 @@ def plot_greeks_consolidated(
             ax.grid(True, alpha=0.3, axis="y")
             ax.tick_params(axis="x", rotation=45)
         else:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.axis("off")
-        
+
         # Panel 8: Greeks by Maturity
         ax = axes[3, 1]
-        df["maturity_label"] = pd.to_datetime(df["maturity"]).dt.strftime("%Y-%m-%d")
+        df["maturity_label"] = pd.to_datetime(df["maturity"]).dt.strftime(
+            "%Y-%m-%d"
+        )
         greek_by_maturity = df.groupby("maturity_label").agg(
             {"position_delta": "sum", "position_gamma": "sum"}
         )
-        
+
         if len(greek_by_maturity) > 0:
             greek_by_maturity.plot(kind="bar", ax=ax, alpha=0.7, width=0.7)
             ax.set_xlabel("Maturity Date")
@@ -1276,9 +1330,16 @@ def plot_greeks_consolidated(
             ax.grid(True, alpha=0.3, axis="y")
             ax.tick_params(axis="x", rotation=45)
         else:
-            ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                "No data",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+            )
             ax.axis("off")
-    
+
     plt.tight_layout()
     return fig
 

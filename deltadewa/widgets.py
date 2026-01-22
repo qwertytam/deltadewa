@@ -214,6 +214,11 @@ class GlobalAssumptions:
             ("1 Month (T+30)", 30),
             ("2 Months (T+60)", 60),
             ("3 Months (T+90)", 90),
+            ("6 Months (T+180)", 180),
+            ("9 Months (T+270)", 270),
+            ("1 Year (T+365)", 365),
+            ("1.5 Years (T+545)", 545),
+            ("2 Years (T+730)", 730),
             ("Custom", -1),
         ]
 
@@ -385,7 +390,9 @@ class GlobalAssumptions:
 
         time_section = widgets.VBox(
             [
-                widgets.HTML("<h4>Time Horizon</h4>"),
+                widgets.HTML(
+                    "<h4>Time Horizon: Days Forward From Valuation Date</h4>"
+                ),
                 widgets.HBox([self.time_horizon, self.custom_days]),
             ]
         )
@@ -563,11 +570,12 @@ class NetHedgeSummary:
 
         # Core Greeks
         core_html = (
-            self._format_greek("Net Delta", stats["total_delta"])
-            + self._format_greek("Net Gamma", stats["total_gamma"])
-            + self._format_greek("Net Vega", stats["total_vega"])
+            self._format_greek("Current Value", stats["total_value"])
+            + self._format_greek("Net Delta", stats["total_delta"])
             + self._format_greek("Theta (Daily)", stats["total_theta"])
-            + self._format_greek("Current Value", stats["total_value"])
+            + self._format_greek("Gamma", stats["total_gamma"])
+            + self._format_greek("Vega", stats["total_vega"])
+            + self._format_greek("Rho", stats["total_rho"])
         )
         self.core_metrics_html.value = (
             f'<div style="padding:10px;">{core_html}</div>'
@@ -575,6 +583,9 @@ class NetHedgeSummary:
 
         # Crash convexity
         current_spot = self.portfolio.spot_price
+        pnl_0 = self.portfolio.calculate_pnl_at_expiry(
+            current_spot * 1.00, include_underlying=True
+        )
         pnl_10 = self.portfolio.calculate_pnl_at_expiry(
             current_spot * 0.90, include_underlying=True
         )
@@ -586,7 +597,8 @@ class NetHedgeSummary:
         )
 
         crash_html = (
-            self._format_crash_indicator(-10, pnl_10)
+            self._format_crash_indicator(-0, pnl_0)
+            + self._format_crash_indicator(-10, pnl_10)
             + self._format_crash_indicator(-20, pnl_20)
             + self._format_crash_indicator(-30, pnl_30)
         )
@@ -1163,9 +1175,9 @@ class PortfolioWidgets:
                 ("Portfolio P&L", "pnl"),
                 ("Portfolio Value", "value"),
                 ("Net Delta", "net_delta"),
+                ("Total Theta", "theta"),
                 ("Total Gamma", "gamma"),
                 ("Total Vega", "vega"),
-                ("Total Theta", "theta"),
                 ("Total Rho", "rho"),
             ]
 
