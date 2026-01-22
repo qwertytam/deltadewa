@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """
 Interactive Widget Components for Options Dashboard
 
@@ -31,10 +32,15 @@ from typing import (
     Tuple,
     Union,
 )
-
+from types import SimpleNamespace
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.persistence import import_portfolio
 from deltadewa.portfolio import OptionPortfolio
+from deltadewa.persistence import (
+    export_portfolio_to_json,
+    export_portfolio_to_csv,
+    export_portfolio_to_yaml,
+)
 
 if TYPE_CHECKING:
     # Import only for type annotations
@@ -326,8 +332,6 @@ class GlobalAssumptions:
         Returns:
             Widget-like object with a 'value' attribute containing the days forward
         """
-        from types import SimpleNamespace
-
         return SimpleNamespace(value=self.get_days_forward())
 
     def get_valuation_date_forward(self) -> datetime:
@@ -608,20 +612,21 @@ class NetHedgeSummary:
                 f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
             )
         else:
-            prob_html += f"<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
-            prob_html += f"<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
+            prob_html += "<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
+            prob_html += "<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
 
         max_loss = total_analysis.get("max_loss", {})
         if not max_loss.get("is_unlimited", True):
             prob_html += f"<p><strong>Max Loss:</strong> ${-max_loss.get('max_loss', 0):,.2f}</p>"
         else:
-            prob_html += f"<p><strong>Max Loss:</strong> Unlimited</p>"
+            prob_html += "<p><strong>Max Loss:</strong> Unlimited</p>"
 
         max_profit = total_analysis.get("max_profit", {})
         if not max_profit.get("is_unlimited", False):
-            prob_html += f"<p><strong>Max Profit:</strong> ${max_profit.get('max_profit', 0):,.2f}</p>"
+            prob_html += "<p><strong>Max Profit:</strong> "
+            prob_html += f"${max_profit.get('max_profit', 0):,.2f}</p>"
         else:
-            prob_html += f"<p><strong>Max Profit:</strong> Unlimited</p>"
+            prob_html += "<p><strong>Max Profit:</strong> Unlimited</p>"
 
         breakevens = analysis.get("breakeven_total", [])
         if breakevens:
@@ -817,7 +822,10 @@ class PortfolioWidgets:
         # Helper functions
         def get_position_display_string(pos):
             """Generate consistent display string for a position."""
-            return f"{pos.symbol} - {pos.option.option_type.capitalize()} {pos.option.strike_price} @ {pos.option.maturity_date.date()}"
+            result = f"{pos.symbol} - {pos.option.option_type.capitalize()} "
+            result += f"{pos.option.strike_price} @ "
+            result += f"{pos.option.maturity_date.date()}"
+            return result
 
         def refresh_position_list():
             """Update dropdown with current positions."""
@@ -1435,12 +1443,12 @@ class PortfolioWidgets:
         export_output = widgets.Output()
 
         # Import button handler
-        def on_import_clicked(b):
+        def on_import_clicked(b):  # pylint: disable=unused-argument
             with import_output:
                 import_output.clear_output()
                 try:
                     filename = import_controls["filename_input"].value
-                    file_format = import_controls[
+                    file_format = import_controls[  # noqa:F841 pylint: disable=unused-variable
                         "format_selector"
                     ].value.lower()
                     filepath = self.export_dir / filename
@@ -1455,7 +1463,8 @@ class PortfolioWidgets:
 
                         if not isinstance(imported_portfolio, OptionPortfolio):
                             print(
-                                f"✗ Import failed: Expected OptionPortfolio, got {type(imported_portfolio)}"
+                                "✗ Import failed: Expected OptionPortfolio, "
+                                + f"got {type(imported_portfolio)}"
                             )
                             return
 
@@ -1488,11 +1497,11 @@ class PortfolioWidgets:
 
                     print(f"✓ Loaded {len(self.portfolio.positions)} positions")
 
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-except
                     print(f"✗ Import failed: {e}")
 
         # Export button handler
-        def on_export_clicked(b):
+        def on_export_clicked(b):  # pylint: disable=unused-argument
             with export_output:
                 export_output.clear_output()
                 try:
@@ -1507,12 +1516,6 @@ class PortfolioWidgets:
 
                     filepath = self.export_dir / filename
 
-                    from deltadewa.persistence import (
-                        export_portfolio_to_json,
-                        export_portfolio_to_csv,
-                        export_portfolio_to_yaml,
-                    )
-
                     if file_format == "json":
                         export_portfolio_to_json(self.portfolio, str(filepath))
                     elif file_format == "csv":
@@ -1525,7 +1528,7 @@ class PortfolioWidgets:
 
                     print(f"✓ Exported to {filepath}")
 
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-except
                     print(f"✗ Export failed: {e}")
 
         # Connect button handlers
