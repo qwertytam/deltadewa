@@ -344,11 +344,15 @@ class PortfolioSerializer:
                 pos_data.get("option_type") or pos_data.get("type") or "call"
             )
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
-            
+
             # Handle volatility - check for both explicit flag and presence of volatility data
-            custom_volatility = pos_data.get('custom_volatility', False)
+            custom_volatility = pos_data.get("custom_volatility", False)
             # Use custom volatility if explicitly marked OR if volatility data exists without flag
-            position_volatility = pos_data.get('volatility') if (custom_volatility or 'volatility' in pos_data) else None
+            position_volatility = (
+                pos_data.get("volatility")
+                if (custom_volatility or "volatility" in pos_data)
+                else None
+            )
 
             imported_portfolio.add_position(
                 strike_price=strike,
@@ -364,7 +368,7 @@ class PortfolioSerializer:
             "metadata": data.get("metadata", {}),
         }
 
-    def import_from_yaml(self, filepath):
+    def import_from_yaml(self, filepath) -> Union[None, dict]:
         """
         Import portfolio from YAML configuration file.
 
@@ -410,7 +414,7 @@ class PortfolioSerializer:
                 continue
 
             # Get optional position-specific volatility
-            position_volatility = pos_config.get('volatility', None)
+            position_volatility = pos_config.get("volatility", None)
 
             imported_portfolio.add_position(
                 strike_price=pos_config["strike_price"],

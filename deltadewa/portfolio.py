@@ -1,7 +1,7 @@
 """Option portfolio management and hedge analysis."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
 
@@ -123,6 +123,7 @@ class OptionPortfolio:
         self.risk_free_rate = risk_free_rate
         self.dividend_yield = dividend_yield
         self.valuation_date = valuation_date or datetime.now()
+        self._monte_carlo_results: Optional[Dict[str, Any]] = None
 
     def add_position(
         self,
@@ -147,9 +148,11 @@ class OptionPortfolio:
             volatility: Optional position-specific volatility (uses portfolio default if None)
         """
         # Use position-specific volatility or portfolio default
-        option_volatility = volatility if volatility is not None else self.volatility
+        option_volatility = (
+            volatility if volatility is not None else self.volatility
+        )
         custom_volatility = volatility is not None
-        
+
         option = AmericanOption(
             spot_price=self.spot_price,
             strike_price=strike_price,
@@ -184,10 +187,10 @@ class OptionPortfolio:
     def total_delta(self) -> float:
         """
         Calculate total portfolio delta from option positions only.
-        
+
         This is the sum of all option position deltas, excluding the underlying position.
         Also referred to as "Portfolio Delta" or "Total Delta".
-        
+
         Returns:
             Total delta from options only (positive = net long options, negative = net short options)
         """
@@ -212,16 +215,16 @@ class OptionPortfolio:
     def net_delta(self) -> float:
         """
         Calculate net delta including both options and underlying position.
-        
+
         This is the total directional exposure combining:
         - Portfolio delta (from all option positions)
         - Underlying position quantity
-        
+
         Also referred to as "Net Position Delta" or "Total Exposure".
-        
+
         Returns:
             Net delta exposure (positive = net long, negative = net short)
-            
+
         Example:
             - Portfolio delta (options): -100
             - Underlying position: +100 shares
@@ -252,7 +255,7 @@ class OptionPortfolio:
     def summary_stats(self) -> dict:
         """
         Get summary statistics of the portfolio.
-        
+
         Returns:
             Dictionary containing:
             - total_positions: Number of option positions
@@ -283,17 +286,23 @@ class OptionPortfolio:
             "total_theta": self.total_theta(),
             "total_rho": self.total_rho(),
         }
-        
+
         # Add volatility statistics
         if self.positions:
-            stats["volatility_min"] = min(pos.option.volatility for pos in self.positions)
-            stats["volatility_max"] = max(pos.option.volatility for pos in self.positions)
-            stats["custom_volatility_count"] = sum(1 for pos in self.positions if pos.custom_volatility)
+            stats["volatility_min"] = min(
+                pos.option.volatility for pos in self.positions
+            )
+            stats["volatility_max"] = max(
+                pos.option.volatility for pos in self.positions
+            )
+            stats["custom_volatility_count"] = sum(
+                1 for pos in self.positions if pos.custom_volatility
+            )
         else:
             stats["volatility_min"] = self.volatility
             stats["volatility_max"] = self.volatility
             stats["custom_volatility_count"] = 0
-            
+
         return stats
 
     def summary(self) -> str:
@@ -372,7 +381,7 @@ class OptionPortfolio:
         opt_type = (
             option_type if option_type is not None else pos.option.option_type
         )
-        
+
         # Handle volatility update
         if volatility is not None:
             option_volatility = volatility
@@ -473,8 +482,8 @@ class OptionPortfolio:
                 )
                 new_positions.append(
                     OptionPosition(
-                        new_option, 
-                        pos.quantity, 
+                        new_option,
+                        pos.quantity,
                         contract_size=pos.contract_size,
                         symbol=pos.symbol,
                         custom_volatility=pos.custom_volatility,  # Preserve custom volatility flag
@@ -483,10 +492,10 @@ class OptionPortfolio:
             self.positions = new_positions
 
     def scenario_analysis(
-        self, 
-        spot_range: np.ndarray, 
+        self,
+        spot_range: np.ndarray,
         vol_range: Optional[np.ndarray] = None,
-        proportional_vol_scaling: bool = True
+        proportional_vol_scaling: bool = True,
     ) -> pd.DataFrame:
         """
         Perform scenario analysis across different spot prices and volatilities.
@@ -500,13 +509,13 @@ class OptionPortfolio:
 
         Returns:
             DataFrame with scenario results
-            
+
         Notes:
             When proportional_vol_scaling=True:
             - Each vol_range value is treated as a target vega-weighted average
             - Position volatilities are scaled proportionally to maintain skew
             - Example: positions [30%, 20%, 25%] at avg 25% -> at 30% become [36%, 24%, 30%]
-            
+
             When proportional_vol_scaling=False (legacy behavior):
             - Each vol_range value is applied uniformly to all positions
             - Volatility skew structure is not preserved
@@ -516,11 +525,11 @@ class OptionPortfolio:
             apply_proportional_volatility_shift,
             restore_volatilities,
         )
-        
+
         results = []
         original_spot = self.spot_price
         original_vol = self.volatility
-        
+
         # Store original position volatilities for restoration
         original_position_vols = {}
         for i, pos in enumerate(self.positions):
@@ -559,7 +568,7 @@ class OptionPortfolio:
                     # Legacy behavior: uniform volatility update
                     self.update_market_conditions(volatility=vol)
                     actual_avg_vol = vol
-                
+
                 # Now iterate through spot prices for this volatility level
                 for spot in spot_range:
                     self.update_market_conditions(spot_price=spot)
