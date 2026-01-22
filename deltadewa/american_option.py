@@ -59,7 +59,7 @@ class AmericanOption:
 
     def _is_expired_or_at_expiry(self) -> bool:
         """Check if option is at or past expiry."""
-        return self.valuation_date >= self.maturity_date
+        return self.valuation_date.date() >= self.maturity_date.date()
 
     def _setup_quantlib(self):
         """Set up QuantLib calculation environment."""
@@ -210,17 +210,17 @@ class AmericanOption:
     def theta(self) -> float:
         """
         Calculate Theta (time decay per day).
-        
+
         Returns theta in dollars per calendar day. Note that the industry
         standard convention uses 365 calendar days for theta calculations,
         not 252 trading days. This matches:
         - Black-Scholes and Bjerksund-Stensland model assumptions
         - VIX and exchange conventions
         - Volatility calculations which use calendar time
-        
+
         The QuantLib theta() method returns annualized theta, so we divide
         by 365 to get the daily rate.
-        
+
         Returns:
             float: Theta value ($ per calendar day)
         """
