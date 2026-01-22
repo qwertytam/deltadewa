@@ -1,10 +1,15 @@
+# pylint: disable=too-many-lines
 """Option portfolio management and hedge analysis."""
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
-
+from .utils import (
+    calculate_portfolio_avg_volatility,
+    apply_proportional_volatility_shift,
+    restore_volatilities,
+)
 from .american_option import AmericanOption
 
 
@@ -192,7 +197,8 @@ class OptionPortfolio:
         Also referred to as "Portfolio Delta" or "Total Delta".
 
         Returns:
-            Total delta from options only (positive = net long options, negative = net short options)
+            Total delta from options only (positive = net long options,
+            negative = net short options)
         """
         return sum(pos.position_delta() for pos in self.positions)
 
@@ -438,7 +444,8 @@ class OptionPortfolio:
             risk_free_rate: New risk-free rate
             dividend_yield: New dividend yield
             valuation_date: New valuation date
-            override_custom_volatility: If True, update all positions' volatility including custom ones
+            override_custom_volatility: If True, update all positions'
+            volatility including custom ones
         """
         if spot_price is not None:
             self.spot_price = spot_price
@@ -520,11 +527,6 @@ class OptionPortfolio:
             - Each vol_range value is applied uniformly to all positions
             - Volatility skew structure is not preserved
         """
-        from .utils import (
-            calculate_portfolio_avg_volatility,
-            apply_proportional_volatility_shift,
-            restore_volatilities,
-        )
 
         results = []
         original_spot = self.spot_price
