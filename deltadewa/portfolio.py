@@ -177,6 +177,13 @@ class OptionPortfolio:
         )
         self.positions.append(position)
 
+    def set_volatility(self, volatility: float):
+        """Set portfolio volatility. Update positions without custom volatility."""
+        self.volatility = volatility
+        for pos in self.positions:
+            if not pos.custom_volatility:
+                pos.option.volatility = volatility
+
     def get_symbol(self) -> str:
         """Get the symbol of the first position, or 'N/A' if none."""
         if self.positions:
