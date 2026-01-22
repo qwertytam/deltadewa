@@ -546,7 +546,8 @@ class NetHedgeSummary:
                 ),
                 self.core_metrics_html,
                 widgets.HTML(
-                    "<h4 style='margin:10px 0 5px 0;'>Crash Convexity Indicators</h4>"
+                    "<h4 style='margin:10px 0 5px 0;'>Crash Convexity "
+                    + "Indicators: P&L at Expiry</h4>"
                 ),
                 self.crash_indicators_html,
                 self.accordion,
@@ -595,7 +596,6 @@ class NetHedgeSummary:
 
         # Probabilistic stats (expandable)
         analysis = self.portfolio.risk_reward_analysis()
-        total_analysis = analysis.get("total", {})
 
         prob_html = "<div style='padding:10px;'>"
 
@@ -615,23 +615,54 @@ class NetHedgeSummary:
             prob_html += "<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
             prob_html += "<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
 
-        max_loss = total_analysis.get("max_loss", {})
-        if not max_loss.get("is_unlimited", True):
-            prob_html += f"<p><strong>Max Loss:</strong> ${-max_loss.get('max_loss', 0):,.2f}</p>"
+        max_loss_opt = analysis.get("max_loss_options", None)
+        max_loss_total = analysis.get("max_loss_total", None)
+        max_loss_result = "<p><strong>Max Loss:</strong> Options: "
+        if max_loss_opt is None:
+            max_loss_result += "N/A"
+        elif not max_loss_opt.get("is_unlimited", True):
+            max_loss_result += f"${-max_loss_opt.get('max_loss', 0):,.2f}"
         else:
-            prob_html += "<p><strong>Max Loss:</strong> Unlimited</p>"
+            max_loss_result += "Unlimited"
 
-        max_profit = total_analysis.get("max_profit", {})
-        if not max_profit.get("is_unlimited", False):
-            prob_html += "<p><strong>Max Profit:</strong> "
-            prob_html += f"${max_profit.get('max_profit', 0):,.2f}</p>"
+        max_loss_result += ";&nbsp;&nbsp;&nbsp;Total: "
+        if max_loss_total is None:
+            max_loss_result += "N/A"
+        elif not max_loss_total.get("is_unlimited", True):
+            max_loss_result += f"${-max_loss_total.get('max_loss', 0):,.2f}"
         else:
-            prob_html += "<p><strong>Max Profit:</strong> Unlimited</p>"
+            max_loss_result += "Unlimited"
+        max_loss_result += "</p>"
+        prob_html += max_loss_result
+
+        max_profit_opt = analysis.get("max_profit_options", None)
+        max_profit_total = analysis.get("max_profit_total", None)
+        max_profit_result = "<p><strong>Max Profit:</strong> Options: "
+        if max_profit_opt is None:
+            max_profit_result += "N/A"
+        elif not max_profit_opt.get("is_unlimited", True):
+            max_profit_result += f"${-max_profit_opt.get('max_profit', 0):,.2f}"
+        else:
+            max_profit_result += "Unlimited"
+
+        max_profit_result += ";&nbsp;&nbsp;&nbsp;Total: "
+        if max_profit_total is None:
+            max_profit_result += "N/A"
+        elif not max_profit_total.get("is_unlimited", True):
+            max_profit_result += (
+                f"${-max_profit_total.get('max_profit', 0):,.2f}"
+            )
+        else:
+            max_profit_result += "Unlimited"
+        max_profit_result += "</p>"
+        prob_html += max_profit_result
 
         breakevens = analysis.get("breakeven_total", [])
         if breakevens:
             be_str = ", ".join([f"${be:.2f}" for be in breakevens])
-            prob_html += f"<p><strong>Breakeven Points:</strong> {be_str}</p>"
+        else:
+            be_str = "N/A"
+        prob_html += f"<p><strong>Breakeven Points:</strong> {be_str}</p>"
 
         prob_html += "</div>"
         self.prob_stats_html.value = prob_html
