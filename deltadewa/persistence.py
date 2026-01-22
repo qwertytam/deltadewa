@@ -294,7 +294,7 @@ class PortfolioSerializer:
 
     # ========== Import Functions ==========
 
-    def import_from_json(self, filepath, create_portfolio=True):
+    def import_from_json(self, filepath, create_portfolio=True) -> dict:
         """
         Import portfolio from JSON file.
 
@@ -368,7 +368,7 @@ class PortfolioSerializer:
             "metadata": data.get("metadata", {}),
         }
 
-    def import_from_yaml(self, filepath) -> Union[None, dict]:
+    def import_from_yaml(self, filepath) -> dict:
         """
         Import portfolio from YAML configuration file.
 
@@ -380,8 +380,9 @@ class PortfolioSerializer:
         """
 
         if not YAML_AVAILABLE:
-            print("⚠️  PyYAML not installed. Cannot import from YAML.")
-            return None
+            raise RuntimeError(
+                "⚠️  PyYAML not installed. Cannot import from YAML."
+            )
 
         with open(filepath, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
@@ -433,7 +434,7 @@ class PortfolioSerializer:
             "metadata": {"source": "yaml", "filepath": str(filepath)},
         }
 
-    def import_portfolio(self, filepath):
+    def import_portfolio(self, filepath) -> dict:
         """
         Universal import function - auto-detects file format.
 
@@ -511,7 +512,7 @@ def import_from_yaml(filepath, export_dir="exports"):
     return serializer.import_from_yaml(filepath)
 
 
-def import_portfolio(filepath, export_dir="exports"):
+def import_portfolio(filepath, export_dir="exports") -> dict:
     """Universal import function - auto-detects file format."""
     serializer = PortfolioSerializer(export_dir)
     return serializer.import_portfolio(filepath)
