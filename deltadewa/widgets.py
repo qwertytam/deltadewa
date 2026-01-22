@@ -131,7 +131,7 @@ class GlobalAssumptions:
         dividend_yield: float = 0.0,
         valuation_date: Optional[datetime] = None,
         spot_range_pct: float = 30.0,
-        vol_range: Tuple[float, float] = (0.05, 0.50),
+        vol_range: Tuple[float, float] = (0.05, 1.00),
     ):
         """
         Initialize global assumptions panel.
@@ -173,7 +173,7 @@ class GlobalAssumptions:
             style={"description_width": "150px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
-            readout_format=".2%",
+            readout_format=".1%",
         )
 
         self.risk_free_rate = widgets.FloatSlider(
