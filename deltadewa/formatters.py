@@ -841,7 +841,7 @@ def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10):
 def get_diverging_color_params(
     values: np.ndarray,
     center: float = 0.0,
-) -> tuple:
+) -> tuple[float, float]:
     """
     Calculate vmin and vmax for a diverging colormap centered at a value.
     
@@ -907,7 +907,7 @@ def get_matplotlib_norm_and_cmap(
     values: np.ndarray,
     center: float = 0.0,
     cmap_name: str = "RdYlGn",
-):
+) -> tuple:
     """
     Get matplotlib Normalize and colormap for consistent financial visualization.
     
