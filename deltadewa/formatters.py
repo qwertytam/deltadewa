@@ -40,6 +40,7 @@ from typing import (
 )
 import warnings
 import pandas as pd
+import numpy as np
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
@@ -833,6 +834,104 @@ def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10):
 
 
 # ============================================================================
+# Unified Financial Color Gradient Functions
+# ============================================================================
+
+
+def get_diverging_color_params(
+    values: np.ndarray,
+    center: float = 0.0,
+) -> tuple[float, float]:
+    """
+    Calculate vmin and vmax for a diverging colormap centered at a value.
+    
+    This ensures the colormap is symmetric around the center value,
+    so that the center color (white) appears exactly at the center value.
+    
+    Args:
+        values: Array of numeric values
+        center: Value to center the colormap at (default: 0.0)
+    
+    Returns:
+        Tuple of (vmin, vmax) for use with colormaps
+    """
+    # Flatten if needed and remove NaN
+    flat_values = np.asarray(values).flatten()
+    flat_values = flat_values[~np.isnan(flat_values)]
+    
+    if len(flat_values) == 0:
+        return (-1.0, 1.0)
+    
+    data_min = float(np.min(flat_values))
+    data_max = float(np.max(flat_values))
+    
+    # Calculate the maximum absolute distance from center
+    max_abs = max(abs(data_min - center), abs(data_max - center))
+    
+    # Ensure we have some range
+    if max_abs == 0:
+        max_abs = 1.0
+    
+    return (center - max_abs, center + max_abs)
+
+
+def apply_financial_gradient_2d(
+    styler: Styler,
+    center: float = 0.0,
+    cmap: str = "RdYlGn",
+) -> Styler:
+    """
+    Apply consistent financial diverging gradient to entire 2D DataFrame.
+    
+    Args:
+        styler: Pandas Styler object
+        center: Value to center the colormap at (default: 0.0)
+        cmap: Colormap name (default: 'RdYlGn')
+    
+    Returns:
+        Styled DataFrame with consistent diverging gradient
+    """
+    df = styler.data
+    all_values = df.values
+    vmin, vmax = get_diverging_color_params(all_values, center)
+    
+    return styler.background_gradient(
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        axis=None,
+    )
+
+
+def get_matplotlib_norm_and_cmap(
+    values: np.ndarray,
+    center: float = 0.0,
+    cmap_name: str = "RdYlGn",
+) -> tuple:
+    """
+    Get matplotlib Normalize and colormap for consistent financial visualization.
+    
+    Args:
+        values: Array of values to display
+        center: Value to center the colormap at (default: 0.0)
+        cmap_name: Colormap name (default: 'RdYlGn')
+    
+    Returns:
+        Tuple of (norm, cmap) for use with matplotlib
+    """
+    from matplotlib.colors import TwoSlopeNorm
+    import matplotlib.pyplot as plt
+    
+    vmin, vmax = get_diverging_color_params(values, center)
+    
+    # Use TwoSlopeNorm to ensure center is exactly at the middle color
+    norm = TwoSlopeNorm(vmin=vmin, vcenter=center, vmax=vmax)
+    cmap = plt.get_cmap(cmap_name)
+    
+    return norm, cmap
+
+
+# ============================================================================
 # Module Metadata
 # ============================================================================
 
@@ -859,4 +958,8 @@ __all__ = [
     # Export/display
     "to_excel_styled",
     "display_dataframe_summary",
+    # Unified financial gradient
+    "get_diverging_color_params",
+    "apply_financial_gradient_2d",
+    "get_matplotlib_norm_and_cmap",
 ]
