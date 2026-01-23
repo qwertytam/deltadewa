@@ -87,6 +87,7 @@ git config filter.nbstripout-commit.required true
 The `options_dashboard.ipynb` is organized into **3 intuitive modes** for streamlined workflow:
 
 #### 🏗️ **Mode 1: BUILD (Portfolio Construction)**
+
 - **Global Assumptions Panel**: Single source of truth for market parameters
   - Spot price, volatility, interest rates, dividend yield
   - Time horizon selector (T+0, T+7, T+30, T+60, T+90, custom)
@@ -101,12 +102,13 @@ The `options_dashboard.ipynb` is organized into **3 intuitive modes** for stream
 - **Portfolio Summary**: Detailed position breakdown tables
 
 #### 📊 **Mode 2: EXPLAIN (At-a-Glance Hedge Behavior)**
+
 - **Consolidated Greeks View**: 80/20 optimized display
   - Net portfolio Greeks in a single table
   - Top 5 contributors bar charts for each Greek
   - Greeks sensitivity heatmap
   - Expandable detailed breakdowns (on-demand)
-- **P&L Diagrams**: 
+- **P&L Diagrams**:
   - Options-only P&L at expiration
   - Total portfolio P&L (options + underlying)
   - Breakeven points, max loss/profit markers
@@ -118,6 +120,7 @@ The `options_dashboard.ipynb` is organized into **3 intuitive modes** for stream
 - **Aging Analysis**: Position maturity profile
 
 #### ⚡ **Mode 3: STRESS (Scenario Analysis)**
+
 - **Interactive Heatmaps**: 2D scenario grids with caching
   - Spot vs volatility heatmaps
   - Time vs price P&L evolution
@@ -285,7 +288,7 @@ The dashboard helps you:
 
 The dashboard includes sophisticated volatility sensitivity analysis that properly handles portfolios with position-level volatilities:
 
-**Proportional Volatility Scaling**
+#### Proportional Volatility Scaling
 
 When testing volatility scenarios (stress tests, scenario grids), the system:
 

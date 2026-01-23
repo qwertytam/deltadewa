@@ -7,6 +7,7 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 ## New Structure
 
 ### 1. Global Setup (Cells 1-9)
+
 - **Imports**: All required libraries loaded once
 - **Configuration**: Portfolio initialization from YAML or defaults
 - **Global Assumptions Widget**: Centralized market parameters panel
@@ -19,7 +20,8 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
   - Probabilistic statistics
 
 ### 2. MODE 1: BUILD (Cells 10-19)
-**Portfolio Construction and Management**
+
+#### Portfolio Construction and Management
 
 - Position editor with interactive widgets
 - Import/export controls (JSON, CSV, YAML)
@@ -28,13 +30,15 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 - Real-time updates to Net Hedge Summary
 
 **Key Features:**
+
 - Add/modify/delete positions
 - Load existing portfolios
 - Track position changes
 - Automatic hedge summary refresh
 
 ### 3. MODE 2: EXPLAIN (Cells 20-33)
-**At-a-Glance Hedge Behavior**
+
+#### At-a-Glance Hedge Behavior
 
 - **Consolidated Greeks View**: Single unified visualization
   - Net portfolio Greeks table
@@ -42,7 +46,7 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
   - Greeks sensitivity heatmap
   - Optional detailed breakdowns by strike/maturity
   
-- **P&L Diagrams**: 
+- **P&L Diagrams**:
   - Options-only P&L profile
   - Total P&L including underlying exposure
   
@@ -57,12 +61,14 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 - **Hedge Decision Triggers**
 
 **Key Features:**
+
 - All charts reference Global Assumptions
 - No duplicate parameter sliders
 - Uses `plot_greeks_consolidated()` for efficiency
 
 ### 4. MODE 3: STRESS (Cells 34-45)
-**Scenario Analysis and Risk Metrics**
+
+#### Scenario Analysis and Risk Metrics
 
 - **Interactive Heatmaps**:
   - Spot price vs. volatility scenarios
@@ -84,11 +90,13 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 - **Volatility Profile Analysis**
 
 **Key Features:**
+
 - Uses `ScenarioGridCache` for performance
 - Leverages Global Assumptions parameters
 - Probabilistic metrics and tail risk
 
 ### 5. Export & Session Management (Cells 46-52)
+
 - Session change log review
 - Portfolio export with full history
 - Multiple format support (JSON/CSV/YAML)
@@ -96,25 +104,30 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 ## Key Improvements
 
 ### ✅ Centralized Parameters
+
 - **Before**: 4+ scattered slider controls for market parameters
 - **After**: Single `GlobalAssumptions` widget referenced everywhere
 - **Benefit**: Consistency, easier parameter sweeps, cleaner UI
 
 ### ✅ Always-Visible KPIs
+
 - **New**: `NetHedgeSummary` widget at top of notebook
 - **Updates**: Automatically refreshes on portfolio changes
 - **Content**: Core Greeks, crash indicators, probabilistic stats
 
 ### ✅ Consolidated Greeks
+
 - **Before**: Separate sections for each Greek
 - **After**: Single `plot_greeks_consolidated()` visualization
 - **Benefit**: 80/20 rule - show what matters, details on demand
 
 ### ✅ Performance Optimization
+
 - **New**: `ScenarioGridCache` for expensive calculations
 - **Benefit**: Faster scenario analysis, automatic invalidation
 
 ### ✅ Clear Organization
+
 - **Visual Mode Headers**: Gradient-styled HTML dividers
 - **Logical Flow**: Build → Explain → Stress → Export
 - **Focused Sections**: Each mode has specific purpose
@@ -132,6 +145,7 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 ## Migration Notes
 
 ### From Old Notebook (44 cells → 52 cells)
+
 - All functionality preserved
 - Market parameter sliders consolidated
 - Position editor moved to BUILD mode
@@ -140,6 +154,7 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 - Export remains at end
 
 ### Backward Compatibility
+
 - Import/export formats unchanged
 - Portfolio files load exactly as before
 - All analysis functions preserved
@@ -148,11 +163,13 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 ## Dependencies
 
 ### Required
+
 - deltadewa (with new widgets module)
 - numpy, pandas, matplotlib
 - ipywidgets
 
 ### Optional
+
 - plotly (for 3D visualizations)
 
 ## Cell Execution Order
@@ -165,14 +182,17 @@ The `options_dashboard.ipynb` notebook has been restructured into a streamlined 
 ## Troubleshooting
 
 ### "GlobalAssumptions not found"
+
 - Ensure cell 3 (imports) executed successfully
 - Check deltadewa installation includes latest widgets
 
 ### "NetHedgeSummary not updating"
+
 - Verify callback registered in position editor (cell 14)
 - Manually call `net_hedge_summary.update()` if needed
 
 ### "ScenarioGridCache errors"
+
 - Check deltadewa.analysis module import (cell 3)
 - Cache is optional - can disable for debugging
 

@@ -93,7 +93,8 @@ jupyter lab options_dashboard.ipynb
 
 #### **Workflow: BUILD → EXPLAIN → STRESS**
 
-**Step 1: BUILD Mode 🏗️**
+#### Step 1: BUILD Mode 🏗️
+
 1. **Set Global Assumptions**:
    - Configure spot price, volatility, interest rates
    - Select time horizon (T+0, T+7, T+30, T+60, T+90, custom)
@@ -109,7 +110,8 @@ jupyter lab options_dashboard.ipynb
    - Crash convexity indicators (-10%, -20%, -30%)
    - Updates automatically when portfolio changes
 
-**Step 2: EXPLAIN Mode 📊**
+#### Step 2: EXPLAIN Mode 📊
+
 1. **Consolidated Greeks View**:
    - See net portfolio Greeks in one table
    - View top 5 contributors for each Greek
@@ -125,7 +127,8 @@ jupyter lab options_dashboard.ipynb
    - Cashflow tracking
    - Aging analysis
 
-**Step 3: STRESS Mode ⚡**
+#### Step 3: STRESS Mode ⚡
+
 1. **Run Scenario Grids**:
    - Interactive spot vs volatility heatmaps
    - Time vs price P&L evolution
@@ -141,6 +144,7 @@ jupyter lab options_dashboard.ipynb
    - Interactive Plotly charts
 
 **Key Features:**
+
 - ✅ Single GlobalAssumptions panel (no duplicate sliders)
 - ✅ Always-visible Net Hedge Summary
 - ✅ Automatic caching for performance
@@ -198,8 +202,8 @@ print(f"Daily time decay: ${stats['total_theta']:.2f}")
 print(f"Annual time decay: ${annual_theta:.2f}")
 ```
 
-**Note on Theta Convention**: This library uses the industry standard of 365 calendar days 
-(not 252 trading days) for theta calculations. This matches:
+**Note on Theta Convention**: This library uses the industry standard of 365 calendar days (not 252 trading days) for theta calculations. This matches:
+
 - Option pricing model assumptions (Black-Scholes, Bjerksund-Stensland)
 - VIX and exchange conventions
 - How volatility is expressed in time-to-expiration

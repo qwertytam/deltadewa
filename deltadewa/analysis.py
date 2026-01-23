@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """
 Portfolio Analysis Module for Options Portfolios
 
@@ -18,7 +19,7 @@ Date: 2026-01-12
 
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
-from functools import lru_cache
+import hashlib
 import numbers
 import pandas as pd
 import numpy as np
@@ -97,7 +98,9 @@ class PortfolioAnalyzer:
         )
 
         # Classify into buckets
-        df["maturity_bucket"] = df["days_to_expiry"].apply(self.classify_maturity_bucket)
+        df["maturity_bucket"] = df["days_to_expiry"].apply(
+            self.classify_maturity_bucket
+        )
 
         return df
 
@@ -108,13 +111,13 @@ class PortfolioAnalyzer:
     def calculate_carry_metrics(self) -> Dict:
         """
         Analyze portfolio carry (theta decay) characteristics.
-        
+
         Note: All theta calculations use the industry standard convention of
         365 calendar days (not 252 trading days). This matches:
         - Option pricing model assumptions (Black-Scholes, Bjerksund-Stensland)
         - VIX and exchange conventions
         - Volatility calculations which use calendar time in T
-        
+
         Returns:
             Dict containing:
                 - total_theta_daily: Daily theta across all positions
@@ -140,28 +143,42 @@ class PortfolioAnalyzer:
         total_theta_daily = df["position_theta"].sum()
 
         # Theta by bucket
-        theta_by_bucket = df.groupby("maturity_bucket")["position_theta"].sum().to_dict()
+        theta_by_bucket = (
+            df.groupby("maturity_bucket")["position_theta"].sum().to_dict()
+        )
 
         # Theta by type
         theta_by_type = df.groupby("type")["position_theta"].sum().to_dict()
 
         # Covered call analysis (short calls - earning premium)
         short_calls = df[(df["type"] == "call") & (df["quantity"] < 0)]
-        covered_call_theta = short_calls["position_theta"].sum() if len(short_calls) > 0 else 0.0
-        covered_call_premium = short_calls["position_value"].sum() if len(short_calls) > 0 else 0.0
+        covered_call_theta = (
+            short_calls["position_theta"].sum() if len(short_calls) > 0 else 0.0
+        )
+        covered_call_premium = (
+            short_calls["position_value"].sum() if len(short_calls) > 0 else 0.0
+        )
 
         # Long call analysis (paying premium)
         long_calls = df[(df["type"] == "call") & (df["quantity"] > 0)]
-        long_call_theta = long_calls["position_theta"].sum() if len(long_calls) > 0 else 0.0
+        long_call_theta = (
+            long_calls["position_theta"].sum() if len(long_calls) > 0 else 0.0
+        )
 
         # Hedge put analysis (long puts - paying for downside protection)
         long_puts = df[(df["type"] == "put") & (df["quantity"] > 0)]
-        hedge_put_theta = long_puts["position_theta"].sum() if len(long_puts) > 0 else 0.0
-        hedge_put_delta = long_puts["position_delta"].sum() if len(long_puts) > 0 else 0.0
+        hedge_put_theta = (
+            long_puts["position_theta"].sum() if len(long_puts) > 0 else 0.0
+        )
+        hedge_put_delta = (
+            long_puts["position_delta"].sum() if len(long_puts) > 0 else 0.0
+        )
 
         # Short put analysis (short puts - earning premium)
         short_puts = df[(df["type"] == "put") & (df["quantity"] < 0)]
-        short_put_theta = short_puts["position_theta"].sum() if len(short_puts) > 0 else 0.0
+        short_put_theta = (
+            short_puts["position_theta"].sum() if len(short_puts) > 0 else 0.0
+        )
 
         # Net carry = total theta (they are identical for options portfolios)
         net_carry = total_theta_daily
@@ -171,7 +188,12 @@ class PortfolioAnalyzer:
             {"position_theta": "sum", "position_value": lambda x: x.abs().sum()}
         )
         bucket_summary["carry_efficiency_pct"] = (
-            (bucket_summary["position_theta"] / bucket_summary["position_value"]) * 100 * 365
+            (
+                bucket_summary["position_theta"]
+                / bucket_summary["position_value"]
+            )
+            * 100
+            * 365
         )
         carry_efficiency = bucket_summary["carry_efficiency_pct"].to_dict()
 
@@ -216,73 +238,83 @@ class PortfolioAnalyzer:
     def create_theta_summary_table(self) -> pd.DataFrame:
         """
         Create consolidated theta/carry summary table.
-        
+
         Returns a DataFrame showing theta breakdown by source (income/cost) and timeframe
         (daily, weekly, monthly, annual). This provides a clear view of where theta is
         coming from and going to in the portfolio.
-        
+
         Returns:
             DataFrame with theta breakdown by source (income/cost) and timeframe,
             with multi-index (category, source) and columns for different time periods
         """
         carry_metrics = self.calculate_carry_metrics()
-        
+
         data = []
-        
+
         # Income sources (positive theta - earning premium)
-        if carry_metrics['covered_call_theta'] != 0:
-            data.append({
-                'category': 'Income',
-                'source': 'Short Calls',
-                'daily': carry_metrics['covered_call_theta'],
-                'weekly': carry_metrics['covered_call_theta'] * 7,
-                'monthly': carry_metrics['covered_call_theta'] * 30,
-                'annual': carry_metrics['covered_call_theta'] * 365,
-            })
-        
-        if carry_metrics['short_put_theta'] != 0:
-            data.append({
-                'category': 'Income',
-                'source': 'Short Puts',
-                'daily': carry_metrics['short_put_theta'],
-                'weekly': carry_metrics['short_put_theta'] * 7,
-                'monthly': carry_metrics['short_put_theta'] * 30,
-                'annual': carry_metrics['short_put_theta'] * 365,
-            })
-        
+        if carry_metrics["covered_call_theta"] != 0:
+            data.append(
+                {
+                    "category": "Income",
+                    "source": "Short Calls",
+                    "daily": carry_metrics["covered_call_theta"],
+                    "weekly": carry_metrics["covered_call_theta"] * 7,
+                    "monthly": carry_metrics["covered_call_theta"] * 30,
+                    "annual": carry_metrics["covered_call_theta"] * 365,
+                }
+            )
+
+        if carry_metrics["short_put_theta"] != 0:
+            data.append(
+                {
+                    "category": "Income",
+                    "source": "Short Puts",
+                    "daily": carry_metrics["short_put_theta"],
+                    "weekly": carry_metrics["short_put_theta"] * 7,
+                    "monthly": carry_metrics["short_put_theta"] * 30,
+                    "annual": carry_metrics["short_put_theta"] * 365,
+                }
+            )
+
         # Cost sources (negative theta - paying premium)
-        if carry_metrics['hedge_put_theta'] != 0:
-            data.append({
-                'category': 'Cost',
-                'source': 'Long Puts (Hedge)',
-                'daily': carry_metrics['hedge_put_theta'],
-                'weekly': carry_metrics['hedge_put_theta'] * 7,
-                'monthly': carry_metrics['hedge_put_theta'] * 30,
-                'annual': carry_metrics['hedge_put_theta'] * 365,
-            })
-        
-        if carry_metrics['long_call_theta'] != 0:
-            data.append({
-                'category': 'Cost',
-                'source': 'Long Calls',
-                'daily': carry_metrics['long_call_theta'],
-                'weekly': carry_metrics['long_call_theta'] * 7,
-                'monthly': carry_metrics['long_call_theta'] * 30,
-                'annual': carry_metrics['long_call_theta'] * 365,
-            })
-        
+        if carry_metrics["hedge_put_theta"] != 0:
+            data.append(
+                {
+                    "category": "Cost",
+                    "source": "Long Puts (Hedge)",
+                    "daily": carry_metrics["hedge_put_theta"],
+                    "weekly": carry_metrics["hedge_put_theta"] * 7,
+                    "monthly": carry_metrics["hedge_put_theta"] * 30,
+                    "annual": carry_metrics["hedge_put_theta"] * 365,
+                }
+            )
+
+        if carry_metrics["long_call_theta"] != 0:
+            data.append(
+                {
+                    "category": "Cost",
+                    "source": "Long Calls",
+                    "daily": carry_metrics["long_call_theta"],
+                    "weekly": carry_metrics["long_call_theta"] * 7,
+                    "monthly": carry_metrics["long_call_theta"] * 30,
+                    "annual": carry_metrics["long_call_theta"] * 365,
+                }
+            )
+
         # Net total (always show, even if zero)
-        data.append({
-            'category': 'NET',
-            'source': 'Total Theta/Carry',
-            'daily': carry_metrics['total_theta_daily'],
-            'weekly': carry_metrics['total_theta_weekly'],
-            'monthly': carry_metrics['total_theta_monthly'],
-            'annual': carry_metrics['total_theta_annual'],
-        })
-        
+        data.append(
+            {
+                "category": "NET",
+                "source": "Total Theta/Carry",
+                "daily": carry_metrics["total_theta_daily"],
+                "weekly": carry_metrics["total_theta_weekly"],
+                "monthly": carry_metrics["total_theta_monthly"],
+                "annual": carry_metrics["total_theta_annual"],
+            }
+        )
+
         df = pd.DataFrame(data)
-        return df.set_index(['category', 'source'])
+        return df.set_index(["category", "source"])
 
     # ========================================================================
     # Risk Concentration
@@ -316,7 +348,11 @@ class PortfolioAnalyzer:
 
         df = self.add_maturity_buckets(df)
 
-        result: Dict[str, Any] = {"by_strike": {}, "by_maturity": {}, "concentration_scores": {}}
+        result: Dict[str, Any] = {
+            "by_strike": {},
+            "by_maturity": {},
+            "concentration_scores": {},
+        }
 
         for metric in metrics:
             column = f"position_{metric}"
@@ -333,7 +369,9 @@ class PortfolioAnalyzer:
                 def _safe_to_number(val):
                     # If val is a native numeric type or numpy numeric,
                     # return float; otherwise preserve original
-                    if isinstance(val, (int, float, np.integer, np.floating, numbers.Real)):
+                    if isinstance(
+                        val, (int, float, np.integer, np.floating, numbers.Real)
+                    ):
                         return float(val)
                     try:
                         return float(val)
@@ -350,8 +388,14 @@ class PortfolioAnalyzer:
                 ]
 
                 # Concentration score (% held by top strike)
-                top_pct = (top_strikes.iloc[0] / total_abs) * 100 if len(top_strikes) > 0 else 0
-                result["concentration_scores"][f"{metric}_strike"] = float(top_pct)
+                top_pct = (
+                    (top_strikes.iloc[0] / total_abs) * 100
+                    if len(top_strikes) > 0
+                    else 0
+                )
+                result["concentration_scores"][f"{metric}_strike"] = float(
+                    top_pct
+                )
 
             # Concentration by maturity
             by_maturity = df.groupby("maturity_bucket")[column].sum().abs()
@@ -370,9 +414,13 @@ class PortfolioAnalyzer:
 
                 # Concentration score (% held by top bucket)
                 top_pct = (
-                    (top_maturities.iloc[0] / total_abs_mat) * 100 if len(top_maturities) > 0 else 0
+                    (top_maturities.iloc[0] / total_abs_mat) * 100
+                    if len(top_maturities) > 0
+                    else 0
                 )
-                result["concentration_scores"][f"{metric}_maturity"] = float(top_pct)
+                result["concentration_scores"][f"{metric}_maturity"] = float(
+                    top_pct
+                )
 
         return result
 
@@ -466,7 +514,9 @@ class PortfolioAnalyzer:
         alternatives = []
 
         for pos in self.portfolio.positions:
-            per_contract_delta = pos.position_delta() / pos.quantity if pos.quantity != 0 else 0
+            per_contract_delta = (
+                pos.position_delta() / pos.quantity if pos.quantity != 0 else 0
+            )
 
             if abs(per_contract_delta) > 0.01:  # Only meaningful deltas
                 contracts_needed = delta_change_needed / per_contract_delta
@@ -477,11 +527,15 @@ class PortfolioAnalyzer:
                         "action": "BUY" if contracts_needed > 0 else "SELL",
                         "type": pos.option.option_type.upper(),
                         "strike": float(pos.option.strike_price),
-                        "maturity": pos.option.maturity_date.strftime("%Y-%m-%d"),
+                        "maturity": pos.option.maturity_date.strftime(
+                            "%Y-%m-%d"
+                        ),
                         "delta_per_contract": float(per_contract_delta),
                         "contracts_needed": abs(contracts_needed),
                         "price": float(price),
-                        "cost": abs(contracts_needed) * price * 100,  # Per contract
+                        "cost": abs(contracts_needed)
+                        * price
+                        * 100,  # Per contract
                     }
                 )
 
@@ -494,21 +548,25 @@ class PortfolioAnalyzer:
     # Scenario Grid Generation
     # ========================================================================
 
-    def _calculate_portfolio_value_at(self, spot: float, valuation_date: datetime) -> float:
+    def _calculate_portfolio_value_at(
+        self, spot: float, valuation_date: datetime
+    ) -> float:
         """
         Calculate total portfolio value at given spot and date.
-        
+
         Args:
             spot: Spot price to use for valuation
             valuation_date: Date to use for valuation
-            
+
         Returns:
             Total portfolio value (options + underlying)
         """
         total_value = 0.0
-        
+
         for position in self.portfolio.positions:
-            days_to_maturity = (position.option.maturity_date - valuation_date).days
+            days_to_maturity = (
+                position.option.maturity_date - valuation_date
+            ).days
 
             if days_to_maturity <= 0:
                 # Option expired - use intrinsic value
@@ -516,7 +574,9 @@ class PortfolioAnalyzer:
                     intrinsic = max(0, spot - position.option.strike_price)
                 else:
                     intrinsic = max(0, position.option.strike_price - spot)
-                total_value += intrinsic * position.quantity * position.contract_size
+                total_value += (
+                    intrinsic * position.quantity * position.contract_size
+                )
             else:
                 # Option still alive - price it
                 opt = AmericanOption(
@@ -529,17 +589,19 @@ class PortfolioAnalyzer:
                     option_type=position.option.option_type,
                     valuation_date=valuation_date,
                 )
-                total_value += opt.price() * position.quantity * position.contract_size
+                total_value += (
+                    opt.price() * position.quantity * position.contract_size
+                )
 
         # Add underlying position value
         total_value += self.portfolio.underlying_quantity * spot
-        
+
         return total_value
 
     def scenario_grid(
-        self, 
-        spot_scenarios: np.ndarray, 
-        time_points: List[datetime], 
+        self,
+        spot_scenarios: np.ndarray,
+        time_points: List[datetime],
         metric: str = "pnl",
         baseline_spot: Optional[float] = None,
         baseline_valuation_date: Optional[datetime] = None,
@@ -553,9 +615,11 @@ class PortfolioAnalyzer:
         Args:
             spot_scenarios: Array of spot prices to test
             time_points: List of valuation dates to test
-            metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta', 'gamma', 'vega', 'theta')
+            metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta',
+            'gamma', 'vega', 'theta')
             baseline_spot: Spot price for P&L baseline (default: current portfolio spot)
-            baseline_valuation_date: Valuation date for P&L baseline (default: current portfolio date)
+            baseline_valuation_date: Valuation date for P&L baseline (default:
+            current portfolio date)
 
         Returns:
             DataFrame with columns: spot_price, valuation_date, metric_value
@@ -564,27 +628,42 @@ class PortfolioAnalyzer:
         results = []
         original_spot = self.portfolio.spot_price
         original_date = self.portfolio.valuation_date
-        
+
         # For P&L calculation, use the baseline values if provided
         if baseline_spot is None:
             baseline_spot = original_spot
+        if baseline_spot is None:
+            raise ValueError(
+                "Portfolio spot price is not set for baseline calculation."
+            )
+
         if baseline_valuation_date is None:
             baseline_valuation_date = original_date
-        
+        if baseline_valuation_date is None:
+            raise ValueError(
+                "Portfolio valuation date is not set for baseline calculation."
+            )
+
         # Calculate baseline value at baseline date/spot for P&L calculations
-        baseline_value = self._calculate_portfolio_value_at(baseline_spot, baseline_valuation_date)
+        baseline_value = self._calculate_portfolio_value_at(
+            baseline_spot, baseline_valuation_date
+        )
 
         for time_point in time_points:
             for spot in spot_scenarios:
                 # Calculate metric at this scenario
                 if metric == "pnl":
                     # Calculate P&L relative to baseline
-                    scenario_value = self._calculate_portfolio_value_at(spot, time_point)
+                    scenario_value = self._calculate_portfolio_value_at(
+                        spot, time_point
+                    )
                     metric_value = scenario_value - baseline_value
 
                 elif metric == "value":
                     # Calculate absolute portfolio value
-                    metric_value = self._calculate_portfolio_value_at(spot, time_point)
+                    metric_value = self._calculate_portfolio_value_at(
+                        spot, time_point
+                    )
 
                 else:
                     # For Greeks, update portfolio and calculate
@@ -650,7 +729,9 @@ class PortfolioAnalyzer:
         # Delta analysis
         lines.append("DIRECTIONAL RISK (DELTA):")
         lines.append(f"  Portfolio Delta: {stats['total_delta']:,.2f}")
-        lines.append(f"  Notional Position: {stats['underlying_quantity']:,.2f}")
+        lines.append(
+            f"  Notional Position: {stats['underlying_quantity']:,.2f}"
+        )
         lines.append(f"  Net Delta: {stats['net_delta']:,.2f}")
         lines.append(f"  Hedge Ratio: {stats['hedge_ratio']:.2f}%")
 
@@ -659,7 +740,9 @@ class PortfolioAnalyzer:
         elif stats["net_delta"] > 0:
             lines.append("  ⚠ Net long exposure - vulnerable to price decline")
         else:
-            lines.append("  ⚠ Net short exposure - vulnerable to price increase")
+            lines.append(
+                "  ⚠ Net short exposure - vulnerable to price increase"
+            )
 
         lines.append("")
 
@@ -749,7 +832,9 @@ class PortfolioAnalyzer:
 
         # Vega insights
         if abs(stats["total_vega"]) > 100:
-            direction = "benefits from" if stats["total_vega"] > 0 else "hurt by"
+            direction = (
+                "benefits from" if stats["total_vega"] > 0 else "hurt by"
+            )
             insights.append(
                 f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f}) - "
                 f"portfolio {direction} volatility increases"
@@ -790,7 +875,9 @@ def quick_carry_analysis(portfolio) -> Dict:
     return analyzer.calculate_carry_metrics()
 
 
-def quick_risk_concentration(portfolio, metrics: Optional[List[str]] = None) -> Dict:
+def quick_risk_concentration(
+    portfolio, metrics: Optional[List[str]] = None
+) -> Dict:
     """
     Quick risk concentration analysis.
 
@@ -818,38 +905,37 @@ def create_scenario_cache_key(
 ) -> Tuple:
     """
     Create a hashable cache key for scenario grid results.
-    
+
     Args:
         spot_scenarios: Array of spot prices
         time_points: List of valuation dates
         metric: Metric being calculated
         portfolio_state_hash: Hash representing portfolio state
-        
+
     Returns:
         Tuple suitable for use as dictionary key
     """
     # Convert numpy array to tuple for hashing
     spot_tuple = tuple(spot_scenarios.tolist())
     time_tuple = tuple(tp.isoformat() for tp in time_points)
-    
+
     return (spot_tuple, time_tuple, metric, portfolio_state_hash)
 
 
 def get_portfolio_state_hash(portfolio) -> str:
     """
     Generate a hash representing the current portfolio state.
-    
+
     This is used for cache invalidation - if the portfolio changes,
     the hash changes and cached scenario grids are invalidated.
-    
+
     Args:
         portfolio: OptionPortfolio instance
-        
+
     Returns:
         String hash of portfolio state
     """
-    import hashlib
-    
+
     # Collect all relevant state
     state_elements = [
         str(portfolio.spot_price),
@@ -859,18 +945,20 @@ def get_portfolio_state_hash(portfolio) -> str:
         str(portfolio.valuation_date.isoformat()),
         str(len(portfolio.positions)),
     ]
-    
+
     # Add position details
     for pos in portfolio.positions:
-        state_elements.extend([
-            pos.symbol,
-            str(pos.quantity),
-            str(pos.option.strike_price),
-            str(pos.option.maturity_date.isoformat()),
-            pos.option.option_type,
-            str(pos.option.volatility),
-        ])
-    
+        state_elements.extend(
+            [
+                pos.symbol,
+                str(pos.quantity),
+                str(pos.option.strike_price),
+                str(pos.option.maturity_date.isoformat()),
+                pos.option.option_type,
+                str(pos.option.volatility),
+            ]
+        )
+
     # Create hash
     state_str = "|".join(state_elements)
     return hashlib.md5(state_str.encode()).hexdigest()
@@ -879,35 +967,35 @@ def get_portfolio_state_hash(portfolio) -> str:
 class ScenarioGridCache:
     """
     Cache for scenario grid calculations with automatic invalidation.
-    
+
     This class provides caching for expensive scenario grid calculations.
     The cache is automatically invalidated when portfolio state changes.
-    
+
     Usage:
         cache = ScenarioGridCache()
-        
+
         # First call calculates and caches
         result1 = cache.get_or_calculate(
             portfolio, analyzer, spot_scenarios, time_points, metric
         )
-        
+
         # Second call returns cached result (if portfolio unchanged)
         result2 = cache.get_or_calculate(
             portfolio, analyzer, spot_scenarios, time_points, metric
         )
     """
-    
+
     def __init__(self, max_size: int = 128):
         """
         Initialize cache.
-        
+
         Args:
             max_size: Maximum number of cached results (LRU eviction)
         """
         self._cache: Dict[Tuple, pd.DataFrame] = {}
         self._max_size = max_size
         self._access_order: List[Tuple] = []
-    
+
     def get_or_calculate(
         self,
         portfolio,
@@ -920,7 +1008,7 @@ class ScenarioGridCache:
     ) -> pd.DataFrame:
         """
         Get cached result or calculate if not available.
-        
+
         Args:
             portfolio: OptionPortfolio instance
             analyzer: PortfolioAnalyzer instance
@@ -929,7 +1017,7 @@ class ScenarioGridCache:
             metric: Metric to calculate
             baseline_spot: Baseline spot for P&L calculation
             baseline_valuation_date: Baseline date for P&L calculation
-            
+
         Returns:
             DataFrame with scenario grid results
         """
@@ -938,7 +1026,7 @@ class ScenarioGridCache:
         cache_key = create_scenario_cache_key(
             spot_scenarios, time_points, metric, portfolio_hash
         )
-        
+
         # Check cache
         if cache_key in self._cache:
             # Update access order
@@ -946,7 +1034,7 @@ class ScenarioGridCache:
                 self._access_order.remove(cache_key)
             self._access_order.append(cache_key)
             return self._cache[cache_key].copy()
-        
+
         # Calculate result
         result = analyzer.scenario_grid(
             spot_scenarios=spot_scenarios,
@@ -955,24 +1043,24 @@ class ScenarioGridCache:
             baseline_spot=baseline_spot,
             baseline_valuation_date=baseline_valuation_date,
         )
-        
+
         # Store in cache
         self._cache[cache_key] = result.copy()
         self._access_order.append(cache_key)
-        
+
         # Enforce max size (LRU eviction)
         while len(self._cache) > self._max_size:
             oldest_key = self._access_order.pop(0)
             if oldest_key in self._cache:
                 del self._cache[oldest_key]
-        
+
         return result
-    
+
     def clear(self):
         """Clear all cached results."""
         self._cache.clear()
         self._access_order.clear()
-    
+
     def size(self) -> int:
         """Return number of cached results."""
         return len(self._cache)

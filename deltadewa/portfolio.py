@@ -435,7 +435,13 @@ class OptionPortfolio:
         df = pd.DataFrame(data)
 
         # Format maturity dates
-        df["maturity"] = pd.to_datetime(df["maturity"]).dt.strftime("%Y-%m-%d")
+        df["maturity"] = df["maturity"].apply(
+            lambda x: (
+                x.strftime("%Y-%m-%d")
+                if isinstance(x, datetime)
+                else pd.to_datetime(x).strftime("%Y-%m-%d")
+            )
+        )
 
         return df
 

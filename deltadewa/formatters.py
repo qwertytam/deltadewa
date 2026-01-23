@@ -26,7 +26,18 @@ Date: 2026-01-12
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Dict, List, Optional, Union, Callable, Literal, TYPE_CHECKING
+from typing import (
+    Any,
+    Mapping,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Callable,
+    Literal,
+    TYPE_CHECKING,
+    cast,
+)
 import warnings
 import pandas as pd
 
@@ -459,77 +470,83 @@ def create_diverging_style(
 ) -> Styler:
     """
     Create DataFrame style with diverging colormap and consistent formatting.
-    
+
     This function creates a styled DataFrame with a diverging color scale centered
     at zero (negative=red, zero=white, positive=green) and consistent currency
     formatting across all tables.
-    
+
     Args:
         df: DataFrame to style
         value_columns: Columns to apply diverging color scale
         cmap: Colormap (default: 'RdYlGn' for red-yellow-green diverging)
         title_case: Convert columns to title case
         currency_columns: Columns to format as currency (default: value_columns)
-    
+
     Returns:
         Styled DataFrame with diverging colors and currency formatting
     """
     df_styled = df.copy()
-    
+
     # Title case columns if requested
     if title_case:
-        df_styled.columns = [c.replace('_', ' ').title() for c in df_styled.columns]
-        value_columns = [c.replace('_', ' ').title() for c in value_columns]
+        # Ensure assignment uses an Index[str] to satisfy type checkers (avoid
+        # assigning list[str] to Index)
+        df_styled.columns = pd.Index(
+            [str(c).replace("_", " ").title() for c in df_styled.columns]
+        )
+        value_columns = [c.replace("_", " ").title() for c in value_columns]
         if currency_columns:
-            currency_columns = [c.replace('_', ' ').title() for c in currency_columns]
-    
+            currency_columns = [
+                c.replace("_", " ").title() for c in currency_columns
+            ]
+
     if currency_columns is None:
         currency_columns = value_columns
-    
+
     # Create styler
     styler = df_styled.style
-    
+
     # Apply diverging colormap to each value column
     for col in value_columns:
         if col not in df_styled.columns:
             continue
-            
+
         col_data = df_styled[col]
         vmin = col_data.min()
         vmax = col_data.max()
-        
+
         # Skip if all same value
         if vmin == vmax:
             continue
-        
+
         # Create diverging norm with zero at center
         # This ensures: negative=red, zero=white, positive=green
         abs_max = max(abs(vmin), abs(vmax))
         styler = styler.background_gradient(
-            subset=[col],
-            cmap=cmap,
-            vmin=-abs_max,
-            vmax=abs_max,
-            axis=0
+            subset=[col], cmap=cmap, vmin=-abs_max, vmax=abs_max, axis=0
         )
-    
+
     # Format currency columns with consistent formatting
-    def format_currency_consistent(value):
+    def format_currency_consistent(value: object) -> str:
         """Format currency consistently: -$1,234.56"""
-        if pd.isna(value):
+        if pd.isna(cast(Any, value)):
             return "-"
-        if value < 0:
-            return f"-${abs(value):,.2f}"
-        return f"${value:,.2f}"
-    
-    format_dict = {}
+        try:
+            num = float(cast(Any, value))
+        except (TypeError, ValueError):
+            return "-" if value is None else str(value)
+        if num < 0:
+            return f"-${abs(num):,.2f}"
+        return f"${num:,.2f}"
+
+    format_dict: Dict[Any, Optional[Union[str, Callable[[object], str]]]] = {}
     for col in currency_columns:
         if col in df_styled.columns:
             format_dict[col] = format_currency_consistent
-    
+
     if format_dict:
         styler = styler.format(format_dict, na_rep="-")
-    
+
     return styler
 
 
@@ -658,9 +675,7 @@ def highlight_max_min(
 # ============================================================================
 
 
-def apply_table_preset(
-    styler: Styler, preset: str = "default"
-) -> Styler:
+def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
     """
     Apply predefined table styling presets.
 

@@ -1146,7 +1146,7 @@ def plot_greeks_consolidated(
     ax_bar.grid(True, alpha=0.3, axis="x")
 
     # Add value labels on bars
-    for bar, value in zip(bars, greek_values):
+    for b, value in zip(bars, greek_values):
         if value != 0:
             label_x = value + (
                 0.05
@@ -1155,7 +1155,7 @@ def plot_greeks_consolidated(
             )
             ax_bar.text(
                 label_x,
-                bar.get_y() + bar.get_height() / 2,
+                b.get_y() + b.get_height() / 2,
                 f"{value:.2f}",
                 ha="left" if value > 0 else "right",
                 va="center",
@@ -1193,7 +1193,7 @@ def plot_greeks_consolidated(
             ax.grid(True, alpha=0.3, axis="x")
 
             # Add value labels
-            for bar, value in zip(bars, values):
+            for b, value in zip(bars, values):
                 if value != 0:
                     label_x = value + (
                         0.05
@@ -1202,7 +1202,7 @@ def plot_greeks_consolidated(
                     )
                     ax.text(
                         label_x,
-                        bar.get_y() + bar.get_height() / 2,
+                        b.get_y() + b.get_height() / 2,
                         f"{value:.2f}",
                         ha="left" if value > 0 else "right",
                         va="center",
