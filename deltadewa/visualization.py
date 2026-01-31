@@ -445,8 +445,7 @@ class OptionCharts:
         # Annotate expected value
         expected_value = analysis.get("expected_value", 0)
         if expected_value is not None:
-            # Find closest spot price where P&L equals expected value
-            # Use the spot where we are closest to the expected value
+            # Find the spot price closest to the expected value on P&L curve
             idx_closest = np.argmin(np.abs(pnl_values - expected_value))
             ev_spot = spot_range[idx_closest]
             ev_pnl = pnl_values[idx_closest]
