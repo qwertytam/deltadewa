@@ -547,9 +547,13 @@ class OptionPortfolio:
             # Create comprehensive range that includes extreme scenarios
             current_spot = self.spot_price
             
+            # Near-zero value scaled appropriately for the asset price
+            # Use 0.01% of current spot, but ensure minimum of 0.01
+            near_zero = max(0.01, current_spot * 0.0001)
+            
             # Critical points to always check for accurate max/min detection
             critical_points = [
-                0.01,  # Near zero (important for puts - can't use exact 0 due to log calculations)
+                near_zero,            # Near zero (important for puts - can't use exact 0 due to log calculations)
                 current_spot * 0.1,   # 90% down
                 current_spot * 0.25,  # 75% down
                 current_spot * 0.5,   # 50% down
@@ -563,9 +567,9 @@ class OptionPortfolio:
                 current_spot * 10.0,  # 900% up
             ]
             
-            # Dense range for main area
-            spot_min = 0.01
-            spot_max = max(current_spot * 5.0, max(critical_points))
+            # Dense range for main area - from near-zero to highest critical point
+            spot_min = near_zero
+            spot_max = current_spot * 10.0  # Maximum is 10x current spot
             main_range = np.linspace(spot_min, spot_max, 300)
             
             # Combine and sort
@@ -576,6 +580,41 @@ class OptionPortfolio:
             spot_min = max(0.01, self.spot_price * spot_min_pct / 100)
             spot_max = self.spot_price * spot_max_pct / 100
             return np.linspace(spot_min, spot_max, num_points)
+    
+    def _check_unlimited_trend(
+        self, spot_range: np.ndarray, include_underlying: bool, 
+        check_increasing: bool
+    ) -> bool:
+        """
+        Check if P&L trend continues at the extreme end of spot range.
+        
+        This helps detect unlimited profit/loss scenarios by examining if
+        the trend continues beyond the sampled range.
+        
+        Args:
+            spot_range: Array of spot prices
+            include_underlying: Whether to include underlying in P&L calculation
+            check_increasing: If True, check for increasing trend (profit).
+                            If False, check for decreasing trend (loss).
+        
+        Returns:
+            True if unlimited trend is detected, False otherwise
+        """
+        if len(spot_range) < 10:
+            return False
+        
+        # Check if P&L trend continues at the high end of range
+        high_end_pnls = [
+            self.calculate_pnl_at_expiry(spot, include_underlying=include_underlying) 
+            for spot in spot_range[-5:]
+        ]
+        
+        if check_increasing:
+            # Check if profits are consistently increasing
+            return all(high_end_pnls[i] < high_end_pnls[i+1] for i in range(len(high_end_pnls)-1))
+        else:
+            # Check if losses are consistently increasing (P&L decreasing)
+            return all(high_end_pnls[i] > high_end_pnls[i+1] for i in range(len(high_end_pnls)-1))
 
     def scenario_analysis(
         self,
@@ -766,18 +805,10 @@ class OptionPortfolio:
             for pos in self.positions
         )
         
-        # Enhanced unlimited loss detection: check if loss is still increasing at high end
-        is_unlimited = has_naked_short_calls
-        
-        if not is_unlimited and len(spot_range) > 10:
-            # Check if P&L is still decreasing (losses increasing) at the high end
-            high_end_pnls = [
-                self.calculate_pnl_at_expiry(spot, include_underlying=False) 
-                for spot in spot_range[-5:]
-            ]
-            # If losses are consistently increasing (P&L decreasing) at high spot prices
-            if all(high_end_pnls[i] > high_end_pnls[i+1] for i in range(len(high_end_pnls)-1)):
-                is_unlimited = True
+        # Enhanced unlimited loss detection using helper method
+        is_unlimited = has_naked_short_calls or self._check_unlimited_trend(
+            spot_range, include_underlying=False, check_increasing=False
+        )
 
         return {
             "max_loss": max_loss,
@@ -830,18 +861,10 @@ class OptionPortfolio:
             for pos in self.positions
         )
         
-        # Enhanced unlimited profit detection: check if profit is still increasing at high end
-        is_unlimited = has_long_calls
-        
-        if not is_unlimited and len(spot_range) > 10:
-            # Check if profit is still increasing at the high end
-            high_end_pnls = [
-                self.calculate_pnl_at_expiry(spot, include_underlying=False) 
-                for spot in spot_range[-5:]
-            ]
-            # If profits are consistently increasing at high spot prices
-            if all(high_end_pnls[i] < high_end_pnls[i+1] for i in range(len(high_end_pnls)-1)):
-                is_unlimited = True
+        # Enhanced unlimited profit detection using helper method
+        is_unlimited = has_long_calls or self._check_unlimited_trend(
+            spot_range, include_underlying=False, check_increasing=True
+        )
 
         return {
             "max_profit": max_profit,
@@ -904,16 +927,11 @@ class OptionPortfolio:
         )
         is_unlimited = is_unlimited or has_naked_short_calls
         
-        # Enhanced unlimited loss detection: check if loss is still increasing at high end
-        if not is_unlimited and len(spot_range) > 10:
-            # Check if P&L is still decreasing (losses increasing) at the high end
-            high_end_pnls = [
-                self.calculate_pnl_at_expiry(spot, include_underlying=True) 
-                for spot in spot_range[-5:]
-            ]
-            # If losses are consistently increasing (P&L decreasing) at high spot prices
-            if all(high_end_pnls[i] > high_end_pnls[i+1] for i in range(len(high_end_pnls)-1)):
-                is_unlimited = True
+        # Enhanced unlimited loss detection using helper method
+        if not is_unlimited:
+            is_unlimited = self._check_unlimited_trend(
+                spot_range, include_underlying=True, check_increasing=False
+            )
 
         return {
             "max_loss": max_loss,
@@ -973,16 +991,11 @@ class OptionPortfolio:
         )
         is_unlimited = is_unlimited or has_long_calls
         
-        # Enhanced unlimited profit detection: check if profit is still increasing at high end
-        if not is_unlimited and len(spot_range) > 10:
-            # Check if profit is still increasing at the high end
-            high_end_pnls = [
-                self.calculate_pnl_at_expiry(spot, include_underlying=True) 
-                for spot in spot_range[-5:]
-            ]
-            # If profits are consistently increasing at high spot prices
-            if all(high_end_pnls[i] < high_end_pnls[i+1] for i in range(len(high_end_pnls)-1)):
-                is_unlimited = True
+        # Enhanced unlimited profit detection using helper method
+        if not is_unlimited:
+            is_unlimited = self._check_unlimited_trend(
+                spot_range, include_underlying=True, check_increasing=True
+            )
 
         return {
             "max_profit": max_profit,
