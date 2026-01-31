@@ -233,8 +233,8 @@ class OptionCharts:
 
     def plot_pnl_distribution_with_metrics(
         self,
-        spot_range_pct: float = 50.0,
-        num_points: int = 500,
+        spot_range_pct: float = 100.0,
+        num_points: int = 1000,
         figsize: Tuple[int, int] = (16, 8),
         include_underlying: bool = True,
         show_probability_overlay: bool = False,
@@ -252,8 +252,8 @@ class OptionCharts:
         - Profit/loss zones (green/red shading)
 
         Args:
-            spot_range_pct: Percentage range around current spot (default: 50%)
-            num_points: Resolution of P&L curve (default: 500)
+            spot_range_pct: Percentage range around current spot (default: 100%)
+            num_points: Resolution of P&L curve (default: 1000)
             figsize: Figure dimensions (default: (16, 8))
             include_underlying: Include underlying position in P&L (default: True)
             show_probability_overlay: Add probability density overlay
@@ -300,7 +300,7 @@ class OptionCharts:
             spot_range,
             pnl_values,
             0,
-            where=(pnl_values >= 0),
+            where=(pnl_values >= 0).tolist(),
             color="green",
             alpha=0.2,
             label="Profit Zone",
@@ -309,7 +309,7 @@ class OptionCharts:
             spot_range,
             pnl_values,
             0,
-            where=(pnl_values < 0),
+            where=(pnl_values < 0).tolist(),
             color="red",
             alpha=0.2,
             label="Loss Zone",

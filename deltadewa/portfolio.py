@@ -517,6 +517,32 @@ class OptionPortfolio:
                 )
             self.positions = new_positions
 
+    def _get_spot_range(
+        self,
+        spot_range: Optional[np.ndarray] = None,
+        spot_min_pct: float = 0.0,
+        spot_max_pct: float = 200.0,
+        num_points: int = 250,
+    ) -> np.ndarray:
+        """
+        Get or create a spot price range for analysis.
+
+        Args:
+            spot_range: Existing spot range to use (returned as-is if provided)
+            spot_min_pct: Minimum spot price as percentage of current spot (default: 0%)
+            spot_max_pct: Maximum spot price as percentage of current spot (default: 200%)
+            num_points: Number of points in the range (default: 250)
+
+        Returns:
+            NumPy array of spot prices for analysis
+        """
+        if spot_range is not None:
+            return spot_range
+
+        spot_min = max(0.01, self.spot_price * spot_min_pct / 100)
+        spot_max = self.spot_price * spot_max_pct / 100
+        return np.linspace(spot_min, spot_max, num_points)
+
     def scenario_analysis(
         self,
         spot_range: np.ndarray,
@@ -662,22 +688,27 @@ class OptionPortfolio:
         return pnl
 
     def calculate_max_loss_options(
-        self, spot_range: Optional[np.ndarray] = None
+        self,
+        spot_range: Optional[np.ndarray] = None,
+        spot_min_pct: float = 0.0,
+        spot_max_pct: float = 200.0,
     ) -> dict:
         """
         Calculate maximum loss from options positions only.
 
         Args:
             spot_range: Array of spot prices to analyze (optional)
+            spot_min_pct: Minimum spot price as percentage of current spot
+            (default: 0% i.e., spot = 0.0)
+            spot_max_pct: Maximum spot price as percentage of current spot
+            (default: 200% i.e., spot = 2x current spot)
 
         Returns:
             Dict with 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
         """
-        if spot_range is None:
-            # Create reasonable range around current spot
-            spot_min = max(0.01, self.spot_price * 0.5)
-            spot_max = self.spot_price * 2.0
-            spot_range = np.linspace(spot_min, spot_max, 200)
+        spot_range = self._get_spot_range(
+            spot_range, spot_min_pct=spot_min_pct, spot_max_pct=spot_max_pct
+        )
 
         max_loss = 0.0
         spot_at_max_loss = self.spot_price
@@ -701,22 +732,27 @@ class OptionPortfolio:
         }
 
     def calculate_max_profit_options(
-        self, spot_range: Optional[np.ndarray] = None
+        self,
+        spot_range: Optional[np.ndarray] = None,
+        spot_min_pct: float = 0.0,
+        spot_max_pct: float = 200.0,
     ) -> dict:
         """
         Calculate maximum profit from options positions only.
 
         Args:
             spot_range: Array of spot prices to analyze (optional)
+            spot_min_pct: Minimum spot price as percentage of current spot
+            (default: 0% i.e., spot = 0.0)
+            spot_max_pct: Maximum spot price as percentage of current spot
+            (default: 200% i.e., spot = 2x current spot)
 
         Returns:
             Dict with 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
         """
-        if spot_range is None:
-            # Create reasonable range around current spot
-            spot_min = max(0.01, self.spot_price * 0.5)
-            spot_max = self.spot_price * 2.0
-            spot_range = np.linspace(spot_min, spot_max, 200)
+        spot_range = self._get_spot_range(
+            spot_range, spot_min_pct=spot_min_pct, spot_max_pct=spot_max_pct
+        )
 
         max_profit = float("-inf")
         spot_at_max_profit = self.spot_price
@@ -740,22 +776,27 @@ class OptionPortfolio:
         }
 
     def calculate_max_loss_total(
-        self, spot_range: Optional[np.ndarray] = None
+        self,
+        spot_range: Optional[np.ndarray] = None,
+        spot_min_pct: float = 0.0,
+        spot_max_pct: float = 200.0,
     ) -> dict:
         """
         Calculate maximum loss including underlying position.
 
         Args:
             spot_range: Array of spot prices to analyze (optional)
+            spot_min_pct: Minimum spot price as percentage of current spot
+            (default: 0% i.e., spot = 0.0)
+            spot_max_pct: Maximum spot price as percentage of current spot
+            (default: 200% i.e., spot = 2x current spot)
 
         Returns:
             Dict with 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
         """
-        if spot_range is None:
-            # Create reasonable range around current spot
-            spot_min = max(0.01, self.spot_price * 0.5)
-            spot_max = self.spot_price * 2.0
-            spot_range = np.linspace(spot_min, spot_max, 200)
+        spot_range = self._get_spot_range(
+            spot_range, spot_min_pct=spot_min_pct, spot_max_pct=spot_max_pct
+        )
 
         max_loss = 0.0
         spot_at_max_loss = self.spot_price
@@ -782,22 +823,29 @@ class OptionPortfolio:
         }
 
     def calculate_max_profit_total(
-        self, spot_range: Optional[np.ndarray] = None
+        self,
+        spot_range: Optional[np.ndarray] = None,
+        spot_min_pct: float = 0.0,
+        spot_max_pct: float = 200.0,
     ) -> dict:
         """
         Calculate maximum profit including underlying position.
 
         Args:
             spot_range: Array of spot prices to analyze (optional)
+            spot_min_pct: Minimum spot price as percentage of current spot
+            (default: 0% i.e., spot = 0.0)
+            spot_max_pct: Maximum spot price as percentage of current spot
+            (default: 200% i.e., spot = 2x current spot)
 
         Returns:
             Dict with 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
         """
-        if spot_range is None:
-            # Create reasonable range around current spot
-            spot_min = max(0.01, self.spot_price * 0.5)
-            spot_max = self.spot_price * 2.0
-            spot_range = np.linspace(spot_min, spot_max, 200)
+        spot_range = self._get_spot_range(
+            spot_range,
+            spot_min_pct=spot_min_pct,
+            spot_max_pct=spot_max_pct,
+        )
 
         max_profit = float("-inf")
         spot_at_max_profit = self.spot_price
@@ -824,6 +872,8 @@ class OptionPortfolio:
         self,
         spot_range: Optional[np.ndarray] = None,
         include_underlying: bool = False,
+        spot_min_pct: float = 0.0,
+        spot_max_pct: float = 200.0,
     ) -> List[float]:
         """
         Calculate breakeven spot prices at expiration.
@@ -831,15 +881,20 @@ class OptionPortfolio:
         Args:
             spot_range: Array of spot prices to analyze (optional)
             include_underlying: Whether to include underlying position
+            spot_min_pct: Minimum spot price as percentage of current spot
+            (default: 0% i.e., spot = 0.0)
+            spot_max_pct: Maximum spot price as percentage of current spot
+            (default: 200% i.e., spot = 2x current spot)
 
         Returns:
             List of breakeven spot prices
         """
-        if spot_range is None:
-            # Create reasonable range around current spot
-            spot_min = max(0.01, self.spot_price * 0.5)
-            spot_max = self.spot_price * 2.0
-            spot_range = np.linspace(spot_min, spot_max, 500)
+        spot_range = self._get_spot_range(
+            spot_range,
+            num_points=500,
+            spot_min_pct=spot_min_pct,
+            spot_max_pct=spot_max_pct,
+        )
 
         breakeven_points = []
         prev_pnl = None
