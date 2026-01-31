@@ -240,27 +240,30 @@ class OptionCharts:
         show_probability_overlay: bool = False,
     ) -> Figure:
         """
-        Create P&L distribution chart with annotated key metrics.
+        Create P&L distribution chart with annotated key metrics and probability analysis.
 
         Shows:
         - P&L curve at maturity
-        - Break-even points (black diamonds)
+        - Break-even points (black diamonds with vertical dashed lines)
         - Max loss point (red triangle down)
         - Max profit point (green triangle up)
         - Expected value from risk analysis (gold star)
         - Current spot marker (vertical dashed line)
         - Profit/loss zones (green/red shading)
+        - Probability density function (light blue background)
+        - 5th and 95th percentile levels (purple dotted lines - 90% confidence interval)
+        - X-axis shows both dollar values and % change from current spot
 
         Args:
             spot_range_pct: Percentage range around current spot (default: 100%)
             num_points: Resolution of P&L curve (default: 1000)
             figsize: Figure dimensions (default: (16, 8))
             include_underlying: Include underlying position in P&L (default: True)
-            show_probability_overlay: Add probability density overlay
-                                     (default: False, reserved for future)
+            show_probability_overlay: Enable probability density overlay (default: False)
+                Note: If False, PDF will still be shown but can be toggled off in future
 
         Returns:
-            Matplotlib Figure object
+            Matplotlib Figure object with primary axis (P&L) and secondary axis (PDF)
         """
         # Store parameter for future use
         _ = show_probability_overlay
@@ -286,6 +289,57 @@ class OptionCharts:
 
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+        # Calculate probability density function for spot prices at maturity
+        # Use the nearest maturity date for time horizon
+        if self.portfolio.positions:
+            min_maturity = min(pos.option.maturity_date for pos in self.portfolio.positions)
+            days_to_maturity = max(1, (min_maturity - self.portfolio.valuation_date).days)
+            time_to_maturity = days_to_maturity / 365.0
+        else:
+            time_to_maturity = 30 / 365.0  # Default to 30 days
+
+        # Calculate log-normal PDF for terminal spot prices (GBM assumption)
+        volatility = self.portfolio.volatility
+        risk_free_rate = self.portfolio.risk_free_rate
+        dividend_yield = self.portfolio.dividend_yield
+
+        # Log-normal parameters
+        mu = np.log(current_spot) + (risk_free_rate - dividend_yield - 0.5 * volatility**2) * time_to_maturity
+        sigma = volatility * np.sqrt(time_to_maturity)
+
+        # Calculate PDF values
+        pdf_values = (1 / (spot_range * sigma * np.sqrt(2 * np.pi))) * \
+                     np.exp(-((np.log(spot_range) - mu)**2) / (2 * sigma**2))
+
+        # Normalize PDF to fit nicely on the chart (scale to use ~30% of y-axis range)
+        pnl_range = pnl_values.max() - pnl_values.min()
+        pdf_scaled = pdf_values / pdf_values.max() * (pnl_range * 0.3)
+        # Shift PDF to bottom of chart
+        pdf_y_offset = pnl_values.min()
+        pdf_plot_values = pdf_scaled + pdf_y_offset
+
+        # Create twin axis for PDF
+        ax_pdf = ax.twinx()
+        ax_pdf.fill_between(spot_range, pdf_y_offset, pdf_plot_values,
+                             color='lightblue', alpha=0.3, zorder=1,
+                             label='Probability Density')
+        ax_pdf.set_ylabel('Probability Density', fontsize=11, color='steelblue', alpha=0.7)
+        ax_pdf.tick_params(axis='y', labelcolor='steelblue', labelsize=9)
+        ax_pdf.set_ylim(ax.get_ylim())  # Match main axis limits
+        ax_pdf.grid(False)  # Don't add extra grid lines
+
+        # Calculate 5th and 95th percentile spot prices (90% confidence interval)
+        # Using log-normal distribution with numpy percentiles
+        np.random.seed(42)  # For reproducibility
+        spot_5th_percentile = np.exp(mu + sigma * np.percentile(np.random.standard_normal(100000), 5))
+        spot_95th_percentile = np.exp(mu + sigma * np.percentile(np.random.standard_normal(100000), 95))
+
+        # Add vertical dashed lines for percentiles
+        ax.axvline(spot_5th_percentile, color='purple', linestyle=':', linewidth=2,
+                   alpha=0.7, zorder=2, label='5% Probability Level')
+        ax.axvline(spot_95th_percentile, color='purple', linestyle=':', linewidth=2,
+                   alpha=0.7, zorder=2, label='95% Probability Level')
         ax.plot(
             spot_range,
             pnl_values,
@@ -294,6 +348,17 @@ class OptionCharts:
             label="P&L at Maturity",
             zorder=3,
         )
+
+        # Add small text annotations for percentile levels at the top of the chart
+        y_annotation = pnl_values.max() * 0.95
+        ax.text(spot_5th_percentile, y_annotation, '5%',
+                ha='center', va='top', fontsize=9, color='purple',
+                fontweight='bold', bbox=dict(boxstyle='round,pad=0.3',
+                facecolor='white', edgecolor='purple', alpha=0.8))
+        ax.text(spot_95th_percentile, y_annotation, '95%',
+                ha='center', va='top', fontsize=9, color='purple',
+                fontweight='bold', bbox=dict(boxstyle='round,pad=0.3',
+                facecolor='white', edgecolor='purple', alpha=0.8))
 
         # Add profit/loss zones with fill_between
         ax.fill_between(
@@ -335,6 +400,10 @@ class OptionCharts:
                 be_pnl = self.portfolio.calculate_pnl_at_expiry(
                     be, include_underlying=include_underlying
                 )
+                # Add vertical dashed line at break-even
+                ax.axvline(be, color='gray', linestyle='--', linewidth=1.5,
+                           alpha=0.6, zorder=2)
+
                 # Plot marker
                 ax.plot(
                     be,
@@ -504,7 +573,24 @@ class OptionCharts:
         ax.yaxis.set_major_formatter(
             FuncFormatter(self.format_currency_compact)
         )
-        ax.xaxis.set_major_formatter(FuncFormatter(self.format_currency_full))
+
+        # Custom x-axis formatter showing price + % change
+        def format_spot_with_pct(x, pos):
+            """Format x-axis to show spot price and % change from current spot."""
+            if current_spot == 0:
+                pct_change = 0
+            else:
+                pct_change = ((x - current_spot) / current_spot) * 100
+
+            if abs(pct_change) < 0.1:
+                return f'${x:,.0f}\n(0%)'
+            elif pct_change > 0:
+                return f'${x:,.0f}\n(+{pct_change:.0f}%)'
+            else:
+                return f'${x:,.0f}\n({pct_change:.0f}%)'
+
+        ax.xaxis.set_major_formatter(FuncFormatter(format_spot_with_pct))
+        ax.tick_params(axis='x', which='major', pad=8)  # Add padding for two-line labels
 
         # Return figure
         plt.tight_layout()
