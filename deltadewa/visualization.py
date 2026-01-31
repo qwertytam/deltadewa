@@ -293,8 +293,12 @@ class OptionCharts:
         # Calculate probability density function for spot prices at maturity
         # Use the nearest maturity date for time horizon
         if self.portfolio.positions:
-            min_maturity = min(pos.option.maturity_date for pos in self.portfolio.positions)
-            days_to_maturity = max(1, (min_maturity - self.portfolio.valuation_date).days)
+            min_maturity = min(
+                pos.option.maturity_date for pos in self.portfolio.positions
+            )
+            days_to_maturity = max(
+                1, (min_maturity - self.portfolio.valuation_date).days
+            )
             time_to_maturity = days_to_maturity / 365.0
         else:
             time_to_maturity = 30 / 365.0  # Default to 30 days
@@ -305,12 +309,17 @@ class OptionCharts:
         dividend_yield = self.portfolio.dividend_yield
 
         # Log-normal parameters
-        mu = np.log(current_spot) + (risk_free_rate - dividend_yield - 0.5 * volatility**2) * time_to_maturity
+        mu = (
+            np.log(current_spot)
+            + (risk_free_rate - dividend_yield - 0.5 * volatility**2)
+            * time_to_maturity
+        )
         sigma = volatility * np.sqrt(time_to_maturity)
 
         # Calculate PDF values
-        pdf_values = (1 / (spot_range * sigma * np.sqrt(2 * np.pi))) * \
-                     np.exp(-((np.log(spot_range) - mu)**2) / (2 * sigma**2))
+        pdf_values = (1 / (spot_range * sigma * np.sqrt(2 * np.pi))) * np.exp(
+            -((np.log(spot_range) - mu) ** 2) / (2 * sigma**2)
+        )
 
         # Normalize PDF to fit nicely on the chart (scale to use ~30% of y-axis range)
         pnl_range = pnl_values.max() - pnl_values.min()
@@ -321,25 +330,51 @@ class OptionCharts:
 
         # Create twin axis for PDF
         ax_pdf = ax.twinx()
-        ax_pdf.fill_between(spot_range, pdf_y_offset, pdf_plot_values,
-                             color='lightblue', alpha=0.3, zorder=1,
-                             label='Probability Density')
-        ax_pdf.set_ylabel('Probability Density', fontsize=11, color='steelblue', alpha=0.7)
-        ax_pdf.tick_params(axis='y', labelcolor='steelblue', labelsize=9)
+        ax_pdf.fill_between(
+            spot_range,
+            pdf_y_offset,
+            pdf_plot_values,
+            color="lightblue",
+            alpha=0.3,
+            zorder=1,
+            label="Probability Density",
+        )
+        ax_pdf.set_ylabel(
+            "Probability Density", fontsize=11, color="steelblue", alpha=0.7
+        )
+        ax_pdf.tick_params(axis="y", labelcolor="steelblue", labelsize=9)
         ax_pdf.set_ylim(ax.get_ylim())  # Match main axis limits
         ax_pdf.grid(False)  # Don't add extra grid lines
 
         # Calculate 5th and 95th percentile spot prices (90% confidence interval)
         # Using log-normal distribution with numpy percentiles
         np.random.seed(42)  # For reproducibility
-        spot_5th_percentile = np.exp(mu + sigma * np.percentile(np.random.standard_normal(100000), 5))
-        spot_95th_percentile = np.exp(mu + sigma * np.percentile(np.random.standard_normal(100000), 95))
+        spot_5th_percentile = np.exp(
+            mu + sigma * np.percentile(np.random.standard_normal(100000), 5)
+        )
+        spot_95th_percentile = np.exp(
+            mu + sigma * np.percentile(np.random.standard_normal(100000), 95)
+        )
 
         # Add vertical dashed lines for percentiles
-        ax.axvline(spot_5th_percentile, color='purple', linestyle=':', linewidth=2,
-                   alpha=0.7, zorder=2, label='5% Probability Level')
-        ax.axvline(spot_95th_percentile, color='purple', linestyle=':', linewidth=2,
-                   alpha=0.7, zorder=2, label='95% Probability Level')
+        ax.axvline(
+            spot_5th_percentile,
+            color="purple",
+            linestyle=":",
+            linewidth=2,
+            alpha=0.7,
+            zorder=2,
+            label="5% Probability Level",
+        )
+        ax.axvline(
+            spot_95th_percentile,
+            color="purple",
+            linestyle=":",
+            linewidth=2,
+            alpha=0.7,
+            zorder=2,
+            label="95% Probability Level",
+        )
         ax.plot(
             spot_range,
             pnl_values,
@@ -351,14 +386,38 @@ class OptionCharts:
 
         # Add small text annotations for percentile levels at the top of the chart
         y_annotation = pnl_values.max() * 0.95
-        ax.text(spot_5th_percentile, y_annotation, '5%',
-                ha='center', va='top', fontsize=9, color='purple',
-                fontweight='bold', bbox=dict(boxstyle='round,pad=0.3',
-                facecolor='white', edgecolor='purple', alpha=0.8))
-        ax.text(spot_95th_percentile, y_annotation, '95%',
-                ha='center', va='top', fontsize=9, color='purple',
-                fontweight='bold', bbox=dict(boxstyle='round,pad=0.3',
-                facecolor='white', edgecolor='purple', alpha=0.8))
+        ax.text(
+            spot_5th_percentile,
+            y_annotation,
+            "5%",
+            ha="center",
+            va="top",
+            fontsize=9,
+            color="purple",
+            fontweight="bold",
+            bbox=dict(
+                boxstyle="round,pad=0.3",
+                facecolor="white",
+                edgecolor="purple",
+                alpha=0.8,
+            ),
+        )
+        ax.text(
+            spot_95th_percentile,
+            y_annotation,
+            "95%",
+            ha="center",
+            va="top",
+            fontsize=9,
+            color="purple",
+            fontweight="bold",
+            bbox=dict(
+                boxstyle="round,pad=0.3",
+                facecolor="white",
+                edgecolor="purple",
+                alpha=0.8,
+            ),
+        )
 
         # Add profit/loss zones with fill_between
         ax.fill_between(
@@ -401,8 +460,14 @@ class OptionCharts:
                     be, include_underlying=include_underlying
                 )
                 # Add vertical dashed line at break-even
-                ax.axvline(be, color='gray', linestyle='--', linewidth=1.5,
-                           alpha=0.6, zorder=2)
+                ax.axvline(
+                    be,
+                    color="gray",
+                    linestyle="--",
+                    linewidth=1.5,
+                    alpha=0.6,
+                    zorder=2,
+                )
 
                 # Plot marker
                 ax.plot(
@@ -583,14 +648,16 @@ class OptionCharts:
                 pct_change = ((x - current_spot) / current_spot) * 100
 
             if abs(pct_change) < 0.1:
-                return f'${x:,.0f}\n(0%)'
+                return f"${x:,.0f}\n(0%)"
             elif pct_change > 0:
-                return f'${x:,.0f}\n(+{pct_change:.0f}%)'
+                return f"${x:,.0f}\n(+{pct_change:.0f}%)"
             else:
-                return f'${x:,.0f}\n({pct_change:.0f}%)'
+                return f"${x:,.0f}\n({pct_change:.0f}%)"
 
         ax.xaxis.set_major_formatter(FuncFormatter(format_spot_with_pct))
-        ax.tick_params(axis='x', which='major', pad=8)  # Add padding for two-line labels
+        ax.tick_params(
+            axis="x", which="major", pad=8
+        )  # Add padding for two-line labels
 
         # Return figure
         plt.tight_layout()
