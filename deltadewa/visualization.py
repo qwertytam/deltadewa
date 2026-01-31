@@ -327,7 +327,9 @@ class OptionCharts:
         )
 
         # Annotate break-even points
-        be_key = "breakeven_total" if include_underlying else "breakeven_options"
+        be_key = (
+            "breakeven_total" if include_underlying else "breakeven_options"
+        )
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
                 be_pnl = self.portfolio.calculate_pnl_at_expiry(
