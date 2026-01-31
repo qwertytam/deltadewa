@@ -231,6 +231,284 @@ class OptionCharts:
         plt.tight_layout()
         return fig
 
+    def plot_pnl_distribution_with_metrics(
+        self,
+        spot_range_pct: float = 50.0,
+        num_points: int = 500,
+        figsize: Tuple[int, int] = (16, 8),
+        include_underlying: bool = True,
+        show_probability_overlay: bool = False,
+    ) -> Figure:
+        """
+        Create P&L distribution chart with annotated key metrics.
+
+        Shows:
+        - P&L curve at maturity
+        - Break-even points (black diamonds)
+        - Max loss point (red triangle down)
+        - Max profit point (green triangle up)
+        - Expected value from risk analysis (gold star)
+        - Current spot marker (vertical dashed line)
+        - Profit/loss zones (green/red shading)
+
+        Args:
+            spot_range_pct: Percentage range around current spot (default: 50%)
+            num_points: Resolution of P&L curve (default: 500)
+            figsize: Figure dimensions (default: (16, 8))
+            include_underlying: Include underlying position in P&L (default: True)
+            show_probability_overlay: Add probability density overlay
+                                     (default: False, reserved for future)
+
+        Returns:
+            Matplotlib Figure object
+        """
+        # Store parameter for future use
+        _ = show_probability_overlay
+
+        # Generate spot price range
+        current_spot = self.portfolio.spot_price
+        spot_min = max(0.01, current_spot * (1 - spot_range_pct / 100))
+        spot_max = current_spot * (1 + spot_range_pct / 100)
+        spot_range = np.linspace(spot_min, spot_max, num_points)
+
+        # Calculate P&L curve
+        pnl_values = np.array(
+            [
+                self.portfolio.calculate_pnl_at_expiry(
+                    spot, include_underlying=include_underlying
+                )
+                for spot in spot_range
+            ]
+        )
+
+        # Get risk/reward metrics
+        analysis = self.portfolio.risk_reward_analysis(spot_range=spot_range)
+
+        # Create figure and plot main P&L curve
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        ax.plot(
+            spot_range,
+            pnl_values,
+            linewidth=3,
+            color="#1f77b4",
+            label="P&L at Maturity",
+            zorder=3,
+        )
+
+        # Add profit/loss zones with fill_between
+        ax.fill_between(
+            spot_range,
+            pnl_values,
+            0,
+            where=(pnl_values >= 0),
+            color="green",
+            alpha=0.2,
+            label="Profit Zone",
+        )
+        ax.fill_between(
+            spot_range,
+            pnl_values,
+            0,
+            where=(pnl_values < 0),
+            color="red",
+            alpha=0.2,
+            label="Loss Zone",
+        )
+
+        # Add zero line and current spot marker
+        ax.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.5)
+        ax.axvline(
+            current_spot,
+            color="black",
+            linestyle="--",
+            linewidth=2,
+            alpha=0.7,
+            label=f"Current Spot: ${current_spot:.2f}",
+        )
+
+        # Annotate break-even points
+        be_key = "breakeven_total" if include_underlying else "breakeven_options"
+        if analysis.get(be_key):
+            for i, be in enumerate(analysis[be_key]):
+                be_pnl = self.portfolio.calculate_pnl_at_expiry(
+                    be, include_underlying=include_underlying
+                )
+                # Plot marker
+                ax.plot(
+                    be,
+                    be_pnl,
+                    marker="D",
+                    markersize=12,
+                    markeredgewidth=2,
+                    markerfacecolor="yellow",
+                    markeredgecolor="black",
+                    zorder=5,
+                )
+                # Add annotation
+                ax.annotate(
+                    f"Break-Even\n${be:.2f}",
+                    xy=(be, be_pnl),
+                    xytext=(0, 30 if i % 2 == 0 else -40),
+                    textcoords="offset points",
+                    fontsize=10,
+                    fontweight="bold",
+                    ha="center",
+                    bbox=dict(
+                        boxstyle="round,pad=0.5",
+                        facecolor="yellow",
+                        alpha=0.7,
+                        edgecolor="black",
+                    ),
+                    arrowprops=dict(
+                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
+                    ),
+                )
+
+        # Annotate maximum loss
+        ml_key = "max_loss_total" if include_underlying else "max_loss_options"
+        max_loss_info = analysis[ml_key]
+        if not max_loss_info["is_unlimited"]:
+            ml_spot = max_loss_info["spot_at_max_loss"]
+            ml_val = max_loss_info["max_loss"]
+            # Plot marker
+            ax.plot(
+                ml_spot,
+                ml_val,
+                marker="v",
+                markersize=15,
+                markeredgewidth=2,
+                markerfacecolor="red",
+                markeredgecolor="darkred",
+                zorder=5,
+            )
+            # Add annotation
+            ax.annotate(
+                f"Max Loss\n${ml_val:,.0f}",
+                xy=(ml_spot, ml_val),
+                xytext=(0, -50),
+                textcoords="offset points",
+                fontsize=10,
+                fontweight="bold",
+                ha="center",
+                bbox=dict(
+                    boxstyle="round,pad=0.5",
+                    facecolor="#ffcccc",
+                    alpha=0.8,
+                    edgecolor="darkred",
+                ),
+                arrowprops=dict(
+                    arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
+                ),
+            )
+
+        # Annotate maximum profit
+        mp_key = (
+            "max_profit_total" if include_underlying else "max_profit_options"
+        )
+        max_profit_info = analysis[mp_key]
+        if not max_profit_info["is_unlimited"]:
+            mp_spot = max_profit_info["spot_at_max_profit"]
+            mp_val = max_profit_info["max_profit"]
+            # Plot marker
+            ax.plot(
+                mp_spot,
+                mp_val,
+                marker="^",
+                markersize=15,
+                markeredgewidth=2,
+                markerfacecolor="green",
+                markeredgecolor="darkgreen",
+                zorder=5,
+            )
+            # Add annotation
+            ax.annotate(
+                f"Max Profit\n${mp_val:,.0f}",
+                xy=(mp_spot, mp_val),
+                xytext=(0, 50),
+                textcoords="offset points",
+                fontsize=10,
+                fontweight="bold",
+                ha="center",
+                bbox=dict(
+                    boxstyle="round,pad=0.5",
+                    facecolor="#ccffcc",
+                    alpha=0.8,
+                    edgecolor="darkgreen",
+                ),
+                arrowprops=dict(
+                    arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
+                ),
+            )
+
+        # Annotate expected value
+        expected_value = analysis.get("expected_value", 0)
+        if expected_value is not None:
+            # Find closest spot price where P&L equals expected value
+            # Use the spot where we are closest to the expected value
+            idx_closest = np.argmin(np.abs(pnl_values - expected_value))
+            ev_spot = spot_range[idx_closest]
+            ev_pnl = pnl_values[idx_closest]
+
+            # Plot marker
+            ax.plot(
+                ev_spot,
+                ev_pnl,
+                marker="*",
+                markersize=20,
+                markeredgewidth=2,
+                markerfacecolor="gold",
+                markeredgecolor="orange",
+                zorder=5,
+            )
+            # Add annotation
+            ax.annotate(
+                f"Expected Value\n${expected_value:,.0f}",
+                xy=(ev_spot, ev_pnl),
+                xytext=(50, 20),
+                textcoords="offset points",
+                fontsize=10,
+                fontweight="bold",
+                ha="center",
+                bbox=dict(
+                    boxstyle="round,pad=0.5",
+                    facecolor="#ffffcc",
+                    alpha=0.8,
+                    edgecolor="orange",
+                ),
+                arrowprops=dict(
+                    arrowstyle="->", connectionstyle="arc3,rad=0.2", lw=1.5
+                ),
+            )
+
+        # Format axes and labels
+        ax.set_xlabel(
+            "Spot Price at Maturity ($)", fontsize=13, fontweight="bold"
+        )
+        ax.set_ylabel("Profit / Loss ($)", fontsize=13, fontweight="bold")
+        title_suffix = (
+            " (Options + Underlying)"
+            if include_underlying
+            else " (Options Only)"
+        )
+        ax.set_title(
+            f"P&L Distribution with Key Metrics{title_suffix}",
+            fontsize=15,
+            fontweight="bold",
+            pad=20,
+        )
+        ax.grid(True, alpha=0.3, linestyle=":", linewidth=0.8)
+        ax.legend(loc="best", fontsize=10, framealpha=0.9)
+
+        # Apply currency formatters
+        ax.yaxis.set_major_formatter(
+            FuncFormatter(self.format_currency_compact)
+        )
+        ax.xaxis.set_major_formatter(FuncFormatter(self.format_currency_full))
+
+        # Return figure
+        plt.tight_layout()
+        return fig
+
     def _plot_pnl_panel(
         self,
         ax: Axes,
@@ -998,6 +1276,21 @@ def plot_pnl_diagram(portfolio, **kwargs):
     return charts.plot_pnl_diagram(**kwargs)
 
 
+def plot_pnl_distribution_with_metrics(portfolio, **kwargs):
+    """
+    Convenience function to plot P&L distribution with key metrics.
+
+    Args:
+        portfolio: OptionPortfolio instance
+        **kwargs: Passed to OptionCharts.plot_pnl_distribution_with_metrics()
+
+    Returns:
+        Matplotlib Figure
+    """
+    charts = OptionCharts(portfolio)
+    return charts.plot_pnl_distribution_with_metrics(**kwargs)
+
+
 def plot_greeks_by_strike(portfolio, **kwargs):
     """
     Convenience function to plot Greeks by strike.
@@ -1351,6 +1644,7 @@ def plot_greeks_consolidated(
 __all__ = [
     "OptionCharts",
     "plot_pnl_diagram",
+    "plot_pnl_distribution_with_metrics",
     "plot_greeks_by_strike",
     "plot_theta_analysis",
     "plot_greeks_consolidated",
