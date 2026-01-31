@@ -259,13 +259,14 @@ class OptionCharts:
             num_points: Resolution of P&L curve (default: 1000)
             figsize: Figure dimensions (default: (16, 8))
             include_underlying: Include underlying position in P&L (default: True)
-            show_probability_overlay: Enable probability density overlay (default: False)
-                Note: If False, PDF will still be shown but can be toggled off in future
+            show_probability_overlay: Reserved for future use to toggle PDF overlay
+                (default: False). Currently, PDF overlay is always shown.
 
         Returns:
             Matplotlib Figure object with primary axis (P&L) and secondary axis (PDF)
         """
-        # Store parameter for future use
+        # Note: show_probability_overlay parameter is reserved for future implementation
+        # Currently, PDF overlay is always displayed
         _ = show_probability_overlay
 
         # Generate spot price range
@@ -347,14 +348,27 @@ class OptionCharts:
         ax_pdf.grid(False)  # Don't add extra grid lines
 
         # Calculate 5th and 95th percentile spot prices (90% confidence interval)
-        # Using log-normal distribution with numpy percentiles
-        np.random.seed(42)  # For reproducibility
-        spot_5th_percentile = np.exp(
-            mu + sigma * np.percentile(np.random.standard_normal(100000), 5)
-        )
-        spot_95th_percentile = np.exp(
-            mu + sigma * np.percentile(np.random.standard_normal(100000), 95)
-        )
+        # Using analytical log-normal distribution (inverse CDF)
+        # For log-normal with parameters mu and sigma:
+        # percentile_p = exp(mu + sigma * z_p) where z_p is the standard normal quantile
+        try:
+            from scipy import stats
+
+            z_5th = stats.norm.ppf(
+                0.05
+            )  # Standard normal quantile for 5th percentile
+            z_95th = stats.norm.ppf(
+                0.95
+            )  # Standard normal quantile for 95th percentile
+        except ImportError:
+            # Fallback to approximation if scipy not available
+            # Using inverse error function approximation for standard normal quantiles
+            # z_0.05 ≈ -1.645, z_0.95 ≈ 1.645
+            z_5th = -1.6449
+            z_95th = 1.6449
+
+        spot_5th_percentile = np.exp(mu + sigma * z_5th)
+        spot_95th_percentile = np.exp(mu + sigma * z_95th)
 
         # Add vertical dashed lines for percentiles
         ax.axvline(
