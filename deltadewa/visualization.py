@@ -291,6 +291,13 @@ class OptionCharts:
         # The visualization uses spot_range only for the chart display
         analysis = self.portfolio.risk_reward_analysis(spot_range=None)
 
+        # Use pre-calculated Monte Carlo expected value if available to ensure consistency
+        # between the main analysis and the chart visualization
+        if hasattr(self.portfolio, '_monte_carlo_results') and \
+           isinstance(self.portfolio._monte_carlo_results, dict) and \
+           'expected_pnl' in self.portfolio._monte_carlo_results:
+            analysis['expected_value'] = self.portfolio._monte_carlo_results['expected_pnl']
+
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)
 
