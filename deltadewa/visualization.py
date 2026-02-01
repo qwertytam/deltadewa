@@ -263,7 +263,7 @@ class OptionCharts:
                 (default: False). Currently, PDF overlay is always shown.
 
         Returns:
-            Matplotlib Figure object with primary axis (P&L) and secondary axis (PDF)
+            Matplotlib Figure object with P&L distribution and probability overlay
         """
         # Note: show_probability_overlay parameter is reserved for future implementation
         # Currently, PDF overlay is always displayed
@@ -286,10 +286,16 @@ class OptionCharts:
         )
 
         # Get risk/reward metrics
-        analysis = self.portfolio.risk_reward_analysis(spot_range=spot_range)
+        # CRITICAL: Pass spot_range=None to allow comprehensive range check for max loss/profit
+        # The visualization uses spot_range only for the chart display
+        analysis = self.portfolio.risk_reward_analysis(spot_range=None)
 
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)
+        
+        # Set figure and axes backgrounds to transparent for better PDF visibility
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
 
         # Calculate probability density function for spot prices at maturity
         # Use the nearest maturity date for time horizon
@@ -322,30 +328,42 @@ class OptionCharts:
             -((np.log(spot_range) - mu) ** 2) / (2 * sigma**2)
         )
 
-        # Normalize PDF to fit nicely on the chart (scale to use ~30% of y-axis range)
+        # Scale PDF to fit at bottom of chart (below all P&L values)
+        # Use 15% of P&L range for PDF height
         pnl_range = pnl_values.max() - pnl_values.min()
-        pdf_scaled = pdf_values / pdf_values.max() * (pnl_range * 0.3)
-        # Shift PDF to bottom of chart
-        pdf_y_offset = pnl_values.min()
-        pdf_plot_values = pdf_scaled + pdf_y_offset
-
-        # Create twin axis for PDF
-        ax_pdf = ax.twinx()
-        ax_pdf.fill_between(
+        pdf_height = pnl_range * 0.15
+        
+        # Normalize PDF to this height
+        pdf_scaled = (pdf_values / pdf_values.max()) * pdf_height
+        
+        # Position PDF at bottom of chart (5% below min P&L)
+        pdf_baseline = pnl_values.min() - (pnl_range * 0.05)
+        pdf_plot_values = pdf_baseline + pdf_scaled
+        
+        # Plot PDF on MAIN axis with zorder=1 (behind other elements)
+        ax.fill_between(
             spot_range,
-            pdf_y_offset,
+            pdf_baseline,
             pdf_plot_values,
             color="lightblue",
-            alpha=0.3,
+            alpha=0.4,
             zorder=1,
             label="Probability Density",
         )
-        ax_pdf.set_ylabel(
-            "Probability Density", fontsize=11, color="steelblue", alpha=0.7
+        
+        # Add subtle text label for PDF
+        ax.text(
+            current_spot,
+            pdf_baseline + pdf_height * 0.5,
+            'Probability\nDensity',
+            ha='center',
+            va='center',
+            fontsize=9,
+            color='steelblue',
+            alpha=0.7,
+            style='italic',
+            zorder=1,
         )
-        ax_pdf.tick_params(axis="y", labelcolor="steelblue", labelsize=9)
-        ax_pdf.set_ylim(ax.get_ylim())  # Match main axis limits
-        ax_pdf.grid(False)  # Don't add extra grid lines
 
         # Calculate 5th and 95th percentile spot prices (90% confidence interval)
         # Using analytical log-normal distribution (inverse CDF)
