@@ -27,6 +27,7 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.ticker import FuncFormatter
 from matplotlib.container import BarContainer
+from scipy import stats  # type: ignore
 
 
 class OptionCharts:
@@ -292,7 +293,7 @@ class OptionCharts:
 
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)
-        
+
         # Set figure and axes backgrounds to transparent for better PDF visibility
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
@@ -328,18 +329,17 @@ class OptionCharts:
             -((np.log(spot_range) - mu) ** 2) / (2 * sigma**2)
         )
 
-        # Scale PDF to fit at bottom of chart (below all P&L values)
-        # Use 15% of P&L range for PDF height
+        # Scale PDF to fit full height of chart
         pnl_range = pnl_values.max() - pnl_values.min()
-        pdf_height = pnl_range * 0.15
-        
+        pdf_height = pnl_range  # Full height
+
         # Normalize PDF to this height
         pdf_scaled = (pdf_values / pdf_values.max()) * pdf_height
-        
-        # Position PDF at bottom of chart (5% below min P&L)
-        pdf_baseline = pnl_values.min() - (pnl_range * 0.05)
+
+        # Position PDF at bottom of chart
+        pdf_baseline = pnl_values.min()
         pdf_plot_values = pdf_baseline + pdf_scaled
-        
+
         # Plot PDF on MAIN axis with zorder=1 (behind other elements)
         ax.fill_between(
             spot_range,
@@ -348,21 +348,6 @@ class OptionCharts:
             color="lightblue",
             alpha=0.4,
             zorder=1,
-            label="Probability Density",
-        )
-        
-        # Add subtle text label for PDF
-        ax.text(
-            current_spot,
-            pdf_baseline + pdf_height * 0.5,
-            'Probability\nDensity',
-            ha='center',
-            va='center',
-            fontsize=9,
-            color='steelblue',
-            alpha=0.7,
-            style='italic',
-            zorder=1,
         )
 
         # Calculate 5th and 95th percentile spot prices (90% confidence interval)
@@ -370,8 +355,6 @@ class OptionCharts:
         # For log-normal with parameters mu and sigma:
         # percentile_p = exp(mu + sigma * z_p) where z_p is the standard normal quantile
         try:
-            from scipy import stats
-
             z_5th = stats.norm.ppf(
                 0.05
             )  # Standard normal quantile for 5th percentile
@@ -388,25 +371,40 @@ class OptionCharts:
         spot_5th_percentile = np.exp(mu + sigma * z_5th)
         spot_95th_percentile = np.exp(mu + sigma * z_95th)
 
-        # Add vertical dashed lines for percentiles
-        ax.axvline(
-            spot_5th_percentile,
-            color="purple",
-            linestyle=":",
-            linewidth=2,
-            alpha=0.7,
-            zorder=2,
-            label="5% Probability Level",
+        # Determine visible range bounds
+        spot_range_min = spot_range.min()
+        spot_range_max = spot_range.max()
+
+        # Check if percentiles are within visible range
+        is_5th_in_range = (
+            spot_range_min <= spot_5th_percentile <= spot_range_max
         )
-        ax.axvline(
-            spot_95th_percentile,
-            color="purple",
-            linestyle=":",
-            linewidth=2,
-            alpha=0.7,
-            zorder=2,
-            label="95% Probability Level",
+        is_95th_in_range = (
+            spot_range_min <= spot_95th_percentile <= spot_range_max
         )
+
+        # Add vertical dashed lines for percentiles only if in range
+        if is_5th_in_range:
+            ax.axvline(
+                spot_5th_percentile,
+                color="purple",
+                linestyle=":",
+                linewidth=2,
+                alpha=0.7,
+                zorder=2,
+                label="5% Probability Level",
+            )
+        if is_95th_in_range:
+            ax.axvline(
+                spot_95th_percentile,
+                color="purple",
+                linestyle=":",
+                linewidth=2,
+                alpha=0.7,
+                zorder=2,
+                label="95% Probability Level",
+            )
+
         ax.plot(
             spot_range,
             pnl_values,
@@ -416,40 +414,93 @@ class OptionCharts:
             zorder=3,
         )
 
-        # Add small text annotations for percentile levels at the top of the chart
+        # Add annotations for percentile levels
         y_annotation = pnl_values.max() * 0.95
-        ax.text(
-            spot_5th_percentile,
-            y_annotation,
-            "5%",
-            ha="center",
-            va="top",
-            fontsize=9,
-            color="purple",
-            fontweight="bold",
-            bbox=dict(
-                boxstyle="round,pad=0.3",
-                facecolor="white",
-                edgecolor="purple",
-                alpha=0.8,
-            ),
-        )
-        ax.text(
-            spot_95th_percentile,
-            y_annotation,
-            "95%",
-            ha="center",
-            va="top",
-            fontsize=9,
-            color="purple",
-            fontweight="bold",
-            bbox=dict(
-                boxstyle="round,pad=0.3",
-                facecolor="white",
-                edgecolor="purple",
-                alpha=0.8,
-            ),
-        )
+        y_mid = (pnl_values.max() + pnl_values.min()) / 2
+
+        if is_5th_in_range:
+            ax.text(
+                spot_5th_percentile,
+                y_annotation,
+                f"5% @ ${spot_5th_percentile:,.0f}",
+                ha="center",
+                va="top",
+                fontsize=9,
+                color="purple",
+                fontweight="bold",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="white",
+                    edgecolor="purple",
+                    alpha=0.8,
+                ),
+            )
+        else:
+            # 5th percentile is below visible range - show arrow on left edge
+            ax.annotate(
+                f"5%\n${spot_5th_percentile:,.0f}",
+                xy=(spot_range_min, y_mid),
+                xytext=(30, 0),
+                textcoords="offset points",
+                fontsize=9,
+                color="purple",
+                fontweight="bold",
+                ha="left",
+                va="center",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="white",
+                    edgecolor="purple",
+                    alpha=0.8,
+                ),
+                arrowprops=dict(
+                    arrowstyle="<-",
+                    color="purple",
+                    lw=1.5,
+                ),
+            )
+
+        if is_95th_in_range:
+            ax.text(
+                spot_95th_percentile,
+                y_annotation,
+                f"95% @ ${spot_95th_percentile:,.0f}",
+                ha="center",
+                va="top",
+                fontsize=9,
+                color="purple",
+                fontweight="bold",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="white",
+                    edgecolor="purple",
+                    alpha=0.8,
+                ),
+            )
+        else:
+            # 95th percentile is above visible range - show arrow on right edge
+            ax.annotate(
+                f"95%\n${spot_95th_percentile:,.0f}",
+                xy=(spot_range_max, y_mid),
+                xytext=(-30, 0),
+                textcoords="offset points",
+                fontsize=9,
+                color="purple",
+                fontweight="bold",
+                ha="right",
+                va="center",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="white",
+                    edgecolor="purple",
+                    alpha=0.8,
+                ),
+                arrowprops=dict(
+                    arrowstyle="<-",
+                    color="purple",
+                    lw=1.5,
+                ),
+            )
 
         # Add profit/loss zones with fill_between
         ax.fill_between(
@@ -479,7 +530,23 @@ class OptionCharts:
             linestyle="--",
             linewidth=2,
             alpha=0.7,
-            label=f"Current Spot: ${current_spot:.2f}",
+        )
+        # Add Current Spot label at top of line
+        ax.text(
+            current_spot,
+            pnl_values.max() * 0.95,
+            f"Current Spot\n${current_spot:,.0f}",
+            ha="center",
+            va="top",
+            fontsize=9,
+            fontweight="bold",
+            color="black",
+            bbox=dict(
+                boxstyle="round,pad=0.3",
+                facecolor="white",
+                edgecolor="black",
+                alpha=0.8,
+            ),
         )
 
         # Annotate break-even points
@@ -514,7 +581,7 @@ class OptionCharts:
                 )
                 # Add annotation
                 ax.annotate(
-                    f"Break-Even\n${be:.2f}",
+                    f"BE ${be:.2f}",
                     xy=(be, be_pnl),
                     xytext=(0, 30 if i % 2 == 0 else -40),
                     textcoords="offset points",
@@ -538,36 +605,77 @@ class OptionCharts:
         if not max_loss_info["is_unlimited"]:
             ml_spot = max_loss_info["spot_at_max_loss"]
             ml_val = max_loss_info["max_loss"]
-            # Plot marker
-            ax.plot(
-                ml_spot,
-                ml_val,
-                marker="v",
-                markersize=15,
-                markeredgewidth=2,
-                markerfacecolor="red",
-                markeredgecolor="darkred",
-                zorder=5,
-            )
-            # Add annotation
-            ax.annotate(
-                f"Max Loss\n${ml_val:,.0f}",
-                xy=(ml_spot, ml_val),
-                xytext=(0, -50),
-                textcoords="offset points",
-                fontsize=10,
-                fontweight="bold",
-                ha="center",
-                bbox=dict(
-                    boxstyle="round,pad=0.5",
-                    facecolor="#ffcccc",
-                    alpha=0.8,
-                    edgecolor="darkred",
-                ),
-                arrowprops=dict(
-                    arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
-                ),
-            )
+
+            # Check if max loss spot is within visible range
+            is_ml_in_range = spot_range_min <= ml_spot <= spot_range_max
+
+            if is_ml_in_range:
+                # Plot marker at actual location
+                ax.plot(
+                    ml_spot,
+                    ml_val,
+                    marker="v",
+                    markersize=15,
+                    markeredgewidth=2,
+                    markerfacecolor="red",
+                    markeredgecolor="darkred",
+                    zorder=5,
+                )
+                # Add annotation
+                ax.annotate(
+                    f"ML ${ml_val:,.0f}",
+                    xy=(ml_spot, ml_val),
+                    xytext=(0, -50),
+                    textcoords="offset points",
+                    fontsize=10,
+                    fontweight="bold",
+                    ha="center",
+                    bbox=dict(
+                        boxstyle="round,pad=0.5",
+                        facecolor="#ffcccc",
+                        alpha=0.8,
+                        edgecolor="darkred",
+                    ),
+                    arrowprops=dict(
+                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
+                    ),
+                )
+            else:
+                # Max loss is outside visible range - show arrow at edge
+                if ml_spot < spot_range_min:
+                    edge_spot = spot_range_min
+                    edge_pnl = pnl_values[0]
+                    arrow_direction = "<-"
+                    text_offset = (40, -30)
+                    ha = "left"
+                else:
+                    edge_spot = spot_range_max
+                    edge_pnl = pnl_values[-1]
+                    arrow_direction = "<-"
+                    text_offset = (-40, -30)
+                    ha = "right"
+
+                ax.annotate(
+                    f"ML ${ml_val:,.0f} @ ${ml_spot:,.0f}",
+                    xy=(edge_spot, edge_pnl),
+                    xytext=text_offset,
+                    textcoords="offset points",
+                    fontsize=10,
+                    fontweight="bold",
+                    ha=ha,
+                    bbox=dict(
+                        boxstyle="round,pad=0.5",
+                        facecolor="#ffcccc",
+                        alpha=0.8,
+                        edgecolor="darkred",
+                    ),
+                    arrowprops=dict(
+                        arrowstyle=arrow_direction,
+                        connectionstyle="arc3,rad=0",
+                        lw=1.5,
+                        color="darkred",
+                    ),
+                )
 
         # Annotate maximum profit
         mp_key = (
@@ -590,7 +698,7 @@ class OptionCharts:
             )
             # Add annotation
             ax.annotate(
-                f"Max Profit\n${mp_val:,.0f}",
+                f"MP ${mp_val:,.0f}",
                 xy=(mp_spot, mp_val),
                 xytext=(0, 50),
                 textcoords="offset points",
@@ -629,7 +737,7 @@ class OptionCharts:
             )
             # Add annotation
             ax.annotate(
-                f"Expected Value\n${expected_value:,.0f}",
+                f"EV ${expected_value:,.0f}",
                 xy=(ev_spot, ev_pnl),
                 xytext=(50, 20),
                 textcoords="offset points",
@@ -664,7 +772,6 @@ class OptionCharts:
             pad=20,
         )
         ax.grid(True, alpha=0.3, linestyle=":", linewidth=0.8)
-        ax.legend(loc="best", fontsize=10, framealpha=0.9)
 
         # Apply currency formatters
         ax.yaxis.set_major_formatter(
@@ -672,7 +779,7 @@ class OptionCharts:
         )
 
         # Custom x-axis formatter showing price + % change
-        def format_spot_with_pct(x, pos):
+        def format_spot_with_pct(x, pos):  # pylint: disable=unused-argument
             """Format x-axis to show spot price and % change from current spot."""
             if current_spot == 0:
                 pct_change = 0
@@ -1555,13 +1662,13 @@ def plot_greeks_consolidated(
         return fig
 
     # Calculate net Greeks
-    stats = portfolio.summary_stats()
+    summ_stats = portfolio.summary_stats()
     net_greeks = {
-        "Delta": stats["total_delta"],
-        "Theta": stats["total_theta"],
-        "Gamma": stats["total_gamma"],
-        "Vega": stats["total_vega"],
-        "Rho": stats.get("total_rho", 0.0),
+        "Delta": summ_stats["total_delta"],
+        "Theta": summ_stats["total_theta"],
+        "Gamma": summ_stats["total_gamma"],
+        "Vega": summ_stats["total_vega"],
+        "Rho": summ_stats.get("total_rho", 0.0),
     }
 
     # Determine number of panels
