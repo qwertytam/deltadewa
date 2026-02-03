@@ -128,6 +128,7 @@ When performing volatility sensitivity analysis (stress tests, scenario analysis
 **Example:**
 
 If you have positions with volatilities [35%, 30%, 25%, 22%]:
+
 - Vega-weighted average might be 28.3%
 - Testing +20% scenario (34% average):
   - Positions scale to [42%, 36%, 30%, 26.4%]
@@ -143,6 +144,7 @@ If you have positions with volatilities [35%, 30%, 25%, 22%]:
 **Displaying volatility profile:**
 
 The notebook's volatility profile section shows:
+
 - Vega-weighted average volatility
 - Volatility range (min/max/std)
 - Which positions have custom volatility

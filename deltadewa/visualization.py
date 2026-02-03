@@ -293,10 +293,9 @@ class OptionCharts:
 
         # Use pre-calculated Monte Carlo expected value if available to ensure consistency
         # between the main analysis and the chart visualization
-        if hasattr(self.portfolio, '_monte_carlo_results') and \
-           isinstance(self.portfolio._monte_carlo_results, dict) and \
-           'expected_pnl' in self.portfolio._monte_carlo_results:
-            analysis['expected_value'] = self.portfolio._monte_carlo_results['expected_pnl']
+        mc_results = self.portfolio.monte_carlo_results
+        if mc_results is not None and isinstance(mc_results, dict) and 'expected_pnl' in mc_results:
+            analysis['expected_value'] = mc_results['expected_pnl']
 
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)

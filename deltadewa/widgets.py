@@ -612,7 +612,7 @@ class NetHedgeSummary:
         prob_html = "<div style='padding:10px;'>"
 
         # Check if Monte Carlo results exist
-        mc_results = getattr(self.portfolio, "_monte_carlo_results", None)
+        mc_results = self.portfolio.monte_carlo_results
         if (
             mc_results is not None
             and len(mc_results.get("simulated_pnls", [])) > 0
