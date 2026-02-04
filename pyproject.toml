@@ -37,15 +37,18 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 80
-target-version = ['py39']
+target-version = ['py311']
 
 [tool.ruff]
 line-length = 80
-target-version = "py39"
+target-version = "py311"
 
 [dependency-groups]
 dev = [
 	"ruff (>=0.5.3)",
 	"debugpy (>=1.8.19,<2.0.0)",
 	"nbstripout (>=0.9.0,<0.10.0)",
+	"nbqa (>=1.9.1,<2.0.0)",
+	"pylint (>=4.0.4,<5.0.0)",
+	"jupytext (>=1.19.1,<2.0.0)",
 ]
