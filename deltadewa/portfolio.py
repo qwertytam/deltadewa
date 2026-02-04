@@ -1,7 +1,7 @@
 # pylint: disable=too-many-lines
 """Option portfolio management and hedge analysis."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
@@ -1403,3 +1403,51 @@ class OptionPortfolio:
             f"value={self.total_value():.2f}, "
             f"delta={self.total_delta():.2f})"
         )
+
+
+def create_empty_portfolio(**kwargs) -> OptionPortfolio:
+    """
+    Create and return an empty `OptionPortfolio` with sensible defaults.
+
+    Args:
+        **kwargs: Any `OptionPortfolio` constructor kwargs (spot_price, volatility, etc.)
+
+    Returns:
+        OptionPortfolio: empty portfolio instance
+
+    Example:
+        p = create_empty_portfolio(spot_price=150.0, volatility=0.25)
+    """
+    return OptionPortfolio(**kwargs)
+
+
+def create_demo_portfolio() -> OptionPortfolio:
+    """
+    Create and return a small demo `OptionPortfolio` pre-populated with
+    example positions. Useful for notebook demos and initial UI setup.
+
+    Returns:
+        OptionPortfolio: portfolio with a couple of example positions
+    """
+    p = OptionPortfolio(underlying_quantity=0, spot_price=100.0, volatility=0.25)
+
+    today = datetime.now()
+    # Short-dated call
+    p.add_position(
+        strike_price=100.0,
+        maturity_date=today + timedelta(days=30),
+        quantity=1,
+        option_type="call",
+        symbol="DEMO",
+    )
+
+    # Protective put
+    p.add_position(
+        strike_price=95.0,
+        maturity_date=today + timedelta(days=60),
+        quantity=1,
+        option_type="put",
+        symbol="DEMO",
+    )
+
+    return p

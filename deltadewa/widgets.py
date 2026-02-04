@@ -41,6 +41,9 @@ from deltadewa.persistence import (
     export_portfolio_to_csv,
     export_portfolio_to_yaml,
 )
+from deltadewa.config import (
+    create_export_dir_widget as _create_export_dir_widget,
+)
 
 if TYPE_CHECKING:
     # Import only for type annotations
@@ -696,17 +699,43 @@ class PortfolioWidgets:
         export_dir: Directory path for import/export operations
     """
 
-    def __init__(self, portfolio, export_dir: Path = Path("exports")):
+    def __init__(
+        self,
+        portfolio,
+        export_dir: Optional[Union[Path, str]] = None,
+    ):
         """
         Initialize widget factory.
 
         Args:
             portfolio: OptionPortfolio instance
-            export_dir: Directory for exports (default: 'exports')
+            export_dir: Directory for exports (default: None)
         """
         self.portfolio = portfolio
-        self.export_dir = Path(export_dir)
-        self.export_dir.mkdir(exist_ok=True)
+        self._export_dir = None
+        if export_dir:
+            self.export_dir = Path(export_dir)
+
+    @property
+    def export_dir(self) -> Path:
+        """Get the current export directory."""
+        if self._export_dir is None:
+            raise ValueError(
+                "Export directory is not set. Please select a directory first."
+            )
+        return self._export_dir
+
+    @export_dir.setter
+    def export_dir(self, value: Union[Path, str]):
+        """Set the export directory and ensure it exists."""
+        if value is None:
+            self._export_dir = None
+            return
+
+        path = Path(value)
+        # Create directory if it doesn't exist
+        path.mkdir(parents=True, exist_ok=True)
+        self._export_dir = path
 
     # ==========================================================================
     # Position Management Widgets
@@ -1603,6 +1632,71 @@ class PortfolioWidgets:
                 widgets.HTML("<hr>"),
                 export_section,
             ]
+        )
+
+    def create_export_dir_widget(
+        self,
+        show_browser: bool = True,
+        on_change_callback: Optional[Callable[[Path], None]] = None,
+    ) -> widgets.VBox:
+        """
+        Create an export-directory selection widget and keep `self.export_dir` in sync.
+
+        Args:
+            show_browser: Whether to show the "Open in Finder" button
+            on_change_callback: Optional callback invoked with the new Path when changed
+
+        Returns:
+            VBox widget created by the shared config helper
+
+        Notes:
+            This wraps `deltadewa.config.create_export_dir_widget` so the dashboard
+            can reuse the common UI while updating the PortfolioWidgets' `export_dir`.
+        """
+
+        def _on_change(export_dir: Path):
+            # keep internal export_dir Path in sync
+            try:
+                self.export_dir = Path(export_dir)
+            except Exception:  # pylint: disable=broad-except
+                # ignore errors here; the config widget already reports failures
+                pass
+
+            if on_change_callback:
+                on_change_callback(export_dir)
+
+        # Use a default if export_dir is not set
+        try:
+            current_dir = str(self.export_dir)
+        except ValueError:
+            current_dir = str(Path.cwd())
+
+        # Use the existing config helper to build the UI; pass current export_dir
+        return _create_export_dir_widget(
+            default_dir=current_dir,
+            on_change_callback=_on_change,
+            show_browser=show_browser,
+        )
+
+    def display_export_dir_widget(
+        self,
+        show_browser: bool = True,
+        on_change_callback: Optional[Callable[[Path], None]] = None,
+    ) -> widgets.VBox:
+        """
+        Convenience display wrapper for the export-directory widget.
+
+        Returns a small VBox containing a header and the export-dir selector
+        so dashboards can simply call this method and `display(...)` the result.
+        """
+
+        widget = self.create_export_dir_widget(
+            show_browser=show_browser, on_change_callback=on_change_callback
+        )
+
+        header = widgets.HTML("<h3>Export Directory</h3>")
+        return widgets.VBox(
+            [header, widget], layout=widgets.Layout(margin="8px 0")
         )
 
     # ==========================================================================

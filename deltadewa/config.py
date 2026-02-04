@@ -40,42 +40,34 @@ def create_export_dir_widget(
         display(widget)
     """
 
-    # Common location presets
-    common_locations = [
-        ("Current Directory (./exports)", "exports"),
-        (
-            "Home Directory (~/deltadewa_exports)",
-            str(Path.home() / "deltadewa_exports"),
-        ),
-        (
-            "Documents (~/Documents/deltadewa)",
-            str(Path.home() / "Documents" / "deltadewa"),
-        ),
-        ("Custom...", "custom"),
-    ]
-
-    location_selector = widgets.Dropdown(
-        options=common_locations,
-        value=default_dir,
-        description="Location:",
-        style={"description_width": "120px"},
-        layout=widgets.Layout(width="500px"),
-    )
+    if not Path(default_dir).exists():
+        initial_value = str(Path.cwd())
+    else:
+        initial_value = default_dir
 
     custom_path_input = widgets.Text(
-        value="",
-        placeholder="Enter custom path",
-        description="Custom Path:",
+        value=initial_value,
+        placeholder="Enter path or browse...",
+        description="Path:",
         style={"description_width": "120px"},
         layout=widgets.Layout(width="500px"),
-        disabled=True,
+        disabled=False,
+    )
+
+    browse_button = widgets.Button(
+        description="Browse...",
+        button_style="",
+        icon="search",
+        layout=widgets.Layout(width="100px"),
+        tooltip="Select folder using system dialog",
     )
 
     create_button = widgets.Button(
         description="Set Directory",
         button_style="success",
-        icon="folder-open",
+        icon="check",
         layout=widgets.Layout(width="150px"),
+        tooltip="Confirm and create directory",
     )
 
     open_button = widgets.Button(
@@ -94,23 +86,52 @@ def create_export_dir_widget(
     # complaints on unknown attributes
     setattr(widget_container, "export_dir", Path(default_dir))
 
-    def on_location_change(change):
-        if change["new"] == "custom":
-            custom_path_input.disabled = False
-            custom_path_input.value = str(Path.cwd() / "exports")
-        else:
-            custom_path_input.disabled = True
+    def on_browse_click(b):  # pylint: disable=unused-argument
+        """Handle browse button click using OS-native dialogs."""
+        try:
+            path = None
+            if platform.system() == "Darwin":
+                # macOS AppleScript
+                cmd = [
+                    "osascript",
+                    "-e",
+                    'POSIX path of (choose folder with prompt "Select Export Directory")',
+                ]
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, check=True
+                )
+                path = result.stdout.strip()
+            elif platform.system() == "Windows":
+                # PowerShell
+                ps_script = (
+                    "Add-Type -AssemblyName System.Windows.Forms; "
+                    "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                    "$f.ShowDialog() | Out-Null; "
+                    "$f.SelectedPath"
+                )
+                result = subprocess.run(
+                    ["powershell", "-Command", ps_script],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                path = result.stdout.strip()
+
+            if path:
+                custom_path_input.value = path
+
+        except subprocess.CalledProcessError:
+            pass  # User cancelled
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            with status_output:
+                print(f"⚠️  Browse failed: {e}")
 
     def on_create_click(b):  # pylint: disable=unused-argument
         with status_output:
             status_output.clear_output(wait=True)
 
             # Determine path
-            if location_selector.value == "custom":
-                dir_path = custom_path_input.value
-            else:
-                dir_path = location_selector.value
-
+            dir_path = custom_path_input.value
             export_dir = Path(dir_path).expanduser().resolve()
 
             try:
@@ -123,12 +144,17 @@ def create_export_dir_widget(
 
                 setattr(widget_container, "export_dir", export_dir)
 
-                print(f"✅ Export directory:  {export_dir}")
+                if export_dir.exists():
+                    print(f"✅ Export directory set to:  {export_dir}")
+                else:
+                    raise ValueError(
+                        f"Unable to set export directory to {export_dir}"
+                    )
 
                 # Count existing files
                 json_count = len(list(export_dir.glob("*.json")))
-                yaml_count = len(list(export_dir.glob("*. yaml")))
-                csv_count = len(list(export_dir.glob("*. csv")))
+                yaml_count = len(list(export_dir.glob("*.yaml")))
+                csv_count = len(list(export_dir.glob("*.csv")))
                 total = json_count + yaml_count + csv_count
 
                 if total > 0:
@@ -160,21 +186,27 @@ def create_export_dir_widget(
             with status_output:
                 print(f"⚠️  Could not open:  {e}")
 
-    location_selector.observe(on_location_change, names="value")
     create_button.on_click(on_create_click)
     open_button.on_click(on_open_click)
+    browse_button.on_click(on_browse_click)
 
     # Assemble widget
-    buttons = [create_button, open_button] if show_browser else [create_button]
+    action_buttons = (
+        [create_button, open_button] if show_browser else [create_button]
+    )
+
+    input_row = widgets.HBox(
+        [custom_path_input, browse_button],
+        layout=widgets.Layout(align_items="center"),
+    )
 
     widget_container.children = [
         widgets.HTML("<h4>📁 Export Directory Configuration</h4>"),
         widgets.HTML(
             "<p style='color: #666;'>Choose where to save portfolio exports</p>"
         ),
-        location_selector,
-        custom_path_input,
-        widgets.HBox(buttons),
+        input_row,
+        widgets.HBox(action_buttons),
         status_output,
     ]
 
