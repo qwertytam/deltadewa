@@ -538,11 +538,6 @@ class NetHedgeSummary:
         self.crash_indicators_html = widgets.HTML(value="")
         self.prob_stats_html = widgets.HTML(value="")
 
-        # Expandable accordion for probabilistic stats
-        self.accordion = widgets.Accordion(children=[self.prob_stats_html])
-        self.accordion.set_title(0, "📊 Probabilistic Statistics (Expand)")
-        self.accordion.selected_index = None  # Collapsed by default
-
         self.widget = widgets.VBox(
             [
                 widgets.HTML(
@@ -557,7 +552,6 @@ class NetHedgeSummary:
                     + "Indicators: P&L at Expiry</h4>"
                 ),
                 self.crash_indicators_html,
-                self.accordion,
             ],
             layout=widgets.Layout(border="2px solid #0F4761", margin="10px 0"),
         )
