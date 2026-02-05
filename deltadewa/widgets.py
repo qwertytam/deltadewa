@@ -255,27 +255,27 @@ class GlobalAssumptions:
 
         # Scenario grid parameters
         self.spot_shock_pct = widgets.FloatSlider(
-            value=20.0,
-            min=5.0,
-            max=50.0,
-            step=5.0,
-            description="Spot Shock %:",
+            value=0.2,
+            min=0.05,
+            max=0.5,
+            step=0.05,
+            description="Spot Shock:",
             style={"description_width": "200px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
-            readout_format=".0f",
+            readout_format=".0%",
         )
 
         self.vol_shock_pct = widgets.FloatSlider(
-            value=50.0,
-            min=10.0,
-            max=100.0,
-            step=10.0,
-            description="Vol Shock %:",
+            value=0.5,
+            min=0.05,
+            max=1,
+            step=0.1,
+            description="Vol Shock:",
             style={"description_width": "200px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
-            readout_format=".0f",
+            readout_format=".0%",
         )
 
         self.grid_resolution = widgets.IntSlider(
