@@ -113,6 +113,8 @@ class GlobalAssumptions:
         spot_shock_pct: Spot price shock for scenarios (%)
         vol_shock_pct: Volatility shock for scenarios (%)
         grid_resolution: Number of points in scenario grids
+        monte_carlo_num_sims: Number of Monte Carlo simulations to run
+        monte_carlo_inc_ul: Include underlying in Monte Carlo simulation
 
     Example:
         assumptions = GlobalAssumptions(spot_price=420.0, volatility=0.25)
@@ -257,7 +259,7 @@ class GlobalAssumptions:
             max=50.0,
             step=5.0,
             description="Spot Shock %:",
-            style={"description_width": "150px"},
+            style={"description_width": "200px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
             readout_format=".0f",
@@ -269,7 +271,7 @@ class GlobalAssumptions:
             max=100.0,
             step=10.0,
             description="Vol Shock %:",
-            style={"description_width": "150px"},
+            style={"description_width": "200px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
             readout_format=".0f",
@@ -281,7 +283,30 @@ class GlobalAssumptions:
             max=50,
             step=5,
             description="Grid Resolution:",
-            style={"description_width": "150px"},
+            style={"description_width": "200px"},
+            layout=widgets.Layout(width="500px"),
+            continuous_update=False,
+        )
+
+        self.monte_carlo_num_sims = widgets.FloatLogSlider(
+            value=10**5,
+            base=10,
+            min=3,  # min exponent of base
+            max=8,  # max exponent of base
+            step=0.1,  # exponent step
+            description="No. of Monte Carlo Simulations",
+            style={"description_width": "200px"},
+            layout=widgets.Layout(width="500px"),
+            continuous_update=False,
+            readout_format=",.0f",
+        )
+
+        self.monte_carlo_inc_ul = widgets.Checkbox(
+            value=True,
+            disabled=False,
+            indent=True,
+            description="Include underlying in MC simulation",
+            style={"description_width": "200px"},
             layout=widgets.Layout(width="500px"),
             continuous_update=False,
         )
@@ -301,6 +326,8 @@ class GlobalAssumptions:
             "spot_shock_pct",
             "vol_shock_pct",
             "grid_resolution",
+            "monte_carlo_num_sims",
+            "monte_carlo_inc_ul",
         ]:
             getattr(self, widget_attr).observe(self._notify_callbacks, "value")
 
@@ -371,6 +398,8 @@ class GlobalAssumptions:
             "spot_shock_pct": self.spot_shock_pct.value,
             "vol_shock_pct": self.vol_shock_pct.value,
             "grid_resolution": self.grid_resolution.value,
+            "monte_carlo_num_sims": self.monte_carlo_num_sims.value,
+            "monte_carlo_inc_ul": self.monte_carlo_inc_ul.value,
         }
 
     def display(self) -> widgets.VBox:
@@ -400,14 +429,18 @@ class GlobalAssumptions:
             ]
         )
 
-        scenario_section = widgets.VBox(
+        scenario_selectors = widgets.VBox(
             [
-                widgets.HTML("<h4>Scenario Grid Parameters</h4>"),
                 self.spot_shock_pct,
                 self.vol_shock_pct,
                 self.grid_resolution,
+                self.monte_carlo_num_sims,
+                self.monte_carlo_inc_ul,
             ]
         )
+        scenario_section = widgets.Accordion(children=[scenario_selectors])
+        scenario_section.set_title(0, "Scenario Grid Parameters (Expand)")
+        scenario_section.selected_index = None  # Collapsed by dfault
 
         return widgets.VBox(
             [
