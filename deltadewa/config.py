@@ -56,7 +56,7 @@ def create_export_dir_widget(
 
     browse_button = widgets.Button(
         description="Browse...",
-        button_style="",
+        button_style="info",
         icon="search",
         layout=widgets.Layout(width="100px"),
         tooltip="Select folder using system dialog",
@@ -64,7 +64,7 @@ def create_export_dir_widget(
 
     create_button = widgets.Button(
         description="Set Directory",
-        button_style="success",
+        button_style="danger",
         icon="check",
         layout=widgets.Layout(width="150px"),
         tooltip="Confirm and create directory",
@@ -145,6 +145,7 @@ def create_export_dir_widget(
                 setattr(widget_container, "export_dir", export_dir)
 
                 if export_dir.exists():
+                    create_button.button_style = "success"
                     print(f"✅ Export directory set to:  {export_dir}")
                 else:
                     raise ValueError(
@@ -171,6 +172,7 @@ def create_export_dir_widget(
                     on_change_callback(export_dir)
 
             except Exception as e:  # pylint: disable=broad-exception-caught
+                create_button.button_style = "danger"
                 print(f"❌ Error:  {str(e)}")
 
     def on_open_click(b):  # pylint: disable=unused-argument

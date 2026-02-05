@@ -1446,13 +1446,6 @@ class PortfolioWidgets:
         Returns:
             Dictionary with import-related widgets
         """
-        format_selector = widgets.RadioButtons(
-            options=["JSON", "YAML"],
-            value="JSON",
-            description="Import Format:",
-            style={"description_width": "150px"},
-        )
-
         filename_input = widgets.Text(
             value="portfolio_book.json",
             description="Filename:",
@@ -1460,54 +1453,44 @@ class PortfolioWidgets:
             layout=widgets.Layout(width="400px"),
         )
 
-        file_upload = widgets.FileUpload(
+        file_select = widgets.FileUpload(
             accept=".json,.yaml,.yml",
+            button_style="danger",
             multiple=False,
-            description="Or Upload:",
+            description="Select File:",
             style={"description_width": "150px"},
         )
 
         preview_button = widgets.Button(
             description="Preview File",
-            button_style="",
+            button_style="danger",
             icon="eye",
             layout=widgets.Layout(width="150px"),
         )
 
         import_button = widgets.Button(
             description="Import Portfolio",
-            button_style="info",
+            button_style="danger",
             icon="upload",
             layout=widgets.Layout(width="150px"),
         )
 
-        replace_checkbox = widgets.Checkbox(
-            value=False,
-            description="Replace current portfolio",
-            style={"description_width": "200px"},
-        )
-
         return {
-            "format_selector": format_selector,
             "filename_input": filename_input,
-            "file_upload": file_upload,
+            "file_select": file_select,
             "preview_button": preview_button,
             "import_button": import_button,
-            "replace_checkbox": replace_checkbox,
         }
 
-    def display_import_export(self) -> widgets.VBox:
+    def display_import(self) -> widgets.VBox:
         """
-        Create and display combined import/export interface.
+        Create and display import interface.
 
         Returns:
-            VBox widget containing import and export controls
+            VBox widget containing import controls
         """
         import_controls = self.create_import_controls()
-        export_controls = self.create_export_controls()
-
         import_output = widgets.Output()
-        export_output = widgets.Output()
 
         # Import button handler
         def on_import_clicked(b):  # pylint: disable=unused-argument
@@ -1515,57 +1498,167 @@ class PortfolioWidgets:
                 import_output.clear_output()
                 try:
                     filename = import_controls["filename_input"].value
-                    file_format = import_controls[  # noqa:F841 pylint: disable=unused-variable
-                        "format_selector"
-                    ].value.lower()
+                    # Auto-detect format handled by import_portfolio
+
                     filepath = self.export_dir / filename
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
                         return
 
-                    replace = import_controls["replace_checkbox"].value
-                    if replace:
-                        imported_portfolio = import_portfolio(str(filepath))
-
-                        if not isinstance(imported_portfolio, OptionPortfolio):
-                            print(
-                                "✗ Import failed: Expected OptionPortfolio, "
-                                + f"got {type(imported_portfolio)}"
-                            )
-                            return
-
-                        # Copy all attributes from imported to current
-                        self.portfolio.positions = imported_portfolio.positions
-                        self.portfolio.spot_price = (
-                            imported_portfolio.spot_price
-                        )
-                        self.portfolio.volatility = (
-                            imported_portfolio.volatility
-                        )
-                        self.portfolio.risk_free_rate = (
-                            imported_portfolio.risk_free_rate
-                        )
-                        self.portfolio.dividend_yield = (
-                            imported_portfolio.dividend_yield
-                        )
-                        self.portfolio.valuation_date = (
-                            imported_portfolio.valuation_date
-                        )
-                        self.portfolio.underlying_quantity = (
-                            imported_portfolio.underlying_quantity
-                        )
-                        print(f"✓ Portfolio replaced from {filepath}")
-                    else:
+                    imported_portfolio = import_portfolio(str(filepath))[
+                        "portfolio"
+                    ]
+                    if not isinstance(imported_portfolio, OptionPortfolio):
                         print(
-                            "✗ Merge mode not yet implemented - use 'Replace' option"
+                            "✗ Import failed: Expected OptionPortfolio, "
+                            + f"got {type(imported_portfolio)}"
                         )
                         return
 
+                    # Copy all attributes from imported to current
+                    self.portfolio.positions = imported_portfolio.positions
+                    self.portfolio.spot_price = imported_portfolio.spot_price
+                    self.portfolio.volatility = imported_portfolio.volatility
+                    self.portfolio.risk_free_rate = (
+                        imported_portfolio.risk_free_rate
+                    )
+                    self.portfolio.dividend_yield = (
+                        imported_portfolio.dividend_yield
+                    )
+                    self.portfolio.valuation_date = (
+                        imported_portfolio.valuation_date
+                    )
+                    self.portfolio.underlying_quantity = (
+                        imported_portfolio.underlying_quantity
+                    )
+
                     print(f"✓ Loaded {len(self.portfolio.positions)} positions")
+                    import_controls["import_button"].button_style = "success"
 
                 except Exception as e:  # pylint: disable=broad-except
                     print(f"✗ Import failed: {e}")
+                    import_controls["import_button"].button_style = "danger"
+
+        # Preview button handler
+        def on_preview_clicked(b):  # pylint: disable=unused-argument
+            with import_output:
+                import_output.clear_output()
+                try:
+                    filename = import_controls["filename_input"].value
+                    filepath = self.export_dir / filename
+
+                    if not filepath.exists():
+                        print(f"✗ File not found: {filepath}")
+                        return
+
+                    # Load into a temporary portfolio to inspect content
+                    print(f"Loading portfolio from {filepath}...")
+                    preview_portfolio = import_portfolio(str(filepath))[
+                        "portfolio"
+                    ]
+
+                    if not isinstance(preview_portfolio, OptionPortfolio):
+                        print(
+                            f"✗ Invalid portfolio file: {type(preview_portfolio)}"
+                        )
+                        return
+
+                    # Extract summary details
+                    positions_count = len(preview_portfolio.positions)
+                    symbol = preview_portfolio.get_symbol()
+
+                    print(f"Previewing Portfolio: {filename}")
+                    print("-" * 50)
+                    print(f"Symbol:              {symbol}")
+                    print(
+                        f"Risk-Free Rate:      {preview_portfolio.risk_free_rate:.2%}"
+                    )
+                    print(
+                        f"Spot Price:          {preview_portfolio.spot_price:.2f}"
+                    )
+                    print(
+                        f"Underlying Quantity: {preview_portfolio.underlying_quantity:.0f}"
+                    )
+                    print(f"Number of Positions: {positions_count}")
+                    print("-" * 50)
+                    import_controls["preview_button"].button_style = "success"
+
+                except Exception as e:  # pylint: disable=broad-except
+                    print(f"✗ Preview failed: {e}")
+                    import_controls["preview_button"].button_style = "danger"
+
+        # File upload handler
+        def on_file_upload(change):
+            if not change["new"]:
+                return
+
+            with import_output:
+                import_output.clear_output()
+                try:
+                    uploaded = change["new"]
+                    # Handle both ipywidgets 7 and 8 formats
+                    if isinstance(uploaded, dict):
+                        # ipywidgets 7
+                        fname = next(iter(uploaded))
+                    else:
+                        # ipywidgets 8 (tuple of dicts)
+                        item = uploaded[0]
+                        fname = item["name"]
+
+                    # Do NOT write file to disk, just update filename input
+                    import_controls["filename_input"].value = fname
+
+                    # Construct potential path for display purposes (though
+                    # FileUpload doesn't give full path)
+                    potential_path = self.export_dir / fname
+                    print(f"✓ Selected file: {fname}")
+                    print(f"Target path: {potential_path}")
+                    import_controls["file_select"].button_style = "success"
+
+                    # Clear widget to allow re-uploading same file
+                    # Note: clearing might trigger another event with empty
+                    # value, hence the check at start
+                    # import_controls["file_select"].value.clear()
+
+                except Exception as e:  # pylint: disable=broad-except
+                    print(f"✗ Selection failed: {e}")
+                    import_controls["file_select"].button_style = "danger"
+
+        # Connect button handlers
+        import_controls["import_button"].on_click(on_import_clicked)
+        import_controls["preview_button"].on_click(on_preview_clicked)
+        import_controls["file_select"].observe(on_file_upload, names="value")
+
+        action_buttons = widgets.HBox(
+            [
+                import_controls["file_select"],
+                import_controls["preview_button"],
+                import_controls["import_button"],
+            ]
+        )
+
+        # Assemble interface
+        import_section = widgets.VBox(
+            [
+                widgets.HTML("<h3>Import Portfolio</h3>"),
+                import_controls["filename_input"],
+                action_buttons,
+                import_output,
+            ]
+        )
+
+        return import_section
+
+    def display_export(self) -> widgets.VBox:
+        """
+        Create and display export interface.
+
+        Returns:
+            VBox widget containing export controls
+        """
+        export_controls = self.create_export_controls()
+        export_output = widgets.Output()
 
         # Export button handler
         def on_export_clicked(b):  # pylint: disable=unused-argument
@@ -1599,21 +1692,9 @@ class PortfolioWidgets:
                     print(f"✗ Export failed: {e}")
 
         # Connect button handlers
-        import_controls["import_button"].on_click(on_import_clicked)
         export_controls["export_button"].on_click(on_export_clicked)
 
         # Assemble interface
-        import_section = widgets.VBox(
-            [
-                widgets.HTML("<h3>Import Portfolio</h3>"),
-                import_controls["format_selector"],
-                import_controls["filename_input"],
-                import_controls["replace_checkbox"],
-                import_controls["import_button"],
-                import_output,
-            ]
-        )
-
         export_section = widgets.VBox(
             [
                 widgets.HTML("<h3>Export Portfolio</h3>"),
@@ -1624,15 +1705,7 @@ class PortfolioWidgets:
             ]
         )
 
-        return widgets.VBox(
-            [
-                widgets.HTML("<h2>Portfolio Import/Export</h2>"),
-                widgets.HTML("<hr>"),
-                import_section,
-                widgets.HTML("<hr>"),
-                export_section,
-            ]
-        )
+        return export_section
 
     def create_export_dir_widget(
         self,
@@ -1669,7 +1742,7 @@ class PortfolioWidgets:
         try:
             current_dir = str(self.export_dir)
         except ValueError:
-            current_dir = str(Path.cwd())
+            current_dir = str(Path.cwd() / "exports")
 
         # Use the existing config helper to build the UI; pass current export_dir
         return _create_export_dir_widget(
