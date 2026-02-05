@@ -44,6 +44,7 @@ from deltadewa.persistence import (
 from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
 )
+from deltadewa.utils import get_volatility_stats
 
 if TYPE_CHECKING:
     # Import only for type annotations
@@ -493,8 +494,27 @@ class NetHedgeSummary:
         self.widget = None
         self._create_widget()
 
+    def _format_large_block(
+        self, color: str, text_color: str, name: str, value_str: str
+    ) -> str:
+        """
+        Return formatted HTML for large block
+        """
+        return (
+            f'<div style="display:inline-block; background-color:{color}; '
+            f"color:{text_color}; padding:8px 12px; margin:5px; "
+            f'border-radius:5px; font-weight:bold; min-width:120px;">'
+            f'<div style="font-size:11px; opacity:0.9;">{name}</div>'
+            f'<div style="font-size:16px;">{value_str}</div>'
+            f"</div>"
+        )
+
     def _format_greek(
-        self, name: str, value: float, is_cost: bool = False
+        self,
+        name: str,
+        value: float,
+        is_cost: bool = False,
+        is_neutral: bool = False,
     ) -> str:
         """
         Format a Greek metric as colored HTML badge.
@@ -503,17 +523,27 @@ class NetHedgeSummary:
             name: Greek name
             value: Greek value
             is_cost: Whether this represents a cost (red) vs profit (green)
+            is_neutral: Whether to ignore the value and use a netural colour
 
         Returns:
             HTML string with formatted badge
         """
+        boundary_1 = 10**6
+        boundary_2 = 10**3
+
         if abs(value) < 0.01 and name != "Value":
             value_str = "~0"
-        elif abs(value) >= 1000:
+        elif abs(value) >= boundary_1:
             value_str = (
-                f"${value/1000:.1f}k"
+                f"${value/boundary_1:,.2f}M"
                 if "Value" in name or "Cost" in name
                 else f"{value:,.0f}"
+            )
+        elif abs(value) >= boundary_2:
+            value_str = (
+                f"${value/boundary_2:,.2f}k"
+                if "Value" in name or "Cost" in name
+                else f"{value:,.1f}"
             )
         else:
             value_str = (
@@ -523,24 +553,53 @@ class NetHedgeSummary:
             )
 
         # Color coding
-        if is_cost or value < 0:
+        if is_cost or value < 0 and not is_neutral:
             color = "#d32f2f"  # Red for costs/negative
             text_color = "white"
-        elif value > 0:
+        elif value > 0 and not is_neutral:
             color = "#388e3c"  # Green for profits/positive
             text_color = "white"
         else:
-            color = "#757575"  # Gray for neutral
+            color = "#999999"  # Gray for neutral
             text_color = "white"
 
-        return (
-            f'<div style="display:inline-block; background-color:{color}; '
-            f"color:{text_color}; padding:8px 12px; margin:5px; "
-            f'border-radius:5px; font-weight:bold; min-width:120px;">'
-            f'<div style="font-size:11px; opacity:0.9;">{name}</div>'
-            f'<div style="font-size:16px;">{value_str}</div>'
-            f"</div>"
-        )
+        return self._format_large_block(color, text_color, name, value_str)
+
+    def _format_pct(
+        self, name: str, value: float, is_neutral: bool = False
+    ) -> str:
+        """
+        Format a percentage metric as colored HTML badge.
+
+        Args:
+            name: Percent metric name
+            value: Percent metric value
+            is_neutral: Whether to ignore the value and use a netural colour
+
+        Returns:
+            HTML string with formatted badge
+        """
+        boundary_1 = 10**1
+
+        if abs(value) < 10**-4:
+            value_str = "~0%"
+        elif abs(value) >= boundary_1:
+            value_str = f"{value/boundary_1*100:,.0f}%"
+        else:
+            value_str = f"{value*100:,.2f}%"
+
+        # Color coding
+        if value < 0 and not is_neutral:
+            color = "#d32f2f"  # Red for costs/negative
+            text_color = "white"
+        elif value > 0 and not is_neutral:
+            color = "#388e3c"  # Green for profits/positive
+            text_color = "white"
+        else:
+            color = "#999999"  # Gray for neutral
+            text_color = "white"
+
+        return self._format_large_block(color, text_color, name, value_str)
 
     def _format_crash_indicator(self, shock_pct: float, pnl: float) -> str:
         """
@@ -570,7 +629,10 @@ class NetHedgeSummary:
 
     def _create_widget(self):
         """Create the KPI display widget."""
-        self.core_metrics_html = widgets.HTML(value="")
+        self.value_metrics_html = widgets.HTML(value="")
+        self.core_metrics_r1_html = widgets.HTML(value="")
+        self.core_metrics_r2_html = widgets.HTML(value="")
+        self.vol_metrics_html = widgets.HTML(value="")
         self.crash_indicators_html = widgets.HTML(value="")
         self.prob_stats_html = widgets.HTML(value="")
 
@@ -582,9 +644,12 @@ class NetHedgeSummary:
                     '<h3 style="margin:0;">Net Hedge Summary</h3>'
                     "</div>"
                 ),
-                self.core_metrics_html,
+                self.value_metrics_html,
+                self.core_metrics_r1_html,
+                self.core_metrics_r2_html,
+                self.vol_metrics_html,
                 widgets.HTML(
-                    "<h4 style='margin:10px 0 5px 0;'>Crash Convexity "
+                    "<h4 style='margin:10px 10px 5px 10px;'>Crash Convexity "
                     + "Indicators: P&L at Expiry</h4>"
                 ),
                 self.crash_indicators_html,
@@ -597,18 +662,60 @@ class NetHedgeSummary:
     def update(self):
         """Update all metrics with current portfolio data."""
         stats = self.portfolio.summary_stats()
+        vol_stats = get_volatility_stats(self.portfolio)
+
+        value_html = (
+            self._format_greek(
+                "Underlying Value", stats["total_underlying_value"]
+            )
+            + self._format_greek("Option Value", stats["total_value"])
+            + self._format_greek(
+                "Total Portfolio Value", stats["total_portfolio_value"]
+            )
+        )
+        self.value_metrics_html.value = (
+            f'<div style="padding:10px;">{value_html}</div>'
+        )
 
         # Core Greeks
-        core_html = (
-            self._format_greek("Current Value", stats["total_value"])
-            + self._format_greek("Net Delta", stats["total_delta"])
-            + self._format_greek("Theta (Daily)", stats["total_theta"])
+        core_r1_html = (
+            self._format_greek("Total Delta", stats["total_delta"])
+            + self._format_greek("Net Delta", stats["net_delta"])
+            + self._format_greek("Delta Adj.", stats["delta_adjustment"])
+            + self._format_greek("Hedge Ratio", stats["hedge_ratio"])
+        )
+        self.core_metrics_r1_html.value = (
+            f'<div style="padding:10px;">{core_r1_html}</div>'
+        )
+
+        core_r2_html = (
+            self._format_greek("Theta (Daily)", stats["total_theta"])
             + self._format_greek("Gamma", stats["total_gamma"])
             + self._format_greek("Vega", stats["total_vega"])
             + self._format_greek("Rho", stats["total_rho"])
         )
-        self.core_metrics_html.value = (
-            f'<div style="padding:10px;">{core_html}</div>'
+        self.core_metrics_r2_html.value = (
+            f'<div style="padding:10px;">{core_r2_html}</div>'
+        )
+
+        vol_html = (
+            self._format_pct(
+                "Min Vol", stats["volatility_min"], is_neutral=True
+            )
+            + self._format_pct(
+                "Max Vol", stats["volatility_max"], is_neutral=True
+            )
+            + self._format_pct(
+                "Vega-W.Avg Vol", vol_stats["avg_volatility"], is_neutral=True
+            )
+            + self._format_greek(
+                "Custom Vol Count",
+                stats["custom_volatility_count"],
+                is_neutral=True,
+            )
+        )
+        self.vol_metrics_html.value = (
+            f'<div style="padding:10px;">{vol_html}</div>'
         )
 
         # Crash convexity
