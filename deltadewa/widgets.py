@@ -532,25 +532,31 @@ class NetHedgeSummary:
         boundary_1 = 10**6
         boundary_2 = 10**3
 
+        matches_to_format_as_currency = ["Value", "Cost", "Theta"]
+        format_as_currency = False
+        if any(
+            sub.lower() in (name or "").lower()
+            for sub in matches_to_format_as_currency
+        ):
+            format_as_currency = True
+
         if abs(value) < 0.01 and name != "Value":
             value_str = "~0"
         elif abs(value) >= boundary_1:
             value_str = (
                 f"${value/boundary_1:,.2f}M"
-                if "Value" in name or "Cost" in name
+                if format_as_currency
                 else f"{value:,.0f}"
             )
         elif abs(value) >= boundary_2:
             value_str = (
                 f"${value/boundary_2:,.2f}k"
-                if "Value" in name or "Cost" in name
+                if format_as_currency
                 else f"{value:,.1f}"
             )
         else:
             value_str = (
-                f"${value:.2f}"
-                if "Value" in name or "Cost" in name
-                else f"{value:.2f}"
+                f"${value:.2f}" if format_as_currency else f"{value:.2f}"
             )
 
         # Color coding
@@ -642,7 +648,7 @@ class NetHedgeSummary:
                 widgets.HTML(
                     '<div style="background-color:#0F4761; color:white; '
                     'padding:10px; border-radius:5px 5px 0 0;">'
-                    '<h3 style="margin:0;">Net Hedge Summary</h3>'
+                    '<h3 style="margin:0;">Hedge Summary</h3>'
                     "</div>"
                 ),
                 self.value_metrics_html,
