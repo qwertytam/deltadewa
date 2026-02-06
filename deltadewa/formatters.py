@@ -41,6 +41,9 @@ from typing import (
 import warnings
 import pandas as pd
 import numpy as np
+from matplotlib.colors import TwoSlopeNorm
+import matplotlib.pyplot as plt
+from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
@@ -593,7 +596,7 @@ def format_pivot_table(
             {
                 "selector": "th",
                 "props": [
-                    ("background-color", "#f0f0f0"),
+                    ("background-color", DEFAULT_PALETTE.very_light_grey),
                     ("font-weight", "bold"),
                     ("text-align", "center"),
                     ("border", "1px solid #ddd"),
@@ -614,7 +617,7 @@ def format_pivot_table(
 def highlight_negative_values(
     styler: Styler,
     columns: Optional[List[str]] = None,
-    color: str = "#ffcccc",
+    color: str = DEFAULT_PALETTE.negative_faded,
 ) -> Styler:
     """
     Highlight negative values in specified columns.
@@ -643,8 +646,8 @@ def highlight_negative_values(
 def highlight_max_min(
     styler: Styler,
     column: str,
-    max_color: str = "#ccffcc",
-    min_color: str = "#ffcccc",
+    max_color: str = DEFAULT_PALETTE.positive_faded,
+    min_color: str = DEFAULT_PALETTE.negative_faded,
 ) -> Styler:
     """
     Highlight maximum and minimum values in a column.
@@ -718,8 +721,8 @@ def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
             {
                 "selector": "th",
                 "props": [
-                    ("background-color", "#2c3e50"),
-                    ("color", "white"),
+                    ("background-color", DEFAULT_PALETTE.dark_background),
+                    ("color", DEFAULT_PALETTE.white),
                     ("padding", "12px"),
                     ("text-align", "left"),
                     ("font-weight", "bold"),
@@ -727,7 +730,9 @@ def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
             },
             {
                 "selector": "tr:nth-child(even)",
-                "props": [("background-color", "#f9f9f9")],
+                "props": [
+                    ("background-color", DEFAULT_PALETTE.very_light_grey)
+                ],
             },
             {
                 "selector": "td",
@@ -748,7 +753,7 @@ def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
             {
                 "selector": "th",
                 "props": [
-                    ("background-color", "#f0f0f0"),
+                    ("background-color", DEFAULT_PALETTE.very_light_grey),
                     ("padding", "8px"),
                     ("text-align", "left"),
                     ("border", "1px solid #ddd"),
@@ -844,34 +849,34 @@ def get_diverging_color_params(
 ) -> tuple[float, float]:
     """
     Calculate vmin and vmax for a diverging colormap centered at a value.
-    
+
     This ensures the colormap is symmetric around the center value,
     so that the center color (white) appears exactly at the center value.
-    
+
     Args:
         values: Array of numeric values
         center: Value to center the colormap at (default: 0.0)
-    
+
     Returns:
         Tuple of (vmin, vmax) for use with colormaps
     """
     # Flatten if needed and remove NaN
     flat_values = np.asarray(values).flatten()
     flat_values = flat_values[~np.isnan(flat_values)]
-    
+
     if len(flat_values) == 0:
         return (-1.0, 1.0)
-    
+
     data_min = float(np.min(flat_values))
     data_max = float(np.max(flat_values))
-    
+
     # Calculate the maximum absolute distance from center
     max_abs = max(abs(data_min - center), abs(data_max - center))
-    
+
     # Ensure we have some range
     if max_abs == 0:
         max_abs = 1.0
-    
+
     return (center - max_abs, center + max_abs)
 
 
@@ -882,19 +887,19 @@ def apply_financial_gradient_2d(
 ) -> Styler:
     """
     Apply consistent financial diverging gradient to entire 2D DataFrame.
-    
+
     Args:
         styler: Pandas Styler object
         center: Value to center the colormap at (default: 0.0)
         cmap: Colormap name (default: 'RdYlGn')
-    
+
     Returns:
         Styled DataFrame with consistent diverging gradient
     """
-    df = styler.data
+    df = cast(Any, styler).data
     all_values = df.values
     vmin, vmax = get_diverging_color_params(all_values, center)
-    
+
     return styler.background_gradient(
         cmap=cmap,
         vmin=vmin,
@@ -910,24 +915,21 @@ def get_matplotlib_norm_and_cmap(
 ) -> tuple:
     """
     Get matplotlib Normalize and colormap for consistent financial visualization.
-    
+
     Args:
         values: Array of values to display
         center: Value to center the colormap at (default: 0.0)
         cmap_name: Colormap name (default: 'RdYlGn')
-    
+
     Returns:
         Tuple of (norm, cmap) for use with matplotlib
     """
-    from matplotlib.colors import TwoSlopeNorm
-    import matplotlib.pyplot as plt
-    
     vmin, vmax = get_diverging_color_params(values, center)
-    
+
     # Use TwoSlopeNorm to ensure center is exactly at the middle color
     norm = TwoSlopeNorm(vmin=vmin, vcenter=center, vmax=vmax)
     cmap = plt.get_cmap(cmap_name)
-    
+
     return norm, cmap
 
 

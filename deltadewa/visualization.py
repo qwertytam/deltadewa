@@ -28,6 +28,8 @@ from matplotlib.axes import Axes
 from matplotlib.ticker import FuncFormatter
 from matplotlib.container import BarContainer
 from scipy import stats  # type: ignore
+from deltadewa.colours import DEFAULT_PALETTE
+from deltadewa.utils import format_currency
 
 
 class OptionCharts:
@@ -294,8 +296,12 @@ class OptionCharts:
         # Use pre-calculated Monte Carlo expected value if available to ensure consistency
         # between the main analysis and the chart visualization
         mc_results = self.portfolio.monte_carlo_results
-        if mc_results is not None and isinstance(mc_results, dict) and 'expected_pnl' in mc_results:
-            analysis['expected_value'] = mc_results['expected_pnl']
+        if (
+            mc_results is not None
+            and isinstance(mc_results, dict)
+            and "expected_pnl" in mc_results
+        ):
+            analysis["expected_value"] = mc_results["expected_pnl"]
 
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -351,7 +357,7 @@ class OptionCharts:
             spot_range,
             pdf_baseline,
             pdf_plot_values,
-            color="lightblue",
+            color=DEFAULT_PALETTE.medium_background,
             alpha=0.4,
             zorder=1,
         )
@@ -393,7 +399,7 @@ class OptionCharts:
         if is_5th_in_range:
             ax.axvline(
                 spot_5th_percentile,
-                color="purple",
+                color=DEFAULT_PALETTE.dark_background,
                 linestyle=":",
                 linewidth=2,
                 alpha=0.7,
@@ -403,7 +409,7 @@ class OptionCharts:
         if is_95th_in_range:
             ax.axvline(
                 spot_95th_percentile,
-                color="purple",
+                color=DEFAULT_PALETTE.dark_background,
                 linestyle=":",
                 linewidth=2,
                 alpha=0.7,
@@ -415,7 +421,7 @@ class OptionCharts:
             spot_range,
             pnl_values,
             linewidth=3,
-            color="#1f77b4",
+            color=DEFAULT_PALETTE.medium_background,
             label="P&L at Maturity",
             zorder=3,
         )
@@ -432,12 +438,12 @@ class OptionCharts:
                 ha="center",
                 va="top",
                 fontsize=9,
-                color="purple",
+                color=DEFAULT_PALETTE.dark_background,
                 fontweight="bold",
                 bbox=dict(
                     boxstyle="round,pad=0.3",
-                    facecolor="white",
-                    edgecolor="purple",
+                    facecolor=DEFAULT_PALETTE.white,
+                    edgecolor=DEFAULT_PALETTE.dark_background,
                     alpha=0.8,
                 ),
             )
@@ -449,19 +455,19 @@ class OptionCharts:
                 xytext=(30, 0),
                 textcoords="offset points",
                 fontsize=9,
-                color="purple",
+                color=DEFAULT_PALETTE.dark_background,
                 fontweight="bold",
                 ha="left",
                 va="center",
                 bbox=dict(
                     boxstyle="round,pad=0.3",
-                    facecolor="white",
-                    edgecolor="purple",
+                    facecolor=DEFAULT_PALETTE.white,
+                    edgecolor=DEFAULT_PALETTE.dark_background,
                     alpha=0.8,
                 ),
                 arrowprops=dict(
                     arrowstyle="<-",
-                    color="purple",
+                    color=DEFAULT_PALETTE.dark_background,
                     lw=1.5,
                 ),
             )
@@ -474,12 +480,12 @@ class OptionCharts:
                 ha="center",
                 va="top",
                 fontsize=9,
-                color="purple",
+                color=DEFAULT_PALETTE.dark_background,
                 fontweight="bold",
                 bbox=dict(
                     boxstyle="round,pad=0.3",
-                    facecolor="white",
-                    edgecolor="purple",
+                    facecolor=DEFAULT_PALETTE.white,
+                    edgecolor=DEFAULT_PALETTE.dark_background,
                     alpha=0.8,
                 ),
             )
@@ -491,19 +497,19 @@ class OptionCharts:
                 xytext=(-30, 0),
                 textcoords="offset points",
                 fontsize=9,
-                color="purple",
+                color=DEFAULT_PALETTE.dark_background,
                 fontweight="bold",
                 ha="right",
                 va="center",
                 bbox=dict(
                     boxstyle="round,pad=0.3",
-                    facecolor="white",
-                    edgecolor="purple",
+                    facecolor=DEFAULT_PALETTE.white,
+                    edgecolor=DEFAULT_PALETTE.dark_background,
                     alpha=0.8,
                 ),
                 arrowprops=dict(
                     arrowstyle="<-",
-                    color="purple",
+                    color=DEFAULT_PALETTE.dark_background,
                     lw=1.5,
                 ),
             )
@@ -514,7 +520,7 @@ class OptionCharts:
             pnl_values,
             0,
             where=(pnl_values >= 0).tolist(),
-            color="green",
+            color=DEFAULT_PALETTE.negative,
             alpha=0.2,
             label="Profit Zone",
         )
@@ -523,16 +529,22 @@ class OptionCharts:
             pnl_values,
             0,
             where=(pnl_values < 0).tolist(),
-            color="red",
+            color=DEFAULT_PALETTE.negative,
             alpha=0.2,
             label="Loss Zone",
         )
 
         # Add zero line and current spot marker
-        ax.axhline(0, color="black", linestyle="-", linewidth=1, alpha=0.5)
+        ax.axhline(
+            0,
+            color=DEFAULT_PALETTE.black,
+            linestyle="-",
+            linewidth=1,
+            alpha=0.5,
+        )
         ax.axvline(
             current_spot,
-            color="black",
+            color=DEFAULT_PALETTE.black,
             linestyle="--",
             linewidth=2,
             alpha=0.7,
@@ -546,11 +558,11 @@ class OptionCharts:
             va="top",
             fontsize=9,
             fontweight="bold",
-            color="black",
+            color=DEFAULT_PALETTE.black,
             bbox=dict(
                 boxstyle="round,pad=0.3",
-                facecolor="white",
-                edgecolor="black",
+                facecolor=DEFAULT_PALETTE.white,
+                edgecolor=DEFAULT_PALETTE.black,
                 alpha=0.8,
             ),
         )
@@ -567,7 +579,7 @@ class OptionCharts:
                 # Add vertical dashed line at break-even
                 ax.axvline(
                     be,
-                    color="gray",
+                    color=DEFAULT_PALETTE.medium_grey,
                     linestyle="--",
                     linewidth=1.5,
                     alpha=0.6,
@@ -582,7 +594,7 @@ class OptionCharts:
                     markersize=12,
                     markeredgewidth=2,
                     markerfacecolor="yellow",
-                    markeredgecolor="black",
+                    markeredgecolor=DEFAULT_PALETTE.black,
                     zorder=5,
                 )
                 # Add annotation
@@ -598,7 +610,7 @@ class OptionCharts:
                         boxstyle="round,pad=0.5",
                         facecolor="yellow",
                         alpha=0.7,
-                        edgecolor="black",
+                        edgecolor=DEFAULT_PALETTE.black,
                     ),
                     arrowprops=dict(
                         arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
@@ -623,8 +635,8 @@ class OptionCharts:
                     marker="v",
                     markersize=15,
                     markeredgewidth=2,
-                    markerfacecolor="red",
-                    markeredgecolor="darkred",
+                    markerfacecolor=DEFAULT_PALETTE.negative,
+                    markeredgecolor=DEFAULT_PALETTE.negative,
                     zorder=5,
                 )
                 # Add annotation
@@ -638,9 +650,9 @@ class OptionCharts:
                     ha="center",
                     bbox=dict(
                         boxstyle="round,pad=0.5",
-                        facecolor="#ffcccc",
+                        facecolor=DEFAULT_PALETTE.negative_faded,
                         alpha=0.8,
-                        edgecolor="darkred",
+                        edgecolor=DEFAULT_PALETTE.negative,
                     ),
                     arrowprops=dict(
                         arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
@@ -671,15 +683,15 @@ class OptionCharts:
                     ha=ha,
                     bbox=dict(
                         boxstyle="round,pad=0.5",
-                        facecolor="#ffcccc",
+                        facecolor=DEFAULT_PALETTE.negative_faded,
                         alpha=0.8,
-                        edgecolor="darkred",
+                        edgecolor=DEFAULT_PALETTE.negative,
                     ),
                     arrowprops=dict(
                         arrowstyle=arrow_direction,
                         connectionstyle="arc3,rad=0",
                         lw=1.5,
-                        color="darkred",
+                        color=DEFAULT_PALETTE.negative,
                     ),
                 )
 
@@ -698,8 +710,8 @@ class OptionCharts:
                 marker="^",
                 markersize=15,
                 markeredgewidth=2,
-                markerfacecolor="green",
-                markeredgecolor="darkgreen",
+                markerfacecolor=DEFAULT_PALETTE.negative,
+                markeredgecolor=DEFAULT_PALETTE.positive,
                 zorder=5,
             )
             # Add annotation
@@ -713,9 +725,9 @@ class OptionCharts:
                 ha="center",
                 bbox=dict(
                     boxstyle="round,pad=0.5",
-                    facecolor="#ccffcc",
+                    facecolor=DEFAULT_PALETTE.positive_faded,
                     alpha=0.8,
-                    edgecolor="darkgreen",
+                    edgecolor=DEFAULT_PALETTE.positive,
                 ),
                 arrowprops=dict(
                     arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
@@ -752,7 +764,7 @@ class OptionCharts:
                 ha="center",
                 bbox=dict(
                     boxstyle="round,pad=0.5",
-                    facecolor="#ffffcc",
+                    facecolor=DEFAULT_PALETTE.orange_faded,
                     alpha=0.8,
                     edgecolor="orange",
                 ),
@@ -829,7 +841,13 @@ class OptionCharts:
             title: Chart title
         """
         # Reference lines
-        ax.axhline(y=0, color="black", linestyle="--", linewidth=0.8, alpha=0.5)
+        ax.axhline(
+            y=0,
+            color=DEFAULT_PALETTE.black,
+            linestyle="--",
+            linewidth=0.8,
+            alpha=0.5,
+        )
         ax.axvline(
             x=self.portfolio.spot_price,
             color="blue",
@@ -846,7 +864,7 @@ class OptionCharts:
             pnl_values,
             0,
             where=(pnl_array >= 0).tolist(),
-            color="green",
+            color=DEFAULT_PALETTE.negative,
             alpha=0.2,
             label="Profit Zone",
         )
@@ -855,13 +873,17 @@ class OptionCharts:
             pnl_values,
             0,
             where=(pnl_array < 0).tolist(),
-            color="red",
+            color=DEFAULT_PALETTE.negative,
             alpha=0.2,
             label="Loss Zone",
         )
 
         # P&L curve
-        color = "darkblue" if analysis_key == "options" else "purple"
+        color = (
+            DEFAULT_PALETTE.dark_background
+            if analysis_key == "options"
+            else DEFAULT_PALETTE.dark_background
+        )
         label = "Options P&L" if analysis_key == "options" else "Total P&L"
         ax.plot(spot_range, pnl_values, linewidth=2.5, color=color, label=label)
 
@@ -893,7 +915,7 @@ class OptionCharts:
                 "rv",
                 markersize=12,
                 markeredgewidth=2,
-                markerfacecolor="red",
+                markerfacecolor=DEFAULT_PALETTE.negative,
                 label=f"Max Loss: ${-ml_val:,.0f}",
             )
 
@@ -908,7 +930,7 @@ class OptionCharts:
                 "g^",
                 markersize=12,
                 markeredgewidth=2,
-                markerfacecolor="green",
+                markerfacecolor=DEFAULT_PALETTE.negative,
                 label=f"Max Profit: ${mp_val:,.0f}",
             )
         else:
@@ -919,8 +941,10 @@ class OptionCharts:
                 xytext=(spot_range[-1] * 0.8, pnl_values[-1] * 0.8),
                 fontsize=11,
                 fontweight="bold",
-                color="green",
-                arrowprops=dict(arrowstyle="->", color="green", lw=2),
+                color=DEFAULT_PALETTE.negative,
+                arrowprops=dict(
+                    arrowstyle="->", color=DEFAULT_PALETTE.negative, lw=2
+                ),
             )
 
         # Formatting
@@ -1052,7 +1076,13 @@ class OptionCharts:
         pivot.plot(kind="bar", stacked=True, ax=ax, alpha=0.8, width=0.7)
 
         # Reference line at zero
-        ax.axhline(y=0, color="black", linestyle="--", linewidth=1, alpha=0.5)
+        ax.axhline(
+            y=0,
+            color=DEFAULT_PALETTE.black,
+            linestyle="--",
+            linewidth=1,
+            alpha=0.5,
+        )
 
         # Formatting
         ax.set_xlabel(xlabel or dimension.replace("_", " ").title())
@@ -1186,7 +1216,9 @@ class OptionCharts:
             theta_pivot.plot(
                 kind="bar", stacked=True, ax=ax, alpha=0.8, width=0.7
             )
-            ax.axhline(y=0, color="black", linestyle="--", linewidth=1)
+            ax.axhline(
+                y=0, color=DEFAULT_PALETTE.black, linestyle="--", linewidth=1
+            )
 
             # Net theta annotations
             for i, bucket in enumerate(theta_pivot.index):
@@ -1231,7 +1263,9 @@ class OptionCharts:
             markersize=4,
             markevery=5,
         )
-        ax.axhline(y=0, color="gray", linestyle=":", linewidth=1)
+        ax.axhline(
+            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1
+        )
         ax.fill_between(days_range, 0, cumulative_theta, alpha=0.2)
 
         # Milestone annotations
@@ -1296,12 +1330,15 @@ class OptionCharts:
             and not bucket_summary["theta_pct"].isna().all()
         ):
             colors = [
-                "green" if x > 0 else "red" for x in bucket_summary["theta_pct"]
+                DEFAULT_PALETTE.negative if x > 0 else DEFAULT_PALETTE.negative
+                for x in bucket_summary["theta_pct"]
             ]
             bucket_summary["theta_pct"].plot(
                 kind="barh", ax=ax, color=colors, alpha=0.7
             )
-            ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
+            ax.axvline(
+                x=0, color=DEFAULT_PALETTE.black, linestyle="--", linewidth=1
+            )
         else:
             ax.text(
                 0.5,
@@ -1454,12 +1491,14 @@ class OptionCharts:
             label="Total P&L",
             linewidth=2.5,
             linestyle="--",
-            color="black",
+            color=DEFAULT_PALETTE.black,
         )
-        ax1.axhline(y=0, color="gray", linestyle=":", linewidth=1)
+        ax1.axhline(
+            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1
+        )
         ax1.axvline(
             x=current_spot,
-            color="red",
+            color=DEFAULT_PALETTE.negative,
             linestyle=":",
             linewidth=1,
             label="Current Spot",
@@ -1498,10 +1537,12 @@ class OptionCharts:
             label="Net Delta (with Notional)",
             linewidth=2.5,
         )
-        ax2.axhline(y=0, color="gray", linestyle=":", linewidth=1)
+        ax2.axhline(
+            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1
+        )
         ax2.axvline(
             x=current_spot,
-            color="red",
+            color=DEFAULT_PALETTE.negative,
             linestyle=":",
             linewidth=1,
             label="Current Spot",
@@ -1624,7 +1665,6 @@ def plot_greeks_consolidated(
     portfolio,
     top_n: int = 5,
     figsize: Tuple[int, int] = (16, 10),
-    show_detailed: bool = False,
 ) -> Figure:
     """
     Create consolidated Greeks view optimized for the EXPLAIN mode.
@@ -1667,98 +1707,36 @@ def plot_greeks_consolidated(
         ax.axis("off")
         return fig
 
-    # Calculate net Greeks
-    summ_stats = portfolio.summary_stats()
-    net_greeks = {
-        "Delta": summ_stats["total_delta"],
-        "Theta": summ_stats["total_theta"],
-        "Gamma": summ_stats["total_gamma"],
-        "Vega": summ_stats["total_vega"],
-        "Rho": summ_stats.get("total_rho", 0.0),
-    }
-
-    # Determine number of panels
-    nrows = 2 if not show_detailed else 4
+    # Set number of panels
+    nrows = 4
     fig, axes = plt.subplots(nrows, 2, figsize=figsize)
+    fig.patch.set_alpha(0.0)
 
-    # Panel 1: Net Greeks Summary Table (spans 2 columns visually)
-    ax_net = axes[0, 0]
-    ax_net.axis("off")
+    def _set_axis_formatting(
+        ax,
+        title: str = "",
+        xaxis: bool = True,
+        yaxis: bool = True,
+        xint: float = 0,
+        yint: float = 0,
+    ):
+        ax.grid(False)
+        if xaxis:
+            ax.axhline(y=yint, color=DEFAULT_PALETTE.axis, linewidth=1)
+        if yaxis:
+            ax.axvline(x=xint, color=DEFAULT_PALETTE.axis, linewidth=1)
+        ax.set_title(
+            title,
+            fontsize=11,
+            fontweight="bold",
+        )
 
-    net_table_data = [
-        ["Greek", "Net Value"],
-        ["Delta", f"{net_greeks['Delta']:.2f}"],
-        ["Theta", f"${net_greeks['Theta']:.2f}/day"],
-        ["Gamma", f"{net_greeks['Gamma']:.4f}"],
-        ["Vega", f"{net_greeks['Vega']:.2f}"],
-        ["Rho", f"{net_greeks['Rho']:.2f}"],
-    ]
-
-    table = ax_net.table(
-        cellText=net_table_data,
-        cellLoc="center",
-        loc="center",
-        bbox=[0, 0, 1, 1],
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(11)
-    table.scale(1, 2)
-
-    # Style header row
-    for i in range(2):
-        table[(0, i)].set_facecolor("#0F4761")
-        table[(0, i)].set_text_props(weight="bold", color="white")
-
-    # Color code Greek values
-    for i in range(1, len(net_table_data)):
-        value = net_greeks[net_table_data[i][0]]
-        if value > 0:
-            table[(i, 1)].set_facecolor("#c8e6c9")  # Light green
-        elif value < 0:
-            table[(i, 1)].set_facecolor("#ffcdd2")  # Light red
-        else:
-            table[(i, 1)].set_facecolor("#eeeeee")  # Light gray
-
-    ax_net.set_title(
-        "Net Portfolio Greeks", fontsize=14, fontweight="bold", pad=10
-    )
-
-    # Panel 2: Net Greeks Bar Chart
-    ax_bar = axes[0, 1]
-    greek_names = list(net_greeks.keys())
-    greek_values = list(net_greeks.values())
-
-    colors = [
-        "green" if v > 0 else "red" if v < 0 else "gray" for v in greek_values
-    ]
-    bars = ax_bar.barh(greek_names, greek_values, color=colors, alpha=0.7)
-    ax_bar.axvline(x=0, color="black", linestyle="--", linewidth=1)
-    ax_bar.set_xlabel("Value")
-    ax_bar.set_title("Net Greeks Overview", fontsize=12, fontweight="bold")
-    ax_bar.grid(True, alpha=0.3, axis="x")
-
-    # Add value labels on bars
-    for b, value in zip(bars, greek_values):
-        if value != 0:
-            label_x = value + (
-                0.05
-                * max(abs(v) for v in greek_values)
-                * (1 if value > 0 else -1)
-            )
-            ax_bar.text(
-                label_x,
-                b.get_y() + b.get_height() / 2,
-                f"{value:.2f}",
-                ha="left" if value > 0 else "right",
-                va="center",
-                fontsize=9,
-            )
-
-    # Panel 3 & 4: Top Contributors for Delta and Gamma
+    # Panel 1 & 2: Top Contributors for Delta and Gamma
     for idx, (greek_name, column_name) in enumerate(
         [("Delta", "position_delta"), ("Gamma", "position_gamma")]
     ):
-        ax = axes[1, idx]
+        ax = axes[0, idx]
+        ax.patch.set_alpha(0.0)
 
         # Calculate top contributors
         df_sorted = df.copy()
@@ -1768,21 +1746,21 @@ def plot_greeks_consolidated(
         if len(df_sorted) > 0:
             # Create labels combining symbol, type, strike
             labels = [
-                f"{row['symbol']} {row['type'].upper()[:1]}{row['strike']:.0f}"
+                f"{row['type'].upper()[:1]}{row['strike']:.0f}"
                 for _, row in df_sorted.iterrows()
             ]
             values = df_sorted[column_name].tolist()
-            colors_contrib = ["green" if v > 0 else "red" for v in values]
+            colors_contrib = [
+                DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
+                for v in values
+            ]
 
-            bars = ax.barh(labels, values, color=colors_contrib, alpha=0.7)
-            ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
+            bars = ax.barh(labels, values, color=colors_contrib)
             ax.set_xlabel(greek_name)
-            ax.set_title(
-                f"Top {top_n} {greek_name} Contributors",
-                fontsize=11,
-                fontweight="bold",
+            yint, _ = ax.get_ylim()
+            _set_axis_formatting(
+                ax, f"Top {top_n} {greek_name} Contributors", yint=yint
             )
-            ax.grid(True, alpha=0.3, axis="x")
 
             # Add value labels
             for b, value in zip(bars, values):
@@ -1812,127 +1790,190 @@ def plot_greeks_consolidated(
             ax.axis("off")
 
     # Detailed panels (if requested)
-    if show_detailed:
-        # Panel 5: Top Vega Contributors
-        ax = axes[2, 0]
-        df_sorted = df.copy()
-        df_sorted["abs_value"] = df_sorted["position_vega"].abs()
-        df_sorted = df_sorted.nlargest(top_n, "abs_value")
+    # Panel 3: Top Vega Contributors
+    ax = axes[1, 0]
+    ax.patch.set_alpha(0.0)
+    df_sorted = df.copy()
+    df_sorted["abs_value"] = df_sorted["position_vega"].abs()
+    df_sorted = df_sorted.nlargest(top_n, "abs_value")
 
-        if len(df_sorted) > 0:
-            labels = [
-                f"{row['symbol']} {row['type'].upper()[:1]}{row['strike']:.0f}"
-                for _, row in df_sorted.iterrows()
-            ]
-            values = df_sorted["position_vega"].tolist()
-            colors_contrib = ["green" if v > 0 else "red" for v in values]
+    if len(df_sorted) > 0:
+        labels = [
+            f"{row['type'].upper()[:1]}{row['strike']:.0f}"
+            for _, row in df_sorted.iterrows()
+        ]
+        values = df_sorted["position_vega"].tolist()
+        colors_contrib = [
+            DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
+            for v in values
+        ]
 
-            bars = ax.barh(labels, values, color=colors_contrib, alpha=0.7)
-            ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
-            ax.set_xlabel("Vega")
-            ax.set_title(
-                f"Top {top_n} Vega Contributors", fontsize=11, fontweight="bold"
-            )
-            ax.grid(True, alpha=0.3, axis="x")
-        else:
-            ax.text(
-                0.5,
-                0.5,
-                "No data",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.axis("off")
+        bars = ax.barh(labels, values, color=colors_contrib)
+        ax.set_xlabel("Vega")
+        yint, _ = ax.get_ylim()
+        _set_axis_formatting(ax, f"Top {top_n} Vega Contributors", yint=yint)
 
-        # Panel 6: Top Theta Contributors
-        ax = axes[2, 1]
-        df_sorted = df.copy()
-        df_sorted["abs_value"] = df_sorted["position_theta"].abs()
-        df_sorted = df_sorted.nlargest(top_n, "abs_value")
-
-        if len(df_sorted) > 0:
-            labels = [
-                f"{row['symbol']} {row['type'].upper()[:1]}{row['strike']:.0f}"
-                for _, row in df_sorted.iterrows()
-            ]
-            values = df_sorted["position_theta"].tolist()
-            colors_contrib = ["green" if v > 0 else "red" for v in values]
-
-            bars = ax.barh(labels, values, color=colors_contrib, alpha=0.7)
-            ax.axvline(x=0, color="black", linestyle="--", linewidth=1)
-            ax.set_xlabel("Theta ($/day)")
-            ax.set_title(
-                f"Top {top_n} Theta Contributors",
-                fontsize=11,
-                fontweight="bold",
-            )
-            ax.grid(True, alpha=0.3, axis="x")
-        else:
-            ax.text(
-                0.5,
-                0.5,
-                "No data",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.axis("off")
-
-        # Panel 7: Greeks by Strike
-        ax = axes[3, 0]
-        greek_by_strike = df.groupby("strike").agg(
-            {"position_delta": "sum", "position_gamma": "sum"}
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No data",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
         )
+        ax.axis("off")
 
-        if len(greek_by_strike) > 0:
-            greek_by_strike.plot(kind="bar", ax=ax, alpha=0.7, width=0.7)
-            ax.set_xlabel("Strike Price")
-            ax.set_ylabel("Greek Value")
-            ax.set_title("Greeks by Strike", fontsize=11, fontweight="bold")
-            ax.legend(["Delta", "Gamma"], loc="best")
-            ax.grid(True, alpha=0.3, axis="y")
-            ax.tick_params(axis="x", rotation=45)
-        else:
-            ax.text(
-                0.5,
-                0.5,
-                "No data",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.axis("off")
+    # Panel 4: Top Theta Contributors
+    ax = axes[1, 1]
+    ax.patch.set_alpha(0.0)
+    df_sorted = df.copy()
+    df_sorted["abs_value"] = df_sorted["position_theta"].abs()
+    df_sorted = df_sorted.nlargest(top_n, "abs_value")
 
-        # Panel 8: Greeks by Maturity
-        ax = axes[3, 1]
-        df["maturity_label"] = pd.to_datetime(df["maturity"]).dt.strftime(
-            "%Y-%m-%d"
+    if len(df_sorted) > 0:
+        labels = [
+            f"{row['type'].upper()[:1]}{row['strike']:.0f}"
+            for _, row in df_sorted.iterrows()
+        ]
+        values = df_sorted["position_theta"].tolist()
+        colors_contrib = [
+            DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
+            for v in values
+        ]
+
+        bars = ax.barh(labels, values, color=colors_contrib)
+        ax.set_xlabel("Theta ($/day)")
+        yint, _ = ax.get_ylim()
+        _set_axis_formatting(ax, f"Top {top_n} Theta Contributors", yint=yint)
+
+    # Panel 5: Value by Strike
+    ax = axes[2, 0]
+    ax.patch.set_alpha(0.0)
+    df_sorted = df.copy()
+    df_sorted["abs_value"] = (
+        df_sorted.groupby("strike")["position_value"].sum().abs()
+    )
+    df_sorted = df_sorted.nlargest(top_n, "abs_value")
+    if len(df_sorted) > 0:
+        labels = [f"{row['strike']:.2f}" for _, row in df_sorted.iterrows()]
+        values = df_sorted["position_value"].tolist()
+        colors_contrib = [
+            DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
+            for v in values
+        ]
+
+        bars = ax.barh(labels, values, color=colors_contrib)
+        ax.set_xlabel("Position Value")
+        yint, _ = ax.get_ylim()
+        _set_axis_formatting(
+            ax, f"Top {top_n} Position Values by Strike", yint=yint
         )
-        greek_by_maturity = df.groupby("maturity_label").agg(
-            {"position_delta": "sum", "position_gamma": "sum"}
+        ax.xaxis.set_major_formatter(FuncFormatter(format_currency))
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No data",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
         )
+        ax.axis("off")
 
-        if len(greek_by_maturity) > 0:
-            greek_by_maturity.plot(kind="bar", ax=ax, alpha=0.7, width=0.7)
-            ax.set_xlabel("Maturity Date")
-            ax.set_ylabel("Greek Value")
-            ax.set_title("Greeks by Maturity", fontsize=11, fontweight="bold")
-            ax.legend(["Delta", "Gamma"], loc="best")
-            ax.grid(True, alpha=0.3, axis="y")
-            ax.tick_params(axis="x", rotation=45)
-        else:
-            ax.text(
-                0.5,
-                0.5,
-                "No data",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.axis("off")
+    # Panel 6: Value by Maturity
+    ax = axes[2, 1]
+    ax.patch.set_alpha(0.0)
+    df_sorted = df.copy()
+    df_sorted["maturity_label"] = pd.to_datetime(
+        df_sorted["maturity"]
+    ).dt.strftime("%Y-%m-%d")
+    df_sorted["abs_value"] = (
+        df_sorted.groupby("maturity_label")["position_value"].sum().abs()
+    )
+    df_sorted = df_sorted.nlargest(top_n, "abs_value")
+    if len(df_sorted) > 0:
+        labels = [f"{row['maturity_label']}" for _, row in df_sorted.iterrows()]
+        values = df_sorted.groupby("maturity_label")["position_value"].sum()
+        colors_contrib = [
+            DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
+            for v in values
+        ]
 
-    plt.tight_layout()
+        bars = ax.barh(labels, values, color=colors_contrib)
+        ax.set_xlabel("Position Value")
+        yint, _ = ax.get_ylim()
+        _set_axis_formatting(
+            ax, f"Top {top_n} Position Values by Maturity", yint=yint
+        )
+        ax.xaxis.set_major_formatter(FuncFormatter(format_currency))
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No data",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        ax.axis("off")
+
+    # Panel 7: Greeks by Strike
+    ax = axes[3, 0]
+    ax.patch.set_alpha(0.0)
+    greek_by_strike = df.groupby("strike").agg(
+        {"position_delta": "sum", "position_gamma": "sum"}
+    )
+
+    if len(greek_by_strike) > 0:
+        greek_by_strike.plot(kind="bar", ax=ax, width=0.7)
+        ax.set_xlabel("Strike Price")
+        ax.set_ylabel("Greek Value")
+        ax.legend(["Delta", "Gamma"], loc="best")
+        ax.tick_params(axis="x", rotation=0)
+        xint, _ = ax.get_xlim()
+        _set_axis_formatting(ax, "Greeks by Strike", xint=xint)
+
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No data",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        ax.axis("off")
+
+    # Panel 8: Greeks by Maturity
+    ax = axes[3, 1]
+    ax.patch.set_alpha(0.0)
+    df["maturity_label"] = pd.to_datetime(df["maturity"]).dt.strftime(
+        "%Y-%m-%d"
+    )
+    greek_by_maturity = df.groupby("maturity_label").agg(
+        {"position_delta": "sum", "position_gamma": "sum"}
+    )
+
+    if len(greek_by_maturity) > 0:
+        greek_by_maturity.plot(kind="bar", ax=ax, width=0.7)
+        ax.set_xlabel("Maturity Date")
+        ax.set_ylabel("Greek Value")
+        ax.legend(["Delta", "Gamma"], loc="best")
+        ax.tick_params(axis="x", rotation=0)
+        xint, _ = ax.get_xlim()
+        _set_axis_formatting(ax, "Greeks by Maturity", xint=xint)
+    else:
+        ax.text(
+            0.5,
+            0.5,
+            "No data",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
+        ax.axis("off")
+
     return fig
 
 

@@ -45,6 +45,7 @@ from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
 )
 from deltadewa.utils import get_volatility_stats
+from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
     # Import only for type annotations
@@ -554,14 +555,14 @@ class NetHedgeSummary:
 
         # Color coding
         if is_cost or value < 0 and not is_neutral:
-            color = "#d32f2f"  # Red for costs/negative
-            text_color = "white"
+            color = DEFAULT_PALETTE.negative
+            text_color = DEFAULT_PALETTE.white
         elif value > 0 and not is_neutral:
-            color = "#388e3c"  # Green for profits/positive
-            text_color = "white"
+            color = DEFAULT_PALETTE.positive
+            text_color = DEFAULT_PALETTE.white
         else:
-            color = "#999999"  # Gray for neutral
-            text_color = "white"
+            color = DEFAULT_PALETTE.medium_grey
+            text_color = DEFAULT_PALETTE.white
 
         return self._format_large_block(color, text_color, name, value_str)
 
@@ -590,14 +591,14 @@ class NetHedgeSummary:
 
         # Color coding
         if value < 0 and not is_neutral:
-            color = "#d32f2f"  # Red for costs/negative
-            text_color = "white"
+            color = DEFAULT_PALETTE.negative
+            text_color = DEFAULT_PALETTE.white
         elif value > 0 and not is_neutral:
-            color = "#388e3c"  # Green for profits/positive
-            text_color = "white"
+            color = DEFAULT_PALETTE.positive
+            text_color = DEFAULT_PALETTE.white
         else:
-            color = "#999999"  # Gray for neutral
-            text_color = "white"
+            color = DEFAULT_PALETTE.medium_grey
+            text_color = DEFAULT_PALETTE.white
 
         return self._format_large_block(color, text_color, name, value_str)
 
@@ -613,11 +614,11 @@ class NetHedgeSummary:
             HTML string with formatted indicator
         """
         if pnl >= 0:
-            color = "#388e3c"  # Green
+            color = DEFAULT_PALETTE.positive
         elif pnl > -1000:
-            color = "#f57c00"  # Orange
+            color = DEFAULT_PALETTE.orange
         else:
-            color = "#d32f2f"  # Red
+            color = DEFAULT_PALETTE.negative
 
         return (
             f'<div style="display:inline-block; background-color:{color}; '
