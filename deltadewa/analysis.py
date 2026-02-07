@@ -796,7 +796,6 @@ class PortfolioAnalyzer:
             DataFrame with columns: spot_price, volatility, value
         """
         from deltadewa.utils import (
-            calculate_portfolio_avg_volatility,
             apply_proportional_volatility_shift,
             restore_volatilities,
         )
@@ -828,9 +827,7 @@ class PortfolioAnalyzer:
             if all_at_expiry:
                 # Use vectorized calculation for maximum speed
                 # Create meshgrid of spot and vol scenarios
-                spot_grid, vol_grid = np.meshgrid(
-                    spot_scenarios, vol_scenarios
-                )
+                spot_grid, vol_grid = np.meshgrid(spot_scenarios, vol_scenarios)
 
                 # Calculate PnL using vectorized method (vol doesn't affect intrinsic value)
                 pnl_values = self._calculate_pnl_at_expiry_vectorized(
