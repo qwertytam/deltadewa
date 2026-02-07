@@ -598,6 +598,75 @@ class PortfolioAnalyzer:
 
         return total_value
 
+    def _calculate_pnl_at_expiry_vectorized(
+        self,
+        spot_scenarios: np.ndarray,
+        include_underlying: bool = True,
+    ) -> np.ndarray:
+        """
+        Calculate P&L at expiry using vectorized NumPy operations.
+
+        This is much faster than iterating for large grids because:
+        - Intrinsic value is element-wise max operation
+        - All positions computed simultaneously across all spots
+        - NumPy broadcasting handles grid expansion
+
+        Args:
+            spot_scenarios: Array of spot prices to evaluate
+            include_underlying: Whether to include underlying position P&L
+
+        Returns:
+            np.ndarray of P&L values for each spot scenario
+        """
+        # Pre-extract position data into arrays
+        strikes = np.array(
+            [pos.option.strike_price for pos in self.portfolio.positions]
+        )
+        quantities = np.array(
+            [pos.quantity for pos in self.portfolio.positions]
+        )
+        contract_sizes = np.array(
+            [pos.contract_size for pos in self.portfolio.positions]
+        )
+        is_call = np.array(
+            [
+                pos.option.option_type.lower() == "call"
+                for pos in self.portfolio.positions
+            ]
+        )
+
+        # Vectorized intrinsic value calculation
+        # Shape: (n_positions, 1) and (1, n_spots) -> broadcasts to (n_positions, n_spots)
+        strikes_2d = strikes[:, np.newaxis]  # (n_positions, 1)
+        spots_2d = spot_scenarios[np.newaxis, :]  # (1, n_spots)
+
+        call_intrinsic = np.maximum(spots_2d - strikes_2d, 0)
+        put_intrinsic = np.maximum(strikes_2d - spots_2d, 0)
+        intrinsic = np.where(
+            is_call[:, np.newaxis], call_intrinsic, put_intrinsic
+        )
+
+        # Apply quantity and contract size, sum across positions
+        position_values = (
+            intrinsic
+            * quantities[:, np.newaxis]
+            * contract_sizes[:, np.newaxis]
+        )
+        portfolio_values = position_values.sum(axis=0)
+
+        # Add underlying if requested
+        if include_underlying and self.portfolio.underlying_quantity != 0:
+            underlying_pnl = self.portfolio.underlying_quantity * (
+                spot_scenarios - self.portfolio.spot_price
+            )
+            portfolio_values += underlying_pnl
+
+        # Calculate P&L relative to initial premium paid/received
+        initial_value = self.portfolio.total_value()
+        pnl = portfolio_values - initial_value
+
+        return pnl
+
     def scenario_grid(
         self,
         spot_scenarios: np.ndarray,
@@ -697,6 +766,146 @@ class PortfolioAnalyzer:
         # Restore original state
         self.portfolio.update_market_conditions(
             spot_price=original_spot, valuation_date=original_date
+        )
+
+        return pd.DataFrame(results)
+
+    def scenario_grid_spot_vol(
+        self,
+        spot_scenarios: np.ndarray,
+        vol_scenarios: np.ndarray,
+        metric: str = "pnl",
+        baseline_value: Optional[float] = None,
+        proportional_vol_scaling: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Calculate portfolio metrics across 2D grid of spot prices and volatilities.
+
+        For P&L at expiry (intrinsic value), uses vectorized calculation for
+        maximum performance. For other metrics requiring repricing, uses
+        iterative approach with proportional vol scaling.
+
+        Args:
+            spot_scenarios: Array of spot prices to test
+            vol_scenarios: Array of volatilities to test
+            metric: Metric to calculate ('pnl', 'value', 'delta', 'gamma', 'vega', 'theta')
+            baseline_value: Portfolio value for P&L baseline (default: current value)
+            proportional_vol_scaling: If True, scale position vols proportionally
+
+        Returns:
+            DataFrame with columns: spot_price, volatility, value
+        """
+        from deltadewa.utils import (
+            calculate_portfolio_avg_volatility,
+            apply_proportional_volatility_shift,
+            restore_volatilities,
+        )
+
+        results = []
+        original_spot = self.portfolio.spot_price
+        original_vol = self.portfolio.volatility
+        original_date = self.portfolio.valuation_date
+
+        # Calculate baseline value if not provided
+        if baseline_value is None:
+            baseline_value = self.portfolio.total_value()
+
+        # Store original position volatilities for restoration
+        original_position_vols = {
+            i: pos.option.volatility
+            for i, pos in enumerate(self.portfolio.positions)
+        }
+
+        # For P&L metric, check if we can use vectorized calculation
+        # (only applicable at expiry where volatility doesn't matter)
+        if metric == "pnl":
+            # Check if all positions are at expiry (days_to_maturity <= 0)
+            all_at_expiry = all(
+                (pos.option.maturity_date - original_date).days <= 0
+                for pos in self.portfolio.positions
+            )
+
+            if all_at_expiry:
+                # Use vectorized calculation for maximum speed
+                # Create meshgrid of spot and vol scenarios
+                spot_grid, vol_grid = np.meshgrid(
+                    spot_scenarios, vol_scenarios
+                )
+
+                # Calculate PnL using vectorized method (vol doesn't affect intrinsic value)
+                pnl_values = self._calculate_pnl_at_expiry_vectorized(
+                    spot_scenarios, include_underlying=True
+                )
+
+                # Expand to full grid
+                for i, vol in enumerate(vol_scenarios):
+                    for j, spot in enumerate(spot_scenarios):
+                        results.append(
+                            {
+                                "spot_price": spot,
+                                "volatility": vol,
+                                "value": pnl_values[j],
+                            }
+                        )
+
+                return pd.DataFrame(results)
+
+        # For other metrics or non-expiry PnL, iterate with vol scaling
+        for vol in vol_scenarios:
+            # Apply proportional volatility shift
+            if proportional_vol_scaling:
+                apply_proportional_volatility_shift(
+                    self.portfolio, vol, preserve_structure=True
+                )
+            else:
+                # Set all positions to same volatility
+                for pos in self.portfolio.positions:
+                    pos.option.volatility = vol
+
+            for spot in spot_scenarios:
+                # Update market conditions
+                self.portfolio.update_market_conditions(
+                    spot_price=spot, valuation_date=original_date
+                )
+
+                # Calculate metric
+                if metric == "pnl":
+                    current_value = self.portfolio.total_value()
+                    underlying_pnl = (
+                        spot - original_spot
+                    ) * self.portfolio.underlying_quantity
+                    metric_value = (
+                        current_value - baseline_value
+                    ) + underlying_pnl
+                elif metric == "value":
+                    metric_value = self.portfolio.total_value()
+                elif metric == "delta":
+                    metric_value = self.portfolio.total_delta()
+                elif metric == "gamma":
+                    metric_value = self.portfolio.total_gamma()
+                elif metric == "vega":
+                    metric_value = self.portfolio.total_vega()
+                elif metric == "theta":
+                    metric_value = self.portfolio.total_theta()
+                else:
+                    metric_value = 0.0
+
+                results.append(
+                    {
+                        "spot_price": spot,
+                        "volatility": vol,
+                        "value": metric_value,
+                    }
+                )
+
+            # Restore volatilities after each volatility level
+            restore_volatilities(self.portfolio, original_position_vols)
+
+        # Restore original portfolio state
+        self.portfolio.update_market_conditions(
+            spot_price=original_spot,
+            volatility=original_vol,
+            valuation_date=original_date,
         )
 
         return pd.DataFrame(results)
@@ -922,6 +1131,31 @@ def create_scenario_cache_key(
     return (spot_tuple, time_tuple, metric, portfolio_state_hash)
 
 
+def create_spot_vol_cache_key(
+    spot_scenarios: np.ndarray,
+    vol_scenarios: np.ndarray,
+    metric: str,
+    portfolio_state_hash: str,
+) -> Tuple:
+    """
+    Create hashable cache key for spot × vol scenario grid results.
+
+    Args:
+        spot_scenarios: Array of spot prices
+        vol_scenarios: Array of volatilities
+        metric: Metric being calculated
+        portfolio_state_hash: Hash representing portfolio state
+
+    Returns:
+        Tuple suitable for use as dictionary key
+    """
+    # Convert numpy arrays to tuples for hashing (rounded for stability)
+    spot_tuple = tuple(np.round(spot_scenarios, 6).tolist())
+    vol_tuple = tuple(np.round(vol_scenarios, 6).tolist())
+
+    return ("spot_vol", spot_tuple, vol_tuple, metric, portfolio_state_hash)
+
+
 def get_portfolio_state_hash(portfolio) -> str:
     """
     Generate a hash representing the current portfolio state.
@@ -1049,6 +1283,67 @@ class ScenarioGridCache:
         self._access_order.append(cache_key)
 
         # Enforce max size (LRU eviction)
+        while len(self._cache) > self._max_size:
+            oldest_key = self._access_order.pop(0)
+            if oldest_key in self._cache:
+                del self._cache[oldest_key]
+
+        return result
+
+    def get_or_calculate_spot_vol(
+        self,
+        portfolio,
+        analyzer: PortfolioAnalyzer,
+        spot_scenarios: np.ndarray,
+        vol_scenarios: np.ndarray,
+        metric: str = "pnl",
+        baseline_value: Optional[float] = None,
+        proportional_vol_scaling: bool = True,
+    ) -> pd.DataFrame:
+        """
+        Get cached spot × vol result or calculate if not available.
+
+        Uses vectorized calculation for P&L at expiry for maximum performance.
+
+        Args:
+            portfolio: OptionPortfolio instance
+            analyzer: PortfolioAnalyzer instance
+            spot_scenarios: Array of spot prices
+            vol_scenarios: Array of volatilities
+            metric: Metric to calculate
+            baseline_value: Portfolio value for P&L baseline
+            proportional_vol_scaling: If True, scale position vols proportionally
+
+        Returns:
+            DataFrame with scenario grid results (columns: spot_price, volatility, value)
+        """
+        # Generate cache key
+        portfolio_hash = get_portfolio_state_hash(portfolio)
+        cache_key = create_spot_vol_cache_key(
+            spot_scenarios, vol_scenarios, metric, portfolio_hash
+        )
+
+        # Check cache
+        if cache_key in self._cache:
+            # Update access order (LRU)
+            if cache_key in self._access_order:
+                self._access_order.remove(cache_key)
+            self._access_order.append(cache_key)
+            return self._cache[cache_key].copy()
+
+        # Calculate result
+        result = analyzer.scenario_grid_spot_vol(
+            spot_scenarios=spot_scenarios,
+            vol_scenarios=vol_scenarios,
+            metric=metric,
+            baseline_value=baseline_value,
+            proportional_vol_scaling=proportional_vol_scaling,
+        )
+
+        # Store in cache with LRU eviction
+        self._cache[cache_key] = result.copy()
+        self._access_order.append(cache_key)
+
         while len(self._cache) > self._max_size:
             oldest_key = self._access_order.pop(0)
             if oldest_key in self._cache:
