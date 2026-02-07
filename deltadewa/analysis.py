@@ -606,6 +606,11 @@ class PortfolioAnalyzer:
         """
         Calculate P&L at expiry using vectorized NumPy operations.
 
+        This method should only be used for at-expiry calculations where all
+        positions have expired (days_to_maturity <= 0). At expiry, options have
+        only intrinsic value and no time value, so volatility doesn't affect
+        the results.
+
         This is much faster than iterating for large grids because:
         - Intrinsic value is element-wise max operation
         - All positions computed simultaneously across all spots
@@ -818,9 +823,10 @@ class PortfolioAnalyzer:
         # For P&L metric, check if we can use vectorized calculation
         # (only applicable at expiry where volatility doesn't matter)
         if metric == "pnl":
-            # Check if all positions are at expiry (days_to_maturity <= 0)
+            # Check if all positions are at expiry (days_to_maturity == 0)
+            # We check for exactly 0 to avoid issues with historical valuations
             all_at_expiry = all(
-                (pos.option.maturity_date - original_date).days <= 0
+                (pos.option.maturity_date - original_date).days == 0
                 for pos in self.portfolio.positions
             )
 
@@ -885,7 +891,10 @@ class PortfolioAnalyzer:
                 elif metric == "theta":
                     metric_value = self.portfolio.total_theta()
                 else:
-                    metric_value = 0.0
+                    raise ValueError(
+                        f"Unsupported metric: {metric}. "
+                        f"Supported: pnl, value, delta, gamma, vega, theta"
+                    )
 
                 results.append(
                     {
@@ -1145,6 +1154,11 @@ def create_spot_vol_cache_key(
 
     Returns:
         Tuple suitable for use as dictionary key
+
+    Note:
+        Rounds to 6 decimal places for stability. This provides precision
+        to 0.000001 for typical spot prices and 0.0001% for volatilities,
+        which is more than sufficient for caching purposes.
     """
     # Convert numpy arrays to tuples for hashing (rounded for stability)
     spot_tuple = tuple(np.round(spot_scenarios, 6).tolist())
