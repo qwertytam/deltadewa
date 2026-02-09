@@ -2181,7 +2181,7 @@ class GaugeIndicator:
             title: Optional title text
         """
         # Validate inputs
-        if not (start <= min_val <= mid_val <= max_val <= end):
+        if not start <= min_val <= mid_val <= max_val <= end:
             raise ValueError(
                 f"Values must satisfy: start ({start}) <= min ({min_val}) "
                 f"<= mid ({mid_val}) <= max ({max_val}) <= end ({end})"
@@ -2253,12 +2253,13 @@ class GaugeIndicator:
                 f"border-left: 8px solid transparent; "
                 f"border-right: 8px solid transparent; "
                 f"border-top: 10px solid #333333; "
+                f"z-index: 3; "
             )
             # Label above the chevron
             label_style = (
                 f"position: absolute; "
                 f"left: {actual_pct}%; "
-                f"top: -32px; "
+                f"top: -40px; "
                 f"transform: translateX(-50%); "
                 f"font-size: 12px; "
                 f"font-weight: bold; "
@@ -2267,6 +2268,7 @@ class GaugeIndicator:
                 f"background: rgba(255,255,255,0.9); "
                 f"padding: 2px 4px; "
                 f"border-radius: 3px; "
+                f"z-index: 2; "
             )
         else:
             # Vertical: chevron pointing right, positioned to the left of the bar
@@ -2279,11 +2281,12 @@ class GaugeIndicator:
                 f"border-top: 8px solid transparent; "
                 f"border-bottom: 8px solid transparent; "
                 f"border-left: 10px solid #333333; "
+                f"z-index: 3; "
             )
             label_style = (
                 f"position: absolute; "
                 f"bottom: {actual_pct}%; "
-                f"left: -55px; "
+                f"left: -50px; "
                 f"transform: translateY(50%); "
                 f"font-size: 12px; "
                 f"font-weight: bold; "
@@ -2292,6 +2295,7 @@ class GaugeIndicator:
                 f"background: rgba(255,255,255,0.9); "
                 f"padding: 2px 4px; "
                 f"border-radius: 3px; "
+                f"z-index: 2; "
             )
 
         marker_html = f'<div style="{marker_style}"></div>'
@@ -2309,19 +2313,19 @@ class GaugeIndicator:
             # Start/End labels at bottom
             if self.show_startend_labels:
                 labels_html += (
-                    f'<div style="position:absolute; left:0; bottom:-20px; '
+                    f'<div style="position:absolute; left:0; bottom:-30px; '
                     f'font-size:10px; color:#666;">'
                     f"{self.label_format.format(self.start)}</div>"
                 )
                 labels_html += (
-                    f'<div style="position:absolute; right:0; bottom:-20px; '
+                    f'<div style="position:absolute; right:0; bottom:-30px; '
                     f'font-size:10px; color:#666;">'
                     f"{self.label_format.format(self.end)}</div>"
                 )
 
             # Min/Mid/Max tick marks and labels
             if self.show_minmidmax_labels:
-                for val, label in [
+                for val, label in [  # pylint: disable=unused-variable
                     (self.min_val, "min"),
                     (self.mid_val, "mid"),
                     (self.max_val, "max"),
@@ -2329,13 +2333,13 @@ class GaugeIndicator:
                     pct = self._value_to_percent(val)
                     # Tick mark
                     labels_html += (
-                        f'<div style="position:absolute; left:{pct}%; bottom:-8px; '
+                        f'<div style="position:absolute; left:{pct}%; bottom:-10px; '
                         f"transform:translateX(-50%); width:1px; height:8px; "
                         f'background:#666;"></div>'
                     )
                     # Label
                     labels_html += (
-                        f'<div style="position:absolute; left:{pct}%; bottom:-20px; '
+                        f'<div style="position:absolute; left:{pct}%; bottom:-30px; '
                         f'transform:translateX(-50%); font-size:10px; color:#666;">'
                         f"{self.label_format.format(val)}</div>"
                     )
@@ -2343,12 +2347,12 @@ class GaugeIndicator:
             # Vertical orientation
             if self.show_startend_labels:
                 labels_html += (
-                    f'<div style="position:absolute; bottom:0; right:-40px; '
+                    f'<div style="position:absolute; bottom:0; right:-35px; '
                     f'font-size:10px; color:#666; transform:translateY(50%);">'
                     f"{self.label_format.format(self.start)}</div>"
                 )
                 labels_html += (
-                    f'<div style="position:absolute; top:0; right:-40px; '
+                    f'<div style="position:absolute; top:0; right:-35px; '
                     f'font-size:10px; color:#666; transform:translateY(-50%);">'
                     f"{self.label_format.format(self.end)}</div>"
                 )
@@ -2368,7 +2372,7 @@ class GaugeIndicator:
                     )
                     # Label
                     labels_html += (
-                        f'<div style="position:absolute; bottom:{pct}%; right:-40px; '
+                        f'<div style="position:absolute; bottom:{pct}%; right:-35px; '
                         f'transform:translateY(50%); font-size:10px; color:#666;">'
                         f"{self.label_format.format(val)}</div>"
                     )
