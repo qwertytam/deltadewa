@@ -30,6 +30,7 @@ from matplotlib.container import BarContainer
 from scipy import stats  # type: ignore
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.utils import format_currency
+from deltadewa import constants as const
 
 
 class OptionCharts:
@@ -319,9 +320,11 @@ class OptionCharts:
             days_to_maturity = max(
                 1, (min_maturity - self.portfolio.valuation_date).days
             )
-            time_to_maturity = days_to_maturity / 365.0
+            time_to_maturity = days_to_maturity / const.DAYS_PER_YEAR
         else:
-            time_to_maturity = 30 / 365.0  # Default to 30 days
+            time_to_maturity = (
+                const.CALENDAR_DAYS_PER_MONTH / const.DAYS_PER_YEAR
+            )  # Default to 30 days
 
         # Calculate log-normal PDF for terminal spot prices (GBM assumption)
         volatility = self.portfolio.volatility
@@ -1158,13 +1161,13 @@ class OptionCharts:
 
         # Maturity buckets
         def classify_maturity(days):
-            if days <= 7:
+            if days <= const.DAYS_PER_WEEK:
                 return "0-7 days"
-            elif days <= 30:
+            elif days <= const.CALENDAR_DAYS_PER_MONTH:
                 return "8-30 days"
-            elif days <= 60:
+            elif days <= const.CALENDAR_DAYS_PER_MONTH * 2:
                 return "31-60 days"
-            elif days <= 90:
+            elif days <= const.CALENDAR_DAYS_PER_MONTH * 3:
                 return "61-90 days"
             else:
                 return "90+ days"
@@ -1177,9 +1180,9 @@ class OptionCharts:
         total_theta_daily = df_carry["position_theta"].sum()
         theta_metrics = {
             "daily": total_theta_daily,
-            "weekly": total_theta_daily * 7,
-            "monthly": total_theta_daily * 30,
-            "annual": total_theta_daily * 365,
+            "weekly": total_theta_daily * const.DAYS_PER_WEEK,
+            "monthly": total_theta_daily * const.CALENDAR_DAYS_PER_MONTH,
+            "annual": total_theta_daily * const.DAYS_PER_YEAR,
         }
 
         return df_carry, theta_metrics
@@ -1317,7 +1320,7 @@ class OptionCharts:
                 / bucket_summary["position_value"]
             )
             * 100
-            * 365
+            * const.DAYS_PER_YEAR
         )
 
         bucket_summary = bucket_summary.set_index("maturity_bucket")

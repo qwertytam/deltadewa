@@ -46,6 +46,7 @@ from deltadewa.config import (
 )
 from deltadewa.utils import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
+from deltadewa import constants as const
 
 if TYPE_CHECKING:
     # Import only for type annotations
@@ -217,15 +218,15 @@ class GlobalAssumptions:
         # Time horizon selector
         time_horizon_options = [
             ("Today (T+0)", 0),
-            ("1 Week (T+7)", 7),
-            ("1 Month (T+30)", 30),
-            ("2 Months (T+60)", 60),
-            ("3 Months (T+90)", 90),
-            ("6 Months (T+180)", 180),
-            ("9 Months (T+270)", 270),
-            ("1 Year (T+365)", 365),
-            ("1.5 Years (T+545)", 545),
-            ("2 Years (T+730)", 730),
+            ("1 Week (T+7)", const.DAYS_PER_WEEK),
+            ("1 Month (T+30)", const.CALENDAR_DAYS_PER_MONTH),
+            ("2 Months (T+60)", const.CALENDAR_DAYS_PER_MONTH * 2),
+            ("3 Months (T+90)", const.CALENDAR_DAYS_PER_MONTH * 3),
+            ("6 Months (T+180)", const.CALENDAR_DAYS_PER_MONTH * 6),
+            ("9 Months (T+270)", const.CALENDAR_DAYS_PER_MONTH * 9),
+            ("1 Year (T+365)", const.DAYS_PER_YEAR),
+            ("1.5 Years (T+545)", int(const.DAYS_PER_YEAR * 1.5)),
+            ("2 Years (T+730)", const.DAYS_PER_YEAR * 2),
             ("Custom", -1),
         ]
 
@@ -540,8 +541,8 @@ class NetHedgeSummary:
         ):
             format_as_currency = True
 
-        if abs(value) < 0.01 and name != "Value":
-            value_str = "~0"
+        if abs(value) < 0.01:
+            value_str = "~0" if not format_as_currency else "~$0"
         elif abs(value) >= boundary_1:
             value_str = (
                 f"${value/boundary_1:,.2f}M"
@@ -637,8 +638,9 @@ class NetHedgeSummary:
     def _create_widget(self):
         """Create the KPI display widget."""
         self.value_metrics_html = widgets.HTML(value="")
-        self.core_metrics_r1_html = widgets.HTML(value="")
-        self.core_metrics_r2_html = widgets.HTML(value="")
+        self.health_indicators_r1_html = widgets.HTML(value="")
+        self.health_indicators_r2_html = widgets.HTML(value="")
+        self.diagnostics_html = widgets.HTML(value="")
         self.vol_metrics_html = widgets.HTML(value="")
         self.crash_indicators_html = widgets.HTML(value="")
         self.prob_stats_html = widgets.HTML(value="")
@@ -651,15 +653,27 @@ class NetHedgeSummary:
                     '<h3 style="margin:0;">Hedge Summary</h3>'
                     "</div>"
                 ),
-                self.value_metrics_html,
-                self.core_metrics_r1_html,
-                self.core_metrics_r2_html,
-                self.vol_metrics_html,
                 widgets.HTML(
-                    "<h4 style='margin:10px 10px 5px 10px;'>Crash Convexity "
-                    + "Indicators: P&L at Expiry</h4>"
+                    "<h4 style='margin:10px 10px 5px 10px;'>Portfolio Value</h4>"
                 ),
-                self.crash_indicators_html,
+                self.value_metrics_html,
+                widgets.HTML(
+                    "<h4 style='margin:10px 10px 5px 10px;'>Health Indicators</h4>"
+                ),
+                self.health_indicators_r1_html,
+                self.health_indicators_r2_html,
+                widgets.Accordion(
+                    children=[
+                        widgets.VBox(
+                            [
+                                self.diagnostics_html,
+                                self.vol_metrics_html,
+                                self.crash_indicators_html,
+                            ]
+                        ),
+                    ],
+                    titles=("Diagnostics (Expandable)",),
+                ),
             ],
             layout=widgets.Layout(border="2px solid #0F4761", margin="10px 0"),
         )
@@ -684,25 +698,57 @@ class NetHedgeSummary:
             f'<div style="padding:10px;">{value_html}</div>'
         )
 
-        # Core Greeks
-        core_r1_html = (
-            self._format_greek("Total Delta", stats["total_delta"])
-            + self._format_greek("Net Delta", stats["net_delta"])
-            + self._format_greek("Delta Adj.", stats["delta_adjustment"])
-            + self._format_greek("Hedge Ratio", stats["hedge_ratio"])
+        # Crash convexity
+        current_spot = self.portfolio.spot_price
+        pnl_0 = self.portfolio.calculate_pnl_at_expiry(
+            current_spot * 1.00, include_underlying=True
         )
-        self.core_metrics_r1_html.value = (
-            f'<div style="padding:10px;">{core_r1_html}</div>'
+        pnl_10 = self.portfolio.calculate_pnl_at_expiry(
+            current_spot * 0.90, include_underlying=True
+        )
+        pnl_20 = self.portfolio.calculate_pnl_at_expiry(
+            current_spot * 0.80, include_underlying=True
+        )
+        pnl_30 = self.portfolio.calculate_pnl_at_expiry(
+            current_spot * 0.70, include_underlying=True
         )
 
-        core_r2_html = (
-            self._format_greek("Theta (Daily)", stats["total_theta"])
+        crash_html = (
+            self._format_greek("Current Spot", pnl_0)
+            + self._format_greek("Spot -10%", pnl_10)
+            + self._format_greek("Spot -20%", pnl_20)
+            + self._format_greek("Spot -30%", pnl_30)
+        )
+        self.crash_indicators_html.value = (
+            f'<div style="padding:10px;">{crash_html}</div>'
+        )
+
+        # Core Greeks
+        health_indicators_r1_html = (
+            self._format_greek("Total Delta", stats["total_delta"])
+            + self._format_greek("Net Delta", stats["net_delta"])
+            + self._format_greek("Theta (Daily)", stats["total_theta"])
+        )
+        self.health_indicators_r1_html.value = (
+            f'<div style="padding:10px;">{health_indicators_r1_html}</div>'
+        )
+
+        health_indicators_r2_html = (
+            self._format_greek("Vega", stats["total_vega"])
             + self._format_greek("Gamma", stats["total_gamma"])
-            + self._format_greek("Vega", stats["total_vega"])
+            + self._format_greek("P&L @ -20%", pnl_20)
+        )
+        self.health_indicators_r2_html.value = (
+            f'<div style="padding:10px;">{health_indicators_r2_html}</div>'
+        )
+
+        diagnostics_html = (
+            self._format_greek("Hedge Ratio", stats["hedge_ratio"])
+            + self._format_greek("Delta Adj.", stats["delta_adjustment"])
             + self._format_greek("Rho", stats["total_rho"])
         )
-        self.core_metrics_r2_html.value = (
-            f'<div style="padding:10px;">{core_r2_html}</div>'
+        self.diagnostics_html.value = (
+            f'<div style="padding:10px;">{diagnostics_html}</div>'
         )
 
         vol_html = (
@@ -723,31 +769,6 @@ class NetHedgeSummary:
         )
         self.vol_metrics_html.value = (
             f'<div style="padding:10px;">{vol_html}</div>'
-        )
-
-        # Crash convexity
-        current_spot = self.portfolio.spot_price
-        pnl_0 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 1.00, include_underlying=True
-        )
-        pnl_10 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.90, include_underlying=True
-        )
-        pnl_20 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.80, include_underlying=True
-        )
-        pnl_30 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.70, include_underlying=True
-        )
-
-        crash_html = (
-            self._format_crash_indicator(-0, pnl_0)
-            + self._format_crash_indicator(-10, pnl_10)
-            + self._format_crash_indicator(-20, pnl_20)
-            + self._format_crash_indicator(-30, pnl_30)
-        )
-        self.crash_indicators_html.value = (
-            f'<div style="padding:10px;">{crash_html}</div>'
         )
 
         # Probabilistic stats (expandable)

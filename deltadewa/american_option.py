@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 import QuantLib as ql  # type: ignore
+from deltadewa import constants as const
 
 
 class AmericanOption:
@@ -230,7 +231,7 @@ class AmericanOption:
         try:
             # QuantLib returns annualized theta, convert to per calendar day
             # Using 365 days (not 252) per industry standard
-            return self.option.theta() / 365.0
+            return self.option.theta() / const.DAYS_PER_YEAR
         except RuntimeError:
             # If theta not available, compute numerically
             # Move evaluation date forward by 1 day

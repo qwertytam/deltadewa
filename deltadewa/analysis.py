@@ -24,6 +24,11 @@ import numbers
 import pandas as pd
 import numpy as np
 from deltadewa.american_option import AmericanOption
+from deltadewa import constants as const
+from deltadewa.utils import (
+    apply_proportional_volatility_shift,
+    restore_volatilities,
+)
 
 
 class PortfolioAnalyzer:
@@ -193,15 +198,16 @@ class PortfolioAnalyzer:
                 / bucket_summary["position_value"]
             )
             * 100
-            * 365
+            * const.DAYS_PER_YEAR
         )
         carry_efficiency = bucket_summary["carry_efficiency_pct"].to_dict()
 
         return {
             "total_theta_daily": total_theta_daily,
-            "total_theta_weekly": total_theta_daily * 7,
-            "total_theta_monthly": total_theta_daily * 30,
-            "total_theta_annual": total_theta_daily * 365,
+            "total_theta_weekly": total_theta_daily * const.DAYS_PER_WEEK,
+            "total_theta_monthly": total_theta_daily
+            * const.CALENDAR_DAYS_PER_MONTH,
+            "total_theta_annual": total_theta_daily * const.DAYS_PER_YEAR,
             "theta_by_bucket": theta_by_bucket,
             "theta_by_type": theta_by_type,
             "covered_call_theta": covered_call_theta,
@@ -258,9 +264,12 @@ class PortfolioAnalyzer:
                     "category": "Income",
                     "source": "Short Calls",
                     "daily": carry_metrics["covered_call_theta"],
-                    "weekly": carry_metrics["covered_call_theta"] * 7,
-                    "monthly": carry_metrics["covered_call_theta"] * 30,
-                    "annual": carry_metrics["covered_call_theta"] * 365,
+                    "weekly": carry_metrics["covered_call_theta"]
+                    * const.DAYS_PER_WEEK,
+                    "monthly": carry_metrics["covered_call_theta"]
+                    * const.CALENDAR_DAYS_PER_MONTH,
+                    "annual": carry_metrics["covered_call_theta"]
+                    * const.DAYS_PER_YEAR,
                 }
             )
 
@@ -270,9 +279,12 @@ class PortfolioAnalyzer:
                     "category": "Income",
                     "source": "Short Puts",
                     "daily": carry_metrics["short_put_theta"],
-                    "weekly": carry_metrics["short_put_theta"] * 7,
-                    "monthly": carry_metrics["short_put_theta"] * 30,
-                    "annual": carry_metrics["short_put_theta"] * 365,
+                    "weekly": carry_metrics["short_put_theta"]
+                    * const.DAYS_PER_WEEK,
+                    "monthly": carry_metrics["short_put_theta"]
+                    * const.CALENDAR_DAYS_PER_MONTH,
+                    "annual": carry_metrics["short_put_theta"]
+                    * const.DAYS_PER_YEAR,
                 }
             )
 
@@ -283,9 +295,12 @@ class PortfolioAnalyzer:
                     "category": "Cost",
                     "source": "Long Puts (Hedge)",
                     "daily": carry_metrics["hedge_put_theta"],
-                    "weekly": carry_metrics["hedge_put_theta"] * 7,
-                    "monthly": carry_metrics["hedge_put_theta"] * 30,
-                    "annual": carry_metrics["hedge_put_theta"] * 365,
+                    "weekly": carry_metrics["hedge_put_theta"]
+                    * const.DAYS_PER_WEEK,
+                    "monthly": carry_metrics["hedge_put_theta"]
+                    * const.CALENDAR_DAYS_PER_MONTH,
+                    "annual": carry_metrics["hedge_put_theta"]
+                    * const.DAYS_PER_YEAR,
                 }
             )
 
@@ -295,9 +310,12 @@ class PortfolioAnalyzer:
                     "category": "Cost",
                     "source": "Long Calls",
                     "daily": carry_metrics["long_call_theta"],
-                    "weekly": carry_metrics["long_call_theta"] * 7,
-                    "monthly": carry_metrics["long_call_theta"] * 30,
-                    "annual": carry_metrics["long_call_theta"] * 365,
+                    "weekly": carry_metrics["long_call_theta"]
+                    * const.DAYS_PER_WEEK,
+                    "monthly": carry_metrics["long_call_theta"]
+                    * const.CALENDAR_DAYS_PER_MONTH,
+                    "annual": carry_metrics["long_call_theta"]
+                    * const.DAYS_PER_YEAR,
                 }
             )
 
@@ -800,10 +818,6 @@ class PortfolioAnalyzer:
         Returns:
             DataFrame with columns: spot_price, volatility, value
         """
-        from deltadewa.utils import (
-            apply_proportional_volatility_shift,
-            restore_volatilities,
-        )
 
         results = []
         original_spot = self.portfolio.spot_price
@@ -833,7 +847,7 @@ class PortfolioAnalyzer:
             if all_at_expiry:
                 # Use vectorized calculation for maximum speed
                 # Create meshgrid of spot and vol scenarios
-                spot_grid, vol_grid = np.meshgrid(spot_scenarios, vol_scenarios)
+                # spot_grid, vol_grid = np.meshgrid(spot_scenarios, vol_scenarios)
 
                 # Calculate PnL using vectorized method (vol doesn't affect intrinsic value)
                 pnl_values = self._calculate_pnl_at_expiry_vectorized(

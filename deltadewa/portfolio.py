@@ -5,11 +5,13 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import numpy as np
+from deltadewa import constants as const
 from .utils import (
     calculate_portfolio_avg_volatility,
     apply_proportional_volatility_shift,
     restore_volatilities,
 )
+
 from .american_option import AmericanOption
 
 
@@ -1122,7 +1124,7 @@ class OptionPortfolio:
                     1, (min_maturity - self.valuation_date).days
                 )
 
-        time_to_expiry = days_to_expiry / 365.0
+        time_to_expiry = days_to_expiry / const.DAYS_PER_YEAR
 
         if method == "monte_carlo":
             # Monte Carlo simulation
@@ -1429,7 +1431,9 @@ def create_demo_portfolio() -> OptionPortfolio:
     Returns:
         OptionPortfolio: portfolio with a couple of example positions
     """
-    p = OptionPortfolio(underlying_quantity=0, spot_price=100.0, volatility=0.25)
+    p = OptionPortfolio(
+        underlying_quantity=0, spot_price=100.0, volatility=0.25
+    )
 
     today = datetime.now()
     # Short-dated call
