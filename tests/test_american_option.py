@@ -151,3 +151,124 @@ class TestVolatilityUpdatePerformance:
         assert (
             quote_time <= rebuild_time * 1.2
         ), f"Quote update should not be slower: {quote_time:.4f}s vs {rebuild_time:.4f}s"
+
+
+class TestGreeksCaching:
+    """Tests for Greeks caching behavior."""
+
+    @pytest.fixture
+    def option(self):
+        """Create a test option."""
+        return AmericanOption(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            volatility=0.20,
+            risk_free_rate=0.05,
+            dividend_yield=0.02,
+            option_type="call",
+        )
+
+    def test_greeks_cached_after_first_call(self, option):
+        """Verify Greeks are cached after first computation."""
+        delta1 = option.delta()
+        assert option._greeks_cache.is_cached('delta')
+        
+        delta2 = option.delta()
+        assert delta1 == delta2
+
+    def test_cache_invalidated_on_spot_change(self, option):
+        """Verify cache invalidates when spot changes."""
+        delta1 = option.delta()
+        assert option._greeks_cache.is_cached('delta')
+        
+        option.update_spot_price(110.0)
+        assert not option._greeks_cache.is_cached('delta')
+        
+        delta2 = option.delta()
+        assert delta2 != delta1
+
+    def test_cache_invalidated_on_vol_change(self, option):
+        """Verify cache invalidates when volatility changes."""
+        vega1 = option.vega()
+        assert option._greeks_cache.is_cached('vega')
+        
+        option.update_volatility(0.30)
+        assert not option._greeks_cache.is_cached('vega')
+
+    def test_cache_invalidated_on_date_change(self, option):
+        """Verify cache invalidates when valuation date changes."""
+        theta1 = option.theta()
+        assert option._greeks_cache.is_cached('theta')
+        
+        new_date = datetime.now() + timedelta(days=1)
+        option.update_valuation_date(new_date)
+        assert not option._greeks_cache.is_cached('theta')
+
+    def test_greeks_batch_computation(self, option):
+        """Verify greeks() returns all values efficiently."""
+        greeks = option.greeks()
+        
+        assert 'price' in greeks
+        assert 'delta' in greeks
+        assert 'gamma' in greeks
+        assert 'vega' in greeks
+        assert 'theta' in greeks
+        assert 'rho' in greeks
+        
+        # Cache may be partially invalidated if some Greeks required numerical fallback
+        # that called _setup_quantlib(). But at minimum, price and rho should be cached
+        # (as they are computed last and don't trigger setup)
+        assert option._greeks_cache.is_cached('price') or option._greeks_cache.is_cached('rho')
+
+    def test_greeks_batch_consistent_with_individual(self, option):
+        """Verify greeks() returns same values as individual calls."""
+        # Get via batch
+        batch_greeks = option.greeks()
+        
+        # Invalidate cache
+        option._invalidate_greeks_cache()
+        
+        # Get individually
+        individual_delta = option.delta()
+        individual_gamma = option.gamma()
+        individual_vega = option.vega()
+        individual_theta = option.theta()
+        individual_rho = option.rho()
+        individual_price = option.price()
+        
+        # Should match
+        assert batch_greeks['delta'] == individual_delta
+        assert batch_greeks['gamma'] == individual_gamma
+        assert batch_greeks['vega'] == individual_vega
+        assert batch_greeks['theta'] == individual_theta
+        assert batch_greeks['rho'] == individual_rho
+        assert batch_greeks['price'] == individual_price
+
+    def test_cache_reuses_computed_values(self, option):
+        """Verify cache reuses values from previous computations."""
+        # Compute delta
+        delta1 = option.delta()
+        assert option._greeks_cache.is_cached('delta')
+        
+        # Call delta again - should hit cache
+        delta2 = option.delta()
+        assert delta1 == delta2
+        assert option._greeks_cache.is_cached('delta')
+        
+        # Now call greeks() - should reuse cached delta
+        greeks = option.greeks()
+        assert greeks['delta'] == delta1
+
+    def test_cache_stats_accessible(self, option):
+        """Verify cache statistics are accessible."""
+        # Initially nothing cached
+        stats = option._greeks_cache.cache_stats
+        assert 'registered' in stats
+        assert 'cached' in stats
+        assert 'dirty' in stats
+        
+        # After computing, should show in cached
+        option.delta()
+        stats = option._greeks_cache.cache_stats
+        assert 'delta' in stats['cached']

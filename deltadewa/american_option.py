@@ -5,6 +5,7 @@ from typing import Optional
 
 import QuantLib as ql  # type: ignore
 from deltadewa import constants as const
+from deltadewa.greeks_cache import GreeksCache
 
 
 class AmericanOption:
@@ -60,8 +61,14 @@ class AmericanOption:
         self.option_type = option_type.lower()
         self.valuation_date = valuation_date or datetime.now()
 
+        # Initialize Greeks cache
+        self._greeks_cache = GreeksCache()
+
         # Set up QuantLib objects
         self._setup_quantlib()
+
+        # Register Greek computation functions
+        self._register_greeks()
 
     def _is_expired_or_at_expiry(self) -> bool:
         """Check if option is at or past expiry."""
@@ -145,16 +152,36 @@ class AmericanOption:
                 self.bsm_process, self._TIME_STEPS, self._PRICE_STEPS
             )
         )
+        
+        # If cache exists and Greeks are not yet registered, register them
+        # Note: We don't re-register if already registered to avoid invalidating cache
+        if hasattr(self, '_greeks_cache') and not self._greeks_cache._compute_funcs:
+            self._register_greeks()
+        # If cache exists and Greeks are already registered, just invalidate
+        elif hasattr(self, '_greeks_cache') and self._greeks_cache._compute_funcs:
+            self._invalidate_greeks_cache()
 
-    def price(self) -> float:
-        """Calculate the option price."""
-        # At or past expiry, return intrinsic value
+    def _register_greeks(self) -> None:
+        """Register Greek computation functions with the cache."""
+        self._greeks_cache.register('price', self._compute_price)
+        self._greeks_cache.register('delta', self._compute_delta)
+        self._greeks_cache.register('gamma', self._compute_gamma)
+        self._greeks_cache.register('vega', self._compute_vega)
+        self._greeks_cache.register('theta', self._compute_theta)
+        self._greeks_cache.register('rho', self._compute_rho)
+
+    def _invalidate_greeks_cache(self) -> None:
+        """Invalidate all cached Greeks."""
+        self._greeks_cache.invalidate_all()
+
+    def _compute_price(self) -> float:
+        """Internal method to compute option price."""
         if self._is_expired_or_at_expiry():
             return self.intrinsic_value()
         return self.option.NPV()
 
-    def delta(self) -> float:
-        """Calculate Delta (sensitivity to underlying price)."""
+    def _compute_delta(self) -> float:
+        """Internal method to compute delta."""
         # At or past expiry, delta is 1.0 if in-the-money, 0.0 otherwise
         if self._is_expired_or_at_expiry():
             if self.option_type == "call":
@@ -169,15 +196,16 @@ class AmericanOption:
             original_spot = self.spot_price
             up_spot = max(original_spot + h, 1e-8)
             down_spot = max(original_spot - h, 1e-8)
-            self.update_spot_price(up_spot)
+            # Directly set quote value without invalidating cache
+            self.spot_quote.setValue(up_spot)
             price_up = self.option.NPV()
-            self.update_spot_price(down_spot)
+            self.spot_quote.setValue(down_spot)
             price_down = self.option.NPV()
-            self.update_spot_price(original_spot)
+            self.spot_quote.setValue(original_spot)
             return (price_up - price_down) / (up_spot - down_spot)
 
-    def gamma(self) -> float:
-        """Calculate Gamma (second derivative with respect to underlying price)."""
+    def _compute_gamma(self) -> float:
+        """Internal method to compute gamma."""
         # At or past expiry, gamma is zero (no curvature)
         if self._is_expired_or_at_expiry():
             return 0.0
@@ -189,15 +217,16 @@ class AmericanOption:
             original_spot = self.spot_price
             up_spot = max(original_spot + h, 1e-8)
             down_spot = max(original_spot - h, 1e-8)
-            self.update_spot_price(up_spot)
-            delta_up = self.delta()
-            self.update_spot_price(down_spot)
-            delta_down = self.delta()
-            self.update_spot_price(original_spot)
+            # Directly set quote value without invalidating cache
+            self.spot_quote.setValue(up_spot)
+            delta_up = self._compute_delta()
+            self.spot_quote.setValue(down_spot)
+            delta_down = self._compute_delta()
+            self.spot_quote.setValue(original_spot)
             return (delta_up - delta_down) / (up_spot - down_spot)
 
-    def vega(self) -> float:
-        """Calculate Vega (sensitivity to volatility)."""
+    def _compute_vega(self) -> float:
+        """Internal method to compute vega."""
         # At or past expiry, vega is zero (no time value)
         if self._is_expired_or_at_expiry():
             return 0.0
@@ -207,18 +236,19 @@ class AmericanOption:
             # If vega not available, compute numerically
             h = self._VOL_BUMP
             original_vol = self.volatility
-            self.update_volatility(original_vol + h)
+            # Directly set quote value without invalidating cache
+            self.vol_quote.setValue(original_vol + h)
             price_up = self.option.NPV()
-            self.update_volatility(original_vol - h)
+            self.vol_quote.setValue(original_vol - h)
             price_down = self.option.NPV()
-            self.update_volatility(original_vol)
+            self.vol_quote.setValue(original_vol)
             return (
                 price_up - price_down
             ) / 2.0  # Already in terms of 1% change
 
-    def theta(self) -> float:
+    def _compute_theta(self) -> float:
         """
-        Calculate Theta (time decay per day).
+        Internal method to compute theta (time decay per day).
 
         Returns theta in dollars per calendar day. Note that the industry
         standard convention uses 365 calendar days for theta calculations,
@@ -250,8 +280,8 @@ class AmericanOption:
             price_today = self.option.NPV()
             return price_tomorrow - price_today
 
-    def rho(self) -> float:
-        """Calculate Rho (sensitivity to interest rate)."""
+    def _compute_rho(self) -> float:
+        """Internal method to compute rho."""
         # At or past expiry, rho is zero (no time value)
         if self._is_expired_or_at_expiry():
             return 0.0
@@ -273,16 +303,48 @@ class AmericanOption:
                 price_up - price_down
             ) / 2.0  # Already in terms of 1% change
 
+    def price(self) -> float:
+        """Calculate the option price (cached)."""
+        return self._greeks_cache.get('price')
+
+    def delta(self) -> float:
+        """Calculate Delta (sensitivity to underlying price) (cached)."""
+        return self._greeks_cache.get('delta')
+
+    def gamma(self) -> float:
+        """Calculate Gamma (second derivative with respect to underlying price) (cached)."""
+        return self._greeks_cache.get('gamma')
+
+    def vega(self) -> float:
+        """Calculate Vega (sensitivity to volatility) (cached)."""
+        return self._greeks_cache.get('vega')
+
+    def theta(self) -> float:
+        """
+        Calculate Theta (time decay per day) (cached).
+
+        Returns theta in dollars per calendar day. Note that the industry
+        standard convention uses 365 calendar days for theta calculations,
+        not 252 trading days. This matches:
+        - Black-Scholes and Bjerksund-Stensland model assumptions
+        - VIX and exchange conventions
+        - Volatility calculations which use calendar time
+
+        The QuantLib theta() method returns annualized theta, so we divide
+        by 365 to get the daily rate.
+
+        Returns:
+            float: Theta value ($ per calendar day)
+        """
+        return self._greeks_cache.get('theta')
+
+    def rho(self) -> float:
+        """Calculate Rho (sensitivity to interest rate) (cached)."""
+        return self._greeks_cache.get('rho')
+
     def greeks(self) -> dict:
-        """Calculate all Greeks."""
-        return {
-            "price": self.price(),
-            "delta": self.delta(),
-            "gamma": self.gamma(),
-            "vega": self.vega(),
-            "theta": self.theta(),
-            "rho": self.rho(),
-        }
+        """Calculate all Greeks (batch computation for efficiency)."""
+        return self._greeks_cache.compute_all()
 
     def intrinsic_value(self) -> float:
         """Calculate intrinsic value of the option."""
@@ -301,6 +363,7 @@ class AmericanOption:
         safe_spot = max(new_spot_price, 1e-8)
         self.spot_price = safe_spot
         self.spot_quote.setValue(safe_spot)
+        self._invalidate_greeks_cache()
 
     def update_volatility(self, new_volatility: float):
         """Update the volatility and recalculate.
@@ -318,6 +381,7 @@ class AmericanOption:
         else:
             # Fallback: full rebuild if quote doesn't exist (shouldn't happen)
             self._setup_quantlib()
+        self._invalidate_greeks_cache()
 
     def update_valuation_date(self, new_valuation_date: datetime):
         """Update the valuation date and recalculate."""
@@ -334,6 +398,7 @@ class AmericanOption:
 
         try:
             self._setup_quantlib()
+            self._invalidate_greeks_cache()
         except RuntimeError:  # pylint: disable=try-except-raise
             # If QuantLib raises due to date issues or other setup problems,
             # fall back to a safe state where Greeks/price may be computed
