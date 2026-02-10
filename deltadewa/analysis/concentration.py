@@ -2,7 +2,6 @@
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Any
 import numbers
-import pandas as pd
 import numpy as np
 
 if TYPE_CHECKING:

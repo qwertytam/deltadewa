@@ -2,6 +2,14 @@
 
 from typing import TYPE_CHECKING
 
+# Import mixins after base class definition to avoid circular imports
+from deltadewa.analysis.maturity import MaturityMixin
+from deltadewa.analysis.carry import CarryMixin
+from deltadewa.analysis.concentration import ConcentrationMixin
+from deltadewa.analysis.hedge import HedgeMixin
+from deltadewa.analysis.scenarios import ScenariosMixin
+from deltadewa.analysis.insights import InsightsMixin
+
 if TYPE_CHECKING:
     pass
 
@@ -23,15 +31,6 @@ class PortfolioAnalyzerBase:
             portfolio: OptionPortfolio instance to analyze
         """
         self.portfolio = portfolio
-
-
-# Compose the full PortfolioAnalyzer with all mixins
-from deltadewa.analysis.maturity import MaturityMixin
-from deltadewa.analysis.carry import CarryMixin
-from deltadewa.analysis.concentration import ConcentrationMixin
-from deltadewa.analysis.hedge import HedgeMixin
-from deltadewa.analysis.scenarios import ScenariosMixin
-from deltadewa.analysis.insights import InsightsMixin
 
 
 class PortfolioAnalyzer(

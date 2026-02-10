@@ -54,7 +54,7 @@ class TestCarryMixin:
         
         # Short call should have positive theta
         assert metrics['covered_call_theta'] > 0
-        assert metrics['is_positive_carry'] is True
+        assert metrics['is_positive_carry'] == True  # Use == instead of is for numpy boolean
 
     def test_empty_carry_metrics(self):
         """Test _empty_carry_metrics returns correct structure."""
