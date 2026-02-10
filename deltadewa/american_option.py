@@ -12,7 +12,7 @@ class AmericanOption:
     American option pricing using the Bjerksund-Stensland approximation model.
 
     This class provides pricing and Greeks calculation for American options.
-    
+
     Performance Note:
         Spot price and volatility updates use QuantLib's SimpleQuote mechanism
         for efficient repricing without rebuilding the entire calculation
@@ -304,16 +304,16 @@ class AmericanOption:
 
     def update_volatility(self, new_volatility: float):
         """Update the volatility and recalculate.
-        
+
         Uses SimpleQuote for efficient update without rebuilding QuantLib objects.
         This is significantly faster than the previous implementation which
         called _setup_quantlib() on every volatility change.
-        
+
         Args:
             new_volatility: New volatility value (annualized, e.g., 0.25 for 25%)
         """
         self.volatility = new_volatility
-        if hasattr(self, 'vol_quote') and self.vol_quote is not None:
+        if hasattr(self, "vol_quote") and self.vol_quote is not None:
             self.vol_quote.setValue(new_volatility)
         else:
             # Fallback: full rebuild if quote doesn't exist (shouldn't happen)
