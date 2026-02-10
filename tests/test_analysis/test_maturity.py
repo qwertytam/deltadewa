@@ -1,0 +1,83 @@
+"""Tests for deltadewa.analysis.maturity module."""
+
+import pandas as pd
+from datetime import datetime, timedelta
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.analysis import PortfolioAnalyzer
+
+
+class TestMaturityMixin:
+    """Test cases for MaturityMixin."""
+
+    def test_classify_maturity_bucket_weekly(self):
+        """Test classification for weekly options."""
+        assert PortfolioAnalyzer.classify_maturity_bucket(0) == "0-7 days (Weekly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(3) == "0-7 days (Weekly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(7) == "0-7 days (Weekly)"
+
+    def test_classify_maturity_bucket_monthly(self):
+        """Test classification for monthly options."""
+        assert PortfolioAnalyzer.classify_maturity_bucket(8) == "8-30 days (Monthly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(15) == "8-30 days (Monthly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(30) == "8-30 days (Monthly)"
+
+    def test_classify_maturity_bucket_2month(self):
+        """Test classification for 2-month options."""
+        assert PortfolioAnalyzer.classify_maturity_bucket(31) == "31-60 days (2M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(45) == "31-60 days (2M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(60) == "31-60 days (2M)"
+
+    def test_classify_maturity_bucket_3month(self):
+        """Test classification for 3-month options."""
+        assert PortfolioAnalyzer.classify_maturity_bucket(61) == "61-90 days (3M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(75) == "61-90 days (3M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(90) == "61-90 days (3M)"
+
+    def test_classify_maturity_bucket_long_term(self):
+        """Test classification for long-term options."""
+        assert PortfolioAnalyzer.classify_maturity_bucket(91) == "90+ days (Long-term)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(180) == "90+ days (Long-term)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(365) == "90+ days (Long-term)"
+
+    def test_add_maturity_buckets(self):
+        """Test adding maturity bucket columns to DataFrame."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.2,
+        )
+        
+        # Add a position
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=15),
+            quantity=1,
+            option_type="call",
+        )
+        
+        analyzer = PortfolioAnalyzer(portfolio)
+        df = portfolio.to_dataframe()
+        
+        # Add maturity buckets
+        df_with_buckets = analyzer.add_maturity_buckets(df)
+        
+        # Check columns were added
+        assert 'days_to_expiry' in df_with_buckets.columns
+        assert 'maturity_bucket' in df_with_buckets.columns
+        
+        # Check values make sense
+        assert df_with_buckets['days_to_expiry'].iloc[0] >= 14
+        assert df_with_buckets['days_to_expiry'].iloc[0] <= 16
+        assert df_with_buckets['maturity_bucket'].iloc[0] == "8-30 days (Monthly)"
+
+    def test_add_maturity_buckets_empty(self):
+        """Test add_maturity_buckets with empty DataFrame."""
+        portfolio = OptionPortfolio()
+        analyzer = PortfolioAnalyzer(portfolio)
+        
+        df = portfolio.to_dataframe()
+        df_with_buckets = analyzer.add_maturity_buckets(df)
+        
+        assert df_with_buckets.empty
+        assert 'days_to_expiry' in df_with_buckets.columns
+        assert 'maturity_bucket' in df_with_buckets.columns
