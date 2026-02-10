@@ -5,24 +5,33 @@ To hold pallete for colours
 from dataclasses import dataclass
 
 # Single constants
-COLOUR_POSITIVE = "#26a641"
-COLOUR_POSITIVE_FADED = "#ccffcc"
-COLOUR_NEGATIVE = "#d73a49"
-COLOUR_NEGATIVE_FADED = "#ffcccc"
-COLOUR_CALL = "#2196F3"
-COLOUR_PUT = "#F44336"
-AXIS_LINE_COLOUR = "#aaaaaa"
+# Greens - success / positive / good
+TROPICAL_JUICE = "#ccffcc"
+GAMMA_GREEN = "#26a641"
 
-ORANGE = "#f57c00"
-ORANGE_FADED = "#ffffcc"
+# Reds and pinks - error / negative / bad
+SPICY_PASTEL_PINK = "#ffcccc"
+CLAYEY_RED = "#d73a49"
+BLAZE_RED = "#F44336"
 
-WHITE = "#ffffff"
-VERY_LIGHT_GREY = "#f0f0f0"
-MEDIUM_GREY = "#999999"
-BLACK = "#000000"
+# Blues - neutral, informational, or background
+RUSSIAN_BLUE = "#2196F3"
+EARTH_BLUE = "#1f77b4"
+MYSTIC_NAVY = "#2c3e50"
 
-MEDIUM_BACKGROUND = "#1f77b4"
-DARK_BACKGROUND = "#2c3e50"
+# Oranges - warnings / cautions / attention
+VIBRANT_CREAM = "#ffffcc"
+CHILEAN_FIRE = "#f57c00"
+GILDED_LILY = "#f5a623"
+
+# Yellows
+LIGHT_YELLOW = "#ffffe0"
+
+# Neutrals - neutral / background
+FULL_WHITE = "#ffffff"
+OFF_WHITE_GREY = "#f0f0f0"
+SUPER_GREY = "#999999"
+AFRICAN_TURQUOISE = "#000000"
 
 
 # Optional grouped palette
@@ -32,33 +41,31 @@ class Palette:
     To hold colours
     """
 
-    positive: str = COLOUR_POSITIVE
-    positive_faded: str = COLOUR_POSITIVE_FADED
-    negative: str = COLOUR_NEGATIVE
-    negative_faded: str = COLOUR_NEGATIVE_FADED
-    call: str = COLOUR_CALL
-    put: str = COLOUR_PUT
-    axis: str = AXIS_LINE_COLOUR
+    positive: str = GAMMA_GREEN
+    positive_faded: str = TROPICAL_JUICE
+    negative: str = CLAYEY_RED
+    negative_faded: str = SPICY_PASTEL_PINK
+    call: str = RUSSIAN_BLUE
+    put: str = BLAZE_RED
+    axis: str = SUPER_GREY
 
-    orange: str = ORANGE
-    orange_faded: str = ORANGE_FADED
+    orange: str = CHILEAN_FIRE
+    orange_faded: str = VIBRANT_CREAM
 
-    white: str = WHITE
-    very_light_grey: str = VERY_LIGHT_GREY
-    medium_grey: str = MEDIUM_GREY
-    black: str = BLACK
+    yellow: str = GILDED_LILY
+    yellow_faded: str = LIGHT_YELLOW
 
-    medium_background: str = MEDIUM_BACKGROUND
-    dark_background: str = DARK_BACKGROUND
+    white: str = FULL_WHITE
+    very_light_grey: str = OFF_WHITE_GREY
+    medium_grey: str = SUPER_GREY
+    black: str = AFRICAN_TURQUOISE
+
+    medium_background: str = EARTH_BLUE
+    dark_background: str = MYSTIC_NAVY
 
 
 DEFAULT_PALETTE = Palette()
 __all__ = [
-    "COLOUR_POSITIVE",
-    "COLOUR_NEGATIVE",
-    "COLOUR_CALL",
-    "COLOUR_PUT",
-    "AXIS_LINE_COLOUR",
     "Palette",
     "DEFAULT_PALETTE",
 ]

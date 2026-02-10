@@ -2148,7 +2148,7 @@ class GaugeIndicator:
         max_val: float,
         actual: float,
         low_color: str = "#d73a49",  # Red (matches COLOUR_NEGATIVE)
-        mid_color: str = "#f5a623",  # Yellow/Orange
+        mid_color: str = DEFAULT_PALETTE.yellow,  # Yellow/Orange
         high_color: str = "#26a641",  # Green (matches COLOUR_POSITIVE)
         orientation: str = "horizontal",
         width: int = 400,
@@ -2266,7 +2266,7 @@ class GaugeIndicator:
                 f"font-weight: bold; "
                 f"color: #333333; "
                 f"white-space: nowrap; "
-                f"background: rgba(255,255,255,0.9); "
+                f"background: rgba(255,255,255,0.0); "
                 f"padding: 2px 4px; "
                 f"border-radius: 3px; "
                 f"z-index: 2; "
@@ -2293,7 +2293,7 @@ class GaugeIndicator:
                 f"font-weight: bold; "
                 f"color: #333333; "
                 f"white-space: nowrap; "
-                f"background: rgba(255,255,255,0.9); "
+                f"background: rgba(255,255,255,0.0); "
                 f"padding: 2px 4px; "
                 f"border-radius: 3px; "
                 f"z-index: 2; "
@@ -2837,7 +2837,7 @@ class HedgeHealthDashboard:
             mid_val=0.0,  # Neutral at 0
             max_val=2.0,  # Full green at +2% carry income
             actual=net_carry,
-            unit="%",
+            unit="",  # Display % in label, not unit
             invert_colors=False,
             label_format="{:+.2f}%",
         )
@@ -2854,7 +2854,7 @@ class HedgeHealthDashboard:
             mid_val=0.0,  # Neutral at breakeven
             max_val=10.0,  # Full green at +10% gain in crash
             actual=crash_convexity,
-            unit="%",
+            unit="",  # Display % in label, not unit
             invert_colors=False,
             label_format="{:+.1f}%",
         )
@@ -2872,7 +2872,7 @@ class HedgeHealthDashboard:
             mid_val=0.0,  # Neutral at low vega
             max_val=20.0,  # Full color at high positive vega
             actual=vega_suff,
-            unit="%",
+            unit="",  # Display % in label, not unit
             invert_colors=False,  # For vega, we show direction
             label_format="{:+.1f}%",
         )
@@ -2889,7 +2889,7 @@ class HedgeHealthDashboard:
             mid_val=0.0,  # Green at 0% (perfectly hedged)
             max_val=20.0,  # Full red at +20% (over-hedged)
             actual=delta_drift,
-            unit="%",
+            unit="",  # Display % in label, not unit
             invert_colors=False,
             label_format="{:+.1f}%",
         )
@@ -2923,7 +2923,7 @@ class HedgeHealthDashboard:
             mid_val=50,  # Yellow at median
             max_val=75,  # Full red above 75th percentile
             actual=vol_percentile,
-            unit="%ile",
+            unit="th percentile",
             invert_colors=True,  # Low is good (green), high is bad (red)
             label_format="{:.0f}",
         )
@@ -2940,7 +2940,7 @@ class HedgeHealthDashboard:
             mid_val=0,  # Yellow: breakeven
             max_val=100,  # Full green: hedge gained more than carry cost
             actual=max(-200, min(200, hedge_success)),  # Clamp for display
-            unit="%",
+            unit="",  # Display % in label, not unit
             invert_colors=False,
             label_format="{:+.0f}%",
         )
@@ -2964,11 +2964,11 @@ class HedgeHealthDashboard:
         # Determine colors based on invert_colors flag
         if metric.invert_colors:
             low_color = DEFAULT_PALETTE.positive  # Green for low
-            mid_color = "#f5a623"  # Yellow
+            mid_color = DEFAULT_PALETTE.yellow  # Yellow
             high_color = DEFAULT_PALETTE.negative  # Red for high
         else:
             low_color = DEFAULT_PALETTE.negative  # Red for low
-            mid_color = "#f5a623"  # Yellow
+            mid_color = DEFAULT_PALETTE.yellow  # Yellow
             high_color = DEFAULT_PALETTE.positive  # Green for high
 
         gauge = GaugeIndicator(
@@ -3016,7 +3016,7 @@ class HedgeHealthDashboard:
                 status_color = DEFAULT_PALETTE.negative
                 status = "Alert"
             else:
-                status_color = "#f5a623"
+                status_color = DEFAULT_PALETTE.yellow
                 status = "Watch"
         else:
             if metric.actual >= metric.max_val:
@@ -3026,13 +3026,19 @@ class HedgeHealthDashboard:
                 status_color = DEFAULT_PALETTE.negative
                 status = "Alert"
             else:
-                status_color = "#f5a623"
+                status_color = DEFAULT_PALETTE.yellow
                 status = "Watch"
 
         # Format actual value for display
         actual_display = metric.label_format.format(metric.actual) + metric.unit
 
-        card_html = f"""
+        # Assemble the html for the card
+        show_description = True
+
+        # We show the actual value on the gauge marker, so no need to repeat it
+        show_separate_metric_value = False
+
+        card_background_html = f"""
         <div style="
             background: {DEFAULT_PALETTE.very_light_grey};
             border-radius: 8px;
@@ -3042,24 +3048,42 @@ class HedgeHealthDashboard:
             max-width: 360px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         ">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-weight: bold; font-size: 13px; color: #333;">{metric.name}</span>
-                <span style="
-                    background: {status_color};
-                    color: white;
-                    padding: 2px 8px;
-                    border-radius: 10px;
-                    font-size: 11px;
-                    font-weight: bold;
-                ">{status}</span>
+        """
+
+        metric_name_html = f"""
+        <span style="font-weight: bold; font-size: 13px; color: #333;">
+        {metric.name}</span>
+        """
+
+        metric_status_html = f"""
+        <span style="background: {status_color}; color: white;
+        padding: 2px 8px; border-radius: 10px; font-size: 11px;
+        font-weight: bold;">{status}</span>
+        """
+
+        metric_display_html = f"""
+        <div style="font-size: 22px; font-weight: bold; color: #333;
+        margin-bottom: 8px;">
+        {actual_display}
+        </div>
+        """
+
+        metric_description_html = f"""
+        <div style="font-size: 10px; color: #666; margin-top: 8px;">
+        {metric.description}
+        </div>
+        """
+
+        card_html = f"""
+        {card_background_html}
+            <div style="display: flex; justify-content: space-between;
+            align-items: center; margin-bottom: 8px;">
+                {metric_name_html}
+                {metric_status_html}
             </div>
-            <div style="font-size: 22px; font-weight: bold; color: #333; margin-bottom: 8px;">
-                {actual_display}
-            </div>
+            {metric_display_html if show_separate_metric_value else ""}
             {gauge_html}
-            <div style="font-size: 10px; color: #666; margin-top: 8px;">
-                {metric.description}
-            </div>
+            {metric_description_html if show_description else ""}
         </div>
         """
         return card_html
@@ -3094,7 +3118,9 @@ class HedgeHealthDashboard:
             DEFAULT_PALETTE.positive
             if overall_score >= 70
             else (
-                "#f5a623" if overall_score >= 40 else DEFAULT_PALETTE.negative
+                DEFAULT_PALETTE.yellow
+                if overall_score >= 40
+                else DEFAULT_PALETTE.negative
             )
         )
 
@@ -3242,7 +3268,6 @@ class HedgeHealthDashboard:
                 "description": metric.description,
             }
 
-        # overall_score is a float, so the summary container is typed as Any values
         summary["overall_score"] = self._calculate_overall_health_score()
 
         return summary
