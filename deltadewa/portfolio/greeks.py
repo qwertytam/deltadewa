@@ -77,3 +77,44 @@ class GreeksMixin:
             Number of shares to buy/sell to achieve delta neutrality
         """
         return -self.net_delta()
+
+    def all_greeks(self: "OptionPortfolioBase") -> dict:
+        """
+        Calculate all portfolio Greeks in a single efficient pass.
+        
+        More efficient than calling individual methods when you need all Greeks.
+        Uses the cached greeks() method on each option for batch computation.
+        
+        Returns:
+            Dictionary containing:
+            - total_delta: Portfolio delta from options only
+            - total_gamma: Portfolio gamma
+            - total_vega: Portfolio vega
+            - total_theta: Portfolio theta (per day)
+            - total_rho: Portfolio rho
+            - net_delta: Total delta exposure (options + underlying)
+        """
+        total_delta = 0.0
+        total_gamma = 0.0
+        total_vega = 0.0
+        total_theta = 0.0
+        total_rho = 0.0
+        
+        for pos in self.positions:
+            greeks = pos.option.greeks()  # Uses cache for efficiency
+            multiplier = pos.quantity * pos.contract_size
+            
+            total_delta += greeks['delta'] * multiplier
+            total_gamma += greeks['gamma'] * multiplier
+            total_vega += greeks['vega'] * multiplier
+            total_theta += greeks['theta'] * multiplier
+            total_rho += greeks['rho'] * multiplier
+        
+        return {
+            'total_delta': total_delta,
+            'total_gamma': total_gamma,
+            'total_vega': total_vega,
+            'total_theta': total_theta,
+            'total_rho': total_rho,
+            'net_delta': total_delta + self.underlying_quantity,
+        }

@@ -60,8 +60,11 @@ class OptionPosition:
         return self.option.rho() * self.quantity * self.contract_size
 
     def to_dict(self) -> dict:
-        """Convert position to dictionary."""
+        """Convert position to dictionary (optimized with batch Greek computation)."""
+        # Use batch computation - gets all Greeks in one efficient call
         greeks = self.option.greeks()
+        multiplier = self.quantity * self.contract_size
+        
         return {
             "symbol": self.symbol,
             "type": self.option.option_type,
@@ -69,17 +72,17 @@ class OptionPosition:
             "maturity": self.option.maturity_date,
             "quantity": self.quantity,
             "price": greeks["price"],
-            "position_value": self.position_value(),
+            "position_value": greeks["price"] * multiplier,
             "delta": greeks["delta"],
-            "position_delta": self.position_delta(),
+            "position_delta": greeks["delta"] * multiplier,
             "gamma": greeks["gamma"],
-            "position_gamma": self.position_gamma(),
+            "position_gamma": greeks["gamma"] * multiplier,
             "vega": greeks["vega"],
-            "position_vega": self.position_vega(),
+            "position_vega": greeks["vega"] * multiplier,
             "theta": greeks["theta"],
-            "position_theta": self.position_theta(),
+            "position_theta": greeks["theta"] * multiplier,
             "rho": greeks["rho"],
-            "position_rho": self.position_rho(),
+            "position_rho": greeks["rho"] * multiplier,
             "contract_size": self.contract_size,
             "volatility": self.option.volatility,
             "custom_volatility": self.custom_volatility,

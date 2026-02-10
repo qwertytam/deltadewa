@@ -167,23 +167,40 @@ class OptionPortfolioBase:
             "underlying_quantity": self.underlying_quantity,
         }
 
-        # Add Greek statistics if methods are available (from mixins)
-        if hasattr(self, "total_delta"):
-            stats["total_delta"] = self.total_delta()
-        if hasattr(self, "net_delta"):
-            stats["net_delta"] = self.net_delta()
-        if hasattr(self, "hedge_ratio"):
-            stats["hedge_ratio"] = self.hedge_ratio()
-        if hasattr(self, "delta_adjustment_needed"):
-            stats["delta_adjustment"] = self.delta_adjustment_needed()
-        if hasattr(self, "total_gamma"):
-            stats["total_gamma"] = self.total_gamma()
-        if hasattr(self, "total_vega"):
-            stats["total_vega"] = self.total_vega()
-        if hasattr(self, "total_theta"):
-            stats["total_theta"] = self.total_theta()
-        if hasattr(self, "total_rho"):
-            stats["total_rho"] = self.total_rho()
+        # Use batch Greek calculation if available (optimized path)
+        if hasattr(self, "all_greeks"):
+            greeks = self.all_greeks()
+            stats["total_delta"] = greeks["total_delta"]
+            stats["net_delta"] = greeks["net_delta"]
+            stats["total_gamma"] = greeks["total_gamma"]
+            stats["total_vega"] = greeks["total_vega"]
+            stats["total_theta"] = greeks["total_theta"]
+            stats["total_rho"] = greeks["total_rho"]
+            
+            # Derived metrics
+            if self.underlying_quantity != 0:
+                stats["hedge_ratio"] = -(greeks["total_delta"] / self.underlying_quantity) * 100
+            else:
+                stats["hedge_ratio"] = 0.0
+            stats["delta_adjustment"] = -greeks["net_delta"]
+        else:
+            # Fallback to individual methods (existing code)
+            if hasattr(self, "total_delta"):
+                stats["total_delta"] = self.total_delta()
+            if hasattr(self, "net_delta"):
+                stats["net_delta"] = self.net_delta()
+            if hasattr(self, "hedge_ratio"):
+                stats["hedge_ratio"] = self.hedge_ratio()
+            if hasattr(self, "delta_adjustment_needed"):
+                stats["delta_adjustment"] = self.delta_adjustment_needed()
+            if hasattr(self, "total_gamma"):
+                stats["total_gamma"] = self.total_gamma()
+            if hasattr(self, "total_vega"):
+                stats["total_vega"] = self.total_vega()
+            if hasattr(self, "total_theta"):
+                stats["total_theta"] = self.total_theta()
+            if hasattr(self, "total_rho"):
+                stats["total_rho"] = self.total_rho()
 
         # Add volatility statistics
         if self.positions:

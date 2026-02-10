@@ -182,3 +182,108 @@ class TestGreeksMixin:
         assert portfolio.total_theta() == 0.0
         assert portfolio.total_rho() == 0.0
         assert portfolio.net_delta() == 0.0
+
+
+class TestAllGreeksBatch:
+    """Test batch Greek computation via all_greeks()."""
+    
+    def test_all_greeks_single_position(self):
+        """Test all_greeks with single position."""
+        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
+        
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+        )
+        
+        greeks = portfolio.all_greeks()
+        
+        # Verify all keys present
+        assert 'total_delta' in greeks
+        assert 'total_gamma' in greeks
+        assert 'total_vega' in greeks
+        assert 'total_theta' in greeks
+        assert 'total_rho' in greeks
+        assert 'net_delta' in greeks
+        
+        # Verify consistency with individual methods
+        assert greeks['total_delta'] == portfolio.total_delta()
+        assert greeks['total_gamma'] == portfolio.total_gamma()
+        assert greeks['total_vega'] == portfolio.total_vega()
+        assert greeks['total_theta'] == portfolio.total_theta()
+        assert greeks['total_rho'] == portfolio.total_rho()
+        assert greeks['net_delta'] == portfolio.net_delta()
+    
+    def test_all_greeks_multiple_positions(self):
+        """Test all_greeks with multiple positions."""
+        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=50.0)
+        
+        # Long call
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=2,
+            option_type="call",
+        )
+        
+        # Short put
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=-1,
+            option_type="put",
+        )
+        
+        greeks = portfolio.all_greeks()
+        
+        # Verify consistency
+        assert greeks['total_delta'] == portfolio.total_delta()
+        assert greeks['net_delta'] == portfolio.net_delta()
+        
+        # Net delta should include underlying
+        assert greeks['net_delta'] == greeks['total_delta'] + 50.0
+    
+    def test_all_greeks_empty_portfolio(self):
+        """Test all_greeks with empty portfolio."""
+        portfolio = OptionPortfolio(underlying_quantity=100.0)
+        
+        greeks = portfolio.all_greeks()
+        
+        assert greeks['total_delta'] == 0.0
+        assert greeks['total_gamma'] == 0.0
+        assert greeks['total_vega'] == 0.0
+        assert greeks['total_theta'] == 0.0
+        assert greeks['total_rho'] == 0.0
+        assert greeks['net_delta'] == 100.0  # Only underlying
+    
+    def test_summary_stats_uses_all_greeks(self):
+        """Test that summary_stats uses all_greeks for efficiency."""
+        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
+        
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+        )
+        
+        # Get summary stats (should use all_greeks internally)
+        stats = portfolio.summary_stats()
+        
+        # Verify all Greek stats are present
+        assert 'total_delta' in stats
+        assert 'net_delta' in stats
+        assert 'total_gamma' in stats
+        assert 'total_vega' in stats
+        assert 'total_theta' in stats
+        assert 'total_rho' in stats
+        assert 'hedge_ratio' in stats
+        assert 'delta_adjustment' in stats
+        
+        # Verify consistency with all_greeks
+        greeks = portfolio.all_greeks()
+        assert stats['total_delta'] == greeks['total_delta']
+        assert stats['net_delta'] == greeks['net_delta']
+        assert stats['total_gamma'] == greeks['total_gamma']
