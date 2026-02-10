@@ -1,10 +1,11 @@
 """Axis and value formatting utilities for option charts."""
 
 from typing import TYPE_CHECKING
+
 from matplotlib.ticker import FuncFormatter
 
 if TYPE_CHECKING:
-    from deltadewa.visualization.base import OptionChartsBase
+    pass
 
 
 class FormattersMixin:
@@ -55,9 +56,9 @@ class FormattersMixin:
     @staticmethod
     def apply_volatility_percent(ax):
         """
-        Format the y-axis of an Axes to display percentages for volatility values.
+        Format y-axis to display percentages for volatility values.
 
-        Assumes the axis values are in decimal form (e.g. 0.25 -> '25%').
+        Assumes axis values are in decimal form (e.g. 0.25 -> '25%').
 
         Args:
             ax: Matplotlib Axes object

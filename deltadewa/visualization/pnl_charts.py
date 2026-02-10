@@ -1,14 +1,16 @@
 """P&L diagram plotting methods for option charts."""
 
 from typing import TYPE_CHECKING, Dict, List, Tuple
-import numpy as np
+
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
+import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 from scipy import stats  # type: ignore
-from deltadewa.colours import DEFAULT_PALETTE
+
 from deltadewa import constants as const
+from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
     from deltadewa.visualization.base import OptionChartsBase

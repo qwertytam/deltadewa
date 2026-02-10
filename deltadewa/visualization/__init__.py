@@ -17,16 +17,16 @@ Date: 2026-01-12
 """
 
 from typing import Tuple
-import pandas as pd
+
 import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
-from deltadewa.visualization.base import OptionCharts
-from deltadewa.visualization.formatters import FormattersMixin
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.utils import format_currency
-
+from deltadewa.visualization.base import OptionCharts
+from deltadewa.visualization.formatters import FormattersMixin
 
 # ============================================================================
 # Module-Level Convenience Functions

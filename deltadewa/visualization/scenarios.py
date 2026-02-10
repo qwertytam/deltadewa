@@ -1,10 +1,12 @@
 """Scenario analysis visualization for option charts."""
 
 from typing import TYPE_CHECKING, Tuple
-import pandas as pd
+
 import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
+
 from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
