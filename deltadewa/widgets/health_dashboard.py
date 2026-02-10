@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING, Any, Dict
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa import constants as const
+from deltadewa.analysis import PortfolioAnalyzer
 from .gauges import GaugeIndicator
 
 if TYPE_CHECKING:
     from deltadewa.portfolio import OptionPortfolio
-    from deltadewa.analysis import PortfolioAnalyzer
 
 
 class HedgeHealthMetric:

@@ -19,9 +19,7 @@ from deltadewa.persistence import (
 from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
 )
-
-if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+from deltadewa.portfolio import OptionPortfolio
 
 
 class PortfolioWidgets:

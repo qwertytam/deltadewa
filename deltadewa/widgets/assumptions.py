@@ -357,7 +357,7 @@ class GlobalAssumptions:
         )
         scenario_section = widgets.Accordion(children=[scenario_selectors])
         scenario_section.set_title(0, "Scenario Grid Parameters (Expand)")
-        scenario_section.selected_index = None  # Collapsed by dfault
+        scenario_section.selected_index = None  # Collapsed by default
 
         return widgets.VBox(
             [
