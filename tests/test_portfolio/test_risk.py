@@ -140,10 +140,11 @@ class TestRiskMixin:
     def test_check_unlimited_trend_increasing(self, portfolio):
         """Test _check_unlimited_trend detects increasing trend."""
         # Mock consistently increasing P&L
+        # Need more than 10 points for _check_unlimited_trend to work
         with patch.object(portfolio, 'calculate_pnl_at_expiry') as mock_pnl:
             mock_pnl.side_effect = lambda spot, **kwargs: spot * 10
             
-            spot_range = np.array([100, 105, 110, 115, 120])
+            spot_range = np.array([90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150])
             result = portfolio._check_unlimited_trend(
                 spot_range, include_underlying=False, check_increasing=True
             )
@@ -151,10 +152,11 @@ class TestRiskMixin:
 
     def test_check_unlimited_trend_decreasing(self, portfolio):
         """Test _check_unlimited_trend detects decreasing trend."""
+        # Need more than 10 points for _check_unlimited_trend to work
         with patch.object(portfolio, 'calculate_pnl_at_expiry') as mock_pnl:
             mock_pnl.side_effect = lambda spot, **kwargs: -spot * 10
             
-            spot_range = np.array([100, 105, 110, 115, 120])
+            spot_range = np.array([90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150])
             result = portfolio._check_unlimited_trend(
                 spot_range, include_underlying=False, check_increasing=False
             )

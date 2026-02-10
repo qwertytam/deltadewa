@@ -99,10 +99,14 @@ class TestScenarioMixin:
 
     def test_scenario_analysis_with_positions(self, portfolio):
         """Test scenario_analysis with mock positions."""
-        # Add mock position
+        # Add mock position with proper return values
         pos = Mock()
         pos.option.volatility = 0.25
         pos.custom_volatility = False
+        pos.position_value.return_value = 500.0
+        pos.position_delta.return_value = 50.0
+        pos.position_gamma.return_value = 2.0
+        pos.position_vega.return_value = 10.0
         portfolio.positions = [pos]
         
         spot_range = np.array([95, 100, 105])
