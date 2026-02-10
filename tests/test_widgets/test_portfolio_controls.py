@@ -1,8 +1,7 @@
 """Tests for deltadewa.widgets.portfolio_controls module."""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
-from pathlib import Path
+from unittest.mock import Mock
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
 
 

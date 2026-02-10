@@ -1,6 +1,5 @@
 """Tests for deltadewa.widgets.assumptions module."""
 
-import pytest
 from datetime import datetime, timedelta
 from deltadewa.widgets.assumptions import GlobalAssumptions
 
@@ -74,7 +73,7 @@ class TestGlobalAssumptions:
         val_date = datetime(2024, 1, 1)
         assumptions = GlobalAssumptions(valuation_date=val_date)
         assumptions.time_horizon.value = 30  # 30 days forward
-        
+
         future_date = assumptions.get_valuation_date_forward()
         expected = val_date + timedelta(days=30)
         assert future_date == expected
@@ -83,7 +82,7 @@ class TestGlobalAssumptions:
         """Test to_dict exports all parameters correctly."""
         assumptions = GlobalAssumptions(spot_price=150.0, volatility=0.35)
         params = assumptions.to_dict()
-        
+
         assert isinstance(params, dict)
         assert params["spot_price"] == 150.0
         assert params["volatility"] == 0.35
@@ -114,10 +113,10 @@ class TestGlobalAssumptions:
             call_log.append(change)
 
         assumptions.on_change(callback)
-        
+
         # Trigger a change
         assumptions.spot_price.value = 110.0
-        
+
         # Callback should have been called
         assert len(call_log) > 0
 

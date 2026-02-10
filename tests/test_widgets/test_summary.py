@@ -2,7 +2,7 @@
 
 import pytest
 from datetime import datetime
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from deltadewa.widgets.summary import NetHedgeSummary
 
 

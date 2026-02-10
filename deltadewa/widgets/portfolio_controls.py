@@ -5,7 +5,15 @@ and managing option portfolios in the deltadewa dashboard.
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Union, Callable, Tuple, Dict, List, Any
+from typing import (
+    Optional,
+    Union,
+    Callable,
+    Tuple,
+    Dict,
+    List,
+    Any,
+)
 from datetime import datetime, timedelta
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
@@ -81,7 +89,7 @@ class PortfolioWidgets:
         description: str = "Select Position:",
         width: str = "500px",
         include_index: bool = True,
-    ) -> "Dropdown":
+    ) -> widgets.Dropdown:  # type: ignore[name-defined]
         """
         Create dropdown for position selection.
 
@@ -121,7 +129,7 @@ class PortfolioWidgets:
 
     def create_position_editor(
         self, on_change_callback: Optional[Callable] = None
-    ) -> "VBox":
+    ) -> widgets.VBox:  # type: ignore[name-defined]
         """
         Create complete position editor interface.
 

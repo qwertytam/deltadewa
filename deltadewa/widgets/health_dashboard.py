@@ -5,15 +5,12 @@ This module provides visual gauge-based dashboard widgets for monitoring
 the health and effectiveness of equity hedges through key metrics.
 """
 
-from typing import TYPE_CHECKING, Any, Dict
+from typing import Any, Dict
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa import constants as const
 from deltadewa.analysis import PortfolioAnalyzer
 from .gauges import GaugeIndicator
-
-if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
 
 
 class HedgeHealthMetric:

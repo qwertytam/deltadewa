@@ -1,6 +1,5 @@
 """Tests for deltadewa.widgets.gauges module."""
 
-import pytest
 from deltadewa.widgets.gauges import GaugeIndicator
 
 

@@ -1,7 +1,7 @@
 """Tests for deltadewa.widgets.health_dashboard module."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from deltadewa.widgets.health_dashboard import (
     HedgeHealthMetric,
     HedgeHealthDashboard,

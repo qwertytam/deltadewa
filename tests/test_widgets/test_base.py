@@ -1,6 +1,5 @@
 """Tests for deltadewa.widgets.base module."""
 
-import pytest
 from deltadewa.widgets.base import InteractiveOutput
 
 
