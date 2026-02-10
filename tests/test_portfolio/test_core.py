@@ -225,12 +225,17 @@ class TestOptionPortfolioBase:
         
         stats = portfolio.summary_stats()
         
+        # Base fields should always be present
         assert "total_positions" in stats
         assert "total_value" in stats
-        assert "total_delta" in stats
-        assert "net_delta" in stats
-        assert "hedge_ratio" in stats
+        assert "total_underlying_value" in stats
+        assert "total_portfolio_value" in stats
+        assert "underlying_quantity" in stats
         assert stats["total_positions"] == 1
+        
+        # Greek fields might not be present in base class
+        # They would be present in the composed OptionPortfolio
+        # but not in OptionPortfolioBase
 
     def test_summary(self):
         """Test summary string generation."""

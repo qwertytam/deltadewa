@@ -150,12 +150,12 @@ class OptionPortfolioBase:
             - total_value: Value of option positions only
             - total_underlying_value: Value of underlying position
             - total_portfolio_value: Total value (options + underlying)
-            - total_delta: Portfolio delta from options only
+            - total_delta: Portfolio delta from options only (if available)
             - underlying_quantity: Number of underlying shares
-            - net_delta: Total delta exposure (options + underlying)
-            - hedge_ratio: Percentage of underlying hedged by options
-            - delta_adjustment: Shares needed for delta neutrality
-            - total_gamma, total_vega, total_theta, total_rho: Greek totals
+            - net_delta: Total delta exposure (if available)
+            - hedge_ratio: Percentage of underlying hedged by options (if available)
+            - delta_adjustment: Shares needed for delta neutrality (if available)
+            - total_gamma, total_vega, total_theta, total_rho: Greek totals (if available)
             - volatility_min, volatility_max: Volatility range
             - custom_volatility_count: Positions with custom volatility
         """
@@ -164,16 +164,26 @@ class OptionPortfolioBase:
             "total_value": self.total_value(),
             "total_underlying_value": self.total_underlying_value(),
             "total_portfolio_value": self.total_portfolio_value(),
-            "total_delta": self.total_delta(),
             "underlying_quantity": self.underlying_quantity,
-            "net_delta": self.net_delta(),
-            "hedge_ratio": self.hedge_ratio(),
-            "delta_adjustment": self.delta_adjustment_needed(),
-            "total_gamma": self.total_gamma(),
-            "total_vega": self.total_vega(),
-            "total_theta": self.total_theta(),
-            "total_rho": self.total_rho(),
         }
+
+        # Add Greek statistics if methods are available (from mixins)
+        if hasattr(self, "total_delta"):
+            stats["total_delta"] = self.total_delta()
+        if hasattr(self, "net_delta"):
+            stats["net_delta"] = self.net_delta()
+        if hasattr(self, "hedge_ratio"):
+            stats["hedge_ratio"] = self.hedge_ratio()
+        if hasattr(self, "delta_adjustment_needed"):
+            stats["delta_adjustment"] = self.delta_adjustment_needed()
+        if hasattr(self, "total_gamma"):
+            stats["total_gamma"] = self.total_gamma()
+        if hasattr(self, "total_vega"):
+            stats["total_vega"] = self.total_vega()
+        if hasattr(self, "total_theta"):
+            stats["total_theta"] = self.total_theta()
+        if hasattr(self, "total_rho"):
+            stats["total_rho"] = self.total_rho()
 
         # Add volatility statistics
         if self.positions:
@@ -196,14 +206,19 @@ class OptionPortfolioBase:
     def summary(self) -> str:
         """Return a human-readable summary of the portfolio."""
         stats = self.summary_stats()
-        return (
-            f"Positions: {stats['total_positions']}, "
-            f"Value: ${stats['total_value']:,.2f}, "
-            f"Net Delta: {stats['net_delta']:,.2f}, "
-            f"Gamma: {stats['total_gamma']:.4f}, "
-            f"Vega: {stats['total_vega']:.2f}, "
-            f"Theta: {stats['total_theta']:.2f}"
-        )
+        parts = [f"Positions: {stats['total_positions']}"]
+        parts.append(f"Value: ${stats['total_value']:,.2f}")
+        
+        if "net_delta" in stats:
+            parts.append(f"Net Delta: {stats['net_delta']:,.2f}")
+        if "total_gamma" in stats:
+            parts.append(f"Gamma: {stats['total_gamma']:.4f}")
+        if "total_vega" in stats:
+            parts.append(f"Vega: {stats['total_vega']:.2f}")
+        if "total_theta" in stats:
+            parts.append(f"Theta: {stats['total_theta']:.2f}")
+        
+        return ", ".join(parts)
 
     def summary_market(self) -> str:
         """Return a summary of the market conditions."""
@@ -392,7 +407,9 @@ class OptionPortfolioBase:
 
     def __repr__(self) -> str:
         """String representation of the portfolio."""
-        return f"<OptionPortfolio: {len(self.positions)} positions, Net Delta: {self.net_delta():.2f}>"
+        if hasattr(self, "net_delta"):
+            return f"<OptionPortfolio: {len(self.positions)} positions, Net Delta: {self.net_delta():.2f}>"
+        return f"<OptionPortfolio: {len(self.positions)} positions>"
 
 
 # Final composed class with all mixins
