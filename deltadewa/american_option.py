@@ -12,6 +12,11 @@ class AmericanOption:
     American option pricing using the Bjerksund-Stensland approximation model.
 
     This class provides pricing and Greeks calculation for American options.
+    
+    Performance Note:
+        Spot price and volatility updates use QuantLib's SimpleQuote mechanism
+        for efficient repricing without rebuilding the entire calculation
+        environment. Only date or rate changes trigger a full rebuild.
     """
 
     # Numerical differentiation parameters
@@ -115,12 +120,15 @@ class AmericanOption:
                 self.ql_valuation_date, self.dividend_yield, ql.Actual365Fixed()  # type: ignore
             )  # type: ignore
         )
+        # Create mutable volatility quote (similar to spot_quote)
+        self.vol_quote = ql.SimpleQuote(self.volatility)
+        self.vol_handle = ql.QuoteHandle(self.vol_quote)
         self.flat_vol_ts = ql.BlackVolTermStructureHandle(
             # type: ignore
             ql.BlackConstantVol(
                 self.ql_valuation_date,
                 ql.NullCalendar(),
-                self.volatility,
+                self.vol_handle,
                 ql.Actual365Fixed(),  # type: ignore
             )  # type: ignore
         )
@@ -295,9 +303,21 @@ class AmericanOption:
         self.spot_quote.setValue(safe_spot)
 
     def update_volatility(self, new_volatility: float):
-        """Update the volatility and recalculate."""
+        """Update the volatility and recalculate.
+        
+        Uses SimpleQuote for efficient update without rebuilding QuantLib objects.
+        This is significantly faster than the previous implementation which
+        called _setup_quantlib() on every volatility change.
+        
+        Args:
+            new_volatility: New volatility value (annualized, e.g., 0.25 for 25%)
+        """
         self.volatility = new_volatility
-        self._setup_quantlib()
+        if hasattr(self, 'vol_quote') and self.vol_quote is not None:
+            self.vol_quote.setValue(new_volatility)
+        else:
+            # Fallback: full rebuild if quote doesn't exist (shouldn't happen)
+            self._setup_quantlib()
 
     def update_valuation_date(self, new_valuation_date: datetime):
         """Update the valuation date and recalculate."""
