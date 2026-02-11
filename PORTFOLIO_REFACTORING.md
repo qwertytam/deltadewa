@@ -26,9 +26,21 @@ deltadewa/portfolio/
 ├── core.py                  # OptionPortfolioBase + composition (404 lines)
 ├── greeks.py                # GreeksMixin - Greek calculations (80 lines)
 ├── pnl.py                   # PnLMixin - P&L calculations (61 lines)
-├── risk.py                  # RiskMixin - Risk analysis (565 lines)
+├── risk.py                  # RiskMixin - Risk computations (479 lines, reduced from 538)
 ├── monte_carlo.py           # MonteCarloMixin - Simulations (113 lines)
 └── factory.py               # Factory functions (61 lines)
+
+deltadewa/analysis/
+├── __init__.py              # Exports PortfolioAnalyzer
+├── base.py                  # PortfolioAnalyzerBase + mixin composition
+├── maturity.py              # MaturityMixin - bucket classification
+├── carry.py                 # CarryMixin - theta/carry analysis
+├── concentration.py         # ConcentrationMixin - risk concentration
+├── hedge.py                 # HedgeMixin - hedge recommendations
+├── scenarios.py             # ScenariosMixin - scenario grids
+├── insights.py              # InsightsMixin - risk summary formatting
+├── risk_reward.py           # RiskRewardMixin - risk/reward analysis (NEW)
+└── functions.py             # Utility functions
 ```
 
 ### Mixin Architecture
@@ -136,6 +148,48 @@ from deltadewa.portfolio.position import OptionPosition
 from deltadewa.portfolio import OptionPosition
 ```
 
+### Risk/Reward Analysis Migration (2026-02)
+
+**Background**: The `risk_reward_analysis()` and `print_risk_reward_summary()` methods 
+have been moved from `portfolio/risk.py` to `analysis/risk_reward.py` to enforce proper 
+architectural separation:
+- **portfolio** layer = data + computation
+- **analysis** layer = aggregation + interpretation  
+- **widgets/visualization** layer = presentation
+
+**Deprecation Notice**: The methods still work on `OptionPortfolio` via deprecation 
+wrappers that emit `DeprecationWarning`, but will be removed in a future version.
+
+**Migration Required**:
+
+```python
+# OLD (deprecated, will raise DeprecationWarning)
+analysis = portfolio.risk_reward_analysis()
+portfolio.print_risk_reward_summary()
+
+# NEW (recommended)
+from deltadewa.analysis import PortfolioAnalyzer
+
+analyzer = PortfolioAnalyzer(portfolio)
+analysis = analyzer.risk_reward_analysis()
+analyzer.print_risk_reward_summary()
+
+# NEW: Additional method available
+summary_text = analyzer.format_risk_reward_summary()  # Returns string instead of printing
+```
+
+**What Changed**:
+- ✅ Same return values and functionality
+- ✅ Backward compatible via deprecation wrappers
+- ✅ New `format_risk_reward_summary()` method returns string (consistent with `format_risk_summary()`)
+- ✅ portfolio/risk.py reduced from 538 lines to 479 lines (~11% reduction, ~5.5KB saved)
+- ✅ New analysis/risk_reward.py (~231 lines, ~8.8KB)
+
+**Files Updated**:
+- `deltadewa/widgets/summary.py` - Updated to use PortfolioAnalyzer
+- `deltadewa/visualization/pnl_charts.py` - Updated to use PortfolioAnalyzer
+- Tests updated to verify deprecation warnings and test new location
+
 ## Follow-up Work (Out of Scope)
 
 The following modules may need verification (but likely work due to backward compatibility):
@@ -200,6 +254,8 @@ def create_empty_portfolio(**kwargs):
 
 ## Metrics
 
+### Initial Refactoring (Portfolio Package)
+
 | Metric | Before | After | Change |
 |--------|--------|-------|--------|
 | Lines of code | 1,457 | 1,494 | +37 (2.5%) |
@@ -208,6 +264,16 @@ def create_empty_portfolio(**kwargs):
 | Test coverage | 0 tests | 95 tests | +95 |
 | Classes | 2 | 8 | +6 |
 | Maintainability | Low | High | ✅ |
+
+### Risk/Reward Refactoring (2026-02)
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| portfolio/risk.py | 538 lines (~23KB) | 479 lines (~17KB) | -59 lines (-11%) |
+| analysis package | 9 files | 10 files (+risk_reward.py) | +1 file |
+| New file | - | analysis/risk_reward.py (231 lines, ~8.8KB) | +231 lines |
+| Test files | - | +test_risk_reward.py (10 tests) | +10 tests |
+| Updated tests | - | Updated 3 test files | Deprecation tests added |
 
 Note: Small increase in total lines due to:
 - Module-level docstrings

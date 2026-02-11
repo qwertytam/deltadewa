@@ -13,9 +13,8 @@ from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
 
 # Import centralized formatters
-from deltadewa.formatters import (
-    format_spot_with_pct as format_spot_with_pct_centralized,
-)
+from deltadewa.formatters import format_spot_with_pct as format_spot_with_pct_centralized
+from deltadewa.analysis import PortfolioAnalyzer
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolioBase
@@ -79,7 +78,8 @@ class PnLChartsMixin:
         ]
 
         # Get risk/reward metrics
-        analysis = self.portfolio.risk_reward_analysis()  # type: ignore
+        analyzer = PortfolioAnalyzer(self.portfolio)
+        analysis = analyzer.risk_reward_analysis()
 
         # Determine expiration label
         # pylint: disable=assignment-from-no-return
@@ -179,7 +179,8 @@ class PnLChartsMixin:
         # Get risk/reward metrics
         # CRITICAL: Pass spot_range=None to allow comprehensive range check for max loss/profit
         # The visualization uses spot_range only for the chart display
-        analysis = self.portfolio.risk_reward_analysis(spot_range=None)  # type: ignore
+        analyzer = PortfolioAnalyzer(self.portfolio)
+        analysis = analyzer.risk_reward_analysis(spot_range=None)
 
         # Use pre-calculated Monte Carlo expected value if available to ensure consistency
         # between the main analysis and the chart visualization

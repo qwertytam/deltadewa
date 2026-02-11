@@ -46,13 +46,32 @@ class TestNetHedgeSummary:
 
         portfolio.calculate_pnl_at_expiry.return_value = 0.0
 
-        # Setup risk analysis
-        portfolio.risk_reward_analysis.return_value = {
-            "max_loss_options": {"max_loss": 100, "is_unlimited": False},
-            "max_loss_total": {"max_loss": 100, "is_unlimited": False},
-            "max_profit_options": {"max_profit": 500, "is_unlimited": False},
-            "max_profit_total": {"max_profit": 500, "is_unlimited": False},
-            "breakeven_total": [105.0],
+        # Setup risk analysis methods that analyzer will call
+        portfolio.calculate_net_debit.return_value = 100.0
+        portfolio.calculate_max_loss_options.return_value = {
+            "max_loss": 100,
+            "is_unlimited": False,
+            "spot_at_max_loss": 95.0,
+        }
+        portfolio.calculate_max_profit_options.return_value = {
+            "max_profit": 500,
+            "is_unlimited": False,
+            "spot_at_max_profit": 105.0,
+        }
+        portfolio.calculate_breakeven_points.return_value = [105.0]
+        portfolio.calculate_max_loss_total.return_value = {
+            "max_loss": 100,
+            "is_unlimited": False,
+            "spot_at_max_loss": 95.0,
+        }
+        portfolio.calculate_max_profit_total.return_value = {
+            "max_profit": 500,
+            "is_unlimited": False,
+            "spot_at_max_profit": 105.0,
+        }
+        portfolio.calculate_probability_of_profit.return_value = {
+            "probability": 0.6,
+            "expected_value": 1.5,
         }
 
         portfolio.monte_carlo_results = {

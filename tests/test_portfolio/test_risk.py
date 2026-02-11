@@ -149,7 +149,9 @@ class TestRiskMixin:
         assert len(breakevens) > 0
 
     def test_risk_reward_analysis(self):
-        """Test risk_reward_analysis comprehensive method."""
+        """Test risk_reward_analysis comprehensive method (deprecation wrapper)."""
+        import warnings
+        
         portfolio = OptionPortfolio(spot_price=100.0)
         
         portfolio.add_position(
@@ -159,8 +161,18 @@ class TestRiskMixin:
             option_type="call",
         )
         
-        analysis = portfolio.risk_reward_analysis(num_simulations=100)
+        # Test that deprecation warning is raised
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            analysis = portfolio.risk_reward_analysis(num_simulations=100)
+            
+            # Verify warning was raised
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "OptionPortfolio.risk_reward_analysis() is deprecated" in str(w[0].message)
+            assert "PortfolioAnalyzer" in str(w[0].message)
         
+        # Verify the method still works correctly
         assert "net_debit" in analysis
         assert "max_loss_options" in analysis
         assert "max_profit_options" in analysis
@@ -172,7 +184,9 @@ class TestRiskMixin:
         assert "expected_value" in analysis
 
     def test_print_risk_reward_summary(self):
-        """Test print_risk_reward_summary method (just ensure no errors)."""
+        """Test print_risk_reward_summary method (deprecation wrapper)."""
+        import warnings
+        
         portfolio = OptionPortfolio(spot_price=100.0)
         
         portfolio.add_position(
@@ -182,12 +196,16 @@ class TestRiskMixin:
             option_type="call",
         )
         
-        # Should not raise any exceptions
-        # We're not capturing output in this test
-        try:
+        # Test that deprecation warning is raised
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
             portfolio.print_risk_reward_summary()
-        except Exception as e:
-            assert False, f"print_risk_reward_summary raised {e}"
+            
+            # Verify warning was raised
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "OptionPortfolio.print_risk_reward_summary() is deprecated" in str(w[0].message)
+            assert "PortfolioAnalyzer" in str(w[0].message)
 
     def test_breakeven_empty_portfolio(self):
         """Test calculate_breakeven_points with empty portfolio."""

@@ -9,6 +9,7 @@ from deltadewa.analysis.concentration import ConcentrationMixin
 from deltadewa.analysis.hedge import HedgeMixin
 from deltadewa.analysis.scenarios import ScenariosMixin
 from deltadewa.analysis.insights import InsightsMixin
+from deltadewa.analysis.risk_reward import RiskRewardMixin
 
 if TYPE_CHECKING:
     pass
@@ -40,6 +41,7 @@ class PortfolioAnalyzer(
     HedgeMixin,
     ScenariosMixin,
     InsightsMixin,
+    RiskRewardMixin,
     PortfolioAnalyzerBase,
 ):
     """
@@ -53,6 +55,7 @@ class PortfolioAnalyzer(
     - Scenario grid generation
     - Risk summary formatting
     - Actionable insights generation
+    - Risk/reward analysis
     """
 
     pass  # pylint: disable=unnecessary-pass

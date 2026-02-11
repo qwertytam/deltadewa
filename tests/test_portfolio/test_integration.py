@@ -235,7 +235,9 @@ class TestPortfolioIntegration:
         assert "total_positions" in stats
 
     def test_risk_reward_full_analysis(self):
-        """Test complete risk/reward analysis."""
+        """Test complete risk/reward analysis using PortfolioAnalyzer."""
+        from deltadewa.analysis import PortfolioAnalyzer
+        
         portfolio = OptionPortfolio(spot_price=100.0)
         
         portfolio.add_position(
@@ -245,7 +247,8 @@ class TestPortfolioIntegration:
             option_type="call",
         )
         
-        analysis = portfolio.risk_reward_analysis(num_simulations=100)
+        analyzer = PortfolioAnalyzer(portfolio)
+        analysis = analyzer.risk_reward_analysis(num_simulations=100)
         
         # Verify all expected keys are present
         expected_keys = [
