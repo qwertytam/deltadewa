@@ -46,8 +46,8 @@ class FormattersMixin:
         Format currency with full dollar precision and comma separators.
         
         Note: 'full' refers to displaying full dollar amounts without compact 
-        notation (no k/M/B). Precision is set to 0 to avoid cluttering axis 
-        labels with cents.
+            notation (no k/M/B). Precision is set to 0 to avoid cluttering axis 
+            labels with cents.
 
         Args:
             x: numeric value
