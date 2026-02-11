@@ -1,0 +1,504 @@
+"""Tests for deltadewa.analysis.volatility module."""
+
+from datetime import datetime, timedelta
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.analysis.volatility import (
+    calculate_portfolio_avg_volatility,
+    apply_proportional_volatility_shift,
+    restore_volatilities,
+    get_volatility_stats,
+)
+
+
+class TestCalculatePortfolioAvgVolatility:
+    """Test cases for calculate_portfolio_avg_volatility function."""
+
+    def test_empty_portfolio_returns_portfolio_volatility(self):
+        """Test that empty portfolio returns portfolio-level volatility."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        avg_vol = calculate_portfolio_avg_volatility(portfolio)
+        assert avg_vol == 0.25
+
+    def test_single_position(self):
+        """Test vega-weighted average with single position."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        avg_vol = calculate_portfolio_avg_volatility(portfolio)
+        # With single position, average should equal position volatility
+        assert abs(avg_vol - 0.30) < 0.001
+
+    def test_multi_position_weighted_average(self):
+        """Test vega-weighted average with multiple positions."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        # Add positions with different volatilities and vegas
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=2,
+            option_type="put",
+            volatility=0.20,
+        )
+
+        avg_vol = calculate_portfolio_avg_volatility(portfolio)
+
+        # Vega-weighted average should be between min and max
+        assert 0.20 <= avg_vol <= 0.30
+
+    def test_negative_position_uses_absolute_vega(self):
+        """Test that negative positions use absolute vega for weighting."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        # Add long and short positions with same strike/maturity
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=-1,
+            option_type="call",
+            volatility=0.20,
+        )
+
+        avg_vol = calculate_portfolio_avg_volatility(portfolio)
+
+        # Both should contribute equally (abs vega), so average should be 0.25
+        assert abs(avg_vol - 0.25) < 0.01
+
+    def test_zero_vega_positions_fallback(self):
+        """Test fallback when all positions have zero vega."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        # Add deep ITM position (very low vega)
+        portfolio.add_position(
+            strike_price=50.0,
+            maturity_date=datetime.now() + timedelta(days=1),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        avg_vol = calculate_portfolio_avg_volatility(portfolio)
+
+        # Should return a reasonable value (either position vol or portfolio vol)
+        assert 0.20 <= avg_vol <= 0.35
+
+
+class TestApplyProportionalVolatilityShift:
+    """Test cases for apply_proportional_volatility_shift function."""
+
+    def test_proportional_scaling(self):
+        """Test proportional scaling maintains volatility structure."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="put",
+            volatility=0.20,
+        )
+
+        # Get original ratio
+        original_ratio = (
+            portfolio.positions[0].option.volatility
+            / portfolio.positions[1].option.volatility
+        )
+
+        # Shift to 30% average
+        original_vols = apply_proportional_volatility_shift(
+            portfolio, 0.30, preserve_structure=True
+        )
+
+        # Check ratio is preserved
+        new_ratio = (
+            portfolio.positions[0].option.volatility
+            / portfolio.positions[1].option.volatility
+        )
+        assert abs(original_ratio - new_ratio) < 0.01
+
+        # Check original vols were stored
+        assert len(original_vols) == 2
+        assert 0 in original_vols
+        assert 1 in original_vols
+
+    def test_uniform_shift(self):
+        """Test uniform shift sets all positions to target."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="put",
+            volatility=0.20,
+        )
+
+        # Apply uniform shift
+        original_vols = apply_proportional_volatility_shift(
+            portfolio, 0.35, preserve_structure=False
+        )
+
+        # All positions should now be at target
+        for position in portfolio.positions:
+            assert abs(position.option.volatility - 0.35) < 0.001
+
+        # Original vols should be stored
+        assert original_vols[0] == 0.30
+        assert original_vols[1] == 0.20
+
+    def test_zero_avg_vol_edge_case(self):
+        """Test handling when current average volatility is near zero."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.01,  # Very small but non-zero to avoid QuantLib issues
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.01,  # Very small but non-zero
+        )
+
+        # Should scale proportionally or uniformly
+        original_vols = apply_proportional_volatility_shift(
+            portfolio, 0.30, preserve_structure=True
+        )
+
+        # Position should now be at or near target (scaled from 0.01 to 0.30)
+        assert (
+            portfolio.positions[0].option.volatility > 0.20
+        )  # Should be scaled up
+        assert original_vols[0] == 0.01
+
+    def test_returns_original_volatilities_dict(self):
+        """Test that function returns dict of original volatilities."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        original_vols = apply_proportional_volatility_shift(
+            portfolio, 0.35, preserve_structure=True
+        )
+
+        # Check return value structure
+        assert isinstance(original_vols, dict)
+        assert 0 in original_vols
+        assert original_vols[0] == 0.30
+
+
+class TestRestoreVolatilities:
+    """Test cases for restore_volatilities function."""
+
+    def test_basic_restore(self):
+        """Test basic restoration of volatilities."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="put",
+            volatility=0.20,
+        )
+
+        # Store original
+        original_vol_0 = portfolio.positions[0].option.volatility
+        original_vol_1 = portfolio.positions[1].option.volatility
+
+        # Apply shift
+        original_vols = apply_proportional_volatility_shift(
+            portfolio, 0.35, preserve_structure=False
+        )
+
+        # Verify changed
+        assert portfolio.positions[0].option.volatility != original_vol_0
+        assert portfolio.positions[1].option.volatility != original_vol_1
+
+        # Restore
+        restore_volatilities(portfolio, original_vols)
+
+        # Verify restored
+        assert (
+            abs(portfolio.positions[0].option.volatility - original_vol_0)
+            < 0.001
+        )
+        assert (
+            abs(portfolio.positions[1].option.volatility - original_vol_1)
+            < 0.001
+        )
+
+    def test_partial_restore_missing_indices(self):
+        """Test restore handles missing position indices gracefully."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        # Create a dict with out-of-bounds index
+        original_vols = {0: 0.30, 5: 0.20}
+
+        # Should not crash, should restore position 0 and skip 5
+        restore_volatilities(portfolio, original_vols)
+
+        assert abs(portfolio.positions[0].option.volatility - 0.30) < 0.001
+
+    def test_empty_restore_dict(self):
+        """Test restore with empty dict does nothing."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        original_vol = portfolio.positions[0].option.volatility
+
+        # Restore with empty dict
+        restore_volatilities(portfolio, {})
+
+        # Volatility should be unchanged
+        assert portfolio.positions[0].option.volatility == original_vol
+
+
+class TestGetVolatilityStats:
+    """Test cases for get_volatility_stats function."""
+
+    def test_empty_portfolio_returns_empty_dict(self):
+        """Test that empty portfolio returns empty dict."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        stats = get_volatility_stats(portfolio)
+        assert stats == {}
+
+    def test_populated_portfolio_has_expected_keys(self):
+        """Test that stats dict has all expected keys."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        stats = get_volatility_stats(portfolio)
+
+        # Check all expected keys exist
+        expected_keys = {
+            "avg_volatility",
+            "min_volatility",
+            "max_volatility",
+            "std_volatility",
+            "num_positions",
+            "num_custom_vol",
+            "portfolio_volatility",
+            "volatility_range",
+        }
+        assert set(stats.keys()) == expected_keys
+
+    def test_single_position_stats(self):
+        """Test stats with single position."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        stats = get_volatility_stats(portfolio)
+
+        assert stats["num_positions"] == 1
+        assert stats["num_custom_vol"] == 1
+        assert abs(stats["min_volatility"] - 0.30) < 0.001
+        assert abs(stats["max_volatility"] - 0.30) < 0.001
+        assert abs(stats["volatility_range"]) < 0.001
+        assert stats["std_volatility"] == 0.0
+        assert abs(stats["portfolio_volatility"] - 0.25) < 0.001
+
+    def test_multiple_positions_stats(self):
+        """Test stats with multiple positions."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="put",
+            volatility=0.20,
+        )
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+        )
+
+        stats = get_volatility_stats(portfolio)
+
+        assert stats["num_positions"] == 3
+        assert stats["num_custom_vol"] == 2  # Two positions with custom vol
+        assert abs(stats["min_volatility"] - 0.20) < 0.001
+        assert abs(stats["max_volatility"] - 0.30) < 0.001
+        assert abs(stats["volatility_range"] - 0.10) < 0.001
+        assert stats["std_volatility"] > 0  # Should have some variation
+        assert abs(stats["portfolio_volatility"] - 0.25) < 0.001
+
+    def test_avg_volatility_is_vega_weighted(self):
+        """Test that avg_volatility uses vega weighting."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            volatility=0.30,
+        )
+
+        stats = get_volatility_stats(portfolio)
+
+        # avg_volatility should call calculate_portfolio_avg_volatility
+        manual_avg = calculate_portfolio_avg_volatility(portfolio)
+        assert abs(stats["avg_volatility"] - manual_avg) < 0.001
