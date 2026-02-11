@@ -194,12 +194,12 @@ class TestFormatHtmlMetric:
         result = format_html_metric("Value", 0.001, format_type="currency")
         assert "~$0" in result
         
-        # Near-zero percentage at threshold boundary (0.0001 = 0.01%)
+        # Percentage at threshold boundary (0.0001 = 0.01%)
+        # At exactly threshold, should format normally (not as ~0%)
         result = format_html_metric("Change", 0.0001, format_type="percentage")
-        # At exact threshold, should not show ~0%
-        assert "0.01%" in result or "0.0%" in result
+        assert "0.01%" in result
         
-        # Near-zero percentage below threshold
+        # Percentage below threshold should show as ~0%
         result = format_html_metric("Change", 0.00001, format_type="percentage")
         assert "~0%" in result
         

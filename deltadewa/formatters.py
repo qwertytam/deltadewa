@@ -286,7 +286,7 @@ def format_spot_with_pct(x: float, current_spot: float, pos: Optional[int] = Non
     
     # Handle edge cases
     if x is None:
-        return "$0\n0%"
+        return "$0\n+0%"  # Consistent sign-aware format
     
     # Check for zero division and None values
     if current_spot is None or current_spot == 0:
