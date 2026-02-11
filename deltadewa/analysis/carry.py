@@ -5,18 +5,24 @@ import pandas as pd
 from deltadewa import constants as const
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.base import PortfolioAnalyzerBase
+    from deltadewa.portfolio import OptionPortfolio
 
 
 class CarryMixin:
     """
     Mixin for theta and carry analysis.
-    
+
     Provides methods for analyzing portfolio carry (theta decay)
     characteristics and creating theta summary tables.
     """
 
-    def calculate_carry_metrics(self: "PortfolioAnalyzerBase") -> Dict:
+    if TYPE_CHECKING:
+        portfolio: "OptionPortfolio"
+
+        # pylint: disable=unused-argument, missing-function-docstring
+        def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame: ...
+
+    def calculate_carry_metrics(self) -> Dict:
         """
         Analyze portfolio carry (theta decay) characteristics.
 
@@ -45,6 +51,7 @@ class CarryMixin:
         if df.empty:
             return self._empty_carry_metrics()
 
+        # pylint: disable=assignment-from-no-return
         df = self.add_maturity_buckets(df)
 
         # Total theta metrics
@@ -124,7 +131,7 @@ class CarryMixin:
             "is_positive_carry": net_carry > 0,
         }
 
-    def _empty_carry_metrics(self: "PortfolioAnalyzerBase") -> Dict:
+    def _empty_carry_metrics(self) -> Dict:
         """Return empty carry metrics structure."""
         return {
             "total_theta_daily": 0.0,
@@ -145,7 +152,7 @@ class CarryMixin:
         }
 
     def create_theta_summary_table(
-        self: "PortfolioAnalyzerBase",
+        self,
     ) -> pd.DataFrame:
         """
         Create consolidated theta/carry summary table.

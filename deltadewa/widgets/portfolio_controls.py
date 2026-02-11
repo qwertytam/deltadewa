@@ -47,7 +47,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             export_dir: Directory for exports (default: None)
         """
         self.portfolio = portfolio
-        self._export_dir = None
+        self._export_dir: Optional[Path] = None
         if export_dir:
             self.export_dir = Path(export_dir)
 

@@ -34,7 +34,7 @@ class FormattersMixin:
 
         Returns:
             Formatted string
-        
+
         Note:
             Uses centralized formatter from deltadewa.formatters
         """
@@ -44,9 +44,9 @@ class FormattersMixin:
     def format_currency_full(x, pos=None):
         """
         Format currency with full dollar precision and comma separators.
-        
-        Note: 'full' refers to displaying full dollar amounts without compact 
-            notation (no k/M/B). Precision is set to 0 to avoid cluttering axis 
+
+        Note: 'full' refers to displaying full dollar amounts without compact
+            notation (no k/M/B). Precision is set to 0 to avoid cluttering axis
             labels with cents.
 
         Args:
@@ -55,7 +55,7 @@ class FormattersMixin:
 
         Returns:
             String like "$1,234"
-        
+
         Note:
             Uses centralized formatter from deltadewa.formatters
         """
@@ -74,13 +74,11 @@ class FormattersMixin:
 
         Args:
             ax: Matplotlib Axes object
-        
+
         Note:
             Uses centralized formatter from deltadewa.formatters
         """
-        ax.yaxis.set_major_formatter(
-            FuncFormatter(format_percentage_for_axis)
-        )
+        ax.yaxis.set_major_formatter(FuncFormatter(format_percentage_for_axis))
 
     @staticmethod
     def apply_spot_price_with_pct(ax, current_spot: float):
@@ -95,11 +93,12 @@ class FormattersMixin:
         Args:
             ax: Matplotlib Axes object
             current_spot: Current spot price to calculate percentage from
-        
+
         Note:
             Uses centralized formatter from deltadewa.formatters
         """
-        ax.xaxis.set_major_formatter(get_spot_price_axis_formatter(current_spot))
+        ax.xaxis.set_major_formatter(
+            get_spot_price_axis_formatter(current_spot)
+        )
         # Slightly tighten tick padding so two-line labels don't overlap title
         ax.tick_params(axis="x", which="major", pad=6)
-

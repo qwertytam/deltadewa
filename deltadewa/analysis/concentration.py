@@ -5,19 +5,25 @@ import numbers
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.base import PortfolioAnalyzerBase
+    from deltadewa.portfolio import OptionPortfolio
 
 
 class ConcentrationMixin:
     """
     Mixin for risk concentration analysis.
-    
+
     Provides methods for identifying concentrated risk by strike and maturity,
     analyzing which strikes/maturities contribute most to portfolio Greeks.
     """
 
+    if TYPE_CHECKING:
+        portfolio: OptionPortfolio
+
+        # pylint: disable=unused-argument, missing-function-docstring
+        def add_maturity_buckets(self, df: Any) -> Any: ...
+
     def analyze_risk_concentration(
-        self: "PortfolioAnalyzerBase",
+        self,
         metrics: Optional[List[str]] = None,
         top_n: int = 3,
     ) -> Dict:
@@ -44,6 +50,7 @@ class ConcentrationMixin:
         if df.empty:
             return self._empty_concentration()
 
+        # pylint: disable=assignment-from-no-return
         df = self.add_maturity_buckets(df)
 
         result: Dict[str, Any] = {
@@ -122,6 +129,6 @@ class ConcentrationMixin:
 
         return result
 
-    def _empty_concentration(self: "PortfolioAnalyzerBase") -> Dict:
+    def _empty_concentration(self) -> Dict:
         """Return empty concentration structure."""
         return {"by_strike": {}, "by_maturity": {}, "concentration_scores": {}}

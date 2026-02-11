@@ -64,7 +64,7 @@ class OptionPosition:
         # Use batch computation - gets all Greeks in one efficient call
         greeks = self.option.greeks()
         multiplier = self.quantity * self.contract_size
-        
+
         return {
             "symbol": self.symbol,
             "type": self.option.option_type,

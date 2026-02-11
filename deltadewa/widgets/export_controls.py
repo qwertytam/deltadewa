@@ -36,6 +36,9 @@ class ExportControlsMixin:
     - self._export_dir: Path or None attribute
     """
 
+    portfolio: OptionPortfolio
+    _export_dir: Optional[Path] = None
+
     @property
     def export_dir(self) -> Path:
         """Get the current export directory."""
