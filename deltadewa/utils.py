@@ -10,6 +10,14 @@ import numpy as np
 import pandas as pd
 from IPython.display import clear_output
 
+# Import formatting functions from centralized module
+from deltadewa.formatters import (
+    format_currency as _format_currency,
+    format_percentage as _format_percentage,
+    format_number as _format_number,
+    format_currency_for_axis as _format_currency_for_axis,
+)
+
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
@@ -264,6 +272,11 @@ def display_styled_dataframe(
     return styled
 
 
+# ========== Formatting Functions (Re-exported for Backward Compatibility) ==========
+# These functions are now defined in deltadewa.formatters and re-exported here
+# for backward compatibility with existing code.
+
+
 def format_currency(value: Union[int, float], compact: bool = False) -> str:
     """
     Format a value as currency.
@@ -280,21 +293,11 @@ def format_currency(value: Union[int, float], compact: bool = False) -> str:
         '$1,234.56'
         >>> format_currency(1234567.89, compact=True)
         '$1.23M'
+    
+    Note:
+        This function is re-exported from deltadewa.formatters for backward compatibility.
     """
-    if not compact:
-        return f"${value:,.2f}"
-
-    abs_val = abs(value)
-    sign = "-" if value < 0 else ""
-
-    if abs_val < 1_000:
-        return f"{sign}${abs_val:,.2f}"
-    elif abs_val < 1_000_000:
-        return f"{sign}${abs_val/1_000:,.1f}K"
-    elif abs_val < 1_000_000_000:
-        return f"{sign}${abs_val/1_000_000:,.2f}M"
-    else:
-        return f"{sign}${abs_val/1_000_000_000:,.2f}B"
+    return _format_currency(value, compact=compact, precision=2)
 
 
 def format_percentage(value: float, decimals: int = 2) -> str:
@@ -313,8 +316,11 @@ def format_percentage(value: float, decimals: int = 2) -> str:
         '15.23%'
         >>> format_percentage(0.1523, decimals=1)
         '15.2%'
+    
+    Note:
+        This function is re-exported from deltadewa.formatters for backward compatibility.
     """
-    return f"{value * 100:.{decimals}f}%"
+    return _format_percentage(value, decimals=decimals, from_decimal=True)
 
 
 def format_number(
@@ -336,21 +342,21 @@ def format_number(
         '1,234.57'
         >>> format_number(1234.5678, decimals=4)
         '1,234.5678'
+    
+    Note:
+        This function is re-exported from deltadewa.formatters for backward compatibility.
     """
-    if thousands_sep:
-        return f"{value:,.{decimals}f}"
-    else:
-        return f"{value:.{decimals}f}"
+    return _format_number(value, decimals=decimals, thousands_sep=thousands_sep)
 
 
 def format_currency_compact(x, pos) -> str:  # pylint: disable=unused-argument
-    """Format currency: <$10k as $x,xxx, <$10M as $x,xxxk, else $x,xxxM"""
-    if abs(x) < 10_000:
-        return f"${x:,.0f}"
-    elif abs(x) < 10_000_000:
-        return f"${x/1_000:,.0f}k"
-    else:
-        return f"${x/1_000_000:,.1f}M"
+    """
+    Format currency: <$10k as $x,xxx, <$10M as $x,xxxk, else $x,xxxM
+    
+    Note:
+        This function is re-exported from deltadewa.formatters for backward compatibility.
+    """
+    return _format_currency_for_axis(x, pos)
 
 
 # ========== Status/Alert Utilities ==========

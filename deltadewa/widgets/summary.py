@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Union
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.utils import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
+# Import centralized formatters
+from deltadewa.formatters import format_html_badge, format_html_metric
 
 if TYPE_CHECKING:
     from deltadewa.portfolio import OptionPortfolio
@@ -49,15 +51,17 @@ class NetHedgeSummary:
         self, color: str, text_color: str, name: str, value_str: str
     ) -> str:
         """
-        Return formatted HTML for large block
+        Return formatted HTML for large block.
+        
+        Note:
+            Uses centralized formatter from deltadewa.formatters
         """
-        return (
-            f'<div style="display:inline-block; background-color:{color}; '
-            f"color:{text_color}; padding:8px 12px; margin:5px; "
-            f'border-radius:5px; font-weight:bold; min-width:120px;">'
-            f'<div style="font-size:11px; opacity:0.9;">{name}</div>'
-            f'<div style="font-size:16px;">{value_str}</div>'
-            f"</div>"
+        return format_html_badge(
+            label=name,
+            value=value_str,
+            color=color,
+            text_color=text_color,
+            size="large"
         )
 
     def _format_greek(
@@ -78,49 +82,24 @@ class NetHedgeSummary:
 
         Returns:
             HTML string with formatted badge
+        
+        Note:
+            Uses centralized formatter from deltadewa.formatters
         """
-        boundary_1 = 10**6
-        boundary_2 = 10**3
-
+        # Determine the format type based on the metric name
         matches_to_format_as_currency = ["Value", "Cost", "Theta"]
-        format_as_currency = False
-        if any(
+        format_type = "currency" if any(
             sub.lower() in (name or "").lower()
             for sub in matches_to_format_as_currency
-        ):
-            format_as_currency = True
-
-        if abs(value) < 0.01:
-            value_str = "~0" if not format_as_currency else "~$0"
-        elif abs(value) >= boundary_1:
-            value_str = (
-                f"${value/boundary_1:,.2f}M"
-                if format_as_currency
-                else f"{value:,.0f}"
-            )
-        elif abs(value) >= boundary_2:
-            value_str = (
-                f"${value/boundary_2:,.2f}k"
-                if format_as_currency
-                else f"{value:,.1f}"
-            )
-        else:
-            value_str = (
-                f"${value:.2f}" if format_as_currency else f"{value:.2f}"
-            )
-
-        # Color coding
-        if is_cost or value < 0 and not is_neutral:
-            color = DEFAULT_PALETTE.negative
-            text_color = DEFAULT_PALETTE.white
-        elif value > 0 and not is_neutral:
-            color = DEFAULT_PALETTE.positive
-            text_color = DEFAULT_PALETTE.white
-        else:
-            color = DEFAULT_PALETTE.medium_grey
-            text_color = DEFAULT_PALETTE.white
-
-        return self._format_large_block(color, text_color, name, value_str)
+        ) else "number"
+        
+        return format_html_metric(
+            name=name,
+            value=value,
+            format_type=format_type,
+            is_cost=is_cost,
+            is_neutral=is_neutral
+        )
 
     def _format_pct(
         self, name: str, value: float, is_neutral: bool = False
@@ -135,28 +114,18 @@ class NetHedgeSummary:
 
         Returns:
             HTML string with formatted badge
+        
+        Note:
+            Uses centralized formatter from deltadewa.formatters
         """
-        boundary_1 = 10**1
+        return format_html_metric(
+            name=name,
+            value=value,
+            format_type="percentage",
+            is_cost=False,
+            is_neutral=is_neutral
+        )
 
-        if abs(value) < 10**-4:
-            value_str = "~0%"
-        elif abs(value) >= boundary_1:
-            value_str = f"{value/boundary_1*100:,.0f}%"
-        else:
-            value_str = f"{value*100:,.2f}%"
-
-        # Color coding
-        if value < 0 and not is_neutral:
-            color = DEFAULT_PALETTE.negative
-            text_color = DEFAULT_PALETTE.white
-        elif value > 0 and not is_neutral:
-            color = DEFAULT_PALETTE.positive
-            text_color = DEFAULT_PALETTE.white
-        else:
-            color = DEFAULT_PALETTE.medium_grey
-            text_color = DEFAULT_PALETTE.white
-
-        return self._format_large_block(color, text_color, name, value_str)
 
     def _format_crash_indicator(self, shock_pct: float, pnl: float) -> str:
         """
