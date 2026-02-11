@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from deltadewa.american_option import AmericanOption
+from deltadewa.batch_pricer import BatchPricer
 from deltadewa.utils import (
     apply_proportional_volatility_shift,
     restore_volatilities,
@@ -199,23 +200,42 @@ class ScenariosMixin:
             baseline_spot, baseline_valuation_date
         )
 
-        for time_point in time_points:
-            for spot in spot_scenarios:
-                # Calculate metric at this scenario
-                if metric == "pnl":
-                    # Calculate P&L relative to baseline
-                    scenario_value = self._calculate_portfolio_value_at(
-                        spot, time_point
-                    )
-                    metric_value = scenario_value - baseline_value
+        # Use BatchPricer for efficient valuation of 'pnl' and 'value' metrics
+        # Greeks still need portfolio state updates, so they use the old path
+        if metric in ("pnl", "value"):
+            pricer = BatchPricer(
+                positions=self.portfolio.positions,
+                risk_free_rate=self.portfolio.risk_free_rate,
+                dividend_yield=self.portfolio.dividend_yield,
+                underlying_quantity=self.portfolio.underlying_quantity,
+            )
 
-                elif metric == "value":
-                    # Calculate absolute portfolio value
-                    metric_value = self._calculate_portfolio_value_at(
-                        spot, time_point
+            for time_point in time_points:
+                # Get all portfolio values at this time_point efficiently
+                portfolio_values = pricer.portfolio_values_at(
+                    spot_scenarios, time_point
+                )
+
+                for j, spot in enumerate(spot_scenarios):
+                    if metric == "pnl":
+                        metric_value = portfolio_values[j] - baseline_value
+                    else:  # metric == "value"
+                        metric_value = portfolio_values[j]
+
+                    results.append(
+                        {
+                            "spot_price": spot,
+                            "valuation_date": time_point,
+                            "days_forward": (time_point - original_date).days,
+                            "metric": metric,
+                            "value": metric_value,
+                        }
                     )
 
-                else:
+        else:
+            # For Greeks, we need to update portfolio state, so use old path
+            for time_point in time_points:
+                for spot in spot_scenarios:
                     # For Greeks, update portfolio and calculate
                     self.portfolio.update_market_conditions(
                         spot_price=spot, valuation_date=time_point
@@ -234,15 +254,15 @@ class ScenariosMixin:
                     else:
                         metric_value = 0.0
 
-                results.append(
-                    {
-                        "spot_price": spot,
-                        "valuation_date": time_point,
-                        "days_forward": (time_point - original_date).days,
-                        "metric": metric,
-                        "value": metric_value,
-                    }
-                )
+                    results.append(
+                        {
+                            "spot_price": spot,
+                            "valuation_date": time_point,
+                            "days_forward": (time_point - original_date).days,
+                            "metric": metric,
+                            "value": metric_value,
+                        }
+                    )
 
         # Restore original state
         self.portfolio.update_market_conditions(
