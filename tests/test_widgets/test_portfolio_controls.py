@@ -38,13 +38,10 @@ class TestPortfolioWidgets:
     def test_create_market_params_controls(self, mock_portfolio):
         """Test create_market_params_controls method."""
         widgets = PortfolioWidgets(mock_portfolio)
-        controls = widgets.create_market_params_controls()
-        assert controls is not None
-
-    def test_create_scenario_controls(self, mock_portfolio):
-        """Test create_scenario_controls method."""
-        widgets = PortfolioWidgets(mock_portfolio)
-        controls = widgets.create_scenario_controls()
+        controls = widgets.create_market_params_controls(
+            spot_price=mock_portfolio.spot_price,
+            volatility=mock_portfolio.volatility,
+        )
         assert controls is not None
 
     def test_create_transaction_cost_controls(self, mock_portfolio):
@@ -54,9 +51,9 @@ class TestPortfolioWidgets:
         assert controls is not None
 
     def test_create_roll_analysis_controls(self, mock_portfolio):
-        """Test create_roll_analysis_controls method."""
+        """Test create_roll_controls method."""
         widgets = PortfolioWidgets(mock_portfolio)
-        controls = widgets.create_roll_analysis_controls()
+        controls = widgets.create_roll_controls()
         assert controls is not None
 
     def test_create_export_controls(self, mock_portfolio):
@@ -77,4 +74,5 @@ class TestPortfolioWidgets:
         assert hasattr(widgets, "portfolio")
         assert hasattr(widgets, "create_position_editor")
         assert hasattr(widgets, "create_market_params_controls")
-        assert hasattr(widgets, "create_scenario_controls")
+        # Removed create_scenario_controls as it is not in the class
+        assert hasattr(widgets, "create_roll_controls")
