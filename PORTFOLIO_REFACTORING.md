@@ -28,7 +28,6 @@ deltadewa/portfolio/
 ├── pnl.py                   # PnLMixin - P&L calculations (61 lines)
 ├── risk.py                  # RiskMixin - Risk analysis (565 lines)
 ├── monte_carlo.py           # MonteCarloMixin - Simulations (113 lines)
-├── scenarios.py             # ScenariosMixin - Scenario analysis (120 lines)
 └── factory.py               # Factory functions (61 lines)
 ```
 
@@ -40,12 +39,15 @@ class OptionPortfolio(
     PnLMixin,              # P&L calculations  
     RiskMixin,             # Risk analysis
     MonteCarloMixin,       # Monte Carlo simulation
-    ScenariosMixin,        # Scenario analysis
     OptionPortfolioBase,   # Core management
 ):
     """Full portfolio with all capabilities."""
     pass
 ```
+
+**Note**: Scenario analysis has been moved to `deltadewa.analysis.scenarios` 
+as part of the `PortfolioAnalyzer` class, which provides more advanced features 
+including BatchPricer optimization, caching, and 2D grids (spot×time, spot×vol).
 
 ## Benefits
 
@@ -55,7 +57,9 @@ Each mixin handles a specific responsibility:
 - **PnLMixin**: P&L at expiry, net debit/credit
 - **RiskMixin**: Max loss/profit, breakeven points, risk/reward analysis
 - **MonteCarloMixin**: Probability of profit simulations
-- **ScenariosMixin**: Spot/volatility scenario grids
+
+**Note**: Scenario analysis functionality has been moved to `deltadewa.analysis.scenarios` 
+for better separation of concerns. Use `PortfolioAnalyzer` for scenario grids.
 
 ### 2. Improved Maintainability
 - Smaller, focused modules (90-565 lines vs 1,457 lines)
@@ -87,12 +91,14 @@ tests/test_portfolio/
 ├── test_pnl.py              # 7 tests
 ├── test_risk.py             # 13 tests
 ├── test_monte_carlo.py      # 7 tests
-├── test_scenarios.py        # 8 tests
 ├── test_factory.py          # 8 tests
 └── test_integration.py      # 11 tests
 
-Total: 95 tests, all passing ✅
+Total: 87 tests, all passing ✅
 ```
+
+**Note**: Scenario analysis tests have been moved to `tests/test_analysis/test_scenarios.py` 
+as part of the consolidation with `PortfolioAnalyzer`.
 
 ## Migration Guide
 

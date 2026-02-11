@@ -68,9 +68,16 @@ class TestPortfolioIntegration:
         prob = portfolio.calculate_probability_of_profit(num_simulations=100)
         assert "probability" in prob
         
-        # Test scenario analysis
+        # Test scenario analysis using PortfolioAnalyzer
+        from deltadewa.analysis import PortfolioAnalyzer
+        analyzer = PortfolioAnalyzer(portfolio)
         spot_range = np.linspace(90, 110, 5)
-        scenarios = portfolio.scenario_analysis(spot_range)
+        time_points = [portfolio.valuation_date]
+        scenarios = analyzer.scenario_grid(
+            spot_scenarios=spot_range,
+            time_points=time_points,
+            metric='pnl',
+        )
         assert len(scenarios) == 5
 
     def test_backward_compatibility(self):

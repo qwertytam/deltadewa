@@ -74,13 +74,23 @@ print(f"Delta Adjustment: {stats['delta_adjustment']:.0f} shares")
 
 ```python
 import numpy as np
+from deltadewa.analysis import PortfolioAnalyzer
+
+# Create analyzer from portfolio
+analyzer = PortfolioAnalyzer(portfolio)
 
 # Analyze P&L across different spot prices
 spot_range = np.linspace(80, 120, 41)
-scenario_df = portfolio.scenario_analysis(spot_range)
+time_points = [portfolio.valuation_date]
+scenario_df = analyzer.scenario_grid(
+    spot_scenarios=spot_range,
+    time_points=time_points,
+    metric='pnl',
+)
 
 # View results
-print(scenario_df[['spot_price', 'portfolio_value', 'net_delta']])
+print(scenario_df[['spot_price', 'value']])
+```
 ```
 
 ### Example 4: Interactive Dashboard (New 3-Mode Layout)

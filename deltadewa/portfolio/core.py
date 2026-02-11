@@ -9,7 +9,6 @@ from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.pnl import PnLMixin
 from deltadewa.portfolio.risk import RiskMixin
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
-from deltadewa.portfolio.scenarios import ScenariosMixin
 
 
 class OptionPortfolioBase:
@@ -435,7 +434,6 @@ class OptionPortfolio(
     PnLMixin,
     RiskMixin,
     MonteCarloMixin,
-    ScenariosMixin,
     OptionPortfolioBase,
 ):
     """
@@ -447,7 +445,8 @@ class OptionPortfolio(
     - P&L calculations (PnLMixin)
     - Risk analysis (RiskMixin)
     - Monte Carlo simulation (MonteCarloMixin)
-    - Scenario analysis (ScenariosMixin)
+    
+    For scenario analysis, use PortfolioAnalyzer from deltadewa.analysis.
     """
 
     pass
