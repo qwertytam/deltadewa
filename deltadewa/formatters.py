@@ -274,7 +274,7 @@ def format_greek_value(
 
 def format_number_auto_precision(value: float) -> str:
     """Format a number with precision that adapts to magnitude.
-    
+
     Automatically selects decimal places based on the absolute value:
     - >= 1,000,000: no decimals, with commas (e.g., "1,234,567")
     - >= 10,000: no decimals, with commas (e.g., "12,345")
@@ -282,10 +282,10 @@ def format_number_auto_precision(value: float) -> str:
     - >= 10: 3 decimals (e.g., "12.345")
     - >= 0.1: 4 decimals (e.g., "0.1234")
     - < 0.1: 6 decimals (e.g., "0.001234")
-    
+
     Args:
         value: Numeric value to format
-        
+
     Returns:
         Formatted string with appropriate precision
     """
@@ -345,13 +345,13 @@ def format_spot_with_pct(
 
 def format_currency_for_df(value: object) -> str:
     """NA-safe currency formatter for DataFrame cells.
-    
+
     Args:
         value: Value to format (may be numeric, NA, or None)
-        
+
     Returns:
         Formatted string (e.g., "$1,234.56" or "-" for NA values)
-        
+
     Note:
         Uses format_currency() with $-X format for negatives (canonical format).
         This differs from the old closure which used -$X format.
@@ -359,7 +359,9 @@ def format_currency_for_df(value: object) -> str:
     if pd.isna(cast(Any, value)):
         return "-"
     try:
-        return format_currency(float(cast(Any, value)), compact=False, precision=2)
+        return format_currency(
+            float(cast(Any, value)), compact=False, precision=2
+        )
     except (TypeError, ValueError):
         return "-" if value is None else str(value)
 

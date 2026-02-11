@@ -25,7 +25,6 @@ from deltadewa.visualization.convenience import (
     plot_greeks_consolidated,
 )
 
-
 __all__ = [
     "OptionCharts",
     "plot_pnl_diagram",

@@ -75,9 +75,7 @@ class ScenarioChartsMixin:
         )
         ax1.set_xlabel("Spot Price", fontsize=11)
         ax1.set_ylabel("P&L ($)", fontsize=11)
-        ax1.yaxis.set_major_formatter(
-            FuncFormatter(format_currency_for_axis)
-        )
+        ax1.yaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
 
         # Add date info to title
         date_str = valuation_date.strftime("%Y-%m-%d")

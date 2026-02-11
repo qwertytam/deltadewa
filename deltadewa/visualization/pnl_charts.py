@@ -683,9 +683,7 @@ class PnLChartsMixin:
         ax.grid(True, alpha=0.3, linestyle=":", linewidth=0.8)
 
         # Apply currency formatters
-        ax.yaxis.set_major_formatter(
-            FuncFormatter(format_currency_for_axis)
-        )
+        ax.yaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
 
         # Custom x-axis formatter showing price + % change (use centralized formatter)
         def format_spot_with_pct(x, pos):  # pylint: disable=unused-argument
@@ -836,6 +834,4 @@ class PnLChartsMixin:
         ax.set_title(title, fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)
         ax.legend(loc="best", fontsize=10)
-        ax.yaxis.set_major_formatter(
-            FuncFormatter(format_currency_for_axis)
-        )
+        ax.yaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
