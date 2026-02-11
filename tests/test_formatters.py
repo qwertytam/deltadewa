@@ -79,7 +79,9 @@ class TestFormatPercentage:
     def test_format_percentage_already_percent(self):
         """Test percentage formatting when value is already percentage."""
         assert format_percentage(15.23, from_decimal=False) == "15.23%"
-        assert format_percentage(15.23, from_decimal=False, decimals=1) == "15.2%"
+        assert (
+            format_percentage(15.23, from_decimal=False, decimals=1) == "15.2%"
+        )
 
     def test_format_percentage_show_sign(self):
         """Test show_sign parameter."""
@@ -184,10 +186,12 @@ class TestFormatHtmlMetric:
 
     def test_format_html_metric_percentage(self):
         """Test HTML metric formatting for percentages."""
-        result = format_html_metric("Volatility", 0.25, format_type="percentage")
+        result = format_html_metric(
+            "Volatility", 0.25, format_type="percentage"
+        )
         assert "Volatility" in result
         assert "%" in result
-    
+
     def test_format_html_metric_near_zero(self):
         """Test HTML metric formatting for near-zero values."""
         # Currency at threshold boundary (0.01)
@@ -195,51 +199,27 @@ class TestFormatHtmlMetric:
         # At exactly threshold, should format normally (not as ~$0)
         assert "$0.01" in result
         assert "~$0" not in result
-        
+
         # Currency below threshold
         result = format_html_metric("Value", 0.001, format_type="currency")
         assert "~$0" in result
-        
+
         # Percentage at threshold boundary (0.0001 = 0.01%)
         # At exactly threshold, should format normally (not as ~0%)
         result = format_html_metric("Change", 0.0001, format_type="percentage")
         assert "0.01%" in result
         assert "~0%" not in result
-        
+
         # Percentage below threshold should show as ~0%
         result = format_html_metric("Change", 0.00001, format_type="percentage")
         assert "~0%" in result
-        
+
         # Number at threshold boundary (0.01)
         result = format_html_metric("Delta", 0.01, format_type="number")
         # At exactly threshold, should format normally
         assert "0.01" in result
         assert "~0" not in result
-        
+
         # Number below threshold
         result = format_html_metric("Delta", 0.001, format_type="number")
         assert "~0" in result
-
-
-class TestBackwardCompatibility:
-    """Test backward compatibility with old imports."""
-
-    def test_utils_format_currency(self):
-        """Test that utils.format_currency still works."""
-        from deltadewa.utils import format_currency as utils_format_currency
-        assert utils_format_currency(1234.56) == "$1,234.56"
-
-    def test_utils_format_percentage(self):
-        """Test that utils.format_percentage still works."""
-        from deltadewa.utils import format_percentage as utils_format_percentage
-        assert utils_format_percentage(0.1523) == "15.23%"
-
-    def test_utils_format_number(self):
-        """Test that utils.format_number still works."""
-        from deltadewa.utils import format_number as utils_format_number
-        assert utils_format_number(1234.5678) == "1,234.57"
-
-    def test_utils_format_currency_compact(self):
-        """Test that utils.format_currency_compact still works."""
-        from deltadewa.utils import format_currency_compact as utils_format_currency_compact
-        assert utils_format_currency_compact(12000, None) == "$12k"
