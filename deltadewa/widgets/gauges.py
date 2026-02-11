@@ -53,12 +53,12 @@ class GaugeIndicator:
 
     def __init__(
         self,
-        start: float,
-        end: float,
-        min_val: float,
-        mid_val: float,
-        max_val: float,
-        actual: float,
+        start: float = 0.0,
+        end: float = 100.0,
+        min_val: float = 25.0,
+        mid_val: float = 50.0,
+        max_val: float = 75.0,
+        actual: float = 50.0,
         low_color: str = "#d73a49",  # Red (matches COLOUR_NEGATIVE)
         mid_color: str = DEFAULT_PALETTE.yellow,  # Yellow/Orange
         high_color: str = "#26a641",  # Green (matches COLOUR_POSITIVE)
