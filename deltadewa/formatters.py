@@ -329,28 +329,19 @@ def format_html_metric(
         >>> badge = format_html_metric("Delta", 1234.56, is_currency=True)
         >>> # Returns HTML badge with formatted currency
     """
-    # Format the value
-    boundary_1 = 10**6
-    boundary_2 = 10**3
-    
+    # Format the value using centralized formatters
     if abs(value) < 0.01:
         value_str = "~$0" if is_currency else "~0"
-    elif abs(value) >= boundary_1:
-        value_str = (
-            f"${value/boundary_1:,.2f}M"
-            if is_currency
-            else f"{value:,.0f}"
-        )
-    elif abs(value) >= boundary_2:
-        value_str = (
-            f"${value/boundary_2:,.2f}K"
-            if is_currency
-            else f"{value:,.1f}"
-        )
+    elif is_currency:
+        value_str = format_currency(value, compact=compact, precision=2)
     else:
-        value_str = (
-            f"${value:.2f}" if is_currency else f"{value:.2f}"
-        )
+        # For non-currency values, use adaptive formatting
+        if abs(value) >= 10**6:
+            value_str = format_number(value, decimals=0, thousands_sep=True)
+        elif abs(value) >= 10**3:
+            value_str = format_number(value, decimals=1, thousands_sep=True)
+        else:
+            value_str = format_number(value, decimals=2, thousands_sep=True)
     
     # Determine color
     if is_neutral:
@@ -387,14 +378,14 @@ def format_html_percentage(
         >>> badge = format_html_percentage("Return", 0.1523)
         >>> # Returns HTML badge showing "15.23%"
     """
-    boundary_1 = 10**1
-    
+    # Format the value using centralized formatter
     if abs(value) < 10**-4:
         value_str = "~0%"
-    elif abs(value) >= boundary_1:
-        value_str = f"{value/boundary_1*100:,.0f}%"
+    elif abs(value) >= 10**1:
+        # For very large percentages (>1000%), show as integer
+        value_str = format_percentage(value, decimals=0, from_decimal=True)
     else:
-        value_str = f"{value*100:,.2f}%"
+        value_str = format_percentage(value, decimals=2, from_decimal=True)
     
     # Determine color
     if is_neutral:
