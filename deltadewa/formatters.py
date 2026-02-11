@@ -979,7 +979,11 @@ def create_diverging_style(
 
     # Format currency columns with consistent formatting
     def format_currency_consistent(value: object) -> str:
-        """Format currency consistently: -$1,234.56"""
+        """Format currency consistently: -$1,234.56
+        
+        Note: Uses -$X format (sign before $) for DataFrame display consistency.
+        This differs from format_currency() which uses $-X format.
+        """
         if pd.isna(cast(Any, value)):
             return "-"
         try:

@@ -10,13 +10,7 @@ import numpy as np
 import pandas as pd
 from IPython.display import clear_output
 
-# Import formatting functions from centralized module
-from deltadewa.formatters import (
-    format_currency as _format_currency,
-    format_percentage as _format_percentage,
-    format_number as _format_number,
-    format_currency_for_axis as _format_currency_for_axis,
-)
+
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
@@ -213,6 +207,10 @@ def display_styled_dataframe(
     """
     Format and display a DataFrame with consistent styling.
 
+    .. deprecated::
+        Use :func:`deltadewa.formatters.prepare_dataframe_display` and
+        :func:`deltadewa.formatters.apply_gradient_style` directly instead.
+
     Args:
         df: DataFrame to display
         format_dict: Dictionary of column names to format strings
@@ -232,32 +230,20 @@ def display_styled_dataframe(
         ...     gradient_column='delta'
         ... )
     """
-    df_display = df.copy()
+    from deltadewa.formatters import prepare_dataframe_display, apply_gradient_style
 
-    # Convert column names to title case if requested
-    if title_case:
-        df_display = df_display.rename(
-            columns=lambda s: s.replace("_", " ").title()
-        )
-
-    # Reset index to start at specified value
-    df_display.index = pd.RangeIndex(
-        start=start_index, stop=len(df_display) + start_index
+    df_display = prepare_dataframe_display(
+        df, title_case=title_case, start_index=start_index
     )
 
-    # Apply formatting
     styled = df_display.style
     if format_dict:
-        # Update format_dict keys if title case was applied
         if title_case:
-            format_dict_updated = {
+            format_dict = {
                 k.replace("_", " ").title(): v for k, v in format_dict.items()
             }
-        else:
-            format_dict_updated = format_dict
-        styled = styled.format(format_dict_updated)
+        styled = styled.format(format_dict)
 
-    # Apply background gradient if specified
     if gradient_column:
         gradient_col = (
             gradient_column.replace("_", " ").title()
@@ -265,98 +251,19 @@ def display_styled_dataframe(
             else gradient_column
         )
         if gradient_col in df_display.columns:
-            styled = styled.background_gradient(
-                subset=[gradient_col], cmap=cmap
-            )
+            styled = apply_gradient_style(styled, gradient_col, cmap=cmap)
 
     return styled
 
 
 # ========== Formatting Functions (Re-exported for Backward Compatibility) ==========
-# These functions are now defined in deltadewa.formatters and re-exported here
-# for backward compatibility with existing code.
+# These are re-exported from deltadewa.formatters for backward compatibility.
+# New code should import directly from deltadewa.formatters.
 
-
-def format_currency(value: Union[int, float], compact: bool = False) -> str:
-    """
-    Format a value as currency.
-
-    Args:
-        value: Numeric value to format
-        compact: If True, use compact notation (K, M, B) for large values
-
-    Returns:
-        Formatted currency string
-
-    Example:
-        >>> format_currency(1234.56)
-        '$1,234.56'
-        >>> format_currency(1234567.89, compact=True)
-        '$1.23M'
-    
-    Note:
-        This function is re-exported from deltadewa.formatters for backward compatibility.
-    """
-    return _format_currency(value, compact=compact, precision=2)
-
-
-def format_percentage(value: float, decimals: int = 2) -> str:
-    """
-    Format a decimal value as a percentage.
-
-    Args:
-        value: Decimal value (e.g., 0.1523 for 15.23%)
-        decimals: Number of decimal places (default: 2)
-
-    Returns:
-        Formatted percentage string
-
-    Example:
-        >>> format_percentage(0.1523)
-        '15.23%'
-        >>> format_percentage(0.1523, decimals=1)
-        '15.2%'
-    
-    Note:
-        This function is re-exported from deltadewa.formatters for backward compatibility.
-    """
-    return _format_percentage(value, decimals=decimals, from_decimal=True)
-
-
-def format_number(
-    value: Union[int, float], decimals: int = 2, thousands_sep: bool = True
-) -> str:
-    """
-    Format a number with appropriate precision.
-
-    Args:
-        value: Numeric value to format
-        decimals: Number of decimal places (default: 2)
-        thousands_sep: Whether to use thousands separator (default: True)
-
-    Returns:
-        Formatted number string
-
-    Example:
-        >>> format_number(1234.5678)
-        '1,234.57'
-        >>> format_number(1234.5678, decimals=4)
-        '1,234.5678'
-    
-    Note:
-        This function is re-exported from deltadewa.formatters for backward compatibility.
-    """
-    return _format_number(value, decimals=decimals, thousands_sep=thousands_sep)
-
-
-def format_currency_compact(x, pos) -> str:  # pylint: disable=unused-argument
-    """
-    Format currency: <$10k as $x,xxx, <$10M as $x,xxxk, else $x,xxxM
-    
-    Note:
-        This function is re-exported from deltadewa.formatters for backward compatibility.
-    """
-    return _format_currency_for_axis(x, pos)
+from deltadewa.formatters import format_currency  # noqa: F811
+from deltadewa.formatters import format_percentage  # noqa: F811
+from deltadewa.formatters import format_number  # noqa: F811
+from deltadewa.formatters import format_currency_for_axis as format_currency_compact  # noqa: F811
 
 
 # ========== Status/Alert Utilities ==========
