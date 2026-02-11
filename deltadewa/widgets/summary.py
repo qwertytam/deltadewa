@@ -11,6 +11,7 @@ from deltadewa.utils import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
 # Import centralized formatters
 from deltadewa.formatters import format_html_badge, format_html_metric
+from deltadewa.analysis import PortfolioAnalyzer
 
 if TYPE_CHECKING:
     from deltadewa.portfolio import OptionPortfolio
@@ -290,7 +291,8 @@ class NetHedgeSummary:
         )
 
         # Probabilistic stats (expandable)
-        analysis = self.portfolio.risk_reward_analysis()
+        analyzer = PortfolioAnalyzer(self.portfolio)
+        analysis = analyzer.risk_reward_analysis()
 
         prob_html = "<div style='padding:10px;'>"
 
