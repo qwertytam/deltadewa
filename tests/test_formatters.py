@@ -1,12 +1,12 @@
 """Tests for deltadewa.formatters module - centralized formatting functions."""
 
-import pytest
 from deltadewa.formatters import (
     format_currency,
     format_currency_for_axis,
     format_percentage,
     format_percentage_for_axis,
     format_number,
+    format_number_auto_precision,
     format_greek_value,
     format_spot_with_pct,
     format_html_badge,
@@ -174,8 +174,22 @@ class TestFormatHtmlMetric:
         """Test HTML metric formatting for numbers."""
         result = format_html_metric("Delta", 1234.56, format_type="number")
         assert "Delta" in result
-        # Should format as "1,234.56" (2 decimal places by default)
-        assert "1,234.56" in result
+        # Should format as "1.23K" (compact notation for values >= 1000)
+        assert "1.23K" in result
+
+    def test_format_html_metric_number_delegates_compact(self):
+        """Test that format_html_metric delegates to format_number with compact=True."""
+        # Values < 1000 should not be compact
+        result = format_html_metric("Small", 500.0, format_type="number")
+        assert "500.00" in result
+        # Values >= 1000 should use compact notation
+        result = format_html_metric("Large", 5000.0, format_type="number")
+        assert "5.00K" in result
+        # Very large values should use M notation
+        result = format_html_metric(
+            "VeryLarge", 5000000.0, format_type="number"
+        )
+        assert "5.00M" in result
 
     def test_format_html_metric_currency(self):
         """Test HTML metric formatting for currency."""
@@ -223,3 +237,61 @@ class TestFormatHtmlMetric:
         # Number below threshold
         result = format_html_metric("Delta", 0.001, format_type="number")
         assert "~0" in result
+
+
+class TestFormatNumberAutoPrecision:
+    """Test cases for format_number_auto_precision function."""
+
+    def test_millions(self):
+        """Test formatting of millions."""
+        assert format_number_auto_precision(1234567.0) == "1,234,567"
+
+    def test_ten_thousands(self):
+        """Test formatting of ten thousands."""
+        assert format_number_auto_precision(12345.0) == "12,345"
+
+    def test_hundreds(self):
+        """Test formatting of hundreds."""
+        assert format_number_auto_precision(123.456) == "123.46"
+
+    def test_tens(self):
+        """Test formatting of tens."""
+        assert format_number_auto_precision(12.3456) == "12.346"
+
+    def test_small(self):
+        """Test formatting of small numbers (0.1-1)."""
+        assert format_number_auto_precision(0.1234) == "0.1234"
+
+    def test_very_small(self):
+        """Test formatting of very small numbers (<0.1)."""
+        assert format_number_auto_precision(0.001234) == "0.001234"
+
+    def test_negative(self):
+        """Test formatting of negative numbers."""
+        assert format_number_auto_precision(-1234567.0) == "-1,234,567"
+        assert format_number_auto_precision(-12.3456) == "-12.346"
+
+    def test_boundary_million(self):
+        """Test boundary at 1 million."""
+        assert format_number_auto_precision(1_000_000.0) == "1,000,000"
+        assert format_number_auto_precision(999_999.0) == "999,999"
+
+    def test_boundary_ten_thousand(self):
+        """Test boundary at 10,000."""
+        assert format_number_auto_precision(10_000.0) == "10,000"
+        assert format_number_auto_precision(9_999.0) == "9,999.00"
+
+    def test_boundary_hundred(self):
+        """Test boundary at 100."""
+        assert format_number_auto_precision(100.0) == "100.00"
+        assert format_number_auto_precision(99.999) == "99.999"
+
+    def test_boundary_ten(self):
+        """Test boundary at 10."""
+        assert format_number_auto_precision(10.0) == "10.000"
+        assert format_number_auto_precision(9.9999) == "9.9999"
+
+    def test_boundary_tenth(self):
+        """Test boundary at 0.1."""
+        assert format_number_auto_precision(0.1) == "0.1000"
+        assert format_number_auto_precision(0.09999) == "0.099990"

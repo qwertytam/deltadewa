@@ -13,7 +13,10 @@ from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
 
 # Import centralized formatters
-from deltadewa.formatters import format_spot_with_pct as format_spot_with_pct_centralized
+from deltadewa.formatters import (
+    format_spot_with_pct as format_spot_with_pct_centralized,
+    format_currency_for_axis,
+)
 from deltadewa.analysis import PortfolioAnalyzer
 
 if TYPE_CHECKING:
@@ -27,9 +30,6 @@ class PnLChartsMixin:
         portfolio: "OptionPortfolioBase"
 
         def _get_expiry_label(self) -> str: ...
-
-        # pylint: disable=missing-function-docstring, unused-argument
-        def format_currency_compact(self, x: float, pos: int) -> str: ...
 
     def plot_pnl_diagram(
         self,
@@ -683,9 +683,7 @@ class PnLChartsMixin:
         ax.grid(True, alpha=0.3, linestyle=":", linewidth=0.8)
 
         # Apply currency formatters
-        ax.yaxis.set_major_formatter(
-            FuncFormatter(self.format_currency_compact)
-        )
+        ax.yaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
 
         # Custom x-axis formatter showing price + % change (use centralized formatter)
         def format_spot_with_pct(x, pos):  # pylint: disable=unused-argument
@@ -836,6 +834,4 @@ class PnLChartsMixin:
         ax.set_title(title, fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)
         ax.legend(loc="best", fontsize=10)
-        ax.yaxis.set_major_formatter(
-            FuncFormatter(self.format_currency_compact)
-        )
+        ax.yaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))

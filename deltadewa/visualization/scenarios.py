@@ -8,17 +8,14 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
 from deltadewa.colours import DEFAULT_PALETTE
+from deltadewa.formatters import format_currency_for_axis
 
 if TYPE_CHECKING:
-    from typing import Any
+    pass
 
 
 class ScenarioChartsMixin:
     """Mixin providing scenario analysis visualization."""
-
-    if TYPE_CHECKING:
-        # pylint: disable=unused-argument, missing-function-docstring
-        def format_currency_compact(self, x: float, pos: Any) -> str: ...
 
     def plot_scenario_analysis(
         self,
@@ -78,9 +75,7 @@ class ScenarioChartsMixin:
         )
         ax1.set_xlabel("Spot Price", fontsize=11)
         ax1.set_ylabel("P&L ($)", fontsize=11)
-        ax1.yaxis.set_major_formatter(
-            FuncFormatter(self.format_currency_compact)
-        )
+        ax1.yaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
 
         # Add date info to title
         date_str = valuation_date.strftime("%Y-%m-%d")

@@ -5,16 +5,9 @@ This module provides common utilities for formatting, printing,
 and displaying data in notebooks and scripts.
 """
 
-from typing import TYPE_CHECKING, Optional
-import pandas as pd
+from typing import Optional
 from IPython.display import clear_output
-from deltadewa.formatters import (
-    prepare_dataframe_display,
-    apply_gradient_style,
-)
-
-if TYPE_CHECKING:
-    from pandas.io.formats.style import Styler
+from deltadewa.formatters import format_number_auto_precision
 
 __all__ = [
     # Print formatting utilities
@@ -24,8 +17,6 @@ __all__ = [
     "print_section",
     "print_key_value",
     "print_metric_summary",
-    # DataFrame display utilities
-    "display_styled_dataframe",
     # Status/alert utilities
     "print_success",
     "print_warning",
@@ -166,84 +157,12 @@ def print_metric_summary(
 
     for key, value in metrics.items():
         if isinstance(value, float):
-            if abs(value) >= 10**6:
-                print(f"{key}: {value:,.0f}")
-            elif abs(value) >= 10000:
-                print(f"{key}: {value:.0f}")
-            elif abs(value) >= 100:
-                print(f"{key}: {value:.2f}")
-            elif abs(value) >= 10:
-                print(f"{key}: {value:.3f}")
-            elif abs(value) >= 0.1:
-                print(f"{key}: {value:.4f}")
-            else:
-                print(f"{key}: {value:.6f}")
+            print(f"{key}: {format_number_auto_precision(value)}")
         else:
             print(f"{key}: {value}")
 
     if title:
         print_divider(width, char="=")
-
-
-# ========== DataFrame Display Utilities ==========
-
-
-def display_styled_dataframe(
-    df: pd.DataFrame,
-    format_dict: Optional[dict] = None,
-    gradient_column: Optional[str] = None,
-    start_index: int = 1,
-    title_case: bool = True,
-    cmap: str = "RdYlGn",
-) -> "Styler":
-    """
-    Format and display a DataFrame with consistent styling.
-
-    .. deprecated::
-        Use :func:`deltadewa.formatters.prepare_dataframe_display` and
-        :func:`deltadewa.formatters.apply_gradient_style` directly instead.
-
-    Args:
-        df: DataFrame to display
-        format_dict: Dictionary of column names to format strings
-        gradient_column: Column to apply background gradient
-        start_index: Starting index for display (default: 1)
-        title_case: Whether to convert column names to title case (default: True)
-        cmap: Colormap for gradient (default: 'RdYlGn')
-
-    Returns:
-        Styled DataFrame
-
-    Example:
-        >>> df = pd.DataFrame({'price': [100.0, 200.0], 'delta': [0.5, 0.75]})
-        >>> styled = display_styled_dataframe(
-        ...     df,
-        ...     format_dict={'price': '${:.2f}', 'delta': '{:.4f}'},
-        ...     gradient_column='delta'
-        ... )
-    """
-    df_display = prepare_dataframe_display(
-        df, title_case=title_case, start_index=start_index
-    )
-
-    styled = df_display.style
-    if format_dict:
-        if title_case:
-            format_dict = {
-                k.replace("_", " ").title(): v for k, v in format_dict.items()
-            }
-        styled = styled.format(format_dict)
-
-    if gradient_column:
-        gradient_col = (
-            gradient_column.replace("_", " ").title()
-            if title_case
-            else gradient_column
-        )
-        if gradient_col in df_display.columns:
-            styled = apply_gradient_style(styled, gradient_col, cmap=cmap)
-
-    return styled
 
 
 # ========== Status/Alert Utilities ==========

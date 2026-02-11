@@ -17,7 +17,6 @@ Date: 2026-01-12
 """
 
 from deltadewa.visualization.base import OptionCharts
-from deltadewa.visualization.formatters import FormattersMixin
 from deltadewa.visualization.convenience import (
     plot_pnl_diagram,
     plot_pnl_distribution_with_metrics,
@@ -26,10 +25,8 @@ from deltadewa.visualization.convenience import (
     plot_greeks_consolidated,
 )
 
-
 __all__ = [
     "OptionCharts",
-    "FormattersMixin",
     "plot_pnl_diagram",
     "plot_pnl_distribution_with_metrics",
     "plot_greeks_by_strike",
