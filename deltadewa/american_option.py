@@ -360,6 +360,8 @@ class AmericanOption:
     def update_spot_price(self, new_spot_price: float):
         """Update the spot price and recalculate."""
         # Ensure spot remains strictly positive for QuantLib engines
+        # Cast to float to handle numpy types which QuantLib rejects
+        new_spot_price = float(new_spot_price)
         safe_spot = max(new_spot_price, 1e-8)
         self.spot_price = safe_spot
         self.spot_quote.setValue(safe_spot)
@@ -375,6 +377,8 @@ class AmericanOption:
         Args:
             new_volatility: New volatility value (annualized, e.g., 0.25 for 25%)
         """
+        # Cast to float to handle numpy types which QuantLib rejects
+        new_volatility = float(new_volatility)
         self.volatility = new_volatility
         if hasattr(self, "vol_quote") and self.vol_quote is not None:
             self.vol_quote.setValue(new_volatility)
