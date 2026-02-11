@@ -270,6 +270,10 @@ def format_spot_with_pct(x: float, current_spot: float, pos: Optional[int] = Non
     """
     Format spot price with percentage change for axis labels.
     
+    Note: Parameter order (x, current_spot, pos) is intentional for clarity
+          when used with lambda/partial. Use get_spot_price_axis_formatter()
+          factory function for direct FuncFormatter compatibility.
+    
     Args:
         x: Spot price value
         current_spot: Current spot price to calculate percentage from
