@@ -42,6 +42,7 @@ import warnings
 import pandas as pd
 import numpy as np
 from matplotlib.colors import TwoSlopeNorm
+from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 from deltadewa.colours import DEFAULT_PALETTE
 
@@ -55,6 +56,391 @@ try:
     IPYTHON_AVAILABLE = True
 except ImportError:
     IPYTHON_AVAILABLE = False
+
+
+# ============================================================================
+# Scalar Value Formatters
+# ============================================================================
+
+
+def format_currency(
+    value: Union[int, float],
+    compact: bool = False,
+    precision: int = 2,
+    show_sign: bool = False,
+) -> str:
+    """
+    Format a value as currency with consistent behavior.
+    
+    Args:
+        value: Numeric value to format
+        compact: Use K/M/B notation for large values
+        precision: Decimal places (ignored if compact and value >= 1000)
+        show_sign: Include + for positive values
+    
+    Returns:
+        Formatted currency string
+    
+    Compact thresholds:
+        - < 1,000: $X.XX
+        - < 1,000,000: $X.XXK
+        - >= 1,000,000: $X.XXM
+        - >= 1,000,000,000: $X.XXB
+    
+    Examples:
+        >>> format_currency(1234.56)
+        '$1,234.56'
+        >>> format_currency(1234567.89, compact=True)
+        '$1.23M'
+        >>> format_currency(-1234.56)
+        '-$1,234.56'
+    """
+    if not compact:
+        sign = "+" if show_sign and value > 0 else ""
+        if value < 0:
+            return f"-${abs(value):,.{precision}f}"
+        return f"{sign}${value:,.{precision}f}"
+    
+    abs_val = abs(value)
+    sign = "-" if value < 0 else ("+" if show_sign and value > 0 else "")
+    
+    if abs_val < 1_000:
+        return f"{sign}${abs_val:,.{precision}f}"
+    elif abs_val < 1_000_000:
+        return f"{sign}${abs_val/1_000:.{precision}f}K"
+    elif abs_val < 1_000_000_000:
+        return f"{sign}${abs_val/1_000_000:.{precision}f}M"
+    else:
+        return f"{sign}${abs_val/1_000_000_000:.{precision}f}B"
+
+
+def format_currency_for_axis(x: float, pos: Any = None) -> str:
+    """
+    Format currency for matplotlib axis labels (FuncFormatter compatible).
+    
+    Uses standardized thresholds:
+    - < $10,000: $X,XXX (full with commas)
+    - < $10,000,000: $XXXK (thousands)
+    - >= $10,000,000: $X.XM (millions)
+    
+    Args:
+        x: Value to format
+        pos: Position (unused, for FuncFormatter compatibility)
+    
+    Returns:
+        Formatted string
+    """
+    _ = pos  # Unused but required for FuncFormatter
+    if abs(x) < 10_000:
+        return f"${x:,.0f}"
+    elif abs(x) < 10_000_000:
+        return f"${x/1_000:,.0f}K"
+    else:
+        return f"${x/1_000_000:,.1f}M"
+
+
+def format_percentage(
+    value: float,
+    decimals: int = 2,
+    from_decimal: bool = True,
+    show_sign: bool = False,
+) -> str:
+    """
+    Format a value as percentage.
+    
+    Args:
+        value: Value to format
+        decimals: Decimal places
+        from_decimal: If True, multiply by 100 (0.15 → 15%)
+        show_sign: Include + for positive values
+    
+    Returns:
+        Formatted percentage string
+    
+    Examples:
+        >>> format_percentage(0.1523)
+        '15.23%'
+        >>> format_percentage(15.23, from_decimal=False)
+        '15.23%'
+        >>> format_percentage(0.1523, decimals=1)
+        '15.2%'
+    """
+    pct_value = value * 100 if from_decimal else value
+    sign = "+" if show_sign and pct_value > 0 else ""
+    return f"{sign}{pct_value:.{decimals}f}%"
+
+
+def format_percentage_for_axis(x: float, pos: Any = None) -> str:
+    """
+    Format percentage for matplotlib axis labels (FuncFormatter compatible).
+    Assumes input is in decimal form (0.25 -> '25%').
+    
+    Args:
+        x: Value to format (in decimal form)
+        pos: Position (unused, for FuncFormatter compatibility)
+    
+    Returns:
+        Formatted percentage string
+    """
+    _ = pos  # Unused but required for FuncFormatter
+    return f"{x*100:.0f}%"
+
+
+def format_number(
+    value: Union[int, float],
+    decimals: int = 2,
+    thousands_sep: bool = True,
+) -> str:
+    """
+    Format a number with appropriate precision.
+    
+    Args:
+        value: Numeric value to format
+        decimals: Number of decimal places (default: 2)
+        thousands_sep: Whether to use thousands separator (default: True)
+    
+    Returns:
+        Formatted number string
+    
+    Examples:
+        >>> format_number(1234.5678)
+        '1,234.57'
+        >>> format_number(1234.5678, decimals=4)
+        '1,234.5678'
+        >>> format_number(1234.5678, thousands_sep=False)
+        '1234.57'
+    """
+    if thousands_sep:
+        return f"{value:,.{decimals}f}"
+    else:
+        return f"{value:.{decimals}f}"
+
+
+def format_greek_value(
+    value: float,
+    greek_name: str = "",
+    compact: bool = True,
+) -> str:
+    """
+    Format Greek values with appropriate precision based on magnitude.
+    
+    Args:
+        value: Greek value
+        greek_name: Name hint for formatting (e.g., "theta" formats as currency)
+        compact: Use compact notation for large values
+    
+    Returns:
+        Formatted string
+    
+    Examples:
+        >>> format_greek_value(1234.56, "theta", True)
+        '$1.23K'
+        >>> format_greek_value(0.1234, "delta", False)
+        '0.12'
+    """
+    # Determine if this greek should be formatted as currency
+    currency_greeks = ["theta", "value", "cost"]
+    is_currency = any(g.lower() in greek_name.lower() for g in currency_greeks)
+    
+    if is_currency:
+        return format_currency(value, compact=compact, precision=2)
+    else:
+        # Non-currency greeks: use adaptive precision
+        if abs(value) < 0.01:
+            return "~0"
+        elif abs(value) < 1:
+            return f"{value:.4f}"
+        elif abs(value) < 1000:
+            return f"{value:.2f}"
+        else:
+            if compact:
+                return format_number(value, decimals=0, thousands_sep=True)
+            return format_number(value, decimals=2, thousands_sep=True)
+
+
+# ============================================================================
+# HTML Formatters (for widgets/dashboards)
+# ============================================================================
+
+
+def format_html_badge(
+    label: str,
+    value_str: str,
+    color: str = "neutral",
+    text_color: str = "white",
+    min_width: int = 120,
+) -> str:
+    """
+    Create an HTML badge for dashboard display.
+    
+    Args:
+        label: Badge label/name
+        value_str: Pre-formatted value string
+        color: 'positive', 'negative', 'neutral', or hex color
+        text_color: Text color (default white)
+        min_width: Minimum width in pixels
+    
+    Returns:
+        HTML string for the badge
+    
+    Example:
+        >>> badge = format_html_badge("Delta", "$1,234", "positive")
+        >>> # Returns HTML div with green background
+    """
+    # Map color names to actual colors
+    color_map = {
+        "positive": DEFAULT_PALETTE.positive,
+        "negative": DEFAULT_PALETTE.negative,
+        "neutral": DEFAULT_PALETTE.medium_grey,
+    }
+    bg_color = color_map.get(color, color)
+    
+    return (
+        f'<div style="display:inline-block; background-color:{bg_color}; '
+        f"color:{text_color}; padding:8px 12px; margin:5px; "
+        f'border-radius:5px; font-weight:bold; min-width:{min_width}px;">'
+        f'<div style="font-size:11px; opacity:0.9;">{label}</div>'
+        f'<div style="font-size:16px;">{value_str}</div>'
+        f"</div>"
+    )
+
+
+def format_html_metric(
+    name: str,
+    value: float,
+    is_currency: bool = False,
+    is_neutral: bool = False,
+    compact: bool = True,
+) -> str:
+    """
+    Format a metric as colored HTML badge with automatic color coding.
+    
+    Args:
+        name: Metric name
+        value: Numeric value
+        is_currency: Format value as currency
+        is_neutral: Use neutral color regardless of value
+        compact: Use compact notation for large values
+    
+    Returns:
+        HTML badge string
+    
+    Example:
+        >>> badge = format_html_metric("Delta", 1234.56, is_currency=True)
+        >>> # Returns HTML badge with formatted currency
+    """
+    # Format the value
+    boundary_1 = 10**6
+    boundary_2 = 10**3
+    
+    if abs(value) < 0.01:
+        value_str = "~$0" if is_currency else "~0"
+    elif abs(value) >= boundary_1:
+        value_str = (
+            f"${value/boundary_1:,.2f}M"
+            if is_currency
+            else f"{value:,.0f}"
+        )
+    elif abs(value) >= boundary_2:
+        value_str = (
+            f"${value/boundary_2:,.2f}K"
+            if is_currency
+            else f"{value:,.1f}"
+        )
+    else:
+        value_str = (
+            f"${value:.2f}" if is_currency else f"{value:.2f}"
+        )
+    
+    # Determine color
+    if is_neutral:
+        color = "neutral"
+    elif value < 0:
+        color = "negative"
+    elif value > 0:
+        color = "positive"
+    else:
+        color = "neutral"
+    
+    return format_html_badge(name, value_str, color=color)
+
+
+def format_html_percentage(
+    name: str,
+    value: float,
+    is_neutral: bool = False,
+) -> str:
+    """
+    Format a percentage metric as colored HTML badge.
+    
+    Assumes value is in decimal form (0.15 = 15%).
+    
+    Args:
+        name: Metric name
+        value: Percentage value in decimal form
+        is_neutral: Use neutral color regardless of value
+    
+    Returns:
+        HTML badge string
+    
+    Example:
+        >>> badge = format_html_percentage("Return", 0.1523)
+        >>> # Returns HTML badge showing "15.23%"
+    """
+    boundary_1 = 10**1
+    
+    if abs(value) < 10**-4:
+        value_str = "~0%"
+    elif abs(value) >= boundary_1:
+        value_str = f"{value/boundary_1*100:,.0f}%"
+    else:
+        value_str = f"{value*100:,.2f}%"
+    
+    # Determine color
+    if is_neutral:
+        color = "neutral"
+    elif value < 0:
+        color = "negative"
+    elif value > 0:
+        color = "positive"
+    else:
+        color = "neutral"
+    
+    return format_html_badge(name, value_str, color=color)
+
+
+# ============================================================================
+# Axis Formatter Factories
+# ============================================================================
+
+
+def get_currency_axis_formatter() -> FuncFormatter:
+    """Return a FuncFormatter for currency axis labels."""
+    return FuncFormatter(format_currency_for_axis)
+
+
+def get_percentage_axis_formatter() -> FuncFormatter:
+    """Return a FuncFormatter for percentage axis labels."""
+    return FuncFormatter(format_percentage_for_axis)
+
+
+def get_spot_price_axis_formatter(current_spot: float) -> FuncFormatter:
+    """
+    Return a FuncFormatter showing spot price with % change.
+    
+    Args:
+        current_spot: Current spot price for calculating % change
+    
+    Returns:
+        FuncFormatter that displays:
+            $420
+            +10%
+    """
+    def _fmt(x, pos=None):
+        _ = pos  # Unused
+        pct = (x / current_spot - 1) * 100 if current_spot != 0 else 0
+        return f"{format_currency(x, compact=False, precision=0)}\n{pct:+.0f}%"
+    return FuncFormatter(_fmt)
 
 
 # ============================================================================
@@ -938,6 +1324,21 @@ def get_matplotlib_norm_and_cmap(
 # ============================================================================
 
 __all__ = [
+    # Scalar formatters
+    "format_currency",
+    "format_currency_for_axis",
+    "format_percentage",
+    "format_percentage_for_axis",
+    "format_number",
+    "format_greek_value",
+    # HTML formatters
+    "format_html_badge",
+    "format_html_metric",
+    "format_html_percentage",
+    # Axis formatter factories
+    "get_currency_axis_formatter",
+    "get_percentage_axis_formatter",
+    "get_spot_price_axis_formatter",
     # Core functions
     "prepare_dataframe_display",
     "apply_gradient_style",

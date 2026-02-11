@@ -18,10 +18,10 @@ class TestFormattersMixin:
     def test_format_currency_compact_thousands(self):
         """Test format_currency_compact with thousands."""
         result = FormattersMixin.format_currency_compact(12000)
-        assert result == "$12k"
+        assert result == "$12K"
         
         result = FormattersMixin.format_currency_compact(500000)
-        assert result == "$500k"
+        assert result == "$500K"
 
     def test_format_currency_compact_millions(self):
         """Test format_currency_compact with millions."""

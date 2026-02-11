@@ -10,6 +10,14 @@ import numpy as np
 import pandas as pd
 from IPython.display import clear_output
 
+# Import formatters from centralized module for backward compatibility
+from deltadewa.formatters import (
+    format_currency,
+    format_percentage,
+    format_number,
+    format_currency_for_axis as format_currency_compact,
+)
+
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
@@ -262,95 +270,6 @@ def display_styled_dataframe(
             )
 
     return styled
-
-
-def format_currency(value: Union[int, float], compact: bool = False) -> str:
-    """
-    Format a value as currency.
-
-    Args:
-        value: Numeric value to format
-        compact: If True, use compact notation (K, M, B) for large values
-
-    Returns:
-        Formatted currency string
-
-    Example:
-        >>> format_currency(1234.56)
-        '$1,234.56'
-        >>> format_currency(1234567.89, compact=True)
-        '$1.23M'
-    """
-    if not compact:
-        return f"${value:,.2f}"
-
-    abs_val = abs(value)
-    sign = "-" if value < 0 else ""
-
-    if abs_val < 1_000:
-        return f"{sign}${abs_val:,.2f}"
-    elif abs_val < 1_000_000:
-        return f"{sign}${abs_val/1_000:,.1f}K"
-    elif abs_val < 1_000_000_000:
-        return f"{sign}${abs_val/1_000_000:,.2f}M"
-    else:
-        return f"{sign}${abs_val/1_000_000_000:,.2f}B"
-
-
-def format_percentage(value: float, decimals: int = 2) -> str:
-    """
-    Format a decimal value as a percentage.
-
-    Args:
-        value: Decimal value (e.g., 0.1523 for 15.23%)
-        decimals: Number of decimal places (default: 2)
-
-    Returns:
-        Formatted percentage string
-
-    Example:
-        >>> format_percentage(0.1523)
-        '15.23%'
-        >>> format_percentage(0.1523, decimals=1)
-        '15.2%'
-    """
-    return f"{value * 100:.{decimals}f}%"
-
-
-def format_number(
-    value: Union[int, float], decimals: int = 2, thousands_sep: bool = True
-) -> str:
-    """
-    Format a number with appropriate precision.
-
-    Args:
-        value: Numeric value to format
-        decimals: Number of decimal places (default: 2)
-        thousands_sep: Whether to use thousands separator (default: True)
-
-    Returns:
-        Formatted number string
-
-    Example:
-        >>> format_number(1234.5678)
-        '1,234.57'
-        >>> format_number(1234.5678, decimals=4)
-        '1,234.5678'
-    """
-    if thousands_sep:
-        return f"{value:,.{decimals}f}"
-    else:
-        return f"{value:.{decimals}f}"
-
-
-def format_currency_compact(x, pos) -> str:  # pylint: disable=unused-argument
-    """Format currency: <$10k as $x,xxx, <$10M as $x,xxxk, else $x,xxxM"""
-    if abs(x) < 10_000:
-        return f"${x:,.0f}"
-    elif abs(x) < 10_000_000:
-        return f"${x/1_000:,.0f}k"
-    else:
-        return f"${x/1_000_000:,.1f}M"
 
 
 # ========== Status/Alert Utilities ==========
