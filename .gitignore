@@ -233,3 +233,4 @@ __marimo__/
 # Test files (temporary test scripts)
 test_fixes.py
 test_*.png
+tests/benchmark_*.py
