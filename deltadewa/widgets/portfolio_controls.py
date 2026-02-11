@@ -18,19 +18,12 @@ from datetime import datetime, timedelta
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
-from deltadewa.persistence import (
-    import_portfolio,
-    export_portfolio_to_json,
-    export_portfolio_to_csv,
-    export_portfolio_to_yaml,
-)
-from deltadewa.config import (
-    create_export_dir_widget as _create_export_dir_widget,
-)
-from deltadewa.portfolio import OptionPortfolio
+from deltadewa.widgets.export_controls import ExportControlsMixin
+from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
 
 
-class PortfolioWidgets:
+
+class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     """
     Comprehensive widget creation utilities for portfolio analysis.
 
@@ -58,27 +51,6 @@ class PortfolioWidgets:
         self._export_dir = None
         if export_dir:
             self.export_dir = Path(export_dir)
-
-    @property
-    def export_dir(self) -> Path:
-        """Get the current export directory."""
-        if self._export_dir is None:
-            raise ValueError(
-                "Export directory is not set. Please select a directory first."
-            )
-        return self._export_dir
-
-    @export_dir.setter
-    def export_dir(self, value: Union[Path, str]):
-        """Set the export directory and ensure it exists."""
-        if value is None:
-            self._export_dir = None
-            return
-
-        path = Path(value)
-        # Create directory if it doesn't exist
-        path.mkdir(parents=True, exist_ok=True)
-        self._export_dir = path
 
     # ==========================================================================
     # Position Management Widgets
