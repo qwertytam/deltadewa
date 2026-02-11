@@ -225,7 +225,6 @@ class GlobalAssumptions:
             description="Include underlying in MC simulation",
             style={"description_width": "200px"},
             layout=widgets.Layout(width="500px"),
-            continuous_update=False,
         )
 
         # Callbacks registry
