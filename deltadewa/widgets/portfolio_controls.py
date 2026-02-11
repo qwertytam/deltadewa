@@ -182,7 +182,7 @@ class PortfolioWidgets:
         )
 
         # Volatility input
-        volatility_input = widgets.FloatText(
+        volatility_input = widgets.BoundedFloatText(
             value=self.portfolio.volatility,
             description="Volatility:",
             min=0.01,
@@ -616,7 +616,7 @@ class PortfolioWidgets:
             continuous_update=False,
         )
 
-        commission_widget = widgets.FloatText(
+        commission_widget = widgets.BoundedFloatText(
             value=default_commission,
             min=0.0,
             max=10.0,
@@ -801,7 +801,6 @@ class PortfolioWidgets:
             button_style="danger",
             multiple=False,
             description="Select File:",
-            style={"description_width": "150px"},
         )
 
         preview_button = widgets.Button(

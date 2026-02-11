@@ -52,3 +52,10 @@ dev = [
 	"pylint (>=4.0.4,<5.0.0)",
 	"jupytext (>=1.19.1,<2.0.0)",
 ]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:builtin type SwigPyPacked has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
+    "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
+]
