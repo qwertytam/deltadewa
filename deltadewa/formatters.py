@@ -276,9 +276,11 @@ def format_html_badge(
     Args:
         label: Badge label/name
         value_str: Pre-formatted value string
-        color: 'positive', 'negative', 'neutral', or hex color
-        text_color: Text color (default white)
-        min_width: Minimum width in pixels
+        color: Color specification - either a semantic name ('positive', 'negative', 
+               'neutral') which maps to palette colors, or a CSS color value 
+               (e.g., '#FF5733', 'rgb(255,87,51)'). Unrecognized values are used as-is.
+        text_color: Text color (default: 'white')
+        min_width: Minimum width of badge in pixels (default: 120)
     
     Returns:
         HTML string for the badge
@@ -286,6 +288,8 @@ def format_html_badge(
     Example:
         >>> badge = format_html_badge("Delta", "$1,234", "positive")
         >>> # Returns HTML div with green background
+        >>> badge = format_html_badge("Custom", "100", "#FF5733")
+        >>> # Returns HTML div with custom hex color background
     """
     # Map color names to actual colors
     color_map = {
@@ -311,6 +315,7 @@ def format_html_metric(
     is_currency: bool = False,
     is_neutral: bool = False,
     compact: bool = True,
+    force_negative_color: bool = False,
 ) -> str:
     """
     Format a metric as colored HTML badge with automatic color coding.
@@ -321,6 +326,7 @@ def format_html_metric(
         is_currency: Format value as currency
         is_neutral: Use neutral color regardless of value
         compact: Use compact notation for large values
+        force_negative_color: Force negative (red) color even for positive values (e.g., for costs)
     
     Returns:
         HTML badge string
@@ -328,6 +334,8 @@ def format_html_metric(
     Example:
         >>> badge = format_html_metric("Delta", 1234.56, is_currency=True)
         >>> # Returns HTML badge with formatted currency
+        >>> badge = format_html_metric("Cost", 100, is_currency=True, force_negative_color=True)
+        >>> # Returns red badge even though value is positive (costs are bad)
     """
     # Format the value using centralized formatters
     if abs(value) < 0.01:
@@ -346,6 +354,9 @@ def format_html_metric(
     # Determine color
     if is_neutral:
         color = "neutral"
+    elif force_negative_color:
+        # For costs or other "bad" metrics, always use negative color
+        color = "negative"
     elif value < 0:
         color = "negative"
     elif value > 0:

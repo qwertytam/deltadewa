@@ -86,16 +86,15 @@ class NetHedgeSummary:
             for sub in matches_to_format_as_currency
         )
         
-        if is_cost:
-            # Special handling for costs: always negative display
-            # Use the centralized formatter but with custom logic
-            result = format_html_metric(name, value, is_currency=is_currency, is_neutral=is_neutral, compact=True)
-            # Override color for costs to always be negative
-            if not is_neutral:
-                result = result.replace(DEFAULT_PALETTE.positive, DEFAULT_PALETTE.negative)
-            return result
-        else:
-            return format_html_metric(name, value, is_currency=is_currency, is_neutral=is_neutral, compact=True)
+        # Delegate to centralized formatter with force_negative_color for costs
+        return format_html_metric(
+            name, 
+            value, 
+            is_currency=is_currency, 
+            is_neutral=is_neutral, 
+            compact=True,
+            force_negative_color=is_cost and not is_neutral
+        )
 
     def _format_pct(
         self, name: str, value: float, is_neutral: bool = False
