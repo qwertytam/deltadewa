@@ -20,9 +20,10 @@ class BatchPricer:
     where P=positions, S=spot scenarios, T=time points.
     
     Performance Impact:
-        - 5 positions × 20 spots × 5 dates: ~20× speedup
-        - 10 positions × 30 spots × 10 dates: ~30× speedup
-        - 10 positions × 50 spots × 20 dates: ~50× speedup
+        Measured speedup: 5-10% improvement across different scenario sizes
+        - Example: 10 positions × 50 spots × 20 dates = 10,000 → 200 setups
+        - Main benefit: Avoids expensive QL environment rebuilds
+        - Note: QL price computation still dominates (finite difference calculation)
     """
     
     def __init__(
