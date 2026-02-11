@@ -1,7 +1,7 @@
 """Core portfolio management and mixin composition."""
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any
 import pandas as pd
 from deltadewa.american_option import AmericanOption
 from deltadewa.portfolio.position import OptionPosition
@@ -18,6 +18,34 @@ class OptionPortfolioBase:
     Handles core portfolio functionality including position management,
     market conditions, and basic value calculations.
     """
+
+    if TYPE_CHECKING:
+        # pylint: disable=missing-function-docstring
+        def all_greeks(self) -> Dict[str, float]: ...
+
+        # pylint: disable=missing-function-docstring
+        def total_delta(self) -> float: ...
+
+        # pylint: disable=missing-function-docstring
+        def total_gamma(self) -> float: ...
+
+        # pylint: disable=missing-function-docstring
+        def total_vega(self) -> float: ...
+
+        # pylint: disable=missing-function-docstring
+        def total_theta(self) -> float: ...
+
+        # pylint: disable=missing-function-docstring
+        def total_rho(self) -> float: ...
+
+        # pylint: disable=missing-function-docstring
+        def net_delta(self) -> float: ...
+
+        # pylint: disable=missing-function-docstring
+        def hedge_ratio(self) -> float: ...
+
+        # pylint: disable=missing-function-docstring
+        def delta_adjustment_needed(self) -> float: ...
 
     def __init__(
         self,
@@ -168,6 +196,7 @@ class OptionPortfolioBase:
 
         # Use batch Greek calculation if available (optimized path)
         if hasattr(self, "all_greeks"):
+            # pylint: disable=assignment-from-no-return
             greeks = self.all_greeks()
             stats["total_delta"] = greeks["total_delta"]
             stats["net_delta"] = greeks["net_delta"]
@@ -175,30 +204,40 @@ class OptionPortfolioBase:
             stats["total_vega"] = greeks["total_vega"]
             stats["total_theta"] = greeks["total_theta"]
             stats["total_rho"] = greeks["total_rho"]
-            
+
             # Derived metrics
             if self.underlying_quantity != 0:
-                stats["hedge_ratio"] = -(greeks["total_delta"] / self.underlying_quantity) * 100
+                stats["hedge_ratio"] = (
+                    -(greeks["total_delta"] / self.underlying_quantity) * 100
+                )
             else:
                 stats["hedge_ratio"] = 0.0
             stats["delta_adjustment"] = -greeks["net_delta"]
         else:
             # Fallback to individual methods (existing code)
             if hasattr(self, "total_delta"):
+                # pylint: disable=assignment-from-no-return
                 stats["total_delta"] = self.total_delta()
             if hasattr(self, "net_delta"):
+                # pylint: disable=assignment-from-no-return
                 stats["net_delta"] = self.net_delta()
             if hasattr(self, "hedge_ratio"):
+                # pylint: disable=assignment-from-no-return
                 stats["hedge_ratio"] = self.hedge_ratio()
             if hasattr(self, "delta_adjustment_needed"):
+                # pylint: disable=assignment-from-no-return
                 stats["delta_adjustment"] = self.delta_adjustment_needed()
             if hasattr(self, "total_gamma"):
+                # pylint: disable=assignment-from-no-return
                 stats["total_gamma"] = self.total_gamma()
             if hasattr(self, "total_vega"):
+                # pylint: disable=assignment-from-no-return
                 stats["total_vega"] = self.total_vega()
             if hasattr(self, "total_theta"):
+                # pylint: disable=assignment-from-no-return
                 stats["total_theta"] = self.total_theta()
             if hasattr(self, "total_rho"):
+                # pylint: disable=assignment-from-no-return
                 stats["total_rho"] = self.total_rho()
 
         # Add volatility statistics
@@ -224,7 +263,7 @@ class OptionPortfolioBase:
         stats = self.summary_stats()
         parts = [f"Positions: {stats['total_positions']}"]
         parts.append(f"Value: ${stats['total_value']:,.2f}")
-        
+
         if "net_delta" in stats:
             parts.append(f"Net Delta: {stats['net_delta']:,.2f}")
         if "total_gamma" in stats:
@@ -233,7 +272,7 @@ class OptionPortfolioBase:
             parts.append(f"Vega: {stats['total_vega']:.2f}")
         if "total_theta" in stats:
             parts.append(f"Theta: {stats['total_theta']:.2f}")
-        
+
         return ", ".join(parts)
 
     def summary_market(self) -> str:
@@ -424,7 +463,11 @@ class OptionPortfolioBase:
     def __repr__(self) -> str:
         """String representation of the portfolio."""
         if hasattr(self, "net_delta"):
-            return f"<OptionPortfolio: {len(self.positions)} positions, Net Delta: {self.net_delta():.2f}>"
+            s = (
+                f"<OptionPortfolio: {len(self.positions)} "
+                + f"positions, Net Delta: {self.net_delta():.2f}>"
+            )
+            return s
         return f"<OptionPortfolio: {len(self.positions)} positions>"
 
 
@@ -445,8 +488,8 @@ class OptionPortfolio(
     - P&L calculations (PnLMixin)
     - Risk analysis (RiskMixin)
     - Monte Carlo simulation (MonteCarloMixin)
-    
+
     For scenario analysis, use PortfolioAnalyzer from deltadewa.analysis.
     """
 
-    pass
+    pass  # pylint: disable=unnecessary-pass

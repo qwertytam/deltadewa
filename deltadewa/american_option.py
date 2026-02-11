@@ -152,23 +152,19 @@ class AmericanOption:
                 self.bsm_process, self._TIME_STEPS, self._PRICE_STEPS
             )
         )
-        
-        # If cache exists and Greeks are not yet registered, register them
-        # Note: We don't re-register if already registered to avoid invalidating cache
-        if hasattr(self, '_greeks_cache') and not self._greeks_cache._compute_funcs:
-            self._register_greeks()
-        # If cache exists and Greeks are already registered, just invalidate
-        elif hasattr(self, '_greeks_cache') and self._greeks_cache._compute_funcs:
+
+        # If cache exists, just invalidate it since Greeks are already registered in __init__
+        if hasattr(self, "_greeks_cache"):
             self._invalidate_greeks_cache()
 
     def _register_greeks(self) -> None:
         """Register Greek computation functions with the cache."""
-        self._greeks_cache.register('price', self._compute_price)
-        self._greeks_cache.register('delta', self._compute_delta)
-        self._greeks_cache.register('gamma', self._compute_gamma)
-        self._greeks_cache.register('vega', self._compute_vega)
-        self._greeks_cache.register('theta', self._compute_theta)
-        self._greeks_cache.register('rho', self._compute_rho)
+        self._greeks_cache.register("price", self._compute_price)
+        self._greeks_cache.register("delta", self._compute_delta)
+        self._greeks_cache.register("gamma", self._compute_gamma)
+        self._greeks_cache.register("vega", self._compute_vega)
+        self._greeks_cache.register("theta", self._compute_theta)
+        self._greeks_cache.register("rho", self._compute_rho)
 
     def _invalidate_greeks_cache(self) -> None:
         """Invalidate all cached Greeks."""
@@ -305,19 +301,19 @@ class AmericanOption:
 
     def price(self) -> float:
         """Calculate the option price (cached)."""
-        return self._greeks_cache.get('price')
+        return self._greeks_cache.get("price")
 
     def delta(self) -> float:
         """Calculate Delta (sensitivity to underlying price) (cached)."""
-        return self._greeks_cache.get('delta')
+        return self._greeks_cache.get("delta")
 
     def gamma(self) -> float:
         """Calculate Gamma (second derivative with respect to underlying price) (cached)."""
-        return self._greeks_cache.get('gamma')
+        return self._greeks_cache.get("gamma")
 
     def vega(self) -> float:
         """Calculate Vega (sensitivity to volatility) (cached)."""
-        return self._greeks_cache.get('vega')
+        return self._greeks_cache.get("vega")
 
     def theta(self) -> float:
         """
@@ -336,11 +332,11 @@ class AmericanOption:
         Returns:
             float: Theta value ($ per calendar day)
         """
-        return self._greeks_cache.get('theta')
+        return self._greeks_cache.get("theta")
 
     def rho(self) -> float:
         """Calculate Rho (sensitivity to interest rate) (cached)."""
-        return self._greeks_cache.get('rho')
+        return self._greeks_cache.get("rho")
 
     def greeks(self) -> dict:
         """Calculate all Greeks (batch computation for efficiency)."""

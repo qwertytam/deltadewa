@@ -9,22 +9,31 @@ from threading import RLock
 class GreeksCache:
     """
     Thread-safe, lazy-loading cache for option Greeks.
-    
+
     Each Greek is computed only when first accessed and cached until
     invalidation. The cache is invalidated when market conditions change.
     """
-    
+
     _compute_funcs: Dict[str, Callable[[], float]] = field(default_factory=dict)
     _cache: Dict[str, float] = field(default_factory=dict)
-    _dirty: set = field(default_factory=lambda: {'delta', 'gamma', 'vega', 'theta', 'rho', 'price'})
+    _dirty: set = field(
+        default_factory=lambda: {
+            "delta",
+            "gamma",
+            "vega",
+            "theta",
+            "rho",
+            "price",
+        }
+    )
     _lock: RLock = field(default_factory=RLock)
-    
+
     def register(self, name: str, compute_func: Callable[[], float]) -> None:
         """Register a Greek computation function."""
         with self._lock:
             self._compute_funcs[name] = compute_func
             self._dirty.add(name)
-    
+
     def get(self, name: str) -> float:
         """Get a Greek value, computing if necessary (lazy evaluation)."""
         with self._lock:
@@ -34,7 +43,7 @@ class GreeksCache:
                 self._cache[name] = self._compute_funcs[name]()
                 self._dirty.discard(name)
             return self._cache[name]
-    
+
     def invalidate(self, names: Optional[set] = None) -> None:
         """Mark Greeks as needing recomputation."""
         with self._lock:
@@ -42,18 +51,18 @@ class GreeksCache:
                 self._dirty = set(self._compute_funcs.keys())
             else:
                 self._dirty.update(names)
-    
+
     def invalidate_all(self) -> None:
         """Mark all Greeks as dirty and clear cache."""
         with self._lock:
             self._dirty = set(self._compute_funcs.keys())
             self._cache.clear()
-    
+
     def is_cached(self, name: str) -> bool:
         """Check if a Greek is currently cached and valid."""
         with self._lock:
             return name in self._cache and name not in self._dirty
-    
+
     def compute_all(self) -> Dict[str, float]:
         """
         Compute all registered Greeks and return as dictionary.
@@ -67,7 +76,7 @@ class GreeksCache:
                     self._dirty.discard(name)
                 result[name] = self._cache[name]
             return result
-    
+
     @property
     def cache_stats(self) -> Dict[str, Any]:
         """Return cache statistics for monitoring/debugging."""

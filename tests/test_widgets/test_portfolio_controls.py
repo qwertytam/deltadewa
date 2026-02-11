@@ -1,7 +1,7 @@
 """Tests for deltadewa.widgets.portfolio_controls module."""
 
-import pytest
 from unittest.mock import Mock
+import pytest
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
 
 

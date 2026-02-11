@@ -5,6 +5,7 @@ from datetime import datetime
 import hashlib
 import pandas as pd
 import numpy as np
+from deltadewa.analysis.base import PortfolioAnalyzer
 
 
 def classify_maturity_bucket(days_to_expiry: int) -> str:
@@ -17,8 +18,6 @@ def classify_maturity_bucket(days_to_expiry: int) -> str:
     Returns:
         Bucket label string
     """
-    from deltadewa.analysis.base import PortfolioAnalyzer
-
     return PortfolioAnalyzer.classify_maturity_bucket(days_to_expiry)
 
 
@@ -32,8 +31,6 @@ def quick_carry_analysis(portfolio) -> Dict:
     Returns:
         Dictionary with carry metrics
     """
-    from deltadewa.analysis.base import PortfolioAnalyzer
-
     analyzer = PortfolioAnalyzer(portfolio)
     return analyzer.calculate_carry_metrics()
 
@@ -51,8 +48,6 @@ def quick_risk_concentration(
     Returns:
         Dictionary with concentration analysis
     """
-    from deltadewa.analysis.base import PortfolioAnalyzer
-
     analyzer = PortfolioAnalyzer(portfolio)
     return analyzer.analyze_risk_concentration(metrics=metrics)
 

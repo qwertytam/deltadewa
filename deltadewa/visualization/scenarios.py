@@ -10,14 +10,18 @@ from matplotlib.ticker import FuncFormatter
 from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
-    from deltadewa.visualization.base import OptionChartsBase
+    from typing import Any
 
 
 class ScenarioChartsMixin:
     """Mixin providing scenario analysis visualization."""
 
+    if TYPE_CHECKING:
+        # pylint: disable=unused-argument, missing-function-docstring
+        def format_currency_compact(self, x: float, pos: Any) -> str: ...
+
     def plot_scenario_analysis(
-        self: "OptionChartsBase",
+        self,
         scenario_df: pd.DataFrame,
         days_forward: int,
         valuation_date,

@@ -12,14 +12,17 @@ from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
-    from deltadewa.visualization.base import OptionChartsBase
+    from deltadewa.portfolio.core import OptionPortfolioBase
 
 
 class ThetaChartsMixin:
     """Mixin providing theta and carry analysis charts."""
 
+    if TYPE_CHECKING:
+        portfolio: "OptionPortfolioBase"
+
     def plot_theta_analysis(
-        self: "OptionChartsBase",
+        self,
         projection_days: int = 30,
         figsize: Tuple[int, int] = (16, 12),
     ) -> Figure:
@@ -63,7 +66,7 @@ class ThetaChartsMixin:
         return fig
 
     def _prepare_theta_data(
-        self: "OptionChartsBase", df: pd.DataFrame
+        self, df: pd.DataFrame
     ) -> Tuple[pd.DataFrame, Dict]:
         """Prepare data for theta analysis."""
         df_carry = df.copy()
@@ -101,9 +104,7 @@ class ThetaChartsMixin:
 
         return df_carry, theta_metrics
 
-    def _plot_theta_by_bucket(
-        self: "OptionChartsBase", ax: Axes, df_carry: pd.DataFrame
-    ):
+    def _plot_theta_by_bucket(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot theta by maturity bucket."""
         theta_by_bucket = (
             df_carry.groupby(["maturity_bucket", "type"])
@@ -168,7 +169,7 @@ class ThetaChartsMixin:
         ax.legend(loc="best")
 
     def _plot_theta_projection(
-        self: "OptionChartsBase",
+        self,
         ax: Axes,
         theta_metrics: Dict,
         projection_days: int,
@@ -212,9 +213,7 @@ class ThetaChartsMixin:
         )
         ax.grid(True, alpha=0.3)
 
-    def _plot_carry_efficiency(
-        self: "OptionChartsBase", ax: Axes, df_carry: pd.DataFrame
-    ):
+    def _plot_carry_efficiency(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot theta/value ratio by bucket."""
         bucket_order = [
             "0-7 days",
@@ -280,9 +279,7 @@ class ThetaChartsMixin:
         )
         ax.grid(True, alpha=0.3, axis="x")
 
-    def _plot_theta_vs_contracts(
-        self: "OptionChartsBase", ax: Axes, df_carry: pd.DataFrame
-    ):
+    def _plot_theta_vs_contracts(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot contract count vs theta contribution."""
         bucket_order = [
             "0-7 days",

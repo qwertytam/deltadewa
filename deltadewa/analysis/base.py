@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class PortfolioAnalyzerBase:
     """
     Base class for portfolio analysis with core initialization.
-    
+
     This class provides the foundational structure for portfolio analysis,
     holding the reference to the portfolio being analyzed. All analysis
     mixins build upon this base class.
@@ -58,4 +58,4 @@ class PortfolioAnalyzer(
     - Risk/reward analysis
     """
 
-    pass
+    pass  # pylint: disable=unnecessary-pass

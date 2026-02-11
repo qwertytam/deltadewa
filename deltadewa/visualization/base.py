@@ -17,10 +17,10 @@ from deltadewa.visualization.theta_charts import ThetaChartsMixin
 class OptionChartsBase:
     """
     Base class with portfolio reference and style setup.
-    
+
     This class provides the foundation for all charting utilities, managing
     the portfolio reference and matplotlib style configuration.
-    
+
     Attributes:
         portfolio: OptionPortfolio instance to visualize
         style: Matplotlib style to use
@@ -127,4 +127,4 @@ class OptionCharts(
         style: Matplotlib style to use (default: 'seaborn-v0_8-darkgrid')
     """
 
-    pass
+    pass  # pylint: disable=unnecessary-pass

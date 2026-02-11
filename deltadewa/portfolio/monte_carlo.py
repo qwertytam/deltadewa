@@ -1,18 +1,37 @@
 """Monte Carlo simulation mixin for option portfolio."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, List
+from datetime import datetime
 import numpy as np
 from deltadewa import constants as const
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolioBase
+    from deltadewa.portfolio.position import OptionPosition
 
 
 class MonteCarloMixin:
     """Mixin providing Monte Carlo simulation for option portfolio."""
 
+    if TYPE_CHECKING:
+        positions: List["OptionPosition"]
+        valuation_date: datetime
+        risk_free_rate: float
+        dividend_yield: float
+        volatility: float
+        spot_price: float
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def _vectorized_pnl_at_expiry(
+            self, spots: np.ndarray, include_underlying: bool = False
+        ) -> np.ndarray: ...
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def calculate_breakeven_points(
+            self, include_underlying: bool = False
+        ) -> List[float]: ...
+
     def calculate_probability_of_profit(
-        self: "OptionPortfolioBase",
+        self,
         method: str = "monte_carlo",
         num_simulations: int = 10000,
         include_underlying: bool = False,
@@ -75,14 +94,13 @@ class MonteCarloMixin:
         # Generate all random numbers at once (50-100x faster than loop)
         z = np.random.standard_normal(num_simulations)
         drift = (
-            self.risk_free_rate
-            - self.dividend_yield
-            - 0.5 * self.volatility**2
+            self.risk_free_rate - self.dividend_yield - 0.5 * self.volatility**2
         ) * time_to_expiry
         diffusion = self.volatility * np.sqrt(time_to_expiry) * z
         final_spots = self.spot_price * np.exp(drift + diffusion)
 
         # Vectorized P&L calculation for all spots at once
+        # pylint: disable=assignment-from-no-return
         simulated_pnls = self._vectorized_pnl_at_expiry(
             final_spots, include_underlying=include_underlying
         )
@@ -115,6 +133,7 @@ class MonteCarloMixin:
         cvar_99 = float(np.mean(pnls_clean[pnls_clean <= var_99]))
 
         # Calculate breakeven points (for backward compatibility)
+        # pylint: disable=assignment-from-no-return
         breakeven_points = self.calculate_breakeven_points(
             include_underlying=include_underlying
         )
