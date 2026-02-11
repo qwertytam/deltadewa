@@ -177,6 +177,20 @@ class TestFormatHtmlMetric:
         # Should format as "1.23K" (compact notation for values >= 1000)
         assert "1.23K" in result
 
+    def test_format_html_metric_number_delegates_compact(self):
+        """Test that format_html_metric delegates to format_number with compact=True."""
+        # Values < 1000 should not be compact
+        result = format_html_metric("Small", 500.0, format_type="number")
+        assert "500.00" in result
+        # Values >= 1000 should use compact notation
+        result = format_html_metric("Large", 5000.0, format_type="number")
+        assert "5.00K" in result
+        # Very large values should use M notation
+        result = format_html_metric(
+            "VeryLarge", 5000000.0, format_type="number"
+        )
+        assert "5.00M" in result
+
     def test_format_html_metric_currency(self):
         """Test HTML metric formatting for currency."""
         result = format_html_metric("Value", 1000000, format_type="currency")

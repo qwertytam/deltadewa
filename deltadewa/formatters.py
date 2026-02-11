@@ -353,8 +353,10 @@ def format_currency_for_df(value: object) -> str:
         Formatted string (e.g., "$1,234.56" or "-" for NA values)
 
     Note:
-        Uses format_currency() with $-X format for negatives (canonical format).
-        This differs from the old closure which used -$X format.
+        Uses format_currency() which produces "$-X" format for negatives
+        (e.g., "$-1,234.56"). This differs from the old closure which used
+        "-$X" format (e.g., "-$1,234.56"). This change standardizes on the
+        canonical format used throughout the codebase.
     """
     if pd.isna(cast(Any, value)):
         return "-"
