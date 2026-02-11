@@ -260,10 +260,10 @@ def display_styled_dataframe(
 # These are re-exported from deltadewa.formatters for backward compatibility.
 # New code should import directly from deltadewa.formatters.
 
-from deltadewa.formatters import format_currency  # noqa: F811
-from deltadewa.formatters import format_percentage  # noqa: F811
-from deltadewa.formatters import format_number  # noqa: F811
-from deltadewa.formatters import format_currency_for_axis as format_currency_compact  # noqa: F811
+from deltadewa.formatters import format_currency
+from deltadewa.formatters import format_percentage
+from deltadewa.formatters import format_number
+from deltadewa.formatters import format_currency_for_axis as format_currency_compact
 
 
 # ========== Status/Alert Utilities ==========
