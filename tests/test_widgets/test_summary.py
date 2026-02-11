@@ -74,19 +74,6 @@ class TestNetHedgeSummary:
             "expected_value": 1.5,
         }
 
-        # Setup risk analysis (deprecated wrapper, still works but not used by widgets anymore)
-        portfolio.risk_reward_analysis.return_value = {
-            "net_debit": 100.0,
-            "max_loss_options": {"max_loss": 100, "is_unlimited": False, "spot_at_max_loss": 95.0},
-            "max_loss_total": {"max_loss": 100, "is_unlimited": False, "spot_at_max_loss": 95.0},
-            "max_profit_options": {"max_profit": 500, "is_unlimited": False, "spot_at_max_profit": 105.0},
-            "max_profit_total": {"max_profit": 500, "is_unlimited": False, "spot_at_max_profit": 105.0},
-            "breakeven_options": [105.0],
-            "breakeven_total": [105.0],
-            "probability_of_profit": 0.6,
-            "expected_value": 1.5,
-        }
-
         portfolio.monte_carlo_results = {
             "simulated_pnls": [1.0, 2.0],
             "expected_pnl": 1.5,
