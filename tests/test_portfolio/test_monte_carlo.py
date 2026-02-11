@@ -48,8 +48,8 @@ class TestMonteCarloMixin:
         assert 0.0 <= result["prob_profit"] <= 1.0
         assert 0.0 <= result["prob_loss"] <= 1.0
         
-        # Probabilities should sum to 1
-        assert abs(result["prob_profit"] + result["prob_loss"] - 1.0) < 0.01
+        # Probabilities should sum to 1 (within floating-point precision)
+        assert abs(result["prob_profit"] + result["prob_loss"] - 1.0) < 1e-9
         
         # probability and prob_profit should be the same
         assert result["probability"] == result["prob_profit"]
@@ -220,14 +220,14 @@ class TestMonteCarloMixin:
         )
         
         result = portfolio.calculate_probability_of_profit(
-            num_simulations=1000, include_underlying=True
+            num_simulations=10000, include_underlying=True
         )
         
         assert "probability" in result
         assert "simulated_pnls" in result
-        # With symmetric random walk, probability should be around 0.5
-        # (but not exactly due to drift and finite samples)
-        assert 0.3 <= result["prob_profit"] <= 0.7
+        # With symmetric GBM and risk-free drift, probability should be around 0.5
+        # Using larger sample size (10k) and tighter bounds for better validation
+        assert 0.45 <= result["prob_profit"] <= 0.55
 
     def test_single_position_portfolio(self):
         """Test Monte Carlo with single option position."""

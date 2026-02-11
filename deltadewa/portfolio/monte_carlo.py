@@ -88,6 +88,9 @@ class MonteCarloMixin:
         )
 
         # Clean data (remove any non-finite values)
+        # Non-finite values could theoretically occur from extreme parameter combinations
+        # (e.g., very high volatility causing numerical overflow in exp()), though
+        # this is rare in practice with typical option parameters
         pnls_clean = simulated_pnls[np.isfinite(simulated_pnls)]
         num_valid = len(pnls_clean)
 
