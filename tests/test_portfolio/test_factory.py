@@ -71,7 +71,7 @@ class TestFactoryFunctions:
         assert hasattr(portfolio, "calculate_pnl_at_expiry")
         assert hasattr(portfolio, "calculate_max_loss_options")
         assert hasattr(portfolio, "calculate_probability_of_profit")
-        assert hasattr(portfolio, "scenario_analysis")
+        # ScenariosMixin removed - use PortfolioAnalyzer instead
 
     def test_create_demo_portfolio_returns_full_portfolio(self):
         """Test that demo portfolio has all mixin methods."""
@@ -82,7 +82,7 @@ class TestFactoryFunctions:
         assert hasattr(portfolio, "calculate_pnl_at_expiry")
         assert hasattr(portfolio, "calculate_max_loss_options")
         assert hasattr(portfolio, "calculate_probability_of_profit")
-        assert hasattr(portfolio, "scenario_analysis")
+        # ScenariosMixin removed - use PortfolioAnalyzer instead
 
     def test_create_empty_portfolio_different_params(self):
         """Test create_empty_portfolio with different rate parameters."""

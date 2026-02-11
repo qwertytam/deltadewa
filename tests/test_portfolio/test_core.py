@@ -355,8 +355,7 @@ class TestOptionPortfolio:
         # Check methods from MonteCarloMixin
         assert hasattr(portfolio, "calculate_probability_of_profit")
         
-        # Check methods from ScenariosMixin
-        assert hasattr(portfolio, "scenario_analysis")
+        # ScenariosMixin has been removed - use PortfolioAnalyzer instead
 
     def test_instantiation(self):
         """Test OptionPortfolio can be instantiated."""
