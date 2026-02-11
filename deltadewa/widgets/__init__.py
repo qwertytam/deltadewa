@@ -13,6 +13,8 @@ Classes:
     GaugeIndicator: Visual gauge indicator with configurable color gradient
     HedgeHealthMetric: Configuration for a single hedge health metric
     HedgeHealthDashboard: Comprehensive hedge health dashboard with visual gauges
+    ExportControlsMixin: Mixin for export/import controls (advanced usage)
+    HeatmapControlsMixin: Mixin for heatmap controls (advanced usage)
 
 Usage:
     from deltadewa.widgets import PortfolioWidgets, InteractiveOutput
@@ -26,6 +28,8 @@ from deltadewa.widgets.base import InteractiveOutput
 from deltadewa.widgets.assumptions import GlobalAssumptions
 from deltadewa.widgets.summary import NetHedgeSummary
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
+from deltadewa.widgets.export_controls import ExportControlsMixin
+from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
 from deltadewa.widgets.gauges import GaugeIndicator
 from deltadewa.widgets.health_dashboard import (
     HedgeHealthMetric,
@@ -37,6 +41,8 @@ __all__ = [
     "GlobalAssumptions",
     "NetHedgeSummary",
     "PortfolioWidgets",
+    "ExportControlsMixin",
+    "HeatmapControlsMixin",
     "GaugeIndicator",
     "HedgeHealthMetric",
     "HedgeHealthDashboard",
