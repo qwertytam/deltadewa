@@ -284,8 +284,8 @@ def format_spot_with_pct(x: float, current_spot: float, pos: Optional[int] = Non
     """
     _ = pos  # Unused parameter
     
-    # Check for zero division before calculation
-    if current_spot == 0:
+    # Check for zero division and None values
+    if current_spot is None or current_spot == 0:
         pct = 0
     else:
         pct = (x / current_spot - 1) * 100
@@ -438,6 +438,8 @@ def format_html_metric(
     format_as_currency = format_type == "currency"
     format_as_percentage = format_type == "percentage"
     
+    # Use 0.01 threshold for ~0 display (appropriate for currency and numbers,
+    # percentages are in decimal form so 0.01 = 1% which is significant and shouldn't show as ~0)
     if abs(value) < 0.01:
         value_str = "~$0" if format_as_currency else "~0"
     elif abs(value) >= boundary_1:
@@ -463,7 +465,11 @@ def format_html_metric(
             value_str = f"{value:.2f}"
     
     # Determine badge color
-    # Logic: costs are always negative color, then check neutral flag, then check sign
+    # Logic: 
+    # - Costs are always shown in negative color (red) regardless of value sign
+    #   because costs are semantically negative
+    # - is_neutral flag overrides sign-based coloring (but not is_cost)
+    # - Otherwise, color by sign (positive=green, negative=red, zero=neutral)
     if is_cost:
         color = "negative"
     elif is_neutral:
