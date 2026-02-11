@@ -190,7 +190,12 @@ class TestFormatHtmlMetric:
     
     def test_format_html_metric_near_zero(self):
         """Test HTML metric formatting for near-zero values."""
-        # Near-zero currency
+        # Currency at threshold boundary (0.01)
+        result = format_html_metric("Value", 0.01, format_type="currency")
+        # At exactly threshold, should format normally (not as ~$0)
+        assert "$0.01" in result
+        
+        # Currency below threshold
         result = format_html_metric("Value", 0.001, format_type="currency")
         assert "~$0" in result
         
@@ -203,7 +208,12 @@ class TestFormatHtmlMetric:
         result = format_html_metric("Change", 0.00001, format_type="percentage")
         assert "~0%" in result
         
-        # Near-zero number
+        # Number at threshold boundary (0.01)
+        result = format_html_metric("Delta", 0.01, format_type="number")
+        # At exactly threshold, should format normally
+        assert "0.01" in result
+        
+        # Number below threshold
         result = format_html_metric("Delta", 0.001, format_type="number")
         assert "~0" in result
 

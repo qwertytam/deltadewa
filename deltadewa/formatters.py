@@ -284,9 +284,9 @@ def format_spot_with_pct(x: float, current_spot: float, pos: Optional[int] = Non
     """
     _ = pos  # Unused parameter
     
-    # Handle edge cases
+    # Handle None edge case
     if x is None:
-        return "$0\n0%"  # Zero has no sign (consistent with formatting below)
+        return "$0\n0%"
     
     # Check for zero division and None values
     if current_spot is None or current_spot == 0:
@@ -295,6 +295,7 @@ def format_spot_with_pct(x: float, current_spot: float, pos: Optional[int] = Non
         pct = (x / current_spot - 1) * 100
     
     curr = format_currency(x, compact=False, precision=0)
+    # Note: {pct:+.0f} always includes sign (+/-), even for 0
     return f"{curr}\n{pct:+.0f}%"
 
 
