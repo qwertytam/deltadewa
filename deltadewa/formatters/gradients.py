@@ -20,8 +20,6 @@ import pandas as pd
 from matplotlib.colors import TwoSlopeNorm
 import matplotlib.pyplot as plt
 
-from deltadewa.colours import DEFAULT_PALETTE
-
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 

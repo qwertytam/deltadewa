@@ -27,7 +27,11 @@ class MonteCarloMixin:
 
         # pylint: disable=missing-function-docstring, unused-argument
         def calculate_breakeven_points(
-            self, include_underlying: bool = False
+            self,
+            spot_range: Optional[np.ndarray] = None,
+            include_underlying: bool = False,
+            spot_min_pct: float = 0.0,
+            spot_max_pct: float = 200.0,
         ) -> List[float]: ...
 
     def calculate_probability_of_profit(

@@ -4,19 +4,22 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.base import PortfolioAnalyzerBase
+    from deltadewa.portfolio import OptionPortfolio
 
 
 class RiskRewardMixin:
     """
     Mixin for comprehensive risk/reward analysis.
-    
+
     Provides methods for generating risk/reward metrics including
     max loss, max profit, breakeven points, and probability analysis.
     """
 
+    if TYPE_CHECKING:
+        portfolio: OptionPortfolio
+
     def risk_reward_analysis(
-        self: "PortfolioAnalyzerBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         num_simulations: int = 10000,
     ) -> dict:
@@ -34,7 +37,9 @@ class RiskRewardMixin:
 
         # Options only analysis
         max_loss_opts = self.portfolio.calculate_max_loss_options(spot_range)
-        max_profit_opts = self.portfolio.calculate_max_profit_options(spot_range)
+        max_profit_opts = self.portfolio.calculate_max_profit_options(
+            spot_range
+        )
         breakeven_opts = self.portfolio.calculate_breakeven_points(
             spot_range, include_underlying=False
         )
@@ -66,7 +71,7 @@ class RiskRewardMixin:
         }
 
     def format_risk_reward_summary(
-        self: "PortfolioAnalyzerBase", spot_range: Optional[np.ndarray] = None
+        self, spot_range: Optional[np.ndarray] = None
     ) -> str:
         """
         Generate formatted risk/reward summary text.
@@ -117,9 +122,7 @@ class RiskRewardMixin:
         if max_profit_opts["is_unlimited"]:
             lines.append("  Max Profit: UNLIMITED")
         else:
-            profit_line = (
-                f"  Max Profit: ${max_profit_opts['max_profit']:,.2f}"
-            )
+            profit_line = f"  Max Profit: ${max_profit_opts['max_profit']:,.2f}"
             if net_debit > 0:
                 roi = (max_profit_opts["max_profit"] / net_debit) * 100
                 profit_line += f" ({roi:.1f}% return on net debit)"
@@ -144,12 +147,12 @@ class RiskRewardMixin:
             max_profit_total = analysis["max_profit_total"]
 
             if max_loss_total["is_unlimited"]:
-                lines.append("  Max Loss: UNLIMITED (short underlying position)")
+                lines.append(
+                    "  Max Loss: UNLIMITED (short underlying position)"
+                )
             else:
                 portfolio_value = self.portfolio.total_portfolio_value()
-                loss_line = (
-                    f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}"
-                )
+                loss_line = f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}"
                 if portfolio_value > 0:
                     loss_pct = (
                         -max_loss_total["max_loss"] / portfolio_value
@@ -162,7 +165,9 @@ class RiskRewardMixin:
 
             if max_profit_total["is_unlimited"]:
                 if self.portfolio.underlying_quantity > 0:
-                    lines.append("  Max Profit: UNLIMITED (long underlying position)")
+                    lines.append(
+                        "  Max Profit: UNLIMITED (long underlying position)"
+                    )
                 else:
                     lines.append("  Max Profit: UNLIMITED")
                 lines.append("    └─ Profit increases with spot price")
@@ -219,7 +224,7 @@ class RiskRewardMixin:
         return "\n".join(lines)
 
     def print_risk_reward_summary(
-        self: "PortfolioAnalyzerBase", spot_range: Optional[np.ndarray] = None
+        self, spot_range: Optional[np.ndarray] = None
     ):
         """
         Print a formatted risk/reward summary of the portfolio.

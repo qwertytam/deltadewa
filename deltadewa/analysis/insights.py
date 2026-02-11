@@ -3,20 +3,27 @@
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.base import PortfolioAnalyzerBase
+    from deltadewa.portfolio import OptionPortfolio
 
 
 class InsightsMixin:
     """
     Mixin for insights generation and risk summary formatting.
-    
+
     Provides methods for generating formatted risk summaries
     and actionable insights based on portfolio analysis.
     """
 
-    def format_risk_summary(
-        self: "PortfolioAnalyzerBase", stats: Optional[Dict] = None
-    ) -> str:
+    if TYPE_CHECKING:
+        portfolio: OptionPortfolio
+
+        # pylint: disable=missing-function-docstring
+        def calculate_carry_metrics(self) -> Dict: ...
+
+        # pylint: disable=missing-function-docstring
+        def analyze_risk_concentration(self) -> Dict: ...
+
+    def format_risk_summary(self, stats: Optional[Dict] = None) -> str:
         """
         Generate formatted risk summary text.
 
@@ -90,7 +97,7 @@ class InsightsMixin:
 
         return "\n".join(lines)
 
-    def generate_insights(self: "PortfolioAnalyzerBase") -> List[str]:
+    def generate_insights(self) -> List[str]:
         """
         Generate actionable insights based on portfolio analysis.
 
@@ -99,7 +106,11 @@ class InsightsMixin:
         """
         insights = []
         stats = self.portfolio.summary_stats()
+
+        # pylint: disable=assignment-from-no-return
         carry_metrics = self.calculate_carry_metrics()
+
+        # pylint: disable=assignment-from-no-return
         concentration = self.analyze_risk_concentration()
 
         # Delta insights

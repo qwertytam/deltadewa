@@ -5,6 +5,7 @@ in the deltadewa dashboard.
 """
 
 from typing import (
+    TYPE_CHECKING,
     Optional,
     List,
     Tuple,
@@ -24,6 +25,34 @@ class HeatmapControlsMixin:
     - self.create_price_range_slider(): method to create price range slider
     - self.create_date_selector(): method to create date selector
     """
+
+    if TYPE_CHECKING:
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def create_metric_selector(
+            self,
+            metrics: Optional[List[Tuple[str, str]]] = None,
+            description: str = "Metric:",
+            default: str = "pnl",
+        ) -> widgets.Dropdown: ...
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def create_price_range_slider(
+            self,
+            description: str = "Price Range (%):",
+            default: float = 20.0,
+            min_val: float = 5.0,
+            max_val: float = 50.0,
+            step: float = 5.0,
+        ) -> widgets.FloatSlider: ...
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def create_date_selector(
+            self,
+            max_days: Optional[int] = None,
+            description: str = "Valuation Date:",
+            num_steps: int = 10,
+        ) -> widgets.SelectionSlider: ...
 
     # ==========================================================================
     # Heatmap Widgets
@@ -54,6 +83,7 @@ class HeatmapControlsMixin:
                 ("Rho", "rho"),
             ]
 
+        # pylint: disable=assignment-from-no-return
         price_range_slider = self.create_price_range_slider()
 
         display_format = widgets.Dropdown(
@@ -63,10 +93,12 @@ class HeatmapControlsMixin:
             style={"description_width": "150px"},
         )
 
+        # pylint: disable=assignment-from-no-return
         metric_selector = self.create_metric_selector(
             metrics=metrics, default="pnl"
         )
 
+        # pylint: disable=assignment-from-no-return
         date_selector = self.create_date_selector()
 
         return {

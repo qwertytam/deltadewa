@@ -1,17 +1,29 @@
 """Risk analysis mixin for option portfolio."""
 
 from typing import TYPE_CHECKING, Optional, List
+import warnings
 import numpy as np
+from deltadewa.analysis import PortfolioAnalyzer
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolioBase
+    from deltadewa.portfolio.position import OptionPosition
 
 
 class RiskMixin:
     """Mixin providing risk analysis for option portfolio."""
 
+    if TYPE_CHECKING:
+        spot_price: float
+        underlying_quantity: float
+        positions: List["OptionPosition"]
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def calculate_pnl_at_expiry(
+            self, spot_price: float, include_underlying: bool = True
+        ) -> float: ...
+
     def _get_spot_range(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
@@ -79,7 +91,7 @@ class RiskMixin:
             return np.linspace(spot_min, spot_max, num_points)
 
     def _check_unlimited_trend(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: np.ndarray,
         include_underlying: bool,
         check_increasing: bool,
@@ -124,7 +136,7 @@ class RiskMixin:
             )
 
     def calculate_max_loss_options(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
@@ -159,6 +171,7 @@ class RiskMixin:
         spot_at_max_loss = self.spot_price
 
         for spot in spot_range:
+            # pylint: disable=assignment-from-no-return
             pnl = self.calculate_pnl_at_expiry(spot, include_underlying=False)
             if pnl < max_loss:
                 max_loss = pnl
@@ -182,7 +195,7 @@ class RiskMixin:
         }
 
     def calculate_max_profit_options(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
@@ -217,6 +230,7 @@ class RiskMixin:
         spot_at_max_profit = self.spot_price
 
         for spot in spot_range:
+            # pylint: disable=assignment-from-no-return
             pnl = self.calculate_pnl_at_expiry(spot, include_underlying=False)
             if pnl > max_profit:
                 max_profit = pnl
@@ -240,7 +254,7 @@ class RiskMixin:
         }
 
     def calculate_max_loss_total(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
@@ -275,6 +289,7 @@ class RiskMixin:
         spot_at_max_loss = self.spot_price
 
         for spot in spot_range:
+            # pylint: disable=assignment-from-no-return
             pnl = self.calculate_pnl_at_expiry(spot, include_underlying=True)
             if pnl < max_loss:
                 max_loss = pnl
@@ -309,7 +324,7 @@ class RiskMixin:
         }
 
     def calculate_max_profit_total(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
@@ -344,6 +359,7 @@ class RiskMixin:
         spot_at_max_profit = self.spot_price
 
         for spot in spot_range:
+            # pylint: disable=assignment-from-no-return
             pnl = self.calculate_pnl_at_expiry(spot, include_underlying=True)
             if pnl > max_profit:
                 max_profit = pnl
@@ -375,7 +391,7 @@ class RiskMixin:
         }
 
     def calculate_breakeven_points(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         include_underlying: bool = False,
         spot_min_pct: float = 0.0,
@@ -406,6 +422,7 @@ class RiskMixin:
         prev_pnl = None
 
         for spot in spot_range:
+            # pylint: disable=assignment-from-no-return
             pnl = self.calculate_pnl_at_expiry(
                 spot, include_underlying=include_underlying
             )
@@ -421,7 +438,7 @@ class RiskMixin:
         return breakeven_points
 
     def risk_reward_analysis(
-        self: "OptionPortfolioBase",
+        self,
         spot_range: Optional[np.ndarray] = None,
         num_simulations: int = 10000,
     ) -> dict:
@@ -439,8 +456,6 @@ class RiskMixin:
         Returns:
             Dict containing all risk/reward metrics
         """
-        import warnings
-        from deltadewa.analysis import PortfolioAnalyzer
 
         warnings.warn(
             "OptionPortfolio.risk_reward_analysis() is deprecated. "
@@ -454,7 +469,7 @@ class RiskMixin:
         )
 
     def print_risk_reward_summary(
-        self: "OptionPortfolioBase", spot_range: Optional[np.ndarray] = None
+        self, spot_range: Optional[np.ndarray] = None
     ):
         """
         Print a formatted risk/reward summary of the portfolio.
@@ -466,8 +481,6 @@ class RiskMixin:
         Args:
             spot_range: Array of spot prices to analyze (optional)
         """
-        import warnings
-        from deltadewa.analysis import PortfolioAnalyzer
 
         warnings.warn(
             "OptionPortfolio.print_risk_reward_summary() is deprecated. "
