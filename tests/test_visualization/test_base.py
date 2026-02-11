@@ -98,21 +98,10 @@ class TestOptionCharts:
         
         assert charts is not None
         assert hasattr(charts, 'portfolio')
-        assert hasattr(charts, 'format_currency_compact')
         assert hasattr(charts, 'plot_pnl_diagram')
         assert hasattr(charts, 'plot_greeks_by_strike')
         assert hasattr(charts, 'plot_theta_analysis')
         assert hasattr(charts, 'plot_scenario_analysis')
-
-    def test_has_formatter_methods(self):
-        """Test OptionCharts has formatter methods."""
-        portfolio = OptionPortfolio()
-        charts = OptionCharts(portfolio)
-        
-        assert hasattr(charts, 'format_currency_compact')
-        assert hasattr(charts, 'format_currency_full')
-        assert hasattr(charts, 'apply_volatility_percent')
-        assert hasattr(charts, 'apply_spot_price_with_pct')
 
     def test_has_pnl_methods(self):
         """Test OptionCharts has P&L methods."""

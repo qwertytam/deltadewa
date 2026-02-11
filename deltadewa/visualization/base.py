@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from deltadewa.visualization.formatters import FormattersMixin
 from deltadewa.visualization.greeks_charts import GreeksChartsMixin
 from deltadewa.visualization.pnl_charts import PnLChartsMixin
 from deltadewa.visualization.scenarios import ScenarioChartsMixin
@@ -100,7 +99,6 @@ class OptionChartsBase:
 
 
 class OptionCharts(
-    FormattersMixin,
     PnLChartsMixin,
     GreeksChartsMixin,
     ThetaChartsMixin,
@@ -115,7 +113,6 @@ class OptionCharts(
     risk decomposition, theta decay analysis, and scenario analysis.
 
     Composed from specialized mixins:
-    - FormattersMixin: Axis and value formatting utilities
     - PnLChartsMixin: P&L diagram plotting methods
     - GreeksChartsMixin: Greek visualization methods
     - ThetaChartsMixin: Theta and carry analysis charts
