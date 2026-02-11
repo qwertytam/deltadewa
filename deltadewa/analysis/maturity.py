@@ -1,16 +1,12 @@
 """Maturity classification mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING
 import pandas as pd
-
-if TYPE_CHECKING:
-    from deltadewa.analysis.base import PortfolioAnalyzerBase
 
 
 class MaturityMixin:
     """
     Mixin for maturity bucket classification.
-    
+
     Provides methods for classifying options by time to expiration
     and adding maturity bucket columns to DataFrames.
     """
@@ -44,9 +40,7 @@ class MaturityMixin:
         else:
             return "90+ days (Long-term)"
 
-    def add_maturity_buckets(
-        self: "PortfolioAnalyzerBase", df: pd.DataFrame
-    ) -> pd.DataFrame:
+    def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Add maturity bucket column to positions DataFrame.
 

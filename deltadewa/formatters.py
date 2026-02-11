@@ -57,9 +57,13 @@ except ImportError:
     IPYTHON_AVAILABLE = False
 
 try:
+    # pylint: disable=ungrouped-imports
     from matplotlib.ticker import FuncFormatter
+
+    MATPLOTLIB_AVAILABLE = True
 except ImportError:
     FuncFormatter = None  # type: ignore
+    MATPLOTLIB_AVAILABLE = False
 
 
 # ============================================================================
@@ -298,9 +302,9 @@ def format_spot_with_pct(
 
     # Check for zero division and None values
     if current_spot is None or current_spot == 0:
-        pct = 0
+        pct = 0.0
     else:
-        pct = (x / current_spot - 1) * 100
+        pct = (x / current_spot - 1) * 100.0
 
     curr = format_currency(x, compact=False, precision=0)
     # Note: {pct:+.0f} always includes sign (+/-), even for 0
@@ -312,7 +316,7 @@ def format_spot_with_pct(
 # ============================================================================
 
 
-def get_currency_axis_formatter(compact: bool = True) -> "FuncFormatter":
+def get_currency_axis_formatter(compact: bool = True) -> Any:
     """
     Return a matplotlib FuncFormatter for currency values.
 
@@ -333,7 +337,7 @@ def get_currency_axis_formatter(compact: bool = True) -> "FuncFormatter":
         )
 
 
-def get_percentage_axis_formatter(from_decimal: bool = True) -> "FuncFormatter":
+def get_percentage_axis_formatter(from_decimal: bool = True) -> Any:
     """
     Return a matplotlib FuncFormatter for percentage values.
 
@@ -354,7 +358,7 @@ def get_percentage_axis_formatter(from_decimal: bool = True) -> "FuncFormatter":
         )
 
 
-def get_spot_price_axis_formatter(current_spot: float) -> "FuncFormatter":
+def get_spot_price_axis_formatter(current_spot: float) -> Any:
     """
     Return a matplotlib FuncFormatter for spot price with % change.
 

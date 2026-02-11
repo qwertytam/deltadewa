@@ -11,14 +11,17 @@ from matplotlib.figure import Figure
 from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
-    from deltadewa.visualization.base import OptionChartsBase
+    from deltadewa.portfolio.core import OptionPortfolioBase
 
 
 class GreeksChartsMixin:
     """Mixin providing Greek visualization methods."""
 
+    if TYPE_CHECKING:
+        portfolio: "OptionPortfolioBase"
+
     def plot_greeks_by_strike(
-        self: "OptionChartsBase",
+        self,
         metrics: Optional[List[str]] = None,
         figsize: Tuple[int, int] = (18, 16),
     ) -> Figure:
@@ -55,7 +58,7 @@ class GreeksChartsMixin:
         return fig
 
     def plot_greeks_by_maturity(
-        self: "OptionChartsBase",
+        self,
         metrics: Optional[List[str]] = None,
         figsize: Tuple[int, int] = (18, 16),
     ) -> Figure:
@@ -96,7 +99,7 @@ class GreeksChartsMixin:
         return fig
 
     def _plot_greek_by_dimension(
-        self: "OptionChartsBase",
+        self,
         ax: Axes,
         df: pd.DataFrame,
         metric: str,

@@ -17,6 +17,7 @@ def create_empty_portfolio(**kwargs):
         p = create_empty_portfolio(spot_price=150.0, volatility=0.25)
     """
     # Import here to avoid circular imports
+    # pylint: disable=import-outside-toplevel
     from deltadewa.portfolio.core import OptionPortfolio
 
     return OptionPortfolio(**kwargs)
@@ -31,6 +32,7 @@ def create_demo_portfolio():
         OptionPortfolio: portfolio with a couple of example positions
     """
     # Import here to avoid circular imports
+    # pylint: disable=import-outside-toplevel
     from deltadewa.portfolio.core import OptionPortfolio
 
     p = OptionPortfolio(

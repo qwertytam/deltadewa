@@ -3,19 +3,22 @@
 from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.base import PortfolioAnalyzerBase
+    from deltadewa.portfolio import OptionPortfolio
 
 
 class HedgeMixin:
     """
     Mixin for hedge recommendations.
-    
+
     Provides methods for generating specific hedge recommendations
     to achieve target hedge ratios.
     """
 
+    if TYPE_CHECKING:
+        portfolio: "OptionPortfolio"
+
     def calculate_hedge_actions(
-        self: "PortfolioAnalyzerBase",
+        self,
         target_hedge_ratio: float,
         include_option_alternatives: bool = True,
         max_alternatives: int = 10,
@@ -81,7 +84,7 @@ class HedgeMixin:
         return result
 
     def _calculate_option_alternatives(
-        self: "PortfolioAnalyzerBase",
+        self,
         delta_change_needed: float,
         max_alternatives: int,
     ) -> List[Dict]:

@@ -12,19 +12,22 @@ from deltadewa.utils import (
 )
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.base import PortfolioAnalyzerBase
+    from deltadewa.portfolio import OptionPortfolio
 
 
 class ScenariosMixin:
     """
     Mixin for scenario grid generation.
-    
+
     Provides methods for calculating portfolio metrics across 2D grids
     of spot prices and time, or spot prices and volatilities.
     """
 
+    if TYPE_CHECKING:
+        portfolio: "OptionPortfolio"
+
     def _calculate_portfolio_value_at(
-        self: "PortfolioAnalyzerBase",
+        self,
         spot: float,
         valuation_date: datetime,
     ) -> float:
@@ -76,7 +79,7 @@ class ScenariosMixin:
         return total_value
 
     def _calculate_pnl_at_expiry_vectorized(
-        self: "PortfolioAnalyzerBase",
+        self,
         spot_scenarios: np.ndarray,
         include_underlying: bool = True,
     ) -> np.ndarray:
@@ -150,7 +153,7 @@ class ScenariosMixin:
         return pnl
 
     def scenario_grid(
-        self: "PortfolioAnalyzerBase",
+        self,
         spot_scenarios: np.ndarray,
         time_points: List[datetime],
         metric: str = "pnl",
@@ -272,7 +275,7 @@ class ScenariosMixin:
         return pd.DataFrame(results)
 
     def scenario_grid_spot_vol(
-        self: "PortfolioAnalyzerBase",
+        self,
         spot_scenarios: np.ndarray,
         vol_scenarios: np.ndarray,
         metric: str = "pnl",

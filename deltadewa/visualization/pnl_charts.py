@@ -11,18 +11,29 @@ from scipy import stats  # type: ignore
 
 from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
+
 # Import centralized formatters
-from deltadewa.formatters import format_spot_with_pct as format_spot_with_pct_centralized
+from deltadewa.formatters import (
+    format_spot_with_pct as format_spot_with_pct_centralized,
+)
 
 if TYPE_CHECKING:
-    from deltadewa.visualization.base import OptionChartsBase
+    from deltadewa.portfolio.core import OptionPortfolioBase
 
 
 class PnLChartsMixin:
     """Mixin providing P&L diagram plotting methods."""
 
+    if TYPE_CHECKING:
+        portfolio: "OptionPortfolioBase"
+
+        def _get_expiry_label(self) -> str: ...
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def format_currency_compact(self, x: float, pos: int) -> str: ...
+
     def plot_pnl_diagram(
-        self: "OptionChartsBase",
+        self,
         spot_range_pct: float = 40.0,
         num_points: int = 300,
         show_underlying: bool = True,
@@ -55,23 +66,24 @@ class PnLChartsMixin:
 
         # Calculate P&L curves
         pnl_options = [
-            self.portfolio.calculate_pnl_at_expiry(
+            self.portfolio.calculate_pnl_at_expiry(  # type: ignore
                 spot, include_underlying=False
             )
             for spot in spot_range
         ]
         pnl_total = [
-            self.portfolio.calculate_pnl_at_expiry(
+            self.portfolio.calculate_pnl_at_expiry(  # type: ignore
                 spot, include_underlying=True
             )
             for spot in spot_range
         ]
 
         # Get risk/reward metrics
-        analysis = self.portfolio.risk_reward_analysis()
+        analysis = self.portfolio.risk_reward_analysis()  # type: ignore
 
         # Determine expiration label
-        expiry_label = (
+        # pylint: disable=assignment-from-no-return
+        expiry_label = (  # type: ignore
             self._get_expiry_label()
         )  # pylint: disable=unused-variable
         _ = expiry_label  # To avoid unused variable warning
@@ -111,7 +123,7 @@ class PnLChartsMixin:
         return fig
 
     def plot_pnl_distribution_with_metrics(
-        self: "OptionChartsBase",
+        self,
         spot_range_pct: float = 100.0,
         num_points: int = 1000,
         figsize: Tuple[int, int] = (16, 8),
@@ -157,7 +169,7 @@ class PnLChartsMixin:
         # Calculate P&L curve
         pnl_values = np.array(
             [
-                self.portfolio.calculate_pnl_at_expiry(
+                self.portfolio.calculate_pnl_at_expiry(  # type: ignore
                     spot, include_underlying=include_underlying
                 )
                 for spot in spot_range
@@ -167,7 +179,7 @@ class PnLChartsMixin:
         # Get risk/reward metrics
         # CRITICAL: Pass spot_range=None to allow comprehensive range check for max loss/profit
         # The visualization uses spot_range only for the chart display
-        analysis = self.portfolio.risk_reward_analysis(spot_range=None)
+        analysis = self.portfolio.risk_reward_analysis(spot_range=None)  # type: ignore
 
         # Use pre-calculated Monte Carlo expected value if available to ensure consistency
         # between the main analysis and the chart visualization
@@ -451,7 +463,7 @@ class PnLChartsMixin:
         )
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
-                be_pnl = self.portfolio.calculate_pnl_at_expiry(
+                be_pnl = self.portfolio.calculate_pnl_at_expiry(  # type: ignore
                     be, include_underlying=include_underlying
                 )
                 # Add vertical dashed line at break-even
@@ -689,7 +701,7 @@ class PnLChartsMixin:
         return fig
 
     def _plot_pnl_panel(
-        self: "OptionChartsBase",
+        self,
         ax: Axes,
         spot_range: np.ndarray,
         pnl_values: List[float],
@@ -759,7 +771,7 @@ class PnLChartsMixin:
         be_key = f"breakeven_{analysis_key}"
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
-                be_pnl = self.portfolio.calculate_pnl_at_expiry(
+                be_pnl = self.portfolio.calculate_pnl_at_expiry(  # type: ignore
                     be, include_underlying=(analysis_key == "total")
                 )
                 ax.plot(
