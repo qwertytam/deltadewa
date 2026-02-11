@@ -120,7 +120,6 @@ class ExportControlsMixin:
             button_style="danger",
             multiple=False,
             description="Select File:",
-            style={"description_width": "150px"},
         )
 
         preview_button = widgets.Button(
