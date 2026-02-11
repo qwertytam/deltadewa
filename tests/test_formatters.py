@@ -24,10 +24,11 @@ class TestFormatCurrency:
 
     def test_format_currency_compact(self):
         """Test compact currency formatting."""
-        # Values < 1000 stay in full format
-        assert format_currency(1234.56, compact=True) == "$1,234.56"
+        # Values < 1000 stay in full format with precision
         assert format_currency(500, compact=True) == "$500.00"
+        assert format_currency(999.99, compact=True) == "$999.99"
         # Values >= 1000 get compact notation
+        assert format_currency(1234.56, compact=True) == "$1.23K"
         assert format_currency(1500, compact=True) == "$1.50K"
         assert format_currency(1234567, compact=True) == "$1.23M"
         assert format_currency(1234567890, compact=True) == "$1.23B"

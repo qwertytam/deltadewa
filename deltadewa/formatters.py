@@ -463,9 +463,14 @@ def format_html_metric(
             value_str = f"{value:.2f}"
     
     # Determine badge color
-    if is_cost or (value < 0 and not is_neutral):
+    # Logic: costs are always negative color, then check neutral flag, then check sign
+    if is_cost:
         color = "negative"
-    elif value > 0 and not is_neutral:
+    elif is_neutral:
+        color = "neutral"
+    elif value < 0:
+        color = "negative"
+    elif value > 0:
         color = "positive"
     else:
         color = "neutral"
