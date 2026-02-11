@@ -52,12 +52,12 @@ class AmericanOption:
             option_type: "call" or "put"
             valuation_date: Date for valuation (defaults to today)
         """
-        self.spot_price = spot_price
-        self.strike_price = strike_price
+        self.spot_price = float(spot_price)
+        self.strike_price = float(strike_price)
         self.maturity_date = maturity_date
-        self.volatility = volatility
-        self.risk_free_rate = risk_free_rate
-        self.dividend_yield = dividend_yield
+        self.volatility = float(volatility)
+        self.risk_free_rate = float(risk_free_rate)
+        self.dividend_yield = float(dividend_yield)
         self.option_type = option_type.lower()
         self.valuation_date = valuation_date or datetime.now()
 
