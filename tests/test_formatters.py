@@ -175,8 +175,8 @@ class TestFormatHtmlMetric:
         """Test HTML metric formatting for numbers."""
         result = format_html_metric("Delta", 1234.56, format_type="number")
         assert "Delta" in result
-        # Should format as "1,234.56" (2 decimal places by default)
-        assert "1,234.56" in result
+        # Should format as "1.23K" (compact notation for values >= 1000)
+        assert "1.23K" in result
 
     def test_format_html_metric_currency(self):
         """Test HTML metric formatting for currency."""

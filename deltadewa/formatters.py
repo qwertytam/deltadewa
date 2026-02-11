@@ -343,6 +343,27 @@ def format_spot_with_pct(
     return f"{curr}\n{pct:+.0f}%"
 
 
+def format_currency_for_df(value: object) -> str:
+    """NA-safe currency formatter for DataFrame cells.
+    
+    Args:
+        value: Value to format (may be numeric, NA, or None)
+        
+    Returns:
+        Formatted string (e.g., "$1,234.56" or "-" for NA values)
+        
+    Note:
+        Uses format_currency() with $-X format for negatives (canonical format).
+        This differs from the old closure which used -$X format.
+    """
+    if pd.isna(cast(Any, value)):
+        return "-"
+    try:
+        return format_currency(float(cast(Any, value)), compact=False, precision=2)
+    except (TypeError, ValueError):
+        return "-" if value is None else str(value)
+
+
 # ============================================================================
 # Axis Formatter Factories
 # ============================================================================
@@ -486,49 +507,29 @@ def format_html_metric(
     Returns:
         HTML string with formatted badge
     """
-    # Format the value based on type
-    boundary_1 = 10**6
-    boundary_2 = 10**3
-
-    format_as_currency = format_type == "currency"
-    format_as_percentage = format_type == "percentage"
-
     # Handle near-zero values
     # For percentages (in decimal form), use 0.0001 threshold (= 0.01%)
     # For currency and numbers, use 0.01 threshold
-    if format_as_percentage:
+    if format_type == "percentage":
         threshold = 0.0001  # 0.01% in decimal form
     else:
         threshold = 0.01
 
     if abs(value) < threshold:
-        if format_as_percentage:
+        if format_type == "percentage":
             value_str = "~0%"
-        elif format_as_currency:
+        elif format_type == "currency":
             value_str = "~$0"
         else:
             value_str = "~0"
-    elif abs(value) >= boundary_1:
-        if format_as_currency:
-            value_str = f"${value/boundary_1:,.2f}M"
-        elif format_as_percentage:
-            value_str = f"{value*100:,.0f}%"
-        else:
-            value_str = f"{value:,.0f}"
-    elif abs(value) >= boundary_2:
-        if format_as_currency:
-            value_str = f"${value/boundary_2:,.2f}k"
-        elif format_as_percentage:
-            value_str = f"{value*100:,.2f}%"
-        else:
-            value_str = f"{value:,.2f}"
     else:
-        if format_as_currency:
-            value_str = f"${value:.2f}"
-        elif format_as_percentage:
-            value_str = f"{value*100:.2f}%"
-        else:
-            value_str = f"{value:.2f}"
+        # Delegate to existing formatters
+        if format_type == "currency":
+            value_str = format_currency(value, compact=True)
+        elif format_type == "percentage":
+            value_str = format_percentage(value, from_decimal=True)
+        else:  # format_type == "number"
+            value_str = format_number(value, compact=True)
 
     # Determine badge color
     # Logic:
@@ -1026,26 +1027,10 @@ def create_diverging_style(
         )
 
     # Format currency columns with consistent formatting
-    def format_currency_consistent(value: object) -> str:
-        """Format currency consistently: -$1,234.56
-
-        Note: Uses -$X format (sign before $) for DataFrame display consistency.
-        This differs from format_currency() which uses $-X format.
-        """
-        if pd.isna(cast(Any, value)):
-            return "-"
-        try:
-            num = float(cast(Any, value))
-        except (TypeError, ValueError):
-            return "-" if value is None else str(value)
-        if num < 0:
-            return f"-${abs(num):,.2f}"
-        return f"${num:,.2f}"
-
     format_dict: Dict[Any, Optional[Union[str, Callable[[object], str]]]] = {}
     for col in currency_columns:
         if col in df_styled.columns:
-            format_dict[col] = format_currency_consistent
+            format_dict[col] = format_currency_for_df
 
     if format_dict:
         styler = styler.format(format_dict, na_rep="-")
