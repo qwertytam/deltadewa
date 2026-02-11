@@ -187,6 +187,20 @@ class TestFormatHtmlMetric:
         result = format_html_metric("Volatility", 0.25, format_type="percentage")
         assert "Volatility" in result
         assert "%" in result
+    
+    def test_format_html_metric_near_zero(self):
+        """Test HTML metric formatting for near-zero values."""
+        # Near-zero currency
+        result = format_html_metric("Value", 0.001, format_type="currency")
+        assert "~$0" in result
+        
+        # Near-zero percentage (0.0001 = 0.01%)
+        result = format_html_metric("Change", 0.00001, format_type="percentage")
+        assert "~0%" in result
+        
+        # Near-zero number
+        result = format_html_metric("Delta", 0.001, format_type="number")
+        assert "~0" in result
 
 
 class TestBackwardCompatibility:

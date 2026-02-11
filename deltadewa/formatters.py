@@ -438,10 +438,21 @@ def format_html_metric(
     format_as_currency = format_type == "currency"
     format_as_percentage = format_type == "percentage"
     
-    # Use 0.01 threshold for ~0 display (appropriate for currency and numbers,
-    # percentages are in decimal form so 0.01 = 1% which is significant and shouldn't show as ~0)
-    if abs(value) < 0.01:
-        value_str = "~$0" if format_as_currency else "~0"
+    # Handle near-zero values
+    # For percentages (in decimal form), use 0.0001 threshold (= 0.01%)
+    # For currency and numbers, use 0.01 threshold
+    if format_as_percentage:
+        threshold = 0.0001  # 0.01% in decimal form
+    else:
+        threshold = 0.01
+    
+    if abs(value) < threshold:
+        if format_as_percentage:
+            value_str = "~0%"
+        elif format_as_currency:
+            value_str = "~$0"
+        else:
+            value_str = "~0"
     elif abs(value) >= boundary_1:
         if format_as_currency:
             value_str = f"${value/boundary_1:,.2f}M"
