@@ -5,12 +5,14 @@ This module provides common utilities for formatting, printing,
 and displaying data in notebooks and scripts.
 """
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 import numpy as np
 import pandas as pd
 from IPython.display import clear_output
-
-
+from deltadewa.formatters import (
+    prepare_dataframe_display,
+    apply_gradient_style,
+)
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
@@ -25,10 +27,6 @@ __all__ = [
     "print_metric_summary",
     # DataFrame display utilities
     "display_styled_dataframe",
-    "format_currency",
-    "format_percentage",
-    "format_number",
-    "format_currency_compact",
     # Status/alert utilities
     "print_success",
     "print_warning",
@@ -230,8 +228,6 @@ def display_styled_dataframe(
         ...     gradient_column='delta'
         ... )
     """
-    from deltadewa.formatters import prepare_dataframe_display, apply_gradient_style
-
     df_display = prepare_dataframe_display(
         df, title_case=title_case, start_index=start_index
     )
@@ -254,16 +250,6 @@ def display_styled_dataframe(
             styled = apply_gradient_style(styled, gradient_col, cmap=cmap)
 
     return styled
-
-
-# ========== Formatting Functions (Re-exported for Backward Compatibility) ==========
-# These are re-exported from deltadewa.formatters for backward compatibility.
-# New code should import directly from deltadewa.formatters.
-
-from deltadewa.formatters import format_currency
-from deltadewa.formatters import format_percentage
-from deltadewa.formatters import format_number
-from deltadewa.formatters import format_currency_for_axis as format_currency_compact
 
 
 # ========== Status/Alert Utilities ==========
