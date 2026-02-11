@@ -24,8 +24,11 @@ class TestFormatCurrency:
 
     def test_format_currency_compact(self):
         """Test compact currency formatting."""
+        # Values < 1000 stay in full format
         assert format_currency(1234.56, compact=True) == "$1,234.56"
-        assert format_currency(1234, compact=True) == "$1.23K"
+        assert format_currency(500, compact=True) == "$500.00"
+        # Values >= 1000 get compact notation
+        assert format_currency(1500, compact=True) == "$1.50K"
         assert format_currency(1234567, compact=True) == "$1.23M"
         assert format_currency(1234567890, compact=True) == "$1.23B"
 
@@ -174,7 +177,8 @@ class TestFormatHtmlMetric:
         """Test HTML metric formatting for currency."""
         result = format_html_metric("Value", 1000000, format_type="currency")
         assert "Value" in result
-        assert "M" in result or "$1,000,000" in result
+        # Should format as $1.00M
+        assert "$1.00M" in result
 
     def test_format_html_metric_percentage(self):
         """Test HTML metric formatting for percentages."""

@@ -283,10 +283,12 @@ def format_spot_with_pct(x: float, current_spot: float, pos: Optional[int] = Non
         +10%
     """
     _ = pos  # Unused parameter
-    try:
-        pct = (x / current_spot - 1) * 100
-    except (ZeroDivisionError, TypeError):
+    
+    # Check for zero division before calculation
+    if current_spot == 0:
         pct = 0
+    else:
+        pct = (x / current_spot - 1) * 100
     
     curr = format_currency(x, compact=False, precision=0)
     return f"{curr}\n{pct:+.0f}%"
@@ -437,7 +439,7 @@ def format_html_metric(
     format_as_percentage = format_type == "percentage"
     
     if abs(value) < 0.01:
-        value_str = "~0" if not format_as_currency else "~$0"
+        value_str = "~$0" if format_as_currency else "~0"
     elif abs(value) >= boundary_1:
         if format_as_currency:
             value_str = f"${value/boundary_1:,.2f}M"
