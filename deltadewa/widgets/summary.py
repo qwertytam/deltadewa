@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Union
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
+
 # Import centralized formatters
 from deltadewa.formatters import format_html_badge, format_html_metric
 from deltadewa.analysis import PortfolioAnalyzer
@@ -53,7 +54,7 @@ class NetHedgeSummary:
     ) -> str:
         """
         Return formatted HTML for large block.
-        
+
         Note:
             Uses centralized formatter from deltadewa.formatters
         """
@@ -62,7 +63,7 @@ class NetHedgeSummary:
             value=value_str,
             color=color,
             text_color=text_color,
-            size="large"
+            size="large",
         )
 
     def _format_greek(
@@ -83,23 +84,27 @@ class NetHedgeSummary:
 
         Returns:
             HTML string with formatted badge
-        
+
         Note:
             Uses centralized formatter from deltadewa.formatters
         """
         # Determine the format type based on the metric name
         matches_to_format_as_currency = ["Value", "Cost", "Theta"]
-        format_type = "currency" if any(
-            sub.lower() in (name or "").lower()
-            for sub in matches_to_format_as_currency
-        ) else "number"
-        
+        format_type = (
+            "currency"
+            if any(
+                sub.lower() in (name or "").lower()
+                for sub in matches_to_format_as_currency
+            )
+            else "number"
+        )
+
         return format_html_metric(
             name=name,
             value=value,
             format_type=format_type,
             is_cost=is_cost,
-            is_neutral=is_neutral
+            is_neutral=is_neutral,
         )
 
     def _format_pct(
@@ -115,7 +120,7 @@ class NetHedgeSummary:
 
         Returns:
             HTML string with formatted badge
-        
+
         Note:
             Uses centralized formatter from deltadewa.formatters
         """
@@ -124,9 +129,8 @@ class NetHedgeSummary:
             value=value,
             format_type="percentage",
             is_cost=False,
-            is_neutral=is_neutral
+            is_neutral=is_neutral,
         )
-
 
     def _format_crash_indicator(self, shock_pct: float, pnl: float) -> str:
         """

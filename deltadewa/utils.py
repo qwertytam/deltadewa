@@ -414,4 +414,3 @@ def print_progress(
     print(f"\r{prefix} |{progress_bar}| {percent}% {suffix}", end="")
     if current == total:
         print()  # New line on completion
-

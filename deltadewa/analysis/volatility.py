@@ -66,7 +66,9 @@ def calculate_portfolio_avg_volatility(portfolio: "OptionPortfolio") -> float:
 
 
 def apply_proportional_volatility_shift(
-    portfolio: "OptionPortfolio", target_avg_vol: float, preserve_structure: bool = True
+    portfolio: "OptionPortfolio",
+    target_avg_vol: float,
+    preserve_structure: bool = True,
 ) -> dict:
     """
     Scale all position volatilities proportionally to achieve target average.
@@ -127,7 +129,9 @@ def apply_proportional_volatility_shift(
     return original_vols
 
 
-def restore_volatilities(portfolio: "OptionPortfolio", original_vols: dict) -> None:
+def restore_volatilities(
+    portfolio: "OptionPortfolio", original_vols: dict
+) -> None:
     """
     Restore position volatilities to their original values.
 
