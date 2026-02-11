@@ -272,6 +272,38 @@ def format_greek_value(
         return format_number(value, decimals=decimals, thousands_sep=True)
 
 
+def format_number_auto_precision(value: float) -> str:
+    """Format a number with precision that adapts to magnitude.
+    
+    Automatically selects decimal places based on the absolute value:
+    - >= 1,000,000: no decimals, with commas (e.g., "1,234,567")
+    - >= 10,000: no decimals, with commas (e.g., "12,345")
+    - >= 100: 2 decimals (e.g., "123.45")
+    - >= 10: 3 decimals (e.g., "12.345")
+    - >= 0.1: 4 decimals (e.g., "0.1234")
+    - < 0.1: 6 decimals (e.g., "0.001234")
+    
+    Args:
+        value: Numeric value to format
+        
+    Returns:
+        Formatted string with appropriate precision
+    """
+    abs_val = abs(value)
+    if abs_val >= 1_000_000:
+        return f"{value:,.0f}"
+    elif abs_val >= 10_000:
+        return f"{value:,.0f}"
+    elif abs_val >= 100:
+        return f"{value:,.2f}"
+    elif abs_val >= 10:
+        return f"{value:.3f}"
+    elif abs_val >= 0.1:
+        return f"{value:.4f}"
+    else:
+        return f"{value:.6f}"
+
+
 def format_spot_with_pct(
     x: float, current_spot: float, pos: Optional[int] = None
 ) -> str:
@@ -1411,6 +1443,7 @@ __all__ = [
     "format_percentage",
     "format_percentage_for_axis",
     "format_number",
+    "format_number_auto_precision",
     "format_greek_value",
     "format_spot_with_pct",
     # Axis formatter factories (NEW)
