@@ -11,6 +11,8 @@ from scipy import stats  # type: ignore
 
 from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
+# Import centralized formatters
+from deltadewa.formatters import format_spot_with_pct as format_spot_with_pct_centralized
 
 if TYPE_CHECKING:
     from deltadewa.visualization.base import OptionChartsBase
@@ -672,20 +674,10 @@ class PnLChartsMixin:
             FuncFormatter(self.format_currency_compact)
         )
 
-        # Custom x-axis formatter showing price + % change
+        # Custom x-axis formatter showing price + % change (use centralized formatter)
         def format_spot_with_pct(x, pos):  # pylint: disable=unused-argument
             """Format x-axis to show spot price and % change from current spot."""
-            if current_spot == 0:
-                pct_change = 0
-            else:
-                pct_change = ((x - current_spot) / current_spot) * 100
-
-            if abs(pct_change) < 0.1:
-                return f"${x:,.0f}\n(0%)"
-            elif pct_change > 0:
-                return f"${x:,.0f}\n(+{pct_change:.0f}%)"
-            else:
-                return f"${x:,.0f}\n({pct_change:.0f}%)"
+            return format_spot_with_pct_centralized(x, current_spot, pos)
 
         ax.xaxis.set_major_formatter(FuncFormatter(format_spot_with_pct))
         ax.tick_params(

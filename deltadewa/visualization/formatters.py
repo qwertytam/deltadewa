@@ -4,6 +4,14 @@ from typing import TYPE_CHECKING
 
 from matplotlib.ticker import FuncFormatter
 
+# Import centralized formatters
+from deltadewa.formatters import (
+    format_currency,
+    format_currency_for_axis,
+    format_percentage_for_axis,
+    get_spot_price_axis_formatter,
+)
+
 if TYPE_CHECKING:
     pass
 
@@ -26,19 +34,20 @@ class FormattersMixin:
 
         Returns:
             Formatted string
+        
+        Note:
+            Uses centralized formatter from deltadewa.formatters
         """
-        _ = pos
-        if abs(x) < 10_000:
-            return f"${x:,.0f}"
-        elif abs(x) < 10_000_000:
-            return f"${x/1_000:,.0f}k"
-        else:
-            return f"${x/1_000_000:,.1f}M"
+        return format_currency_for_axis(x, pos)
 
     @staticmethod
     def format_currency_full(x, pos=None):
         """
         Format currency with full dollar precision and comma separators.
+        
+        Note: 'full' refers to displaying full dollar amounts without compact 
+            notation (no k/M/B). Precision is set to 0 to avoid cluttering axis 
+            labels with cents.
 
         Args:
             x: numeric value
@@ -46,10 +55,13 @@ class FormattersMixin:
 
         Returns:
             String like "$1,234"
+        
+        Note:
+            Uses centralized formatter from deltadewa.formatters
         """
         _ = pos
         try:
-            return f"${x:,.0f}"
+            return format_currency(x, compact=False, precision=0)
         except Exception:  # pylint: disable=broad-except
             return f"${x}"
 
@@ -62,9 +74,12 @@ class FormattersMixin:
 
         Args:
             ax: Matplotlib Axes object
+        
+        Note:
+            Uses centralized formatter from deltadewa.formatters
         """
         ax.yaxis.set_major_formatter(
-            FuncFormatter(lambda x, pos: f"{x*100:.0f}%")
+            FuncFormatter(format_percentage_for_axis)
         )
 
     @staticmethod
@@ -80,19 +95,11 @@ class FormattersMixin:
         Args:
             ax: Matplotlib Axes object
             current_spot: Current spot price to calculate percentage from
+        
+        Note:
+            Uses centralized formatter from deltadewa.formatters
         """
-
-        def _fmt(x, pos):  # pylint: disable=unused-argument
-            # Avoid division by zero
-            try:
-                pct = (x / current_spot - 1) * 100
-            except Exception:  # pylint: disable=broad-except
-                pct = 0
-            # Import locally to avoid circular import
-            from deltadewa.visualization.formatters import FormattersMixin
-            curr = FormattersMixin.format_currency_full(x)
-            return f"{curr}\n{pct:+.0f}%"
-
-        ax.xaxis.set_major_formatter(FuncFormatter(_fmt))
+        ax.xaxis.set_major_formatter(get_spot_price_axis_formatter(current_spot))
         # Slightly tighten tick padding so two-line labels don't overlap title
         ax.tick_params(axis="x", which="major", pad=6)
+

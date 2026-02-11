@@ -24,7 +24,8 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa.utils import format_currency
+# Use centralized formatter
+from deltadewa.formatters import format_currency_for_axis
 from deltadewa.visualization.base import OptionCharts
 from deltadewa.visualization.formatters import FormattersMixin
 
@@ -301,7 +302,7 @@ def plot_greeks_consolidated(
         _set_axis_formatting(
             ax, f"Top {top_n} Position Values by Strike", yint=yint
         )
-        ax.xaxis.set_major_formatter(FuncFormatter(format_currency))
+        ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:
         ax.text(
             0.5,
@@ -338,7 +339,7 @@ def plot_greeks_consolidated(
         _set_axis_formatting(
             ax, f"Top {top_n} Position Values by Maturity", yint=yint
         )
-        ax.xaxis.set_major_formatter(FuncFormatter(format_currency))
+        ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:
         ax.text(
             0.5,
