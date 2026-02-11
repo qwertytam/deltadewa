@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from deltadewa.american_option import AmericanOption
 from deltadewa.batch_pricer import BatchPricer
-from deltadewa.utils import (
+from deltadewa.analysis.volatility import (
     apply_proportional_volatility_shift,
     restore_volatilities,
 )

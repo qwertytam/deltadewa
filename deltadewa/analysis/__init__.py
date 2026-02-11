@@ -23,6 +23,12 @@ from deltadewa.analysis.functions import (
     quick_risk_concentration,
     ScenarioGridCache,
 )
+from deltadewa.analysis.volatility import (
+    calculate_portfolio_avg_volatility,
+    apply_proportional_volatility_shift,
+    restore_volatilities,
+    get_volatility_stats,
+)
 
 __all__ = [
     "PortfolioAnalyzer",
@@ -30,4 +36,8 @@ __all__ = [
     "quick_carry_analysis",
     "quick_risk_concentration",
     "ScenarioGridCache",
+    "calculate_portfolio_avg_volatility",
+    "apply_proportional_volatility_shift",
+    "restore_volatilities",
+    "get_volatility_stats",
 ]

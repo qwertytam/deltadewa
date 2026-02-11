@@ -327,7 +327,7 @@ positions = [
 Use the utility functions to analyze your portfolio's volatility profile:
 
 ```python
-from deltadewa.utils import get_volatility_stats, calculate_portfolio_avg_volatility
+from deltadewa.analysis import get_volatility_stats, calculate_portfolio_avg_volatility
 
 stats = get_volatility_stats(portfolio)
 print(f"Vega-weighted avg: {stats['avg_volatility']:.2%}")

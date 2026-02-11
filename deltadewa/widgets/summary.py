@@ -7,7 +7,7 @@ indicators in a compact, always-visible format.
 
 from typing import TYPE_CHECKING, Union
 import ipywidgets as widgets  # type: ignore[import-untyped]
-from deltadewa.utils import get_volatility_stats
+from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
 # Import centralized formatters
 from deltadewa.formatters import format_html_badge, format_html_metric
