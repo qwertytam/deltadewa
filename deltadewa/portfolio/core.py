@@ -470,6 +470,20 @@ class OptionPortfolioBase:
             return s
         return f"<OptionPortfolio: {len(self.positions)} positions>"
 
+    def get_furtherest_maturity(self) -> Optional[datetime]:
+        """Get the furthest maturity date among all positions."""
+        if not self.positions:
+            return None
+        return max(pos.option.maturity_date for pos in self.positions)
+
+    def get_days_to_furthest_maturity(self) -> Optional[int]:
+        """Get days until the furthest maturity date."""
+        furthest_maturity = self.get_furtherest_maturity()
+        if furthest_maturity is None:
+            return None
+        delta = furthest_maturity - self.valuation_date
+        return max(delta.days, 0)  # Ensure non-negative
+
 
 # Final composed class with all mixins
 class OptionPortfolio(

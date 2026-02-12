@@ -12,7 +12,7 @@ from typing import (
     Dict,
     Any,
 )
-
+from datetime import datetime
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.persistence import PortfolioSerializer
@@ -78,6 +78,14 @@ class ExportControlsMixin:
             style={"description_width": "150px"},
         )
 
+        inc_timestamp_checkbox = widgets.Checkbox(
+            value=False,
+            description="Include Timestamp in Filename",
+            style={"description_width": "initial"},
+            indent=False,
+            layout=widgets.Layout(width="auto"),
+        )
+
         filename_input = widgets.Text(
             value="portfolio_snapshot",
             description="Filename:",
@@ -95,6 +103,7 @@ class ExportControlsMixin:
 
         return {
             "format_selector": format_selector,
+            "inc_timestamp_checkbox": inc_timestamp_checkbox,
             "filename_input": filename_input,
             "export_button": export_button,
         }
@@ -331,10 +340,17 @@ class ExportControlsMixin:
                     file_format = export_controls[
                         "format_selector"
                     ].value.lower()
+                    inc_timestamp = export_controls[
+                        "inc_timestamp_checkbox"
+                    ].value
+
+                    ts = ""
+                    if inc_timestamp:
+                        ts = datetime.now().strftime("_%Y%m%d_%H%M%S")
 
                     # Add extension if not present
                     if not filename.endswith(f".{file_format}"):
-                        filename = f"{filename}.{file_format}"
+                        filename = f"{filename}{ts}.{file_format}"
 
                     filepath = self.export_dir / filename
                     serializer = PortfolioSerializer(str(filepath))
@@ -362,7 +378,10 @@ class ExportControlsMixin:
             [
                 widgets.HTML("<h3>Export Portfolio</h3>"),
                 export_controls["format_selector"],
+                widgets.HTML("<br>"),
+                export_controls["inc_timestamp_checkbox"],
                 export_controls["filename_input"],
+                widgets.HTML("<br>"),
                 export_controls["export_button"],
                 export_output,
             ]

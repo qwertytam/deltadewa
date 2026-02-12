@@ -55,6 +55,7 @@ class GlobalAssumptions:
         valuation_date: Optional[datetime] = None,
         spot_range_pct: float = 30.0,
         vol_range: Tuple[float, float] = (0.05, 1.00),
+        portfolio_time_horizon: Optional[int] = None,
     ):
         """
         Initialize global assumptions panel.
@@ -67,6 +68,7 @@ class GlobalAssumptions:
             valuation_date: Valuation date (defaults to today)
             spot_range_pct: Range for spot slider (+/- %)
             vol_range: Min/max for volatility slider
+            portfolio_time_horizon: Optional default time horizon in days for portfolio (overrides time horizon selector)
         """
         if valuation_date is None:
             valuation_date = datetime.now()
@@ -145,16 +147,50 @@ class GlobalAssumptions:
             ("Custom", -1),
         ]
 
+        insert_index = None
+        if portfolio_time_horizon is not None:
+            last_maturity_title = (
+                "Portfolio Furthest Maturity (T" + f"+{portfolio_time_horizon})"
+            )
+
+            # Insert the portfolio furthest maturity into the ordered options
+            # list. Keep the 'Custom' option (value -1) at the end.
+            existing_values = [val for (_lbl, val) in time_horizon_options]
+            if portfolio_time_horizon not in existing_values:
+                new_option = (last_maturity_title, portfolio_time_horizon)
+                for idx, (_lbl, val) in enumerate(time_horizon_options):
+                    # If we hit the Custom option, insert before it
+                    if val == -1:
+                        insert_index = idx
+                        break
+                    # Insert before the first option with a larger numeric value
+                    if val > portfolio_time_horizon:
+                        insert_index = idx
+                        break
+                if insert_index is None:
+                    # No larger value and no Custom found; append at end
+                    time_horizon_options.append(new_option)
+                else:
+                    time_horizon_options.insert(insert_index, new_option)
+
+        # Default selection: use portfolio_time_horizon (days) when provided,
+        # otherwise default to 6 months (in days). Note: Dropdown `value`
+        # must be the option's value (days), not the index.
+        if portfolio_time_horizon is None:
+            time_horizon_default = const.CALENDAR_DAYS_PER_MONTH * 6
+        else:
+            time_horizon_default = portfolio_time_horizon
+
         self.time_horizon = widgets.Dropdown(
             options=time_horizon_options,
-            value=0,
+            value=time_horizon_default,
             description="Time Horizon:",
             style={"description_width": "150px"},
             layout=widgets.Layout(width="350px"),
         )
 
         self.custom_days = widgets.IntText(
-            value=30,
+            value=time_horizon_default,
             description="Custom Days:",
             style={"description_width": "150px"},
             layout=widgets.Layout(width="250px"),
