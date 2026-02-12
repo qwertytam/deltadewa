@@ -3,7 +3,10 @@
 from typing import Dict, List, Optional
 
 # Re-export generate_spot_range for backward compatibility
-# The function has been moved to deltadewa.spot_utils to avoid circular dependencies
+# The function has been moved to deltadewa.spot_utils (a pure leaf module with
+# zero internal dependencies) to break the circular dependency between portfolio
+# and analysis layers. This re-export is safe because spot_utils has no internal
+# imports - it only depends on numpy.
 from deltadewa.spot_utils import generate_spot_range  # noqa: F401
 
 
@@ -17,6 +20,8 @@ def classify_maturity_bucket(days_to_expiry: int) -> str:
     Returns:
         Bucket label string
     """
+    # Lazy import to prevent circular dependency:
+    # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
 
@@ -33,6 +38,8 @@ def quick_carry_analysis(portfolio) -> Dict:
     Returns:
         Dictionary with carry metrics
     """
+    # Lazy import to prevent circular dependency:
+    # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
 
@@ -53,6 +60,8 @@ def quick_risk_concentration(
     Returns:
         Dictionary with concentration analysis
     """
+    # Lazy import to prevent circular dependency:
+    # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
 
