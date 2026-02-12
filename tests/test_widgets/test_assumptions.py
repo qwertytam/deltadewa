@@ -51,8 +51,8 @@ class TestGlobalAssumptions:
     def test_get_days_forward_default(self):
         """Test get_days_forward returns correct value for default selection."""
         assumptions = GlobalAssumptions()
-        # Default is "Today (T+0)" which is 0 days
-        assert assumptions.get_days_forward() == 0
+        # Default is "Today (T+180)" which is 180 days
+        assert assumptions.get_days_forward() == 180
 
     def test_get_days_forward_custom(self):
         """Test get_days_forward returns custom days when selected."""
@@ -66,7 +66,7 @@ class TestGlobalAssumptions:
         assumptions = GlobalAssumptions()
         time_horizon = assumptions.time_horizon_days
         assert hasattr(time_horizon, "value")
-        assert time_horizon.value == 0
+        assert time_horizon.value == 180  # Default selection
 
     def test_get_valuation_date_forward(self):
         """Test get_valuation_date_forward calculates correct future date."""
