@@ -22,6 +22,11 @@ class RiskMixin:
             self, spot_price: float, include_underlying: bool = True
         ) -> float: ...
 
+        # pylint: disable=missing-function-docstring, unused-argument
+        def vectorized_pnl_at_expiry(
+            self, spot_scenarios: np.ndarray, include_underlying: bool = True
+        ) -> np.ndarray: ...
+
     def _get_spot_range(
         self,
         spot_range: Optional[np.ndarray] = None,
@@ -92,48 +97,37 @@ class RiskMixin:
 
     def _check_unlimited_trend(
         self,
-        spot_range: np.ndarray,
-        include_underlying: bool,
+        pnl_array: np.ndarray,
         check_increasing: bool,
     ) -> bool:
         """
-        Check if P&L trend continues at the extreme end of spot range.
+        Check if P&L trend continues at the extreme end of the PnL array.
 
         This helps detect unlimited profit/loss scenarios by examining if
         the trend continues beyond the sampled range.
 
         Args:
-            spot_range: Array of spot prices
-            include_underlying: Whether to include underlying in P&L calculation
+            pnl_array: Pre-computed P&L array across spot range
             check_increasing: If True, check for increasing trend (profit).
                             If False, check for decreasing trend (loss).
 
         Returns:
             True if unlimited trend is detected, False otherwise
         """
-        if len(spot_range) < 10:
+        if len(pnl_array) < 10:
             return False
 
         # Check if P&L trend continues at the high end of range
-        high_end_pnls = [
-            self.calculate_pnl_at_expiry(
-                spot, include_underlying=include_underlying
-            )
-            for spot in spot_range[-5:]
-        ]
+        high_end_pnls = pnl_array[-5:]
 
         if check_increasing:
             # Check if profits are consistently increasing
-            return all(
-                high_end_pnls[i] < high_end_pnls[i + 1]
-                for i in range(len(high_end_pnls) - 1)
-            )
+            # Use np.diff to check if all differences are positive
+            return bool(np.all(np.diff(high_end_pnls) > 0))
         else:
             # Check if losses are consistently increasing (P&L decreasing)
-            return all(
-                high_end_pnls[i] > high_end_pnls[i + 1]
-                for i in range(len(high_end_pnls) - 1)
-            )
+            # Use np.diff to check if all differences are negative
+            return bool(np.all(np.diff(high_end_pnls) < 0))
 
     def calculate_max_loss_options(
         self,
@@ -167,15 +161,11 @@ class RiskMixin:
             ),  # Only for auto-generated ranges
         )
 
-        max_loss = 0.0
-        spot_at_max_loss = self.spot_price
-
-        for spot in spot_range:
-            # pylint: disable=assignment-from-no-return
-            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=False)
-            if pnl < max_loss:
-                max_loss = pnl
-                spot_at_max_loss = spot
+        # Vectorized P&L calculation
+        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=False)
+        idx = int(np.argmin(pnl_array))
+        max_loss = float(pnl_array[idx])
+        spot_at_max_loss = float(spot_range[idx])
 
         # Check for unlimited loss (naked short calls have unlimited loss potential)
         has_naked_short_calls = any(
@@ -185,7 +175,7 @@ class RiskMixin:
 
         # Enhanced unlimited loss detection using helper method
         is_unlimited = has_naked_short_calls or self._check_unlimited_trend(
-            spot_range, include_underlying=False, check_increasing=False
+            pnl_array, check_increasing=False
         )
 
         return {
@@ -226,15 +216,11 @@ class RiskMixin:
             ),  # Only for auto-generated ranges
         )
 
-        max_profit = float("-inf")
-        spot_at_max_profit = self.spot_price
-
-        for spot in spot_range:
-            # pylint: disable=assignment-from-no-return
-            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=False)
-            if pnl > max_profit:
-                max_profit = pnl
-                spot_at_max_profit = spot
+        # Vectorized P&L calculation
+        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=False)
+        idx = int(np.argmax(pnl_array))
+        max_profit = float(pnl_array[idx])
+        spot_at_max_profit = float(spot_range[idx])
 
         # Check for unlimited profit (long calls have unlimited profit potential)
         has_long_calls = any(
@@ -244,7 +230,7 @@ class RiskMixin:
 
         # Enhanced unlimited profit detection using helper method
         is_unlimited = has_long_calls or self._check_unlimited_trend(
-            spot_range, include_underlying=False, check_increasing=True
+            pnl_array, check_increasing=True
         )
 
         return {
@@ -285,15 +271,11 @@ class RiskMixin:
             ),  # Only for auto-generated ranges
         )
 
-        max_loss = 0.0
-        spot_at_max_loss = self.spot_price
-
-        for spot in spot_range:
-            # pylint: disable=assignment-from-no-return
-            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=True)
-            if pnl < max_loss:
-                max_loss = pnl
-                spot_at_max_loss = spot
+        # Vectorized P&L calculation
+        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=True)
+        idx = int(np.argmin(pnl_array))
+        max_loss = float(pnl_array[idx])
+        spot_at_max_loss = float(spot_range[idx])
 
         # Check if loss is potentially unlimited
         is_unlimited = False
@@ -314,7 +296,7 @@ class RiskMixin:
         # Enhanced unlimited loss detection using helper method
         if not is_unlimited:
             is_unlimited = self._check_unlimited_trend(
-                spot_range, include_underlying=True, check_increasing=False
+                pnl_array, check_increasing=False
             )
 
         return {
@@ -355,15 +337,11 @@ class RiskMixin:
             ),  # Only for auto-generated ranges
         )
 
-        max_profit = float("-inf")
-        spot_at_max_profit = self.spot_price
-
-        for spot in spot_range:
-            # pylint: disable=assignment-from-no-return
-            pnl = self.calculate_pnl_at_expiry(spot, include_underlying=True)
-            if pnl > max_profit:
-                max_profit = pnl
-                spot_at_max_profit = spot
+        # Vectorized P&L calculation
+        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=True)
+        idx = int(np.argmax(pnl_array))
+        max_profit = float(pnl_array[idx])
+        spot_at_max_profit = float(spot_range[idx])
 
         # Check if profit is potentially unlimited
         is_unlimited = False
@@ -381,7 +359,7 @@ class RiskMixin:
         # Enhanced unlimited profit detection using helper method
         if not is_unlimited:
             is_unlimited = self._check_unlimited_trend(
-                spot_range, include_underlying=True, check_increasing=True
+                pnl_array, check_increasing=True
             )
 
         return {
@@ -418,21 +396,12 @@ class RiskMixin:
             spot_max_pct=spot_max_pct,
         )
 
-        breakeven_points = []
-        prev_pnl = None
-
-        for spot in spot_range:
-            # pylint: disable=assignment-from-no-return
-            pnl = self.calculate_pnl_at_expiry(
-                spot, include_underlying=include_underlying
-            )
-
-            # Check for sign change (crossing zero)
-            if prev_pnl is not None:
-                if (prev_pnl < 0 and pnl >= 0) or (prev_pnl > 0 and pnl <= 0):
-                    # Interpolate to find more precise breakeven
-                    breakeven_points.append(spot)
-
-            prev_pnl = pnl
-
-        return breakeven_points
+        # Vectorized P&L calculation
+        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=include_underlying)
+        
+        # Find sign changes to detect breakeven points
+        sign_changes = np.diff(np.sign(pnl_array))
+        crossing_indices = np.where(sign_changes != 0)[0]
+        
+        # Return the spot prices after the sign change
+        return [float(spot_range[i + 1]) for i in crossing_indices]

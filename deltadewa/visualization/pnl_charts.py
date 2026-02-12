@@ -63,19 +63,13 @@ class PnLChartsMixin:
         spot_max = self.portfolio.spot_price * (1 + spot_range_pct / 100)
         spot_range = np.linspace(spot_min, spot_max, num_points)
 
-        # Calculate P&L curves
-        pnl_options = [
-            self.portfolio.calculate_pnl_at_expiry(  # type: ignore
-                spot, include_underlying=False
-            )
-            for spot in spot_range
-        ]
-        pnl_total = [
-            self.portfolio.calculate_pnl_at_expiry(  # type: ignore
-                spot, include_underlying=True
-            )
-            for spot in spot_range
-        ]
+        # Calculate P&L curves using vectorized operations
+        pnl_options = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
+            spot_range, include_underlying=False
+        )
+        pnl_total = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
+            spot_range, include_underlying=True
+        )
 
         # Get risk/reward metrics
         analyzer = PortfolioAnalyzer(self.portfolio)
@@ -166,14 +160,9 @@ class PnLChartsMixin:
         spot_max = current_spot * (1 + spot_range_pct / 100)
         spot_range = np.linspace(spot_min, spot_max, num_points)
 
-        # Calculate P&L curve
-        pnl_values = np.array(
-            [
-                self.portfolio.calculate_pnl_at_expiry(  # type: ignore
-                    spot, include_underlying=include_underlying
-                )
-                for spot in spot_range
-            ]
+        # Calculate P&L curve using vectorized operations
+        pnl_values = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
+            spot_range, include_underlying=include_underlying
         )
 
         # Get risk/reward metrics
