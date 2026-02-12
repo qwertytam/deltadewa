@@ -2,36 +2,28 @@
 Utility functions for the deltadewa package.
 
 This module provides common utilities for formatting, printing,
-and displaying data in notebooks and scripts.
+and displaying data.
+
+.. note::
+    Direct use of print functions here is deprecated. 
+    Please use `deltadewa.reporting.ConsoleReporter`.
 """
 
-from typing import Optional
-from IPython.display import clear_output
-from deltadewa.formatters.values import format_number_auto_precision
+from typing import Optional, List
+from deltadewa.reporting.console import ConsoleReporter
+
+# Create a default instance for backward compatibility
+_reporter = ConsoleReporter()
 
 __all__ = [
-    # Print formatting utilities
-    "print_header",
-    "print_subheader",
-    "print_divider",
-    "print_section",
-    "print_key_value",
-    "print_metric_summary",
-    # Status/alert utilities
-    "print_success",
-    "print_warning",
-    "print_error",
-    "print_info",
-    # Table utilities
-    "print_table_row",
-    "print_table",
-    # Convenience functions
-    "clear_output_and_print",
-    "print_progress",
+    "print_header", "print_subheader", "print_divider", "print_section",
+    "print_key_value", "print_metric_summary",
+    "print_success", "print_warning", "print_error", "print_info",
+    "print_table_row", "print_table",
+    "clear_output_and_print", "print_progress",
 ]
 
-# ========== Print Formatting Utilities ==========
-
+# Delegate all existing functions to the reporter instance
 
 def print_header(title: str, width: int = 80, char: str = "=") -> None:
     """
@@ -48,10 +40,11 @@ def print_header(title: str, width: int = 80, char: str = "=") -> None:
         PORTFOLIO SUMMARY
         ================================================================================
     """
-    print(char * width)
-    print(title)
-    print(char * width)
-
+    # Temporarily override width if provided, otherwise use default
+    old_width = _reporter.width
+    _reporter.width = width
+    _reporter.header(title, char)
+    _reporter.width = old_width
 
 def print_subheader(title: str, width: int = 80) -> None:
     """
@@ -67,8 +60,10 @@ def print_subheader(title: str, width: int = 80) -> None:
         Position Details
         --------------------------------------------------------------------------------
     """
-    print_header(title, width, char="-")
-
+    old_width = _reporter.width
+    _reporter.width = width
+    _reporter.subheader(title)
+    _reporter.width = old_width
 
 def print_divider(width: int = 80, char: str = "-") -> None:
     """
@@ -82,8 +77,10 @@ def print_divider(width: int = 80, char: str = "-") -> None:
         >>> print_divider()
         --------------------------------------------------------------------------------
     """
-    print(char * width)
-
+    old_width = _reporter.width
+    _reporter.width = width
+    _reporter.divider(char)
+    _reporter.width = old_width
 
 def print_section(
     title: str, content: Optional[str] = None, width: int = 80
@@ -103,10 +100,10 @@ def print_section(
         ================================================================================
         Total: $1,234.56
     """
-    print_header(title, width)
-    if content:
-        print(content)
-
+    old_width = _reporter.width
+    _reporter.width = width
+    _reporter.section(title, content)
+    _reporter.width = old_width
 
 def print_key_value(
     key: str, value, width: int = 40, align: str = "left"
@@ -124,11 +121,7 @@ def print_key_value(
         >>> print_key_value("Spot Price", "$100.00", align='right')
         Spot Price:                         $100.00
     """
-    if align == "right":
-        print(f"{key}:{value:>{width - len(key) - 1}}")
-    else:
-        print(f"{key}: {value}")
-
+    _reporter.key_value(key, value, width, align)
 
 def print_metric_summary(
     metrics: dict, title: Optional[str] = None, width: int = 80
@@ -152,17 +145,10 @@ def print_metric_summary(
         Theta: -15.25
         ================================================================================
     """
-    if title:
-        print_header(title, width)
-
-    for key, value in metrics.items():
-        if isinstance(value, float):
-            print(f"{key}: {format_number_auto_precision(value)}")
-        else:
-            print(f"{key}: {value}")
-
-    if title:
-        print_divider(width, char="=")
+    old_width = _reporter.width
+    _reporter.width = width
+    _reporter.metric_summary(metrics, title)
+    _reporter.width = old_width
 
 
 # ========== Status/Alert Utilities ==========
@@ -180,7 +166,7 @@ def print_success(message: str, prefix: str = "✓") -> None:
         >>> print_success("Portfolio loaded successfully")
         ✓ Portfolio loaded successfully
     """
-    print(f"{prefix} {message}")
+    _reporter.success(message, prefix)
 
 
 def print_warning(message: str, prefix: str = "⚠") -> None:
@@ -195,7 +181,7 @@ def print_warning(message: str, prefix: str = "⚠") -> None:
         >>> print_warning("Low liquidity detected")
         ⚠ Low liquidity detected
     """
-    print(f"{prefix} {message}")
+    _reporter.warning(message, prefix)
 
 
 def print_error(message: str, prefix: str = "✗") -> None:
@@ -210,7 +196,7 @@ def print_error(message: str, prefix: str = "✗") -> None:
         >>> print_error("Failed to load data")
         ✗ Failed to load data
     """
-    print(f"{prefix} {message}")
+    _reporter.error(message, prefix)
 
 
 def print_info(message: str, prefix: str = "ℹ️") -> None:
@@ -225,7 +211,7 @@ def print_info(message: str, prefix: str = "ℹ️") -> None:
         >>> print_info("Using default configuration")
         ℹ️  Using default configuration
     """
-    print(f"{prefix}  {message}")
+    _reporter.info(message, prefix)
 
 
 # ========== Table Utilities ==========
@@ -244,10 +230,7 @@ def print_table_row(columns: list, widths: list, separator: str = "|") -> None:
         >>> print_table_row(['Name', 'Value', 'Delta'], [20, 15, 10])
         Name                | Value         | Delta
     """
-    row = separator.join(
-        f" {str(col):<{w-2}} " for col, w in zip(columns, widths)
-    )
-    print(row)
+    _reporter.table_row(columns, widths, separator)
 
 
 def print_table(
@@ -266,23 +249,7 @@ def print_table(
         >>> data = [[100, 'Call', 0.55], [110, 'Put', -0.45]]
         >>> print_table(data, headers)
     """
-    # Auto-calculate widths if not provided
-    if widths is None:
-        widths = []
-        for i, header in enumerate(headers):
-            max_width = len(str(header))
-            for row in data:
-                if i < len(row):
-                    max_width = max(max_width, len(str(row[i])))
-            widths.append(max_width + 4)  # Add padding
-
-    # Print header
-    print_table_row(headers, widths)
-    print_divider(sum(widths) + len(widths) - 1)
-
-    # Print data rows
-    for row in data:
-        print_table_row(row, widths)
+    _reporter.table(data, headers, widths)
 
 
 # ========== Convenience Functions ==========
@@ -299,9 +266,7 @@ def clear_output_and_print(message: str, wait: bool = True) -> None:
     Note:
         This is a convenience wrapper for Jupyter output clearing
     """
-
-    clear_output(wait=wait)
-    print(message)
+    _reporter.clear_and_print(message, wait)
 
 
 def print_progress(
@@ -327,9 +292,4 @@ def print_progress(
         >>> for i in range(100):
         ...     print_progress(i + 1, 100, prefix='Progress:', suffix='Complete')
     """
-    percent = f"{100 * (current / float(total)):.1f}"
-    filled_length = int(length * current // total)
-    progress_bar = fill * filled_length + "-" * (length - filled_length)
-    print(f"\r{prefix} |{progress_bar}| {percent}% {suffix}", end="")
-    if current == total:
-        print()  # New line on completion
+    _reporter.progress(current, total, prefix, suffix, length)
