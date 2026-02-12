@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 # Import mixins after base class definition to avoid circular imports
 from deltadewa.analysis.maturity import MaturityMixin
 from deltadewa.analysis.carry import CarryMixin
-from deltadewa.analysis.concentration import ConcentrationMixin
-from deltadewa.analysis.hedge import HedgeMixin
+from deltadewa.analysis.recommendations import RecommendationsMixin
 from deltadewa.analysis.scenarios import ScenariosMixin
-from deltadewa.analysis.insights import InsightsMixin
+from deltadewa.analysis.summary import SummaryMixin
 from deltadewa.analysis.risk_reward import RiskRewardMixin
+from deltadewa.analysis.health import HealthMixin
 
 if TYPE_CHECKING:
     pass
@@ -37,11 +37,11 @@ class PortfolioAnalyzerBase:
 class PortfolioAnalyzer(
     MaturityMixin,
     CarryMixin,
-    ConcentrationMixin,
-    HedgeMixin,
+    RecommendationsMixin,
     ScenariosMixin,
-    InsightsMixin,
+    SummaryMixin,
     RiskRewardMixin,
+    HealthMixin,
     PortfolioAnalyzerBase,
 ):
     """
@@ -56,6 +56,7 @@ class PortfolioAnalyzer(
     - Risk summary formatting
     - Actionable insights generation
     - Risk/reward analysis
+    - Portfolio health metrics
     """
 
     pass  # pylint: disable=unnecessary-pass

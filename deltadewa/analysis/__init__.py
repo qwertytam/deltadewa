@@ -22,7 +22,12 @@ from deltadewa.analysis.functions import (
     classify_maturity_bucket,
     quick_carry_analysis,
     quick_risk_concentration,
+)
+from deltadewa.analysis.cache import (
     ScenarioGridCache,
+    get_portfolio_state_hash,
+    create_scenario_cache_key,
+    create_spot_vol_cache_key,
 )
 from deltadewa.analysis.volatility import (
     calculate_portfolio_avg_volatility,
@@ -38,6 +43,9 @@ __all__ = [
     "quick_carry_analysis",
     "quick_risk_concentration",
     "ScenarioGridCache",
+    "get_portfolio_state_hash",
+    "create_scenario_cache_key",
+    "create_spot_vol_cache_key",
     "calculate_portfolio_avg_volatility",
     "apply_proportional_volatility_shift",
     "restore_volatilities",
