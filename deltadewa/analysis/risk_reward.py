@@ -37,7 +37,8 @@ class RiskRewardMixin:
 
         # Generate comprehensive spot range once if not provided
         if spot_range is None:
-            # Import here to avoid circular import
+            # Note: Import here to avoid circular dependency:
+            # risk_reward.py -> functions.py -> base.py -> risk_reward.py
             from deltadewa.analysis.functions import generate_spot_range
 
             spot_range = generate_spot_range(

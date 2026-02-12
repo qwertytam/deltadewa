@@ -131,7 +131,12 @@ class TestGenerateSpotRange:
         assert np.all(result_comprehensive[:-1] <= result_comprehensive[1:])
 
     def test_near_zero_floor_logic(self):
-        """Test that near-zero has a minimum floor of 0.01 in the main range."""
+        """Test that near-zero floor logic correctly handles edge cases.
+
+        The near-zero floor (0.01) is used as the minimum for the linspace calculation,
+        but critical points derived from spot_price may be smaller than 0.01.
+        The final range includes both linspace values and critical points.
+        """
         # Test with very small spot price
         spot_price = 0.001
         result = generate_spot_range(spot_price, use_comprehensive_range=True)
