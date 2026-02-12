@@ -29,9 +29,9 @@ class ScenariosMixin:
     def _create_batch_pricer(self) -> BatchPricer:
         """
         Creates a BatchPricer instance from the current portfolio state.
-        
-        This serves as a 'shadow' copy of the pricing engines that we can 
-        manipulate safely during calculations without affecting the main 
+
+        This serves as a 'shadow' copy of the pricing engines that we can
+        manipulate safely during calculations without affecting the main
         portfolio state.
         """
         return BatchPricer(
@@ -66,15 +66,16 @@ class ScenariosMixin:
         if pricer:
             # We treat the single spot as a 1-item array
             values = pricer.portfolio_values_at(
-                np.array([spot]),
-                valuation_date
+                np.array([spot]), valuation_date
             )
             return values[0]
 
         # Fallback to creating a temporary pricer if none provided
         # This is still cleaner than the old loop as it delegates to the optimized class
         temp_pricer = self._create_batch_pricer()
-        return temp_pricer.portfolio_values_at(np.array([spot]), valuation_date)[0]
+        return temp_pricer.portfolio_values_at(
+            np.array([spot]), valuation_date
+        )[0]
 
     def _calculate_pnl_at_expiry_vectorized(
         self,
@@ -83,7 +84,7 @@ class ScenariosMixin:
     ) -> np.ndarray:
         """
         Calculate P&L at expiry using vectorized NumPy operations.
-        
+
         This method should only be used for at-expiry calculations where all
         positions have expired (days_to_maturity <= 0). At expiry, options have
         only intrinsic value and no time value, so volatility doesn't affect
@@ -93,7 +94,7 @@ class ScenariosMixin:
         - Intrinsic value is element-wise max operation
         - All positions computed simultaneously across all spots
         - NumPy broadcasting handles grid expansion
-        
+
         Delegates to portfolio implementation for consistency.
 
         Args:
@@ -127,7 +128,8 @@ class ScenariosMixin:
             metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta',
             'gamma', 'vega', 'theta')
             baseline_spot: Spot price for P&L baseline (default: current portfolio spot)
-            baseline_valuation_date: Valuation date for P&L baseline (default: current portfolio date)
+            baseline_valuation_date: Valuation date for P&L baseline (default:
+            current portfolio date)
 
         Returns:
             DataFrame with columns: spot_price, valuation_date, metric_value
@@ -178,17 +180,19 @@ class ScenariosMixin:
                     val = portfolio_values[j]
                     if metric == "pnl":
                         val = val - baseline_value
-                    
-                    results.append({
-                        "spot_price": spot,
-                        "valuation_date": time_point,
-                        "days_forward": days_forward,
-                        "metric": metric,
-                        "value": val,
-                    })
+
+                    results.append(
+                        {
+                            "spot_price": spot,
+                            "valuation_date": time_point,
+                            "days_forward": days_forward,
+                            "metric": metric,
+                            "value": val,
+                        }
+                    )
 
             # STRATEGY 2: Greeks (Requires state updates)
-            # Currently BatchPricer primarily handles 'value'. 
+            # Currently BatchPricer primarily handles 'value'.
             # Ideally, BatchPricer would be extended to return Greeks arrays.
             # However, to avoid 'feature restriction' or major refactor of BatchPricer
             # right now, we will stick to the existing method for Greeks but
@@ -214,13 +218,15 @@ class ScenariosMixin:
                     else:
                         metric_value = 0.0
 
-                    results.append({
-                        "spot_price": spot,
-                        "valuation_date": time_point,
-                        "days_forward": days_forward,
-                        "metric": metric,
-                        "value": metric_value,
-                    })
+                    results.append(
+                        {
+                            "spot_price": spot,
+                            "valuation_date": time_point,
+                            "days_forward": days_forward,
+                            "metric": metric,
+                            "value": metric_value,
+                        }
+                    )
 
         # ALWAYS Restore original state
         self.portfolio.update_market_conditions(
@@ -279,11 +285,13 @@ class ScenariosMixin:
                 # Expand to full grid
                 for vol in vol_scenarios:
                     for j, spot in enumerate(spot_scenarios):
-                        results.append({
-                            "spot_price": spot,
-                            "volatility": vol,
-                            "value": pnl_values[j],
-                        })
+                        results.append(
+                            {
+                                "spot_price": spot,
+                                "volatility": vol,
+                                "value": pnl_values[j],
+                            }
+                        )
                 return pd.DataFrame(results)
 
         # Store original position vols
@@ -316,8 +324,12 @@ class ScenariosMixin:
                 if metric == "pnl":
                     current_value = self.portfolio.total_value()
                     # Manual underlying PnL calc
-                    underlying_pnl = (spot - original_spot) * self.portfolio.underlying_quantity
-                    metric_value = (current_value - baseline_value) + underlying_pnl
+                    underlying_pnl = (
+                        spot - original_spot
+                    ) * self.portfolio.underlying_quantity
+                    metric_value = (
+                        current_value - baseline_value
+                    ) + underlying_pnl
                 elif metric == "value":
                     metric_value = self.portfolio.total_value()
                 elif metric == "delta":
@@ -334,11 +346,13 @@ class ScenariosMixin:
                         f"Supported: pnl, value, delta, gamma, vega, theta"
                     )
 
-                results.append({
-                    "spot_price": spot,
-                    "volatility": vol,
-                    "value": metric_value,
-                })
+                results.append(
+                    {
+                        "spot_price": spot,
+                        "volatility": vol,
+                        "value": metric_value,
+                    }
+                )
 
             # Reset Volatility for next loop iteration
             restore_volatilities(self.portfolio, original_position_vols)

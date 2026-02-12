@@ -2,13 +2,6 @@
 
 from typing import Dict, List, Optional
 
-# Re-export generate_spot_range for backward compatibility
-# The function has been moved to deltadewa.spot_utils (a pure leaf module with
-# zero internal dependencies) to break the circular dependency between portfolio
-# and analysis layers. This re-export is safe because spot_utils has no internal
-# imports - it only depends on numpy.
-from deltadewa.spot_utils import generate_spot_range  # noqa: F401
-
 
 def classify_maturity_bucket(days_to_expiry: int) -> str:
     """
