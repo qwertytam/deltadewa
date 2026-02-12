@@ -5,11 +5,11 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from deltadewa.american_option import AmericanOption
-from deltadewa.batch_pricer import BatchPricer
 from deltadewa.analysis.volatility import (
     apply_proportional_volatility_shift,
     restore_volatilities,
 )
+
 
 if TYPE_CHECKING:
     from deltadewa.portfolio import OptionPortfolio
@@ -206,6 +206,10 @@ class ScenariosMixin:
         # Use BatchPricer for efficient valuation of 'pnl' and 'value' metrics
         # Greeks still need portfolio state updates, so they use the old path
         if metric in ("pnl", "value"):
+            from deltadewa.batch_pricer import (
+                BatchPricer,
+            )  # Import locally to avoid circular dependency
+
             pricer = BatchPricer(
                 positions=self.portfolio.positions,
                 risk_free_rate=self.portfolio.risk_free_rate,

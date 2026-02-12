@@ -135,7 +135,7 @@ class AmericanOption:
             ql.BlackConstantVol(
                 self.ql_valuation_date,
                 ql.NullCalendar(),
-                self.volatility,
+                self.vol_handle,
                 ql.Actual365Fixed(),  # type: ignore
             )  # type: ignore
         )
