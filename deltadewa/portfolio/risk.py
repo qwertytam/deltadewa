@@ -398,7 +398,7 @@ class RiskMixin:
 
         # Vectorized P&L calculation
         pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=include_underlying)
-        
+
         # Find sign changes to detect breakeven points
         sign_changes = np.diff(np.sign(pnl_array))
         crossing_indices = np.where(sign_changes != 0)[0]
