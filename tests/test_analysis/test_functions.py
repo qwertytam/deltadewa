@@ -5,6 +5,7 @@ import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis import (
     PortfolioAnalyzer,
+    generate_spot_range,
     classify_maturity_bucket,
     quick_carry_analysis,
     quick_risk_concentration,
@@ -15,6 +16,183 @@ from deltadewa.analysis.functions import (
     create_spot_vol_cache_key,
     get_portfolio_state_hash,
 )
+
+
+class TestGenerateSpotRange:
+    """Test cases for generate_spot_range function."""
+
+    def test_passthrough_existing_spot_range(self):
+        """Test that existing spot_range is returned as-is."""
+        existing_range = np.array([90.0, 100.0, 110.0])
+        result = generate_spot_range(100.0, spot_range=existing_range)
+        
+        # Should be the exact same array
+        np.testing.assert_array_equal(result, existing_range)
+
+    def test_standard_range_with_defaults(self):
+        """Test standard range generation with default parameters."""
+        spot_price = 100.0
+        result = generate_spot_range(spot_price)
+        
+        # Check it's a numpy array
+        assert isinstance(result, np.ndarray)
+        
+        # Check number of points
+        assert len(result) == 250  # default num_points
+        
+        # Check bounds (default is 0% to 200%)
+        # Lower bound should be max(0.01, 100 * 0.0 / 100) = 0.01
+        assert result[0] == 0.01
+        # Upper bound should be 100 * 200 / 100 = 200
+        assert result[-1] == 200.0
+        
+        # Check it's sorted
+        assert np.all(result[:-1] <= result[1:])
+
+    def test_standard_range_with_custom_bounds(self):
+        """Test standard range with custom min/max percentages."""
+        spot_price = 100.0
+        result = generate_spot_range(
+            spot_price,
+            spot_min_pct=80.0,
+            spot_max_pct=120.0,
+            num_points=100,
+        )
+        
+        # Check number of points
+        assert len(result) == 100
+        
+        # Check bounds
+        # Lower bound should be max(0.01, 100 * 80 / 100) = 80
+        assert result[0] == 80.0
+        # Upper bound should be 100 * 120 / 100 = 120
+        assert result[-1] == 120.0
+        
+        # Check it's sorted
+        assert np.all(result[:-1] <= result[1:])
+
+    def test_comprehensive_range_includes_extremes(self):
+        """Test comprehensive range includes extreme values."""
+        spot_price = 100.0
+        result = generate_spot_range(
+            spot_price, use_comprehensive_range=True
+        )
+        
+        # Check it's a numpy array
+        assert isinstance(result, np.ndarray)
+        
+        # Check that it includes near-zero
+        # Near-zero should be max(0.01, 100 * 0.0001) = 0.01
+        assert result[0] == 0.01
+        
+        # Check that it includes high multiples
+        # Maximum should be 10x spot = 1000
+        assert result[-1] == 1000.0
+        
+        # Check it's sorted
+        assert np.all(result[:-1] <= result[1:])
+
+    def test_comprehensive_range_includes_critical_points(self):
+        """Test comprehensive range includes critical points."""
+        spot_price = 100.0
+        result = generate_spot_range(
+            spot_price, use_comprehensive_range=True
+        )
+        
+        # Check that critical points are included
+        critical_points = [
+            0.01,  # near-zero
+            10.0,  # 90% down
+            25.0,  # 75% down
+            50.0,  # 50% down
+            75.0,  # 25% down
+            100.0,  # current spot
+            125.0,  # 25% up
+            150.0,  # 50% up
+            200.0,  # 100% up
+            300.0,  # 200% up
+            500.0,  # 400% up
+            1000.0,  # 900% up
+        ]
+        
+        for cp in critical_points:
+            assert np.any(np.isclose(result, cp)), f"Critical point {cp} not found"
+
+    def test_results_are_sorted(self):
+        """Test that results are always sorted."""
+        spot_price = 100.0
+        
+        # Test standard range
+        result_standard = generate_spot_range(spot_price)
+        assert np.all(result_standard[:-1] <= result_standard[1:])
+        
+        # Test comprehensive range
+        result_comprehensive = generate_spot_range(
+            spot_price, use_comprehensive_range=True
+        )
+        assert np.all(result_comprehensive[:-1] <= result_comprehensive[1:])
+
+    def test_near_zero_floor_logic(self):
+        """Test that near-zero has a minimum floor of 0.01 in the main range."""
+        # Test with very small spot price
+        spot_price = 0.001
+        result = generate_spot_range(
+            spot_price, use_comprehensive_range=True
+        )
+        
+        # The near-zero used for linspace should be max(0.01, 0.001 * 0.0001) = 0.01
+        # But critical points based on spot_price can be smaller
+        # So result[0] will be min(critical_points) = spot_price * 0.1 = 0.0001
+        assert result[0] == 0.0001
+        
+        # The near_zero value (0.01) should be in the range
+        assert np.any(np.isclose(result, 0.01))
+        
+        # Test with larger spot price where near_zero > 0.01
+        spot_price = 10000.0
+        result = generate_spot_range(
+            spot_price, use_comprehensive_range=True
+        )
+        
+        # Near-zero should be max(0.01, 10000 * 0.0001) = 1.0
+        # But critical points like 10000 * 0.1 = 1000 are larger
+        # So result[0] will be the near_zero value = 1.0
+        assert result[0] == 1.0
+
+    def test_standalone_produces_same_results_as_riskmixin(self):
+        """Test standalone function produces identical results to RiskMixin._get_spot_range()."""
+        # Create a portfolio with RiskMixin
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.3,
+        )
+        
+        # Test standard range
+        result_standalone = generate_spot_range(
+            spot_price=100.0,
+            spot_min_pct=0.0,
+            spot_max_pct=200.0,
+            num_points=250,
+            use_comprehensive_range=False,
+        )
+        result_riskmixin = portfolio._get_spot_range(
+            spot_min_pct=0.0,
+            spot_max_pct=200.0,
+            num_points=250,
+            use_comprehensive_range=False,
+        )
+        np.testing.assert_array_equal(result_standalone, result_riskmixin)
+        
+        # Test comprehensive range
+        result_standalone_comp = generate_spot_range(
+            spot_price=100.0,
+            use_comprehensive_range=True,
+        )
+        result_riskmixin_comp = portfolio._get_spot_range(
+            use_comprehensive_range=True,
+        )
+        np.testing.assert_array_equal(result_standalone_comp, result_riskmixin_comp)
 
 
 class TestModuleLevelFunctions:
