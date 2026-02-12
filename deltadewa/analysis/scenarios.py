@@ -5,8 +5,6 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-# We maintain the import, but we will use it more effectively
-from deltadewa.american_option import AmericanOption
 from deltadewa.analysis.volatility import (
     apply_proportional_volatility_shift,
     restore_volatilities,
@@ -138,11 +136,20 @@ class ScenariosMixin:
         original_spot = self.portfolio.spot_price
         original_date = self.portfolio.valuation_date
 
-        # Setup defaults
+        # Setup defaults and validate
         if baseline_spot is None:
             baseline_spot = original_spot
+        if baseline_spot is None:
+            raise ValueError(
+                "Portfolio spot price is not set for baseline calculation."
+            )
+
         if baseline_valuation_date is None:
             baseline_valuation_date = original_date
+        if baseline_valuation_date is None:
+            raise ValueError(
+                "Portfolio valuation date is not set for baseline calculation."
+            )
 
         # Create the BatchPricer ONCE.
         # This builds the QuantLib engines for all positions one time.
@@ -194,7 +201,6 @@ class ScenariosMixin:
                         spot_price=spot, valuation_date=time_point
                     )
 
-                    metric_value = 0.0
                     if metric == "delta":
                         metric_value = self.portfolio.total_delta()
                     elif metric == "net_delta":
@@ -205,6 +211,8 @@ class ScenariosMixin:
                         metric_value = self.portfolio.total_vega()
                     elif metric == "theta":
                         metric_value = self.portfolio.total_theta()
+                    else:
+                        metric_value = 0.0
 
                     results.append({
                         "spot_price": spot,
@@ -266,7 +274,7 @@ class ScenariosMixin:
                 pnl_values = self._calculate_pnl_at_expiry_vectorized(
                     spot_scenarios, include_underlying=True
                 )
-                # Expand grid using Python loops (efficient enough for result dict building)
+                # Expand to full grid
                 for vol in vol_scenarios:
                     for j, spot in enumerate(spot_scenarios):
                         results.append({
@@ -303,7 +311,6 @@ class ScenariosMixin:
                     spot_price=spot, valuation_date=original_date
                 )
 
-                val = 0.0
                 if metric == "pnl":
                     curr = self.portfolio.total_value()
                     # Manual underlying PnL calc
@@ -319,6 +326,11 @@ class ScenariosMixin:
                     val = self.portfolio.total_vega()
                 elif metric == "theta":
                     val = self.portfolio.total_theta()
+                else:
+                    raise ValueError(
+                        f"Unsupported metric: {metric}. "
+                        f"Supported: pnl, value, delta, gamma, vega, theta"
+                    )
 
                 results.append({
                     "spot_price": spot,
