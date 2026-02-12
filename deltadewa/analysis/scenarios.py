@@ -86,7 +86,24 @@ class ScenariosMixin:
         """
         Calculate P&L at expiry using vectorized NumPy operations.
         
-        Delegates to portfolio implementation.
+        This method should only be used for at-expiry calculations where all
+        positions have expired (days_to_maturity <= 0). At expiry, options have
+        only intrinsic value and no time value, so volatility doesn't affect
+        the results.
+
+        This is much faster than iterating for large grids because:
+        - Intrinsic value is element-wise max operation
+        - All positions computed simultaneously across all spots
+        - NumPy broadcasting handles grid expansion
+        
+        Delegates to portfolio implementation for consistency.
+
+        Args:
+            spot_scenarios: Array of spot prices to evaluate
+            include_underlying: Whether to include underlying position P&L
+
+        Returns:
+            np.ndarray of P&L values for each spot scenario
         """
         return self.portfolio.vectorized_pnl_at_expiry(
             spot_scenarios, include_underlying=include_underlying
@@ -103,13 +120,16 @@ class ScenariosMixin:
         """
         Calculate portfolio metrics across 2D grid of spot prices and time.
 
+        Useful for heatmap generation showing how portfolio evolves across
+        different price levels and time horizons.
+
         Args:
             spot_scenarios: Array of spot prices to test
             time_points: List of valuation dates to test
             metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta',
             'gamma', 'vega', 'theta')
-            baseline_spot: Spot price for P&L baseline
-            baseline_valuation_date: Valuation date for P&L baseline
+            baseline_spot: Spot price for P&L baseline (default: current portfolio spot)
+            baseline_valuation_date: Valuation date for P&L baseline (default: current portfolio date)
 
         Returns:
             DataFrame with columns: spot_price, valuation_date, metric_value
@@ -211,6 +231,20 @@ class ScenariosMixin:
     ) -> pd.DataFrame:
         """
         Calculate portfolio metrics across 2D grid of spot prices and volatilities.
+
+        For P&L at expiry (intrinsic value), uses vectorized calculation for
+        maximum performance. For other metrics requiring repricing, uses
+        iterative approach with proportional vol scaling.
+
+        Args:
+            spot_scenarios: Array of spot prices to test
+            vol_scenarios: Array of volatilities to test
+            metric: Metric to calculate ('pnl', 'value', 'delta', 'gamma', 'vega', 'theta')
+            baseline_value: Portfolio value for P&L baseline (default: current value)
+            proportional_vol_scaling: If True, scale position vols proportionally
+
+        Returns:
+            DataFrame with columns: spot_price, volatility, value
         """
         results: List[Dict[str, Any]] = []
         original_spot = self.portfolio.spot_price
@@ -222,8 +256,10 @@ class ScenariosMixin:
 
         # Optimization: Vectorized PnL at expiry check
         if metric == "pnl":
+            # Check if all positions are at expiry (days_to_maturity == 0)
+            # We check for exactly 0 to avoid issues with historical valuations
             all_at_expiry = all(
-                (pos.option.maturity_date - original_date).days <= 0
+                (pos.option.maturity_date - original_date).days == 0
                 for pos in self.portfolio.positions
             )
             if all_at_expiry:
