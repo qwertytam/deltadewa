@@ -1,12 +1,12 @@
-"""Tests for deltadewa.analysis.insights module."""
+"""Tests for deltadewa.analysis.summary module (insights functionality)."""
 
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis import PortfolioAnalyzer
 
 
-class TestInsightsMixin:
-    """Test cases for InsightsMixin."""
+class TestSummaryMixinInsights:
+    """Test cases for SummaryMixin insights functionality."""
 
     def test_format_risk_summary_basic(self):
         """Test basic risk summary formatting."""
