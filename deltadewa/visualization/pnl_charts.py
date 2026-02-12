@@ -18,6 +18,7 @@ from deltadewa.formatters import (
     format_currency_for_axis,
 )
 from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.analysis.functions import generate_spot_range
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolioBase
@@ -57,11 +58,16 @@ class PnLChartsMixin:
             Matplotlib Figure object
         """
         # Create spot price range
-        spot_min = max(
-            0.01, self.portfolio.spot_price * (1 - spot_range_pct / 100)
+        # Note: spot_range_pct is symmetric ± percentage (e.g., 40 means 60% to 140%)
+        # Convert to spot_min_pct and spot_max_pct for generate_spot_range
+        spot_min_pct = 100 - spot_range_pct
+        spot_max_pct = 100 + spot_range_pct
+        spot_range = generate_spot_range(
+            spot_price=self.portfolio.spot_price,
+            spot_min_pct=spot_min_pct,
+            spot_max_pct=spot_max_pct,
+            num_points=num_points,
         )
-        spot_max = self.portfolio.spot_price * (1 + spot_range_pct / 100)
-        spot_range = np.linspace(spot_min, spot_max, num_points)
 
         # Calculate P&L curves using vectorized operations
         pnl_options = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
@@ -155,10 +161,17 @@ class PnLChartsMixin:
         _ = show_probability_overlay
 
         # Generate spot price range
+        # Note: spot_range_pct is symmetric ± percentage (e.g., 100 means 0% to 200%)
+        # Convert to spot_min_pct and spot_max_pct for generate_spot_range
         current_spot = self.portfolio.spot_price
-        spot_min = max(0.01, current_spot * (1 - spot_range_pct / 100))
-        spot_max = current_spot * (1 + spot_range_pct / 100)
-        spot_range = np.linspace(spot_min, spot_max, num_points)
+        spot_min_pct = 100 - spot_range_pct
+        spot_max_pct = 100 + spot_range_pct
+        spot_range = generate_spot_range(
+            spot_price=current_spot,
+            spot_min_pct=spot_min_pct,
+            spot_max_pct=spot_max_pct,
+            num_points=num_points,
+        )
 
         # Calculate P&L curve using vectorized operations
         pnl_values = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore

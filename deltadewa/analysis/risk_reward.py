@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING, Optional
 import numpy as np
+from deltadewa.analysis.functions import generate_spot_range
 
 if TYPE_CHECKING:
     from deltadewa.portfolio import OptionPortfolio
@@ -37,7 +38,9 @@ class RiskRewardMixin:
 
         # Generate comprehensive spot range once if not provided
         if spot_range is None:
-            spot_range = self.portfolio._get_spot_range(use_comprehensive_range=True)
+            spot_range = generate_spot_range(
+                self.portfolio.spot_price, use_comprehensive_range=True
+            )
 
         # Options only analysis - pass the spot range
         max_loss_opts = self.portfolio.calculate_max_loss_options(spot_range)

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional, List
 import warnings
 import numpy as np
 from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.analysis.functions import generate_spot_range
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.position import OptionPosition
@@ -38,6 +39,9 @@ class RiskMixin:
         """
         Get or create a spot price range for analysis.
 
+        Delegates to analysis.functions.generate_spot_range() for consistent
+        spot range generation across the codebase.
+
         Args:
             spot_range: Existing spot range to use (returned as-is if provided)
             spot_min_pct: Minimum spot price as percentage of current spot (default: 0%)
@@ -50,50 +54,14 @@ class RiskMixin:
         Returns:
             NumPy array of spot prices for analysis
         """
-        if spot_range is not None:
-            return spot_range
-
-        if use_comprehensive_range:
-            # Create comprehensive range that includes extreme scenarios
-            current_spot = self.spot_price
-
-            # Near-zero value scaled appropriately for the asset price
-            # Use 0.01% of current spot, but ensure minimum of 0.01
-            near_zero = max(0.01, current_spot * 0.0001)
-
-            # Critical points to always check for accurate max/min detection
-            critical_points = [
-                # Near zero (important for puts - can't use exact 0 due to
-                # log calculations)
-                near_zero,
-                current_spot * 0.1,  # 90% down
-                current_spot * 0.25,  # 75% down
-                current_spot * 0.5,  # 50% down
-                current_spot * 0.75,  # 25% down
-                current_spot,  # Current spot
-                current_spot * 1.25,  # 25% up
-                current_spot * 1.5,  # 50% up
-                current_spot * 2.0,  # 100% up
-                current_spot * 3.0,  # 200% up
-                current_spot * 5.0,  # 400% up
-                current_spot * 10.0,  # 900% up
-            ]
-
-            # Dense range for main area - from near-zero to highest critical point
-            spot_min = near_zero
-            spot_max = current_spot * 10.0  # Maximum is 10x current spot
-            main_range = np.linspace(spot_min, spot_max, 300)
-
-            # Combine and sort
-            spot_range = np.unique(
-                np.concatenate([critical_points, main_range])
-            )
-            return np.sort(spot_range)
-        else:
-            # Standard range
-            spot_min = max(0.01, self.spot_price * spot_min_pct / 100)
-            spot_max = self.spot_price * spot_max_pct / 100
-            return np.linspace(spot_min, spot_max, num_points)
+        return generate_spot_range(
+            spot_price=self.spot_price,
+            spot_range=spot_range,
+            spot_min_pct=spot_min_pct,
+            spot_max_pct=spot_max_pct,
+            num_points=num_points,
+            use_comprehensive_range=use_comprehensive_range,
+        )
 
     def _check_unlimited_trend(
         self,

@@ -18,6 +18,7 @@ Date: 2026-01-12
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.functions import (
+    generate_spot_range,
     classify_maturity_bucket,
     quick_carry_analysis,
     quick_risk_concentration,
@@ -32,6 +33,7 @@ from deltadewa.analysis.volatility import (
 
 __all__ = [
     "PortfolioAnalyzer",
+    "generate_spot_range",
     "classify_maturity_bucket",
     "quick_carry_analysis",
     "quick_risk_concentration",
