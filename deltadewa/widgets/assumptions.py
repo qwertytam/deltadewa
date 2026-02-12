@@ -363,13 +363,12 @@ class GlobalAssumptions:
             [
                 widgets.HTML(
                     f"""
-                    '<div style="background-color:'
-                    '{DEFAULT_PALETTE.med_dark_background}; color:white; '
-                    'padding:10px; border-radius:5px; margin-bottom:10px;">'
-                    '<h3 style="margin:0;">Global Assumptions Panel</h3>'
-                    '<p style="margin:5px 0 0 0; font-size:14px;">'
-                    "Single source of truth for all market parameters</p>"
-                    "</div>"
+                    <div style="background-color:{DEFAULT_PALETTE.med_dark_background}; """
+                    + """color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
+                    <h3 style="margin:0;">Global Assumptions Panel</h3>
+                    <p style="margin:5px 0 0 0; font-size:14px;">
+                    Single source of truth for all market parameters</p>
+                    </div>
                     """
                 ),
                 market_section,

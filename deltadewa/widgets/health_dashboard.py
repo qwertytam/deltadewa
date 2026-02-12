@@ -472,7 +472,8 @@ class HedgeHealthDashboard:
             )
         )
 
-        dashboard_html = f"""
+        dashboard_html = (
+            f"""
         <div style="
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             border: 2px solid {DEFAULT_PALETTE.med_dark_background};
@@ -482,9 +483,8 @@ class HedgeHealthDashboard:
         ">
             <!-- Header -->
             <div style="
-                background: linear-gradient(135deg, '
-                '{DEFAULT_PALETTE.med_dark_background} 0%, '
-                '{DEFAULT_PALETTE.dark_background}  100%);
+                background: linear-gradient(135deg, """
+            + f"""{DEFAULT_PALETTE.med_dark_background} 0%, {DEFAULT_PALETTE.dark_background} 100%);
                 color: white;
                 padding: 15px 20px;
                 border-radius: 6px 6px 0 0;
@@ -519,6 +519,7 @@ class HedgeHealthDashboard:
             </div>
         </div>
         """
+        )
         return dashboard_html
 
     def _calculate_overall_health_score(self) -> float:

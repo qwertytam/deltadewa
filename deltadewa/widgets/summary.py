@@ -172,12 +172,10 @@ class NetHedgeSummary:
             [
                 widgets.HTML(
                     f"""
-                    '<div style="background-color:'
-                    '{DEFAULT_PALETTE.med_dark_background};'
-                    'color:white; '
-                    'padding:10px; border-radius:5px 5px 0 0;">'
-                    '<h3 style="margin:0;">Hedge Summary</h3>'
-                    "</div>"
+                    <div style="background-color:{DEFAULT_PALETTE.med_dark_background};"""
+                    + """ color:white; padding:10px; border-radius:5px 5px 0 0;">
+                    <h3 style="margin:0;">Hedge Summary</h3>
+                    </div>
                     """
                 ),
                 widgets.HTML(
