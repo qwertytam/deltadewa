@@ -130,7 +130,9 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
-        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=False)
+        pnl_array = self.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=False
+        )
         idx = int(np.argmin(pnl_array))
         max_loss = float(pnl_array[idx])
         spot_at_max_loss = float(spot_range[idx])
@@ -185,7 +187,9 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
-        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=False)
+        pnl_array = self.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=False
+        )
         idx = int(np.argmax(pnl_array))
         max_profit = float(pnl_array[idx])
         spot_at_max_profit = float(spot_range[idx])
@@ -240,7 +244,9 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
-        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=True)
+        pnl_array = self.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=True
+        )
         idx = int(np.argmin(pnl_array))
         max_loss = float(pnl_array[idx])
         spot_at_max_loss = float(spot_range[idx])
@@ -306,7 +312,9 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
-        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=True)
+        pnl_array = self.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=True
+        )
         idx = int(np.argmax(pnl_array))
         max_profit = float(pnl_array[idx])
         spot_at_max_profit = float(spot_range[idx])
@@ -365,11 +373,13 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
-        pnl_array = self.vectorized_pnl_at_expiry(spot_range, include_underlying=include_underlying)
+        pnl_array = self.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=include_underlying
+        )
 
         # Find sign changes to detect breakeven points
         sign_changes = np.diff(np.sign(pnl_array))
         crossing_indices = np.where(sign_changes != 0)[0]
-        
+
         # Return the spot prices after the sign change
         return [float(spot_range[i + 1]) for i in crossing_indices]

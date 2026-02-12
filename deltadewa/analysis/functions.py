@@ -39,10 +39,10 @@ def generate_spot_range(
     Examples:
         >>> # Standard range from 80% to 120% of spot
         >>> generate_spot_range(100.0, spot_min_pct=80.0, spot_max_pct=120.0)
-        
+
         >>> # Comprehensive range with critical points
         >>> generate_spot_range(100.0, use_comprehensive_range=True)
-        
+
         >>> # Use existing range (passthrough)
         >>> existing = np.array([90, 100, 110])
         >>> generate_spot_range(100.0, spot_range=existing)

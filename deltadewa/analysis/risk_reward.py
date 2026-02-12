@@ -39,6 +39,7 @@ class RiskRewardMixin:
         if spot_range is None:
             # Import here to avoid circular import
             from deltadewa.analysis.functions import generate_spot_range
+
             spot_range = generate_spot_range(
                 self.portfolio.spot_price, use_comprehensive_range=True
             )
