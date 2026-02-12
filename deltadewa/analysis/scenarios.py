@@ -26,7 +26,7 @@ class ScenariosMixin:
     if TYPE_CHECKING:
         portfolio: "OptionPortfolio"
 
-    def _get_or_create_batch_pricer(self) -> BatchPricer:
+    def _create_batch_pricer(self) -> BatchPricer:
         """
         Creates a BatchPricer instance from the current portfolio state.
         
@@ -73,7 +73,7 @@ class ScenariosMixin:
 
         # Fallback to creating a temporary pricer if none provided
         # This is still cleaner than the old loop as it delegates to the optimized class
-        temp_pricer = self._get_or_create_batch_pricer()
+        temp_pricer = self._create_batch_pricer()
         return temp_pricer.portfolio_values_at(np.array([spot]), valuation_date)[0]
 
     def _calculate_pnl_at_expiry_vectorized(
@@ -153,7 +153,7 @@ class ScenariosMixin:
 
         # Create the BatchPricer ONCE.
         # This builds the QuantLib engines for all positions one time.
-        pricer = self._get_or_create_batch_pricer()
+        pricer = self._create_batch_pricer()
 
         # Calculate baseline value efficiently using the pricer
         baseline_value = 0.0
@@ -271,6 +271,8 @@ class ScenariosMixin:
                 for pos in self.portfolio.positions
             )
             if all_at_expiry:
+                # Use vectorized calculation for maximum speed
+                # Volatility doesn't affect intrinsic value at expiry
                 pnl_values = self._calculate_pnl_at_expiry_vectorized(
                     spot_scenarios, include_underlying=True
                 )
@@ -312,20 +314,20 @@ class ScenariosMixin:
                 )
 
                 if metric == "pnl":
-                    curr = self.portfolio.total_value()
+                    current_value = self.portfolio.total_value()
                     # Manual underlying PnL calc
-                    und_pnl = (spot - original_spot) * self.portfolio.underlying_quantity
-                    val = (curr - baseline_value) + und_pnl
+                    underlying_pnl = (spot - original_spot) * self.portfolio.underlying_quantity
+                    metric_value = (current_value - baseline_value) + underlying_pnl
                 elif metric == "value":
-                    val = self.portfolio.total_value()
+                    metric_value = self.portfolio.total_value()
                 elif metric == "delta":
-                    val = self.portfolio.total_delta()
+                    metric_value = self.portfolio.total_delta()
                 elif metric == "gamma":
-                    val = self.portfolio.total_gamma()
+                    metric_value = self.portfolio.total_gamma()
                 elif metric == "vega":
-                    val = self.portfolio.total_vega()
+                    metric_value = self.portfolio.total_vega()
                 elif metric == "theta":
-                    val = self.portfolio.total_theta()
+                    metric_value = self.portfolio.total_theta()
                 else:
                     raise ValueError(
                         f"Unsupported metric: {metric}. "
@@ -335,7 +337,7 @@ class ScenariosMixin:
                 results.append({
                     "spot_price": spot,
                     "volatility": vol,
-                    "value": val,
+                    "value": metric_value,
                 })
 
             # Reset Volatility for next loop iteration
