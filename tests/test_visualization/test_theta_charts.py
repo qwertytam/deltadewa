@@ -2,10 +2,12 @@
 
 from datetime import datetime, timedelta
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
+
 import matplotlib.pyplot as plt
-from deltadewa.portfolio import OptionPortfolio
-from deltadewa.visualization import OptionCharts
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.visualization.base import OptionCharts
+
+matplotlib.use("Agg")  # Use non-interactive backend
 
 
 class TestThetaChartsMixin:
@@ -15,7 +17,7 @@ class TestThetaChartsMixin:
         """Test plot_theta_analysis with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
         charts = OptionCharts(portfolio)
-        
+
         # Empty portfolio will raise KeyError, which is expected behavior
         # This test documents that behavior; in production,
         # users should check portfolio.positions before plotting
@@ -31,7 +33,7 @@ class TestThetaChartsMixin:
         """Test plot_theta_analysis with positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
@@ -44,10 +46,10 @@ class TestThetaChartsMixin:
             quantity=-1,
             option_type="call",
         )
-        
+
         charts = OptionCharts(portfolio)
         fig = charts.plot_theta_analysis()
-        
+
         assert fig is not None
         # Should have 4 main panels (2x2) but theta plots create twin axes
         # So we expect more than 4
@@ -58,17 +60,17 @@ class TestThetaChartsMixin:
         """Test plot_theta_analysis with custom projection days."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         charts = OptionCharts(portfolio)
         fig = charts.plot_theta_analysis(projection_days=60)
-        
+
         assert fig is not None
         plt.close(fig)
 
@@ -76,18 +78,19 @@ class TestThetaChartsMixin:
         """Test _prepare_theta_data."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         charts = OptionCharts(portfolio)
         df = portfolio.to_dataframe()
+        # pylint: disable=protected-access
         df_carry, theta_metrics = charts._prepare_theta_data(df)
-        
+
         assert df_carry is not None
         assert "days_to_expiry" in df_carry.columns
         assert "maturity_bucket" in df_carry.columns

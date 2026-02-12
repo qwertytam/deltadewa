@@ -1,7 +1,5 @@
 """Tests for deltadewa.utils module - print and formatting utilities."""
 
-import pytest
-
 from deltadewa.utils import (
     print_header,
     print_subheader,

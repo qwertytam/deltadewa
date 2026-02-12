@@ -1,8 +1,9 @@
 """Tests for deltadewa.analysis.risk_reward module."""
 
 from datetime import datetime, timedelta
+import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.analysis.base import PortfolioAnalyzer
 
 
 class TestRiskRewardMixin:
@@ -24,6 +25,7 @@ class TestRiskRewardMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Verify all expected keys exist
@@ -34,8 +36,8 @@ class TestRiskRewardMixin:
         assert "max_loss_total" in analysis
         assert "max_profit_total" in analysis
         assert "breakeven_total" in analysis
-        assert "probability_of_profit" in analysis
-        assert "expected_value" in analysis
+        assert "prob_profit" in analysis
+        assert "expected_pnl" in analysis
 
         # Verify structure of nested dicts
         assert "max_loss" in analysis["max_loss_options"]
@@ -61,6 +63,7 @@ class TestRiskRewardMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Long call should have unlimited profit
@@ -84,6 +87,7 @@ class TestRiskRewardMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Short call should have unlimited loss
@@ -102,19 +106,32 @@ class TestRiskRewardMixin:
         maturity = datetime.now() + timedelta(days=30)
         # Iron condor: buy put spread, buy call spread
         portfolio.add_position(
-            strike_price=95.0, maturity_date=maturity, quantity=1, option_type="put"
+            strike_price=95.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type="put",
         )
         portfolio.add_position(
-            strike_price=100.0, maturity_date=maturity, quantity=-1, option_type="put"
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=-1,
+            option_type="put",
         )
         portfolio.add_position(
-            strike_price=105.0, maturity_date=maturity, quantity=-1, option_type="call"
+            strike_price=105.0,
+            maturity_date=maturity,
+            quantity=-1,
+            option_type="call",
         )
         portfolio.add_position(
-            strike_price=110.0, maturity_date=maturity, quantity=1, option_type="call"
+            strike_price=110.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type="call",
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Just verify the analysis structure is valid
@@ -128,12 +145,13 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(spot_price=100.0)
         analyzer = PortfolioAnalyzer(portfolio)
 
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Empty portfolio should still return valid structure
         assert "net_debit" in analysis
         assert "max_loss_options" in analysis
-        assert "probability_of_profit" in analysis
+        assert "prob_profit" in analysis
 
     def test_format_risk_reward_summary_basic(self):
         """Test format_risk_reward_summary returns string."""
@@ -215,12 +233,11 @@ class TestRiskRewardMixin:
         # Should not raise any exceptions
         try:
             analyzer.print_risk_reward_summary()
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             assert False, f"print_risk_reward_summary raised {e}"
 
     def test_risk_reward_analysis_with_spot_range(self):
         """Test risk_reward_analysis with custom spot_range."""
-        import numpy as np
 
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -236,6 +253,7 @@ class TestRiskRewardMixin:
 
         analyzer = PortfolioAnalyzer(portfolio)
         spot_range = np.linspace(50, 150, 100)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(
             spot_range=spot_range, num_simulations=100
         )

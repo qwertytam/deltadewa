@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 import numpy as np
-from deltadewa.portfolio import OptionPortfolio
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestRiskMixin:
@@ -11,7 +11,7 @@ class TestRiskMixin:
     def test_get_spot_range(self):
         """Test _get_spot_range helper method."""
         portfolio = OptionPortfolio(spot_price=100.0)
-
+        # pylint: disable=protected-access
         spot_range = portfolio._get_spot_range(num_points=10)
 
         assert isinstance(spot_range, np.ndarray)
@@ -20,7 +20,7 @@ class TestRiskMixin:
     def test_get_spot_range_comprehensive(self):
         """Test _get_spot_range with comprehensive range."""
         portfolio = OptionPortfolio(spot_price=100.0)
-
+        # pylint: disable=protected-access
         spot_range = portfolio._get_spot_range(use_comprehensive_range=True)
 
         assert isinstance(spot_range, np.ndarray)
@@ -166,13 +166,14 @@ class TestRiskMixin:
         )
 
         spot_range = np.linspace(100, 500, 100)
-        
+
         # Compute PnL array
         pnl_array = portfolio.vectorized_pnl_at_expiry(
             spot_range, include_underlying=False
         )
 
         # Check increasing trend (profit)
+        # pylint: disable=protected-access
         result = portfolio._check_unlimited_trend(
             pnl_array, check_increasing=True
         )
@@ -210,12 +211,15 @@ class TestRiskMixin:
         )
 
         # Generate spot range
+        # pylint: disable=protected-access
         spot_range = portfolio._get_spot_range(use_comprehensive_range=True)
 
         # Calculate using vectorized methods
         max_loss_vec = portfolio.calculate_max_loss_options(spot_range)
         max_profit_vec = portfolio.calculate_max_profit_options(spot_range)
-        breakeven_vec = portfolio.calculate_breakeven_points(spot_range, include_underlying=False)
+        breakeven_vec = portfolio.calculate_breakeven_points(
+            spot_range, include_underlying=False
+        )
 
         # Verify results are computed properly (types and reasonable values)
         assert isinstance(max_loss_vec["max_loss"], float)
@@ -228,13 +232,17 @@ class TestRiskMixin:
 
         assert isinstance(breakeven_vec, list)
         assert all(isinstance(x, float) for x in breakeven_vec)
-        
+
         # Verify vectorized gives same results by comparing PnL at a few key spots
         test_spots = np.array([80.0, 90.0, 95.0, 100.0, 105.0, 110.0, 120.0])
-        pnl_vectorized = portfolio.vectorized_pnl_at_expiry(test_spots, include_underlying=False)
-        
+        pnl_vectorized = portfolio.vectorized_pnl_at_expiry(
+            test_spots, include_underlying=False
+        )
+
         for i, spot in enumerate(test_spots):
-            pnl_scalar = portfolio.calculate_pnl_at_expiry(spot, include_underlying=False)
-            assert np.isclose(pnl_vectorized[i], pnl_scalar, rtol=1e-10), (
-                f"Mismatch at spot={spot}: vectorized={pnl_vectorized[i]}, scalar={pnl_scalar}"
+            pnl_scalar = portfolio.calculate_pnl_at_expiry(
+                spot, include_underlying=False
             )
+            assert np.isclose(
+                pnl_vectorized[i], pnl_scalar, rtol=1e-10
+            ), f"Mismatch at spot={spot}: vectorized={pnl_vectorized[i]}, scalar={pnl_scalar}"

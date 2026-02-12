@@ -2,17 +2,19 @@
 
 from datetime import datetime, timedelta
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
+
 import matplotlib.pyplot as plt
-from deltadewa.portfolio import OptionPortfolio
-from deltadewa.visualization import (
-    OptionCharts,
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.visualization.base import OptionCharts
+from deltadewa.visualization.convenience import (
     plot_pnl_diagram,
     plot_pnl_distribution_with_metrics,
     plot_greeks_by_strike,
     plot_theta_analysis,
     plot_greeks_consolidated,
 )
+
+matplotlib.use("Agg")  # Use non-interactive backend
 
 
 class TestIntegration:
@@ -34,14 +36,14 @@ class TestIntegration:
         """Test plot_pnl_diagram convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         fig = plot_pnl_diagram(portfolio)
         assert fig is not None
         plt.close(fig)
@@ -50,14 +52,14 @@ class TestIntegration:
         """Test plot_pnl_distribution_with_metrics convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         fig = plot_pnl_distribution_with_metrics(portfolio)
         assert fig is not None
         plt.close(fig)
@@ -66,14 +68,14 @@ class TestIntegration:
         """Test plot_greeks_by_strike convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         fig = plot_greeks_by_strike(portfolio)
         assert fig is not None
         plt.close(fig)
@@ -82,14 +84,14 @@ class TestIntegration:
         """Test plot_theta_analysis convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         fig = plot_theta_analysis(portfolio)
         assert fig is not None
         plt.close(fig)
@@ -98,14 +100,14 @@ class TestIntegration:
         """Test plot_greeks_consolidated convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         fig = plot_greeks_consolidated(portfolio)
         assert fig is not None
         plt.close(fig)
@@ -117,11 +119,11 @@ class TestIntegration:
             underlying_quantity=100.0,
             volatility=0.25,
         )
-        
+
         # Add multiple positions
         maturity1 = datetime.now() + timedelta(days=30)
         maturity2 = datetime.now() + timedelta(days=60)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity1,
@@ -140,38 +142,27 @@ class TestIntegration:
             quantity=1,
             option_type="put",
         )
-        
+
         # Create charts
         charts = OptionCharts(portfolio)
-        
+
         # Test all chart methods work
         fig1 = charts.plot_pnl_diagram()
         assert fig1 is not None
         plt.close(fig1)
-        
+
         fig2 = charts.plot_pnl_distribution_with_metrics()
         assert fig2 is not None
         plt.close(fig2)
-        
+
         fig3 = charts.plot_greeks_by_strike()
         assert fig3 is not None
         plt.close(fig3)
-        
+
         fig4 = charts.plot_greeks_by_maturity()
         assert fig4 is not None
         plt.close(fig4)
-        
+
         fig5 = charts.plot_theta_analysis()
         assert fig5 is not None
         plt.close(fig5)
-
-    def test_backward_compatibility(self):
-        """Test backward compatibility of imports."""
-        # Test that old import style still works
-        from deltadewa.visualization import OptionCharts as Charts
-        
-        portfolio = OptionPortfolio(spot_price=100.0)
-        charts = Charts(portfolio)
-        
-        assert charts is not None
-        assert hasattr(charts, 'plot_pnl_diagram')

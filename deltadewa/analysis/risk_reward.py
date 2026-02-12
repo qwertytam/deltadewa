@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class RiskRewardMixin:
@@ -39,6 +39,7 @@ class RiskRewardMixin:
         if spot_range is None:
             # Note: Import here to avoid circular dependency:
             # risk_reward.py -> functions.py -> base.py -> risk_reward.py
+            # pylint: disable=import-outside-toplevel
             from deltadewa.analysis.functions import generate_spot_range
 
             spot_range = generate_spot_range(
@@ -76,6 +77,6 @@ class RiskRewardMixin:
             "max_loss_total": max_loss_total,
             "max_profit_total": max_profit_total,
             "breakeven_total": breakeven_total,
-            "probability_of_profit": prob_analysis["probability"],
-            "expected_value": prob_analysis["expected_value"],
+            "prob_profit": prob_analysis["prob_profit"],
+            "expected_pnl": prob_analysis["expected_pnl"],
         }

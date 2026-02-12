@@ -3,10 +3,11 @@
 from datetime import datetime, timedelta
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
-from deltadewa.portfolio import OptionPortfolio
-from deltadewa.visualization import OptionCharts
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.visualization.base import OptionCharts
+
+matplotlib.use("Agg")  # Use non-interactive backend
 
 
 class TestScenarioChartsMixin:
@@ -16,25 +17,27 @@ class TestScenarioChartsMixin:
         """Test plot_scenario_analysis."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
+
         # Create sample scenario data
         spot_prices = [90, 95, 100, 105, 110]
-        scenario_df = pd.DataFrame({
-            'spot_price': spot_prices,
-            'portfolio_pnl': [100, 200, 300, 400, 500],
-            'underlying_pnl': [-1000, -500, 0, 500, 1000],
-            'total_pnl': [-900, -300, 300, 900, 1500],
-            'total_delta': [0.5, 0.6, 0.7, 0.8, 0.9],
-            'net_delta': [50.5, 50.6, 50.7, 50.8, 50.9],
-        })
-        
+        scenario_df = pd.DataFrame(
+            {
+                "spot_price": spot_prices,
+                "portfolio_pnl": [100, 200, 300, 400, 500],
+                "underlying_pnl": [-1000, -500, 0, 500, 1000],
+                "total_pnl": [-900, -300, 300, 900, 1500],
+                "total_delta": [0.5, 0.6, 0.7, 0.8, 0.9],
+                "net_delta": [50.5, 50.6, 50.7, 50.8, 50.9],
+            }
+        )
+
         charts = OptionCharts(portfolio)
         valuation_date = datetime.now()
         fig = charts.plot_scenario_analysis(
@@ -43,7 +46,7 @@ class TestScenarioChartsMixin:
             valuation_date=valuation_date,
             current_spot=100.0,
         )
-        
+
         assert fig is not None
         # Should have 2 panels
         assert len(fig.axes) == 2
@@ -53,23 +56,25 @@ class TestScenarioChartsMixin:
         """Test plot_scenario_analysis with days_forward=0."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now() + timedelta(days=30)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
             option_type="call",
         )
-        
-        scenario_df = pd.DataFrame({
-            'spot_price': [90, 100, 110],
-            'portfolio_pnl': [0, 100, 200],
-            'underlying_pnl': [0, 0, 0],
-            'total_pnl': [0, 100, 200],
-            'total_delta': [0.5, 0.6, 0.7],
-            'net_delta': [0.5, 0.6, 0.7],
-        })
-        
+
+        scenario_df = pd.DataFrame(
+            {
+                "spot_price": [90, 100, 110],
+                "portfolio_pnl": [0, 100, 200],
+                "underlying_pnl": [0, 0, 0],
+                "total_pnl": [0, 100, 200],
+                "total_delta": [0.5, 0.6, 0.7],
+                "net_delta": [0.5, 0.6, 0.7],
+            }
+        )
+
         charts = OptionCharts(portfolio)
         valuation_date = datetime.now()
         fig = charts.plot_scenario_analysis(
@@ -78,6 +83,6 @@ class TestScenarioChartsMixin:
             valuation_date=valuation_date,
             current_spot=100.0,
         )
-        
+
         assert fig is not None
         plt.close(fig)

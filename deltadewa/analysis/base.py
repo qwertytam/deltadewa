@@ -39,8 +39,8 @@ class PortfolioAnalyzer(
     CarryMixin,
     RecommendationsMixin,
     ScenariosMixin,
-    SummaryMixin,
     RiskRewardMixin,
+    SummaryMixin,
     HealthMixin,
     PortfolioAnalyzerBase,
 ):

@@ -1,7 +1,7 @@
 """Tests for deltadewa.portfolio.greeks module."""
 
 from datetime import datetime, timedelta
-from deltadewa.portfolio import OptionPortfolio
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestGreeksMixin:
@@ -10,14 +10,14 @@ class TestGreeksMixin:
     def test_total_delta(self):
         """Test total_delta calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         delta = portfolio.total_delta()
         assert isinstance(delta, float)
         # ATM call should have positive delta
@@ -26,7 +26,7 @@ class TestGreeksMixin:
     def test_total_delta_multiple_positions(self):
         """Test total_delta with multiple positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        
+
         # Long call
         portfolio.add_position(
             strike_price=100.0,
@@ -34,7 +34,7 @@ class TestGreeksMixin:
             quantity=1,
             option_type="call",
         )
-        
+
         # Short put
         portfolio.add_position(
             strike_price=100.0,
@@ -42,7 +42,7 @@ class TestGreeksMixin:
             quantity=-1,
             option_type="put",
         )
-        
+
         delta = portfolio.total_delta()
         # Should be sum of both deltas
         assert isinstance(delta, float)
@@ -50,14 +50,14 @@ class TestGreeksMixin:
     def test_total_gamma(self):
         """Test total_gamma calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         gamma = portfolio.total_gamma()
         assert isinstance(gamma, float)
         assert gamma > 0
@@ -65,14 +65,14 @@ class TestGreeksMixin:
     def test_total_vega(self):
         """Test total_vega calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         vega = portfolio.total_vega()
         assert isinstance(vega, float)
         assert vega > 0
@@ -80,14 +80,14 @@ class TestGreeksMixin:
     def test_total_theta(self):
         """Test total_theta calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         theta = portfolio.total_theta()
         assert isinstance(theta, float)
         # Long options have negative theta
@@ -96,30 +96,28 @@ class TestGreeksMixin:
     def test_total_rho(self):
         """Test total_rho calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         rho = portfolio.total_rho()
         assert isinstance(rho, float)
 
     def test_net_delta(self):
         """Test net_delta calculation."""
-        portfolio = OptionPortfolio(
-            underlying_quantity=100.0, spot_price=100.0
-        )
-        
+        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-2,  # Short 2 calls
             option_type="call",
         )
-        
+
         net_delta = portfolio.net_delta()
         # Net delta = total_delta + underlying_quantity
         expected = portfolio.total_delta() + 100.0
@@ -127,47 +125,43 @@ class TestGreeksMixin:
 
     def test_hedge_ratio(self):
         """Test hedge_ratio calculation."""
-        portfolio = OptionPortfolio(
-            underlying_quantity=100.0, spot_price=100.0
-        )
-        
+        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
             option_type="call",
         )
-        
+
         hedge_ratio = portfolio.hedge_ratio()
         assert isinstance(hedge_ratio, float)
 
     def test_hedge_ratio_no_underlying(self):
         """Test hedge_ratio with no underlying position."""
         portfolio = OptionPortfolio(underlying_quantity=0.0, spot_price=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         hedge_ratio = portfolio.hedge_ratio()
         assert hedge_ratio == 0.0
 
     def test_delta_adjustment_needed(self):
         """Test delta_adjustment_needed calculation."""
-        portfolio = OptionPortfolio(
-            underlying_quantity=100.0, spot_price=100.0
-        )
-        
+        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         adjustment = portfolio.delta_adjustment_needed()
         # Should be negative of net_delta
         assert adjustment == -portfolio.net_delta()
@@ -175,7 +169,7 @@ class TestGreeksMixin:
     def test_greeks_empty_portfolio(self):
         """Test Greek calculations with empty portfolio."""
         portfolio = OptionPortfolio()
-        
+
         assert portfolio.total_delta() == 0.0
         assert portfolio.total_gamma() == 0.0
         assert portfolio.total_vega() == 0.0
@@ -186,40 +180,40 @@ class TestGreeksMixin:
 
 class TestAllGreeksBatch:
     """Test batch Greek computation via all_greeks()."""
-    
+
     def test_all_greeks_single_position(self):
         """Test all_greeks with single position."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         greeks = portfolio.all_greeks()
-        
+
         # Verify all keys present
-        assert 'total_delta' in greeks
-        assert 'total_gamma' in greeks
-        assert 'total_vega' in greeks
-        assert 'total_theta' in greeks
-        assert 'total_rho' in greeks
-        assert 'net_delta' in greeks
-        
+        assert "total_delta" in greeks
+        assert "total_gamma" in greeks
+        assert "total_vega" in greeks
+        assert "total_theta" in greeks
+        assert "total_rho" in greeks
+        assert "net_delta" in greeks
+
         # Verify consistency with individual methods
-        assert greeks['total_delta'] == portfolio.total_delta()
-        assert greeks['total_gamma'] == portfolio.total_gamma()
-        assert greeks['total_vega'] == portfolio.total_vega()
-        assert greeks['total_theta'] == portfolio.total_theta()
-        assert greeks['total_rho'] == portfolio.total_rho()
-        assert greeks['net_delta'] == portfolio.net_delta()
-    
+        assert greeks["total_delta"] == portfolio.total_delta()
+        assert greeks["total_gamma"] == portfolio.total_gamma()
+        assert greeks["total_vega"] == portfolio.total_vega()
+        assert greeks["total_theta"] == portfolio.total_theta()
+        assert greeks["total_rho"] == portfolio.total_rho()
+        assert greeks["net_delta"] == portfolio.net_delta()
+
     def test_all_greeks_multiple_positions(self):
         """Test all_greeks with multiple positions."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=50.0)
-        
+
         # Long call
         portfolio.add_position(
             strike_price=100.0,
@@ -227,7 +221,7 @@ class TestAllGreeksBatch:
             quantity=2,
             option_type="call",
         )
-        
+
         # Short put
         portfolio.add_position(
             strike_price=95.0,
@@ -235,55 +229,55 @@ class TestAllGreeksBatch:
             quantity=-1,
             option_type="put",
         )
-        
+
         greeks = portfolio.all_greeks()
-        
+
         # Verify consistency
-        assert greeks['total_delta'] == portfolio.total_delta()
-        assert greeks['net_delta'] == portfolio.net_delta()
-        
+        assert greeks["total_delta"] == portfolio.total_delta()
+        assert greeks["net_delta"] == portfolio.net_delta()
+
         # Net delta should include underlying
-        assert greeks['net_delta'] == greeks['total_delta'] + 50.0
-    
+        assert greeks["net_delta"] == greeks["total_delta"] + 50.0
+
     def test_all_greeks_empty_portfolio(self):
         """Test all_greeks with empty portfolio."""
         portfolio = OptionPortfolio(underlying_quantity=100.0)
-        
+
         greeks = portfolio.all_greeks()
-        
-        assert greeks['total_delta'] == 0.0
-        assert greeks['total_gamma'] == 0.0
-        assert greeks['total_vega'] == 0.0
-        assert greeks['total_theta'] == 0.0
-        assert greeks['total_rho'] == 0.0
-        assert greeks['net_delta'] == 100.0  # Only underlying
-    
+
+        assert greeks["total_delta"] == 0.0
+        assert greeks["total_gamma"] == 0.0
+        assert greeks["total_vega"] == 0.0
+        assert greeks["total_theta"] == 0.0
+        assert greeks["total_rho"] == 0.0
+        assert greeks["net_delta"] == 100.0  # Only underlying
+
     def test_summary_stats_uses_all_greeks(self):
         """Test that summary_stats uses all_greeks for efficiency."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
-        
+
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         # Get summary stats (should use all_greeks internally)
         stats = portfolio.summary_stats()
-        
+
         # Verify all Greek stats are present
-        assert 'total_delta' in stats
-        assert 'net_delta' in stats
-        assert 'total_gamma' in stats
-        assert 'total_vega' in stats
-        assert 'total_theta' in stats
-        assert 'total_rho' in stats
-        assert 'hedge_ratio' in stats
-        assert 'delta_adjustment' in stats
-        
+        assert "total_delta" in stats
+        assert "net_delta" in stats
+        assert "total_gamma" in stats
+        assert "total_vega" in stats
+        assert "total_theta" in stats
+        assert "total_rho" in stats
+        assert "hedge_ratio" in stats
+        assert "delta_adjustment" in stats
+
         # Verify consistency with all_greeks
         greeks = portfolio.all_greeks()
-        assert stats['total_delta'] == greeks['total_delta']
-        assert stats['net_delta'] == greeks['net_delta']
-        assert stats['total_gamma'] == greeks['total_gamma']
+        assert stats["total_delta"] == greeks["total_delta"]
+        assert stats["net_delta"] == greeks["net_delta"]
+        assert stats["total_gamma"] == greeks["total_gamma"]

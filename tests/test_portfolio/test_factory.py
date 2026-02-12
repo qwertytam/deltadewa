@@ -1,7 +1,10 @@
 """Tests for deltadewa.portfolio.factory module."""
 
-from deltadewa.portfolio.factory import create_empty_portfolio, create_demo_portfolio
-from deltadewa.portfolio import OptionPortfolio
+from deltadewa.portfolio.factory import (
+    create_empty_portfolio,
+    create_demo_portfolio,
+)
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestFactoryFunctions:
@@ -10,7 +13,7 @@ class TestFactoryFunctions:
     def test_create_empty_portfolio(self):
         """Test create_empty_portfolio function."""
         portfolio = create_empty_portfolio()
-        
+
         assert portfolio is not None
         assert isinstance(portfolio, OptionPortfolio)
         assert len(portfolio.positions) == 0
@@ -20,7 +23,7 @@ class TestFactoryFunctions:
         portfolio = create_empty_portfolio(
             spot_price=150.0, volatility=0.3, underlying_quantity=200.0
         )
-        
+
         assert portfolio.spot_price == 150.0
         assert portfolio.volatility == 0.3
         assert portfolio.underlying_quantity == 200.0
@@ -28,7 +31,7 @@ class TestFactoryFunctions:
     def test_create_demo_portfolio(self):
         """Test create_demo_portfolio function."""
         portfolio = create_demo_portfolio()
-        
+
         assert portfolio is not None
         assert isinstance(portfolio, OptionPortfolio)
         assert len(portfolio.positions) == 2
@@ -36,17 +39,17 @@ class TestFactoryFunctions:
     def test_create_demo_portfolio_positions(self):
         """Test that demo portfolio has expected positions."""
         portfolio = create_demo_portfolio()
-        
+
         # Should have 2 positions
         assert len(portfolio.positions) == 2
-        
+
         # Check first position (call)
         pos1 = portfolio.positions[0]
         assert pos1.option.strike_price == 100.0
         assert pos1.option.option_type == "call"
         assert pos1.quantity == 1
         assert pos1.symbol == "DEMO"
-        
+
         # Check second position (put)
         pos2 = portfolio.positions[1]
         assert pos2.option.strike_price == 95.0
@@ -57,7 +60,7 @@ class TestFactoryFunctions:
     def test_create_demo_portfolio_market_conditions(self):
         """Test demo portfolio has expected market conditions."""
         portfolio = create_demo_portfolio()
-        
+
         assert portfolio.spot_price == 100.0
         assert portfolio.volatility == 0.25
         assert portfolio.underlying_quantity == 0
@@ -65,7 +68,7 @@ class TestFactoryFunctions:
     def test_create_empty_portfolio_returns_full_portfolio(self):
         """Test that created portfolio has all mixin methods."""
         portfolio = create_empty_portfolio()
-        
+
         # Check for mixin methods
         assert hasattr(portfolio, "total_delta")
         assert hasattr(portfolio, "calculate_pnl_at_expiry")
@@ -76,7 +79,7 @@ class TestFactoryFunctions:
     def test_create_demo_portfolio_returns_full_portfolio(self):
         """Test that demo portfolio has all mixin methods."""
         portfolio = create_demo_portfolio()
-        
+
         # Check for mixin methods
         assert hasattr(portfolio, "total_delta")
         assert hasattr(portfolio, "calculate_pnl_at_expiry")
@@ -89,6 +92,6 @@ class TestFactoryFunctions:
         portfolio = create_empty_portfolio(
             risk_free_rate=0.03, dividend_yield=0.02
         )
-        
+
         assert portfolio.risk_free_rate == 0.03
         assert portfolio.dividend_yield == 0.02

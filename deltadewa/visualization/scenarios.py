@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa.formatters import format_currency_for_axis
+from deltadewa.formatters.values import format_currency_for_axis
 
 if TYPE_CHECKING:
     pass

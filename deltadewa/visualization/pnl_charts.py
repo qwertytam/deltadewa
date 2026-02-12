@@ -13,11 +13,11 @@ from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
 
 # Import centralized formatters
-from deltadewa.formatters import (
+from deltadewa.formatters.values import (
     format_spot_with_pct as format_spot_with_pct_centralized,
     format_currency_for_axis,
 )
-from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.functions import generate_spot_range
 
 if TYPE_CHECKING:
@@ -79,6 +79,7 @@ class PnLChartsMixin:
 
         # Get risk/reward metrics
         analyzer = PortfolioAnalyzer(self.portfolio)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis()
 
         # Determine expiration label
@@ -182,6 +183,7 @@ class PnLChartsMixin:
         # CRITICAL: Pass spot_range=None to allow comprehensive range check for max loss/profit
         # The visualization uses spot_range only for the chart display
         analyzer = PortfolioAnalyzer(self.portfolio)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(spot_range=None)
 
         # Use pre-calculated Monte Carlo expected value if available to ensure consistency
@@ -192,7 +194,7 @@ class PnLChartsMixin:
             and isinstance(mc_results, dict)
             and "expected_pnl" in mc_results
         ):
-            analysis["expected_value"] = mc_results["expected_pnl"]
+            analysis["expected_pnl"] = mc_results["expected_pnl"]
 
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)
@@ -628,10 +630,10 @@ class PnLChartsMixin:
             )
 
         # Annotate expected value
-        expected_value = analysis.get("expected_value", 0)
-        if expected_value is not None:
+        expected_pnl = analysis.get("expected_pnl", 0)
+        if expected_pnl is not None:
             # Find the spot price closest to the expected value on P&L curve
-            idx_closest = np.argmin(np.abs(pnl_values - expected_value))
+            idx_closest = np.argmin(np.abs(pnl_values - expected_pnl))
             ev_spot = spot_range[idx_closest]
             ev_pnl = pnl_values[idx_closest]
 
@@ -648,7 +650,7 @@ class PnLChartsMixin:
             )
             # Add annotation
             ax.annotate(
-                f"EV ${expected_value:,.0f}",
+                f"EV ${expected_pnl:,.0f}",
                 xy=(ev_spot, ev_pnl),
                 xytext=(50, 20),
                 textcoords="offset points",

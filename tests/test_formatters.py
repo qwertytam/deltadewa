@@ -1,6 +1,6 @@
 """Tests for deltadewa.formatters module - centralized formatting functions."""
 
-from deltadewa.formatters import (
+from deltadewa.formatters.values import (
     format_currency,
     format_currency_for_axis,
     format_percentage,
@@ -9,9 +9,8 @@ from deltadewa.formatters import (
     format_number_auto_precision,
     format_greek_value,
     format_spot_with_pct,
-    format_html_badge,
-    format_html_metric,
 )
+from deltadewa.formatters.html import format_html_badge, format_html_metric
 
 
 class TestFormatCurrency:
@@ -22,7 +21,7 @@ class TestFormatCurrency:
         assert format_currency(1234.56) == "$1,234.56"
         assert format_currency(1000000) == "$1,000,000.00"
 
-    def test_format_currency_compact(self):
+    def test_format_currency_for_axis(self):
         """Test compact currency formatting."""
         # Values < 1000 stay in full format with precision
         assert format_currency(500, compact=True) == "$500.00"

@@ -9,10 +9,12 @@ from deltadewa.analysis.volatility import (
     apply_proportional_volatility_shift,
     restore_volatilities,
 )
-
+from deltadewa.batch_pricer import (
+    BatchPricer,
+)  # Import locally to avoid circular dependency?
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class ScenariosMixin:
@@ -164,10 +166,6 @@ class ScenariosMixin:
         # Use BatchPricer for efficient valuation of 'pnl' and 'value' metrics
         # Greeks still need portfolio state updates, so they use the old path
         if metric in ("pnl", "value"):
-            from deltadewa.batch_pricer import (
-                BatchPricer,
-            )  # Import locally to avoid circular dependency
-
             pricer = BatchPricer(
                 positions=self.portfolio.positions,
                 risk_free_rate=self.portfolio.risk_free_rate,

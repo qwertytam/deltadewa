@@ -4,7 +4,8 @@ __version__ = "0.1.0"
 
 from .american_option import AmericanOption
 from .batch_pricer import BatchPricer
-from .portfolio import OptionPortfolio, create_empty_portfolio
+from .portfolio.core import OptionPortfolio
+from .portfolio.factory import create_empty_portfolio
 from .widgets import PortfolioWidgets, InteractiveOutput
 from .constants import (
     DAYS_PER_YEAR,

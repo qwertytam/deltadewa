@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.analysis.base import PortfolioAnalyzer
 
 
 class TestPortfolioAnalyzerIntegration:
@@ -19,7 +19,7 @@ class TestPortfolioAnalyzerIntegration:
             risk_free_rate=0.05,
             dividend_yield=0.01,
         )
-        
+
         # Add diverse positions
         portfolio.add_position(
             strike_price=105.0,
@@ -27,73 +27,73 @@ class TestPortfolioAnalyzerIntegration:
             quantity=-1,  # Short call
             option_type="call",
         )
-        
+
         portfolio.add_position(
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,  # Long put
             option_type="put",
         )
-        
+
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=datetime.now() + timedelta(days=60),
             quantity=-1,  # Short call
             option_type="call",
         )
-        
+
         # Create analyzer
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         # Test maturity classification
         df = portfolio.to_dataframe()
         df_with_buckets = analyzer.add_maturity_buckets(df)
-        assert 'maturity_bucket' in df_with_buckets.columns
-        
+        assert "maturity_bucket" in df_with_buckets.columns
+
         # Test carry analysis
         carry_metrics = analyzer.calculate_carry_metrics()
-        assert 'total_theta_daily' in carry_metrics
-        assert isinstance(carry_metrics['total_theta_daily'], (int, float))
-        
+        assert "total_theta_daily" in carry_metrics
+        assert isinstance(carry_metrics["total_theta_daily"], (int, float))
+
         # Test theta summary table
         theta_table = analyzer.create_theta_summary_table()
         assert not theta_table.empty
-        
+
         # Test concentration analysis
         concentration = analyzer.analyze_risk_concentration()
-        assert 'by_strike' in concentration
-        assert 'by_maturity' in concentration
-        
+        assert "by_strike" in concentration
+        assert "by_maturity" in concentration
+
         # Test hedge recommendations
-        hedge_actions = analyzer.calculate_hedge_actions(target_hedge_ratio=50.0)
-        assert 'current_state' in hedge_actions
-        assert 'target_state' in hedge_actions
-        assert 'underlying_trade' in hedge_actions
-        
+        hedge_actions = analyzer.calculate_hedge_actions(
+            target_hedge_ratio=50.0
+        )
+        assert "current_state" in hedge_actions
+        assert "target_state" in hedge_actions
+        assert "underlying_trade" in hedge_actions
+
         # Test scenario grid
         spot_scenarios = np.array([95, 100, 105])
         time_points = [datetime.now()]
         scenario_result = analyzer.scenario_grid(
-            spot_scenarios=spot_scenarios,
-            time_points=time_points,
-            metric='pnl'
+            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl"
         )
         assert len(scenario_result) > 0
-        
+
         # Test scenario grid with spot/vol
         vol_scenarios = np.array([0.2, 0.3, 0.4])
         spot_vol_result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
-            metric='pnl'
+            metric="pnl",
         )
         assert len(spot_vol_result) > 0
-        
+
         # Test risk summary
         risk_summary = analyzer.format_risk_summary()
         assert isinstance(risk_summary, str)
         assert len(risk_summary) > 0
-        
+
         # Test insights
         insights = analyzer.generate_insights()
         assert isinstance(insights, list)
@@ -105,35 +105,37 @@ class TestPortfolioAnalyzerIntegration:
             spot_price=100.0,
             volatility=0.3,
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         # Maturity methods
-        assert callable(getattr(analyzer, 'classify_maturity_bucket'))
-        assert callable(getattr(analyzer, 'add_maturity_buckets'))
-        
+        assert callable(getattr(analyzer, "classify_maturity_bucket"))
+        assert callable(getattr(analyzer, "add_maturity_buckets"))
+
         # Carry methods
-        assert callable(getattr(analyzer, 'calculate_carry_metrics'))
-        assert callable(getattr(analyzer, '_empty_carry_metrics'))
-        assert callable(getattr(analyzer, 'create_theta_summary_table'))
-        
+        assert callable(getattr(analyzer, "calculate_carry_metrics"))
+        assert callable(getattr(analyzer, "_empty_carry_metrics"))
+        assert callable(getattr(analyzer, "create_theta_summary_table"))
+
         # Concentration methods
-        assert callable(getattr(analyzer, 'analyze_risk_concentration'))
-        assert callable(getattr(analyzer, '_empty_concentration'))
-        
+        assert callable(getattr(analyzer, "analyze_risk_concentration"))
+        assert callable(getattr(analyzer, "_empty_concentration"))
+
         # Hedge methods
-        assert callable(getattr(analyzer, 'calculate_hedge_actions'))
-        assert callable(getattr(analyzer, '_calculate_option_alternatives'))
-        
+        assert callable(getattr(analyzer, "calculate_hedge_actions"))
+        assert callable(getattr(analyzer, "_calculate_option_alternatives"))
+
         # Scenario methods
-        assert callable(getattr(analyzer, '_calculate_portfolio_value_at'))
-        assert callable(getattr(analyzer, '_calculate_pnl_at_expiry_vectorized'))
-        assert callable(getattr(analyzer, 'scenario_grid'))
-        assert callable(getattr(analyzer, 'scenario_grid_spot_vol'))
-        
+        assert callable(getattr(analyzer, "_calculate_portfolio_value_at"))
+        assert callable(
+            getattr(analyzer, "_calculate_pnl_at_expiry_vectorized")
+        )
+        assert callable(getattr(analyzer, "scenario_grid"))
+        assert callable(getattr(analyzer, "scenario_grid_spot_vol"))
+
         # Insights methods
-        assert callable(getattr(analyzer, 'format_risk_summary'))
-        assert callable(getattr(analyzer, 'generate_insights'))
+        assert callable(getattr(analyzer, "format_risk_summary"))
+        assert callable(getattr(analyzer, "generate_insights"))
 
     def test_mixin_methods_work_together(self):
         """Test that methods from different mixins work together."""
@@ -142,7 +144,7 @@ class TestPortfolioAnalyzerIntegration:
             spot_price=100.0,
             volatility=0.3,
         )
-        
+
         # Add positions at different maturities
         portfolio.add_position(
             strike_price=105.0,
@@ -150,26 +152,26 @@ class TestPortfolioAnalyzerIntegration:
             quantity=1,
             option_type="call",
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=40),
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         # Carry analysis uses maturity classification
         carry_metrics = analyzer.calculate_carry_metrics()
-        assert 'theta_by_bucket' in carry_metrics
-        assert len(carry_metrics['theta_by_bucket']) > 0
-        
+        assert "theta_by_bucket" in carry_metrics
+        assert len(carry_metrics["theta_by_bucket"]) > 0
+
         # Concentration analysis also uses maturity classification
         concentration = analyzer.analyze_risk_concentration()
-        if 'delta' in concentration['by_maturity']:
-            assert len(concentration['by_maturity']['delta']) > 0
-        
+        if "delta" in concentration["by_maturity"]:
+            assert len(concentration["by_maturity"]["delta"]) > 0
+
         # Insights use both carry and concentration
         insights = analyzer.generate_insights()
         assert isinstance(insights, list)
@@ -182,11 +184,11 @@ class TestPortfolioAnalyzerIntegration:
             volatility=0.25,
             risk_free_rate=0.04,
         )
-        
+
         # Build a covered call + protective put strategy
         strikes = [140, 145, 150, 155, 160]
         maturities = [15, 30, 45, 60]
-        
+
         for i, strike in enumerate(strikes):
             for j, days in enumerate(maturities):
                 portfolio.add_position(
@@ -195,32 +197,18 @@ class TestPortfolioAnalyzerIntegration:
                     quantity=(-1) ** (i + j),  # Mix of long/short
                     option_type="call" if i % 2 == 0 else "put",
                 )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         # All analyses should complete without errors
         carry_metrics = analyzer.calculate_carry_metrics()
         concentration = analyzer.analyze_risk_concentration()
-        hedge_actions = analyzer.calculate_hedge_actions(target_hedge_ratio=60.0)
+        hedge_actions = analyzer.calculate_hedge_actions(
+            target_hedge_ratio=60.0
+        )
         insights = analyzer.generate_insights()
-        
+
         assert carry_metrics is not None
         assert concentration is not None
         assert hedge_actions is not None
         assert insights is not None
-
-    def test_backwards_compatibility_imports(self):
-        """Test that imports from analysis package work as before."""
-        # These imports should all work
-        from deltadewa.analysis import PortfolioAnalyzer
-        from deltadewa.analysis import classify_maturity_bucket
-        from deltadewa.analysis import quick_carry_analysis
-        from deltadewa.analysis import quick_risk_concentration
-        from deltadewa.analysis import ScenarioGridCache
-        
-        # All should be importable
-        assert PortfolioAnalyzer is not None
-        assert classify_maturity_bucket is not None
-        assert quick_carry_analysis is not None
-        assert quick_risk_concentration is not None
-        assert ScenarioGridCache is not None

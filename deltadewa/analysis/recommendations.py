@@ -5,7 +5,7 @@ import numbers
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class RecommendationsMixin:

@@ -1,11 +1,10 @@
 """Health metrics mixin for portfolio analysis."""
 
 from typing import TYPE_CHECKING, Any, Dict
+from deltadewa import constants as const
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
-
-from deltadewa import constants as const
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class HealthMixin:
@@ -38,9 +37,7 @@ class HealthMixin:
         annual_theta = daily_theta * const.DAYS_PER_YEAR
         return (annual_theta / underlying_value) * 100
 
-    def calculate_crash_convexity_pct(
-        self, crash_pct: float = 0.80
-    ) -> float:
+    def calculate_crash_convexity_pct(self, crash_pct: float = 0.80) -> float:
         """
         Calculate crash convexity: Hedge P&L at crash spot as % of underlying.
 
@@ -149,7 +146,9 @@ class HealthMixin:
         return min_days
 
     def calculate_vol_regime_percentile(
-        self, historical_vol_low: float = 0.15, historical_vol_high: float = 0.35
+        self,
+        historical_vol_low: float = 0.15,
+        historical_vol_high: float = 0.35,
     ) -> float:
         """
         Calculate volatility regime as a percentile (0-100).
@@ -175,9 +174,7 @@ class HealthMixin:
         else:
             # Linear interpolation
             vol_range = historical_vol_high - historical_vol_low
-            percentile = (
-                (current_vol - historical_vol_low) / vol_range
-            ) * 100
+            percentile = ((current_vol - historical_vol_low) / vol_range) * 100
             return percentile
 
     def calculate_hedge_success_pct(

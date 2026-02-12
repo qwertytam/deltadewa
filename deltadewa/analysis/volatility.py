@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolio
 
 __all__ = [
     "calculate_portfolio_avg_volatility",

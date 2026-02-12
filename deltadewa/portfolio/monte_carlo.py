@@ -55,9 +55,7 @@ class MonteCarloMixin:
 
         Returns:
             Dict with rich risk metrics:
-                - probability: Probability of profit (backward compatible)
-                - expected_value: Expected P&L (backward compatible, same as expected_pnl)
-                - breakeven_points: List of breakeven spot prices (backward compatible)
+                - breakeven_points: List of breakeven spot prices
                 - simulated_pnls: Raw P&L array for visualization
                 - num_simulations: Actual count of valid simulations
                 - days_to_expiry: Time horizon used
@@ -136,18 +134,14 @@ class MonteCarloMixin:
         cvar_95 = float(np.mean(pnls_clean[pnls_clean <= var_95]))
         cvar_99 = float(np.mean(pnls_clean[pnls_clean <= var_99]))
 
-        # Calculate breakeven points (for backward compatibility)
+        # Calculate breakeven points
         # pylint: disable=assignment-from-no-return
         breakeven_points = self.calculate_breakeven_points(
             include_underlying=include_underlying
         )
 
         return {
-            # Backward compatible keys (old API)
-            "probability": prob_profit,
-            "expected_value": expected_pnl,
             "breakeven_points": breakeven_points,
-            # New enriched metrics
             "simulated_pnls": pnls_clean,
             "num_simulations": num_valid,
             "days_to_expiry": days_to_expiry,

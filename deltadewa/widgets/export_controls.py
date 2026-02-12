@@ -15,16 +15,11 @@ from typing import (
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
-from deltadewa.persistence import (
-    import_portfolio,
-    export_portfolio_to_json,
-    export_portfolio_to_csv,
-    export_portfolio_to_yaml,
-)
+from deltadewa.persistence import PortfolioSerializer
 from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
 )
-from deltadewa.portfolio import OptionPortfolio
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class ExportControlsMixin:
@@ -165,14 +160,15 @@ class ExportControlsMixin:
                     # Auto-detect format handled by import_portfolio
 
                     filepath = self.export_dir / filename
+                    serializer = PortfolioSerializer(str(filepath))
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
                         return
 
-                    imported_portfolio = import_portfolio(str(filepath))[
-                        "portfolio"
-                    ]
+                    imported_portfolio = serializer.import_portfolio(
+                        str(filepath)
+                    )["portfolio"]
                     if not isinstance(imported_portfolio, OptionPortfolio):
                         print(
                             "✗ Import failed: Expected OptionPortfolio, "
@@ -211,6 +207,7 @@ class ExportControlsMixin:
                 try:
                     filename = import_controls["filename_input"].value
                     filepath = self.export_dir / filename
+                    serializer = PortfolioSerializer(str(filepath))
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
@@ -219,9 +216,9 @@ class ExportControlsMixin:
                     # Load into a temporary portfolio to inspect content
                     print(f"Loading portfolio from {filepath}...")
 
-                    preview_portfolio = import_portfolio(str(filepath))[
-                        "portfolio"
-                    ]
+                    preview_portfolio = serializer.import_portfolio(
+                        str(filepath)
+                    )["portfolio"]
 
                     if not isinstance(preview_portfolio, OptionPortfolio):
                         print(
@@ -340,13 +337,14 @@ class ExportControlsMixin:
                         filename = f"{filename}.{file_format}"
 
                     filepath = self.export_dir / filename
+                    serializer = PortfolioSerializer(str(filepath))
 
                     if file_format == "json":
-                        export_portfolio_to_json(self.portfolio, str(filepath))
+                        serializer.export_to_json(self.portfolio, filename)
                     elif file_format == "csv":
-                        export_portfolio_to_csv(self.portfolio, str(filepath))
+                        serializer.export_to_csv(self.portfolio, filename)
                     elif file_format == "yaml":
-                        export_portfolio_to_yaml(self.portfolio, str(filepath))
+                        serializer.export_to_yaml(self.portfolio, filename)
                     else:
                         print(f"✗ Unknown format: {file_format}")
                         return

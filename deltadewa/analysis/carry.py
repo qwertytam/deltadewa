@@ -5,7 +5,7 @@ import pandas as pd
 from deltadewa import constants as const
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class CarryMixin:

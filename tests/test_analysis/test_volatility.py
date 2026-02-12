@@ -381,7 +381,7 @@ class TestGetVolatilityStats:
         )
 
         stats = get_volatility_stats(portfolio)
-        assert stats == {}
+        assert not stats
 
     def test_populated_portfolio_has_expected_keys(self):
         """Test that stats dict has all expected keys."""

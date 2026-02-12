@@ -1,9 +1,7 @@
 """Risk analysis mixin for option portfolio."""
 
 from typing import TYPE_CHECKING, Optional, List
-import warnings
 import numpy as np
-from deltadewa.analysis import PortfolioAnalyzer
 from deltadewa.analysis.functions import generate_spot_range
 
 if TYPE_CHECKING:
@@ -130,6 +128,7 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
+        # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
             spot_range, include_underlying=False
         )
@@ -187,6 +186,7 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
+        # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
             spot_range, include_underlying=False
         )
@@ -244,6 +244,7 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
+        # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
             spot_range, include_underlying=True
         )
@@ -312,6 +313,7 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
+        # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
             spot_range, include_underlying=True
         )
@@ -373,6 +375,7 @@ class RiskMixin:
         )
 
         # Vectorized P&L calculation
+        # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
             spot_range, include_underlying=include_underlying
         )

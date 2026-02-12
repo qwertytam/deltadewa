@@ -7,7 +7,7 @@ and displaying data in notebooks and scripts.
 
 from typing import Optional
 from IPython.display import clear_output
-from deltadewa.formatters import format_number_auto_precision
+from deltadewa.formatters.values import format_number_auto_precision
 
 __all__ = [
     # Print formatting utilities

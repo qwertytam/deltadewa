@@ -70,8 +70,8 @@ class TestNetHedgeSummary:
             "spot_at_max_profit": 105.0,
         }
         portfolio.calculate_probability_of_profit.return_value = {
-            "probability": 0.6,
-            "expected_value": 1.5,
+            "prob_profit": 0.6,
+            "expected_pnl": 1.5,
         }
 
         portfolio.monte_carlo_results = {

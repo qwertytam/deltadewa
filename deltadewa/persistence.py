@@ -123,32 +123,33 @@ class PortfolioSerializer:
 
     # ========== Export Functions ==========
 
-    def export_to_json(
-        self, portfolio, market_params, filename="portfolio_book.json"
-    ):
+    def _build_export_data(self, portfolio) -> dict:
         """
-        Export complete portfolio state to JSON format.
+        Build a comprehensive data structure representing the portfolio state,
+        including market parameters, positions, and risk metrics.
 
         Args:
             portfolio: OptionPortfolio instance
-            market_params: dict with market parameters
-            filename: output filename
-
         Returns:
-            Path to saved file
+            dict with complete portfolio data for export
         """
-        # Build complete portfolio state
-        portfolio_data = {
+        data = {
             "metadata": {
                 "exported_at": datetime.now().isoformat(),
                 "version": "1.0",
             },
-            "market_parameters": market_params,
+            "market_parameters": {
+                "spot_price": portfolio.spot_price,
+                "volatility": portfolio.volatility,
+                "risk_free_rate": portfolio.risk_free_rate,
+                "dividend_yield": portfolio.dividend_yield,
+                "underlying_quantity": portfolio.underlying_quantity,
+                "symbol": portfolio.get_symbol(),
+            },
             "positions": [],
             "risk_metrics": portfolio.summary_stats(),
         }
 
-        # Export each position
         for pos in portfolio.positions:
             position_data = {
                 "option_type": pos.option.option_type,
@@ -170,14 +171,30 @@ class PortfolioSerializer:
                 * pos.quantity
                 * pos.contract_size,
             }
-            portfolio_data["positions"].append(position_data)
+            data["positions"].append(position_data)
+
+        return data
+
+    def export_to_json(self, portfolio, filename="portfolio_book.json") -> Path:
+        """
+        Export complete portfolio state to JSON format.
+
+        Args:
+            portfolio: OptionPortfolio instance
+            market_params: dict with market parameters
+            filename: output filename
+
+        Returns:
+            Path to saved file
+        """
+        portfolio_data = self._build_export_data(portfolio)
 
         # Save to file
         output_path = self.export_dir / filename
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(portfolio_data, f, indent=2)
 
-        return output_path
+        return Path(output_path)
 
     def export_to_csv(self, portfolio, filename_prefix="portfolio"):
         """
@@ -236,8 +253,8 @@ class PortfolioSerializer:
         return {"positions": positions_file, "risk": risk_file}
 
     def export_to_yaml(
-        self, portfolio, market_params, filename="portfolio_export.yaml"
-    ):
+        self, portfolio, filename="portfolio_export.yaml"
+    ) -> Path | None:
         """
         Export portfolio configuration to YAML format (useful for edits/versioning).
 
@@ -246,7 +263,6 @@ class PortfolioSerializer:
 
         Args:
             portfolio: OptionPortfolio instance
-            market_params: dict with market parameters
             filename: output filename
 
         Returns:
@@ -256,41 +272,15 @@ class PortfolioSerializer:
             print("⚠️  PyYAML not installed. Cannot export to YAML.")
             return None
 
-        # Build configuration structure
-        config = {
-            "market_parameters": {
-                "spot_price": market_params["spot_price"],
-                "volatility": market_params["volatility"],
-                "risk_free_rate": market_params["risk_free_rate"],
-                "dividend_yield": market_params["dividend_yield"],
-                "underlying_quantity": getattr(
-                    portfolio,
-                    "underlying_quantity",
-                    market_params.get("underlying_quantity", 0.0),
-                ),
-                "symbol": market_params.get("symbol", "UNKNOWN"),
-            },
-            "positions": [],
-        }
-
-        for pos in portfolio.positions:
-            position_data = {
-                "option_type": pos.option.option_type,
-                "strike_price": float(pos.option.strike_price),
-                "maturity_date": pos.option.maturity_date.date().isoformat(),
-                "quantity": int(pos.quantity),
-                "symbol": getattr(pos, "symbol", None),
-            }
-            # Include volatility if it's custom
-            if pos.custom_volatility:
-                position_data["volatility"] = float(pos.option.volatility)
-            config["positions"].append(position_data)
+        portfolio_data = self._build_export_data(portfolio)
 
         output_path = self.export_dir / filename
         with open(output_path, "w", encoding="utf-8") as f:
-            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            yaml.dump(
+                portfolio_data, f, default_flow_style=False, sort_keys=False
+            )
 
-        return output_path
+        return Path(output_path)
 
     # ========== Import Functions ==========
 
@@ -452,67 +442,3 @@ class PortfolioSerializer:
             return self.import_from_json(filepath, create_portfolio=True)
         else:
             raise ValueError(f"Unsupported file format: {filepath}")
-
-
-# ========== Convenience Functions (for backward compatibility) ==========
-
-
-def list_available_portfolio_files(export_dir="exports"):
-    """List all available portfolio files in the export directory."""
-    serializer = PortfolioSerializer(export_dir)
-    return serializer.list_available_files()
-
-
-def detect_file_format(filepath):
-    """Detect portfolio file format from extension."""
-    return PortfolioSerializer.detect_file_format(filepath)
-
-
-def export_portfolio_to_json(
-    portfolio,
-    market_params,
-    filename="portfolio_book.json",
-    export_dir="exports",
-):
-    """Export complete portfolio state to JSON format."""
-    serializer = PortfolioSerializer(export_dir)
-    return serializer.export_to_json(portfolio, market_params, filename)
-
-
-def export_portfolio_to_csv(
-    portfolio, filename_prefix="portfolio", export_dir="exports"
-):
-    """Export portfolio to CSV files (positions and risk)."""
-    serializer = PortfolioSerializer(export_dir)
-    return serializer.export_to_csv(portfolio, filename_prefix)
-
-
-def export_portfolio_to_yaml(
-    portfolio,
-    market_params,
-    filename="portfolio_export.yaml",
-    export_dir="exports",
-):
-    """Export portfolio configuration to YAML format."""
-    serializer = PortfolioSerializer(export_dir)
-    return serializer.export_to_yaml(portfolio, market_params, filename)
-
-
-def import_portfolio_from_json(
-    filepath, create_portfolio=True, export_dir="exports"
-):
-    """Import portfolio from JSON file."""
-    serializer = PortfolioSerializer(export_dir)
-    return serializer.import_from_json(filepath, create_portfolio)
-
-
-def import_from_yaml(filepath, export_dir="exports"):
-    """Import portfolio from YAML configuration file."""
-    serializer = PortfolioSerializer(export_dir)
-    return serializer.import_from_yaml(filepath)
-
-
-def import_portfolio(filepath, export_dir="exports") -> dict:
-    """Universal import function - auto-detects file format."""
-    serializer = PortfolioSerializer(export_dir)
-    return serializer.import_portfolio(filepath)

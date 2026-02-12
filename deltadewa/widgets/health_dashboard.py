@@ -8,7 +8,7 @@ the health and effectiveness of equity hedges through key metrics.
 from typing import Any, Dict
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.analysis.base import PortfolioAnalyzer
 from .gauges import GaugeIndicator
 
 
@@ -84,7 +84,7 @@ class HedgeHealthDashboard:
 
     Example:
         from deltadewa.widgets import HedgeHealthDashboard
-        from deltadewa.analysis import PortfolioAnalyzer
+        from deltadewa.analysis.base import PortfolioAnalyzer
 
         dashboard = HedgeHealthDashboard(portfolio)
         display(dashboard.display())
@@ -292,8 +292,6 @@ class HedgeHealthDashboard:
             invert_colors=False,
             label_format="{:+.0f}%",
         )
-
-        return metrics
 
         return metrics
 

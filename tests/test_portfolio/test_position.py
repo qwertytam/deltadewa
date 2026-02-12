@@ -22,7 +22,7 @@ class TestOptionPosition:
         position = OptionPosition(
             option=option, quantity=1, contract_size=100, symbol="TEST"
         )
-        
+
         assert position is not None
         assert position.option == option
         assert position.quantity == 1
@@ -44,10 +44,10 @@ class TestOptionPosition:
         position = OptionPosition(
             option=option, quantity=2, contract_size=100, symbol="TEST"
         )
-        
+
         # Position value should be option price * quantity * contract_size
-        expected_value = option.price() * 2 * 100
-        assert position.position_value() == expected_value
+        expected_pnl = option.price() * 2 * 100
+        assert position.position_value() == expected_pnl
 
     def test_position_delta(self):
         """Test position_delta calculation."""
@@ -63,7 +63,7 @@ class TestOptionPosition:
         position = OptionPosition(
             option=option, quantity=2, contract_size=100, symbol="TEST"
         )
-        
+
         # Position delta should be option delta * quantity * contract_size
         expected_delta = option.delta() * 2 * 100
         assert position.position_delta() == expected_delta
@@ -82,7 +82,7 @@ class TestOptionPosition:
         position = OptionPosition(
             option=option, quantity=1, contract_size=100, symbol="TEST"
         )
-        
+
         # All greeks should be scaled by quantity * contract_size
         assert position.position_gamma() == option.gamma() * 100
         assert position.position_vega() == option.vega() * 100
@@ -103,7 +103,7 @@ class TestOptionPosition:
         position = OptionPosition(
             option=option, quantity=-1, contract_size=100, symbol="TEST"
         )
-        
+
         # Negative quantity should result in negative value and delta
         assert position.position_value() < 0
         assert position.position_delta() < 0
@@ -122,9 +122,9 @@ class TestOptionPosition:
         position = OptionPosition(
             option=option, quantity=3, contract_size=100, symbol="TEST"
         )
-        
+
         pos_dict = position.to_dict()
-        
+
         assert pos_dict["symbol"] == "TEST"
         assert pos_dict["type"] == "put"
         assert pos_dict["strike"] == 105.0
@@ -155,7 +155,7 @@ class TestOptionPosition:
             symbol="TEST",
             custom_volatility=True,
         )
-        
+
         assert position.custom_volatility is True
         pos_dict = position.to_dict()
         assert pos_dict["custom_volatility"] is True

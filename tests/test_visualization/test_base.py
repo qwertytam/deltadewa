@@ -1,7 +1,7 @@
 """Tests for deltadewa.visualization.base module."""
 
 from datetime import datetime, timedelta
-from deltadewa.portfolio import OptionPortfolio
+from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionChartsBase, OptionCharts
 
 
@@ -29,6 +29,7 @@ class TestOptionChartsBase:
         portfolio = OptionPortfolio()
         charts = OptionChartsBase(portfolio)
 
+        # pylint: disable=protected-access
         label = charts._get_expiry_label()
         assert label == "N/A"
 
@@ -44,6 +45,7 @@ class TestOptionChartsBase:
         )
         charts = OptionChartsBase(portfolio)
 
+        # pylint: disable=protected-access
         label = charts._get_expiry_label()
         expected = maturity.strftime("%Y-%m-%d")
         assert label == expected
@@ -67,6 +69,7 @@ class TestOptionChartsBase:
             option_type="put",
         )
 
+        # pylint: disable=protected-access
         charts = OptionChartsBase(portfolio)
         label = charts._get_expiry_label()
 

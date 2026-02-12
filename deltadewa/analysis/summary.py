@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class SummaryMixin:
@@ -24,10 +24,12 @@ class SummaryMixin:
         # pylint: disable=missing-function-docstring
         def analyze_risk_concentration(self) -> Dict: ...
 
-        # pylint: disable=missing-function-docstring
+        # pylint: disable=missing-function-docstring, unused-argument
         def risk_reward_analysis(
-            self, spot_range: Optional[np.ndarray] = None
-        ) -> Dict: ...
+            self,
+            spot_range: Optional[np.ndarray] = None,
+            num_simulations: int = 10000,
+        ) -> dict: ...
 
     def format_risk_summary(self, stats: Optional[Dict] = None) -> str:
         """
@@ -178,6 +180,7 @@ class SummaryMixin:
         Returns:
             Formatted string with risk/reward analysis
         """
+        # pylint: disable=assignment-from-no-return
         analysis = self.risk_reward_analysis(spot_range)
         portfolio_value = 0.0
 
@@ -292,10 +295,10 @@ class SummaryMixin:
 
         # Probability Analysis
         lines.append("PROBABILITY ANALYSIS:")
-        prob = analysis["probability_of_profit"]
+        prob = analysis["prob_profit"]
         lines.append(f"  Chance of Profit: {prob*100:.1f}%")
         lines.append(
-            f"  Expected Value: ${analysis['expected_value']:,.2f} (probabilistic weighted average)"
+            f"  Expected Value: ${analysis['expected_pnl']:,.2f} (probabilistic weighted average)"
         )
         lines.append("")
 

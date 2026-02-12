@@ -11,11 +11,11 @@ from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
 
 # Import centralized formatters
-from deltadewa.formatters import format_html_badge, format_html_metric
-from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.formatters.html import format_html_badge, format_html_metric
+from deltadewa.analysis.base import PortfolioAnalyzer
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class NetHedgeSummary:
@@ -303,6 +303,7 @@ class NetHedgeSummary:
 
         # Probabilistic stats (expandable)
         analyzer = PortfolioAnalyzer(self.portfolio)
+        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis()
 
         prob_html = "<div style='padding:10px;'>"
@@ -314,7 +315,7 @@ class NetHedgeSummary:
             and len(mc_results.get("simulated_pnls", [])) > 0
         ):
             expected_pnl = mc_results.get("expected_pnl", 0)
-            # Key is 'prob_profit' not 'probability_of_profit'
+
             prob_profit = mc_results.get("prob_profit", 0)
             prob_html += f"<p><strong>Probability of Profit:</strong> {prob_profit*100:.1f}%</p>"
             prob_html += (

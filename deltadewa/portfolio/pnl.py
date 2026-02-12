@@ -140,6 +140,3 @@ class PnLMixin:
             pnl += underlying_pnl
 
         return pnl
-
-    # Backward-compatible alias
-    _vectorized_pnl_at_expiry = vectorized_pnl_at_expiry

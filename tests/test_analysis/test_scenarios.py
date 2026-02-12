@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.analysis import PortfolioAnalyzer
+from deltadewa.analysis.base import PortfolioAnalyzer
 
 
 class TestScenariosMixin:
@@ -17,22 +17,22 @@ class TestScenariosMixin:
             volatility=0.3,
             risk_free_rate=0.05,
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         # Calculate value at current spot and date
+        # pylint: disable=protected-access
         value = analyzer._calculate_portfolio_value_at(
-            spot=100.0,
-            valuation_date=datetime.now()
+            spot=100.0, valuation_date=datetime.now()
         )
-        
+
         assert isinstance(value, float)
         assert value != 0.0
 
@@ -43,24 +43,23 @@ class TestScenariosMixin:
             spot_price=100.0,
             volatility=0.3,
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now(),  # At expiry
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         # Create spot scenarios
         spot_scenarios = np.array([90, 95, 100, 105, 110, 115])
-        
+        # pylint: disable=protected-access
         pnl = analyzer._calculate_pnl_at_expiry_vectorized(
-            spot_scenarios=spot_scenarios,
-            include_underlying=True
+            spot_scenarios=spot_scenarios, include_underlying=True
         )
-        
+
         assert isinstance(pnl, np.ndarray)
         assert len(pnl) == len(spot_scenarios)
 
@@ -72,33 +71,28 @@ class TestScenariosMixin:
             volatility=0.3,
             risk_free_rate=0.05,
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         # Create scenarios
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [
-            datetime.now(),
-            datetime.now() + timedelta(days=10)
-        ]
-        
+        time_points = [datetime.now(), datetime.now() + timedelta(days=10)]
+
         result = analyzer.scenario_grid(
-            spot_scenarios=spot_scenarios,
-            time_points=time_points,
-            metric='pnl'
+            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl"
         )
-        
-        assert hasattr(result, 'columns')
-        assert 'spot_price' in result.columns
-        assert 'valuation_date' in result.columns
-        assert 'value' in result.columns
+
+        assert hasattr(result, "columns")
+        assert "spot_price" in result.columns
+        assert "valuation_date" in result.columns
+        assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(time_points)
 
     def test_scenario_grid_delta(self):
@@ -108,26 +102,26 @@ class TestScenariosMixin:
             spot_price=100.0,
             volatility=0.3,
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         spot_scenarios = np.array([95, 100, 105])
         time_points = [datetime.now()]
-        
+
         result = analyzer.scenario_grid(
             spot_scenarios=spot_scenarios,
             time_points=time_points,
-            metric='delta'
+            metric="delta",
         )
-        
-        assert 'value' in result.columns
+
+        assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(time_points)
 
     def test_scenario_grid_spot_vol_pnl(self):
@@ -138,28 +132,28 @@ class TestScenariosMixin:
             volatility=0.3,
             risk_free_rate=0.05,
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         spot_scenarios = np.array([95, 100, 105])
         vol_scenarios = np.array([0.2, 0.3, 0.4])
-        
+
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
-            metric='pnl'
+            metric="pnl",
         )
-        
-        assert 'spot_price' in result.columns
-        assert 'volatility' in result.columns
-        assert 'value' in result.columns
+
+        assert "spot_price" in result.columns
+        assert "volatility" in result.columns
+        assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(vol_scenarios)
 
     def test_scenario_grid_spot_vol_vega(self):
@@ -169,26 +163,26 @@ class TestScenariosMixin:
             spot_price=100.0,
             volatility=0.3,
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         spot_scenarios = np.array([95, 100, 105])
         vol_scenarios = np.array([0.2, 0.3, 0.4])
-        
+
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
-            metric='vega'
+            metric="vega",
         )
-        
-        assert 'value' in result.columns
+
+        assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(vol_scenarios)
 
     def test_scenario_grid_restores_state(self):
@@ -198,28 +192,28 @@ class TestScenariosMixin:
             spot_price=100.0,
             volatility=0.3,
         )
-        
+
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
         )
-        
+
         analyzer = PortfolioAnalyzer(portfolio)
-        
+
         original_spot = portfolio.spot_price
         original_date = portfolio.valuation_date
-        
+
         spot_scenarios = np.array([95, 100, 105])
         time_points = [datetime.now()]
-        
+
         analyzer.scenario_grid(
             spot_scenarios=spot_scenarios,
             time_points=time_points,
-            metric='delta'
+            metric="delta",
         )
-        
+
         # State should be restored
         assert portfolio.spot_price == original_spot
         assert portfolio.valuation_date == original_date

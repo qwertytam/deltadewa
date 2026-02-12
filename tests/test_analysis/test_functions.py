@@ -3,12 +3,14 @@
 from datetime import datetime, timedelta
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.analysis import (
-    PortfolioAnalyzer,
+from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.functions import (
     generate_spot_range,
     classify_maturity_bucket,
     quick_carry_analysis,
     quick_risk_concentration,
+)
+from deltadewa.analysis.cache import (
     ScenarioGridCache,
     create_scenario_cache_key,
     create_spot_vol_cache_key,
@@ -173,6 +175,7 @@ class TestGenerateSpotRange:
             num_points=250,
             use_comprehensive_range=False,
         )
+        # pylint: disable=protected-access
         result_riskmixin = portfolio._get_spot_range(
             spot_min_pct=0.0,
             spot_max_pct=200.0,
@@ -186,6 +189,7 @@ class TestGenerateSpotRange:
             spot_price=100.0,
             use_comprehensive_range=True,
         )
+        # pylint: disable=protected-access
         result_riskmixin_comp = portfolio._get_spot_range(
             use_comprehensive_range=True,
         )
