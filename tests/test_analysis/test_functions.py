@@ -5,11 +5,11 @@ import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.functions import (
-    generate_spot_range,
     classify_maturity_bucket,
     quick_carry_analysis,
     quick_risk_concentration,
 )
+from deltadewa.spot_utils import generate_spot_range
 from deltadewa.analysis.cache import (
     ScenarioGridCache,
     create_scenario_cache_key,

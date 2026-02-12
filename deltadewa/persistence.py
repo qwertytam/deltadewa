@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Union
 import pandas as pd
 from deltadewa import OptionPortfolio
-from deltadewa.utils import print_warning
+from deltadewa.reporting import ConsoleReporter
 
 try:
     import yaml
@@ -31,6 +31,8 @@ def load_config_yaml(filepath: Path = Path("portfolio_config_example.yaml")):
 
     if not filepath.exists():
         return None
+
+    reporter = ConsoleReporter(width=100)
 
     try:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -57,7 +59,7 @@ def load_config_yaml(filepath: Path = Path("portfolio_config_example.yaml")):
 
         return config
     except Exception as e:  # pylint: disable=broad-except
-        print_warning(f"Error loading YAML configuration: {e}")
+        reporter.warning(f"Error loading YAML configuration: {e}")
         return None
 
 
