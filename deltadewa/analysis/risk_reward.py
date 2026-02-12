@@ -37,7 +37,13 @@ class RiskRewardMixin:
 
         # Generate comprehensive spot range once if not provided
         if spot_range is None:
-            spot_range = self.portfolio._get_spot_range(use_comprehensive_range=True)
+            # Note: Import here to avoid circular dependency:
+            # risk_reward.py -> functions.py -> base.py -> risk_reward.py
+            from deltadewa.analysis.functions import generate_spot_range
+
+            spot_range = generate_spot_range(
+                self.portfolio.spot_price, use_comprehensive_range=True
+            )
 
         # Options only analysis - pass the spot range
         max_loss_opts = self.portfolio.calculate_max_loss_options(spot_range)
