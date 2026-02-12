@@ -1,12 +1,12 @@
-"""Tests for deltadewa.analysis.hedge module."""
+"""Tests for deltadewa.analysis.recommendations module (hedge functionality)."""
 
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis import PortfolioAnalyzer
 
 
-class TestHedgeMixin:
-    """Test cases for HedgeMixin."""
+class TestRecommendationsMixinHedge:
+    """Test cases for RecommendationsMixin hedge functionality."""
 
     def test_calculate_hedge_actions_basic(self):
         """Test basic hedge action calculation."""

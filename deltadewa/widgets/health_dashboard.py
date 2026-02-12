@@ -8,7 +8,6 @@ the health and effectiveness of equity hedges through key metrics.
 from typing import Any, Dict
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa import constants as const
 from deltadewa.analysis import PortfolioAnalyzer
 from .gauges import GaugeIndicator
 
@@ -141,181 +140,22 @@ class HedgeHealthDashboard:
         self.cumulative_carry_paid = 0.0
 
     # ==========================================================================
-    # Metric Calculations
+    # Metric Calculations - Delegated to HealthMixin in analyzer
     # ==========================================================================
 
-    def _calculate_net_carry_pct(self) -> float:
+    def _get_health_metrics(self) -> Dict[str, Any]:
         """
-        Calculate net carry (theta) as annualized % of underlying value.
+        Get all health metrics from the analyzer.
 
         Returns:
-            Annualized theta as percentage of underlying value.
-            Positive = earning carry, Negative = paying carry.
+            Dictionary containing all calculated health metrics.
         """
-        stats = self.portfolio.summary_stats()
-        daily_theta = stats["total_theta"]
-        underlying_value = abs(stats["total_underlying_value"])
-
-        if underlying_value == 0:
-            return 0.0
-
-        # Annualize and convert to percentage
-        annual_theta = daily_theta * const.DAYS_PER_YEAR
-        return (annual_theta / underlying_value) * 100
-
-    def _calculate_crash_convexity_pct(self) -> float:
-        """
-        Calculate crash convexity: Hedge P&L at -20% spot as % of underlying.
-
-        A positive value means the hedge is providing protection in a crash.
-        A negative value means the portfolio loses money in a crash.
-
-        Returns:
-            Hedge P&L at -20% spot as percentage of underlying value.
-        """
-        stats = self.portfolio.summary_stats()
-        underlying_value = abs(stats["total_underlying_value"])
-        current_spot = self.portfolio.spot_price
-
-        if underlying_value == 0:
-            return 0.0
-
-        # Calculate P&L at -20% spot (include underlying to see net effect)
-        crash_spot = current_spot * 0.80
-        hedge_pnl = self.portfolio.calculate_pnl_at_expiry(
-            crash_spot, include_underlying=True
+        return self.analyzer.calculate_health_metrics(
+            cumulative_carry_paid=self.cumulative_carry_paid,
+            historical_vol_low=self.historical_vol_low,
+            historical_vol_high=self.historical_vol_high,
+            convexity_cliff_days=self.convexity_cliff_days,
         )
-
-        return (hedge_pnl / underlying_value) * 100
-
-    def _calculate_vega_sufficiency_pct(self) -> float:
-        """
-        Calculate vega sufficiency: Portfolio % impact per +10 vol shock.
-
-        Shows how much the portfolio value changes for a 10-point vol increase.
-        High absolute values indicate significant volatility exposure.
-
-        Returns:
-            Percentage change in portfolio value per +10 vol point shock.
-        """
-        stats = self.portfolio.summary_stats()
-        total_vega = stats["total_vega"]
-        portfolio_value = abs(stats["total_portfolio_value"])
-
-        if portfolio_value == 0:
-            return 0.0
-
-        # Vega is $ change per 1% vol change
-        # For +10 vol points (0.10), impact = vega * 10
-        vol_shock_impact = total_vega * 10
-
-        return (vol_shock_impact / portfolio_value) * 100
-
-    def _calculate_delta_drift_pct(self) -> float:
-        """
-        Calculate delta drift: Net hedge delta as % of equity delta.
-
-        Target is 0% (perfectly hedged). Positive means over-hedged,
-        negative means under-hedged.
-
-        Returns:
-            Net delta as percentage of underlying quantity.
-        """
-        stats = self.portfolio.summary_stats()
-        net_delta = stats["net_delta"]
-        underlying_qty = abs(stats["underlying_quantity"])
-
-        if underlying_qty == 0:
-            return 0.0
-
-        return (net_delta / underlying_qty) * 100
-
-    def _calculate_convexity_cliff_days(self) -> int:
-        """
-        Calculate days until long puts enter high-gamma region (<6 months).
-
-        Returns the minimum days to maturity for long put positions.
-        Lower values mean convexity is about to decay rapidly.
-
-        Returns:
-            Days until nearest long put enters high-gamma region.
-            Returns 999 if no long puts exist.
-        """
-        min_days = 999
-
-        for pos in self.portfolio.positions:
-            # Check for long puts (negative quantity for puts means short)
-            is_put = pos.option.option_type.lower() == "put"
-            is_long = pos.quantity > 0
-
-            if is_put and is_long:
-                days_to_maturity = (
-                    pos.option.maturity_date - self.portfolio.valuation_date
-                ).days
-                # Calculate days until entering high-gamma region
-                days_until_cliff = days_to_maturity - self.convexity_cliff_days
-                min_days = min(min_days, max(0, days_until_cliff))
-
-        return min_days
-
-    def _calculate_vol_regime_percentile(self) -> float:
-        """
-        Calculate volatility regime as a percentile (0-100).
-
-        Uses simple linear interpolation between historical low and high.
-        0 = at or below historical low (cheap vol)
-        50 = at historical median
-        100 = at or above historical high (expensive vol)
-
-        Returns:
-            Volatility percentile (0-100).
-        """
-        current_vol = self.portfolio.volatility
-
-        if current_vol <= self.historical_vol_low:
-            return 0.0
-        elif current_vol >= self.historical_vol_high:
-            return 100.0
-        else:
-            # Linear interpolation
-            vol_range = self.historical_vol_high - self.historical_vol_low
-            percentile = (
-                (current_vol - self.historical_vol_low) / vol_range
-            ) * 100
-            return percentile
-
-    def _calculate_hedge_success_pct(self) -> float:
-        """
-        Calculate hedge success: Hedge P&L vs cumulative carry paid.
-
-        Shows whether the hedge protection value exceeds the carry cost.
-        Positive = hedge is "worth it", Negative = paying more than protecting.
-
-        Returns:
-            Ratio of hedge P&L to carry paid as percentage.
-            Returns 0 if no carry has been paid.
-        """
-        if abs(self.cumulative_carry_paid) < 0.01:
-            return 0.0
-
-        # Get current hedge P&L (options value change from initial)
-        # This is a simplified measure - actual hedge P&L would need
-        # historical tracking
-        stats = self.portfolio.summary_stats()
-
-        # pylint: disable=unused-variable
-        current_option_value = stats["total_value"]  # noqa: F841
-
-        # For now, use crash protection value as a proxy for hedge value
-        current_spot = self.portfolio.spot_price
-        crash_spot = current_spot * 0.80
-        hedge_pnl = self.portfolio.calculate_pnl_at_expiry(
-            crash_spot, include_underlying=True
-        )
-
-        # Compare crash protection to carry paid
-        # Positive if hedge protection > carry cost
-        return (hedge_pnl / abs(self.cumulative_carry_paid)) * 100
 
     # ==========================================================================
     # Metric Configuration
@@ -328,11 +168,14 @@ class HedgeHealthDashboard:
         Returns:
             Dictionary of metric name -> HedgeHealthMetric configuration.
         """
+        # Get all calculated metrics from the analyzer
+        health_data = self._get_health_metrics()
+
         metrics = {}
 
         # 1. Net Carry (Theta) as % of underlying
         # Good: positive (earning carry), Bad: negative (paying carry)
-        net_carry = self._calculate_net_carry_pct()
+        net_carry = health_data["net_carry_pct"]
         metrics["net_carry"] = HedgeHealthMetric(
             name="Net Carry (Theta)",
             description="Annualized theta as % of underlying value",
@@ -349,7 +192,7 @@ class HedgeHealthDashboard:
 
         # 2. Crash Convexity (Hedge P&L at -20% spot)
         # Good: positive (hedge working), Bad: negative (losing money in crash)
-        crash_convexity = self._calculate_crash_convexity_pct()
+        crash_convexity = health_data["crash_convexity_pct"]
         metrics["crash_convexity"] = HedgeHealthMetric(
             name="Crash Convexity",
             description="Hedge P&L at -20% spot as % of underlying",
@@ -367,7 +210,7 @@ class HedgeHealthDashboard:
         # 3. Vega Sufficiency (Portfolio % per +10 vol)
         # Target: low absolute value (not too exposed to vol)
         # This is inverted: low absolute value = good
-        vega_suff = self._calculate_vega_sufficiency_pct()
+        vega_suff = health_data["vega_sufficiency_pct"]
         metrics["vega_sufficiency"] = HedgeHealthMetric(
             name="Vega Exposure",
             description="Portfolio % change per +10 vol shock",
@@ -384,7 +227,7 @@ class HedgeHealthDashboard:
 
         # 4. Delta Drift (Net delta as % of underlying)
         # Target: 0% (perfectly hedged)
-        delta_drift = self._calculate_delta_drift_pct()
+        delta_drift = health_data["delta_drift_pct"]
         metrics["delta_drift"] = HedgeHealthMetric(
             name="Delta Drift",
             description="Net hedge delta as % of equity delta",
@@ -401,7 +244,7 @@ class HedgeHealthDashboard:
 
         # 5. Time-to-Convexity Cliff (days until puts in high-gamma)
         # Good: many days, Bad: few days
-        cliff_days = self._calculate_convexity_cliff_days()
+        cliff_days = health_data["convexity_cliff_days"]
         metrics["convexity_cliff"] = HedgeHealthMetric(
             name="Time to Convexity Cliff",
             description="Days until long puts enter high-gamma region",
@@ -418,7 +261,7 @@ class HedgeHealthDashboard:
 
         # 6. Volatility Regime (IV percentile)
         # Low vol = cheap hedges = good, High vol = expensive = caution
-        vol_percentile = self._calculate_vol_regime_percentile()
+        vol_percentile = health_data["vol_regime_percentile"]
         metrics["vol_regime"] = HedgeHealthMetric(
             name="Volatility Regime",
             description="Current IV percentile (0=cheap, 100=expensive)",
@@ -435,7 +278,7 @@ class HedgeHealthDashboard:
 
         # 7. Hedge Success (Hedge P&L vs carry paid)
         # Good: positive (hedge value > carry cost)
-        hedge_success = self._calculate_hedge_success_pct()
+        hedge_success = health_data["hedge_success_pct"]
         metrics["hedge_success"] = HedgeHealthMetric(
             name="Hedge Success",
             description="Hedge P&L vs cumulative carry paid",
@@ -449,6 +292,8 @@ class HedgeHealthDashboard:
             invert_colors=False,
             label_format="{:+.0f}%",
         )
+
+        return metrics
 
         return metrics
 
@@ -685,32 +530,7 @@ class HedgeHealthDashboard:
         Returns:
             Overall health score.
         """
-        scores = []
-
-        for (
-            key,  # pylint: disable=unused-variable
-            metric,
-        ) in self._metrics.items():
-            # Normalize metric to 0-100 score
-            # For non-inverted metrics: min_val=0, max_val=100
-            # For inverted metrics: min_val=100, max_val=0
-
-            if metric.actual <= metric.min_val:
-                raw_score: float = 0 if not metric.invert_colors else 100
-            elif metric.actual >= metric.max_val:
-                raw_score = 100 if not metric.invert_colors else 0
-            else:
-                # Linear interpolation between min and max
-                range_val = metric.max_val - metric.min_val
-                position = (metric.actual - metric.min_val) / range_val
-                if metric.invert_colors:
-                    raw_score = (1 - position) * 100
-                else:
-                    raw_score = position * 100
-
-            scores.append(max(0, min(100, raw_score)))
-
-        return sum(scores) / len(scores) if scores else 50
+        return self.analyzer.calculate_overall_health_score(self._metrics)
 
     # ==========================================================================
     # Public Interface

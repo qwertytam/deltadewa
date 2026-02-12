@@ -1,12 +1,12 @@
-"""Tests for deltadewa.analysis.concentration module."""
+"""Tests for deltadewa.analysis.recommendations module (concentration functionality)."""
 
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis import PortfolioAnalyzer
 
 
-class TestConcentrationMixin:
-    """Test cases for ConcentrationMixin."""
+class TestRecommendationsMixinConcentration:
+    """Test cases for RecommendationsMixin concentration functionality."""
 
     def test_analyze_risk_concentration_empty(self):
         """Test concentration analysis on empty portfolio."""
