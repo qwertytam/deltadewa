@@ -67,15 +67,43 @@ class ConsoleReporter:
             self.divider(char="=")
 
     def success(self, message: str, prefix: str = "✓") -> None:
+        """
+        Print a success message.
+
+        Args:
+            message: Success message text
+            prefix: Prefix symbol (default: '✓')
+        """
         print(f"{prefix} {message}")
 
     def warning(self, message: str, prefix: str = "⚠") -> None:
+        """
+        Print a warning message.
+
+        Args:
+            message: Warning message text
+            prefix: Prefix symbol (default: '⚠')
+        """
         print(f"{prefix} {message}")
 
     def error(self, message: str, prefix: str = "✗") -> None:
+        """
+        Print an error message.
+
+        Args:
+            message: Error message text
+            prefix: Prefix symbol (default: '✗')
+        """
         print(f"{prefix} {message}")
 
     def info(self, message: str, prefix: str = "ℹ️") -> None:
+        """
+        Print an informational message.
+
+        Args:
+            message: Informational message text
+            prefix: Prefix symbol (default: 'ℹ️')
+        """
         print(f"{prefix}  {message}")
 
     def table_row(
@@ -127,9 +155,16 @@ class ConsoleReporter:
         suffix: str = "",
         length: int = 50,
     ) -> None:
-        """Print a progress bar."""
-        if total == 0:
-            return
+        """
+        Print a progress bar.
+
+        Args:
+            current: Current progress value
+            total: Total value (progress will be current/total)
+            prefix: Prefix text before progress bar (default: '')
+            suffix: Suffix text after progress bar (default: '')
+            length: Length of the progress bar in characters (default: 50)
+        """
         percent = f"{100 * (current / float(total)):.1f}"
         filled_length = int(length * current // total)
         fill = "█"
