@@ -35,7 +35,11 @@ class RiskRewardMixin:
         """
         net_debit = self.portfolio.calculate_net_debit()
 
-        # Options only analysis
+        # Generate comprehensive spot range once if not provided
+        if spot_range is None:
+            spot_range = self.portfolio._get_spot_range(use_comprehensive_range=True)
+
+        # Options only analysis - pass the spot range
         max_loss_opts = self.portfolio.calculate_max_loss_options(spot_range)
         max_profit_opts = self.portfolio.calculate_max_profit_options(
             spot_range
@@ -44,7 +48,7 @@ class RiskRewardMixin:
             spot_range, include_underlying=False
         )
 
-        # Total portfolio analysis
+        # Total portfolio analysis - pass the spot range
         max_loss_total = self.portfolio.calculate_max_loss_total(spot_range)
         max_profit_total = self.portfolio.calculate_max_profit_total(spot_range)
         breakeven_total = self.portfolio.calculate_breakeven_points(

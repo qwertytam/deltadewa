@@ -72,7 +72,7 @@ class PnLMixin:
 
         return pnl
 
-    def _vectorized_pnl_at_expiry(
+    def vectorized_pnl_at_expiry(
         self,
         spot_scenarios: np.ndarray,
         include_underlying: bool = True,
@@ -140,3 +140,6 @@ class PnLMixin:
             pnl += underlying_pnl
 
         return pnl
+
+    # Backward-compatible alias
+    _vectorized_pnl_at_expiry = vectorized_pnl_at_expiry

@@ -86,6 +86,9 @@ class ScenariosMixin:
         """
         Calculate P&L at expiry using vectorized NumPy operations.
 
+        This method delegates to the portfolio's canonical vectorized implementation
+        for consistency and maintainability.
+
         This method should only be used for at-expiry calculations where all
         positions have expired (days_to_maturity <= 0). At expiry, options have
         only intrinsic value and no time value, so volatility doesn't affect
@@ -103,54 +106,9 @@ class ScenariosMixin:
         Returns:
             np.ndarray of P&L values for each spot scenario
         """
-        # Pre-extract position data into arrays
-        strikes = np.array(
-            [pos.option.strike_price for pos in self.portfolio.positions]
+        return self.portfolio.vectorized_pnl_at_expiry(
+            spot_scenarios, include_underlying=include_underlying
         )
-        quantities = np.array(
-            [pos.quantity for pos in self.portfolio.positions]
-        )
-        contract_sizes = np.array(
-            [pos.contract_size for pos in self.portfolio.positions]
-        )
-        is_call = np.array(
-            [
-                pos.option.option_type.lower() == "call"
-                for pos in self.portfolio.positions
-            ]
-        )
-
-        # Vectorized intrinsic value calculation
-        # Shape: (n_positions, 1) and (1, n_spots) -> broadcasts to (n_positions, n_spots)
-        strikes_2d = strikes[:, np.newaxis]  # (n_positions, 1)
-        spots_2d = spot_scenarios[np.newaxis, :]  # (1, n_spots)
-
-        call_intrinsic = np.maximum(spots_2d - strikes_2d, 0)
-        put_intrinsic = np.maximum(strikes_2d - spots_2d, 0)
-        intrinsic = np.where(
-            is_call[:, np.newaxis], call_intrinsic, put_intrinsic
-        )
-
-        # Apply quantity and contract size, sum across positions
-        position_values = (
-            intrinsic
-            * quantities[:, np.newaxis]
-            * contract_sizes[:, np.newaxis]
-        )
-        portfolio_values = position_values.sum(axis=0)
-
-        # Add underlying if requested
-        if include_underlying and self.portfolio.underlying_quantity != 0:
-            underlying_pnl = self.portfolio.underlying_quantity * (
-                spot_scenarios - self.portfolio.spot_price
-            )
-            portfolio_values += underlying_pnl
-
-        # Calculate P&L relative to initial premium paid/received
-        initial_value = self.portfolio.total_value()
-        pnl = portfolio_values - initial_value
-
-        return pnl
 
     def scenario_grid(
         self,

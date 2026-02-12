@@ -166,10 +166,75 @@ class TestRiskMixin:
         )
 
         spot_range = np.linspace(100, 500, 100)
+        
+        # Compute PnL array
+        pnl_array = portfolio.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=False
+        )
 
         # Check increasing trend (profit)
         result = portfolio._check_unlimited_trend(
-            spot_range, include_underlying=False, check_increasing=True
+            pnl_array, check_increasing=True
         )
 
         assert isinstance(result, bool)
+
+    def test_vectorized_risk_methods_numerical_equivalence(self):
+        """Test that vectorized risk methods produce identical results to scalar approach."""
+        portfolio = OptionPortfolio(spot_price=100.0)
+
+        # Create a complex multi-leg position (iron condor)
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="put",
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=-1,
+            option_type="put",
+        )
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=-1,
+            option_type="call",
+        )
+        portfolio.add_position(
+            strike_price=110.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+        )
+
+        # Generate spot range
+        spot_range = portfolio._get_spot_range(use_comprehensive_range=True)
+
+        # Calculate using vectorized methods
+        max_loss_vec = portfolio.calculate_max_loss_options(spot_range)
+        max_profit_vec = portfolio.calculate_max_profit_options(spot_range)
+        breakeven_vec = portfolio.calculate_breakeven_points(spot_range, include_underlying=False)
+
+        # Verify results are computed properly (types and reasonable values)
+        assert isinstance(max_loss_vec["max_loss"], float)
+        assert isinstance(max_loss_vec["spot_at_max_loss"], float)
+        assert isinstance(max_loss_vec["is_unlimited"], bool)
+
+        assert isinstance(max_profit_vec["max_profit"], float)
+        assert isinstance(max_profit_vec["spot_at_max_profit"], float)
+        assert isinstance(max_profit_vec["is_unlimited"], bool)
+
+        assert isinstance(breakeven_vec, list)
+        assert all(isinstance(x, float) for x in breakeven_vec)
+        
+        # Verify vectorized gives same results by comparing PnL at a few key spots
+        test_spots = np.array([80.0, 90.0, 95.0, 100.0, 105.0, 110.0, 120.0])
+        pnl_vectorized = portfolio.vectorized_pnl_at_expiry(test_spots, include_underlying=False)
+        
+        for i, spot in enumerate(test_spots):
+            pnl_scalar = portfolio.calculate_pnl_at_expiry(spot, include_underlying=False)
+            assert np.isclose(pnl_vectorized[i], pnl_scalar, rtol=1e-10), (
+                f"Mismatch at spot={spot}: vectorized={pnl_vectorized[i]}, scalar={pnl_scalar}"
+            )

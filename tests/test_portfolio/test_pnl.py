@@ -142,3 +142,117 @@ class TestPnLMixin:
         # Credit spread should have negative net debit (we receive money)
         # Note: This depends on pricing, but typically credit spreads are net negative
         assert isinstance(net_debit, float)
+
+    def test_vectorized_pnl_at_expiry(self):
+        """Test vectorized_pnl_at_expiry method."""
+        import numpy as np
+        
+        portfolio = OptionPortfolio(spot_price=100.0)
+        
+        # Buy a call at 100 strike
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+        )
+        
+        # Test with array of spot prices
+        spot_range = np.array([90.0, 100.0, 110.0, 120.0])
+        pnl_array = portfolio.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=False
+        )
+        
+        # Should return numpy array
+        assert isinstance(pnl_array, np.ndarray)
+        assert len(pnl_array) == len(spot_range)
+        
+        # Verify results match scalar calculation
+        for i, spot in enumerate(spot_range):
+            scalar_pnl = portfolio.calculate_pnl_at_expiry(
+                spot, include_underlying=False
+            )
+            assert np.isclose(pnl_array[i], scalar_pnl), (
+                f"Mismatch at spot={spot}: vectorized={pnl_array[i]}, "
+                f"scalar={scalar_pnl}"
+            )
+
+    def test_vectorized_pnl_at_expiry_backward_compat(self):
+        """Test backward-compatible _vectorized_pnl_at_expiry alias."""
+        import numpy as np
+        
+        portfolio = OptionPortfolio(spot_price=100.0)
+        
+        # Buy a call at 100 strike
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+        )
+        
+        spot_range = np.array([90.0, 100.0, 110.0])
+        
+        # Old name should still work
+        pnl_old = portfolio._vectorized_pnl_at_expiry(
+            spot_range, include_underlying=False
+        )
+        
+        # New name
+        pnl_new = portfolio.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=False
+        )
+        
+        # Should produce identical results
+        assert np.allclose(pnl_old, pnl_new)
+
+    def test_vectorized_pnl_with_underlying(self):
+        """Test vectorized_pnl_at_expiry including underlying position."""
+        import numpy as np
+        
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0, spot_price=100.0
+        )
+        
+        spot_range = np.array([90.0, 100.0, 110.0])
+        pnl_array = portfolio.vectorized_pnl_at_expiry(
+            spot_range, include_underlying=True
+        )
+        
+        # Verify against scalar calculation
+        for i, spot in enumerate(spot_range):
+            scalar_pnl = portfolio.calculate_pnl_at_expiry(
+                spot, include_underlying=True
+            )
+            assert np.isclose(pnl_array[i], scalar_pnl)
+
+    def test_vectorized_pnl_multi_position(self):
+        """Test vectorized calculation with multiple positions."""
+        import numpy as np
+        
+        portfolio = OptionPortfolio(spot_price=100.0)
+        
+        # Create a bull call spread
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+        )
+        portfolio.add_position(
+            strike_price=110.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=-1,
+            option_type="call",
+        )
+        
+        spot_range = np.linspace(80, 120, 50)
+        pnl_array = portfolio.vectorized_pnl_at_expiry(spot_range)
+        
+        # Verify all values against scalar calculation
+        for i, spot in enumerate(spot_range):
+            scalar_pnl = portfolio.calculate_pnl_at_expiry(spot)
+            assert np.isclose(pnl_array[i], scalar_pnl, rtol=1e-10), (
+                f"Mismatch at spot={spot}: vectorized={pnl_array[i]}, "
+                f"scalar={scalar_pnl}"
+            )

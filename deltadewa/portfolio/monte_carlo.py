@@ -21,7 +21,7 @@ class MonteCarloMixin:
         spot_price: float
 
         # pylint: disable=missing-function-docstring, unused-argument
-        def _vectorized_pnl_at_expiry(
+        def vectorized_pnl_at_expiry(
             self, spots: np.ndarray, include_underlying: bool = False
         ) -> np.ndarray: ...
 
@@ -105,7 +105,7 @@ class MonteCarloMixin:
 
         # Vectorized P&L calculation for all spots at once
         # pylint: disable=assignment-from-no-return
-        simulated_pnls = self._vectorized_pnl_at_expiry(
+        simulated_pnls = self.vectorized_pnl_at_expiry(
             final_spots, include_underlying=include_underlying
         )
 
