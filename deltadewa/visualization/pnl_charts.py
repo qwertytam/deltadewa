@@ -18,7 +18,7 @@ from deltadewa.formatters.values import (
     format_currency_for_axis,
 )
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.functions import generate_spot_range
+from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolioBase

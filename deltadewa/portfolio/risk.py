@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Optional, List
 import numpy as np
-from deltadewa.analysis.functions import generate_spot_range
+from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.position import OptionPosition
