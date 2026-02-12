@@ -1,17 +1,15 @@
 """Scenario grid generation mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from datetime import datetime
 import pandas as pd
 import numpy as np
-from deltadewa.american_option import AmericanOption
+
 from deltadewa.analysis.volatility import (
     apply_proportional_volatility_shift,
     restore_volatilities,
 )
-from deltadewa.batch_pricer import (
-    BatchPricer,
-)  # Import locally to avoid circular dependency?
+from deltadewa.batch_pricer import BatchPricer
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
@@ -28,57 +26,55 @@ class ScenariosMixin:
     if TYPE_CHECKING:
         portfolio: "OptionPortfolio"
 
+    def _create_batch_pricer(self) -> BatchPricer:
+        """
+        Creates a BatchPricer instance from the current portfolio state.
+        
+        This serves as a 'shadow' copy of the pricing engines that we can 
+        manipulate safely during calculations without affecting the main 
+        portfolio state.
+        """
+        return BatchPricer(
+            positions=self.portfolio.positions,
+            risk_free_rate=self.portfolio.risk_free_rate,
+            dividend_yield=self.portfolio.dividend_yield,
+            underlying_quantity=self.portfolio.underlying_quantity,
+        )
+
     def _calculate_portfolio_value_at(
         self,
         spot: float,
         valuation_date: datetime,
+        pricer: Optional[BatchPricer] = None,
     ) -> float:
         """
         Calculate total portfolio value at given spot and date.
 
+        Optimized to use an existing BatchPricer if provided, avoiding
+        expensive QuantLib engine reconstruction.
+
         Args:
             spot: Spot price to use for valuation
             valuation_date: Date to use for valuation
+            pricer: Optional existing BatchPricer instance for performance
 
         Returns:
             Total portfolio value (options + underlying)
         """
-        total_value = 0.0
+        # If a pricer is provided, use its optimized single-point lookup
+        # This reuses the pre-built QuantLib engines
+        if pricer:
+            # We treat the single spot as a 1-item array
+            values = pricer.portfolio_values_at(
+                np.array([spot]),
+                valuation_date
+            )
+            return values[0]
 
-        for position in self.portfolio.positions:
-            days_to_maturity = (
-                position.option.maturity_date - valuation_date
-            ).days
-
-            if days_to_maturity <= 0:
-                # Option expired - use intrinsic value
-                if position.option.option_type == "call":
-                    intrinsic = max(0, spot - position.option.strike_price)
-                else:
-                    intrinsic = max(0, position.option.strike_price - spot)
-                total_value += (
-                    intrinsic * position.quantity * position.contract_size
-                )
-            else:
-                # Option still alive - price it
-                opt = AmericanOption(
-                    spot_price=spot,
-                    strike_price=position.option.strike_price,
-                    maturity_date=position.option.maturity_date,
-                    volatility=position.option.volatility,  # Use position volatility
-                    risk_free_rate=self.portfolio.risk_free_rate,
-                    dividend_yield=self.portfolio.dividend_yield,
-                    option_type=position.option.option_type,
-                    valuation_date=valuation_date,
-                )
-                total_value += (
-                    opt.price() * position.quantity * position.contract_size
-                )
-
-        # Add underlying position value
-        total_value += self.portfolio.underlying_quantity * spot
-
-        return total_value
+        # Fallback to creating a temporary pricer if none provided
+        # This is still cleaner than the old loop as it delegates to the optimized class
+        temp_pricer = self._create_batch_pricer()
+        return temp_pricer.portfolio_values_at(np.array([spot]), valuation_date)[0]
 
     def _calculate_pnl_at_expiry_vectorized(
         self,
@@ -87,10 +83,7 @@ class ScenariosMixin:
     ) -> np.ndarray:
         """
         Calculate P&L at expiry using vectorized NumPy operations.
-
-        This method delegates to the portfolio's canonical vectorized implementation
-        for consistency and maintainability.
-
+        
         This method should only be used for at-expiry calculations where all
         positions have expired (days_to_maturity <= 0). At expiry, options have
         only intrinsic value and no time value, so volatility doesn't affect
@@ -100,6 +93,8 @@ class ScenariosMixin:
         - Intrinsic value is element-wise max operation
         - All positions computed simultaneously across all spots
         - NumPy broadcasting handles grid expansion
+        
+        Delegates to portfolio implementation for consistency.
 
         Args:
             spot_scenarios: Array of spot prices to evaluate
@@ -132,18 +127,16 @@ class ScenariosMixin:
             metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta',
             'gamma', 'vega', 'theta')
             baseline_spot: Spot price for P&L baseline (default: current portfolio spot)
-            baseline_valuation_date: Valuation date for P&L baseline (default:
-            current portfolio date)
+            baseline_valuation_date: Valuation date for P&L baseline (default: current portfolio date)
 
         Returns:
             DataFrame with columns: spot_price, valuation_date, metric_value
         """
-
-        results = []
+        results: List[Dict[str, Any]] = []
         original_spot = self.portfolio.spot_price
         original_date = self.portfolio.valuation_date
 
-        # For P&L calculation, use the baseline values if provided
+        # Setup defaults and validate
         if baseline_spot is None:
             baseline_spot = original_spot
         if baseline_spot is None:
@@ -158,48 +151,52 @@ class ScenariosMixin:
                 "Portfolio valuation date is not set for baseline calculation."
             )
 
-        # Calculate baseline value at baseline date/spot for P&L calculations
-        baseline_value = self._calculate_portfolio_value_at(
-            baseline_spot, baseline_valuation_date
-        )
+        # Create the BatchPricer ONCE.
+        # This builds the QuantLib engines for all positions one time.
+        pricer = self._create_batch_pricer()
 
-        # Use BatchPricer for efficient valuation of 'pnl' and 'value' metrics
-        # Greeks still need portfolio state updates, so they use the old path
-        if metric in ("pnl", "value"):
-            pricer = BatchPricer(
-                positions=self.portfolio.positions,
-                risk_free_rate=self.portfolio.risk_free_rate,
-                dividend_yield=self.portfolio.dividend_yield,
-                underlying_quantity=self.portfolio.underlying_quantity,
+        # Calculate baseline value efficiently using the pricer
+        baseline_value = 0.0
+        if metric == "pnl":
+            baseline_value = self._calculate_portfolio_value_at(
+                baseline_spot, baseline_valuation_date, pricer=pricer
             )
 
-            for time_point in time_points:
-                # Get all portfolio values at this time_point efficiently
+        # Main Grid Loop
+        for time_point in time_points:
+            days_forward = (time_point - original_date).days
+
+            # STRATEGY 1: Efficient Value/PnL (No Greeks)
+            if metric in ("pnl", "value"):
+                # BatchPricer is optimized for this exact operation
                 portfolio_values = pricer.portfolio_values_at(
                     spot_scenarios, time_point
                 )
 
+                # Vectorized construction of result rows
                 for j, spot in enumerate(spot_scenarios):
+                    val = portfolio_values[j]
                     if metric == "pnl":
-                        metric_value = portfolio_values[j] - baseline_value
-                    else:  # metric == "value"
-                        metric_value = portfolio_values[j]
+                        val = val - baseline_value
+                    
+                    results.append({
+                        "spot_price": spot,
+                        "valuation_date": time_point,
+                        "days_forward": days_forward,
+                        "metric": metric,
+                        "value": val,
+                    })
 
-                    results.append(
-                        {
-                            "spot_price": spot,
-                            "valuation_date": time_point,
-                            "days_forward": (time_point - original_date).days,
-                            "metric": metric,
-                            "value": metric_value,
-                        }
-                    )
-
-        else:
-            # For Greeks, we need to update portfolio state, so use old path
-            for time_point in time_points:
+            # STRATEGY 2: Greeks (Requires state updates)
+            # Currently BatchPricer primarily handles 'value'. 
+            # Ideally, BatchPricer would be extended to return Greeks arrays.
+            # However, to avoid 'feature restriction' or major refactor of BatchPricer
+            # right now, we will stick to the existing method for Greeks but
+            # clean up the loop structure.
+            else:
                 for spot in spot_scenarios:
-                    # For Greeks, update portfolio and calculate
+                    # We must update the actual portfolio for Greek calculations
+                    # because the Greek methods (total_delta etc) live on the portfolio
                     self.portfolio.update_market_conditions(
                         spot_price=spot, valuation_date=time_point
                     )
@@ -217,17 +214,15 @@ class ScenariosMixin:
                     else:
                         metric_value = 0.0
 
-                    results.append(
-                        {
-                            "spot_price": spot,
-                            "valuation_date": time_point,
-                            "days_forward": (time_point - original_date).days,
-                            "metric": metric,
-                            "value": metric_value,
-                        }
-                    )
+                    results.append({
+                        "spot_price": spot,
+                        "valuation_date": time_point,
+                        "days_forward": days_forward,
+                        "metric": metric,
+                        "value": metric_value,
+                    })
 
-        # Restore original state
+        # ALWAYS Restore original state
         self.portfolio.update_market_conditions(
             spot_price=original_spot, valuation_date=original_date
         )
@@ -259,24 +254,15 @@ class ScenariosMixin:
         Returns:
             DataFrame with columns: spot_price, volatility, value
         """
-
-        results = []
+        results: List[Dict[str, Any]] = []
         original_spot = self.portfolio.spot_price
         original_vol = self.portfolio.volatility
         original_date = self.portfolio.valuation_date
 
-        # Calculate baseline value if not provided
         if baseline_value is None:
             baseline_value = self.portfolio.total_value()
 
-        # Store original position volatilities for restoration
-        original_position_vols = {
-            i: pos.option.volatility
-            for i, pos in enumerate(self.portfolio.positions)
-        }
-
-        # For P&L metric, check if we can use vectorized calculation
-        # (only applicable at expiry where volatility doesn't matter)
+        # Optimization: Vectorized PnL at expiry check
         if metric == "pnl":
             # Check if all positions are at expiry (days_to_maturity == 0)
             # We check for exactly 0 to avoid issues with historical valuations
@@ -284,57 +270,54 @@ class ScenariosMixin:
                 (pos.option.maturity_date - original_date).days == 0
                 for pos in self.portfolio.positions
             )
-
             if all_at_expiry:
                 # Use vectorized calculation for maximum speed
-                # Create meshgrid of spot and vol scenarios
-                # spot_grid, vol_grid = np.meshgrid(spot_scenarios, vol_scenarios)
-
-                # Calculate PnL using vectorized method (vol doesn't affect intrinsic value)
+                # Volatility doesn't affect intrinsic value at expiry
                 pnl_values = self._calculate_pnl_at_expiry_vectorized(
                     spot_scenarios, include_underlying=True
                 )
-
                 # Expand to full grid
-                for i, vol in enumerate(vol_scenarios):
+                for vol in vol_scenarios:
                     for j, spot in enumerate(spot_scenarios):
-                        results.append(
-                            {
-                                "spot_price": spot,
-                                "volatility": vol,
-                                "value": pnl_values[j],
-                            }
-                        )
-
+                        results.append({
+                            "spot_price": spot,
+                            "volatility": vol,
+                            "value": pnl_values[j],
+                        })
                 return pd.DataFrame(results)
 
-        # For other metrics or non-expiry PnL, iterate with vol scaling
+        # Store original position vols
+        original_position_vols = {
+            i: pos.option.volatility
+            for i, pos in enumerate(self.portfolio.positions)
+        }
+
+        # Initialize BatchPricer for Non-Greek calculations if applicable
+        # Note: Volatility changes require deep updates, so BatchPricer usage
+        # here is tricky unless we rebuild it per vol-slice.
+        # For now, we rely on the portfolio update mechanism which is robust.
+
         for vol in vol_scenarios:
-            # Apply proportional volatility shift
+            # Apply Volatility Shift
             if proportional_vol_scaling:
                 apply_proportional_volatility_shift(
                     self.portfolio, vol, preserve_structure=True
                 )
             else:
-                # Set all positions to same volatility
                 for pos in self.portfolio.positions:
                     pos.option.volatility = vol
 
+            # Inner Loop: Spot Prices
             for spot in spot_scenarios:
-                # Update market conditions
                 self.portfolio.update_market_conditions(
                     spot_price=spot, valuation_date=original_date
                 )
 
-                # Calculate metric
                 if metric == "pnl":
                     current_value = self.portfolio.total_value()
-                    underlying_pnl = (
-                        spot - original_spot
-                    ) * self.portfolio.underlying_quantity
-                    metric_value = (
-                        current_value - baseline_value
-                    ) + underlying_pnl
+                    # Manual underlying PnL calc
+                    underlying_pnl = (spot - original_spot) * self.portfolio.underlying_quantity
+                    metric_value = (current_value - baseline_value) + underlying_pnl
                 elif metric == "value":
                     metric_value = self.portfolio.total_value()
                 elif metric == "delta":
@@ -351,18 +334,16 @@ class ScenariosMixin:
                         f"Supported: pnl, value, delta, gamma, vega, theta"
                     )
 
-                results.append(
-                    {
-                        "spot_price": spot,
-                        "volatility": vol,
-                        "value": metric_value,
-                    }
-                )
+                results.append({
+                    "spot_price": spot,
+                    "volatility": vol,
+                    "value": metric_value,
+                })
 
-            # Restore volatilities after each volatility level
+            # Reset Volatility for next loop iteration
             restore_volatilities(self.portfolio, original_position_vols)
 
-        # Restore original portfolio state
+        # Restore everything
         self.portfolio.update_market_conditions(
             spot_price=original_spot,
             volatility=original_vol,
