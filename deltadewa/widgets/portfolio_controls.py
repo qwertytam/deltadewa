@@ -263,7 +263,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                         else "put"
                     ),
                     quantity=quantity_input.value,
-                    symbol="SPY",
+                    symbol=self.portfolio.get_symbol(),
                     volatility=position_volatility,
                 )
                 status_label.value = (
