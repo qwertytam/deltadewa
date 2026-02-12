@@ -5,25 +5,35 @@ This module provides common utilities for formatting, printing,
 and displaying data.
 
 .. note::
-    Direct use of print functions here is deprecated. 
+    Direct use of print functions here is deprecated.
     Please use `deltadewa.reporting.ConsoleReporter`.
 """
 
-from typing import Optional, List
+from typing import Optional
 from deltadewa.reporting.console import ConsoleReporter
 
 # Create a default instance for backward compatibility
 _reporter = ConsoleReporter()
 
 __all__ = [
-    "print_header", "print_subheader", "print_divider", "print_section",
-    "print_key_value", "print_metric_summary",
-    "print_success", "print_warning", "print_error", "print_info",
-    "print_table_row", "print_table",
-    "clear_output_and_print", "print_progress",
+    "print_header",
+    "print_subheader",
+    "print_divider",
+    "print_section",
+    "print_key_value",
+    "print_metric_summary",
+    "print_success",
+    "print_warning",
+    "print_error",
+    "print_info",
+    "print_table_row",
+    "print_table",
+    "clear_output_and_print",
+    "print_progress",
 ]
 
 # Delegate all existing functions to the reporter instance
+
 
 def print_header(title: str, width: int = 80, char: str = "=") -> None:
     """
@@ -46,6 +56,7 @@ def print_header(title: str, width: int = 80, char: str = "=") -> None:
     _reporter.header(title, char)
     _reporter.width = old_width
 
+
 def print_subheader(title: str, width: int = 80) -> None:
     """
     Print a formatted subsection header (using dashes).
@@ -65,6 +76,7 @@ def print_subheader(title: str, width: int = 80) -> None:
     _reporter.subheader(title)
     _reporter.width = old_width
 
+
 def print_divider(width: int = 80, char: str = "-") -> None:
     """
     Print a simple divider line.
@@ -81,6 +93,7 @@ def print_divider(width: int = 80, char: str = "-") -> None:
     _reporter.width = width
     _reporter.divider(char)
     _reporter.width = old_width
+
 
 def print_section(
     title: str, content: Optional[str] = None, width: int = 80
@@ -105,6 +118,7 @@ def print_section(
     _reporter.section(title, content)
     _reporter.width = old_width
 
+
 def print_key_value(
     key: str, value, width: int = 40, align: str = "left"
 ) -> None:
@@ -122,6 +136,7 @@ def print_key_value(
         Spot Price:                         $100.00
     """
     _reporter.key_value(key, value, width, align)
+
 
 def print_metric_summary(
     metrics: dict, title: Optional[str] = None, width: int = 80

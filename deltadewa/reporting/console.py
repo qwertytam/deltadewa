@@ -6,7 +6,6 @@ tables, status messages, and progress bars.
 """
 
 from typing import Optional, Any, List, Dict
-import sys
 from IPython.display import clear_output
 from deltadewa.formatters.values import format_number_auto_precision
 
@@ -14,7 +13,7 @@ from deltadewa.formatters.values import format_number_auto_precision
 class ConsoleReporter:
     """
     Builder for formatted console output.
-    
+
     Encapsulates printing logic to allow for consistent formatting,
     configuration (e.g. width), and potential redirection of output.
     """
@@ -42,14 +41,18 @@ class ConsoleReporter:
         if content:
             print(content)
 
-    def key_value(self, key: str, value: Any, width: int = 40, align: str = "left") -> None:
+    def key_value(
+        self, key: str, value: Any, width: int = 40, align: str = "left"
+    ) -> None:
         """Print a key-value pair with aligned formatting."""
         if align == "right":
             print(f"{key}:{value:>{width - len(key) - 1}}")
         else:
             print(f"{key}: {value}")
 
-    def metric_summary(self, metrics: Dict[str, Any], title: Optional[str] = None) -> None:
+    def metric_summary(
+        self, metrics: Dict[str, Any], title: Optional[str] = None
+    ) -> None:
         """Print a formatted summary of metrics."""
         if title:
             self.header(title)
@@ -75,14 +78,21 @@ class ConsoleReporter:
     def info(self, message: str, prefix: str = "ℹ️") -> None:
         print(f"{prefix}  {message}")
 
-    def table_row(self, columns: List[Any], widths: List[int], separator: str = "|") -> None:
+    def table_row(
+        self, columns: List[Any], widths: List[int], separator: str = "|"
+    ) -> None:
         """Print a formatted table row."""
         row = separator.join(
             f" {str(col):<{w-2}} " for col, w in zip(columns, widths)
         )
         print(row)
 
-    def table(self, data: List[List[Any]], headers: List[str], widths: Optional[List[int]] = None) -> None:
+    def table(
+        self,
+        data: List[List[Any]],
+        headers: List[str],
+        widths: Optional[List[int]] = None,
+    ) -> None:
         """Print a simple formatted table."""
         # Auto-calculate widths if not provided
         if widths is None:
@@ -109,7 +119,14 @@ class ConsoleReporter:
         clear_output(wait=wait)
         print(message)
 
-    def progress(self, current: int, total: int, prefix: str = "", suffix: str = "", length: int = 50) -> None:
+    def progress(
+        self,
+        current: int,
+        total: int,
+        prefix: str = "",
+        suffix: str = "",
+        length: int = 50,
+    ) -> None:
         """Print a progress bar."""
         if total == 0:
             return
