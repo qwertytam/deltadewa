@@ -10,8 +10,6 @@ from deltadewa.analysis import (
     quick_carry_analysis,
     quick_risk_concentration,
     ScenarioGridCache,
-)
-from deltadewa.analysis.functions import (
     create_scenario_cache_key,
     create_spot_vol_cache_key,
     get_portfolio_state_hash,
