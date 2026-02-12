@@ -632,14 +632,16 @@ class HedgeHealthDashboard:
         dashboard_html = f"""
         <div style="
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            border: 2px solid #0F4761;
+            border: 2px solid {DEFAULT_PALETTE.med_dark_background};
             border-radius: 8px;
             margin: 10px 0;
             background: white;
         ">
             <!-- Header -->
             <div style="
-                background: linear-gradient(135deg, #0F4761 0%, #1a5a7a 100%);
+                background: linear-gradient(135deg, '
+                '{DEFAULT_PALETTE.med_dark_background} 0%, '
+                '{DEFAULT_PALETTE.dark_background}  100%);
                 color: white;
                 padding: 15px 20px;
                 border-radius: 6px 6px 0 0;

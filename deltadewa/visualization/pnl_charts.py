@@ -718,7 +718,7 @@ class PnLChartsMixin:
         )
         ax.axvline(
             x=self.portfolio.spot_price,
-            color="blue",
+            color=DEFAULT_PALETTE.medium_background,
             linestyle="--",
             linewidth=1.5,
             alpha=0.7,

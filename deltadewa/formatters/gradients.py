@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import TwoSlopeNorm
 import matplotlib.pyplot as plt
+from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
@@ -100,18 +101,18 @@ def apply_traffic_light_colors(
 
         if reverse:
             if val >= thresholds["green"]:
-                return "background-color: #ffcccc"  # light red
+                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
             elif val >= thresholds["yellow"]:
-                return "background-color: #ffffcc"  # light yellow
+                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
             else:
-                return "background-color: #ccffcc"  # light green
+                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
         else:
             if val <= thresholds["red"]:
-                return "background-color: #ffcccc"  # light red
+                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
             elif val <= thresholds["yellow"]:
-                return "background-color: #ffffcc"  # light yellow
+                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
             else:
-                return "background-color: #ccffcc"  # light green
+                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
 
     return styler.apply(
         lambda col: col.map(color_traffic_light), subset=[column]

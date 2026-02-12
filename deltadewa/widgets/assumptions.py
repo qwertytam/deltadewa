@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa import constants as const
+from deltadewa.colours import DEFAULT_PALETTE
 
 
 class GlobalAssumptions:
@@ -361,18 +362,23 @@ class GlobalAssumptions:
         return widgets.VBox(
             [
                 widgets.HTML(
-                    '<div style="background-color:#0F4761; color:white; '
+                    f"""
+                    '<div style="background-color:'
+                    '{DEFAULT_PALETTE.med_dark_background}; color:white; '
                     'padding:10px; border-radius:5px; margin-bottom:10px;">'
                     '<h3 style="margin:0;">Global Assumptions Panel</h3>'
                     '<p style="margin:5px 0 0 0; font-size:14px;">'
                     "Single source of truth for all market parameters</p>"
                     "</div>"
+                    """
                 ),
                 market_section,
                 time_section,
                 scenario_section,
             ],
             layout=widgets.Layout(
-                border="2px solid #0F4761", padding="15px", margin="10px 0"
+                border=f"2px solid {DEFAULT_PALETTE.med_dark_background}",
+                padding="15px",
+                margin="10px 0",
             ),
         )

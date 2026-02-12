@@ -171,10 +171,14 @@ class NetHedgeSummary:
         self.widget = widgets.VBox(
             [
                 widgets.HTML(
-                    '<div style="background-color:#0F4761; color:white; '
+                    f"""
+                    '<div style="background-color:'
+                    '{DEFAULT_PALETTE.med_dark_background};'
+                    'color:white; '
                     'padding:10px; border-radius:5px 5px 0 0;">'
                     '<h3 style="margin:0;">Hedge Summary</h3>'
                     "</div>"
+                    """
                 ),
                 widgets.HTML(
                     "<h4 style='margin:10px 10px 5px 10px;'>Portfolio Value</h4>"
@@ -198,7 +202,10 @@ class NetHedgeSummary:
                     titles=("Diagnostics (Expandable)",),
                 ),
             ],
-            layout=widgets.Layout(border="2px solid #0F4761", margin="10px 0"),
+            layout=widgets.Layout(
+                border=f"2px solid {DEFAULT_PALETTE.med_dark_background}",
+                margin="10px 0",
+            ),
         )
 
         self.update()

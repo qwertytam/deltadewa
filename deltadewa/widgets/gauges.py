@@ -59,9 +59,9 @@ class GaugeIndicator:
         mid_val: float = 50.0,
         max_val: float = 75.0,
         actual: float = 50.0,
-        low_color: str = "#d73a49",  # Red (matches COLOUR_NEGATIVE)
+        low_color: str = DEFAULT_PALETTE.negative,  # Red
         mid_color: str = DEFAULT_PALETTE.yellow,  # Yellow/Orange
-        high_color: str = "#26a641",  # Green (matches COLOUR_POSITIVE)
+        high_color: str = DEFAULT_PALETTE.positive,  # Green
         orientation: str = "horizontal",
         width: int = 400,
         height: int = 40,
@@ -165,7 +165,7 @@ class GaugeIndicator:
                 f"width: 0; height: 0; "
                 f"border-left: 8px solid transparent; "
                 f"border-right: 8px solid transparent; "
-                f"border-top: 10px solid #333333; "
+                f"border-top: 10px solid {DEFAULT_PALETTE.dark_grey}; "
                 f"z-index: 3; "
             )
             # Label above the chevron
@@ -176,7 +176,7 @@ class GaugeIndicator:
                 f"transform: translateX(-50%); "
                 f"font-size: 12px; "
                 f"font-weight: bold; "
-                f"color: #333333; "
+                f"color: {DEFAULT_PALETTE.dark_grey}; "
                 f"white-space: nowrap; "
                 f"background: rgba(255,255,255,0.0); "
                 f"padding: 2px 4px; "
@@ -193,7 +193,7 @@ class GaugeIndicator:
                 f"width: 0; height: 0; "
                 f"border-top: 8px solid transparent; "
                 f"border-bottom: 8px solid transparent; "
-                f"border-left: 10px solid #333333; "
+                f"border-left: 10px solid {DEFAULT_PALETTE.dark_grey}; "
                 f"z-index: 3; "
             )
             label_style = (
@@ -203,7 +203,7 @@ class GaugeIndicator:
                 f"transform: translateY(50%); "
                 f"font-size: 12px; "
                 f"font-weight: bold; "
-                f"color: #333333; "
+                f"color: {DEFAULT_PALETTE.dark_grey}; "
                 f"white-space: nowrap; "
                 f"background: rgba(255,255,255,0.0); "
                 f"padding: 2px 4px; "
