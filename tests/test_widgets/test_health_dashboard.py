@@ -2,6 +2,7 @@
 
 from unittest.mock import Mock
 import pytest
+import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.widgets.health_dashboard import (
     HedgeHealthMetric,
     HedgeHealthDashboard,
@@ -202,19 +203,24 @@ class TestHedgeHealthDashboard:
         """Test that _get_default_config returns expected structure."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         config = dashboard._get_default_config()
-        
+
         assert "parameters" in config
         assert "metrics" in config
-        
+
         # Check parameters
         assert config["parameters"]["historical_vol_low"] == 0.15
         assert config["parameters"]["historical_vol_high"] == 0.35
         assert config["parameters"]["convexity_cliff_days"] == 180
-        
+
         # Check metrics exist
         expected_metrics = [
-            "net_carry", "crash_convexity", "vega_sufficiency",
-            "delta_drift", "convexity_cliff", "vol_regime", "hedge_success"
+            "net_carry",
+            "crash_convexity",
+            "vega_sufficiency",
+            "delta_drift",
+            "convexity_cliff",
+            "vol_regime",
+            "hedge_success",
         ]
         for metric in expected_metrics:
             assert metric in config["metrics"]
@@ -228,16 +234,16 @@ class TestHedgeHealthDashboard:
     def test_load_config_parameters(self, mock_portfolio):
         """Test loading configuration with parameter updates."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
-        
+
         new_config = {
             "parameters": {
                 "historical_vol_low": 0.18,
                 "historical_vol_high": 0.38,
             }
         }
-        
+
         dashboard.load_config(new_config)
-        
+
         assert dashboard.config["parameters"]["historical_vol_low"] == 0.18
         assert dashboard.config["parameters"]["historical_vol_high"] == 0.38
         # convexity_cliff_days should remain unchanged
@@ -246,7 +252,7 @@ class TestHedgeHealthDashboard:
     def test_load_config_metrics(self, mock_portfolio):
         """Test loading configuration with metric threshold updates."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
-        
+
         new_config = {
             "metrics": {
                 "net_carry": {
@@ -257,9 +263,9 @@ class TestHedgeHealthDashboard:
                 }
             }
         }
-        
+
         dashboard.load_config(new_config)
-        
+
         assert dashboard.config["metrics"]["net_carry"]["start"] == -15.0
         assert dashboard.config["metrics"]["net_carry"]["end"] == 15.0
         assert dashboard.config["metrics"]["net_carry"]["min_val"] == -8.0
@@ -270,7 +276,7 @@ class TestHedgeHealthDashboard:
     def test_load_config_full(self, mock_portfolio):
         """Test loading full configuration with both parameters and metrics."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
-        
+
         new_config = {
             "parameters": {
                 "historical_vol_low": 0.12,
@@ -284,16 +290,16 @@ class TestHedgeHealthDashboard:
                 "vol_regime": {
                     "min_val": 20,
                     "max_val": 80,
-                }
-            }
+                },
+            },
         }
-        
+
         dashboard.load_config(new_config)
-        
+
         # Check parameters
         assert dashboard.config["parameters"]["historical_vol_low"] == 0.12
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 150
-        
+
         # Check metrics
         assert dashboard.config["metrics"]["crash_convexity"]["start"] == -40.0
         assert dashboard.config["metrics"]["crash_convexity"]["end"] == 40.0
@@ -304,8 +310,17 @@ class TestHedgeHealthDashboard:
         """Test that display_config_loader returns a widget."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         loader_widget = dashboard.display_config_loader()
-        
+
         assert loader_widget is not None
         assert hasattr(loader_widget, "children")
-        # Should have 3 children: HTML label, FileUpload, Output
-        assert len(loader_widget.children) == 3
+        # Check for expected widget types rather than exact count
+        children = loader_widget.children
+        assert any(
+            isinstance(child, widgets.HTML) for child in children
+        ), "Should have HTML label widget"
+        assert any(
+            isinstance(child, widgets.FileUpload) for child in children
+        ), "Should have FileUpload widget"
+        assert any(
+            isinstance(child, widgets.Output) for child in children
+        ), "Should have Output widget"

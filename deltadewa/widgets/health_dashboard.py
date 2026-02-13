@@ -698,13 +698,26 @@ class HedgeHealthDashboard:
                 output.clear_output()
                 try:
                     uploaded_file = change["new"][0]
-                    content = uploaded_file["content"].tobytes().decode("utf-8")
+                    try:
+                        content = uploaded_file["content"].tobytes().decode("utf-8")
+                    except UnicodeDecodeError:
+                        print("❌ Error: File must be UTF-8 encoded")
+                        return
+
                     filename = uploaded_file["name"]
 
                     if filename.endswith(".json"):
-                        data = json.loads(content)
+                        try:
+                            data = json.loads(content)
+                        except json.JSONDecodeError as e:
+                            print(f"❌ Invalid JSON format: {str(e)}")
+                            return
                     elif filename.endswith((".yaml", ".yml")):
-                        data = yaml.safe_load(content)
+                        try:
+                            data = yaml.safe_load(content)
+                        except yaml.YAMLError as e:
+                            print(f"❌ Invalid YAML format: {str(e)}")
+                            return
                     else:
                         print(f"❌ Unsupported file type: {filename}")
                         return
@@ -715,8 +728,11 @@ class HedgeHealthDashboard:
                     # Clear uploader to allow reloading same file
                     uploader.value = []
 
-                except Exception as e:
-                    print(f"❌ Error loading config: {str(e)}")
+                except (KeyError, TypeError) as e:
+                    print(
+                        f"❌ Invalid config structure: {str(e)}. "
+                        "Expected 'parameters' and/or 'metrics' keys."
+                    )
 
         uploader.observe(on_upload, names="value")
 
