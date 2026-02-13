@@ -99,11 +99,11 @@ def format_html_metric(
 
     if abs(value) < threshold:
         if format_type == "percentage":
-            value_str = "~0%"
+            value_str = "- %"
         elif format_type == "currency":
-            value_str = "~$0"
+            value_str = "$ -"
         else:
-            value_str = "~0"
+            value_str = "-"
     else:
         # Delegate to existing formatters
         if format_type == "currency":

@@ -89,7 +89,16 @@ class NetHedgeSummary:
             Uses centralized formatter from deltadewa.formatters
         """
         # Determine the format type based on the metric name
-        matches_to_format_as_currency = ["Value", "Cost", "Theta"]
+        matches_to_format_as_currency = [
+            "Value",
+            "Cost",
+            "Theta",
+            "P&L",
+            "Profit",
+            "Loss",
+            "Carry",
+            "Price",
+        ]
         format_type = (
             "currency"
             if any(
@@ -242,10 +251,10 @@ class NetHedgeSummary:
         )
 
         crash_html = (
-            self._format_greek("Current Spot", pnl_0)
-            + self._format_greek("Spot -10%", pnl_10)
-            + self._format_greek("Spot -20%", pnl_20)
-            + self._format_greek("Spot -30%", pnl_30)
+            self._format_greek("Current Price", pnl_0)
+            + self._format_greek("Price -10%", pnl_10)
+            + self._format_greek("Price -20%", pnl_20)
+            + self._format_greek("Price -30%", pnl_30)
         )
         self.crash_indicators_html.value = (
             f'<div style="padding:10px;">{crash_html}</div>'
