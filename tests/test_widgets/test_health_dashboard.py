@@ -175,3 +175,137 @@ class TestHedgeHealthDashboard:
         assert dashboard is not None
         widget = dashboard.display()
         assert widget is not None
+
+    def test_config_initialization(self, mock_portfolio):
+        """Test that config is initialized with defaults."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+        assert hasattr(dashboard, "config")
+        assert "parameters" in dashboard.config
+        assert "metrics" in dashboard.config
+        assert "historical_vol_low" in dashboard.config["parameters"]
+        assert "historical_vol_high" in dashboard.config["parameters"]
+        assert "convexity_cliff_days" in dashboard.config["parameters"]
+
+    def test_config_override_with_init_params(self, mock_portfolio):
+        """Test that init parameters override default config."""
+        dashboard = HedgeHealthDashboard(
+            mock_portfolio,
+            historical_vol_low=0.20,
+            historical_vol_high=0.40,
+            convexity_cliff_days=200,
+        )
+        assert dashboard.config["parameters"]["historical_vol_low"] == 0.20
+        assert dashboard.config["parameters"]["historical_vol_high"] == 0.40
+        assert dashboard.config["parameters"]["convexity_cliff_days"] == 200
+
+    def test_get_default_config(self, mock_portfolio):
+        """Test that _get_default_config returns expected structure."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+        config = dashboard._get_default_config()
+        
+        assert "parameters" in config
+        assert "metrics" in config
+        
+        # Check parameters
+        assert config["parameters"]["historical_vol_low"] == 0.15
+        assert config["parameters"]["historical_vol_high"] == 0.35
+        assert config["parameters"]["convexity_cliff_days"] == 180
+        
+        # Check metrics exist
+        expected_metrics = [
+            "net_carry", "crash_convexity", "vega_sufficiency",
+            "delta_drift", "convexity_cliff", "vol_regime", "hedge_success"
+        ]
+        for metric in expected_metrics:
+            assert metric in config["metrics"]
+            assert "start" in config["metrics"][metric]
+            assert "end" in config["metrics"][metric]
+            assert "min_val" in config["metrics"][metric]
+            assert "mid_val" in config["metrics"][metric]
+            assert "max_val" in config["metrics"][metric]
+            assert "invert_colors" in config["metrics"][metric]
+
+    def test_load_config_parameters(self, mock_portfolio):
+        """Test loading configuration with parameter updates."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+        
+        new_config = {
+            "parameters": {
+                "historical_vol_low": 0.18,
+                "historical_vol_high": 0.38,
+            }
+        }
+        
+        dashboard.load_config(new_config)
+        
+        assert dashboard.config["parameters"]["historical_vol_low"] == 0.18
+        assert dashboard.config["parameters"]["historical_vol_high"] == 0.38
+        # convexity_cliff_days should remain unchanged
+        assert dashboard.config["parameters"]["convexity_cliff_days"] == 180
+
+    def test_load_config_metrics(self, mock_portfolio):
+        """Test loading configuration with metric threshold updates."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+        
+        new_config = {
+            "metrics": {
+                "net_carry": {
+                    "start": -15.0,
+                    "end": 15.0,
+                    "min_val": -8.0,
+                    "max_val": 4.0,
+                }
+            }
+        }
+        
+        dashboard.load_config(new_config)
+        
+        assert dashboard.config["metrics"]["net_carry"]["start"] == -15.0
+        assert dashboard.config["metrics"]["net_carry"]["end"] == 15.0
+        assert dashboard.config["metrics"]["net_carry"]["min_val"] == -8.0
+        assert dashboard.config["metrics"]["net_carry"]["max_val"] == 4.0
+        # mid_val should remain unchanged
+        assert dashboard.config["metrics"]["net_carry"]["mid_val"] == 0.0
+
+    def test_load_config_full(self, mock_portfolio):
+        """Test loading full configuration with both parameters and metrics."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+        
+        new_config = {
+            "parameters": {
+                "historical_vol_low": 0.12,
+                "convexity_cliff_days": 150,
+            },
+            "metrics": {
+                "crash_convexity": {
+                    "start": -40.0,
+                    "end": 40.0,
+                },
+                "vol_regime": {
+                    "min_val": 20,
+                    "max_val": 80,
+                }
+            }
+        }
+        
+        dashboard.load_config(new_config)
+        
+        # Check parameters
+        assert dashboard.config["parameters"]["historical_vol_low"] == 0.12
+        assert dashboard.config["parameters"]["convexity_cliff_days"] == 150
+        
+        # Check metrics
+        assert dashboard.config["metrics"]["crash_convexity"]["start"] == -40.0
+        assert dashboard.config["metrics"]["crash_convexity"]["end"] == 40.0
+        assert dashboard.config["metrics"]["vol_regime"]["min_val"] == 20
+        assert dashboard.config["metrics"]["vol_regime"]["max_val"] == 80
+
+    def test_display_config_loader(self, mock_portfolio):
+        """Test that display_config_loader returns a widget."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+        loader_widget = dashboard.display_config_loader()
+        
+        assert loader_widget is not None
+        assert hasattr(loader_widget, "children")
+        # Should have 3 children: HTML label, FileUpload, Output
+        assert len(loader_widget.children) == 3
