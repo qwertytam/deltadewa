@@ -261,6 +261,7 @@ def plot_greeks_consolidated(
         ax.set_xlabel("Theta ($/day)")
         yint, _ = ax.get_ylim()
         _set_axis_formatting(ax, f"Top {top_n} Theta Contributors", yint=yint)
+        ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
 
     # Panel 5: Value by Strike
     ax = axes[2, 0]
