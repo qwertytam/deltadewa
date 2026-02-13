@@ -7,7 +7,7 @@ the health and effectiveness of equity hedges through key metrics.
 
 import json
 import yaml
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -83,7 +83,7 @@ class HedgeHealthDashboard:
 
         # Track cumulative carry for hedge success metric
         dashboard.add_carry_paid(100.0)  # Add daily carry
-        
+
         # Load configuration from file
         config_loader = dashboard.display_config_loader()
         display(config_loader)
@@ -109,10 +109,10 @@ class HedgeHealthDashboard:
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
-        
+
         # Initialize default configuration
         self.config = self._get_default_config()
-        
+
         # Override defaults with init parameters
         self.config["parameters"]["historical_vol_low"] = historical_vol_low
         self.config["parameters"]["historical_vol_high"] = historical_vol_high
@@ -147,58 +147,79 @@ class HedgeHealthDashboard:
             },
             "metrics": {
                 "net_carry": {
-                    "start": -10.0, "end": 10.0,
-                    "min_val": -5.0, "mid_val": 0.0, "max_val": 2.0,
-                    "invert_colors": False
+                    "start": -10.0,
+                    "end": 10.0,
+                    "min_val": -5.0,
+                    "mid_val": 0.0,
+                    "max_val": 2.0,
+                    "invert_colors": False,
                 },
                 "crash_convexity": {
-                    "start": -30.0, "end": 30.0,
-                    "min_val": -10.0, "mid_val": 0.0, "max_val": 10.0,
-                    "invert_colors": False
+                    "start": -30.0,
+                    "end": 30.0,
+                    "min_val": -10.0,
+                    "mid_val": 0.0,
+                    "max_val": 10.0,
+                    "invert_colors": False,
                 },
                 "vega_sufficiency": {
-                    "start": -50.0, "end": 50.0,
-                    "min_val": -20.0, "mid_val": 0.0, "max_val": 20.0,
-                    "invert_colors": False
+                    "start": -50.0,
+                    "end": 50.0,
+                    "min_val": -20.0,
+                    "mid_val": 0.0,
+                    "max_val": 20.0,
+                    "invert_colors": False,
                 },
                 "delta_drift": {
-                    "start": -50.0, "end": 50.0,
-                    "min_val": -20.0, "mid_val": 0.0, "max_val": 20.0,
-                    "invert_colors": False
+                    "start": -50.0,
+                    "end": 50.0,
+                    "min_val": -20.0,
+                    "mid_val": 0.0,
+                    "max_val": 20.0,
+                    "invert_colors": False,
                 },
                 "convexity_cliff": {
-                    "start": 0, "end": 365,
-                    "min_val": 30, "mid_val": 90, "max_val": 180,
-                    "invert_colors": False
+                    "start": 0,
+                    "end": 365,
+                    "min_val": 30,
+                    "mid_val": 90,
+                    "max_val": 180,
+                    "invert_colors": False,
                 },
                 "vol_regime": {
-                    "start": 0, "end": 100,
-                    "min_val": 25, "mid_val": 50, "max_val": 75,
-                    "invert_colors": True
+                    "start": 0,
+                    "end": 100,
+                    "min_val": 25,
+                    "mid_val": 50,
+                    "max_val": 75,
+                    "invert_colors": True,
                 },
                 "hedge_success": {
-                    "start": -200, "end": 200,
-                    "min_val": -100, "mid_val": 0, "max_val": 100,
-                    "invert_colors": False
-                }
-            }
+                    "start": -200,
+                    "end": 200,
+                    "min_val": -100,
+                    "mid_val": 0,
+                    "max_val": 100,
+                    "invert_colors": False,
+                },
+            },
         }
 
     def load_config(self, config_data: Dict[str, Any]) -> None:
         """
         Update configuration from a dictionary and refresh dashboard.
-        
+
         Args:
             config_data: Dictionary containing 'parameters' and/or 'metrics' keys.
         """
         if "parameters" in config_data:
             self.config["parameters"].update(config_data["parameters"])
-            
+
         if "metrics" in config_data:
             for key, val in config_data["metrics"].items():
                 if key in self.config["metrics"]:
                     self.config["metrics"][key].update(val)
-        
+
         self.update()
 
     # ==========================================================================
@@ -311,7 +332,9 @@ class HedgeHealthDashboard:
             min_val=c["min_val"],
             mid_val=c["mid_val"],
             max_val=c["max_val"],
-            actual=min(health_data["convexity_cliff_days"], 365),  # Cap at 365 for display
+            actual=min(
+                health_data["convexity_cliff_days"], 365
+            ),  # Cap at 365 for display
             unit=" days",
             invert_colors=c["invert_colors"],
             label_format="{:.0f}",
@@ -658,31 +681,29 @@ class HedgeHealthDashboard:
     def display_config_loader(self) -> widgets.VBox:
         """
         Display a widget to load configuration from YAML/JSON file.
-        
+
         Returns:
             VBox widget containing file upload and status output.
         """
         uploader = widgets.FileUpload(
-            accept='.json,.yaml,.yml',
-            multiple=False,
-            description='Load Config'
+            accept=".json,.yaml,.yml", multiple=False, description="Load Config"
         )
         output = widgets.Output()
 
         def on_upload(change):
-            if not change['new']:
+            if not change["new"]:
                 return
-            
+
             with output:
                 output.clear_output()
                 try:
-                    uploaded_file = change['new'][0]
-                    content = uploaded_file['content'].tobytes().decode('utf-8')
-                    filename = uploaded_file['name']
-                    
-                    if filename.endswith('.json'):
+                    uploaded_file = change["new"][0]
+                    content = uploaded_file["content"].tobytes().decode("utf-8")
+                    filename = uploaded_file["name"]
+
+                    if filename.endswith(".json"):
                         data = json.loads(content)
-                    elif filename.endswith(('.yaml', '.yml')):
+                    elif filename.endswith((".yaml", ".yml")):
                         data = yaml.safe_load(content)
                     else:
                         print(f"❌ Unsupported file type: {filename}")
@@ -690,17 +711,19 @@ class HedgeHealthDashboard:
 
                     self.load_config(data)
                     print(f"✅ Successfully loaded config from {filename}")
-                    
+
                     # Clear uploader to allow reloading same file
                     uploader.value = []
-                    
+
                 except Exception as e:
                     print(f"❌ Error loading config: {str(e)}")
 
-        uploader.observe(on_upload, names='value')
+        uploader.observe(on_upload, names="value")
 
-        return widgets.VBox([
-            widgets.HTML("<b>Load Dashboard Configuration</b>"),
-            uploader,
-            output
-        ])
+        return widgets.VBox(
+            [
+                widgets.HTML("<b>Load Dashboard Configuration</b>"),
+                uploader,
+                output,
+            ]
+        )
