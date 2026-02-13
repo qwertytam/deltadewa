@@ -5,7 +5,9 @@ This module provides visual gauge-based dashboard widgets for monitoring
 the health and effectiveness of equity hedges through key metrics.
 """
 
-from typing import Any, Dict
+import json
+import yaml
+from typing import Any, Dict, Optional
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -60,27 +62,14 @@ class HedgeHealthDashboard:
     """
     Comprehensive hedge health dashboard with visual gauge indicators.
 
-    Displays seven key hedge health metrics as visual gauges:
-    1. Net Carry (Theta) - Annualized theta as % of underlying value
-    2. Crash Convexity - Hedge P&L as % of underlying at -20% spot
-    3. Vega Sufficiency - Portfolio % impact per +10 vol shock
-    4. Delta Drift - Net hedge delta as % of equity delta
-    5. Time-to-Convexity Cliff - Days until puts enter high-gamma region
-    6. Volatility Regime Alert - IV percentile assessment
-    7. Hedge Success - Hedge P&L vs cumulative carry paid
-
-    Each metric is displayed as a colored gauge bar with:
-    - Color gradient from red (bad) through yellow (neutral) to green (good)
-    - Chevron marker showing actual value
-    - Configurable thresholds for each metric
+    Displays seven key hedge health metrics as visual gauges with configurable thresholds.
+    Supports loading configuration from YAML/JSON files.
 
     Attributes:
         portfolio: OptionPortfolio instance to analyze
         analyzer: PortfolioAnalyzer for advanced calculations
         cumulative_carry_paid: Running total of carry paid (for hedge success)
-        historical_vol_low: 25th percentile IV for vol regime (default: 0.15)
-        historical_vol_high: 75th percentile IV for vol regime (default: 0.35)
-        convexity_cliff_days: Days threshold for high-gamma region (default: 180)
+        config: Dictionary storing current threshold configuration
 
     Example:
         from deltadewa.widgets import HedgeHealthDashboard
@@ -94,6 +83,10 @@ class HedgeHealthDashboard:
 
         # Track cumulative carry for hedge success metric
         dashboard.add_carry_paid(100.0)  # Add daily carry
+        
+        # Load configuration from file
+        config_loader = dashboard.display_config_loader()
+        display(config_loader)
     """
 
     def __init__(
@@ -116,9 +109,14 @@ class HedgeHealthDashboard:
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
-        self.historical_vol_low = historical_vol_low
-        self.historical_vol_high = historical_vol_high
-        self.convexity_cliff_days = convexity_cliff_days
+        
+        # Initialize default configuration
+        self.config = self._get_default_config()
+        
+        # Override defaults with init parameters
+        self.config["parameters"]["historical_vol_low"] = historical_vol_low
+        self.config["parameters"]["historical_vol_high"] = historical_vol_high
+        self.config["parameters"]["convexity_cliff_days"] = convexity_cliff_days
 
         self.analyzer = PortfolioAnalyzer(portfolio)
 
@@ -139,6 +137,70 @@ class HedgeHealthDashboard:
         """Reset cumulative carry paid to zero."""
         self.cumulative_carry_paid = 0.0
 
+    def _get_default_config(self) -> Dict[str, Any]:
+        """Return the default configuration dictionary."""
+        return {
+            "parameters": {
+                "historical_vol_low": 0.15,
+                "historical_vol_high": 0.35,
+                "convexity_cliff_days": 180,
+            },
+            "metrics": {
+                "net_carry": {
+                    "start": -10.0, "end": 10.0,
+                    "min_val": -5.0, "mid_val": 0.0, "max_val": 2.0,
+                    "invert_colors": False
+                },
+                "crash_convexity": {
+                    "start": -30.0, "end": 30.0,
+                    "min_val": -10.0, "mid_val": 0.0, "max_val": 10.0,
+                    "invert_colors": False
+                },
+                "vega_sufficiency": {
+                    "start": -50.0, "end": 50.0,
+                    "min_val": -20.0, "mid_val": 0.0, "max_val": 20.0,
+                    "invert_colors": False
+                },
+                "delta_drift": {
+                    "start": -50.0, "end": 50.0,
+                    "min_val": -20.0, "mid_val": 0.0, "max_val": 20.0,
+                    "invert_colors": False
+                },
+                "convexity_cliff": {
+                    "start": 0, "end": 365,
+                    "min_val": 30, "mid_val": 90, "max_val": 180,
+                    "invert_colors": False
+                },
+                "vol_regime": {
+                    "start": 0, "end": 100,
+                    "min_val": 25, "mid_val": 50, "max_val": 75,
+                    "invert_colors": True
+                },
+                "hedge_success": {
+                    "start": -200, "end": 200,
+                    "min_val": -100, "mid_val": 0, "max_val": 100,
+                    "invert_colors": False
+                }
+            }
+        }
+
+    def load_config(self, config_data: Dict[str, Any]) -> None:
+        """
+        Update configuration from a dictionary and refresh dashboard.
+        
+        Args:
+            config_data: Dictionary containing 'parameters' and/or 'metrics' keys.
+        """
+        if "parameters" in config_data:
+            self.config["parameters"].update(config_data["parameters"])
+            
+        if "metrics" in config_data:
+            for key, val in config_data["metrics"].items():
+                if key in self.config["metrics"]:
+                    self.config["metrics"][key].update(val)
+        
+        self.update()
+
     # ==========================================================================
     # Metric Calculations - Delegated to HealthMixin in analyzer
     # ==========================================================================
@@ -150,11 +212,12 @@ class HedgeHealthDashboard:
         Returns:
             Dictionary containing all calculated health metrics.
         """
+        params = self.config["parameters"]
         return self.analyzer.calculate_health_metrics(
             cumulative_carry_paid=self.cumulative_carry_paid,
-            historical_vol_low=self.historical_vol_low,
-            historical_vol_high=self.historical_vol_high,
-            convexity_cliff_days=self.convexity_cliff_days,
+            historical_vol_low=params["historical_vol_low"],
+            historical_vol_high=params["historical_vol_high"],
+            convexity_cliff_days=params["convexity_cliff_days"],
         )
 
     # ==========================================================================
@@ -163,7 +226,7 @@ class HedgeHealthDashboard:
 
     def _configure_metrics(self) -> Dict[str, HedgeHealthMetric]:
         """
-        Configure all seven health metrics with their gauge parameters.
+        Configure all seven health metrics with their gauge parameters using self.config values.
 
         Returns:
             Dictionary of metric name -> HedgeHealthMetric configuration.
@@ -172,124 +235,118 @@ class HedgeHealthDashboard:
         health_data = self._get_health_metrics()
 
         metrics = {}
+        cfg = self.config["metrics"]
 
         # 1. Net Carry (Theta) as % of underlying
-        # Good: positive (earning carry), Bad: negative (paying carry)
-        net_carry = health_data["net_carry_pct"]
+        c = cfg["net_carry"]
         metrics["net_carry"] = HedgeHealthMetric(
             name="Net Carry (Theta)",
             description="Annualized theta as % of underlying value",
-            start=-10.0,
-            end=10.0,
-            min_val=-5.0,  # Full red at -5% annual carry cost
-            mid_val=0.0,  # Neutral at 0
-            max_val=2.0,  # Full green at +2% carry income
-            actual=net_carry,
-            unit="",  # Display % in label, not unit
-            invert_colors=False,
+            start=c["start"],
+            end=c["end"],
+            min_val=c["min_val"],
+            mid_val=c["mid_val"],
+            max_val=c["max_val"],
+            actual=health_data["net_carry_pct"],
+            unit="",
+            invert_colors=c["invert_colors"],
             label_format="{:+.2f}%",
         )
 
         # 2. Crash Convexity (Hedge P&L at -20% spot)
-        # Good: positive (hedge working), Bad: negative (losing money in crash)
-        crash_convexity = health_data["crash_convexity_pct"]
+        c = cfg["crash_convexity"]
         metrics["crash_convexity"] = HedgeHealthMetric(
             name="Crash Convexity",
             description="Hedge P&L at -20% spot as % of underlying",
-            start=-30.0,
-            end=30.0,
-            min_val=-10.0,  # Full red at -10% loss in crash
-            mid_val=0.0,  # Neutral at breakeven
-            max_val=10.0,  # Full green at +10% gain in crash
-            actual=crash_convexity,
-            unit="",  # Display % in label, not unit
-            invert_colors=False,
+            start=c["start"],
+            end=c["end"],
+            min_val=c["min_val"],
+            mid_val=c["mid_val"],
+            max_val=c["max_val"],
+            actual=health_data["crash_convexity_pct"],
+            unit="",
+            invert_colors=c["invert_colors"],
             label_format="{:+.1f}%",
         )
 
         # 3. Vega Sufficiency (Portfolio % per +10 vol)
-        # Target: low absolute value (not too exposed to vol)
-        # This is inverted: low absolute value = good
-        vega_suff = health_data["vega_sufficiency_pct"]
+        c = cfg["vega_sufficiency"]
         metrics["vega_sufficiency"] = HedgeHealthMetric(
             name="Vega Exposure",
             description="Portfolio % change per +10 vol shock",
-            start=-50.0,
-            end=50.0,
-            min_val=-20.0,  # Full color at high negative vega
-            mid_val=0.0,  # Neutral at low vega
-            max_val=20.0,  # Full color at high positive vega
-            actual=vega_suff,
-            unit="",  # Display % in label, not unit
-            invert_colors=False,  # For vega, we show direction
+            start=c["start"],
+            end=c["end"],
+            min_val=c["min_val"],
+            mid_val=c["mid_val"],
+            max_val=c["max_val"],
+            actual=health_data["vega_sufficiency_pct"],
+            unit="",
+            invert_colors=c["invert_colors"],
             label_format="{:+.1f}%",
         )
 
         # 4. Delta Drift (Net delta as % of underlying)
-        # Target: 0% (perfectly hedged)
-        delta_drift = health_data["delta_drift_pct"]
+        c = cfg["delta_drift"]
         metrics["delta_drift"] = HedgeHealthMetric(
             name="Delta Drift",
             description="Net hedge delta as % of equity delta",
-            start=-50.0,
-            end=50.0,
-            min_val=-20.0,  # Full red at -20% (under-hedged)
-            mid_val=0.0,  # Green at 0% (perfectly hedged)
-            max_val=20.0,  # Full red at +20% (over-hedged)
-            actual=delta_drift,
-            unit="",  # Display % in label, not unit
-            invert_colors=False,
+            start=c["start"],
+            end=c["end"],
+            min_val=c["min_val"],
+            mid_val=c["mid_val"],
+            max_val=c["max_val"],
+            actual=health_data["delta_drift_pct"],
+            unit="",
+            invert_colors=c["invert_colors"],
             label_format="{:+.1f}%",
         )
 
         # 5. Time-to-Convexity Cliff (days until puts in high-gamma)
-        # Good: many days, Bad: few days
-        cliff_days = health_data["convexity_cliff_days"]
+        c = cfg["convexity_cliff"]
         metrics["convexity_cliff"] = HedgeHealthMetric(
             name="Time to Convexity Cliff",
             description="Days until long puts enter high-gamma region",
-            start=0,
-            end=365,
-            min_val=30,  # Full red at <30 days
-            mid_val=90,  # Yellow at 90 days
-            max_val=180,  # Full green at >180 days
-            actual=min(cliff_days, 365),  # Cap at 365 for display
+            start=c["start"],
+            end=c["end"],
+            min_val=c["min_val"],
+            mid_val=c["mid_val"],
+            max_val=c["max_val"],
+            actual=min(health_data["convexity_cliff_days"], 365),  # Cap at 365 for display
             unit=" days",
-            invert_colors=False,
+            invert_colors=c["invert_colors"],
             label_format="{:.0f}",
         )
 
         # 6. Volatility Regime (IV percentile)
-        # Low vol = cheap hedges = good, High vol = expensive = caution
-        vol_percentile = health_data["vol_regime_percentile"]
+        c = cfg["vol_regime"]
         metrics["vol_regime"] = HedgeHealthMetric(
             name="Volatility Regime",
             description="Current IV percentile (0=cheap, 100=expensive)",
-            start=0,
-            end=100,
-            min_val=25,  # Full green below 25th percentile
-            mid_val=50,  # Yellow at median
-            max_val=75,  # Full red above 75th percentile
-            actual=vol_percentile,
+            start=c["start"],
+            end=c["end"],
+            min_val=c["min_val"],
+            mid_val=c["mid_val"],
+            max_val=c["max_val"],
+            actual=health_data["vol_regime_percentile"],
             unit="th percentile",
-            invert_colors=True,  # Low is good (green), high is bad (red)
+            invert_colors=c["invert_colors"],
             label_format="{:.0f}",
         )
 
         # 7. Hedge Success (Hedge P&L vs carry paid)
-        # Good: positive (hedge value > carry cost)
-        hedge_success = health_data["hedge_success_pct"]
+        c = cfg["hedge_success"]
+        val = health_data["hedge_success_pct"]
         metrics["hedge_success"] = HedgeHealthMetric(
             name="Hedge Success",
             description="Hedge P&L vs cumulative carry paid",
-            start=-200,
-            end=200,
-            min_val=-100,  # Full red: hedge lost more than carry paid
-            mid_val=0,  # Yellow: breakeven
-            max_val=100,  # Full green: hedge gained more than carry cost
-            actual=max(-200, min(200, hedge_success)),  # Clamp for display
-            unit="",  # Display % in label, not unit
-            invert_colors=False,
+            start=c["start"],
+            end=c["end"],
+            min_val=c["min_val"],
+            mid_val=c["mid_val"],
+            max_val=c["max_val"],
+            actual=max(c["start"], min(c["end"], val)),  # Clamp for display
+            unit="",
+            invert_colors=c["invert_colors"],
             label_format="{:+.0f}%",
         )
 
@@ -597,3 +654,53 @@ class HedgeHealthDashboard:
         summary["overall_score"] = self._calculate_overall_health_score()
 
         return summary
+
+    def display_config_loader(self) -> widgets.VBox:
+        """
+        Display a widget to load configuration from YAML/JSON file.
+        
+        Returns:
+            VBox widget containing file upload and status output.
+        """
+        uploader = widgets.FileUpload(
+            accept='.json,.yaml,.yml',
+            multiple=False,
+            description='Load Config'
+        )
+        output = widgets.Output()
+
+        def on_upload(change):
+            if not change['new']:
+                return
+            
+            with output:
+                output.clear_output()
+                try:
+                    uploaded_file = change['new'][0]
+                    content = uploaded_file['content'].tobytes().decode('utf-8')
+                    filename = uploaded_file['name']
+                    
+                    if filename.endswith('.json'):
+                        data = json.loads(content)
+                    elif filename.endswith(('.yaml', '.yml')):
+                        data = yaml.safe_load(content)
+                    else:
+                        print(f"❌ Unsupported file type: {filename}")
+                        return
+
+                    self.load_config(data)
+                    print(f"✅ Successfully loaded config from {filename}")
+                    
+                    # Clear uploader to allow reloading same file
+                    uploader.value = []
+                    
+                except Exception as e:
+                    print(f"❌ Error loading config: {str(e)}")
+
+        uploader.observe(on_upload, names='value')
+
+        return widgets.VBox([
+            widgets.HTML("<b>Load Dashboard Configuration</b>"),
+            uploader,
+            output
+        ])
