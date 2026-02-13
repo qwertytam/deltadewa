@@ -1,0 +1,75 @@
+# Conservative Hedge Health Dashboard Configuration
+# More stringent thresholds for risk-averse portfolios.
+# Triggers alerts earlier and requires higher performance standards.
+
+parameters:
+  # Use tighter volatility bands for regime assessment
+  historical_vol_low: 0.12    # 20th percentile (stricter "cheap" threshold)
+  historical_vol_high: 0.40   # 80th percentile (stricter "expensive" threshold)
+  
+  # Earlier warning for convexity cliff
+  convexity_cliff_days: 240   # Alert when within 8 months (vs 6 months default)
+
+metrics:
+  # Stricter carry tolerance
+  net_carry:
+    start: -15.0
+    end: 10.0
+    min_val: -3.0             # Alert at -3% carry (vs -5% default)
+    mid_val: 0.0
+    max_val: 2.0
+    invert_colors: false
+
+  # Higher crash protection requirements
+  crash_convexity:
+    start: -30.0
+    end: 40.0
+    min_val: -5.0             # Alert at -5% crash loss (vs -10% default)
+    mid_val: 5.0              # Prefer some positive convexity
+    max_val: 15.0             # Green at +15% (vs +10% default)
+    invert_colors: false
+
+  # Tighter vega exposure limits
+  vega_sufficiency:
+    start: -40.0
+    end: 40.0
+    min_val: -15.0            # Lower tolerance for vega exposure
+    mid_val: 0.0
+    max_val: 15.0
+    invert_colors: false
+
+  # Narrower delta drift tolerance
+  delta_drift:
+    start: -40.0
+    end: 40.0
+    min_val: -15.0            # Alert at ±15% drift (vs ±20% default)
+    mid_val: 0.0
+    max_val: 15.0
+    invert_colors: false
+
+  # Earlier convexity cliff warning
+  convexity_cliff:
+    start: 0
+    end: 365
+    min_val: 60               # Red below 60 days (vs 30 default)
+    mid_val: 120              # Yellow below 120 days (vs 90 default)
+    max_val: 240              # Green above 240 days (vs 180 default)
+    invert_colors: false
+
+  # More sensitive to expensive volatility
+  vol_regime:
+    start: 0
+    end: 100
+    min_val: 20               # Green only below 20th percentile
+    mid_val: 50
+    max_val: 70               # Red above 70th percentile (vs 75 default)
+    invert_colors: true
+
+  # Higher hedge success requirements
+  hedge_success:
+    start: -150
+    end: 250
+    min_val: -50              # Alert at -50% (vs -100% default)
+    mid_val: 25               # Prefer positive returns
+    max_val: 150              # Green at +150% (vs +100% default)
+    invert_colors: false
