@@ -253,7 +253,7 @@ class ScenariosMixin:
         Args:
             spot_scenarios: Array of spot prices to test
             vol_scenarios: Array of volatilities to test
-            metric: Metric to calculate ('pnl', 'value', 'delta', 'gamma', 'vega', 'theta')
+            metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta', 'gamma', 'vega', 'theta', 'rho')
             baseline_value: Portfolio value for P&L baseline (default: current value)
             proportional_vol_scaling: If True, scale position vols proportionally
 
@@ -334,16 +334,20 @@ class ScenariosMixin:
                     metric_value = self.portfolio.total_value()
                 elif metric == "delta":
                     metric_value = self.portfolio.total_delta()
+                elif metric == "net_delta":
+                    metric_value = self.portfolio.net_delta()
                 elif metric == "gamma":
                     metric_value = self.portfolio.total_gamma()
                 elif metric == "vega":
                     metric_value = self.portfolio.total_vega()
                 elif metric == "theta":
                     metric_value = self.portfolio.total_theta()
+                elif metric == "rho":
+                    metric_value = self.portfolio.total_rho()
                 else:
                     raise ValueError(
                         f"Unsupported metric: {metric}. "
-                        f"Supported: pnl, value, delta, gamma, vega, theta"
+                        f"Supported: pnl, value, delta, net_delta, gamma, vega, theta, rho"
                     )
 
                 results.append(
