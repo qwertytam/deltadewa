@@ -76,6 +76,11 @@ class OptionPortfolioBase:
         self.valuation_date = valuation_date or datetime.now()
         self._monte_carlo_results: Optional[Dict[str, Any]] = None
 
+        # Monte Carlo staleness tracking
+        self.monte_carlo_stale: bool = False
+        self.monte_carlo_timestamp: Optional[datetime] = None
+        self.monte_carlo_last_modified: Optional[datetime] = None
+
     def add_position(
         self,
         strike_price: float,
