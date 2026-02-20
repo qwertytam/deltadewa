@@ -267,13 +267,16 @@ def plot_greeks_consolidated(
     ax = axes[2, 0]
     ax.patch.set_alpha(0.0)
     df_sorted = df.copy()
-    df_sorted["abs_value"] = (
-        df_sorted.groupby("strike")["position_value"].sum().abs()
+
+    # Group by strike and sum position values
+    strike_values = df_sorted.groupby("strike")["position_value"].sum()
+    strike_values = strike_values.reindex(
+        strike_values.abs().nlargest(top_n).index
     )
-    df_sorted = df_sorted.nlargest(top_n, "abs_value")
-    if len(df_sorted) > 0:
-        labels = [f"{row['strike']:.2f}" for _, row in df_sorted.iterrows()]
-        values = df_sorted["position_value"].tolist()
+
+    if len(strike_values) > 0:
+        labels = [f"{strike:.2f}" for strike in strike_values.index]
+        values = strike_values.values
         colors_contrib = [
             DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
             for v in values
@@ -304,13 +307,18 @@ def plot_greeks_consolidated(
     df_sorted["maturity_label"] = pd.to_datetime(
         df_sorted["maturity"]
     ).dt.strftime("%Y-%m-%d")
-    df_sorted["abs_value"] = (
-        df_sorted.groupby("maturity_label")["position_value"].sum().abs()
+
+    # Group by maturity and sum position values
+    maturity_values = df_sorted.groupby("maturity_label")[
+        "position_value"
+    ].sum()
+    maturity_values = maturity_values.reindex(
+        maturity_values.abs().nlargest(top_n).index
     )
-    df_sorted = df_sorted.nlargest(top_n, "abs_value")
-    if len(df_sorted) > 0:
-        labels = [f"{row['maturity_label']}" for _, row in df_sorted.iterrows()]
-        values = df_sorted.groupby("maturity_label")["position_value"].sum()
+
+    if len(maturity_values) > 0:
+        labels = list(maturity_values.index)
+        values = maturity_values.values
         colors_contrib = [
             DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
             for v in values
