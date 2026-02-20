@@ -11,7 +11,6 @@ class OptionPosition:
         option: AmericanOption,
         quantity: int,
         contract_size: int = 100,
-        symbol: str = "UNKNOWN",
         custom_volatility: bool = False,
     ):
         """
@@ -21,13 +20,11 @@ class OptionPosition:
             option: AmericanOption instance
             quantity: Number of contracts (positive for long, negative for short)
             contract_size: Number of underlying shares per option contract (e.g. 100)
-            symbol: Underlying symbol or identifier for display/export
             custom_volatility: Whether this position uses custom volatility
         """
         self.option = option
         self.quantity = quantity
         self.contract_size = contract_size
-        self.symbol = symbol
         self.custom_volatility = custom_volatility
 
     def position_value(self) -> float:
@@ -66,7 +63,6 @@ class OptionPosition:
         multiplier = self.quantity * self.contract_size
 
         return {
-            "symbol": self.symbol,
             "type": self.option.option_type,
             "strike": self.option.strike_price,
             "maturity": self.option.maturity_date,

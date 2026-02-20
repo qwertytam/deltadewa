@@ -34,7 +34,6 @@ class TestPortfolioIntegration:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="put",
-            symbol="AAPL",
         )
 
         portfolio.add_position(
@@ -42,7 +41,6 @@ class TestPortfolioIntegration:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="AAPL",
         )
 
         # Test core functionality
@@ -202,7 +200,6 @@ class TestPortfolioIntegration:
         df = portfolio.to_dataframe()
 
         assert len(df) == 2
-        assert "symbol" in df.columns
         assert "strike" in df.columns
         assert "type" in df.columns
         assert "quantity" in df.columns

@@ -19,15 +19,12 @@ class TestOptionPosition:
             dividend_yield=0.0,
             option_type="call",
         )
-        position = OptionPosition(
-            option=option, quantity=1, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=1, contract_size=100)
 
         assert position is not None
         assert position.option == option
         assert position.quantity == 1
         assert position.contract_size == 100
-        assert position.symbol == "TEST"
         assert position.custom_volatility is False
 
     def test_position_value(self):
@@ -41,9 +38,7 @@ class TestOptionPosition:
             dividend_yield=0.0,
             option_type="call",
         )
-        position = OptionPosition(
-            option=option, quantity=2, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=2, contract_size=100)
 
         # Position value should be option price * quantity * contract_size
         expected_pnl = option.price() * 2 * 100
@@ -60,9 +55,7 @@ class TestOptionPosition:
             dividend_yield=0.0,
             option_type="call",
         )
-        position = OptionPosition(
-            option=option, quantity=2, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=2, contract_size=100)
 
         # Position delta should be option delta * quantity * contract_size
         expected_delta = option.delta() * 2 * 100
@@ -79,9 +72,7 @@ class TestOptionPosition:
             dividend_yield=0.0,
             option_type="call",
         )
-        position = OptionPosition(
-            option=option, quantity=1, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=1, contract_size=100)
 
         # All greeks should be scaled by quantity * contract_size
         assert position.position_gamma() == option.gamma() * 100
@@ -100,9 +91,7 @@ class TestOptionPosition:
             dividend_yield=0.0,
             option_type="call",
         )
-        position = OptionPosition(
-            option=option, quantity=-1, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=-1, contract_size=100)
 
         # Negative quantity should result in negative value and delta
         assert position.position_value() < 0
@@ -119,13 +108,10 @@ class TestOptionPosition:
             dividend_yield=0.0,
             option_type="put",
         )
-        position = OptionPosition(
-            option=option, quantity=3, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=3, contract_size=100)
 
         pos_dict = position.to_dict()
 
-        assert pos_dict["symbol"] == "TEST"
         assert pos_dict["type"] == "put"
         assert pos_dict["strike"] == 105.0
         assert pos_dict["quantity"] == 3
@@ -152,7 +138,6 @@ class TestOptionPosition:
             option=option,
             quantity=1,
             contract_size=100,
-            symbol="TEST",
             custom_volatility=True,
         )
 

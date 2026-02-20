@@ -29,6 +29,7 @@ def sample_portfolio():
         risk_free_rate=0.05,
         dividend_yield=0.02,
         underlying_quantity=100.0,
+        symbol="TEST",
     )
     maturity = datetime.now() + timedelta(days=30)
     portfolio.add_position(
@@ -173,6 +174,7 @@ class TestJsonRoundtrip:
         assert imported_params["dividend_yield"] == pytest.approx(
             sample_portfolio.dividend_yield
         )
+        assert imported_params["symbol"] == sample_portfolio.symbol
 
     def test_json_roundtrip_preserves_positions(
         self, tmp_path, sample_portfolio
@@ -255,6 +257,7 @@ class TestJsonRoundtrip:
         assert "market_parameters" in result
         assert "positions" in result
         assert isinstance(result, dict)
+        assert "symbol" in result["market_parameters"]
 
     def test_import_from_json_missing_maturity_raises(self, tmp_path):
         """Test that importing JSON with missing maturity_date raises ValueError."""
@@ -360,6 +363,7 @@ class TestYamlRoundtrip:
         assert imported_params["dividend_yield"] == pytest.approx(
             sample_portfolio.dividend_yield
         )
+        assert imported_params["symbol"] == sample_portfolio.symbol
 
     def test_yaml_roundtrip_preserves_positions(
         self, tmp_path, sample_portfolio
@@ -561,6 +565,7 @@ class TestLoadConfigYaml:
                 "volatility": 0.3,
                 "risk_free_rate": 0.05,
                 "dividend_yield": 0.02,
+                "symbol": "TEST",
             },
             "positions": [
                 {

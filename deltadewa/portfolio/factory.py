@@ -36,7 +36,10 @@ def create_demo_portfolio():
     from deltadewa.portfolio.core import OptionPortfolio
 
     p = OptionPortfolio(
-        underlying_quantity=0, spot_price=100.0, volatility=0.25
+        underlying_quantity=0,
+        spot_price=100.0,
+        volatility=0.25,
+        symbol="DEMO",
     )
 
     today = datetime.now()
@@ -46,7 +49,6 @@ def create_demo_portfolio():
         maturity_date=today + timedelta(days=30),
         quantity=1,
         option_type="call",
-        symbol="DEMO",
     )
 
     # Protective put
@@ -55,7 +57,6 @@ def create_demo_portfolio():
         maturity_date=today + timedelta(days=60),
         quantity=1,
         option_type="put",
-        symbol="DEMO",
     )
 
     return p

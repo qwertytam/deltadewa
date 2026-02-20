@@ -48,14 +48,12 @@ class TestFactoryFunctions:
         assert pos1.option.strike_price == 100.0
         assert pos1.option.option_type == "call"
         assert pos1.quantity == 1
-        assert pos1.symbol == "DEMO"
 
         # Check second position (put)
         pos2 = portfolio.positions[1]
         assert pos2.option.strike_price == 95.0
         assert pos2.option.option_type == "put"
         assert pos2.quantity == 1
-        assert pos2.symbol == "DEMO"
 
     def test_create_demo_portfolio_market_conditions(self):
         """Test demo portfolio has expected market conditions."""

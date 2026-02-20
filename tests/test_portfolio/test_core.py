@@ -15,6 +15,7 @@ class TestOptionPortfolioBase:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            symbol="TEST",
         )
 
         assert portfolio is not None
@@ -23,6 +24,7 @@ class TestOptionPortfolioBase:
         assert portfolio.volatility == 0.2
         assert portfolio.risk_free_rate == 0.05
         assert portfolio.dividend_yield == 0.0
+        assert portfolio.symbol == "TEST"
         assert len(portfolio.positions) == 0
 
     def test_add_position(self):
@@ -34,11 +36,9 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
         assert len(portfolio.positions) == 1
-        assert portfolio.positions[0].symbol == "TEST"
         assert portfolio.positions[0].quantity == 1
 
     def test_add_position_with_custom_volatility(self):
@@ -50,7 +50,6 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
             volatility=0.3,
         )
 
@@ -60,7 +59,7 @@ class TestOptionPortfolioBase:
 
     def test_remove_position(self):
         """Test removing a position."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
@@ -79,6 +78,7 @@ class TestOptionPortfolioBase:
         portfolio.remove_position(0)
         assert len(portfolio.positions) == 1
         assert portfolio.positions[0].option.strike_price == 105.0
+        assert portfolio.symbol == "TEST"
 
     def test_remove_position_invalid_index(self):
         """Test removing position with invalid index."""
@@ -92,24 +92,23 @@ class TestOptionPortfolioBase:
 
     def test_update_position(self):
         """Test updating a position."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
-        portfolio.update_position(0, quantity=2, symbol="UPDATED")
+        portfolio.update_position(0, quantity=2)
 
         assert portfolio.positions[0].quantity == 2
-        assert portfolio.positions[0].symbol == "UPDATED"
+        assert portfolio.symbol == "TEST"
 
     def test_clear_positions(self):
         """Test clearing all positions."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
@@ -125,8 +124,10 @@ class TestOptionPortfolioBase:
         )
 
         assert len(portfolio.positions) == 2
+        assert portfolio.symbol == "TEST"
         portfolio.clear_positions()
         assert len(portfolio.positions) == 0
+        assert portfolio.symbol == "TEST"
 
     def test_total_value(self):
         """Test total_value calculation."""
@@ -178,12 +179,10 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
         positions = portfolio.get_positions()
         assert len(positions) == 1
-        assert positions[0]["symbol"] == "TEST"
         assert positions[0]["type"] == "Call"
         assert positions[0]["strike"] == 100.0
 
@@ -196,12 +195,10 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
         df = portfolio.to_dataframe()
         assert len(df) == 1
-        assert "symbol" in df.columns
         assert "strike" in df.columns
         assert "quantity" in df.columns
 
@@ -239,7 +236,7 @@ class TestOptionPortfolioBase:
 
     def test_summary(self):
         """Test summary string generation."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
@@ -255,16 +252,19 @@ class TestOptionPortfolioBase:
 
     def test_summary_market(self):
         """Test summary_market string generation."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         summary = portfolio.summary_market()
         assert isinstance(summary, str)
         assert "Spot Price" in summary
         assert "Volatility" in summary
+        assert "TEST" in summary
 
     def test_update_market_conditions(self):
         """Test updating market conditions."""
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0, volatility=0.2, symbol="TEST"
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -273,10 +273,13 @@ class TestOptionPortfolioBase:
             option_type="call",
         )
 
+        assert portfolio.symbol == "TEST"
+
         portfolio.update_market_conditions(spot_price=110.0, volatility=0.3)
 
         assert portfolio.spot_price == 110.0
         assert portfolio.volatility == 0.3
+        assert portfolio.symbol == "TEST"
 
     def test_set_volatility(self):
         """Test set_volatility method."""
@@ -299,7 +302,7 @@ class TestOptionPortfolioBase:
         portfolio = OptionPortfolioBase()
 
         # Empty portfolio
-        assert portfolio.get_symbol() == "N/A"
+        assert portfolio.get_symbol() == "UNKNOWN"
 
         # With position
         portfolio.add_position(
@@ -307,10 +310,12 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="AAPL",
         )
+        assert portfolio.get_symbol() == "UNKNOWN"
 
-        assert portfolio.get_symbol() == "AAPL"
+        # With symbol set
+        portfolio.symbol = "TEST"
+        assert portfolio.get_symbol() == "TEST"
 
     def test_monte_carlo_results_property(self):
         """Test monte_carlo_results property."""

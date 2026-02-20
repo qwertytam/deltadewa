@@ -72,12 +72,12 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         else:
             if include_index:
                 options = [
-                    f"{i}: {p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
+                    f"{i}: {p['type']} {p['strike']} @ {p['expiry']}"
                     for i, p in enumerate(positions)
                 ]
             else:
                 options = [
-                    f"{p['symbol']} - {p['type']} {p['strike']} @ {p['expiry']}"
+                    f"{p['type']} {p['strike']} @ {p['expiry']}"
                     for p in positions
                 ]
             disabled = False
@@ -195,7 +195,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         # Helper functions
         def get_position_display_string(pos):
             """Generate consistent display string for a position."""
-            result = f"{pos.symbol} - {pos.option.option_type.capitalize()} "
+            result = f"{pos.option.option_type.capitalize()} "
             result += f"{pos.option.strike_price} @ "
             result += f"{pos.option.maturity_date.date()}"
             return result
@@ -255,7 +255,6 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                         else "put"
                     ),
                     quantity=quantity_input.value,
-                    symbol=self.portfolio.get_symbol(),
                     volatility=position_volatility,
                 )
                 status_label.value = (
