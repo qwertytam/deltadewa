@@ -66,15 +66,19 @@ def load_config_yaml(filepath: Path = Path("portfolio_config_example.yaml")):
 class PortfolioSerializer:
     """Handle portfolio export/import in multiple formats."""
 
-    def __init__(self, export_dir: Union[str, Path] = "exports"):
+    def __init__(self, export_dir: Union[str, Path]):
         """
         Initialize the serializer.
 
         Args:
-            export_dir: Directory path for exports (str or Path)
+            export_dir: Directory path for exports (str or Path). If None, must be set later.
         """
         self.export_dir = Path(export_dir)
-        self.export_dir.mkdir(exist_ok=True)
+        try:
+            self.export_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # If creation fails, keep the path but it won't exist
+            print(f"Export directory creation failed. {e}")
 
     # ========== Helper Functions ==========
 
@@ -103,6 +107,16 @@ class PortfolioSerializer:
             )
         )
         return {"json": json_files, "yaml": yaml_files}
+
+    def update_export_dir(self, new_dir: Union[str, Path]) -> None:
+        """
+        Update the export directory and ensure it exists.
+
+        Args:
+            new_dir: New directory path for exports
+        """
+        self.export_dir = Path(new_dir)
+        self.export_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def detect_file_format(filepath):

@@ -4,10 +4,8 @@ This module provides comprehensive widget controls for creating, editing,
 and managing option portfolios in the deltadewa dashboard.
 """
 
-from pathlib import Path
 from typing import (
     Optional,
-    Union,
     Callable,
     Tuple,
     Dict,
@@ -31,25 +29,19 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     Attributes:
         portfolio: OptionPortfolio instance to manage
-        export_dir: Directory path for import/export operations
+        serializer: PortfolioSerializer to manage
     """
 
-    def __init__(
-        self,
-        portfolio,
-        export_dir: Optional[Union[Path, str]] = None,
-    ):
+    def __init__(self, portfolio, serializer):
         """
         Initialize widget factory.
 
         Args:
             portfolio: OptionPortfolio instance
-            export_dir: Directory for exports (default: None)
+            serializer: PortfolioSerializer instance
         """
         self.portfolio = portfolio
-        self._export_dir: Optional[Path] = None
-        if export_dir:
-            self.export_dir = Path(export_dir)
+        self.serializer = serializer
 
     # ==========================================================================
     # Position Management Widgets

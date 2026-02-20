@@ -28,32 +28,66 @@ class ExportControlsMixin:
 
     This mixin expects the host class to have:
     - self.portfolio: OptionPortfolio instance
-    - self._export_dir: Path or None attribute
+    - self.serializer: PortfolioSerializer instance
     """
 
     portfolio: OptionPortfolio
-    _export_dir: Optional[Path] = None
+    serializer: PortfolioSerializer
 
     @property
     def export_dir(self) -> Path:
         """Get the current export directory."""
-        if self._export_dir is None:
-            raise ValueError(
-                "Export directory is not set. Please select a directory first."
-            )
-        return self._export_dir
+        if self.serializer.export_dir is None:
+            raise ValueError("Export directory is not set")
+        return self.serializer.export_dir
 
     @export_dir.setter
     def export_dir(self, value: Union[Path, str]):
-        """Set the export directory and ensure it exists."""
-        if value is None:
-            self._export_dir = None
+        """Set the export directory and update UI."""
+        self.serializer.update_export_dir(value)
+        self._update_export_ui_state()
+
+    def _update_export_ui_state(self):
+        """Update state of all registered export UI elements."""
+        if not hasattr(self, "_export_ui_map"):
             return
 
-        path = Path(value)
-        # Create directory if it doesn't exist
-        path.mkdir(parents=True, exist_ok=True)
-        self._export_dir = path
+        # Check if directory exists and is valid
+        try:
+            is_ready = self.export_dir.exists()
+        except (ValueError, AttributeError):
+            is_ready = False
+
+        # Clean up and update widgets
+        # Using a copy list to remove dead references if we implemented weakrefs,
+        # but here we'll just check for errors
+        for widgets_dict in self._export_ui_map:
+            btn = widgets_dict.get("button")
+            warning = widgets_dict.get("warning")
+
+            if is_ready:
+                if btn:
+                    btn.button_style = "success"
+                    btn.disabled = False
+                    btn.tooltip = "Export portfolio to file"
+                if warning:
+                    warning.value = ""
+                    warning.layout.display = "none"
+            else:
+                if btn:
+                    btn.button_style = "danger"
+                    # We don't disable it so they can see the error message if they click
+                    btn.tooltip = "Export directory not set"
+                if warning:
+                    warning.value = (
+                        "<div style='color: #d32f2f; background-color: #fde8e8; "
+                        "padding: 10px; border-radius: 4px; border: 1px solid #f8b4b4; "
+                        "margin-bottom: 10px;'>"
+                        "<strong>⚠️ Action Required:</strong> Export directory is not configured. "
+                        "Please use the 'Set Directory' button in the Setup section above."
+                        "</div>"
+                    )
+                    warning.layout.display = "block"
 
     # ==========================================================================
     # Import/Export Widgets
@@ -96,7 +130,7 @@ class ExportControlsMixin:
 
         export_button = widgets.Button(
             description="Export Portfolio",
-            button_style="success",
+            button_style="danger",
             icon="download",
             layout=widgets.Layout(width="200px"),
         )
@@ -169,13 +203,12 @@ class ExportControlsMixin:
                     # Auto-detect format handled by import_portfolio
 
                     filepath = self.export_dir / filename
-                    serializer = PortfolioSerializer(str(filepath))
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
                         return
 
-                    imported_portfolio = serializer.import_portfolio(
+                    imported_portfolio = self.serializer.import_portfolio(
                         str(filepath)
                     )["portfolio"]
                     if not isinstance(imported_portfolio, OptionPortfolio):
@@ -216,7 +249,6 @@ class ExportControlsMixin:
                 try:
                     filename = import_controls["filename_input"].value
                     filepath = self.export_dir / filename
-                    serializer = PortfolioSerializer(str(filepath))
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
@@ -225,7 +257,7 @@ class ExportControlsMixin:
                     # Load into a temporary portfolio to inspect content
                     print(f"Loading portfolio from {filepath}...")
 
-                    preview_portfolio = serializer.import_portfolio(
+                    preview_portfolio = self.serializer.import_portfolio(
                         str(filepath)
                     )["portfolio"]
 
@@ -331,10 +363,42 @@ class ExportControlsMixin:
         export_controls = self.create_export_controls()
         export_output = widgets.Output()
 
+        # Warning label for unconfigured directory
+        warning_label = widgets.HTML(
+            value="", layout=widgets.Layout(display="none")
+        )
+
+        # Register UI elements for state updates
+        if not hasattr(self, "_export_ui_map"):
+            self._export_ui_map = []
+
+        self._export_ui_map.append(
+            {
+                "button": export_controls["export_button"],
+                "warning": warning_label,
+            }
+        )
+
+        # Initial status check
+        self._update_export_ui_state()
+
         # Export button handler
         def on_export_clicked(b):  # pylint: disable=unused-argument
             with export_output:
                 export_output.clear_output()
+
+                # Double check directory validity
+                try:
+                    if not self.export_dir.exists():
+                        print("✗ Error: Export directory does not exist.")
+                        return
+                except (ValueError, AttributeError):
+                    print(
+                        "✗ Error: Export directory is not set. "
+                        + "Please configure it in the Setup section."
+                    )
+                    return
+
                 try:
                     filename = export_controls["filename_input"].value
                     file_format = export_controls[
@@ -353,14 +417,13 @@ class ExportControlsMixin:
                         filename = f"{filename}{ts}.{file_format}"
 
                     filepath = self.export_dir / filename
-                    serializer = PortfolioSerializer(str(filepath))
 
                     if file_format == "json":
-                        serializer.export_to_json(self.portfolio, filename)
+                        self.serializer.export_to_json(self.portfolio, filename)
                     elif file_format == "csv":
-                        serializer.export_to_csv(self.portfolio, filename)
+                        self.serializer.export_to_csv(self.portfolio, filename)
                     elif file_format == "yaml":
-                        serializer.export_to_yaml(self.portfolio, filename)
+                        self.serializer.export_to_yaml(self.portfolio, filename)
                     else:
                         print(f"✗ Unknown format: {file_format}")
                         return
@@ -377,8 +440,9 @@ class ExportControlsMixin:
         export_section = widgets.VBox(
             [
                 widgets.HTML("<h3>Export Portfolio</h3>"),
+                warning_label,
                 export_controls["format_selector"],
-                widgets.HTML("<br>"),
+                widgets.HTML(f"<p>Export Directory: {self.export_dir}/</p>"),
                 export_controls["inc_timestamp_checkbox"],
                 export_controls["filename_input"],
                 widgets.HTML("<br>"),
@@ -413,9 +477,10 @@ class ExportControlsMixin:
             # keep internal export_dir Path in sync
             try:
                 self.export_dir = Path(export_dir)
-            except Exception:  # pylint: disable=broad-except
-                # ignore errors here; the config widget already reports failures
-                pass
+            except Exception as e:  # pylint: disable=broad-except
+                print(f"DEBUG: Failed to update internal export_dir: {e}")
+                # Re-raise so the config widget shows the error red
+                raise e
 
             if on_change_callback:
                 on_change_callback(export_dir)
