@@ -8,7 +8,7 @@ from deltadewa import constants as const
 from deltadewa.greeks_cache import GreeksCache
 
 
-class AmericanOption:
+class OptionValuation:
     """
     American option pricing using the Bjerksund-Stensland approximation model.
 
@@ -38,9 +38,10 @@ class AmericanOption:
         dividend_yield: float,
         option_type: str = "call",
         valuation_date: Optional[datetime] = None,
+        exercise_style: str = "American",
     ):
         """
-        Initialize American option.
+        Initialize option.
 
         Args:
             spot_price: Current price of the underlying asset
@@ -51,6 +52,7 @@ class AmericanOption:
             dividend_yield: Dividend yield (annualized)
             option_type: "call" or "put"
             valuation_date: Date for valuation (defaults to today)
+            exercise_style: "American" or "European"
         """
         self.spot_price = float(spot_price)
         self.strike_price = float(strike_price)
@@ -60,6 +62,7 @@ class AmericanOption:
         self.dividend_yield = float(dividend_yield)
         self.option_type = option_type.lower()
         self.valuation_date = valuation_date or datetime.now()
+        self.exercise_style = exercise_style.capitalize()
 
         # Initialize Greeks cache
         self._greeks_cache = GreeksCache()
@@ -76,6 +79,12 @@ class AmericanOption:
 
     def _setup_quantlib(self):
         """Set up QuantLib calculation environment."""
+
+        # 1. Calendar & Dates (Same as before)
+        # pylint: disable
+        calendar = ql.UnitedStates(ql.UnitedStates.NYSE)
+        day_count = ql.Actual365Fixed()
+
         # Convert dates to QuantLib dates
         self.ql_valuation_date = ql.Date(  # type: ignore
             self.valuation_date.day,
@@ -88,70 +97,62 @@ class AmericanOption:
             self.maturity_date.year,
         )
 
-        # Set the evaluation date
-        # type: ignore
         ql.Settings.instance().evaluationDate = self.ql_valuation_date
 
-        # Set up the option
-        if self.option_type == "call":
-            # type: ignore
-            payoff = ql.PlainVanillaPayoff(ql.Option.Call, self.strike_price)
-        elif self.option_type == "put":
-            # type: ignore
-            payoff = ql.PlainVanillaPayoff(ql.Option.Put, self.strike_price)
-        else:
-            raise ValueError(f"Invalid option type: {self.option_type}")
-
-        # American exercise
-        # type: ignore
-        exercise = ql.AmericanExercise(
-            self.ql_valuation_date, self.ql_maturity_date
-        )
-
-        # Create the option
-        # type: ignore
-        self.option = ql.VanillaOption(payoff, exercise)
-
-        # Set up market data with SimpleQuote for spot (allows updates)
+        # 2. Market Data Handles (Same as before - strictly minimal handles)
         self.spot_quote = ql.SimpleQuote(self.spot_price)
         self.spot_handle = ql.QuoteHandle(self.spot_quote)
         self.flat_ts = ql.YieldTermStructureHandle(
-            # type: ignore
-            ql.FlatForward(
-                self.ql_valuation_date, self.risk_free_rate, ql.Actual365Fixed()  # type: ignore
-            )  # type: ignore
+            ql.FlatForward(  # type: ignore
+                self.ql_valuation_date, self.risk_free_rate, day_count
+            )
         )
         self.dividend_ts = ql.YieldTermStructureHandle(
-            # type: ignore
-            ql.FlatForward(
-                self.ql_valuation_date, self.dividend_yield, ql.Actual365Fixed()  # type: ignore
-            )  # type: ignore
+            ql.FlatForward(  # type: ignore
+                self.ql_valuation_date, self.dividend_yield, day_count
+            )
         )
-        # Create mutable volatility quote (similar to spot_quote)
+
         self.vol_quote = ql.SimpleQuote(self.volatility)
         self.vol_handle = ql.QuoteHandle(self.vol_quote)
         self.flat_vol_ts = ql.BlackVolTermStructureHandle(
-            # type: ignore
-            ql.BlackConstantVol(
+            ql.BlackConstantVol(  # type: ignore
                 self.ql_valuation_date,
-                ql.NullCalendar(),
+                calendar,
                 self.vol_handle,  # type: ignore
-                ql.Actual365Fixed(),  # type: ignore
-            )  # type: ignore
+                day_count,
+            )
         )
 
-        # Black-Scholes-Merton process
-        self.bsm_process = ql.BlackScholesMertonProcess(
+        # 3. Process
+        bsm_process = ql.BlackScholesMertonProcess(
             self.spot_handle, self.dividend_ts, self.flat_ts, self.flat_vol_ts
         )
 
-        # Use Finite Difference engine for American options with Greeks support
-        # This uses implicit finite differences which provides accurate Greeks
-        self.option.setPricingEngine(
-            ql.FdBlackScholesVanillaEngine(
-                self.bsm_process, self._TIME_STEPS, self._PRICE_STEPS
-            )
+        # 4. Payoff
+        ql_option_type = (
+            ql.Option.Call if self.option_type == "call" else ql.Option.Put
         )
+        payoff = ql.PlainVanillaPayoff(ql_option_type, self.strike_price)
+
+        # 5. Exercise & Engine Selection (THE NEW LOGIC)
+        if self.exercise_style == "European":
+            # Fast Analytic Formula
+            exercise = ql.EuropeanExercise(self.ql_maturity_date)
+            self.option = ql.VanillaOption(payoff, exercise)
+            self.option.setPricingEngine(ql.AnalyticEuropeanEngine(bsm_process))
+        else:
+            # Slower Finite Difference Grid (Default for American)
+            exercise = ql.AmericanExercise(
+                self.ql_valuation_date, self.ql_maturity_date
+            )
+            self.option = ql.VanillaOption(payoff, exercise)
+            # Use 2000 time steps / 2000 grid points for accuracy
+            self.option.setPricingEngine(
+                ql.FdBlackScholesVanillaEngine(
+                    bsm_process, self._TIME_STEPS, self._PRICE_STEPS
+                )
+            )
 
         # If cache exists, just invalidate it since Greeks are already registered in __init__
         if hasattr(self, "_greeks_cache"):
@@ -409,7 +410,7 @@ class AmericanOption:
     def __repr__(self) -> str:
         """String representation of the option."""
         return (
-            f"AmericanOption(type={self.option_type}, "
+            f"OptionValuation(type={self.option_type}, "
             f"spot={self.spot_price:.2f}, "
             f"strike={self.strike_price:.2f}, "
             f"maturity={self.maturity_date.strftime('%Y-%m-%d')}, "

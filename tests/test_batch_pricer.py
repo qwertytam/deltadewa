@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 import numpy as np
 
-from deltadewa import OptionPortfolio, AmericanOption
+from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.analysis.base import PortfolioAnalyzer
 
@@ -12,7 +12,7 @@ class TestBatchPricer:
     """Test cases for BatchPricer class."""
 
     def test_single_spot_matches_american_option(self):
-        """Verify BatchPricer matches AmericanOption for a single spot."""
+        """Verify BatchPricer matches OptionValuation for a single spot."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
             spot_price=100.0,
@@ -42,8 +42,8 @@ class TestBatchPricer:
         # Get BatchPricer result
         batch_result = pricer.portfolio_values_at(spots, valuation_date)[0]
 
-        # Calculate expected using AmericanOption directly
-        opt = AmericanOption(
+        # Calculate expected using OptionValuation directly
+        opt = OptionValuation(
             spot_price=spot,
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -52,6 +52,7 @@ class TestBatchPricer:
             dividend_yield=0.02,
             option_type="call",
             valuation_date=valuation_date,
+            exercise_style="American",
         )
         expected = opt.price() * 2 * 100 + 100.0 * spot
 
@@ -89,9 +90,9 @@ class TestBatchPricer:
         # Verify results are monotonically increasing for call option
         assert portfolio_values[0] < portfolio_values[1] < portfolio_values[2]
 
-        # Verify each matches individual AmericanOption calculation
+        # Verify each matches individual OptionValuation calculation
         for i, spot in enumerate(spots):
-            opt = AmericanOption(
+            opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
                 maturity_date=datetime.now() + timedelta(days=30),
@@ -100,6 +101,7 @@ class TestBatchPricer:
                 dividend_yield=0.0,
                 option_type="call",
                 valuation_date=valuation_date,
+                exercise_style="American",
             )
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)
@@ -331,7 +333,7 @@ class TestBatchPricer:
         expired_value = 500.0
 
         # Live call: price it directly
-        opt = AmericanOption(
+        opt = OptionValuation(
             spot_price=spot,
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -340,6 +342,7 @@ class TestBatchPricer:
             dividend_yield=portfolio.dividend_yield,
             option_type="call",
             valuation_date=valuation_date,
+            exercise_style="American",
         )
         live_value = opt.price() * 100
 
@@ -452,9 +455,9 @@ class TestBatchPricer:
         # Put should be worth more at lower spots
         assert portfolio_values[0] > portfolio_values[1] > portfolio_values[2]
 
-        # Verify against AmericanOption
+        # Verify against OptionValuation
         for i, spot in enumerate(spots):
-            opt = AmericanOption(
+            opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
                 maturity_date=datetime.now() + timedelta(days=30),
@@ -463,6 +466,7 @@ class TestBatchPricer:
                 dividend_yield=portfolio.dividend_yield,
                 option_type="put",
                 valuation_date=valuation_date,
+                exercise_style="American",
             )
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)

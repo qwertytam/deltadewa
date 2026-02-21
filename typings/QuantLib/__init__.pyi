@@ -1,19 +1,13 @@
-"""Typing stubs for QuantLib."""
+"""Typing stubs for QuantLib.
+
+Minimal, hand-maintained typing stubs for the QuantLib symbols used in this project.
+"""
 
 # pylint: disable=unused-argument missing-class-docstring missing-function-docstring
 # pylint: disable=invalid-name
-from typing import Any
+from typing import Any, Optional, Union
 
-# Minimal, hand-maintained stubs for the QuantLib symbols used in this project.
-
-class Date:
-    """QuantLib Date class."""
-
-    def __init__(self, day: int, month: int, year: int) -> None: ...
-
-class DayCounter: ...
-
-Actual365Fixed: DayCounter
+# Settings
 
 class Settings:
     """QuantLib global settings."""
@@ -22,6 +16,37 @@ class Settings:
 
     @staticmethod
     def instance() -> "Settings": ...
+
+# Date and Calendar
+
+class Date:
+    """QuantLib Date class."""
+
+    def __init__(self, day: int, month: int, year: int) -> None: ...
+
+class DayCounter: ...
+
+class Actual365Fixed(DayCounter):
+    """Actual/365 fixed day count convention."""
+
+    def __init__(self) -> None: ...
+
+class NullCalendar: ...
+
+class Calendar:
+    """QuantLib calendar."""
+
+    @staticmethod
+    def from_name(name: str) -> "Calendar": ...
+
+class UnitedStates(Calendar):
+    """United States calendar."""
+
+    NYSE: int
+
+    def __init__(self, market: Optional[int] = ...) -> None: ...
+
+# Options
 
 class Option:
     """Option types."""
@@ -34,6 +59,11 @@ class PlainVanillaPayoff:
 
     def __init__(self, option_type: int, strike: float) -> None: ...
 
+class EuropeanExercise:
+    """European exercise style."""
+
+    def __init__(self, end: Date) -> None: ...
+
 class AmericanExercise:
     """American exercise style."""
 
@@ -42,7 +72,11 @@ class AmericanExercise:
 class VanillaOption:
     """Vanilla option instrument."""
 
-    def __init__(self, payoff: PlainVanillaPayoff, exercise: AmericanExercise) -> None: ...
+    def __init__(
+        self,
+        payoff: PlainVanillaPayoff,
+        exercise: Union[EuropeanExercise, AmericanExercise],
+    ) -> None: ...
     def setPricingEngine(self, engine: Any) -> None: ...
     def NPV(self) -> float: ...
     def delta(self) -> float: ...
@@ -50,6 +84,8 @@ class VanillaOption:
     def vega(self) -> float: ...
     def theta(self) -> float: ...
     def rho(self) -> float: ...
+
+# Quotes
 
 class SimpleQuote:
     """A simple market quote."""
@@ -62,18 +98,23 @@ class QuoteHandle:
 
     def __init__(self, quote: SimpleQuote) -> None: ...
 
+# Term structures
+
+class BlackVolTermStructureHandle: ...
 class YieldTermStructureHandle: ...
 
-def FlatForward(date: Date, rate: float, daycounter: DayCounter) -> YieldTermStructureHandle: ...
+def FlatForward(
+    date: Date, rate: float, daycounter: DayCounter
+) -> YieldTermStructureHandle: ...
 
-class NullCalendar: ...
+# Models, Processes and Engines
 
 class BlackConstantVol:
     """Constant volatility model."""
 
-    def __init__(self, date: Date, calendar: Any, vol: float, daycounter: DayCounter) -> None: ...
-
-class BlackVolTermStructureHandle: ...
+    def __init__(
+        self, date: Date, calendar: Any, vol: float, daycounter: DayCounter
+    ) -> None: ...
 
 class BlackScholesMertonProcess:
     """Black-Scholes-Merton stochastic process."""
@@ -86,9 +127,20 @@ class BlackScholesMertonProcess:
         flat_vol_ts: BlackVolTermStructureHandle,
     ) -> None: ...
 
+class AnalyticEuropeanEngine:
+    """Finite Difference engine for pricing European options."""
+
+    def __init__(
+        self,
+        process: BlackScholesMertonProcess,
+    ) -> None: ...
+
 class FdBlackScholesVanillaEngine:
     """Finite Difference engine for pricing vanilla options."""
 
     def __init__(
-        self, process: BlackScholesMertonProcess, time_steps: int, price_steps: int
+        self,
+        process: BlackScholesMertonProcess,
+        time_steps: int,
+        price_steps: int,
     ) -> None: ...

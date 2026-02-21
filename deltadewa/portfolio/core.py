@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 import pandas as pd
-from deltadewa.american_option import AmericanOption
+from deltadewa.valuation import OptionValuation
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.pnl import PnLMixin
@@ -92,6 +92,7 @@ class OptionPortfolioBase:
         option_type: str = "call",
         contract_size: int = 100,
         volatility: Optional[float] = None,
+        exercise_style: str = "American",
     ):
         """
         Add an option position to the portfolio.
@@ -103,6 +104,7 @@ class OptionPortfolioBase:
             option_type: "call" or "put"
             contract_size: Number of underlying shares per option contract
             volatility: Optional position-specific volatility (uses portfolio default if None)
+            exercise_style: 'American' or 'European'
         """
         # Use position-specific volatility or portfolio default
         option_volatility = (
@@ -110,7 +112,7 @@ class OptionPortfolioBase:
         )
         custom_volatility = volatility is not None
 
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=self.spot_price,
             strike_price=strike_price,
             maturity_date=maturity_date,
@@ -119,12 +121,14 @@ class OptionPortfolioBase:
             dividend_yield=self.dividend_yield,
             option_type=option_type,
             valuation_date=self.valuation_date,
+            exercise_style=exercise_style,
         )
         position = OptionPosition(
             option,
             quantity,
             contract_size=contract_size,
             custom_volatility=custom_volatility,
+            exercise_style=exercise_style,
         )
         self.positions.append(position)
 
@@ -353,7 +357,7 @@ class OptionPortfolioBase:
             or opt_type != pos.option.option_type
             or volatility is not None
         ):
-            pos.option = AmericanOption(
+            pos.option = OptionValuation(
                 spot_price=self.spot_price,
                 strike_price=strike_price,
                 maturity_date=maturity_date,
@@ -362,6 +366,7 @@ class OptionPortfolioBase:
                 dividend_yield=self.dividend_yield,
                 option_type=opt_type,
                 valuation_date=self.valuation_date,
+                exercise_style=pos.exercise_style,
             )
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -434,7 +439,7 @@ class OptionPortfolioBase:
             # Recreate all positions with new rates, preserving custom volatility
             new_positions = []
             for pos in self.positions:
-                new_option = AmericanOption(
+                new_option = OptionValuation(
                     spot_price=self.spot_price,
                     strike_price=pos.option.strike_price,
                     maturity_date=pos.option.maturity_date,
@@ -443,6 +448,7 @@ class OptionPortfolioBase:
                     dividend_yield=self.dividend_yield,
                     option_type=pos.option.option_type,
                     valuation_date=self.valuation_date,
+                    exercise_style=pos.exercise_style,
                 )
                 new_positions.append(
                     OptionPosition(
@@ -450,6 +456,7 @@ class OptionPortfolioBase:
                         pos.quantity,
                         contract_size=pos.contract_size,
                         custom_volatility=pos.custom_volatility,  # Preserve custom volatility flag
+                        exercise_style=pos.exercise_style,
                     )
                 )
             self.positions = new_positions
