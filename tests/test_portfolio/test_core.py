@@ -1,5 +1,6 @@
 """Tests for deltadewa.portfolio.core module."""
 
+import unittest
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolioBase, OptionPortfolio
 
@@ -372,3 +373,71 @@ class TestOptionPortfolio:
 
         assert portfolio is not None
         assert portfolio.spot_price == 100.0
+
+
+class TestPortfolioCore(unittest.TestCase):
+    """Test cases for core portfolio functionality."""
+
+    def setUp(self):
+        # Initialize with explicit Symbol
+        self.portfolio = OptionPortfolio(symbol="TSLA", spot_price=200.0)
+
+    def test_portfolio_symbol_storage(self):
+        """Test that symbol is stored at portfolio level"""
+        self.assertEqual(self.portfolio.symbol, "TSLA")
+
+    def test_add_position_defaults(self):
+        """Test adding position uses defaults and works without position-level symbol"""
+        self.portfolio.add_position(
+            strike_price=210,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=1,
+        )
+
+        # Verify position was added
+        self.assertEqual(len(self.portfolio.positions), 1)
+        pos = self.portfolio.positions[0]
+
+        # Verify defaults
+        self.assertEqual(pos.exercise_style, "American")
+
+    def test_european_position_pricing(self):
+        """Test that a portfolio can hold and price European options"""
+
+        self.portfolio.add_position(
+            strike_price=210,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=1,
+            exercise_style="European",  # Explicitly European
+        )
+
+        # pylint: disable=assignment-from-no-return
+        value = self.portfolio.total_value()
+        self.assertGreater(value, 0)
+        self.assertEqual(self.portfolio.positions[0].exercise_style, "European")
+
+    def test_mixed_styles(self):
+        """Portfolio should handle both styles simultaneously"""
+        # Long American Call
+        self.portfolio.add_position(
+            strike_price=200,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=1,
+            exercise_style="American",
+        )
+        # Short European Call
+        self.portfolio.add_position(
+            strike_price=200,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=-1,
+            exercise_style="European",
+        )
+
+        # Since American >= European, Net Value should be >= 0
+        # pylint: disable=assignment-from-no-return
+        net_value = self.portfolio.total_value()
+        self.assertGreaterEqual(net_value, -0.01)  # Allow for float precision

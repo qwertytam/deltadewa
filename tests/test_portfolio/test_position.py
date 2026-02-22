@@ -111,7 +111,7 @@ class TestOptionPosition:
             risk_free_rate=0.05,
             dividend_yield=0.0,
             option_type="put",
-            exercise_style="European",
+            exercise_style="American",
         )
         position = OptionPosition(option=option, quantity=3, contract_size=100)
 

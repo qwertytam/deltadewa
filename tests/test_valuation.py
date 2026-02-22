@@ -1,4 +1,4 @@
-"""Tests for deltadewa.american_option module."""
+"""Tests for deltadewa.valuation module."""
 
 from datetime import datetime, timedelta
 import time
