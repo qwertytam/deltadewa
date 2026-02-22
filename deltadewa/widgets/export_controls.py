@@ -200,6 +200,7 @@ class ExportControlsMixin:
                 import_output.clear_output()
                 try:
                     filename = import_controls["filename_input"].value
+                    print(f"Attempting to import portfolio from {filename}...")
                     # Auto-detect format handled by import_portfolio
 
                     filepath = self.export_dir / filename
@@ -234,6 +235,11 @@ class ExportControlsMixin:
                     self.portfolio.underlying_quantity = (
                         imported_portfolio.underlying_quantity
                     )
+                    self.portfolio.symbol = imported_portfolio.symbol
+
+                    print(f"✓ Successfully imported portfolio from {filepath}")
+                    print(f"Symbol: {self.portfolio.get_symbol()}")
+                    print(f"Spot Price: {self.portfolio.spot_price}")
 
                     print(f"✓ Loaded {len(self.portfolio.positions)} positions")
                     import_controls["import_button"].button_style = "success"

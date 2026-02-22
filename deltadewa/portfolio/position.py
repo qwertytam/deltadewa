@@ -1,6 +1,6 @@
 """Option position representation."""
 
-from deltadewa.american_option import AmericanOption
+from deltadewa.valuation import OptionValuation
 
 
 class OptionPosition:
@@ -8,27 +8,27 @@ class OptionPosition:
 
     def __init__(
         self,
-        option: AmericanOption,
+        option: OptionValuation,
         quantity: int,
         contract_size: int = 100,
-        symbol: str = "UNKNOWN",
         custom_volatility: bool = False,
+        exercise_style: str = "American",
     ):
         """
         Initialize an option position.
 
         Args:
-            option: AmericanOption instance
+            option: OptionValuation instance
             quantity: Number of contracts (positive for long, negative for short)
             contract_size: Number of underlying shares per option contract (e.g. 100)
-            symbol: Underlying symbol or identifier for display/export
             custom_volatility: Whether this position uses custom volatility
+            exercise_style: "American" or "European"
         """
         self.option = option
         self.quantity = quantity
         self.contract_size = contract_size
-        self.symbol = symbol
         self.custom_volatility = custom_volatility
+        self.exercise_style = exercise_style.capitalize()
 
     def position_value(self) -> float:
         """Calculate the total value of the position.
@@ -66,11 +66,11 @@ class OptionPosition:
         multiplier = self.quantity * self.contract_size
 
         return {
-            "symbol": self.symbol,
             "type": self.option.option_type,
             "strike": self.option.strike_price,
             "maturity": self.option.maturity_date,
             "quantity": self.quantity,
+            "exercise_style": self.exercise_style,
             "price": greeks["price"],
             "position_value": greeks["price"] * multiplier,
             "delta": greeks["delta"],

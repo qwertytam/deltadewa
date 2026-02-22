@@ -1,5 +1,6 @@
 """Tests for deltadewa.portfolio.core module."""
 
+import unittest
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolioBase, OptionPortfolio
 
@@ -15,6 +16,7 @@ class TestOptionPortfolioBase:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            symbol="TEST",
         )
 
         assert portfolio is not None
@@ -23,6 +25,7 @@ class TestOptionPortfolioBase:
         assert portfolio.volatility == 0.2
         assert portfolio.risk_free_rate == 0.05
         assert portfolio.dividend_yield == 0.0
+        assert portfolio.symbol == "TEST"
         assert len(portfolio.positions) == 0
 
     def test_add_position(self):
@@ -34,11 +37,9 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
         assert len(portfolio.positions) == 1
-        assert portfolio.positions[0].symbol == "TEST"
         assert portfolio.positions[0].quantity == 1
 
     def test_add_position_with_custom_volatility(self):
@@ -50,7 +51,6 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
             volatility=0.3,
         )
 
@@ -60,7 +60,7 @@ class TestOptionPortfolioBase:
 
     def test_remove_position(self):
         """Test removing a position."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
@@ -79,6 +79,7 @@ class TestOptionPortfolioBase:
         portfolio.remove_position(0)
         assert len(portfolio.positions) == 1
         assert portfolio.positions[0].option.strike_price == 105.0
+        assert portfolio.symbol == "TEST"
 
     def test_remove_position_invalid_index(self):
         """Test removing position with invalid index."""
@@ -92,24 +93,73 @@ class TestOptionPortfolioBase:
 
     def test_update_position(self):
         """Test updating a position."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
-        portfolio.update_position(0, quantity=2, symbol="UPDATED")
+        portfolio.update_position(0, quantity=2)
 
         assert portfolio.positions[0].quantity == 2
-        assert portfolio.positions[0].symbol == "UPDATED"
+        assert portfolio.symbol == "TEST"
+
+    def test_update_position_exercise_style_synced(self):
+        """
+        Regression test: updating exercise_style must sync both
+        OptionPosition.exercise_style and OptionPosition.option.exercise_style.
+        Previously, update_position only updated the OptionValuation attribute,
+        leaving the OptionPosition attribute stale. This caused the position
+        table (to_dict) to show the old value, and update_market_conditions to
+        silently revert the change when it recreated OptionValuation instances.
+        """
+        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now() + timedelta(days=30),
+            quantity=1,
+            option_type="call",
+            exercise_style="american",
+        )
+
+        pos = portfolio.positions[0]
+        assert pos.exercise_style == "American"
+        assert pos.option.exercise_style == "American"
+
+        # Change exercise style via update_position
+        portfolio.update_position(0, exercise_style="european")
+
+        pos = portfolio.positions[0]
+        # Both OptionPosition and OptionValuation attributes must reflect the change
+        assert (
+            pos.option.exercise_style == "European"
+        ), "OptionValuation.exercise_style not updated"
+        assert (
+            pos.exercise_style == "European"
+        ), "OptionPosition.exercise_style not synced after update"
+
+        # Confirm to_dict (used by the position table) also reflects the change
+        assert (
+            pos.to_dict()["exercise_style"] == "European"
+        ), "to_dict() still returns stale exercise_style"
+
+        # Confirm update_market_conditions preserves the updated exercise style
+        portfolio.update_market_conditions(spot_price=105.0)
+        pos = portfolio.positions[0]
+        assert (
+            pos.exercise_style == "European"
+        ), "exercise_style reverted after update_market_conditions"
+        assert (
+            pos.option.exercise_style == "European"
+        ), "OptionValuation.exercise_style reverted after update_market_conditions"
 
     def test_clear_positions(self):
         """Test clearing all positions."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
@@ -125,8 +175,10 @@ class TestOptionPortfolioBase:
         )
 
         assert len(portfolio.positions) == 2
+        assert portfolio.symbol == "TEST"
         portfolio.clear_positions()
         assert len(portfolio.positions) == 0
+        assert portfolio.symbol == "TEST"
 
     def test_total_value(self):
         """Test total_value calculation."""
@@ -178,12 +230,10 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
         positions = portfolio.get_positions()
         assert len(positions) == 1
-        assert positions[0]["symbol"] == "TEST"
         assert positions[0]["type"] == "Call"
         assert positions[0]["strike"] == 100.0
 
@@ -196,12 +246,10 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="TEST",
         )
 
         df = portfolio.to_dataframe()
         assert len(df) == 1
-        assert "symbol" in df.columns
         assert "strike" in df.columns
         assert "quantity" in df.columns
 
@@ -239,7 +287,7 @@ class TestOptionPortfolioBase:
 
     def test_summary(self):
         """Test summary string generation."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,
@@ -255,16 +303,19 @@ class TestOptionPortfolioBase:
 
     def test_summary_market(self):
         """Test summary_market string generation."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(symbol="TEST")
 
         summary = portfolio.summary_market()
         assert isinstance(summary, str)
         assert "Spot Price" in summary
         assert "Volatility" in summary
+        assert "TEST" in summary
 
     def test_update_market_conditions(self):
         """Test updating market conditions."""
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0, volatility=0.2, symbol="TEST"
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -273,10 +324,13 @@ class TestOptionPortfolioBase:
             option_type="call",
         )
 
+        assert portfolio.symbol == "TEST"
+
         portfolio.update_market_conditions(spot_price=110.0, volatility=0.3)
 
         assert portfolio.spot_price == 110.0
         assert portfolio.volatility == 0.3
+        assert portfolio.symbol == "TEST"
 
     def test_set_volatility(self):
         """Test set_volatility method."""
@@ -299,7 +353,7 @@ class TestOptionPortfolioBase:
         portfolio = OptionPortfolioBase()
 
         # Empty portfolio
-        assert portfolio.get_symbol() == "N/A"
+        assert portfolio.get_symbol() == "UNKNOWN"
 
         # With position
         portfolio.add_position(
@@ -307,10 +361,12 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type="call",
-            symbol="AAPL",
         )
+        assert portfolio.get_symbol() == "UNKNOWN"
 
-        assert portfolio.get_symbol() == "AAPL"
+        # With symbol set
+        portfolio.symbol = "TEST"
+        assert portfolio.get_symbol() == "TEST"
 
     def test_monte_carlo_results_property(self):
         """Test monte_carlo_results property."""
@@ -367,3 +423,72 @@ class TestOptionPortfolio:
 
         assert portfolio is not None
         assert portfolio.spot_price == 100.0
+
+
+class TestPortfolioCore(unittest.TestCase):
+    """Test cases for core portfolio functionality."""
+
+    def setUp(self):
+        # Initialize with explicit Symbol
+        self.portfolio = OptionPortfolio(symbol="TSLA", spot_price=200.0)
+
+    def test_portfolio_symbol_storage(self):
+        """Test that symbol is stored at portfolio level"""
+        pf = OptionPortfolio(symbol="TSLA")
+        self.assertEqual(pf.get_symbol(), "TSLA")
+
+    def test_add_position_defaults(self):
+        """Test adding position uses defaults and works without position-level symbol"""
+        self.portfolio.add_position(
+            strike_price=210,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=1,
+        )
+
+        # Verify position was added
+        self.assertEqual(len(self.portfolio.positions), 1)
+        pos = self.portfolio.positions[0]
+
+        # Verify defaults
+        self.assertEqual(pos.exercise_style, "American")
+
+    def test_european_position_pricing(self):
+        """Test that a portfolio can hold and price European options"""
+
+        self.portfolio.add_position(
+            strike_price=210,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=1,
+            exercise_style="European",  # Explicitly European
+        )
+
+        # pylint: disable=assignment-from-no-return
+        value = self.portfolio.total_value()
+        self.assertGreater(value, 0)
+        self.assertEqual(self.portfolio.positions[0].exercise_style, "European")
+
+    def test_mixed_styles(self):
+        """Portfolio should handle both styles simultaneously"""
+        # Long American Call
+        self.portfolio.add_position(
+            strike_price=200,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=1,
+            exercise_style="American",
+        )
+        # Short European Call
+        self.portfolio.add_position(
+            strike_price=200,
+            maturity_date=datetime.now() + timedelta(days=30),
+            option_type="call",
+            quantity=-1,
+            exercise_style="European",
+        )
+
+        # Since American >= European, Net Value should be >= 0
+        # pylint: disable=assignment-from-no-return
+        net_value = self.portfolio.total_value()
+        self.assertGreaterEqual(net_value, -0.01)  # Allow for float precision

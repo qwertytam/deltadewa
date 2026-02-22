@@ -331,6 +331,7 @@ class PortfolioSerializer:
             volatility=market_params["volatility"],
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
+            symbol=market_params.get("symbol", "UNKNOWN"),
         )
 
         # Add positions (robust to variations in exported field names)
@@ -407,6 +408,7 @@ class PortfolioSerializer:
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
             valuation_date=datetime.now(),
+            symbol=market_params.get("symbol", "UNKNOWN"),
         )
 
         # Add positions
@@ -428,9 +430,6 @@ class PortfolioSerializer:
                 maturity_date=maturity,
                 quantity=pos_config["quantity"],
                 option_type=pos_config["option_type"].lower(),
-                symbol=pos_config.get(
-                    "symbol", market_params.get("symbol", "UNKNOWN")
-                ),
                 volatility=position_volatility,
             )
 

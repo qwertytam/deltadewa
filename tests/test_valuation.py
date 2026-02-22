@@ -1,9 +1,9 @@
-"""Tests for deltadewa.american_option module."""
+"""Tests for deltadewa.valuation module."""
 
 from datetime import datetime, timedelta
 import time
 import pytest
-from deltadewa.american_option import AmericanOption
+from deltadewa.valuation import OptionValuation
 
 
 class TestVolatilityQuoteCaching:
@@ -12,7 +12,7 @@ class TestVolatilityQuoteCaching:
     @pytest.fixture
     def option(self):
         """Create a test option."""
-        return AmericanOption(
+        return OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -110,7 +110,7 @@ class TestVolatilityUpdatePerformance:
     def test_vol_update_faster_than_rebuild(self):
         """Verify SimpleQuote update is faster than full rebuild."""
 
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -118,6 +118,7 @@ class TestVolatilityUpdatePerformance:
             risk_free_rate=0.05,
             dividend_yield=0.02,
             option_type="call",
+            exercise_style="American",
         )
 
         # Time SimpleQuote update (new method) with more iterations
@@ -159,7 +160,7 @@ class TestGreeksCaching:
     @pytest.fixture
     def option(self):
         """Create a test option."""
-        return AmericanOption(
+        return OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),

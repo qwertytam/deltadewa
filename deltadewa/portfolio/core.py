@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 import pandas as pd
-from deltadewa.american_option import AmericanOption
+from deltadewa.valuation import OptionValuation
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.pnl import PnLMixin
@@ -55,6 +55,7 @@ class OptionPortfolioBase:
         risk_free_rate: float = 0.05,
         dividend_yield: float = 0.0,
         valuation_date: Optional[datetime] = None,
+        symbol: str = "UNKNOWN",
     ):
         """
         Initialize option portfolio.
@@ -66,6 +67,7 @@ class OptionPortfolioBase:
             risk_free_rate: Risk-free rate
             dividend_yield: Dividend yield
             valuation_date: Valuation date for all options (defaults to now)
+            symbol: Underlying symbol or identifier for display/export
         """
         self.positions: List[OptionPosition] = []
         self.underlying_quantity = underlying_quantity
@@ -74,6 +76,7 @@ class OptionPortfolioBase:
         self.risk_free_rate = risk_free_rate
         self.dividend_yield = dividend_yield
         self.valuation_date = valuation_date or datetime.now()
+        self.symbol = symbol
         self._monte_carlo_results: Optional[Dict[str, Any]] = None
 
         # Monte Carlo staleness tracking
@@ -87,9 +90,9 @@ class OptionPortfolioBase:
         maturity_date: datetime,
         quantity: int,
         option_type: str = "call",
-        symbol: str = "UNKNOWN",
         contract_size: int = 100,
         volatility: Optional[float] = None,
+        exercise_style: str = "American",
     ):
         """
         Add an option position to the portfolio.
@@ -99,9 +102,9 @@ class OptionPortfolioBase:
             maturity_date: Maturity date of the option
             quantity: Number of contracts
             option_type: "call" or "put"
-            symbol: Underlying symbol or identifier for display/export
             contract_size: Number of underlying shares per option contract
             volatility: Optional position-specific volatility (uses portfolio default if None)
+            exercise_style: 'American' or 'European'
         """
         # Use position-specific volatility or portfolio default
         option_volatility = (
@@ -109,7 +112,7 @@ class OptionPortfolioBase:
         )
         custom_volatility = volatility is not None
 
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=self.spot_price,
             strike_price=strike_price,
             maturity_date=maturity_date,
@@ -118,13 +121,14 @@ class OptionPortfolioBase:
             dividend_yield=self.dividend_yield,
             option_type=option_type,
             valuation_date=self.valuation_date,
+            exercise_style=exercise_style,
         )
         position = OptionPosition(
             option,
             quantity,
             contract_size=contract_size,
-            symbol=symbol,
             custom_volatility=custom_volatility,
+            exercise_style=exercise_style,
         )
         self.positions.append(position)
 
@@ -136,10 +140,8 @@ class OptionPortfolioBase:
                 pos.option.volatility = volatility
 
     def get_symbol(self) -> str:
-        """Get the symbol of the first position, or 'N/A' if none."""
-        if self.positions:
-            return self.positions[0].symbol
-        return "N/A"
+        """Get the symbol of the portfolio."""
+        return self.symbol
 
     @property
     def monte_carlo_results(self) -> Optional[Dict[str, Any]]:
@@ -283,7 +285,7 @@ class OptionPortfolioBase:
     def summary_market(self) -> str:
         """Return a summary of the market conditions."""
         return (
-            f"Symbol: {self.positions[0].symbol if self.positions else 'N/A'}, "
+            f"Symbol: {self.symbol}, "
             f"Underlying Quantity: {self.underlying_quantity:,.0f} shares, "
             f"Spot Price: ${self.spot_price:,.2f}, "
             f"Volatility: {self.volatility:.2%}, "
@@ -298,7 +300,6 @@ class OptionPortfolioBase:
         for pos in self.positions:
             positions.append(
                 {
-                    "symbol": pos.symbol,
                     "type": pos.option.option_type.capitalize(),
                     "strike": pos.option.strike_price,
                     "expiry": pos.option.maturity_date.date(),
@@ -321,9 +322,9 @@ class OptionPortfolioBase:
         strike: Optional[float] = None,
         expiry: Optional[datetime] = None,
         option_type: Optional[str] = None,
-        symbol: Optional[str] = None,
         contract_size: Optional[int] = None,
         volatility: Optional[float] = None,
+        exercise_style: Optional[str] = None,
     ):
         """Update a position's properties by index."""
         if index < 0 or index >= len(self.positions):
@@ -334,8 +335,6 @@ class OptionPortfolioBase:
             pos.quantity = quantity
         if contract_size is not None:
             pos.contract_size = contract_size
-        if symbol is not None:
-            pos.symbol = symbol
 
         strike_price = strike if strike is not None else pos.option.strike_price
         maturity_date = (
@@ -343,6 +342,9 @@ class OptionPortfolioBase:
         )
         opt_type = (
             option_type if option_type is not None else pos.option.option_type
+        )
+        exercise_style = (
+            exercise_style if exercise_style is not None else pos.exercise_style
         )
 
         # Handle volatility update
@@ -357,9 +359,10 @@ class OptionPortfolioBase:
             strike_price != pos.option.strike_price
             or maturity_date != pos.option.maturity_date
             or opt_type != pos.option.option_type
+            or exercise_style != pos.option.exercise_style
             or volatility is not None
         ):
-            pos.option = AmericanOption(
+            pos.option = OptionValuation(
                 spot_price=self.spot_price,
                 strike_price=strike_price,
                 maturity_date=maturity_date,
@@ -368,7 +371,10 @@ class OptionPortfolioBase:
                 dividend_yield=self.dividend_yield,
                 option_type=opt_type,
                 valuation_date=self.valuation_date,
+                exercise_style=exercise_style,
             )
+            # Keep OptionPosition.exercise_style in sync with the new OptionValuation
+            pos.exercise_style = pos.option.exercise_style
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert portfolio to pandas DataFrame."""
@@ -440,7 +446,7 @@ class OptionPortfolioBase:
             # Recreate all positions with new rates, preserving custom volatility
             new_positions = []
             for pos in self.positions:
-                new_option = AmericanOption(
+                new_option = OptionValuation(
                     spot_price=self.spot_price,
                     strike_price=pos.option.strike_price,
                     maturity_date=pos.option.maturity_date,
@@ -449,14 +455,15 @@ class OptionPortfolioBase:
                     dividend_yield=self.dividend_yield,
                     option_type=pos.option.option_type,
                     valuation_date=self.valuation_date,
+                    exercise_style=pos.exercise_style,
                 )
                 new_positions.append(
                     OptionPosition(
                         new_option,
                         pos.quantity,
                         contract_size=pos.contract_size,
-                        symbol=pos.symbol,
                         custom_volatility=pos.custom_volatility,  # Preserve custom volatility flag
+                        exercise_style=pos.exercise_style,
                     )
                 )
             self.positions = new_positions

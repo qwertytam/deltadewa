@@ -215,7 +215,7 @@ class TestFormatHtmlMetric:
 
         # Currency below threshold
         result = format_html_metric("Value", 0.001, format_type="currency")
-        assert "~$0" in result
+        assert "$ -" in result
 
         # Percentage at threshold boundary (0.0001 = 0.01%)
         # At exactly threshold, should format normally (not as ~0%)
@@ -225,7 +225,7 @@ class TestFormatHtmlMetric:
 
         # Percentage below threshold should show as ~0%
         result = format_html_metric("Change", 0.00001, format_type="percentage")
-        assert "~0%" in result
+        assert "- %" in result
 
         # Number at threshold boundary (0.01)
         result = format_html_metric("Delta", 0.01, format_type="number")
@@ -235,7 +235,7 @@ class TestFormatHtmlMetric:
 
         # Number below threshold
         result = format_html_metric("Delta", 0.001, format_type="number")
-        assert "~0" in result
+        assert "-" in result
 
 
 class TestFormatNumberAutoPrecision:

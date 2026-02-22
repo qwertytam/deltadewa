@@ -1,7 +1,7 @@
 """Tests for deltadewa.portfolio.position module."""
 
 from datetime import datetime, timedelta
-from deltadewa.american_option import AmericanOption
+from deltadewa.valuation import OptionValuation
 from deltadewa.portfolio.position import OptionPosition
 
 
@@ -10,7 +10,7 @@ class TestOptionPosition:
 
     def test_initialization(self):
         """Test OptionPosition can be instantiated."""
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -19,20 +19,17 @@ class TestOptionPosition:
             dividend_yield=0.0,
             option_type="call",
         )
-        position = OptionPosition(
-            option=option, quantity=1, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=1, contract_size=100)
 
         assert position is not None
         assert position.option == option
         assert position.quantity == 1
         assert position.contract_size == 100
-        assert position.symbol == "TEST"
         assert position.custom_volatility is False
 
     def test_position_value(self):
         """Test position_value calculation."""
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -40,10 +37,9 @@ class TestOptionPosition:
             risk_free_rate=0.05,
             dividend_yield=0.0,
             option_type="call",
+            exercise_style="American",
         )
-        position = OptionPosition(
-            option=option, quantity=2, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=2, contract_size=100)
 
         # Position value should be option price * quantity * contract_size
         expected_pnl = option.price() * 2 * 100
@@ -51,7 +47,7 @@ class TestOptionPosition:
 
     def test_position_delta(self):
         """Test position_delta calculation."""
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -59,10 +55,9 @@ class TestOptionPosition:
             risk_free_rate=0.05,
             dividend_yield=0.0,
             option_type="call",
+            exercise_style="American",
         )
-        position = OptionPosition(
-            option=option, quantity=2, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=2, contract_size=100)
 
         # Position delta should be option delta * quantity * contract_size
         expected_delta = option.delta() * 2 * 100
@@ -70,7 +65,7 @@ class TestOptionPosition:
 
     def test_position_greeks(self):
         """Test all Greek calculations."""
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -78,10 +73,9 @@ class TestOptionPosition:
             risk_free_rate=0.05,
             dividend_yield=0.0,
             option_type="call",
+            exercise_style="American",
         )
-        position = OptionPosition(
-            option=option, quantity=1, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=1, contract_size=100)
 
         # All greeks should be scaled by quantity * contract_size
         assert position.position_gamma() == option.gamma() * 100
@@ -91,7 +85,7 @@ class TestOptionPosition:
 
     def test_negative_quantity(self):
         """Test position with negative quantity (short position)."""
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -99,10 +93,9 @@ class TestOptionPosition:
             risk_free_rate=0.05,
             dividend_yield=0.0,
             option_type="call",
+            exercise_style="American",
         )
-        position = OptionPosition(
-            option=option, quantity=-1, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=-1, contract_size=100)
 
         # Negative quantity should result in negative value and delta
         assert position.position_value() < 0
@@ -110,7 +103,7 @@ class TestOptionPosition:
 
     def test_to_dict(self):
         """Test to_dict conversion."""
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -118,14 +111,12 @@ class TestOptionPosition:
             risk_free_rate=0.05,
             dividend_yield=0.0,
             option_type="put",
+            exercise_style="American",
         )
-        position = OptionPosition(
-            option=option, quantity=3, contract_size=100, symbol="TEST"
-        )
+        position = OptionPosition(option=option, quantity=3, contract_size=100)
 
         pos_dict = position.to_dict()
 
-        assert pos_dict["symbol"] == "TEST"
         assert pos_dict["type"] == "put"
         assert pos_dict["strike"] == 105.0
         assert pos_dict["quantity"] == 3
@@ -139,7 +130,7 @@ class TestOptionPosition:
 
     def test_custom_volatility_flag(self):
         """Test custom_volatility flag."""
-        option = AmericanOption(
+        option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
@@ -147,15 +138,16 @@ class TestOptionPosition:
             risk_free_rate=0.05,
             dividend_yield=0.0,
             option_type="call",
+            exercise_style="American",
         )
         position = OptionPosition(
             option=option,
             quantity=1,
             contract_size=100,
-            symbol="TEST",
             custom_volatility=True,
         )
 
         assert position.custom_volatility is True
         pos_dict = position.to_dict()
         assert pos_dict["custom_volatility"] is True
+        assert pos_dict["exercise_style"] == "American"

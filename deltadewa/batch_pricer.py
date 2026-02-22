@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Dict, Tuple
 import numpy as np
 
-from deltadewa.american_option import AmericanOption
+from deltadewa.valuation import OptionValuation
 from deltadewa.portfolio.position import OptionPosition
 
 
@@ -12,7 +12,7 @@ class BatchPricer:
     """
     Efficient batch pricer for portfolio valuation across scenario grids.
 
-    Optimizes portfolio valuation by caching AmericanOption instances per
+    Optimizes portfolio valuation by caching OptionValuation instances per
     (position, date) and reusing them across spot price sweeps using the
     efficient update_spot_price() method.
 
@@ -47,8 +47,8 @@ class BatchPricer:
         self.dividend_yield = dividend_yield
         self.underlying_quantity = underlying_quantity
 
-        # Cache: (position_index, valuation_date) -> AmericanOption
-        self._cache: Dict[Tuple[int, datetime], AmericanOption] = {}
+        # Cache: (position_index, valuation_date) -> OptionValuation
+        self._cache: Dict[Tuple[int, datetime], OptionValuation] = {}
 
     def portfolio_values_at(
         self,
@@ -58,7 +58,7 @@ class BatchPricer:
         """
         Calculate portfolio values at multiple spot prices for a given date.
 
-        For each position, checks if a cached AmericanOption exists for the
+        For each position, checks if a cached OptionValuation exists for the
         given valuation_date. If cached and date matches, reuses it; otherwise
         builds a new one and caches it.
 
@@ -100,13 +100,13 @@ class BatchPricer:
                     intrinsic * position.quantity * position.contract_size
                 )
             else:
-                # Option still alive - use cached AmericanOption
+                # Option still alive - use cached OptionValuation
                 cache_key = (pos_idx, valuation_date)
 
                 if cache_key not in self._cache:
-                    # Create new AmericanOption and cache it
+                    # Create new OptionValuation and cache it
                     # Use first spot as initial value (will be updated in loop)
-                    opt = AmericanOption(
+                    opt = OptionValuation(
                         spot_price=float(spots[0]),
                         strike_price=position.option.strike_price,
                         maturity_date=position.option.maturity_date,
@@ -115,6 +115,7 @@ class BatchPricer:
                         dividend_yield=self.dividend_yield,
                         option_type=position.option.option_type,
                         valuation_date=valuation_date,
+                        exercise_style=position.exercise_style,
                     )
                     self._cache[cache_key] = opt
                 else:
@@ -130,5 +131,5 @@ class BatchPricer:
         return portfolio_values
 
     def clear_cache(self):
-        """Clear the internal cache of AmericanOption instances."""
+        """Clear the internal cache of OptionValuation instances."""
         self._cache.clear()

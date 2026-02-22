@@ -2,7 +2,7 @@
 
 __version__ = "0.1.0"
 
-from .american_option import AmericanOption
+from .valuation import OptionValuation
 from .batch_pricer import BatchPricer
 from .portfolio.core import OptionPortfolio
 from .portfolio.factory import create_empty_portfolio
@@ -17,7 +17,7 @@ from .constants import (
 )
 
 __all__ = [
-    "AmericanOption",
+    "OptionValuation",
     "BatchPricer",
     "OptionPortfolio",
     "create_empty_portfolio",

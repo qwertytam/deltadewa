@@ -90,7 +90,6 @@ def get_portfolio_state_hash(portfolio) -> str:
     for pos in portfolio.positions:
         state_elements.extend(
             [
-                pos.symbol,
                 str(pos.quantity),
                 str(pos.option.strike_price),
                 str(pos.option.maturity_date.isoformat()),
