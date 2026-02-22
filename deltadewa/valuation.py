@@ -26,8 +26,8 @@ class OptionValuation:
     _VOL_BUMP = 0.01  # Bump size for vega calculation
 
     # Grid dimensions for finite difference engine
-    _TIME_STEPS = 2000
-    _PRICE_STEPS = 2000
+    _TIME_STEPS = 250
+    _PRICE_STEPS = 250
 
     def __init__(
         self,
