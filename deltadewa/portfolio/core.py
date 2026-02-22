@@ -344,9 +344,7 @@ class OptionPortfolioBase:
             option_type if option_type is not None else pos.option.option_type
         )
         exercise_style = (
-            exercise_style
-            if exercise_style is not None
-            else pos.option.exercise_style
+            exercise_style if exercise_style is not None else pos.exercise_style
         )
 
         # Handle volatility update
@@ -375,6 +373,7 @@ class OptionPortfolioBase:
                 valuation_date=self.valuation_date,
                 exercise_style=exercise_style,
             )
+            # Keep OptionPosition.exercise_style in sync with the new OptionValuation
             pos.exercise_style = pos.option.exercise_style
 
     def to_dataframe(self) -> pd.DataFrame:

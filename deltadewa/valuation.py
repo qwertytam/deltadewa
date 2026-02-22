@@ -10,9 +10,10 @@ from deltadewa.greeks_cache import GreeksCache
 
 class OptionValuation:
     """
-    American option pricing using the Bjerksund-Stensland approximation model.
+    Option pricing engine supporting both American (Finite Difference) and
+    European (Analytic Black-Scholes) exercise styles.
 
-    This class provides pricing and Greeks calculation for American options.
+    This class provides pricing and Greeks calculation for options.
 
     Performance Note:
         Spot price and volatility updates use QuantLib's SimpleQuote mechanism
@@ -25,8 +26,8 @@ class OptionValuation:
     _VOL_BUMP = 0.01  # Bump size for vega calculation
 
     # Grid dimensions for finite difference engine
-    _TIME_STEPS = 200
-    _PRICE_STEPS = 200
+    _TIME_STEPS = 2000
+    _PRICE_STEPS = 2000
 
     def __init__(
         self,
