@@ -144,7 +144,14 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             layout=widgets.Layout(width="300px"),
         )
 
-        # Volatility input
+        exercise_style_selector = widgets.Dropdown(
+            options=["American", "European"],
+            value="American",
+            description="Exercise Style:",
+            style={"description_width": "120px"},
+            layout=widgets.Layout(width="300px"),
+        )
+
         volatility_input = widgets.BoundedFloatText(
             value=self.portfolio.volatility,
             description="Volatility:",
@@ -195,9 +202,11 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         # Helper functions
         def get_position_display_string(pos):
             """Generate consistent display string for a position."""
-            result = f"{pos.option.option_type.capitalize()} "
-            result += f"{pos.option.strike_price} @ "
-            result += f"{pos.option.maturity_date.date()}"
+            result = f"{pos.quantity}x "
+            result += f"{pos.option.option_type.capitalize()} @"
+            result += f"{pos.option.strike_price} on "
+            result += f"{pos.option.maturity_date.date()} "
+            result += f"{pos.option.exercise_style.capitalize()}"
             return result
 
         def refresh_position_list():
@@ -231,7 +240,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                             else "Put"
                         )
                         expiry_input.value = pos.option.maturity_date.date()
-                        # Update volatility input based on position
+                        exercise_style_selector.value = (
+                            pos.option.exercise_style
+                        )
                         volatility_input.value = pos.option.volatility
                         use_default_vol.value = not pos.custom_volatility
                         break
@@ -256,6 +267,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                     ),
                     quantity=quantity_input.value,
                     volatility=position_volatility,
+                    exercise_style=exercise_style_selector.value.lower(),
                 )
                 status_label.value = (
                     f"✓ Added {quantity_input.value} "
@@ -331,6 +343,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                                     if option_type_selector.value == "Call"
                                     else "put"
                                 ),
+                                exercise_style=exercise_style_selector.value,
                                 volatility=position_volatility,
                             )
                             status_label.value = (
@@ -363,7 +376,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 position_selector,
                 widgets.HBox([quantity_input, strike_input]),
                 widgets.HBox([option_type_selector, expiry_input]),
-                widgets.HBox([volatility_input, use_default_vol]),
+                widgets.HBox([exercise_style_selector, volatility_input]),
+                widgets.HBox([use_default_vol]),
                 widgets.HBox([add_button, update_button, remove_button]),
                 status_label,
                 output,

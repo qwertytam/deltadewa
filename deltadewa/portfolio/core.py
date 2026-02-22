@@ -324,6 +324,7 @@ class OptionPortfolioBase:
         option_type: Optional[str] = None,
         contract_size: Optional[int] = None,
         volatility: Optional[float] = None,
+        exercise_style: Optional[str] = None,
     ):
         """Update a position's properties by index."""
         if index < 0 or index >= len(self.positions):
@@ -342,6 +343,11 @@ class OptionPortfolioBase:
         opt_type = (
             option_type if option_type is not None else pos.option.option_type
         )
+        exercise_style = (
+            exercise_style
+            if exercise_style is not None
+            else pos.option.exercise_style
+        )
 
         # Handle volatility update
         if volatility is not None:
@@ -355,6 +361,7 @@ class OptionPortfolioBase:
             strike_price != pos.option.strike_price
             or maturity_date != pos.option.maturity_date
             or opt_type != pos.option.option_type
+            or exercise_style != pos.option.exercise_style
             or volatility is not None
         ):
             pos.option = OptionValuation(
@@ -366,8 +373,9 @@ class OptionPortfolioBase:
                 dividend_yield=self.dividend_yield,
                 option_type=opt_type,
                 valuation_date=self.valuation_date,
-                exercise_style=pos.exercise_style,
+                exercise_style=exercise_style,
             )
+            pos.exercise_style = pos.option.exercise_style
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert portfolio to pandas DataFrame."""
