@@ -60,3 +60,68 @@ def create_demo_portfolio():
     )
 
     return p
+
+
+def create_default_portfolio():
+    """Build default market parameters and positions from inline config"""
+    default_config = {
+        "market_parameters": {
+            "spot_price": 83.50,
+            "risk_free_rate": 0.0399,
+            "dividend_yield": 0.0,
+            "underlying_quantity": 300 * 0,
+            "symbol": "NFLX",
+        },
+        "positions": [
+            {
+                "option_type": "call",
+                "strike_price": 95.0,
+                "maturity_days": 349,
+                "volatility": 0.366,
+                "quantity": 5,
+                "exercise_style": "european",
+            },
+            {
+                "option_type": "put",
+                "strike_price": 70.0,
+                "maturity_days": 349,
+                "volatility": 0.386,
+                "quantity": -5,
+                "exercise_style": "european",
+            },
+        ],
+    }
+
+    portfolio = create_empty_portfolio()
+    market_params = dict(default_config["market_parameters"])
+    portfolio.underlying_quantity = market_params["underlying_quantity"]
+    portfolio.spot_price = market_params["spot_price"]
+    portfolio.volatility = market_params.get("volatility", 0)
+    portfolio.risk_free_rate = market_params["risk_free_rate"]
+    portfolio.dividend_yield = market_params["dividend_yield"]
+    portfolio.symbol = market_params.get("symbol", "UNKNOWN")
+
+    portfolio.positions.clear()
+
+    now = datetime.now()
+    for pos_config in default_config["positions"]:
+        if "maturity_date" in pos_config:
+            # Absolute date specified
+            maturity = datetime.fromisoformat(pos_config["maturity_date"])
+        elif "maturity_days" in pos_config:
+            # Relative days from today
+            maturity = now + timedelta(days=pos_config["maturity_days"])
+        else:
+            continue
+
+        portfolio.add_position(
+            strike_price=pos_config["strike_price"],
+            maturity_date=maturity,
+            quantity=pos_config["quantity"],
+            option_type=pos_config["option_type"].lower(),
+            volatility=pos_config.get(
+                "volatility", market_params.get("volatility", None)
+            ),
+            exercise_style=pos_config.get("exercise_style", "american"),
+        )
+    return portfolio
