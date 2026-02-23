@@ -20,6 +20,7 @@ from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
 )
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.reporting.audit import PortfolioLogger
 
 
 class ExportControlsMixin:
@@ -29,10 +30,12 @@ class ExportControlsMixin:
     This mixin expects the host class to have:
     - self.portfolio: OptionPortfolio instance
     - self.serializer: PortfolioSerializer instance
+    - self.portfolio_changelog: PortfolioLogger instance
     """
 
     portfolio: OptionPortfolio
     serializer: PortfolioSerializer
+    portfolio_changelog: PortfolioLogger
 
     @property
     def export_dir(self) -> Path:
@@ -425,11 +428,17 @@ class ExportControlsMixin:
                     filepath = self.export_dir / filename
 
                     if file_format == "json":
-                        self.serializer.export_to_json(self.portfolio, filename)
+                        self.serializer.export_to_json(
+                            self.portfolio, self.portfolio_changelog, filename
+                        )
                     elif file_format == "csv":
-                        self.serializer.export_to_csv(self.portfolio, filename)
+                        self.serializer.export_to_csv(
+                            self.portfolio, self.portfolio_changelog, filename
+                        )
                     elif file_format == "yaml":
-                        self.serializer.export_to_yaml(self.portfolio, filename)
+                        self.serializer.export_to_yaml(
+                            self.portfolio, self.portfolio_changelog, filename
+                        )
                     else:
                         print(f"✗ Unknown format: {file_format}")
                         return

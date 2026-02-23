@@ -139,16 +139,18 @@ class PortfolioSerializer:
 
     # ========== Export Functions ==========
 
-    def _build_export_data(self, portfolio) -> dict:
+    def _build_export_data(self, portfolio, changelog) -> dict:
         """
         Build a comprehensive data structure representing the portfolio state,
         including market parameters, positions, and risk metrics.
 
         Args:
             portfolio: OptionPortfolio instance
+            changelog: PortfolioLogger instance
         Returns:
             dict with complete portfolio data for export
         """
+
         data = {
             "metadata": {
                 "exported_at": datetime.now().isoformat(),
@@ -164,6 +166,7 @@ class PortfolioSerializer:
             },
             "positions": [],
             "risk_metrics": portfolio.summary_stats(),
+            "session_changelog": [],
         }
 
         for pos in portfolio.positions:
@@ -189,21 +192,35 @@ class PortfolioSerializer:
             }
             data["positions"].append(position_data)
 
+        for entry in changelog.get_all_portfolio_snapshots():
+            data["session_changelog"].append(
+                {
+                    "timestamp": entry["timestamp"].isoformat(),
+                    "action": entry["action"].value,
+                    "details": entry["details"],
+                    "impact_delta": entry["impact_delta"],
+                    "impact_cost": entry["impact_cost"],
+                    "portfolio_snapshot": entry["portfolio_snapshot"],
+                }
+            )
+
         return data
 
-    def export_to_json(self, portfolio, filename="portfolio_book.json") -> Path:
+    def export_to_json(
+        self, portfolio, changelog, filename="portfolio_book.json"
+    ) -> Path:
         """
         Export complete portfolio state to JSON format.
 
         Args:
             portfolio: OptionPortfolio instance
-            market_params: dict with market parameters
+            changelog: PortfolioLogger instance
             filename: output filename
 
         Returns:
             Path to saved file
         """
-        portfolio_data = self._build_export_data(portfolio)
+        portfolio_data = self._build_export_data(portfolio, changelog)
 
         # Save to file
         output_path = self.export_dir / filename
@@ -212,17 +229,20 @@ class PortfolioSerializer:
 
         return Path(output_path)
 
-    def export_to_csv(self, portfolio, filename_prefix="portfolio"):
+    def export_to_csv(self, portfolio, changelog, filename="portfolio.csv"):
         """
         Export portfolio to CSV files (positions and risk).
 
         Args:
             portfolio: OptionPortfolio instance
-            filename_prefix: prefix for output files
+            changelog: PortfolioLogger instance
+            filename: output filename
 
         Returns:
             dict with paths to saved files
         """
+        filename_prefix = Path(filename).stem
+
         # Export positions
         positions_data = []
         for i, pos in enumerate(portfolio.positions):
@@ -231,7 +251,7 @@ class PortfolioSerializer:
                     "position_id": i,
                     "option_type": pos.option.option_type,
                     "strike": pos.option.strike_price,
-                    "maturity": pos.option.maturity_date.strftime("%Y-%m-%d"),
+                    "maturity": pos.option.maturity_date.isoformat(),
                     "quantity": pos.quantity,
                     "contract_size": pos.contract_size,
                     "volatility": pos.option.volatility,
@@ -252,6 +272,25 @@ class PortfolioSerializer:
                 }
             )
 
+        changelog_df = pd.DataFrame(
+            [
+                {
+                    "timestamp": entry["timestamp"].isoformat(),
+                    "action": entry["action"],
+                    "details": entry["details"],
+                    "impact_delta": entry["impact_delta"],
+                    "impact_cost": entry["impact_cost"],
+                    "resulting_positions": entry["portfolio_snapshot"][
+                        "total_positions"
+                    ],
+                    "resulting_net_delta": entry["portfolio_snapshot"][
+                        "net_delta"
+                    ],
+                }
+                for entry in changelog.get_all_portfolio_snapshots()
+            ]
+        )
+
         df_positions_export = pd.DataFrame(positions_data)
         positions_file = self.export_dir / f"{filename_prefix}_positions.csv"
         df_positions_export.to_csv(positions_file, index=False)
@@ -266,10 +305,13 @@ class PortfolioSerializer:
         risk_file = self.export_dir / f"{filename_prefix}_risk.csv"
         df_risk.to_csv(risk_file, index=False)
 
+        changelog_path = self.export_dir / f"{filename_prefix}_changelog.csv"
+        changelog_df.to_csv(changelog_path, index=False)
+
         return {"positions": positions_file, "risk": risk_file}
 
     def export_to_yaml(
-        self, portfolio, filename="portfolio_export.yaml"
+        self, portfolio, changelog, filename="portfolio_export.yaml"
     ) -> Path | None:
         """
         Export portfolio configuration to YAML format (useful for edits/versioning).
@@ -279,6 +321,7 @@ class PortfolioSerializer:
 
         Args:
             portfolio: OptionPortfolio instance
+            changelog: PortfolioLogger instance
             filename: output filename
 
         Returns:
@@ -288,7 +331,7 @@ class PortfolioSerializer:
             print("⚠️  PyYAML not installed. Cannot export to YAML.")
             return None
 
-        portfolio_data = self._build_export_data(portfolio)
+        portfolio_data = self._build_export_data(portfolio, changelog)
 
         output_path = self.export_dir / filename
         with open(output_path, "w", encoding="utf-8") as f:

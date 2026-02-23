@@ -29,19 +29,22 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     Attributes:
         portfolio: OptionPortfolio instance to manage
-        serializer: PortfolioSerializer to manage
+        serializer: PortfolioSerializer instance to manage
+        portfolio_changelog: PortfolioLogger instance to track changes
     """
 
-    def __init__(self, portfolio, serializer):
+    def __init__(self, portfolio, serializer, portfolio_changelog):
         """
         Initialize widget factory.
 
         Args:
             portfolio: OptionPortfolio instance
             serializer: PortfolioSerializer instance
+            portfolio_changelog: PortfolioLogger instance
         """
         self.portfolio = portfolio
         self.serializer = serializer
+        self.portfolio_changelog = portfolio_changelog
 
     # ==========================================================================
     # Position Management Widgets

@@ -6,6 +6,7 @@ other modules.
 """
 
 from typing import Final
+from enum import Enum
 
 # Calendar / time constants
 DAYS_PER_YEAR: Final[int] = 365
@@ -21,6 +22,25 @@ TRADING_DAYS_PER_YEAR: Final[int] = 252
 BUSINESS_DAYS_PER_YEAR: Final[int] = 252
 CALENDAR_DAYS_PER_MONTH: Final[int] = 30
 
+# Logging action types for portfolio changes
+
+
+class PortfolioAction(str, Enum):
+    """Enum of portfolio action types.
+
+    Use this when you want attribute access like `PORTFOLIO_ACTION_TYPES.ADD`.
+    The values are plain strings so they remain friendly for serialization
+    and display.
+    """
+
+    ADD = "ADD"
+    REMOVE = "REMOVE"
+    ROLL = "ROLL"
+    UPDATE = "UPDATE"
+    REBALANCE = "REBALANCE"
+    INITIALIZE = "INITIALIZE"
+
+
 __all__ = [
     "DAYS_PER_YEAR",
     "DAYS_PER_WEEK",
@@ -29,4 +49,5 @@ __all__ = [
     "TRADING_DAYS_PER_YEAR",
     "BUSINESS_DAYS_PER_YEAR",
     "CALENDAR_DAYS_PER_MONTH",
+    "PortfolioAction",
 ]
