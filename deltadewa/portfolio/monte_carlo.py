@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING, Optional, List
 from datetime import datetime
+from collections import Counter
 import numpy as np
 from deltadewa import constants as const
 
@@ -33,6 +34,11 @@ class MonteCarloMixin:
             spot_min_pct: float = 0.0,
             spot_max_pct: float = 200.0,
         ) -> List[float]: ...
+
+        # pylint: disable=missing-function-docstring, unused-argument
+        def calculate_pnl_at_expiry(
+            self, spot: float, include_underlying: bool = False
+        ) -> float: ...
 
     def calculate_probability_of_profit(
         self,
@@ -157,3 +163,164 @@ class MonteCarloMixin:
             "cvar_95": cvar_95,
             "cvar_99": cvar_99,
         }
+
+    def run_monte_carlo_simulation(
+        self,
+        num_simulations: int = 10**5,
+        include_underlying: bool = True,
+        random_seed: Optional[int] = 42,  # Set to None for true randomness
+    ):
+        """
+        Run Monte Carlo simulation and store results on portfolio object.
+
+        Args:
+            num_simulations: Number of simulation paths
+            include_underlying: Include underlying position in P&L
+            random_seed: Random seed for reproducibility (None for true randomness)
+
+        Returns:
+            dict: Monte Carlo results dictionary
+        """
+        # Get time to expiry from nearest maturity
+        min_time_horizon = 1  # Minimum days to expiry
+        if len(self.positions) > 0:
+            min_maturity = min(
+                pos.option.maturity_date for pos in self.positions
+            )
+            days_to_expiry = max(
+                min_time_horizon, (min_maturity - self.valuation_date).days
+            )
+        else:
+            days_to_expiry = const.CALENDAR_DAYS_PER_MONTH  # Default
+
+        time_to_expiry = days_to_expiry / const.DAYS_PER_YEAR
+
+        # Get market parameters
+        spot_price = self.spot_price
+        volatility = self.volatility
+        risk_free_rate = self.risk_free_rate
+        dividend_yield = self.dividend_yield
+
+        if random_seed is not None:
+            np.random.seed(random_seed)
+
+        # Vectorized simulation for performance
+        z = np.random.standard_normal(num_simulations)
+        drift = (
+            risk_free_rate - dividend_yield - 0.5 * volatility**2
+        ) * time_to_expiry
+        diffusion = volatility * np.sqrt(time_to_expiry) * z
+        final_spots = spot_price * np.exp(drift + diffusion)
+
+        # Calculate P&L for each simulated spot price
+        simulated_pnls = np.array(
+            [
+                self.calculate_pnl_at_expiry(
+                    spot, include_underlying=include_underlying
+                )
+                for spot in final_spots
+            ]
+        )
+
+        # Clean data
+        pnls_clean = simulated_pnls[np.isfinite(simulated_pnls)]
+
+        # Basic statistics
+        expected_pnl = np.mean(pnls_clean)
+        median_pnl = np.median(pnls_clean)
+        std_pnl = np.std(pnls_clean)
+        min_pnl = np.min(pnls_clean)
+        max_pnl = np.max(pnls_clean)
+
+        # Profit/Loss breakdown
+        profits = pnls_clean[pnls_clean >= 0]
+        losses = pnls_clean[pnls_clean < 0]
+        prob_profit = len(profits) / len(pnls_clean)
+        prob_loss = len(losses) / len(pnls_clean)
+
+        # VaR and CVaR
+        var_95 = np.percentile(pnls_clean, 5)  # 5th percentile = 95% VaR
+        var_99 = np.percentile(pnls_clean, 1)  # 1st percentile = 99% VaR
+        cvar_95 = np.mean(pnls_clean[pnls_clean <= var_95])
+        cvar_99 = np.mean(pnls_clean[pnls_clean <= var_99])
+
+        # Loss analysis (conditional on losses occurring)
+        if len(losses) > 0:
+            avg_loss = np.mean(losses)
+            max_loss = np.min(losses)  # Most negative = worst loss
+            median_loss = np.median(losses)
+        else:
+            avg_loss = max_loss = median_loss = 0.0
+
+        # Distribution concentration check (for short option strategies)
+        unique_rounded = np.unique(np.round(pnls_clean, 2))
+        is_concentrated = len(unique_rounded) < (len(pnls_clean) / 100)
+
+        most_common_pnl = None
+        concentration_pct = 0.0
+        if is_concentrated:
+            most_common_pnl = Counter(np.round(pnls_clean, 2)).most_common(1)[0]
+            concentration_pct = most_common_pnl[1] / len(pnls_clean) * 100
+
+        # Theoretical maximum loss (for short options)
+        theoretical_max_loss = None
+        if hasattr(self, "positions") and len(self.positions) > 0:
+            max_loss_theoretical = 0.0
+            for pos in self.positions:
+                if pos.quantity < 0:  # Short position
+                    if pos.option.option_type.lower() == "put":
+                        max_loss_this = (
+                            pos.option.strike_price
+                            * abs(pos.quantity)
+                            * pos.contract_size
+                        )
+                    else:  # Short call = unlimited
+                        max_loss_this = float("inf")
+
+                    if max_loss_this == float("inf"):
+                        max_loss_theoretical = float("inf")
+                        break
+                    max_loss_theoretical += max_loss_this
+
+            if (
+                max_loss_theoretical != float("inf")
+                and max_loss_theoretical > 0
+            ):
+                theoretical_max_loss = -max_loss_theoretical
+
+        # Build results dictionary
+        mc_results = {
+            # Raw data
+            "simulated_pnls": pnls_clean,
+            "num_simulations": len(pnls_clean),
+            "days_to_expiry": days_to_expiry,
+            # Basic statistics
+            "expected_pnl": expected_pnl,
+            "median_pnl": median_pnl,
+            "std_pnl": std_pnl,
+            "min_pnl": min_pnl,
+            "max_pnl": max_pnl,
+            # Profit/Loss breakdown
+            "prob_profit": prob_profit,
+            "prob_loss": prob_loss,
+            "avg_loss": avg_loss,
+            "max_loss": max_loss,
+            "median_loss": median_loss,
+            # Risk metrics
+            "var_95": var_95,
+            "var_99": var_99,
+            "cvar_95": cvar_95,
+            "cvar_99": cvar_99,
+            # Distribution characteristics
+            "is_concentrated": is_concentrated,
+            "most_common_pnl": most_common_pnl,
+            "concentration_pct": concentration_pct,
+            "unique_values": len(unique_rounded),
+            # Theoretical bounds
+            "theoretical_max_loss": theoretical_max_loss,
+        }
+
+        # Store on portfolio using public property
+        self.monte_carlo_results = mc_results
+
+        return mc_results
