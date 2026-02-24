@@ -15,7 +15,7 @@ from deltadewa.persistence import (
     load_config_yaml,
     YAML_AVAILABLE,
 )
-
+from deltadewa.reporting.audit import PortfolioLogger
 
 # ========== Fixtures ==========
 
@@ -142,7 +142,10 @@ class TestJsonRoundtrip:
     def test_export_to_json_creates_file(self, tmp_path, sample_portfolio):
         """Test that export_to_json creates the file."""
         serializer = PortfolioSerializer(tmp_path)
-        output_path = serializer.export_to_json(sample_portfolio, "test.json")
+        changelog = PortfolioLogger()
+        output_path = serializer.export_to_json(
+            sample_portfolio, changelog, "test.json"
+        )
 
         assert output_path.exists()
         assert output_path.suffix == ".json"
@@ -153,9 +156,12 @@ class TestJsonRoundtrip:
     ):
         """Export then import JSON — market params should match."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export
-        output_path = serializer.export_to_json(sample_portfolio, "test.json")
+        output_path = serializer.export_to_json(
+            sample_portfolio, changelog, "test.json"
+        )
 
         # Import
         result = serializer.import_from_json(output_path, create_portfolio=True)
@@ -181,9 +187,12 @@ class TestJsonRoundtrip:
     ):
         """Export then import JSON — position count, strikes, types, quantities should match."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export
-        output_path = serializer.export_to_json(sample_portfolio, "test.json")
+        output_path = serializer.export_to_json(
+            sample_portfolio, changelog, "test.json"
+        )
 
         # Import
         result = serializer.import_from_json(output_path, create_portfolio=True)
@@ -224,9 +233,12 @@ class TestJsonRoundtrip:
         )
 
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export
-        output_path = serializer.export_to_json(portfolio, "test.json")
+        output_path = serializer.export_to_json(
+            portfolio, changelog, "test.json"
+        )
 
         # Import
         result = serializer.import_from_json(output_path, create_portfolio=True)
@@ -243,9 +255,12 @@ class TestJsonRoundtrip:
     ):
         """Test import_from_json with create_portfolio=False returns raw dict."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export
-        output_path = serializer.export_to_json(sample_portfolio, "test.json")
+        output_path = serializer.export_to_json(
+            sample_portfolio, changelog, "test.json"
+        )
 
         # Import without creating portfolio
         result = serializer.import_from_json(
@@ -330,7 +345,10 @@ class TestYamlRoundtrip:
     def test_export_to_yaml_creates_file(self, tmp_path, sample_portfolio):
         """Test that export_to_yaml creates the file."""
         serializer = PortfolioSerializer(tmp_path)
-        output_path = serializer.export_to_yaml(sample_portfolio, "test.yaml")
+        changelog = PortfolioLogger()
+        output_path = serializer.export_to_yaml(
+            sample_portfolio, changelog, "test.yaml"
+        )
 
         assert output_path is not None
         assert output_path.exists()
@@ -342,9 +360,12 @@ class TestYamlRoundtrip:
     ):
         """Export then import YAML — market params should match."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export
-        output_path = serializer.export_to_yaml(sample_portfolio, "test.yaml")
+        output_path = serializer.export_to_yaml(
+            sample_portfolio, changelog, "test.yaml"
+        )
 
         # Import
         result = serializer.import_from_yaml(output_path)
@@ -370,9 +391,12 @@ class TestYamlRoundtrip:
     ):
         """Export then import YAML — positions should match."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export
-        output_path = serializer.export_to_yaml(sample_portfolio, "test.yaml")
+        output_path = serializer.export_to_yaml(
+            sample_portfolio, changelog, "test.yaml"
+        )
 
         # Import
         result = serializer.import_from_yaml(output_path)
@@ -445,7 +469,8 @@ class TestCsvExport:
     def test_export_to_csv_creates_files(self, tmp_path, sample_portfolio):
         """Test that export creates both positions and risk CSV files."""
         serializer = PortfolioSerializer(tmp_path)
-        result = serializer.export_to_csv(sample_portfolio, "test")
+        changelog = PortfolioLogger()
+        result = serializer.export_to_csv(sample_portfolio, changelog, "test")
 
         assert "positions" in result
         assert "risk" in result
@@ -458,7 +483,8 @@ class TestCsvExport:
         """Test that positions CSV contains correct columns and data."""
 
         serializer = PortfolioSerializer(tmp_path)
-        result = serializer.export_to_csv(sample_portfolio, "test")
+        changelog = PortfolioLogger()
+        result = serializer.export_to_csv(sample_portfolio, changelog, "test")
 
         # Read positions CSV
         df = pd.read_csv(result["positions"])
@@ -488,7 +514,8 @@ class TestCsvExport:
         """Test that risk CSV contains summary stats."""
 
         serializer = PortfolioSerializer(tmp_path)
-        result = serializer.export_to_csv(sample_portfolio, "test")
+        changelog = PortfolioLogger()
+        result = serializer.export_to_csv(sample_portfolio, changelog, "test")
 
         # Read risk CSV
         df = pd.read_csv(result["risk"])
@@ -512,9 +539,12 @@ class TestUniversalImport:
     def test_import_portfolio_json(self, tmp_path, sample_portfolio):
         """Test auto-detection for JSON files."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export as JSON
-        json_path = serializer.export_to_json(sample_portfolio, "test.json")
+        json_path = serializer.export_to_json(
+            sample_portfolio, changelog, "test.json"
+        )
 
         # Import using universal function
         result = serializer.import_portfolio(json_path)
@@ -526,9 +556,12 @@ class TestUniversalImport:
     def test_import_portfolio_yaml(self, tmp_path, sample_portfolio):
         """Test auto-detection for YAML files."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
 
         # Export as YAML
-        yaml_path = serializer.export_to_yaml(sample_portfolio, "test.yaml")
+        yaml_path = serializer.export_to_yaml(
+            sample_portfolio, changelog, "test.yaml"
+        )
 
         # Import using universal function
         result = serializer.import_portfolio(yaml_path)
@@ -654,8 +687,10 @@ class TestConvenienceFunctions:
     def test_export_portfolio_to_json(self, tmp_path, sample_portfolio):
         """Test the convenience wrapper for JSON export."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
         output_path = serializer.export_to_json(
             sample_portfolio,
+            changelog,
             filename="convenience.json",
         )
 
@@ -665,9 +700,11 @@ class TestConvenienceFunctions:
     def test_export_portfolio_to_csv(self, tmp_path, sample_portfolio):
         """Test the convenience wrapper for CSV export."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
         result = serializer.export_to_csv(
             sample_portfolio,
-            filename_prefix="convenience",
+            changelog,
+            filename="convenience.csv",
         )
 
         assert result["positions"].exists()
@@ -677,8 +714,10 @@ class TestConvenienceFunctions:
     def test_export_portfolio_to_yaml(self, tmp_path, sample_portfolio):
         """Test the convenience wrapper for YAML export."""
         serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
         output_path = serializer.export_to_yaml(
             sample_portfolio,
+            changelog,
             filename="convenience.yaml",
         )
 
@@ -690,7 +729,10 @@ class TestConvenienceFunctions:
         """Test the convenience wrapper for JSON import."""
         # First export
         serializer = PortfolioSerializer(tmp_path)
-        json_path = serializer.export_to_json(sample_portfolio, "test.json")
+        changelog = PortfolioLogger()
+        json_path = serializer.export_to_json(
+            sample_portfolio, changelog, "test.json"
+        )
 
         # Import using convenience function
         result = serializer.import_from_json(

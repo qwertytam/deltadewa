@@ -30,25 +30,42 @@ class TestPortfolioWidgets:
         serializer.deserialize = Mock(return_value="deserialized_data")
         return serializer
 
-    def test_initialization(self, mock_portfolio, mock_serializer):
+    @pytest.fixture
+    def mock_changelog(self):
+        """Create a mock changelog for testing."""
+        changelog = Mock()
+        changelog.log = Mock()
+        return changelog
+
+    def test_initialization(
+        self, mock_portfolio, mock_serializer, mock_changelog
+    ):
         """Test PortfolioWidgets can be instantiated."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         assert widgets is not None
         assert widgets.portfolio == mock_portfolio
         assert widgets.serializer == mock_serializer
 
-    def test_create_position_editor(self, mock_portfolio, mock_serializer):
+    def test_create_position_editor(
+        self, mock_portfolio, mock_serializer, mock_changelog
+    ):
         """Test create_position_editor method."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         editor = widgets.create_position_editor()
         assert editor is not None
         assert hasattr(editor, "children") or hasattr(editor, "value")
 
     def test_create_market_params_controls(
-        self, mock_portfolio, mock_serializer
+        self, mock_portfolio, mock_serializer, mock_changelog
     ):
         """Test create_market_params_controls method."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         controls = widgets.create_market_params_controls(
             spot_price=mock_portfolio.spot_price,
             volatility=mock_portfolio.volatility,
@@ -56,36 +73,52 @@ class TestPortfolioWidgets:
         assert controls is not None
 
     def test_create_transaction_cost_controls(
-        self, mock_portfolio, mock_serializer
+        self, mock_portfolio, mock_serializer, mock_changelog
     ):
         """Test create_transaction_cost_controls method."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         controls = widgets.create_transaction_cost_controls()
         assert controls is not None
 
     def test_create_roll_analysis_controls(
-        self, mock_portfolio, mock_serializer
+        self, mock_portfolio, mock_serializer, mock_changelog
     ):
         """Test create_roll_controls method."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         controls = widgets.create_roll_controls()
         assert controls is not None
 
-    def test_create_export_controls(self, mock_portfolio, mock_serializer):
+    def test_create_export_controls(
+        self, mock_portfolio, mock_serializer, mock_changelog
+    ):
         """Test create_export_controls method."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         controls = widgets.create_export_controls()
         assert controls is not None
 
-    def test_create_import_controls(self, mock_portfolio, mock_serializer):
+    def test_create_import_controls(
+        self, mock_portfolio, mock_serializer, mock_changelog
+    ):
         """Test create_import_controls method."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         controls = widgets.create_import_controls()
         assert controls is not None
 
-    def test_attributes_exist(self, mock_portfolio, mock_serializer):
+    def test_attributes_exist(
+        self, mock_portfolio, mock_serializer, mock_changelog
+    ):
         """Test all expected attributes exist."""
-        widgets = PortfolioWidgets(mock_portfolio, mock_serializer)
+        widgets = PortfolioWidgets(
+            mock_portfolio, mock_serializer, mock_changelog
+        )
         assert hasattr(widgets, "portfolio")
         assert hasattr(widgets, "create_position_editor")
         assert hasattr(widgets, "create_market_params_controls")
