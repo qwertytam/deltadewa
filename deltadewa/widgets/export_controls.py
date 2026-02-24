@@ -6,13 +6,12 @@ in the deltadewa dashboard.
 
 from pathlib import Path
 from typing import (
-    Optional,
     Union,
     Callable,
     Dict,
     Any,
 )
-from datetime import datetime
+from datetime import datetime, timezone
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.persistence import PortfolioSerializer
@@ -419,7 +418,9 @@ class ExportControlsMixin:
 
                     ts = ""
                     if inc_timestamp:
-                        ts = datetime.now().strftime("_%Y%m%d_%H%M%S")
+                        ts = datetime.now(tz=timezone.utc).strftime(
+                            "_%Y%m%d_%H%M%S"
+                        )
 
                     # Add extension if not present
                     if not filename.endswith(f".{file_format}"):

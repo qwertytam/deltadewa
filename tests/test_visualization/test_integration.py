@@ -1,6 +1,6 @@
 """Integration tests for deltadewa.visualization module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import matplotlib
 
 import matplotlib.pyplot as plt
@@ -36,7 +36,7 @@ class TestIntegration:
     def test_convenience_plot_pnl_diagram(self):
         """Test plot_pnl_diagram convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -52,7 +52,7 @@ class TestIntegration:
     def test_convenience_plot_pnl_distribution(self):
         """Test plot_pnl_distribution_with_metrics convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -68,7 +68,7 @@ class TestIntegration:
     def test_convenience_plot_greeks_by_strike(self):
         """Test plot_greeks_by_strike convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -84,7 +84,7 @@ class TestIntegration:
     def test_convenience_plot_theta_analysis(self):
         """Test plot_theta_analysis convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -100,7 +100,7 @@ class TestIntegration:
     def test_convenience_plot_greeks_consolidated(self):
         """Test plot_greeks_consolidated convenience function."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -122,8 +122,8 @@ class TestIntegration:
         )
 
         # Add multiple positions
-        maturity1 = datetime.now() + timedelta(days=30)
-        maturity2 = datetime.now() + timedelta(days=60)
+        maturity1 = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity2 = datetime.now(tz=timezone.utc) + timedelta(days=60)
 
         portfolio.add_position(
             strike_price=100.0,

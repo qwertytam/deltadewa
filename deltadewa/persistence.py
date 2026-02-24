@@ -6,7 +6,7 @@ in multiple formats (JSON, CSV, YAML).
 """
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
 import pandas as pd
@@ -154,7 +154,7 @@ class PortfolioSerializer:
 
         data = {
             "metadata": {
-                "exported_at": datetime.now().isoformat(),
+                "exported_at": datetime.now(tz=timezone.utc).isoformat(),
                 "version": "1.0",
             },
             "market_parameters": {
@@ -453,12 +453,12 @@ class PortfolioSerializer:
             volatility=market_params["volatility"],
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
-            valuation_date=datetime.now(),
+            valuation_date=datetime.now(tz=timezone.utc),
             symbol=market_params.get("symbol", "UNKNOWN"),
         )
 
         # Add positions
-        today = datetime.now()
+        today = datetime.now(tz=timezone.utc)
         for pos_config in config["positions"]:
             # Determine maturity date
             if "maturity_date" in pos_config:

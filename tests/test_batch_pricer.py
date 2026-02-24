@@ -1,6 +1,6 @@
 """Tests for BatchPricer class."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from deltadewa import OptionPortfolio, OptionValuation
@@ -24,7 +24,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=2,
             option_type=OptionType.CALL,
         )
@@ -37,7 +37,7 @@ class TestBatchPricer:
         )
 
         spot = 100.0
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
         spots = np.array([spot])
 
         # Get BatchPricer result
@@ -47,7 +47,7 @@ class TestBatchPricer:
         opt = OptionValuation(
             spot_price=spot,
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -71,7 +71,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -84,7 +84,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
 
         portfolio_values = pricer.portfolio_values_at(spots, valuation_date)
 
@@ -96,7 +96,8 @@ class TestBatchPricer:
             opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
-                maturity_date=datetime.now() + timedelta(days=30),
+                maturity_date=datetime.now(tz=timezone.utc)
+                + timedelta(days=30),
                 volatility=0.25,
                 risk_free_rate=0.05,
                 dividend_yield=0.0,
@@ -119,7 +120,7 @@ class TestBatchPricer:
         # Set maturity to 1 day from now, but value it at 2 days from now
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now() + timedelta(days=1),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=1),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -133,7 +134,7 @@ class TestBatchPricer:
 
         spots = np.array([90.0, 100.0, 110.0])
         # Value at a date after expiry
-        future_date = datetime.now() + timedelta(days=2)
+        future_date = datetime.now(tz=timezone.utc) + timedelta(days=2)
         portfolio_values = pricer.portfolio_values_at(spots, future_date)
 
         # Verify intrinsic values: max(0, spot - 95) * 100
@@ -150,7 +151,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -163,7 +164,7 @@ class TestBatchPricer:
         )
 
         spots1 = np.array([95.0, 100.0, 105.0])
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
 
         # First call - should create and cache option
         values1 = pricer.portfolio_values_at(spots1, valuation_date)
@@ -190,7 +191,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -203,8 +204,8 @@ class TestBatchPricer:
         )
 
         spots = np.array([100.0])
-        date1 = datetime.now()
-        date2 = datetime.now() + timedelta(days=5)
+        date1 = datetime.now(tz=timezone.utc)
+        date2 = datetime.now(tz=timezone.utc) + timedelta(days=5)
 
         # First call
         values1 = pricer.portfolio_values_at(spots, date1)
@@ -231,14 +232,14 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=2,
             option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now() + timedelta(days=45),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=45),
             quantity=-1,
             option_type=OptionType.PUT,
         )
@@ -252,7 +253,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
 
         # Get BatchPricer results
         batch_values = pricer.portfolio_values_at(spots, valuation_date)
@@ -286,7 +287,9 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        portfolio_values = pricer.portfolio_values_at(spots, datetime.now())
+        portfolio_values = pricer.portfolio_values_at(
+            spots, datetime.now(tz=timezone.utc)
+        )
 
         # Should be exactly underlying_quantity * spot
         expected = 1000.0 * spots
@@ -303,7 +306,7 @@ class TestBatchPricer:
         # Call that will be expired when valued
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now() + timedelta(days=5),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=5),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -311,7 +314,7 @@ class TestBatchPricer:
         # Call that will still be alive when valued
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -326,7 +329,7 @@ class TestBatchPricer:
         spot = 100.0
         spots = np.array([spot])
         # Value at a date where first option is expired but second is still alive
-        valuation_date = datetime.now() + timedelta(days=10)
+        valuation_date = datetime.now(tz=timezone.utc) + timedelta(days=10)
 
         portfolio_value = pricer.portfolio_values_at(spots, valuation_date)[0]
 
@@ -337,7 +340,7 @@ class TestBatchPricer:
         opt = OptionValuation(
             spot_price=spot,
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             volatility=0.25,
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
@@ -360,7 +363,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -374,7 +377,7 @@ class TestBatchPricer:
 
         # Build cache
         spots = np.array([100.0])
-        pricer.portfolio_values_at(spots, datetime.now())
+        pricer.portfolio_values_at(spots, datetime.now(tz=timezone.utc))
         # pylint: disable=protected-access
         assert len(pricer._cache) == 1
 
@@ -395,7 +398,8 @@ class TestBatchPricer:
         for strike in [95.0, 100.0, 105.0]:
             portfolio.add_position(
                 strike_price=strike,
-                maturity_date=datetime.now() + timedelta(days=30),
+                maturity_date=datetime.now(tz=timezone.utc)
+                + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )
@@ -408,7 +412,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([100.0])
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
 
         # First call should cache 3 options (one per position)
         pricer.portfolio_values_at(spots, valuation_date)
@@ -421,7 +425,7 @@ class TestBatchPricer:
         assert len(pricer._cache) == 3
 
         # Call with different date should create 3 more
-        new_date = datetime.now() + timedelta(days=5)
+        new_date = datetime.now(tz=timezone.utc) + timedelta(days=5)
         pricer.portfolio_values_at(spots, new_date)
         # pylint: disable=protected-access
         assert len(pricer._cache) == 6  # 3 positions × 2 dates
@@ -436,7 +440,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -449,7 +453,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
 
         portfolio_values = pricer.portfolio_values_at(spots, valuation_date)
 
@@ -461,7 +465,8 @@ class TestBatchPricer:
             opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
-                maturity_date=datetime.now() + timedelta(days=30),
+                maturity_date=datetime.now(tz=timezone.utc)
+                + timedelta(days=30),
                 volatility=0.25,
                 risk_free_rate=portfolio.risk_free_rate,
                 dividend_yield=portfolio.dividend_yield,
@@ -484,7 +489,7 @@ class TestBatchPricer:
         # Set maturity to 1 day from now, but value it at 2 days from now
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=1),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=1),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -498,7 +503,7 @@ class TestBatchPricer:
 
         spots = np.array([90.0, 100.0, 110.0])
         # Value at a date after expiry
-        future_date = datetime.now() + timedelta(days=2)
+        future_date = datetime.now(tz=timezone.utc) + timedelta(days=2)
         portfolio_values = pricer.portfolio_values_at(spots, future_date)
 
         # Verify intrinsic values: max(0, 105 - spot) * 100

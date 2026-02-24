@@ -1,6 +1,6 @@
 """Tests for deltadewa.visualization.theta_charts module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import matplotlib
 
 import matplotlib.pyplot as plt
@@ -33,7 +33,7 @@ class TestThetaChartsMixin:
     def test_plot_theta_analysis_with_positions(self):
         """Test plot_theta_analysis with positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -60,7 +60,7 @@ class TestThetaChartsMixin:
     def test_plot_theta_analysis_custom_projection(self):
         """Test plot_theta_analysis with custom projection days."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -78,7 +78,7 @@ class TestThetaChartsMixin:
     def test_prepare_theta_data(self):
         """Test _prepare_theta_data."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,

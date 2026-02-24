@@ -4,8 +4,9 @@ Example script demonstrating the deltadewa American options portfolio management
 This script creates a sample portfolio and demonstrates key functionality.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from deltadewa import OptionPortfolio
+from deltadewa.constants import OptionType
 
 
 def main():
@@ -41,7 +42,7 @@ def main():
 
     # Add positions
     print("Adding Option Positions...")
-    today = datetime.now()
+    today = datetime.now(tz=timezone.utc)
     maturity_30d = today + timedelta(days=30)
     maturity_60d = today + timedelta(days=60)
     maturity_90d = today + timedelta(days=90)
@@ -135,10 +136,12 @@ def main():
         ("Up 10%", spot_price * 1.1),
     ]
 
+    # pylint: disable=assignment-from-no-return
     current_value = portfolio.total_value()
 
     for name, new_spot in scenarios:
         portfolio.update_market_conditions(spot_price=new_spot)
+        # pylint: disable=assignment-from-no-return
         new_value = portfolio.total_value()
         pnl = new_value - current_value
         underlying_pnl = (new_spot - spot_price) * underlying_quantity

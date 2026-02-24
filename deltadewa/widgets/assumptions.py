@@ -5,7 +5,7 @@ This module provides a centralized widget for managing market parameters
 and scenario assumptions across the deltadewa dashboard.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Tuple
 import ipywidgets as widgets  # type: ignore[import-untyped]
@@ -72,7 +72,7 @@ class GlobalAssumptions:
             portfolio (overrides time horizon selector)
         """
         if valuation_date is None:
-            valuation_date = datetime.now()
+            valuation_date = datetime.now(tz=timezone.utc)
 
         # Market parameters
         spot_min = spot_price * (1 - spot_range_pct / 100)

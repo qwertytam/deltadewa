@@ -1,6 +1,6 @@
 """Tests for deltadewa.portfolio.pnl module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.constants import OptionType
@@ -15,7 +15,7 @@ class TestPnLMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -32,7 +32,7 @@ class TestPnLMixin:
         # Buy a call at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -56,7 +56,7 @@ class TestPnLMixin:
         # Buy a put at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -95,7 +95,7 @@ class TestPnLMixin:
         # Sell a call at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -125,7 +125,7 @@ class TestPnLMixin:
         # Sell OTM put (collect premium)
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.PUT,
         )
@@ -133,7 +133,7 @@ class TestPnLMixin:
         # Buy further OTM put (pay premium)
         portfolio.add_position(
             strike_price=90.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -151,7 +151,7 @@ class TestPnLMixin:
         # Buy a call at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -201,13 +201,13 @@ class TestPnLMixin:
         # Create a bull call spread
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )

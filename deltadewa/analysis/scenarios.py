@@ -1,7 +1,7 @@
 """Scenario grid generation mixin for portfolio analysis."""
 
 from typing import TYPE_CHECKING, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
 

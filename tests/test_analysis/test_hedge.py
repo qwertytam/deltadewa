@@ -1,6 +1,6 @@
 """Tests for deltadewa.analysis.recommendations module (hedge functionality)."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
@@ -21,7 +21,7 @@ class TestRecommendationsMixinHedge:
         # Add a long call
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -60,7 +60,7 @@ class TestRecommendationsMixinHedge:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -84,14 +84,14 @@ class TestRecommendationsMixinHedge:
         # Add positions
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -118,7 +118,7 @@ class TestRecommendationsMixinHedge:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -154,7 +154,8 @@ class TestRecommendationsMixinHedge:
         for strike in [95, 100, 105, 110, 115]:
             portfolio.add_position(
                 strike_price=float(strike),
-                maturity_date=datetime.now() + timedelta(days=30),
+                maturity_date=datetime.now(tz=timezone.utc)
+                + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )

@@ -1,6 +1,6 @@
 """Factory functions for creating option portfolios."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from deltadewa.constants import OptionType, ExerciseStyle
 
 
@@ -43,7 +43,7 @@ def create_demo_portfolio():
         symbol="DEMO",
     )
 
-    today = datetime.now()
+    today = datetime.now(tz=timezone.utc)
     # Short-dated call
     p.add_position(
         strike_price=100.0,
@@ -104,7 +104,7 @@ def create_default_portfolio():
 
     portfolio.positions.clear()
 
-    now = datetime.now()
+    now = datetime.now(tz=timezone.utc)
     for pos_config in default_config["positions"]:
         if "maturity_date" in pos_config:
             # Absolute date specified

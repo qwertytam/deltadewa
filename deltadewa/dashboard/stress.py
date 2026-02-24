@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 import ipywidgets as widgets  # type: ignore

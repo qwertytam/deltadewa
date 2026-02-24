@@ -1,6 +1,6 @@
 """Tests for deltadewa.analysis.risk_reward module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -20,7 +20,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -58,7 +58,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -82,7 +82,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -104,7 +104,7 @@ class TestRiskRewardMixin:
             volatility=0.3,
         )
 
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
         # Iron condor: buy put spread, buy call spread
         portfolio.add_position(
             strike_price=95.0,
@@ -163,7 +163,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -188,7 +188,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -224,7 +224,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -247,7 +247,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )

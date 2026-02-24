@@ -1,6 +1,6 @@
 """Core portfolio management and mixin composition."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Dict, Any
 import pandas as pd
 from deltadewa.valuation import OptionValuation
@@ -76,7 +76,7 @@ class OptionPortfolioBase:
         self.volatility = volatility
         self.risk_free_rate = risk_free_rate
         self.dividend_yield = dividend_yield
-        self.valuation_date = valuation_date or datetime.now()
+        self.valuation_date = valuation_date or datetime.now(tz=timezone.utc)
         self.symbol = symbol
         self._monte_carlo_results: Dict[str, Any] | None = None
 

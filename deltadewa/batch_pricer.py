@@ -1,6 +1,6 @@
 """Batch pricer for efficient portfolio valuation across scenario grids."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Tuple
 import numpy as np
 

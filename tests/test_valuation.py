@@ -1,6 +1,6 @@
 """Tests for deltadewa.valuation module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import time
 import pytest
 from deltadewa.valuation import OptionValuation
@@ -16,7 +16,7 @@ class TestVolatilityQuoteCaching:
         return OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -114,7 +114,7 @@ class TestVolatilityUpdatePerformance:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -164,7 +164,7 @@ class TestGreeksCaching:
         return OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -209,7 +209,7 @@ class TestGreeksCaching:
         # pylint: disable=protected-access
         assert option._greeks_cache.is_cached("theta")
 
-        new_date = datetime.now() + timedelta(days=1)
+        new_date = datetime.now(tz=timezone.utc) + timedelta(days=1)
         option.update_valuation_date(new_date)
         # pylint: disable=protected-access
         assert not option._greeks_cache.is_cached("theta")

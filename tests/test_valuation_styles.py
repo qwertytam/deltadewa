@@ -3,7 +3,7 @@ pricing and performance characteristics."""
 
 import unittest
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from deltadewa.valuation import OptionValuation
 from deltadewa.constants import OptionType, ExerciseStyle
 
@@ -17,11 +17,12 @@ class TestValuationStyles(unittest.TestCase):
         params = {
             "spot_price": 100,
             "strike_price": 100,
-            "maturity_date": datetime.now() + timedelta(days=365),
+            "maturity_date": datetime.now(tz=timezone.utc)
+            + timedelta(days=365),
             "volatility": 0.2,
             "risk_free_rate": 0.05,
             "dividend_yield": 0.0,  # No dividends
-            "valuation_date": datetime.now(),
+            "valuation_date": datetime.now(tz=timezone.utc),
         }
 
         # For non-dividend paying stock, American Call == European Call
@@ -44,11 +45,12 @@ class TestValuationStyles(unittest.TestCase):
         params = {
             "spot_price": 100,
             "strike_price": 100,
-            "maturity_date": datetime.now() + timedelta(days=365),
+            "maturity_date": datetime.now(tz=timezone.utc)
+            + timedelta(days=365),
             "volatility": 0.2,
             "risk_free_rate": 0.25,  # High rates increase value of early exercise for Puts
             "dividend_yield": 0.0,
-            "valuation_date": datetime.now(),
+            "valuation_date": datetime.now(tz=timezone.utc),
         }
 
         amer_put = OptionValuation(
@@ -73,11 +75,12 @@ class TestValuationStyles(unittest.TestCase):
         params = {
             "spot_price": 100,
             "strike_price": 105,
-            "maturity_date": datetime.now() + timedelta(days=365),
+            "maturity_date": datetime.now(tz=timezone.utc)
+            + timedelta(days=365),
             "volatility": 0.2,
             "risk_free_rate": 0.05,
             "dividend_yield": 0.02,
-            "valuation_date": datetime.now(),
+            "valuation_date": datetime.now(tz=timezone.utc),
         }
 
         # Measure American (Finite Difference)

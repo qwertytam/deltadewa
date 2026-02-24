@@ -1,6 +1,6 @@
 """Tests for deltadewa.visualization.scenarios module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
@@ -17,7 +17,7 @@ class TestScenarioChartsMixin:
     def test_plot_scenario_analysis(self):
         """Test plot_scenario_analysis."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -40,7 +40,7 @@ class TestScenarioChartsMixin:
         )
 
         charts = OptionCharts(portfolio)
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
         fig = charts.plot_scenario_analysis(
             scenario_df=scenario_df,
             days_forward=10,
@@ -56,7 +56,7 @@ class TestScenarioChartsMixin:
     def test_plot_scenario_analysis_today(self):
         """Test plot_scenario_analysis with days_forward=0."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -77,7 +77,7 @@ class TestScenarioChartsMixin:
         )
 
         charts = OptionCharts(portfolio)
-        valuation_date = datetime.now()
+        valuation_date = datetime.now(tz=timezone.utc)
         fig = charts.plot_scenario_analysis(
             scenario_df=scenario_df,
             days_forward=0,

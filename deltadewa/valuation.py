@@ -1,6 +1,6 @@
 """American option pricing using QuantLib with Bjerksund-Stensland model."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 import QuantLib as ql  # type: ignore
@@ -63,7 +63,7 @@ class OptionValuation:
         self.risk_free_rate = float(risk_free_rate)
         self.dividend_yield = float(dividend_yield)
         self.option_type = option_type
-        self.valuation_date = valuation_date or datetime.now()
+        self.valuation_date = valuation_date or datetime.now(tz=timezone.utc)
         self.exercise_style = exercise_style
 
         # Initialize Greeks cache

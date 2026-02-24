@@ -5,14 +5,13 @@ and managing option portfolios in the deltadewa dashboard.
 """
 
 from typing import (
-    Optional,
     Callable,
     Tuple,
     Dict,
     List,
     Any,
 )
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
@@ -145,7 +144,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         expiry_input = widgets.DatePicker(
-            value=datetime.now().date() + timedelta(days=30),
+            value=datetime.now(tz=timezone.utc).date() + timedelta(days=30),
             description="Expiry:",
             style={"description_width": "120px"},
             layout=widgets.Layout(width="300px"),
@@ -701,7 +700,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         new_maturity = widgets.DatePicker(
-            value=datetime.now().date() + timedelta(days=default_days_forward),
+            value=datetime.now(tz=timezone.utc).date()
+            + timedelta(days=default_days_forward),
             description="New Maturity:",
             style={"description_width": "150px"},
             layout=widgets.Layout(width="400px"),

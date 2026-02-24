@@ -1,7 +1,7 @@
 """Monte Carlo simulation mixin for option portfolio."""
 
 from typing import TYPE_CHECKING, Any, List, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import Counter
 import numpy as np
 from deltadewa import constants as const

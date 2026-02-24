@@ -43,7 +43,7 @@ Usage example
 ... )
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from deltadewa.constants import PortfolioAction
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -69,7 +69,7 @@ class PortfolioLogger:
         """Add an initial entry to the changelog for portfolio creation."""
         self.changelog.append(
             {
-                "timestamp": datetime.now(),
+                "timestamp": datetime.now(tz=timezone.utc),
                 "action": PortfolioAction.INITIALIZE,
                 "details": "Portfolio initialized",
                 "impact_delta": None,
@@ -99,7 +99,7 @@ class PortfolioLogger:
             position_id: Position identifier (optional)
         """
         entry = {
-            "timestamp": datetime.now(),
+            "timestamp": datetime.now(tz=timezone.utc),
             "action": action_type,
             "details": details,
             "impact_delta": impact_delta,

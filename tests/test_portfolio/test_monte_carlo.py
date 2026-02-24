@@ -1,6 +1,6 @@
 """Tests for deltadewa.portfolio.monte_carlo module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.constants import OptionType
@@ -15,7 +15,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -72,7 +72,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -92,7 +92,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -122,7 +122,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -142,7 +142,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -161,7 +161,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -209,7 +209,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )

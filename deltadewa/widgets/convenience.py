@@ -4,7 +4,8 @@ This module contains small helper functions used by the notebook to wire
 dashboard-level widgets to portfolio objects. Keep helpers lightweight and
 focused on wiring/translation logic only.
 """
-from datetime import datetime
+
+from datetime import datetime, timezone
 from typing import Callable
 
 from deltadewa.portfolio.core import OptionPortfolioBase
@@ -35,9 +36,11 @@ def link_portfolio_to_assumptions(
         # Valuation date widget stores a date; convert to datetime
         val_date_widget = assumptions.valuation_date.value
         if val_date_widget is None:
-            valuation_date = datetime.now()
+            valuation_date = datetime.now(tz=timezone.utc)
         else:
-            valuation_date = datetime.combine(val_date_widget, datetime.min.time())
+            valuation_date = datetime.combine(
+                val_date_widget, datetime.min.time(), tzinfo=timezone.utc
+            )
 
         # Update portfolio market fields and refresh positions
         portfolio.update_market_conditions(

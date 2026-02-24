@@ -1,7 +1,7 @@
 """Caching utilities for portfolio analysis."""
 
 from typing import Dict, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import hashlib
 import pandas as pd
 import numpy as np

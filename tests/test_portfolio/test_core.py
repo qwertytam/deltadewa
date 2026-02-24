@@ -1,7 +1,7 @@
 """Tests for deltadewa.portfolio.core module."""
 
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from deltadewa.portfolio.core import OptionPortfolioBase, OptionPortfolio
 from deltadewa.constants import OptionType, ExerciseStyle
 
@@ -35,7 +35,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -49,7 +49,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.3,
@@ -65,13 +65,13 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -98,7 +98,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -121,7 +121,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             exercise_style=ExerciseStyle.AMERICAN,
@@ -164,13 +164,13 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -187,7 +187,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -211,7 +211,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -228,7 +228,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -244,7 +244,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -267,7 +267,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -292,7 +292,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -320,7 +320,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -339,7 +339,7 @@ class TestOptionPortfolioBase:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -359,7 +359,7 @@ class TestOptionPortfolioBase:
         # With position
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -442,7 +442,7 @@ class TestPortfolioCore(unittest.TestCase):
         """Test adding position uses defaults and works without position-level symbol"""
         self.portfolio.add_position(
             strike_price=210,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=1,
         )
@@ -459,7 +459,7 @@ class TestPortfolioCore(unittest.TestCase):
 
         self.portfolio.add_position(
             strike_price=210,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=1,
             exercise_style=ExerciseStyle.EUROPEAN,  # Explicitly European
@@ -477,7 +477,7 @@ class TestPortfolioCore(unittest.TestCase):
         # Long American Call
         self.portfolio.add_position(
             strike_price=200,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=1,
             exercise_style=ExerciseStyle.AMERICAN,
@@ -485,7 +485,7 @@ class TestPortfolioCore(unittest.TestCase):
         # Short European Call
         self.portfolio.add_position(
             strike_price=200,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=-1,
             exercise_style=ExerciseStyle.EUROPEAN,

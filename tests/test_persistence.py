@@ -3,7 +3,7 @@
 # pylint: disable=redefined-outer-name
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import yaml
 import pandas as pd
@@ -32,7 +32,7 @@ def sample_portfolio():
         underlying_quantity=100.0,
         symbol="TEST",
     )
-    maturity = datetime.now() + timedelta(days=30)
+    maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
     portfolio.add_position(
         strike_price=100.0,
         maturity_date=maturity,
@@ -224,7 +224,7 @@ class TestJsonRoundtrip:
             risk_free_rate=0.05,
             dividend_yield=0.02,
         )
-        maturity = datetime.now() + timedelta(days=30)
+        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
@@ -321,7 +321,7 @@ class TestJsonRoundtrip:
                     "option_type": OptionType.CALL,
                     # Missing strike_price
                     "maturity_date": (
-                        datetime.now() + timedelta(days=30)
+                        datetime.now(tz=timezone.utc) + timedelta(days=30)
                     ).isoformat(),
                     "quantity": 1,
                 }
@@ -456,7 +456,7 @@ class TestYamlRoundtrip:
 
         # Check that maturity is approximately 30 days from now
         time_to_maturity = (
-            position.option.maturity_date - datetime.now()
+            position.option.maturity_date - datetime.now(tz=timezone.utc)
         ).total_seconds() / 86400
         assert time_to_maturity == pytest.approx(30, abs=1)
 

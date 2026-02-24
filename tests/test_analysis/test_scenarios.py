@@ -1,6 +1,6 @@
 """Tests for deltadewa.analysis.scenarios module."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -21,7 +21,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -31,7 +31,7 @@ class TestScenariosMixin:
         # Calculate value at current spot and date
         # pylint: disable=protected-access
         value = analyzer._calculate_portfolio_value_at(
-            spot=100.0, valuation_date=datetime.now()
+            spot=100.0, valuation_date=datetime.now(tz=timezone.utc)
         )
 
         assert isinstance(value, float)
@@ -47,7 +47,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(),  # At expiry
+            maturity_date=datetime.now(tz=timezone.utc),  # At expiry
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -75,7 +75,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -84,7 +84,10 @@ class TestScenariosMixin:
 
         # Create scenarios
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now(), datetime.now() + timedelta(days=10)]
+        time_points = [
+            datetime.now(tz=timezone.utc),
+            datetime.now(tz=timezone.utc) + timedelta(days=10),
+        ]
 
         result = analyzer.scenario_grid(
             spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl"
@@ -106,7 +109,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -114,7 +117,7 @@ class TestScenariosMixin:
         analyzer = PortfolioAnalyzer(portfolio)
 
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now()]
+        time_points = [datetime.now(tz=timezone.utc)]
 
         result = analyzer.scenario_grid(
             spot_scenarios=spot_scenarios,
@@ -136,7 +139,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -167,7 +170,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -196,7 +199,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now() + timedelta(days=30),
+            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -207,7 +210,7 @@ class TestScenariosMixin:
         original_date = portfolio.valuation_date
 
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now()]
+        time_points = [datetime.now(tz=timezone.utc)]
 
         analyzer.scenario_grid(
             spot_scenarios=spot_scenarios,
