@@ -6,6 +6,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
+from deltadewa.constants import OptionType
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
@@ -38,13 +39,13 @@ class TestGreeksChartsMixin:
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=maturity,
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         charts = OptionCharts(portfolio)
@@ -64,7 +65,7 @@ class TestGreeksChartsMixin:
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         charts = OptionCharts(portfolio)
@@ -85,13 +86,13 @@ class TestGreeksChartsMixin:
             strike_price=100.0,
             maturity_date=maturity1,
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity2,
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         charts = OptionCharts(portfolio)
@@ -111,7 +112,7 @@ class TestGreeksChartsMixin:
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         charts = OptionCharts(portfolio)

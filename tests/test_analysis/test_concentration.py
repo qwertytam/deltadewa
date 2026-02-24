@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.constants import OptionType
 
 
 class TestRecommendationsMixinConcentration:
@@ -35,14 +36,14 @@ class TestRecommendationsMixinConcentration:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=5,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=60),
             quantity=3,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -73,7 +74,7 @@ class TestRecommendationsMixinConcentration:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -97,7 +98,7 @@ class TestRecommendationsMixinConcentration:
                 strike_price=float(strike),
                 maturity_date=datetime.now() + timedelta(days=30),
                 quantity=1,
-                option_type="call",
+                option_type=OptionType.CALL,
             )
 
         analyzer = PortfolioAnalyzer(portfolio)

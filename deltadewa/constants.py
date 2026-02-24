@@ -41,6 +41,20 @@ class PortfolioAction(str, Enum):
     INITIALIZE = "INITIALIZE"
 
 
+class OptionType(str, Enum):
+    """Enum of option types."""
+
+    CALL = "CALL"
+    PUT = "PUT"
+
+
+class ExerciseStyle(str, Enum):
+    """Enum of option exercise styles."""
+
+    AMERICAN = "AMERICAN"
+    EUROPEAN = "EUROPEAN"
+
+
 __all__ = [
     "DAYS_PER_YEAR",
     "DAYS_PER_WEEK",
@@ -50,4 +64,6 @@ __all__ = [
     "BUSINESS_DAYS_PER_YEAR",
     "CALENDAR_DAYS_PER_MONTH",
     "PortfolioAction",
+    "OptionType",
+    "ExerciseStyle",
 ]

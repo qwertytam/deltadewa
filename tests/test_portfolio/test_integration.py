@@ -9,6 +9,7 @@ from deltadewa.portfolio.factory import (
     create_demo_portfolio,
 )
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.constants import OptionType
 
 
 class TestPortfolioIntegration:
@@ -33,14 +34,14 @@ class TestPortfolioIntegration:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Test core functionality
@@ -64,7 +65,7 @@ class TestPortfolioIntegration:
         assert isinstance(breakevens, list)
 
         # Test Monte Carlo
-        prob = portfolio.calculate_probability_of_profit(num_simulations=100)
+        prob = portfolio.run_monte_carlo_simulation(num_simulations=100)
         assert "prob_profit" in prob
 
         # Test scenario analysis using PortfolioAnalyzer
@@ -88,13 +89,13 @@ class TestPortfolioIntegration:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
         portfolio.add_position(
             strike_price=90.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         # Short call spread
@@ -102,13 +103,13 @@ class TestPortfolioIntegration:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Verify structure
@@ -171,7 +172,7 @@ class TestPortfolioIntegration:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Add position with custom volatility
@@ -179,7 +180,7 @@ class TestPortfolioIntegration:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.3,
         )
 
@@ -232,7 +233,7 @@ class TestPortfolioIntegration:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)

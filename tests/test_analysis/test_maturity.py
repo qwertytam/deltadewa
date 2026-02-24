@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.constants import OptionType
 
 
 class TestMaturityMixin:
@@ -87,7 +88,7 @@ class TestMaturityMixin:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=15),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -122,7 +123,7 @@ class TestMaturityMixin:
                 strike_price=100.0,
                 maturity_date=datetime.now() + timedelta(days=30),
                 quantity=1,
-                option_type="call",
+                option_type=OptionType.CALL,
             )
             df = portfolio.to_dataframe()
             df_with_buckets = analyzer.add_maturity_buckets(df)

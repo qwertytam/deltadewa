@@ -48,14 +48,14 @@ def main():
 
     # Long puts for downside protection
     # Optional: Add volatility parameter to specify position-specific volatility
-    # Example: portfolio.add_position(95, maturity_30d, 5, "put", volatility=0.30)
-    portfolio.add_position(95, maturity_30d, 5, "put")
-    portfolio.add_position(95, maturity_60d, 5, "put")
-    portfolio.add_position(100, maturity_90d, 10, "put")
+    # Example: portfolio.add_position(95, maturity_30d, 5, OptionType.PUT, volatility=0.30)
+    portfolio.add_position(95, maturity_30d, 5, OptionType.PUT)
+    portfolio.add_position(95, maturity_60d, 5, OptionType.PUT)
+    portfolio.add_position(100, maturity_90d, 10, OptionType.PUT)
 
     # Short calls for income
-    portfolio.add_position(105, maturity_30d, -5, "call")
-    portfolio.add_position(110, maturity_60d, -5, "call")
+    portfolio.add_position(105, maturity_30d, -5, OptionType.CALL)
+    portfolio.add_position(110, maturity_60d, -5, OptionType.CALL)
 
     print(f"  Added {len(portfolio.positions)} positions")
     print()
@@ -108,7 +108,9 @@ def main():
         print("⚠ Portfolio may be over-hedged (opposite direction to notional)")
 
     if stats["delta_adjustment"] > 0:
-        print(f"→ Consider BUYING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality")
+        print(
+            f"→ Consider BUYING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality"
+        )
     elif stats["delta_adjustment"] < 0:
         print(
             f"→ Consider SELLING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality"
@@ -153,7 +155,9 @@ def main():
 
     print()
     print("=" * 70)
-    print("For full interactive analysis, run: jupyter lab options_dashboard.ipynb")
+    print(
+        "For full interactive analysis, run: jupyter lab options_dashboard.ipynb"
+    )
     print("=" * 70)
 
 

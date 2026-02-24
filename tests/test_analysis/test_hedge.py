@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.constants import OptionType
 
 
 class TestRecommendationsMixinHedge:
@@ -22,7 +23,7 @@ class TestRecommendationsMixinHedge:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -61,7 +62,7 @@ class TestRecommendationsMixinHedge:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -85,14 +86,14 @@ class TestRecommendationsMixinHedge:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -119,7 +120,7 @@ class TestRecommendationsMixinHedge:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -155,7 +156,7 @@ class TestRecommendationsMixinHedge:
                 strike_price=float(strike),
                 maturity_date=datetime.now() + timedelta(days=30),
                 quantity=1,
-                option_type="call",
+                option_type=OptionType.CALL,
             )
 
         analyzer = PortfolioAnalyzer(portfolio)

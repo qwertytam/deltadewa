@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from deltadewa.valuation import OptionValuation
 from deltadewa.portfolio.position import OptionPosition
+from deltadewa.constants import OptionType
 
 
 class TestOptionPosition:
@@ -17,7 +18,7 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         position = OptionPosition(option=option, quantity=1, contract_size=100)
 
@@ -36,7 +37,7 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type="call",
+            option_type=OptionType.CALL,
             exercise_style="American",
         )
         position = OptionPosition(option=option, quantity=2, contract_size=100)
@@ -54,7 +55,7 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type="call",
+            option_type=OptionType.CALL,
             exercise_style="American",
         )
         position = OptionPosition(option=option, quantity=2, contract_size=100)
@@ -72,7 +73,7 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type="call",
+            option_type=OptionType.CALL,
             exercise_style="American",
         )
         position = OptionPosition(option=option, quantity=1, contract_size=100)
@@ -92,7 +93,7 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type="call",
+            option_type=OptionType.CALL,
             exercise_style="American",
         )
         position = OptionPosition(option=option, quantity=-1, contract_size=100)
@@ -110,14 +111,14 @@ class TestOptionPosition:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type="put",
+            option_type=OptionType.PUT,
             exercise_style="American",
         )
         position = OptionPosition(option=option, quantity=3, contract_size=100)
 
         pos_dict = position.to_dict()
 
-        assert pos_dict["type"] == "put"
+        assert pos_dict["type"] == OptionType.PUT
         assert pos_dict["strike"] == 105.0
         assert pos_dict["quantity"] == 3
         assert pos_dict["contract_size"] == 100
@@ -137,7 +138,7 @@ class TestOptionPosition:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type="call",
+            option_type=OptionType.CALL,
             exercise_style="American",
         )
         position = OptionPosition(

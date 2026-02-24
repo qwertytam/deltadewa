@@ -8,6 +8,7 @@ from deltadewa.analysis.volatility import (
     restore_volatilities,
     get_volatility_stats,
 )
+from deltadewa.constants import OptionType
 
 
 class TestCalculatePortfolioAvgVolatility:
@@ -36,7 +37,7 @@ class TestCalculatePortfolioAvgVolatility:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -57,7 +58,7 @@ class TestCalculatePortfolioAvgVolatility:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -65,7 +66,7 @@ class TestCalculatePortfolioAvgVolatility:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=2,
-            option_type="put",
+            option_type=OptionType.PUT,
             volatility=0.20,
         )
 
@@ -87,7 +88,7 @@ class TestCalculatePortfolioAvgVolatility:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -95,7 +96,7 @@ class TestCalculatePortfolioAvgVolatility:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.20,
         )
 
@@ -117,7 +118,7 @@ class TestCalculatePortfolioAvgVolatility:
             strike_price=50.0,
             maturity_date=datetime.now() + timedelta(days=1),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -142,7 +143,7 @@ class TestApplyProportionalVolatilityShift:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -150,7 +151,7 @@ class TestApplyProportionalVolatilityShift:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
             volatility=0.20,
         )
 
@@ -189,7 +190,7 @@ class TestApplyProportionalVolatilityShift:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -197,7 +198,7 @@ class TestApplyProportionalVolatilityShift:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
             volatility=0.20,
         )
 
@@ -226,7 +227,7 @@ class TestApplyProportionalVolatilityShift:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.01,  # Very small but non-zero
         )
 
@@ -253,7 +254,7 @@ class TestApplyProportionalVolatilityShift:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -282,7 +283,7 @@ class TestRestoreVolatilities:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -290,7 +291,7 @@ class TestRestoreVolatilities:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
             volatility=0.20,
         )
 
@@ -332,7 +333,7 @@ class TestRestoreVolatilities:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -356,7 +357,7 @@ class TestRestoreVolatilities:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -395,7 +396,7 @@ class TestGetVolatilityStats:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -426,7 +427,7 @@ class TestGetVolatilityStats:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -452,7 +453,7 @@ class TestGetVolatilityStats:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 
@@ -460,7 +461,7 @@ class TestGetVolatilityStats:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
             volatility=0.20,
         )
 
@@ -468,7 +469,7 @@ class TestGetVolatilityStats:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         stats = get_volatility_stats(portfolio)
@@ -493,7 +494,7 @@ class TestGetVolatilityStats:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.30,
         )
 

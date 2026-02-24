@@ -6,6 +6,7 @@ import numpy as np
 from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.constants import OptionType
 
 
 class TestBatchPricer:
@@ -25,7 +26,7 @@ class TestBatchPricer:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=2,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         pricer = BatchPricer(
@@ -50,7 +51,7 @@ class TestBatchPricer:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.02,
-            option_type="call",
+            option_type=OptionType.CALL,
             valuation_date=valuation_date,
             exercise_style="American",
         )
@@ -72,7 +73,7 @@ class TestBatchPricer:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         pricer = BatchPricer(
@@ -99,7 +100,7 @@ class TestBatchPricer:
                 volatility=0.25,
                 risk_free_rate=0.05,
                 dividend_yield=0.0,
-                option_type="call",
+                option_type=OptionType.CALL,
                 valuation_date=valuation_date,
                 exercise_style="American",
             )
@@ -120,7 +121,7 @@ class TestBatchPricer:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=1),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         pricer = BatchPricer(
@@ -151,7 +152,7 @@ class TestBatchPricer:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         pricer = BatchPricer(
@@ -191,7 +192,7 @@ class TestBatchPricer:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         pricer = BatchPricer(
@@ -232,14 +233,14 @@ class TestBatchPricer:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=2,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=45),
             quantity=-1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -304,7 +305,7 @@ class TestBatchPricer:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=5),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Call that will still be alive when valued
@@ -312,7 +313,7 @@ class TestBatchPricer:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         pricer = BatchPricer(
@@ -340,7 +341,7 @@ class TestBatchPricer:
             volatility=0.25,
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
-            option_type="call",
+            option_type=OptionType.CALL,
             valuation_date=valuation_date,
             exercise_style="American",
         )
@@ -361,7 +362,7 @@ class TestBatchPricer:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         pricer = BatchPricer(
@@ -396,7 +397,7 @@ class TestBatchPricer:
                 strike_price=strike,
                 maturity_date=datetime.now() + timedelta(days=30),
                 quantity=1,
-                option_type="call",
+                option_type=OptionType.CALL,
             )
 
         pricer = BatchPricer(
@@ -437,7 +438,7 @@ class TestBatchPricer:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         pricer = BatchPricer(
@@ -464,7 +465,7 @@ class TestBatchPricer:
                 volatility=0.25,
                 risk_free_rate=portfolio.risk_free_rate,
                 dividend_yield=portfolio.dividend_yield,
-                option_type="put",
+                option_type=OptionType.PUT,
                 valuation_date=valuation_date,
                 exercise_style="American",
             )
@@ -485,7 +486,7 @@ class TestBatchPricer:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=1),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         pricer = BatchPricer(

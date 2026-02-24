@@ -6,6 +6,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
+from deltadewa.constants import OptionType
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
@@ -22,7 +23,7 @@ class TestScenarioChartsMixin:
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Create sample scenario data
@@ -61,7 +62,7 @@ class TestScenarioChartsMixin:
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         scenario_df = pd.DataFrame(

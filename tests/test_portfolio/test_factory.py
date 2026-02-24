@@ -5,6 +5,7 @@ from deltadewa.portfolio.factory import (
     create_demo_portfolio,
 )
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.constants import OptionType
 
 
 class TestFactoryFunctions:
@@ -46,13 +47,13 @@ class TestFactoryFunctions:
         # Check first position (call)
         pos1 = portfolio.positions[0]
         assert pos1.option.strike_price == 100.0
-        assert pos1.option.option_type == "call"
+        assert pos1.option.option_type == OptionType.CALL
         assert pos1.quantity == 1
 
         # Check second position (put)
         pos2 = portfolio.positions[1]
         assert pos2.option.strike_price == 95.0
-        assert pos2.option.option_type == "put"
+        assert pos2.option.option_type == OptionType.PUT
         assert pos2.quantity == 1
 
     def test_create_demo_portfolio_market_conditions(self):
@@ -71,7 +72,7 @@ class TestFactoryFunctions:
         assert hasattr(portfolio, "total_delta")
         assert hasattr(portfolio, "calculate_pnl_at_expiry")
         assert hasattr(portfolio, "calculate_max_loss_options")
-        assert hasattr(portfolio, "calculate_probability_of_profit")
+        assert hasattr(portfolio, "run_monte_carlo_simulation")
         # ScenariosMixin removed - use PortfolioAnalyzer instead
 
     def test_create_demo_portfolio_returns_full_portfolio(self):
@@ -82,7 +83,7 @@ class TestFactoryFunctions:
         assert hasattr(portfolio, "total_delta")
         assert hasattr(portfolio, "calculate_pnl_at_expiry")
         assert hasattr(portfolio, "calculate_max_loss_options")
-        assert hasattr(portfolio, "calculate_probability_of_profit")
+        assert hasattr(portfolio, "run_monte_carlo_simulation")
         # ScenariosMixin removed - use PortfolioAnalyzer instead
 
     def test_create_empty_portfolio_different_params(self):

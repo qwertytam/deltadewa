@@ -132,7 +132,7 @@ class HealthMixin:
 
         for pos in self.portfolio.positions:
             # Check for long puts (negative quantity for puts means short)
-            is_put = pos.option.option_type.lower() == "put"
+            is_put = pos.option.option_type.upper() == const.OptionType.PUT
             is_long = pos.quantity > 0
 
             if is_put and is_long:

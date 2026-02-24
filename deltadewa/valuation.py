@@ -6,6 +6,7 @@ from typing import Optional
 import QuantLib as ql  # type: ignore
 from deltadewa import constants as const
 from deltadewa.greeks_cache import GreeksCache
+from deltadewa.constants import OptionType
 
 
 class OptionValuation:
@@ -37,7 +38,7 @@ class OptionValuation:
         volatility: float,
         risk_free_rate: float,
         dividend_yield: float,
-        option_type: str = "call",
+        option_type: OptionType = OptionType.CALL,
         valuation_date: Optional[datetime] = None,
         exercise_style: str = "American",
     ):
@@ -51,7 +52,7 @@ class OptionValuation:
             volatility: Implied volatility (annualized)
             risk_free_rate: Risk-free interest rate (annualized)
             dividend_yield: Dividend yield (annualized)
-            option_type: "call" or "put"
+            option_type: OptionType.CALL or OptionType.PUT
             valuation_date: Date for valuation (defaults to today)
             exercise_style: "American" or "European"
         """
@@ -61,7 +62,7 @@ class OptionValuation:
         self.volatility = float(volatility)
         self.risk_free_rate = float(risk_free_rate)
         self.dividend_yield = float(dividend_yield)
-        self.option_type = option_type.lower()
+        self.option_type = option_type
         self.valuation_date = valuation_date or datetime.now()
         self.exercise_style = exercise_style.capitalize()
 
@@ -132,7 +133,9 @@ class OptionValuation:
 
         # 4. Payoff
         ql_option_type = (
-            ql.Option.Call if self.option_type == "call" else ql.Option.Put
+            ql.Option.Call
+            if self.option_type == OptionType.CALL
+            else ql.Option.Put
         )
         payoff = ql.PlainVanillaPayoff(ql_option_type, self.strike_price)
 
@@ -182,7 +185,7 @@ class OptionValuation:
         """Internal method to compute delta."""
         # At or past expiry, delta is 1.0 if in-the-money, 0.0 otherwise
         if self._is_expired_or_at_expiry():
-            if self.option_type == "call":
+            if self.option_type == OptionType.CALL:
                 return 1.0 if self.spot_price > self.strike_price else 0.0
             else:
                 return -1.0 if self.spot_price < self.strike_price else 0.0
@@ -346,7 +349,7 @@ class OptionValuation:
 
     def intrinsic_value(self) -> float:
         """Calculate intrinsic value of the option."""
-        if self.option_type == "call":
+        if self.option_type == OptionType.CALL:
             return max(0, self.spot_price - self.strike_price)
         else:
             return max(0, self.strike_price - self.spot_price)

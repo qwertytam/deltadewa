@@ -3,6 +3,7 @@
 import unittest
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolioBase, OptionPortfolio
+from deltadewa.constants import OptionType
 
 
 class TestOptionPortfolioBase:
@@ -36,7 +37,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         assert len(portfolio.positions) == 1
@@ -50,7 +51,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.3,
         )
 
@@ -66,13 +67,13 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         assert len(portfolio.positions) == 2
@@ -99,7 +100,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         portfolio.update_position(0, quantity=2)
@@ -122,7 +123,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             exercise_style="american",
         )
 
@@ -165,13 +166,13 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         assert len(portfolio.positions) == 2
@@ -188,7 +189,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         total_value = portfolio.total_value()
@@ -212,7 +213,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         total_portfolio = portfolio.total_portfolio_value()
@@ -229,7 +230,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         positions = portfolio.get_positions()
@@ -245,7 +246,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         df = portfolio.to_dataframe()
@@ -268,7 +269,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         stats = portfolio.summary_stats()
@@ -293,7 +294,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         summary = portfolio.summary()
@@ -321,7 +322,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         assert portfolio.symbol == "TEST"
@@ -340,7 +341,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         portfolio.set_volatility(0.3)
@@ -360,7 +361,7 @@ class TestOptionPortfolioBase:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         assert portfolio.get_symbol() == "UNKNOWN"
 
@@ -409,7 +410,7 @@ class TestOptionPortfolio:
         assert hasattr(portfolio, "calculate_breakeven_points")
 
         # Check methods from MonteCarloMixin
-        assert hasattr(portfolio, "calculate_probability_of_profit")
+        assert hasattr(portfolio, "run_monte_carlo_simulation")
 
         # ScenariosMixin has been removed - use PortfolioAnalyzer instead
 
@@ -442,7 +443,7 @@ class TestPortfolioCore(unittest.TestCase):
         self.portfolio.add_position(
             strike_price=210,
             maturity_date=datetime.now() + timedelta(days=30),
-            option_type="call",
+            option_type=OptionType.CALL,
             quantity=1,
         )
 
@@ -459,7 +460,7 @@ class TestPortfolioCore(unittest.TestCase):
         self.portfolio.add_position(
             strike_price=210,
             maturity_date=datetime.now() + timedelta(days=30),
-            option_type="call",
+            option_type=OptionType.CALL,
             quantity=1,
             exercise_style="European",  # Explicitly European
         )
@@ -475,7 +476,7 @@ class TestPortfolioCore(unittest.TestCase):
         self.portfolio.add_position(
             strike_price=200,
             maturity_date=datetime.now() + timedelta(days=30),
-            option_type="call",
+            option_type=OptionType.CALL,
             quantity=1,
             exercise_style="American",
         )
@@ -483,7 +484,7 @@ class TestPortfolioCore(unittest.TestCase):
         self.portfolio.add_position(
             strike_price=200,
             maturity_date=datetime.now() + timedelta(days=30),
-            option_type="call",
+            option_type=OptionType.CALL,
             quantity=-1,
             exercise_style="European",
         )

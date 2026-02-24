@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING, List
 import numpy as np
+from deltadewa.constants import OptionType
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.position import OptionPosition
@@ -52,7 +53,7 @@ class PnLMixin:
 
         # Calculate intrinsic value at expiry for each position
         for pos in self.positions:
-            if pos.option.option_type.lower() == "call":
+            if pos.option.option_type == OptionType.CALL:
                 intrinsic = max(
                     0, spot_price_at_expiry - pos.option.strike_price
                 )
@@ -105,7 +106,10 @@ class PnLMixin:
         quantities = np.array([pos.quantity for pos in self.positions])
         contract_sizes = np.array([pos.contract_size for pos in self.positions])
         is_call = np.array(
-            [pos.option.option_type.lower() == "call" for pos in self.positions]
+            [
+                pos.option.option_type == OptionType.CALL
+                for pos in self.positions
+            ]
         )
 
         # Vectorized intrinsic value calculation using broadcasting

@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.constants import OptionType
 
 
 class TestRiskMixin:
@@ -38,7 +39,7 @@ class TestRiskMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         result = portfolio.calculate_max_loss_options()
@@ -59,7 +60,7 @@ class TestRiskMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         result = portfolio.calculate_max_profit_options()
@@ -79,7 +80,7 @@ class TestRiskMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         result = portfolio.calculate_max_loss_options()
@@ -95,7 +96,7 @@ class TestRiskMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         result = portfolio.calculate_max_profit_options()
@@ -135,7 +136,7 @@ class TestRiskMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         breakevens = portfolio.calculate_breakeven_points()
@@ -162,7 +163,7 @@ class TestRiskMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         spot_range = np.linspace(100, 500, 100)
@@ -189,25 +190,25 @@ class TestRiskMixin:
             strike_price=90.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
         portfolio.add_position(
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Generate spot range

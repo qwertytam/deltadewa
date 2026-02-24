@@ -16,6 +16,7 @@ from deltadewa.analysis.cache import (
     create_spot_vol_cache_key,
     get_portfolio_state_hash,
 )
+from deltadewa.constants import OptionType
 
 
 class TestGenerateSpotRange:
@@ -221,7 +222,7 @@ class TestModuleLevelFunctions:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         metrics = quick_carry_analysis(portfolio)
@@ -242,7 +243,7 @@ class TestModuleLevelFunctions:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         result = quick_risk_concentration(portfolio)
@@ -263,7 +264,7 @@ class TestModuleLevelFunctions:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         result = quick_risk_concentration(portfolio, metrics=["delta"])
@@ -323,7 +324,7 @@ class TestCachingFunctions:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         hash3 = get_portfolio_state_hash(portfolio)
         assert hash3 != hash1
@@ -351,7 +352,7 @@ class TestScenarioGridCache:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         cache = ScenarioGridCache()
@@ -379,7 +380,7 @@ class TestScenarioGridCache:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         cache = ScenarioGridCache()
@@ -412,7 +413,7 @@ class TestScenarioGridCache:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         cache = ScenarioGridCache()
@@ -440,7 +441,7 @@ class TestScenarioGridCache:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         cache = ScenarioGridCache()
@@ -470,7 +471,7 @@ class TestScenarioGridCache:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         cache = ScenarioGridCache(max_size=2)

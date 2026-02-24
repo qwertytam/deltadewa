@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.constants import OptionType
 
 
 class TestScenariosMixin:
@@ -22,7 +23,7 @@ class TestScenariosMixin:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -48,7 +49,7 @@ class TestScenariosMixin:
             strike_price=105.0,
             maturity_date=datetime.now(),  # At expiry
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -76,7 +77,7 @@ class TestScenariosMixin:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -107,7 +108,7 @@ class TestScenariosMixin:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -137,7 +138,7 @@ class TestScenariosMixin:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -168,7 +169,7 @@ class TestScenariosMixin:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -197,7 +198,7 @@ class TestScenariosMixin:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)

@@ -9,6 +9,7 @@ from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.pnl import PnLMixin
 from deltadewa.portfolio.risk import RiskMixin
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
+from deltadewa.constants import OptionType
 
 
 class OptionPortfolioBase:
@@ -89,7 +90,7 @@ class OptionPortfolioBase:
         strike_price: float,
         maturity_date: datetime,
         quantity: int,
-        option_type: str = "call",
+        option_type: OptionType = OptionType.CALL,
         contract_size: int = 100,
         volatility: Optional[float] = None,
         exercise_style: str = "American",
@@ -101,7 +102,7 @@ class OptionPortfolioBase:
             strike_price: Strike price of the option
             maturity_date: Maturity date of the option
             quantity: Number of contracts
-            option_type: "call" or "put"
+            option_type: OptionType.CALL or OptionType.PUT
             contract_size: Number of underlying shares per option contract
             volatility: Optional position-specific volatility (uses portfolio default if None)
             exercise_style: 'American' or 'European'
@@ -321,7 +322,7 @@ class OptionPortfolioBase:
         quantity: Optional[int] = None,
         strike: Optional[float] = None,
         expiry: Optional[datetime] = None,
-        option_type: Optional[str] = None,
+        option_type: Optional[OptionType] = None,
         contract_size: Optional[int] = None,
         volatility: Optional[float] = None,
         exercise_style: Optional[str] = None,

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.constants import OptionType
 
 
 class TestPortfolioAnalyzerIntegration:
@@ -25,21 +26,21 @@ class TestPortfolioAnalyzerIntegration:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,  # Short call
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,  # Long put
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=datetime.now() + timedelta(days=60),
             quantity=-1,  # Short call
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Create analyzer
@@ -150,14 +151,14 @@ class TestPortfolioAnalyzerIntegration:
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=10),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now() + timedelta(days=40),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -195,7 +196,9 @@ class TestPortfolioAnalyzerIntegration:
                     strike_price=float(strike),
                     maturity_date=datetime.now() + timedelta(days=days),
                     quantity=(-1) ** (i + j),  # Mix of long/short
-                    option_type="call" if i % 2 == 0 else "put",
+                    option_type=(
+                        OptionType.CALL if i % 2 == 0 else OptionType.PUT
+                    ),
                 )
 
         analyzer = PortfolioAnalyzer(portfolio)

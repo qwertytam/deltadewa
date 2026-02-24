@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.constants import OptionType
 
 
 class TestGreeksMixin:
@@ -15,7 +16,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         delta = portfolio.total_delta()
@@ -32,7 +33,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Short put
@@ -40,7 +41,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         delta = portfolio.total_delta()
@@ -55,7 +56,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         gamma = portfolio.total_gamma()
@@ -70,7 +71,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         vega = portfolio.total_vega()
@@ -85,7 +86,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         theta = portfolio.total_theta()
@@ -101,7 +102,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         rho = portfolio.total_rho()
@@ -115,7 +116,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-2,  # Short 2 calls
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         net_delta = portfolio.net_delta()
@@ -131,7 +132,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         hedge_ratio = portfolio.hedge_ratio()
@@ -145,7 +146,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         hedge_ratio = portfolio.hedge_ratio()
@@ -159,7 +160,7 @@ class TestGreeksMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         adjustment = portfolio.delta_adjustment_needed()
@@ -189,7 +190,7 @@ class TestAllGreeksBatch:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         greeks = portfolio.all_greeks()
@@ -219,7 +220,7 @@ class TestAllGreeksBatch:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=2,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Short put
@@ -227,7 +228,7 @@ class TestAllGreeksBatch:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         greeks = portfolio.all_greeks()
@@ -260,7 +261,7 @@ class TestAllGreeksBatch:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Get summary stats (should use all_greeks internally)

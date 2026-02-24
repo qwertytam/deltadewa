@@ -1,6 +1,7 @@
 """Factory functions for creating option portfolios."""
 
 from datetime import datetime, timedelta
+from deltadewa.constants import OptionType
 
 
 def create_empty_portfolio(**kwargs):
@@ -48,7 +49,7 @@ def create_demo_portfolio():
         strike_price=100.0,
         maturity_date=today + timedelta(days=30),
         quantity=1,
-        option_type="call",
+        option_type=OptionType.CALL,
     )
 
     # Protective put
@@ -56,7 +57,7 @@ def create_demo_portfolio():
         strike_price=95.0,
         maturity_date=today + timedelta(days=60),
         quantity=1,
-        option_type="put",
+        option_type=OptionType.PUT,
     )
 
     return p
@@ -74,7 +75,7 @@ def create_default_portfolio():
         },
         "positions": [
             {
-                "option_type": "call",
+                "option_type": OptionType.CALL,
                 "strike_price": 95.0,
                 "maturity_days": 349,
                 "volatility": 0.366,
@@ -82,7 +83,7 @@ def create_default_portfolio():
                 "exercise_style": "european",
             },
             {
-                "option_type": "put",
+                "option_type": OptionType.PUT,
                 "strike_price": 70.0,
                 "maturity_days": 349,
                 "volatility": 0.386,
@@ -118,7 +119,7 @@ def create_default_portfolio():
             strike_price=pos_config["strike_price"],
             maturity_date=maturity,
             quantity=pos_config["quantity"],
-            option_type=pos_config["option_type"].lower(),
+            option_type=pos_config["option_type"],
             volatility=pos_config.get(
                 "volatility", market_params.get("volatility", None)
             ),

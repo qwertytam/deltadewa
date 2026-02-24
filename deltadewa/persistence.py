@@ -12,6 +12,7 @@ from typing import Union
 import pandas as pd
 from deltadewa import OptionPortfolio
 from deltadewa.reporting import ConsoleReporter
+from deltadewa.constants import OptionType
 
 try:
     import yaml
@@ -171,7 +172,7 @@ class PortfolioSerializer:
 
         for pos in portfolio.positions:
             position_data = {
-                "option_type": pos.option.option_type,
+                "option_type": pos.option.option_type.value,
                 "strike_price": pos.option.strike_price,
                 "maturity_date": pos.option.maturity_date.isoformat(),
                 "quantity": pos.quantity,
@@ -249,7 +250,7 @@ class PortfolioSerializer:
             positions_data.append(
                 {
                     "position_id": i,
-                    "option_type": pos.option.option_type,
+                    "option_type": pos.option.option_type.value,
                     "strike": pos.option.strike_price,
                     "maturity": pos.option.maturity_date.isoformat(),
                     "quantity": pos.quantity,
@@ -391,7 +392,9 @@ class PortfolioSerializer:
                 raise ValueError("Position entry missing strike price")
 
             option_type = (
-                pos_data.get("option_type") or pos_data.get("type") or "call"
+                pos_data.get("option_type")
+                or pos_data.get("type")
+                or OptionType.CALL
             )
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
 
@@ -472,7 +475,11 @@ class PortfolioSerializer:
                 strike_price=pos_config["strike_price"],
                 maturity_date=maturity,
                 quantity=pos_config["quantity"],
-                option_type=pos_config["option_type"].lower(),
+                option_type=(
+                    OptionType.CALL
+                    if pos_config["option_type"].upper() == "CALL"
+                    else OptionType.PUT
+                ),
                 volatility=position_volatility,
             )
 

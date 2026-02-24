@@ -18,6 +18,7 @@ import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.widgets.export_controls import ExportControlsMixin
 from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
@@ -75,12 +76,12 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         else:
             if include_index:
                 options = [
-                    f"{i}: {p['type']} {p['strike']} @ {p['expiry']}"
+                    f"{i}: {p['type'].value.capitalize()} {p['strike']} @ {p['expiry']}"
                     for i, p in enumerate(positions)
                 ]
             else:
                 options = [
-                    f"{p['type']} {p['strike']} @ {p['expiry']}"
+                    f"{p['type'].value.capitalize()} {p['strike']} @ {p['expiry']}"
                     for p in positions
                 ]
             disabled = False
@@ -133,8 +134,11 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         option_type_selector = widgets.Dropdown(
-            options=["Call", "Put"],
-            value="Call",
+            options=[
+                OptionType.CALL.value.capitalize(),
+                OptionType.PUT.value.capitalize(),
+            ],
+            value=OptionType.CALL.value.capitalize(),
             description="Type:",
             style={"description_width": "120px"},
             layout=widgets.Layout(width="300px"),
@@ -148,8 +152,11 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         exercise_style_selector = widgets.Dropdown(
-            options=["American", "European"],
-            value="American",
+            options=[
+                ExerciseStyle.AMERICAN.value.capitalize(),
+                ExerciseStyle.EUROPEAN.value.capitalize(),
+            ],
+            value=ExerciseStyle.AMERICAN.value.capitalize(),
             description="Exercise Style:",
             style={"description_width": "120px"},
             layout=widgets.Layout(width="300px"),
@@ -206,7 +213,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         def get_position_display_string(pos):
             """Generate consistent display string for a position."""
             result = f"{pos.quantity}x "
-            result += f"{pos.option.option_type.capitalize()} @"
+            result += f"{pos.option.option_type.value.capitalize()} @"
             result += f"{pos.option.strike_price} on "
             result += f"{pos.option.maturity_date.date()} "
             result += f"{pos.option.exercise_style.capitalize()}"
@@ -238,13 +245,16 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                         quantity_input.value = pos.quantity
                         strike_input.value = pos.option.strike_price
                         option_type_selector.value = (
-                            "Call"
-                            if pos.option.option_type.lower() == "call"
-                            else "Put"
+                            OptionType.CALL.value.capitalize()
+                            if pos.option.option_type == OptionType.CALL
+                            else OptionType.PUT.value.capitalize()
                         )
                         expiry_input.value = pos.option.maturity_date.date()
                         exercise_style_selector.value = (
-                            pos.option.exercise_style
+                            ExerciseStyle.AMERICAN.value.capitalize()
+                            if pos.option.exercise_style
+                            == ExerciseStyle.AMERICAN
+                            else ExerciseStyle.EUROPEAN.value.capitalize()
                         )
                         volatility_input.value = pos.option.volatility
                         use_default_vol.value = not pos.custom_volatility
@@ -264,13 +274,19 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                         expiry_input.value, datetime.min.time()
                     ),
                     option_type=(
-                        "call"
-                        if option_type_selector.value == "Call"
-                        else "put"
+                        OptionType.CALL
+                        if option_type_selector.value
+                        == OptionType.CALL.value.capitalize()
+                        else OptionType.PUT
                     ),
                     quantity=quantity_input.value,
                     volatility=position_volatility,
-                    exercise_style=exercise_style_selector.value.lower(),
+                    exercise_style=(
+                        ExerciseStyle.AMERICAN
+                        if exercise_style_selector.value
+                        == ExerciseStyle.AMERICAN.value.capitalize()
+                        else ExerciseStyle.EUROPEAN
+                    ),
                 )
                 status_label.value = (
                     f"✓ Added {quantity_input.value} "
@@ -342,11 +358,17 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                                     expiry_input.value, datetime.min.time()
                                 ),
                                 option_type=(
-                                    "call"
-                                    if option_type_selector.value == "Call"
-                                    else "put"
+                                    OptionType.CALL
+                                    if option_type_selector.value
+                                    == OptionType.CALL.value.capitalize()
+                                    else OptionType.PUT
                                 ),
-                                exercise_style=exercise_style_selector.value,
+                                exercise_style=(
+                                    ExerciseStyle.AMERICAN
+                                    if exercise_style_selector.value
+                                    == ExerciseStyle.AMERICAN.value.capitalize()
+                                    else ExerciseStyle.EUROPEAN
+                                ),
                                 volatility=position_volatility,
                             )
                             status_label.value = (

@@ -5,6 +5,7 @@ import unittest
 import time
 from datetime import datetime, timedelta
 from deltadewa.valuation import OptionValuation
+from deltadewa.constants import OptionType
 
 
 class TestValuationStyles(unittest.TestCase):
@@ -25,10 +26,10 @@ class TestValuationStyles(unittest.TestCase):
 
         # For non-dividend paying stock, American Call == European Call
         amer_call = OptionValuation(
-            **params, option_type="call", exercise_style="American"
+            **params, option_type=OptionType.CALL, exercise_style="American"
         ).price()
         euro_call = OptionValuation(
-            **params, option_type="call", exercise_style="European"
+            **params, option_type=OptionType.CALL, exercise_style="European"
         ).price()
 
         # Allow small numerical error from Finite Difference method
@@ -47,10 +48,10 @@ class TestValuationStyles(unittest.TestCase):
         }
 
         amer_put = OptionValuation(
-            **params, option_type="put", exercise_style="American"
+            **params, option_type=OptionType.PUT, exercise_style="American"
         ).price()
         euro_put = OptionValuation(
-            **params, option_type="put", exercise_style="European"
+            **params, option_type=OptionType.PUT, exercise_style="European"
         ).price()
 
         print(f"American Put: {amer_put:.4f}, European Put: {euro_put:.4f}")

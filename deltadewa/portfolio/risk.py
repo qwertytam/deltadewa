@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING, Optional, List
 import numpy as np
 from deltadewa.spot_utils import generate_spot_range
+from deltadewa.constants import OptionType
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.position import OptionPosition
@@ -138,7 +139,7 @@ class RiskMixin:
 
         # Check for unlimited loss (naked short calls have unlimited loss potential)
         has_naked_short_calls = any(
-            pos.quantity < 0 and pos.option.option_type.lower() == "call"
+            pos.quantity < 0 and pos.option.option_type == OptionType.CALL
             for pos in self.positions
         )
 
@@ -196,7 +197,7 @@ class RiskMixin:
 
         # Check for unlimited profit (long calls have unlimited profit potential)
         has_long_calls = any(
-            pos.quantity > 0 and pos.option.option_type.lower() == "call"
+            pos.quantity > 0 and pos.option.option_type == OptionType.CALL
             for pos in self.positions
         )
 
@@ -263,7 +264,7 @@ class RiskMixin:
 
         # Also check for naked short calls in options
         has_naked_short_calls = any(
-            pos.quantity < 0 and pos.option.option_type.lower() == "call"
+            pos.quantity < 0 and pos.option.option_type == OptionType.CALL
             for pos in self.positions
         )
         is_unlimited = is_unlimited or has_naked_short_calls
@@ -329,7 +330,7 @@ class RiskMixin:
 
         # Also check for long calls in options
         has_long_calls = any(
-            pos.quantity > 0 and pos.option.option_type.lower() == "call"
+            pos.quantity > 0 and pos.option.option_type == OptionType.CALL
             for pos in self.positions
         )
         is_unlimited = is_unlimited or has_long_calls

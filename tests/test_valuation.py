@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import time
 import pytest
 from deltadewa.valuation import OptionValuation
+from deltadewa.constants import OptionType
 
 
 class TestVolatilityQuoteCaching:
@@ -19,7 +20,7 @@ class TestVolatilityQuoteCaching:
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
     def test_vol_quote_initialized(self, option):
@@ -117,7 +118,7 @@ class TestVolatilityUpdatePerformance:
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
-            option_type="call",
+            option_type=OptionType.CALL,
             exercise_style="American",
         )
 
@@ -167,7 +168,7 @@ class TestGreeksCaching:
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
     def test_greeks_cached_after_first_call(self, option):

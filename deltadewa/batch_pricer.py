@@ -6,6 +6,7 @@ import numpy as np
 
 from deltadewa.valuation import OptionValuation
 from deltadewa.portfolio.position import OptionPosition
+from deltadewa.constants import OptionType
 
 
 class BatchPricer:
@@ -88,7 +89,7 @@ class BatchPricer:
 
             if days_to_maturity <= 0:
                 # Option expired - use vectorized intrinsic value calculation
-                if position.option.option_type == "call":
+                if position.option.option_type == OptionType.CALL:
                     intrinsic = np.maximum(
                         0, spots - position.option.strike_price
                     )

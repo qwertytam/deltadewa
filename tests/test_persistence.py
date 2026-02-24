@@ -16,6 +16,7 @@ from deltadewa.persistence import (
     YAML_AVAILABLE,
 )
 from deltadewa.reporting.audit import PortfolioLogger
+from deltadewa.constants import OptionType
 
 # ========== Fixtures ==========
 
@@ -36,13 +37,13 @@ def sample_portfolio():
         strike_price=100.0,
         maturity_date=maturity,
         quantity=1,
-        option_type="call",
+        option_type=OptionType.CALL,
     )
     portfolio.add_position(
         strike_price=95.0,
         maturity_date=maturity,
         quantity=-1,
-        option_type="put",
+        option_type=OptionType.PUT,
     )
     return portfolio
 
@@ -228,7 +229,7 @@ class TestJsonRoundtrip:
             strike_price=100.0,
             maturity_date=maturity,
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
             volatility=0.5,  # Custom volatility
         )
 
@@ -288,7 +289,7 @@ class TestJsonRoundtrip:
             },
             "positions": [
                 {
-                    "option_type": "call",
+                    "option_type": OptionType.CALL.value,
                     "strike_price": 100.0,
                     # Missing maturity_date
                     "quantity": 1,
@@ -317,7 +318,7 @@ class TestJsonRoundtrip:
             },
             "positions": [
                 {
-                    "option_type": "call",
+                    "option_type": OptionType.CALL,
                     # Missing strike_price
                     "maturity_date": (
                         datetime.now() + timedelta(days=30)
@@ -433,7 +434,7 @@ class TestYamlRoundtrip:
             },
             "positions": [
                 {
-                    "option_type": "call",
+                    "option_type": OptionType.CALL.value,
                     "strike_price": 100.0,
                     "maturity_days": 30,
                     "quantity": 1,
@@ -507,7 +508,7 @@ class TestCsvExport:
         assert len(df) == len(sample_portfolio.positions)
 
         # Check data types
-        assert df["option_type"].iloc[0] in ["call", "put"]
+        assert df["option_type"].iloc[0] in [OptionType.CALL, OptionType.PUT]
         assert df["quantity"].iloc[0] in [1, -1]
 
     def test_csv_risk_content(self, tmp_path, sample_portfolio):
@@ -602,7 +603,7 @@ class TestLoadConfigYaml:
             },
             "positions": [
                 {
-                    "option_type": "call",
+                    "option_type": OptionType.CALL.value,
                     "strike_price": 100.0,
                     "maturity_date": "2024-12-31",
                     "quantity": 1,

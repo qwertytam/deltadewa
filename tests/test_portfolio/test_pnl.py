@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 import numpy as np
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.constants import OptionType
 
 
 class TestPnLMixin:
@@ -16,7 +17,7 @@ class TestPnLMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         net_debit = portfolio.calculate_net_debit()
@@ -33,7 +34,7 @@ class TestPnLMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # If spot goes to 110, call is worth 10 per share
@@ -57,7 +58,7 @@ class TestPnLMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         # If spot goes to 90, put is worth 10 per share
@@ -96,7 +97,7 @@ class TestPnLMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # If spot goes to 110, we lose on the short call
@@ -126,7 +127,7 @@ class TestPnLMixin:
             strike_price=95.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         # Buy further OTM put (pay premium)
@@ -134,7 +135,7 @@ class TestPnLMixin:
             strike_price=90.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="put",
+            option_type=OptionType.PUT,
         )
 
         net_debit = portfolio.calculate_net_debit()
@@ -152,7 +153,7 @@ class TestPnLMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         # Test with array of spot prices
@@ -202,13 +203,13 @@ class TestPnLMixin:
             strike_price=100.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=-1,
-            option_type="call",
+            option_type=OptionType.CALL,
         )
 
         spot_range = np.linspace(80, 120, 50)

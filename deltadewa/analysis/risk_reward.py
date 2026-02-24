@@ -59,8 +59,7 @@ class RiskRewardMixin:
         )
 
         # Probability analysis
-        prob_analysis = self.portfolio.calculate_probability_of_profit(
-            method="monte_carlo",
+        prob_analysis = self.portfolio.run_monte_carlo_simulation(
             num_simulations=num_simulations,
             include_underlying=True,
         )

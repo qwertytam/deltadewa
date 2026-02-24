@@ -69,7 +69,7 @@ class TestNetHedgeSummary:
             "is_unlimited": False,
             "spot_at_max_profit": 105.0,
         }
-        portfolio.calculate_probability_of_profit.return_value = {
+        portfolio.run_monte_carlo_simulation.return_value = {
             "prob_profit": 0.6,
             "expected_pnl": 1.5,
         }
