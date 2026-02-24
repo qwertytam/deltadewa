@@ -6,7 +6,7 @@ other modules.
 """
 
 from typing import Final
-from enum import Enum
+from enum import StrEnum
 
 # Calendar / time constants
 DAYS_PER_YEAR: Final[int] = 365
@@ -25,7 +25,7 @@ CALENDAR_DAYS_PER_MONTH: Final[int] = 30
 # Logging action types for portfolio changes
 
 
-class PortfolioAction(str, Enum):
+class PortfolioAction(StrEnum):
     """Enum of portfolio action types.
 
     Use this when you want attribute access like `PORTFOLIO_ACTION_TYPES.ADD`.
@@ -41,14 +41,14 @@ class PortfolioAction(str, Enum):
     INITIALIZE = "INITIALIZE"
 
 
-class OptionType(str, Enum):
+class OptionType(StrEnum):
     """Enum of option types."""
 
     CALL = "CALL"
     PUT = "PUT"
 
 
-class ExerciseStyle(str, Enum):
+class ExerciseStyle(StrEnum):
     """Enum of option exercise styles."""
 
     AMERICAN = "AMERICAN"
