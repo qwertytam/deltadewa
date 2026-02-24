@@ -70,7 +70,7 @@ class OptionPortfolioBase:
             valuation_date: Valuation date for all options (defaults to now)
             symbol: Underlying symbol or identifier for display/export
         """
-        self.positions: List[OptionPosition] = []
+        self.positions: list[OptionPosition] = []
         self.underlying_quantity = underlying_quantity
         self.spot_price = spot_price
         self.volatility = volatility
@@ -78,7 +78,7 @@ class OptionPortfolioBase:
         self.dividend_yield = dividend_yield
         self.valuation_date = valuation_date or datetime.now(tz=timezone.utc)
         self.symbol = symbol
-        self._monte_carlo_results: Dict[str, Any] | None = None
+        self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
         self.monte_carlo_stale: bool = False
@@ -154,12 +154,12 @@ class OptionPortfolioBase:
         return self._monte_carlo_results
 
     @monte_carlo_results.setter
-    def monte_carlo_results(self, results: Dict[str, Any] | None):
+    def monte_carlo_results(self, results: dict[str, Any] | None):
         """
         Set Monte Carlo simulation results.
 
         Args:
-            results: Dictionary containing Monte Carlo analysis results
+            results: dictionary containing Monte Carlo analysis results
         """
         self._monte_carlo_results = results
 

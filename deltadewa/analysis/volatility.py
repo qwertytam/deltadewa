@@ -140,7 +140,7 @@ def restore_volatilities(
 
     Args:
         portfolio: OptionPortfolio instance to modify
-        original_vols: Dictionary from apply_proportional_volatility_shift()
+        original_vols: dictionary from apply_proportional_volatility_shift()
                       Maps position index to original volatility
 
     Notes:

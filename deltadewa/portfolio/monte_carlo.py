@@ -14,14 +14,14 @@ class MonteCarloMixin:
     """Mixin providing Monte Carlo simulation for option portfolio."""
 
     if TYPE_CHECKING:
-        positions: List["OptionPosition"]
+        positions: list["OptionPosition"]
         valuation_date: datetime
         risk_free_rate: float
         dividend_yield: float
         volatility: float
         spot_price: float
         # Monte Carlo results and staleness tracking provided by the host
-        monte_carlo_results: Dict[str, Any] | None
+        monte_carlo_results: dict[str, Any] | None
         monte_carlo_stale: bool
         monte_carlo_last_modified: datetime | None
 

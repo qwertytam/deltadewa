@@ -53,7 +53,7 @@ def prepare_dataframe_display(
     df: pd.DataFrame,
     title_case: bool = True,
     start_index: int | None = 1,
-    sort_by: List[str] | None = None,
+    sort_by: list[str] | None = None,
     index_name: str | None = None,
 ) -> pd.DataFrame:
     """
@@ -263,8 +263,8 @@ def format_greeks_dataframe(
 
 def format_risk_metrics_dataframe(
     df: pd.DataFrame,
-    currency_columns: List[str] | None = None,
-    percentage_columns: List[str] | None = None,
+    currency_columns: list[str] | None = None,
+    percentage_columns: list[str] | None = None,
     title_case: bool = True,
     sort_by: list[str] | None = None,
 ) -> Styler:
@@ -359,10 +359,10 @@ def format_scenario_dataframe(
 
 def create_diverging_style(
     df: pd.DataFrame,
-    value_columns: List[str],
+    value_columns: list[str],
     cmap: str = "RdYlGn",
     title_case: bool = True,
-    currency_columns: List[str] | None = None,
+    currency_columns: list[str] | None = None,
 ) -> Styler:
     """
     Create DataFrame style with diverging colormap and consistent formatting.
@@ -423,7 +423,7 @@ def create_diverging_style(
         )
 
     # Format currency columns with consistent formatting
-    format_dict: Dict[Any, Union[str, Callable[[object], str]]] = {}
+    format_dict: dict[Any, Union[str, Callable[[object], str]]] = {}
     for col in currency_columns:
         if col in df_styled.columns:
             format_dict[col] = format_currency_for_df
@@ -502,7 +502,7 @@ def format_pivot_table(
 
 def highlight_negative_values(
     styler: Styler,
-    columns: List[str] | None = None,
+    columns: list[str] | None = None,
     color: str = DEFAULT_PALETTE.negative_faded,
 ) -> Styler:
     """

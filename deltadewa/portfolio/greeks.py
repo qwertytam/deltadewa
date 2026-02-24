@@ -10,7 +10,7 @@ class GreeksMixin:
     """Mixin providing Greek calculations for option portfolio."""
 
     if TYPE_CHECKING:
-        positions: List["OptionPosition"]
+        positions: list["OptionPosition"]
         underlying_quantity: float
 
     def total_delta(self) -> float:

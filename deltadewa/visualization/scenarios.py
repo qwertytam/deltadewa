@@ -23,7 +23,7 @@ class ScenarioChartsMixin:
         days_forward: int,
         valuation_date,
         current_spot: float,
-        figsize: Tuple[int, int] = (14, 10),
+        figsize: tuple[int, int] = (14, 10),
     ) -> Figure:
         """
         Plot P&L and delta profiles for a scenario analysis at a forward date.

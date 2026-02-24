@@ -38,8 +38,8 @@ class CarryMixin:
                 - total_theta_weekly: Weekly theta (daily * 7 calendar days)
                 - total_theta_monthly: Monthly theta (daily * 30 calendar days)
                 - total_theta_annual: Annual theta (daily * 365 calendar days)
-                - theta_by_bucket: Dict of theta totals per maturity bucket
-                - theta_by_type: Dict of theta totals by option type
+                - theta_by_bucket: dict of theta totals per maturity bucket
+                - theta_by_type: dict of theta totals by option type
                 - covered_call_theta: Theta from short calls (income)
                 - long_call_theta: Theta from long calls (cost)
                 - hedge_put_theta: Theta cost from long puts (protection)

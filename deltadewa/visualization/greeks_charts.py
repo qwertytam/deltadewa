@@ -22,14 +22,14 @@ class GreeksChartsMixin:
 
     def plot_greeks_by_strike(
         self,
-        metrics: List[str] | None = None,
-        figsize: Tuple[int, int] = (18, 16),
+        metrics: list[str] | None = None,
+        figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
         """
         Create stacked bar charts of Greeks by strike price.
 
         Args:
-            metrics: List of Greeks to plot (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
             figsize: Figure size tuple
 
         Returns:
@@ -59,14 +59,14 @@ class GreeksChartsMixin:
 
     def plot_greeks_by_maturity(
         self,
-        metrics: List[str] | None = None,
-        figsize: Tuple[int, int] = (18, 16),
+        metrics: list[str] | None = None,
+        figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
         """
         Create stacked bar charts of Greeks by maturity date.
 
         Args:
-            metrics: List of Greeks to plot (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
             figsize: Figure size tuple
 
         Returns:

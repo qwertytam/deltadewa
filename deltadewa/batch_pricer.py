@@ -29,7 +29,7 @@ class BatchPricer:
 
     def __init__(
         self,
-        positions: List[OptionPosition],
+        positions: list[OptionPosition],
         risk_free_rate: float,
         dividend_yield: float,
         underlying_quantity: float,
@@ -38,7 +38,7 @@ class BatchPricer:
         Initialize batch pricer.
 
         Args:
-            positions: List of option positions to price
+            positions: list of option positions to price
             risk_free_rate: Risk-free interest rate (annualized)
             dividend_yield: Dividend yield (annualized)
             underlying_quantity: Quantity of underlying shares in portfolio
@@ -49,7 +49,7 @@ class BatchPricer:
         self.underlying_quantity = underlying_quantity
 
         # Cache: (position_index, valuation_date) -> OptionValuation
-        self._cache: Dict[Tuple[int, datetime], OptionValuation] = {}
+        self._cache: dict[Tuple[int, datetime], OptionValuation] = {}
 
     def portfolio_values_at(
         self,

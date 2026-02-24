@@ -31,7 +31,7 @@ class SummaryMixin:
             num_simulations: int = 10000,
         ) -> dict: ...
 
-    def format_risk_summary(self, stats: Dict | None = None) -> str:
+    def format_risk_summary(self, stats: dict | None = None) -> str:
         """
         Generate formatted risk summary text.
 

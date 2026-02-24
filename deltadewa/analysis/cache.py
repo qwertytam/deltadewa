@@ -9,7 +9,7 @@ import numpy as np
 
 def create_scenario_cache_key(
     spot_scenarios: np.ndarray,
-    time_points: List[datetime],
+    time_points: list[datetime],
     metric: str,
     portfolio_state_hash: str,
 ) -> Tuple:
@@ -18,7 +18,7 @@ def create_scenario_cache_key(
 
     Args:
         spot_scenarios: Array of spot prices
-        time_points: List of valuation dates
+        time_points: list of valuation dates
         metric: Metric being calculated
         portfolio_state_hash: Hash representing portfolio state
 
@@ -131,16 +131,16 @@ class ScenarioGridCache:
         Args:
             max_size: Maximum number of cached results (LRU eviction)
         """
-        self._cache: Dict[Tuple, pd.DataFrame] = {}
+        self._cache: dict[Tuple, pd.DataFrame] = {}
         self._max_size = max_size
-        self._access_order: List[Tuple] = []
+        self._access_order: list[Tuple] = []
 
     def get_or_calculate(
         self,
         portfolio,
         analyzer,
         spot_scenarios: np.ndarray,
-        time_points: List[datetime],
+        time_points: list[datetime],
         metric: str,
         baseline_spot: float | None = None,
         baseline_valuation_date: datetime | None = None,
@@ -152,7 +152,7 @@ class ScenarioGridCache:
             portfolio: OptionPortfolio instance
             analyzer: PortfolioAnalyzer instance
             spot_scenarios: Array of spot prices
-            time_points: List of valuation dates
+            time_points: list of valuation dates
             metric: Metric to calculate
             baseline_spot: Baseline spot for P&L calculation
             baseline_valuation_date: Baseline date for P&L calculation

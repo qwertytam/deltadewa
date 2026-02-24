@@ -54,7 +54,7 @@ class GlobalAssumptions:
         dividend_yield: float = 0.0,
         valuation_date: datetime | None = None,
         spot_range_pct: float = 30.0,
-        vol_range: Tuple[float, float] = (0.05, 1.00),
+        vol_range: tuple[float, float] = (0.05, 1.00),
         portfolio_time_horizon: int | None = None,
     ):
         """
@@ -266,7 +266,7 @@ class GlobalAssumptions:
         )
 
         # Callbacks registry
-        self._callbacks: List[Callable] = []
+        self._callbacks: list[Callable] = []
 
         # Register observers for all widgets
         for widget_attr in [

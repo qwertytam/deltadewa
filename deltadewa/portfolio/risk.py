@@ -15,7 +15,7 @@ class RiskMixin:
     if TYPE_CHECKING:
         spot_price: float
         underlying_quantity: float
-        positions: List["OptionPosition"]
+        positions: list["OptionPosition"]
 
         # pylint: disable=missing-function-docstring, unused-argument
         def calculate_pnl_at_expiry(

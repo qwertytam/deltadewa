@@ -64,8 +64,8 @@ class OptionChartsBase:
     def create_chart_grid(
         rows: int,
         cols: int,
-        titles: List[str],
-        figsize: Tuple[int, int] | None = None,
+        titles: list[str],
+        figsize: tuple[int, int] | None = None,
     ) -> Tuple[Figure, np.ndarray]:
         """
         Create standardized multi-panel chart grid with consistent styling.
@@ -73,7 +73,7 @@ class OptionChartsBase:
         Args:
             rows: Number of rows
             cols: Number of columns
-            titles: List of titles for each panel
+            titles: list of titles for each panel
             figsize: Figure size tuple (default: calculated based on rows/cols)
 
         Returns:

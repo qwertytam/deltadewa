@@ -69,7 +69,7 @@ class HedgeHealthDashboard:
         portfolio: OptionPortfolio instance to analyze
         analyzer: PortfolioAnalyzer for advanced calculations
         cumulative_carry_paid: Running total of carry paid (for hedge success)
-        config: Dictionary storing current threshold configuration
+        config: dictionary storing current threshold configuration
 
     Example:
         from deltadewa.widgets import HedgeHealthDashboard
@@ -121,8 +121,8 @@ class HedgeHealthDashboard:
         self.analyzer = PortfolioAnalyzer(portfolio)
 
         self._widget = None
-        self._metrics: Dict[str, HedgeHealthMetric] = {}
-        self._gauges: Dict[str, GaugeIndicator] = {}
+        self._metrics: dict[str, HedgeHealthMetric] = {}
+        self._gauges: dict[str, GaugeIndicator] = {}
 
     def add_carry_paid(self, amount: float) -> None:
         """
@@ -205,12 +205,12 @@ class HedgeHealthDashboard:
             },
         }
 
-    def load_config(self, config_data: Dict[str, Any]) -> None:
+    def load_config(self, config_data: dict[str, Any]) -> None:
         """
         Update configuration from a dictionary and refresh dashboard.
 
         Args:
-            config_data: Dictionary containing 'parameters' and/or 'metrics' keys.
+            config_data: dictionary containing 'parameters' and/or 'metrics' keys.
         """
         if "parameters" in config_data:
             self.config["parameters"].update(config_data["parameters"])
@@ -648,7 +648,7 @@ class HedgeHealthDashboard:
         """
         self._metrics = self._configure_metrics()
 
-        summary: Dict[str, Any] = {}
+        summary: dict[str, Any] = {}
         for key, metric in self._metrics.items():
             # Determine status
             if metric.invert_colors:
@@ -699,7 +699,9 @@ class HedgeHealthDashboard:
                 try:
                     uploaded_file = change["new"][0]
                     try:
-                        content = uploaded_file["content"].tobytes().decode("utf-8")
+                        content = (
+                            uploaded_file["content"].tobytes().decode("utf-8")
+                        )
                     except UnicodeDecodeError:
                         print("❌ Error: File must be UTF-8 encoded")
                         return

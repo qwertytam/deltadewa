@@ -24,7 +24,7 @@ class ThetaChartsMixin:
     def plot_theta_analysis(
         self,
         projection_days: int = 30,
-        figsize: Tuple[int, int] = (16, 12),
+        figsize: tuple[int, int] = (16, 12),
     ) -> Figure:
         """
         Create 4-panel theta decay analysis chart.
@@ -171,7 +171,7 @@ class ThetaChartsMixin:
     def _plot_theta_projection(
         self,
         ax: Axes,
-        theta_metrics: Dict,
+        theta_metrics: dict,
         projection_days: int,
     ):
         """Plot cumulative theta projection."""

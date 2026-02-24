@@ -111,7 +111,7 @@ class ScenariosMixin:
     def scenario_grid(
         self,
         spot_scenarios: np.ndarray,
-        time_points: List[datetime],
+        time_points: list[datetime],
         metric: str = "pnl",
         baseline_spot: float | None = None,
         baseline_valuation_date: datetime | None = None,
@@ -124,7 +124,7 @@ class ScenariosMixin:
 
         Args:
             spot_scenarios: Array of spot prices to test
-            time_points: List of valuation dates to test
+            time_points: list of valuation dates to test
             metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta',
             'gamma', 'vega', 'theta')
             baseline_spot: Spot price for P&L baseline (default: current portfolio spot)
@@ -134,7 +134,7 @@ class ScenariosMixin:
         Returns:
             DataFrame with columns: spot_price, valuation_date, metric_value
         """
-        results: List[Dict[str, Any]] = []
+        results: list[Dict[str, Any]] = []
         original_spot = self.portfolio.spot_price
         original_date = self.portfolio.valuation_date
 
@@ -260,7 +260,7 @@ class ScenariosMixin:
         Returns:
             DataFrame with columns: spot_price, volatility, value
         """
-        results: List[Dict[str, Any]] = []
+        results: list[Dict[str, Any]] = []
         original_spot = self.portfolio.spot_price
         original_vol = self.portfolio.volatility
         original_date = self.portfolio.valuation_date

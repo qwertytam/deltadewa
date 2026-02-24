@@ -37,7 +37,7 @@ class PnLChartsMixin:
         spot_range_pct: float = 40.0,
         num_points: int = 300,
         show_underlying: bool = True,
-        figsize: Tuple[int, int] = (14, 12),
+        figsize: tuple[int, int] = (14, 12),
     ) -> Figure:
         """
         Create comprehensive P&L diagram at expiration.
@@ -127,7 +127,7 @@ class PnLChartsMixin:
         self,
         spot_range_pct: float = 100.0,
         num_points: int = 1000,
-        figsize: Tuple[int, int] = (16, 8),
+        figsize: tuple[int, int] = (16, 8),
         include_underlying: bool = True,
         show_probability_overlay: bool = False,
     ) -> Figure:
@@ -707,8 +707,8 @@ class PnLChartsMixin:
         self,
         ax: Axes,
         spot_range: np.ndarray,
-        pnl_values: List[float],
-        analysis: Dict,
+        pnl_values: list[float],
+        analysis: dict,
         analysis_key: str,
         title: str,
     ):

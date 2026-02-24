@@ -214,12 +214,12 @@ class HealthMixin:
         # Positive if hedge protection > carry cost
         return (hedge_pnl / abs(cumulative_carry_paid)) * 100
 
-    def calculate_overall_health_score(self, metrics: Dict) -> float:
+    def calculate_overall_health_score(self, metrics: dict) -> float:
         """
         Calculate an overall health score (0-100) based on all metrics.
 
         Args:
-            metrics: Dictionary containing metric configurations with keys:
+            metrics: dictionary containing metric configurations with keys:
                 - actual: Actual metric value
                 - min_val: Minimum threshold value
                 - max_val: Maximum threshold value

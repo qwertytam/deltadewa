@@ -73,7 +73,7 @@ def create_heatmap_style(
 def apply_traffic_light_colors(
     styler: Styler,
     column: str,
-    thresholds: Dict[str, float],
+    thresholds: dict[str, float],
     reverse: bool = False,
 ) -> Styler:
     """
@@ -82,7 +82,7 @@ def apply_traffic_light_colors(
     Args:
         styler: Pandas Styler object
         column: Column to apply colors to
-        thresholds: Dict with 'red', 'yellow', 'green' threshold values
+        thresholds: dict with 'red', 'yellow', 'green' threshold values
         reverse: If True, reverse the color logic (red for high values)
 
     Returns:

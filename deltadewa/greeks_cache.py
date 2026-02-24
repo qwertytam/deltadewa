@@ -14,8 +14,8 @@ class GreeksCache:
     invalidation. The cache is invalidated when market conditions change.
     """
 
-    _compute_funcs: Dict[str, Callable[[], float]] = field(default_factory=dict)
-    _cache: Dict[str, float] = field(default_factory=dict)
+    _compute_funcs: dict[str, Callable[[], float]] = field(default_factory=dict)
+    _cache: dict[str, float] = field(default_factory=dict)
     _dirty: set = field(
         default_factory=lambda: {
             "delta",

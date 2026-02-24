@@ -51,7 +51,7 @@ class ConsoleReporter:
             print(f"{key}: {value}")
 
     def metric_summary(
-        self, metrics: Dict[str, Any], title: str | None = None
+        self, metrics: dict[str, Any], title: str | None = None
     ) -> None:
         """Print a formatted summary of metrics."""
         if title:
@@ -107,7 +107,7 @@ class ConsoleReporter:
         print(f"{prefix}  {message}")
 
     def table_row(
-        self, columns: List[Any], widths: List[int], separator: str = "|"
+        self, columns: list[Any], widths: list[int], separator: str = "|"
     ) -> None:
         """Print a formatted table row."""
         row = separator.join(
@@ -117,9 +117,9 @@ class ConsoleReporter:
 
     def table(
         self,
-        data: List[List[Any]],
-        headers: List[str],
-        widths: List[int] | None = None,
+        data: list[List[Any]],
+        headers: list[str],
+        widths: list[int] | None = None,
     ) -> None:
         """Print a simple formatted table."""
         # Auto-calculate widths if not provided

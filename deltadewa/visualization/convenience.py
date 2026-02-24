@@ -79,7 +79,7 @@ def plot_theta_analysis(portfolio, **kwargs):
 def plot_greeks_consolidated(
     portfolio,
     top_n: int = 5,
-    figsize: Tuple[int, int] = (16, 10),
+    figsize: tuple[int, int] = (16, 10),
 ) -> Figure:
     """
     Create consolidated Greeks view optimized for the EXPLAIN mode.

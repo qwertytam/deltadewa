@@ -12,7 +12,7 @@ class PnLMixin:
     """Mixin providing P&L calculations for option portfolio."""
 
     if TYPE_CHECKING:
-        positions: List["OptionPosition"]
+        positions: list["OptionPosition"]
         underlying_quantity: float
         spot_price: float
 

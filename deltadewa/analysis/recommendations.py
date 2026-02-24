@@ -45,7 +45,7 @@ class RecommendationsMixin:
             - delta_change_needed: Delta adjustment required
             - underlying_trade: Shares to buy/sell
             - underlying_cost: Estimated cost of share trade
-            - option_alternatives: List of option trades to achieve same delta (if enabled)
+            - option_alternatives: list of option trades to achieve same delta (if enabled)
         """
         stats = self.portfolio.summary_stats()
 
@@ -140,7 +140,7 @@ class RecommendationsMixin:
 
     def analyze_risk_concentration(
         self,
-        metrics: List[str] | None = None,
+        metrics: list[str] | None = None,
         top_n: int = 3,
     ) -> Dict:
         """
@@ -150,7 +150,7 @@ class RecommendationsMixin:
         Useful for identifying over-concentration that should be diversified.
 
         Args:
-            metrics: List of Greeks to analyze (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to analyze (default: ['delta', 'gamma', 'vega'])
             top_n: Number of top contributors to identify
 
         Returns:
@@ -169,7 +169,7 @@ class RecommendationsMixin:
         # pylint: disable=assignment-from-no-return
         df = self.add_maturity_buckets(df)
 
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "by_strike": {},
             "by_maturity": {},
             "concentration_scores": {},

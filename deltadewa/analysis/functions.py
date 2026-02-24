@@ -41,7 +41,7 @@ def quick_carry_analysis(portfolio) -> Dict:
 
 
 def quick_risk_concentration(
-    portfolio, metrics: List[str] | None = None
+    portfolio, metrics: list[str] | None = None
 ) -> Dict:
     """
     Quick risk concentration analysis.

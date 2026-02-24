@@ -417,7 +417,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         spot_price: float,
         volatility: float,
         spot_range: float = 0.3,
-        vol_range: Tuple[float, float] = (0.05, 0.5),
+        vol_range: tuple[float, float] = (0.05, 0.5),
         continuous_update: bool = False,
     ) -> Dict[str, Any]:
         """
@@ -522,7 +522,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     def create_metric_selector(
         self,
-        metrics: List[Tuple[str, str]] | None = None,
+        metrics: list[Tuple[str, str]] | None = None,
         description: str = "Metric:",
         default: str = "pnl",
     ) -> widgets.Dropdown:
@@ -530,7 +530,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         Create metric selection dropdown.
 
         Args:
-            metrics: List of (display_name, value) tuples (None = default set)
+            metrics: list of (display_name, value) tuples (None = default set)
             description: Widget label
             default: Default selected metric
 
@@ -807,13 +807,13 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     @staticmethod
     def create_button_group(
-        buttons: List[widgets.Button], layout: str = "horizontal"
+        buttons: list[widgets.Button], layout: str = "horizontal"
     ) -> widgets.Widget:
         """
         Create group of buttons with consistent spacing.
 
         Args:
-            buttons: List of button widgets
+            buttons: list of button widgets
             layout: 'horizontal' or 'vertical'
 
         Returns:
@@ -826,7 +826,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     @staticmethod
     def create_two_column_layout(
-        left_widgets: List[widgets.Widget], right_widgets: List[widgets.Widget]
+        left_widgets: list[widgets.Widget], right_widgets: list[widgets.Widget]
     ) -> widgets.HBox:
         """
         Create two-column layout for widgets.
