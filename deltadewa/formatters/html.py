@@ -9,11 +9,8 @@ These formatters are designed for use in Jupyter notebooks with HTML display.
 """
 
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa.formatters.values import (
-    format_currency,
-    format_percentage,
-    format_number,
-)
+from deltadewa.formatters.values import (format_currency, format_number,
+                                         format_percentage)
 
 
 def format_html_badge(

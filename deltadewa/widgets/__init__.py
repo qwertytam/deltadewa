@@ -24,17 +24,15 @@ Usage:
     display(position_editor)
 """
 
-from deltadewa.widgets.base import InteractiveOutput
 from deltadewa.widgets.assumptions import GlobalAssumptions
-from deltadewa.widgets.summary import NetHedgeSummary
-from deltadewa.widgets.portfolio_controls import PortfolioWidgets
+from deltadewa.widgets.base import InteractiveOutput
 from deltadewa.widgets.export_controls import ExportControlsMixin
-from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
 from deltadewa.widgets.gauges import GaugeIndicator
-from deltadewa.widgets.health_dashboard import (
-    HedgeHealthMetric,
-    HedgeHealthDashboard,
-)
+from deltadewa.widgets.health_dashboard import (HedgeHealthDashboard,
+                                                HedgeHealthMetric)
+from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
+from deltadewa.widgets.portfolio_controls import PortfolioWidgets
+from deltadewa.widgets.summary import NetHedgeSummary
 
 __all__ = [
     "InteractiveOutput",

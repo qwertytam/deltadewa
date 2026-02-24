@@ -1,7 +1,7 @@
 """Option position representation."""
 
-from deltadewa.valuation import OptionValuation
 from deltadewa.constants import ExerciseStyle
+from deltadewa.valuation import OptionValuation
 
 
 class OptionPosition:

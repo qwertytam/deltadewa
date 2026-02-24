@@ -5,8 +5,8 @@ these are constants; they are module-level values intended for import by
 other modules.
 """
 
-from typing import Final
 from enum import StrEnum
+from typing import Final
 
 # Calendar / time constants
 DAYS_PER_YEAR: Final[int] = 365

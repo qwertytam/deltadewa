@@ -6,6 +6,7 @@ the deltadewa widget system.
 """
 
 from typing import Callable
+
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 

@@ -13,12 +13,13 @@ These functions are self-contained with no dependencies on other formatter submo
 
 from __future__ import annotations
 
-from typing import Dict, TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Dict, cast
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.colors import TwoSlopeNorm
-import matplotlib.pyplot as plt
+
 from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:

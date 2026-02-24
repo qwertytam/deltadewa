@@ -14,18 +14,9 @@ All functions work with pandas DataFrames and Styler objects.
 
 from __future__ import annotations
 
-from typing import (
-    Any,
-    Mapping,
-    Dict,
-    List,
-    Union,
-    Callable,
-    Literal,
-    TYPE_CHECKING,
-    cast,
-)
 import warnings
+from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Literal, Mapping,
+                    Union, cast)
 
 import pandas as pd
 

@@ -1,9 +1,11 @@
 """Risk analysis mixin for option portfolio."""
 
 from typing import TYPE_CHECKING, List
+
 import numpy as np
-from deltadewa.spot_utils import generate_spot_range
+
 from deltadewa.constants import OptionType
+from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.position import OptionPosition

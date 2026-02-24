@@ -1,7 +1,8 @@
 """Factory functions for creating option portfolios."""
 
 from datetime import datetime, timedelta, timezone
-from deltadewa.constants import OptionType, ExerciseStyle
+
+from deltadewa.constants import ExerciseStyle, OptionType
 
 
 def create_empty_portfolio(**kwargs):

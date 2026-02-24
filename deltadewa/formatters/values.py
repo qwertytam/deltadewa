@@ -15,7 +15,7 @@ on other formatter submodules.
 
 from __future__ import annotations
 
-from typing import Union, Any, cast
+from typing import Any, Union, cast
 
 import pandas as pd
 

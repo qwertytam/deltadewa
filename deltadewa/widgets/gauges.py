@@ -6,6 +6,7 @@ and value markers for displaying portfolio health metrics.
 """
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
+
 from deltadewa.colours import DEFAULT_PALETTE
 
 

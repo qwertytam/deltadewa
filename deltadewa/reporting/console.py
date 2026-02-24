@@ -5,8 +5,10 @@ Handles formatted output to stdout/stderr with support for headers,
 tables, status messages, and progress bars.
 """
 
-from typing import Any, List, Dict
+from typing import Any, Dict, List
+
 from IPython.display import clear_output
+
 from deltadewa.formatters.values import format_number_auto_precision
 
 

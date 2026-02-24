@@ -24,10 +24,8 @@ from matplotlib.ticker import FuncFormatter
 
 from deltadewa.analysis.volatility import calculate_portfolio_avg_volatility
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa.formatters.gradients import (
-    apply_financial_gradient_2d,
-    get_matplotlib_norm_and_cmap,
-)
+from deltadewa.formatters.gradients import (apply_financial_gradient_2d,
+                                            get_matplotlib_norm_and_cmap)
 from deltadewa.formatters.values import format_currency_for_axis
 from deltadewa.reporting import ConsoleReporter
 
@@ -291,9 +289,8 @@ class StressDashboard:
         # PortfolioWidgets helpers are not available here; build widgets
         # directly
         # pylint: disable=import-outside-toplevel
-        from deltadewa.widgets.portfolio_controls import (
-            PortfolioWidgets as _PW,
-        )  # local import to avoid hard dep
+        from deltadewa.widgets.portfolio_controls import \
+            PortfolioWidgets as _PW  # local import to avoid hard dep
 
         _pw_stub = _PW.__new__(_PW)
         _pw_stub.portfolio = portfolio

@@ -2,11 +2,11 @@
 
 from datetime import datetime, timezone
 
-
 import QuantLib as ql  # type: ignore
+
 from deltadewa import constants as const
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.greeks_cache import GreeksCache
-from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class OptionValuation:

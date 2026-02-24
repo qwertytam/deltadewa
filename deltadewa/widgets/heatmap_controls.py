@@ -4,14 +4,7 @@ This module provides mixin classes for heatmap functionality
 in the deltadewa dashboard.
 """
 
-from typing import (
-    TYPE_CHECKING,
-    Optional,
-    List,
-    Tuple,
-    Dict,
-    Any,
-)
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 

@@ -6,13 +6,14 @@ indicators in a compact, always-visible format.
 """
 
 from typing import TYPE_CHECKING, Union
+
 import ipywidgets as widgets  # type: ignore[import-untyped]
+
+from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
-
 # Import centralized formatters
 from deltadewa.formatters.html import format_html_badge, format_html_metric
-from deltadewa.analysis.base import PortfolioAnalyzer
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio

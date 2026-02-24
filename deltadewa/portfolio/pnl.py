@@ -1,7 +1,9 @@
 """P&L calculations mixin for option portfolio."""
 
 from typing import TYPE_CHECKING, List
+
 import numpy as np
+
 from deltadewa.constants import OptionType
 
 if TYPE_CHECKING:

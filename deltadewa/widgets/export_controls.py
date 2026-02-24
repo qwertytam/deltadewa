@@ -4,20 +4,15 @@ This module provides mixin classes for export/import functionality
 in the deltadewa dashboard.
 """
 
-from pathlib import Path
-from typing import (
-    Union,
-    Callable,
-    Dict,
-    Any,
-)
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable, Dict, Union
+
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
+from deltadewa.config import \
+    create_export_dir_widget as _create_export_dir_widget
 from deltadewa.persistence import PortfolioSerializer
-from deltadewa.config import (
-    create_export_dir_widget as _create_export_dir_widget,
-)
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.audit import PortfolioLogger
 

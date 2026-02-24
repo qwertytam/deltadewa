@@ -8,7 +8,9 @@ and scenario assumptions across the deltadewa dashboard.
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Tuple
+
 import ipywidgets as widgets  # type: ignore[import-untyped]
+
 from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
 

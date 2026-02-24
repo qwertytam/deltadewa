@@ -9,10 +9,12 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
+
 import pandas as pd
+
 from deltadewa import OptionPortfolio
-from deltadewa.reporting import ConsoleReporter
 from deltadewa.constants import OptionType
+from deltadewa.reporting import ConsoleReporter
 
 try:
     import yaml

@@ -1,8 +1,8 @@
 """Lazy-loading Greeks cache with automatic invalidation."""
 
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Any
 from threading import RLock
+from typing import Any, Callable, Dict
 
 
 @dataclass

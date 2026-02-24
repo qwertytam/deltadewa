@@ -10,14 +10,12 @@ from matplotlib.ticker import FuncFormatter
 from scipy import stats  # type: ignore
 
 from deltadewa import constants as const
-from deltadewa.colours import DEFAULT_PALETTE
-
-# Import centralized formatters
-from deltadewa.formatters.values import (
-    format_spot_with_pct as format_spot_with_pct_centralized,
-    format_currency_for_axis,
-)
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.colours import DEFAULT_PALETTE
+# Import centralized formatters
+from deltadewa.formatters.values import format_currency_for_axis
+from deltadewa.formatters.values import \
+    format_spot_with_pct as format_spot_with_pct_centralized
 from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:

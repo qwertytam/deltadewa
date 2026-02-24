@@ -44,6 +44,7 @@ Usage example
 """
 
 from datetime import datetime, timezone
+
 from deltadewa.constants import PortfolioAction
 from deltadewa.portfolio.core import OptionPortfolio
 
