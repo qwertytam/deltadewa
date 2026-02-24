@@ -39,7 +39,7 @@ def create_spot_vol_cache_key(
     portfolio_state_hash: str,
 ) -> Tuple:
     """
-    Create hashable cache key for spot × vol scenario grid results.
+    Create hashable cache key for spot x vol scenario grid results.
 
     Args:
         spot_scenarios: Array of spot prices
@@ -206,7 +206,7 @@ class ScenarioGridCache:
         proportional_vol_scaling: bool = True,
     ) -> pd.DataFrame:
         """
-        Get cached spot × vol result or calculate if not available.
+        Get cached spot x vol result or calculate if not available.
 
         Uses vectorized calculation for P&L at expiry for maximum performance.
 

@@ -428,7 +428,7 @@ class TestBatchPricer:
         new_date = datetime.now(tz=timezone.utc) + timedelta(days=5)
         pricer.portfolio_values_at(spots, new_date)
         # pylint: disable=protected-access
-        assert len(pricer._cache) == 6  # 3 positions × 2 dates
+        assert len(pricer._cache) == 6  # 3 positions x 2 dates
 
     def test_put_option_pricing(self):
         """Test BatchPricer works correctly for put options."""

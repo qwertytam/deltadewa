@@ -96,7 +96,7 @@ def apply_proportional_volatility_shift(
         >>> # Positions with [30%, 20%, 25%] volatilities, avg = 25%
         >>> # Shift to 30% average:
         >>> original_vols = apply_proportional_volatility_shift(portfolio, 0.30)
-        >>> # Positions become [36%, 24%, 30%] (all scaled by 1.2×)
+        >>> # Positions become [36%, 24%, 30%] (all scaled by 1.2x)
         >>> restore_volatilities(portfolio, original_vols)  # Restore original
     """
     original_vols = {}

@@ -700,7 +700,7 @@ def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10):
         df: DataFrame to summarize
         max_rows: Maximum number of rows to display from each end
     """
-    print(f"\nDataFrame Shape: {df.shape[0]} rows × {df.shape[1]} columns")
+    print(f"\nDataFrame Shape: {df.shape[0]} rows x {df.shape[1]} columns")
     print("\nColumn Data Types:")
     print(df.dtypes)
 

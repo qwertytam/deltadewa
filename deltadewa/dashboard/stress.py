@@ -5,14 +5,14 @@ This module encapsulates the STRESS mode (Mode 3) logic from
 options_dashboard.ipynb, providing three main capabilities:
   - Time vs Price heatmap  (create_time_heatmap)
   - Spot vs Volatility heatmap  (create_spot_vol_heatmap)
-  - Risk / Reward summary from Monte Carlo results  (display_risk_reward_summary)
+  - Risk / Reward summary from Monte Carlo results (display_risk_reward_summary)
 """
 
 from __future__ import annotations
 
 import time
 import traceback
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, cast
 
 import ipywidgets as widgets  # type: ignore
@@ -30,7 +30,6 @@ from deltadewa.formatters.gradients import (
 )
 from deltadewa.formatters.values import format_currency_for_axis
 from deltadewa.reporting import ConsoleReporter
-
 
 # ---------------------------------------------------------------------------
 # Metric configuration shared across heatmap methods
@@ -114,9 +113,9 @@ class StressDashboard:
         metric : str
             Initial metric to display (default ``"pnl"``).
         num_time_steps : int
-            Initial number of time-axis grid points (5–20).
+            Initial number of time-axis grid points (5-20).
         num_price_steps : int
-            Initial number of price-axis grid points (5–19, odd values only).
+            Initial number of price-axis grid points (5-19, odd values only).
 
         Returns
         -------
@@ -238,7 +237,7 @@ class StressDashboard:
         days_forward: int = 0,
     ) -> widgets.VBox:
         """
-        Build and return an interactive Spot × Volatility heatmap widget.
+        Build and return an interactive Spot x Volatility heatmap widget.
 
         The widget contains a date selector (days forward) and metric selector;
         the heatmap re-renders via ``widgets.interactive``.
@@ -289,7 +288,8 @@ class StressDashboard:
         else:
             max_days = 90
 
-        # PortfolioWidgets helpers are not available here; build widgets directly
+        # PortfolioWidgets helpers are not available here; build widgets
+        # directly
         # pylint: disable=import-outside-toplevel
         from deltadewa.widgets.portfolio_controls import (
             PortfolioWidgets as _PW,
@@ -445,7 +445,8 @@ class StressDashboard:
 
         if len(pnls_clean) < 20:
             self.reporter.error(
-                f"Insufficient valid data: {len(pnls_clean)} points (need at least 20)"
+                f"Insufficient valid data: {len(pnls_clean)} points "
+                + "(need at least 20)"
             )
             return
 
@@ -507,11 +508,13 @@ class StressDashboard:
             if var_95 >= 0:
                 print(f"   → 95% of outcomes are BETTER than ${var_95:,.2f}")
                 print(
-                    f"   → Only 5% of scenarios result in less than ${var_95:,.2f}"
+                    "   → Only 5% of scenarios result in less "
+                    + f"than ${var_95:,.2f}"
                 )
             else:
                 print(
-                    f"   → 5% of scenarios result in worse than ${var_95:,.2f} loss"
+                    "   → 5% of scenarios result in worse than "
+                    + f"${var_95:,.2f} loss"
                 )
 
             print(f"   99% VaR (1st percentile): ${var_99:>10,.2f}")
@@ -524,7 +527,8 @@ class StressDashboard:
             if theoretical_max_loss is not None:
                 print("\n🔴 Theoretical Maximum Loss:")
                 print(
-                    f"   Max possible loss:        ${theoretical_max_loss:>10,.2f}"
+                    "   Max possible loss:        "
+                    + f"${theoretical_max_loss:>10,.2f}"
                 )
                 print(
                     "   → If all short options go fully ITM (spot → $0 for puts)"
@@ -797,7 +801,7 @@ class StressDashboard:
         vol_shock_pct: float,
         baseline_value: float,
     ) -> None:
-        """Render (or re-render) the Spot × Volatility matplotlib heatmap inside *output_widget*."""
+        """Render (or re-render) the Spot x Volatility matplotlib heatmap inside *output_widget*."""
 
         with output_widget:
             output_widget.clear_output(wait=True)
@@ -1061,14 +1065,14 @@ class StressDashboard:
             grid_size = kwargs.get("grid_size", "?")
             message = (
                 f"<strong>{style['icon']} {style['title']}</strong><br/>"
-                f"Computing {metric.upper()} across {grid_size}×{grid_size} scenario grid..."
+                f"Computing {metric.upper()} across {grid_size}x{grid_size} scenario grid..."
             )
         elif status_type == "complete":
             elapsed = kwargs.get("elapsed_time", 0)
             grid_size = kwargs.get("grid_size", "?")
             message = (
                 f"<strong>{style['icon']} {style['title']}</strong><br/>"
-                f"Generated {grid_size}×{grid_size} heatmap in {elapsed:.2f} seconds"
+                f"Generated {grid_size}x{grid_size} heatmap in {elapsed:.2f} seconds"
             )
         else:
             error_msg = kwargs.get("error_msg", "Unknown error")
@@ -1317,7 +1321,7 @@ class StressDashboard:
 
         ax2.set_ylim(-0.02, 1.05)
         ax2.set_xlim(x_min, x_max)
-        # Safety check – ensure x-axis is not inverted
+        # Safety check - ensure x-axis is not inverted
         if ax2.get_xlim()[0] > ax2.get_xlim()[1]:
             ax2.set_xlim(ax2.get_xlim()[1], ax2.get_xlim()[0])
 

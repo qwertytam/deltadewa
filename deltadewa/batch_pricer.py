@@ -17,12 +17,12 @@ class BatchPricer:
     (position, date) and reusing them across spot price sweeps using the
     efficient update_spot_price() method.
 
-    This reduces QuantLib environment constructions from P×S×T to P×T,
+    This reduces QuantLib environment constructions from PxSxT to PxT,
     where P=positions, S=spot scenarios, T=time points.
 
     Performance Impact:
         Measured speedup: 5-10% improvement across different scenario sizes
-        - Example: 10 positions × 50 spots × 20 dates = 10,000 → 200 setups
+        - Example: 10 positions x 50 spots x 20 dates = 10,000 → 200 setups
         - Main benefit: Avoids expensive QL environment rebuilds
         - Note: QL price computation still dominates (finite difference calculation)
     """
