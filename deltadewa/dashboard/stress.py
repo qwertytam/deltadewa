@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import Optional, Any, cast
+from typing import Any, cast
 
 import ipywidgets as widgets  # type: ignore
 import matplotlib.pyplot as plt
@@ -84,7 +84,7 @@ class StressDashboard:
         analyzer,
         cache,
         global_assumptions,
-        reporter: Optional[ConsoleReporter] = None,
+        reporter: ConsoleReporter | None = None,
     ) -> None:
         self.portfolio = portfolio
         self.analyzer = analyzer

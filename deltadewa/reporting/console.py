@@ -5,7 +5,7 @@ Handles formatted output to stdout/stderr with support for headers,
 tables, status messages, and progress bars.
 """
 
-from typing import Optional, Any, List, Dict
+from typing import Any, List, Dict
 from IPython.display import clear_output
 from deltadewa.formatters.values import format_number_auto_precision
 
@@ -35,7 +35,7 @@ class ConsoleReporter:
         """Print a simple divider line."""
         print(char * self.width)
 
-    def section(self, title: str, content: Optional[str] = None) -> None:
+    def section(self, title: str, content: str | None = None) -> None:
         """Print a complete section with header and optional content."""
         self.header(title)
         if content:
@@ -51,7 +51,7 @@ class ConsoleReporter:
             print(f"{key}: {value}")
 
     def metric_summary(
-        self, metrics: Dict[str, Any], title: Optional[str] = None
+        self, metrics: Dict[str, Any], title: str | None = None
     ) -> None:
         """Print a formatted summary of metrics."""
         if title:
@@ -119,7 +119,7 @@ class ConsoleReporter:
         self,
         data: List[List[Any]],
         headers: List[str],
-        widths: Optional[List[int]] = None,
+        widths: List[int] | None = None,
     ) -> None:
         """Print a simple formatted table."""
         # Auto-calculate widths if not provided

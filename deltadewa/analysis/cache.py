@@ -1,6 +1,6 @@
 """Caching utilities for portfolio analysis."""
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 from datetime import datetime
 import hashlib
 import pandas as pd
@@ -142,8 +142,8 @@ class ScenarioGridCache:
         spot_scenarios: np.ndarray,
         time_points: List[datetime],
         metric: str,
-        baseline_spot: Optional[float] = None,
-        baseline_valuation_date: Optional[datetime] = None,
+        baseline_spot: float | None = None,
+        baseline_valuation_date: datetime | None = None,
     ) -> pd.DataFrame:
         """
         Get cached result or calculate if not available.
@@ -202,7 +202,7 @@ class ScenarioGridCache:
         spot_scenarios: np.ndarray,
         vol_scenarios: np.ndarray,
         metric: str = "pnl",
-        baseline_value: Optional[float] = None,
+        baseline_value: float | None = None,
         proportional_vol_scaling: bool = True,
     ) -> pd.DataFrame:
         """

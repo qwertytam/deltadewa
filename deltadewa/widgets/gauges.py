@@ -5,7 +5,6 @@ This module provides visual gauge indicators with configurable color gradients
 and value markers for displaying portfolio health metrics.
 """
 
-from typing import Optional
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa.colours import DEFAULT_PALETTE
 
@@ -69,7 +68,7 @@ class GaugeIndicator:
         show_minmidmax_labels: bool = True,
         show_startend_labels: bool = True,
         label_format: str = "{:.1f}",
-        title: Optional[str] = None,
+        title: str | None = None,
     ):
         """
         Initialize the GaugeIndicator.
@@ -362,12 +361,12 @@ class GaugeIndicator:
 
     def update(
         self,
-        actual: Optional[float] = None,
-        min_val: Optional[float] = None,
-        mid_val: Optional[float] = None,
-        max_val: Optional[float] = None,
-        start: Optional[float] = None,
-        end: Optional[float] = None,
+        actual: float | None = None,
+        min_val: float | None = None,
+        mid_val: float | None = None,
+        max_val: float | None = None,
+        start: float | None = None,
+        end: float | None = None,
     ) -> None:
         """
         Update the gauge values and refresh the display.

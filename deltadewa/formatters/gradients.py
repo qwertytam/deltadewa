@@ -13,7 +13,7 @@ These functions are self-contained with no dependencies on other formatter submo
 
 from __future__ import annotations
 
-from typing import Dict, Optional, TYPE_CHECKING, Any, cast
+from typing import Dict, TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -29,9 +29,9 @@ def create_heatmap_style(
     df: pd.DataFrame,
     cmap: str = "RdYlGn",
     format_str: str = "{:,.2f}",
-    center_value: Optional[float] = None,  # pylint: disable=unused-argument
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
+    center_value: float | None = None,  # pylint: disable=unused-argument
+    vmin: float | None = None,
+    vmax: float | None = None,
 ) -> Styler:
     """
     Create a heatmap-style DataFrame (for pivot tables, correlation matrices).

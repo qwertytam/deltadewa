@@ -1,6 +1,6 @@
 """Risk/reward analysis mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 import numpy as np
 from deltadewa.spot_utils import generate_spot_range
 
@@ -21,7 +21,7 @@ class RiskRewardMixin:
 
     def risk_reward_analysis(
         self,
-        spot_range: Optional[np.ndarray] = None,
+        spot_range: np.ndarray | None = None,
         num_simulations: int = 10000,
     ) -> dict:
         """

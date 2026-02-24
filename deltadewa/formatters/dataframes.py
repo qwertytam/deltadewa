@@ -19,11 +19,11 @@ from typing import (
     Mapping,
     Dict,
     List,
-    Optional,
     Union,
     Callable,
     Literal,
     TYPE_CHECKING,
+    cast,
 )
 import warnings
 
@@ -52,9 +52,9 @@ except ImportError:
 def prepare_dataframe_display(
     df: pd.DataFrame,
     title_case: bool = True,
-    start_index: Optional[int] = 1,
-    sort_by: Optional[List[str]] = None,
-    index_name: Optional[str] = None,
+    start_index: int | None = 1,
+    sort_by: List[str] | None = None,
+    index_name: str | None = None,
 ) -> pd.DataFrame:
     """
     Prepare a DataFrame for display with consistent formatting.
@@ -101,9 +101,9 @@ def apply_gradient_style(
     styler: Styler,
     columns: Union[str, List[str]],
     cmap: str = "RdYlGn",
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    axis: Optional[Literal["index", "columns", 0, 1]] = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    axis: Literal["index", "columns", 0, 1] | None = None,
 ) -> Styler:
     """
     Apply color gradient to specified columns.
@@ -129,7 +129,7 @@ def apply_gradient_style(
 
 def apply_format_dict(
     styler: Styler,
-    format_dict: Mapping[Any, Optional[Union[str, Callable[[object], str]]]],
+    format_dict: Mapping[Any, Union[str, Callable[[object], str]]] | None,
 ) -> Styler:
     """
     Apply formatting to columns based on format dictionary.
@@ -142,6 +142,10 @@ def apply_format_dict(
     Returns:
         Styler with formatting applied
     """
+    # If no format dict provided, call Styler.format with default formatter
+    if not format_dict:
+        return styler.format(na_rep="-")
+
     # Ensure we pass a concrete dict to Styler.format to satisfy type checkers
     return styler.format(dict(format_dict), na_rep="-")
 
@@ -158,7 +162,7 @@ def format_portfolio_dataframe(
     title_case: bool = True,
     cmap: str = "RdYlGn",
     include_greeks: bool = True,
-    sort_by: Optional[list[str]] = None,
+    sort_by: list[str] | None = None,
 ) -> Styler:
     """
     Format portfolio positions DataFrame with standard styling.
@@ -224,7 +228,7 @@ def format_greeks_dataframe(
     title_case: bool = True,
     cmap: str = "RdBu_r",
     precision: int = 4,
-    sort_by: Optional[list[str]] = None,
+    sort_by: list[str] | None = None,
 ) -> Styler:
     """
     Format Greeks analysis DataFrame (e.g., delta by strike/maturity).
@@ -259,10 +263,10 @@ def format_greeks_dataframe(
 
 def format_risk_metrics_dataframe(
     df: pd.DataFrame,
-    currency_columns: Optional[List[str]] = None,
-    percentage_columns: Optional[List[str]] = None,
+    currency_columns: List[str] | None = None,
+    percentage_columns: List[str] | None = None,
     title_case: bool = True,
-    sort_by: Optional[list[str]] = None,
+    sort_by: list[str] | None = None,
 ) -> Styler:
     """
     Format risk metrics DataFrame with appropriate numeric formatting.
@@ -305,7 +309,7 @@ def format_scenario_dataframe(
     metric_column: str = "portfolio_value",
     title_case: bool = True,
     cmap: str = "RdYlGn",
-    sort_by: Optional[list[str]] = None,
+    sort_by: list[str] | None = None,
 ) -> Styler:
     """
     Format scenario analysis DataFrame with color gradients.
@@ -358,7 +362,7 @@ def create_diverging_style(
     value_columns: List[str],
     cmap: str = "RdYlGn",
     title_case: bool = True,
-    currency_columns: Optional[List[str]] = None,
+    currency_columns: List[str] | None = None,
 ) -> Styler:
     """
     Create DataFrame style with diverging colormap and consistent formatting.
@@ -419,13 +423,19 @@ def create_diverging_style(
         )
 
     # Format currency columns with consistent formatting
-    format_dict: Dict[Any, Optional[Union[str, Callable[[object], str]]]] = {}
+    format_dict: Dict[Any, Union[str, Callable[[object], str]]] = {}
     for col in currency_columns:
         if col in df_styled.columns:
             format_dict[col] = format_currency_for_df
 
     if format_dict:
-        styler = styler.format(format_dict, na_rep="-")
+        styler = styler.format(
+            cast(
+                Mapping[Any, Union[str, Callable[[object], str], None]],
+                format_dict,
+            ),
+            na_rep="-",
+        )
 
     return styler
 
@@ -492,7 +502,7 @@ def format_pivot_table(
 
 def highlight_negative_values(
     styler: Styler,
-    columns: Optional[List[str]] = None,
+    columns: List[str] | None = None,
     color: str = DEFAULT_PALETTE.negative_faded,
 ) -> Styler:
     """
@@ -652,7 +662,7 @@ def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
 def to_excel_styled(
     df: pd.DataFrame,
     filepath: str,
-    styler: Optional[Styler] = None,
+    styler: Styler | None = None,
     sheet_name: str = "Sheet1",
 ):
     """

@@ -15,7 +15,7 @@ on other formatter submodules.
 
 from __future__ import annotations
 
-from typing import Optional, Union, Any, cast
+from typing import Union, Any, cast
 
 import pandas as pd
 
@@ -78,7 +78,7 @@ def format_currency(
         return f"{sign}${abs_val/1_000_000_000:.{precision}f}B"
 
 
-def format_currency_for_axis(x: float, pos: Optional[int] = None) -> str:
+def format_currency_for_axis(x: float, pos: int | None = None) -> str:
     """
     FuncFormatter-compatible currency formatter for matplotlib axes.
 
@@ -135,7 +135,7 @@ def format_percentage(
     return f"{sign}{pct_value:.{decimals}f}%"
 
 
-def format_percentage_for_axis(x: float, pos: Optional[int] = None) -> str:
+def format_percentage_for_axis(x: float, pos: int | None = None) -> str:
     """
     FuncFormatter-compatible percentage formatter for matplotlib axes.
 
@@ -263,7 +263,7 @@ def format_number_auto_precision(value: float) -> str:
 
 
 def format_spot_with_pct(
-    x: float, current_spot: float, pos: Optional[int] = None
+    x: float, current_spot: float, pos: int | None = None
 ) -> str:
     """
     Format spot price with percentage change for axis labels.

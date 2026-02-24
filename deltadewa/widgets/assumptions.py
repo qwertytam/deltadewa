@@ -7,7 +7,7 @@ and scenario assumptions across the deltadewa dashboard.
 
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 import ipywidgets as widgets  # type: ignore[import-untyped]
 from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
@@ -52,10 +52,10 @@ class GlobalAssumptions:
         volatility: float = 0.25,
         risk_free_rate: float = 0.05,
         dividend_yield: float = 0.0,
-        valuation_date: Optional[datetime] = None,
+        valuation_date: datetime | None = None,
         spot_range_pct: float = 30.0,
         vol_range: Tuple[float, float] = (0.05, 1.00),
-        portfolio_time_horizon: Optional[int] = None,
+        portfolio_time_horizon: int | None = None,
     ):
         """
         Initialize global assumptions panel.
@@ -68,7 +68,8 @@ class GlobalAssumptions:
             valuation_date: Valuation date (defaults to today)
             spot_range_pct: Range for spot slider (+/- %)
             vol_range: Min/max for volatility slider
-            portfolio_time_horizon: Optional default time horizon in days for portfolio (overrides time horizon selector)
+            portfolio_time_horizon: Optional default time horizon in days for
+            portfolio (overrides time horizon selector)
         """
         if valuation_date is None:
             valuation_date = datetime.now()

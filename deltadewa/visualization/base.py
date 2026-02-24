@@ -1,7 +1,7 @@
 """Base class and final composition for option charts visualization."""
 
 import warnings
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -65,7 +65,7 @@ class OptionChartsBase:
         rows: int,
         cols: int,
         titles: List[str],
-        figsize: Optional[Tuple[int, int]] = None,
+        figsize: Tuple[int, int] | None = None,
     ) -> Tuple[Figure, np.ndarray]:
         """
         Create standardized multi-panel chart grid with consistent styling.

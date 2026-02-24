@@ -7,13 +7,13 @@ Provides interactive configuration widgets and default settings management.
 import platform
 import subprocess
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Callable
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 
 def create_export_dir_widget(
     default_dir: str = "exports",
-    on_change_callback: Optional[Callable] = None,
+    on_change_callback: Callable | None = None,
     show_browser: bool = True,
 ) -> widgets.VBox:
     """

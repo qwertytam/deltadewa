@@ -1,6 +1,6 @@
 """Risk analysis mixin for option portfolio."""
 
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, List
 import numpy as np
 from deltadewa.spot_utils import generate_spot_range
 from deltadewa.constants import OptionType
@@ -29,7 +29,7 @@ class RiskMixin:
 
     def _get_spot_range(
         self,
-        spot_range: Optional[np.ndarray] = None,
+        spot_range: np.ndarray | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
         num_points: int = 250,
@@ -98,7 +98,7 @@ class RiskMixin:
 
     def calculate_max_loss_options(
         self,
-        spot_range: Optional[np.ndarray] = None,
+        spot_range: np.ndarray | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
@@ -156,7 +156,7 @@ class RiskMixin:
 
     def calculate_max_profit_options(
         self,
-        spot_range: Optional[np.ndarray] = None,
+        spot_range: np.ndarray | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
@@ -214,7 +214,7 @@ class RiskMixin:
 
     def calculate_max_loss_total(
         self,
-        spot_range: Optional[np.ndarray] = None,
+        spot_range: np.ndarray | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
@@ -283,7 +283,7 @@ class RiskMixin:
 
     def calculate_max_profit_total(
         self,
-        spot_range: Optional[np.ndarray] = None,
+        spot_range: np.ndarray | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
@@ -349,7 +349,7 @@ class RiskMixin:
 
     def calculate_breakeven_points(
         self,
-        spot_range: Optional[np.ndarray] = None,
+        spot_range: np.ndarray | None = None,
         include_underlying: bool = False,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,

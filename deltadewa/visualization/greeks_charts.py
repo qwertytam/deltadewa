@@ -1,6 +1,6 @@
 """Greek visualization methods for option charts."""
 
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -22,7 +22,7 @@ class GreeksChartsMixin:
 
     def plot_greeks_by_strike(
         self,
-        metrics: Optional[List[str]] = None,
+        metrics: List[str] | None = None,
         figsize: Tuple[int, int] = (18, 16),
     ) -> Figure:
         """
@@ -59,7 +59,7 @@ class GreeksChartsMixin:
 
     def plot_greeks_by_maturity(
         self,
-        metrics: Optional[List[str]] = None,
+        metrics: List[str] | None = None,
         figsize: Tuple[int, int] = (18, 16),
     ) -> Figure:
         """
@@ -105,7 +105,7 @@ class GreeksChartsMixin:
         metric: str,
         dimension: str,
         title: str,
-        xlabel: Optional[str] = None,
+        xlabel: str | None = None,
     ):
         """
         Plot Greek exposure by a dimension (strike or maturity).

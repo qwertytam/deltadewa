@@ -31,7 +31,7 @@ class HeatmapControlsMixin:
         # pylint: disable=missing-function-docstring, unused-argument
         def create_metric_selector(
             self,
-            metrics: Optional[List[Tuple[str, str]]] = None,
+            metrics: List[Tuple[str, str]] | None = None,
             description: str = "Metric:",
             default: str = "pnl",
         ) -> widgets.Dropdown: ...
@@ -49,7 +49,7 @@ class HeatmapControlsMixin:
         # pylint: disable=missing-function-docstring, unused-argument
         def create_date_selector(
             self,
-            max_days: Optional[int] = None,
+            max_days: int | None = None,
             description: str = "Valuation Date:",
             num_steps: int = 10,
         ) -> widgets.SelectionSlider: ...
@@ -59,7 +59,7 @@ class HeatmapControlsMixin:
     # ==========================================================================
 
     def create_heatmap_controls(
-        self, metrics: Optional[List[Tuple[str, str]]] = None
+        self, metrics: List[Tuple[str, str]] | None = None
     ) -> Dict[str, Any]:
         """
         Create complete heatmap configuration controls.

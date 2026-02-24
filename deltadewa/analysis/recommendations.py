@@ -1,6 +1,6 @@
 """Hedge and concentration recommendations mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Any
+from typing import TYPE_CHECKING, Dict, List, Any
 import numbers
 import numpy as np
 
@@ -140,7 +140,7 @@ class RecommendationsMixin:
 
     def analyze_risk_concentration(
         self,
-        metrics: Optional[List[str]] = None,
+        metrics: List[str] | None = None,
         top_n: int = 3,
     ) -> Dict:
         """

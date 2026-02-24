@@ -1,6 +1,6 @@
 """Monte Carlo simulation mixin for option portfolio."""
 
-from typing import TYPE_CHECKING, Any, Optional, List, Dict
+from typing import TYPE_CHECKING, Any, List, Dict
 from datetime import datetime
 from collections import Counter
 import numpy as np
@@ -21,9 +21,9 @@ class MonteCarloMixin:
         volatility: float
         spot_price: float
         # Monte Carlo results and staleness tracking provided by the host
-        monte_carlo_results: Optional[Dict[str, Any]]
+        monte_carlo_results: Dict[str, Any] | None
         monte_carlo_stale: bool
-        monte_carlo_last_modified: Optional[datetime]
+        monte_carlo_last_modified: datetime | None
 
         # pylint: disable=missing-function-docstring, unused-argument
         def vectorized_pnl_at_expiry(
@@ -33,7 +33,7 @@ class MonteCarloMixin:
         # pylint: disable=missing-function-docstring, unused-argument
         def calculate_breakeven_points(
             self,
-            spot_range: Optional[np.ndarray] = None,
+            spot_range: np.ndarray | None = None,
             include_underlying: bool = False,
             spot_min_pct: float = 0.0,
             spot_max_pct: float = 200.0,
@@ -44,7 +44,7 @@ class MonteCarloMixin:
             self, spot: float, include_underlying: bool = False
         ) -> float: ...
 
-    def _calculate_theoretical_max_loss(self) -> Optional[float]:
+    def _calculate_theoretical_max_loss(self) -> float | None:
         """Helper to calculate theoretical max loss based on position structure."""
         if not hasattr(self, "positions") or not self.positions:
             return None
@@ -115,8 +115,8 @@ class MonteCarloMixin:
         self,
         num_simulations: int = 10**5,
         include_underlying: bool = True,
-        random_seed: Optional[int] = 42,  # Set to None for true randomness
-        days_to_expiry: Optional[int] = None,
+        random_seed: int | None = 42,  # Set to None for true randomness
+        days_to_expiry: int | None = None,
     ) -> Dict[str, Any]:
         """
         Run Monte Carlo simulation and store results on portfolio object.

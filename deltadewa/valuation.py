@@ -1,7 +1,7 @@
 """American option pricing using QuantLib with Bjerksund-Stensland model."""
 
 from datetime import datetime
-from typing import Optional
+
 
 import QuantLib as ql  # type: ignore
 from deltadewa import constants as const
@@ -39,7 +39,7 @@ class OptionValuation:
         risk_free_rate: float,
         dividend_yield: float,
         option_type: OptionType = OptionType.CALL,
-        valuation_date: Optional[datetime] = None,
+        valuation_date: datetime | None = None,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ):
         """

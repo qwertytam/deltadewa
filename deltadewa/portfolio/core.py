@@ -1,7 +1,7 @@
 """Core portfolio management and mixin composition."""
 
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Dict, Any
 import pandas as pd
 from deltadewa.valuation import OptionValuation
 from deltadewa.portfolio.position import OptionPosition
@@ -55,7 +55,7 @@ class OptionPortfolioBase:
         volatility: float = 0.2,
         risk_free_rate: float = 0.05,
         dividend_yield: float = 0.0,
-        valuation_date: Optional[datetime] = None,
+        valuation_date: datetime | None = None,
         symbol: str = "UNKNOWN",
     ):
         """
@@ -78,12 +78,12 @@ class OptionPortfolioBase:
         self.dividend_yield = dividend_yield
         self.valuation_date = valuation_date or datetime.now()
         self.symbol = symbol
-        self._monte_carlo_results: Optional[Dict[str, Any]] = None
+        self._monte_carlo_results: Dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
         self.monte_carlo_stale: bool = False
-        self.monte_carlo_timestamp: Optional[datetime] = None
-        self.monte_carlo_last_modified: Optional[datetime] = None
+        self.monte_carlo_timestamp: datetime | None = None
+        self.monte_carlo_last_modified: datetime | None = None
 
     def add_position(
         self,
@@ -92,7 +92,7 @@ class OptionPortfolioBase:
         quantity: int,
         option_type: OptionType = OptionType.CALL,
         contract_size: int = 100,
-        volatility: Optional[float] = None,
+        volatility: float | None = None,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ):
         """
@@ -145,7 +145,7 @@ class OptionPortfolioBase:
         return self.symbol
 
     @property
-    def monte_carlo_results(self) -> Optional[Dict[str, Any]]:
+    def monte_carlo_results(self) -> Dict[str, Any] | None:
         """Get Monte Carlo simulation results if available.
 
         Returns:
@@ -154,7 +154,7 @@ class OptionPortfolioBase:
         return self._monte_carlo_results
 
     @monte_carlo_results.setter
-    def monte_carlo_results(self, results: Optional[Dict[str, Any]]):
+    def monte_carlo_results(self, results: Dict[str, Any] | None):
         """
         Set Monte Carlo simulation results.
 
@@ -319,13 +319,13 @@ class OptionPortfolioBase:
     def update_position(
         self,
         index: int,
-        quantity: Optional[int] = None,
-        strike: Optional[float] = None,
-        expiry: Optional[datetime] = None,
-        option_type: Optional[OptionType] = None,
-        contract_size: Optional[int] = None,
-        volatility: Optional[float] = None,
-        exercise_style: Optional[ExerciseStyle] = None,
+        quantity: int | None = None,
+        strike: float | None = None,
+        expiry: datetime | None = None,
+        option_type: OptionType | None = None,
+        contract_size: int | None = None,
+        volatility: float | None = None,
+        exercise_style: ExerciseStyle | None = None,
     ):
         """Update a position's properties by index."""
         if index < 0 or index >= len(self.positions):
@@ -398,11 +398,11 @@ class OptionPortfolioBase:
 
     def update_market_conditions(
         self,
-        spot_price: Optional[float] = None,
-        volatility: Optional[float] = None,
-        risk_free_rate: Optional[float] = None,
-        dividend_yield: Optional[float] = None,
-        valuation_date: Optional[datetime] = None,
+        spot_price: float | None = None,
+        volatility: float | None = None,
+        risk_free_rate: float | None = None,
+        dividend_yield: float | None = None,
+        valuation_date: datetime | None = None,
         override_custom_volatility: bool = False,
     ):
         """
@@ -483,13 +483,13 @@ class OptionPortfolioBase:
             return s
         return f"<OptionPortfolio: {len(self.positions)} positions>"
 
-    def get_furtherest_maturity(self) -> Optional[datetime]:
+    def get_furtherest_maturity(self) -> datetime | None:
         """Get the furthest maturity date among all positions."""
         if not self.positions:
             return None
         return max(pos.option.maturity_date for pos in self.positions)
 
-    def get_days_to_furthest_maturity(self) -> Optional[int]:
+    def get_days_to_furthest_maturity(self) -> int | None:
         """Get days until the furthest maturity date."""
         furthest_maturity = self.get_furtherest_maturity()
         if furthest_maturity is None:

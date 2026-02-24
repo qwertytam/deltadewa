@@ -1,7 +1,7 @@
 """Lazy-loading Greeks cache with automatic invalidation."""
 
 from dataclasses import dataclass, field
-from typing import Optional, Callable, Dict, Any
+from typing import Callable, Dict, Any
 from threading import RLock
 
 
@@ -44,7 +44,7 @@ class GreeksCache:
                 self._dirty.discard(name)
             return self._cache[name]
 
-    def invalidate(self, names: Optional[set] = None) -> None:
+    def invalidate(self, names: set | None = None) -> None:
         """Mark Greeks as needing recomputation."""
         with self._lock:
             if names is None:

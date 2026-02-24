@@ -1,6 +1,6 @@
 """Scenario grid generation mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Dict, Any
 from datetime import datetime
 import pandas as pd
 import numpy as np
@@ -45,7 +45,7 @@ class ScenariosMixin:
         self,
         spot: float,
         valuation_date: datetime,
-        pricer: Optional[BatchPricer] = None,
+        pricer: BatchPricer | None = None,
     ) -> float:
         """
         Calculate total portfolio value at given spot and date.
@@ -113,8 +113,8 @@ class ScenariosMixin:
         spot_scenarios: np.ndarray,
         time_points: List[datetime],
         metric: str = "pnl",
-        baseline_spot: Optional[float] = None,
-        baseline_valuation_date: Optional[datetime] = None,
+        baseline_spot: float | None = None,
+        baseline_valuation_date: datetime | None = None,
     ) -> pd.DataFrame:
         """
         Calculate portfolio metrics across 2D grid of spot prices and time.
@@ -240,7 +240,7 @@ class ScenariosMixin:
         spot_scenarios: np.ndarray,
         vol_scenarios: np.ndarray,
         metric: str = "pnl",
-        baseline_value: Optional[float] = None,
+        baseline_value: float | None = None,
         proportional_vol_scaling: bool = True,
     ) -> pd.DataFrame:
         """

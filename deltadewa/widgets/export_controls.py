@@ -471,7 +471,7 @@ class ExportControlsMixin:
     def create_export_dir_widget(
         self,
         show_browser: bool = True,
-        on_change_callback: Optional[Callable[[Path], None]] = None,
+        on_change_callback: Callable[[Path], None] | None = None,
     ) -> widgets.VBox:
         """
         Create an export-directory selection widget and keep `self.export_dir` in sync.
@@ -516,7 +516,7 @@ class ExportControlsMixin:
     def display_export_dir_widget(
         self,
         show_browser: bool = True,
-        on_change_callback: Optional[Callable[[Path], None]] = None,
+        on_change_callback: Callable[[Path], None] | None = None,
     ) -> widgets.VBox:
         """
         Convenience display wrapper for the export-directory widget.

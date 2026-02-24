@@ -1,6 +1,6 @@
 """Module-level convenience functions for portfolio analysis."""
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 def classify_maturity_bucket(days_to_expiry: int) -> str:
@@ -41,7 +41,7 @@ def quick_carry_analysis(portfolio) -> Dict:
 
 
 def quick_risk_concentration(
-    portfolio, metrics: Optional[List[str]] = None
+    portfolio, metrics: List[str] | None = None
 ) -> Dict:
     """
     Quick risk concentration analysis.

@@ -12,13 +12,12 @@ By extracting these pure utilities here, portfolio.risk can use them without
 depending on the analysis layer.
 """
 
-from typing import Optional
 import numpy as np
 
 
 def generate_spot_range(
     spot_price: float,
-    spot_range: Optional[np.ndarray] = None,
+    spot_range: np.ndarray | None = None,
     spot_min_pct: float = 0.0,
     spot_max_pct: float = 200.0,
     num_points: int = 250,

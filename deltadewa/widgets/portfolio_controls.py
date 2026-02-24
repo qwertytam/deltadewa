@@ -95,7 +95,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
     def create_position_editor(
-        self, on_change_callback: Optional[Callable] = None
+        self, on_change_callback: Callable | None = None
     ) -> widgets.VBox:  # type: ignore[name-defined]
         """
         Create complete position editor interface.
@@ -469,7 +469,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     def create_date_selector(
         self,
-        max_days: Optional[int] = None,
+        max_days: int | None = None,
         description: str = "Valuation Date:",
         num_steps: int = 10,
     ) -> widgets.SelectionSlider:
@@ -523,7 +523,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     def create_metric_selector(
         self,
-        metrics: Optional[List[Tuple[str, str]]] = None,
+        metrics: List[Tuple[str, str]] | None = None,
         description: str = "Metric:",
         default: str = "pnl",
     ) -> widgets.Dropdown:
@@ -788,7 +788,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     @staticmethod
     def create_section_header(
-        title: str, subtitle: Optional[str] = None
+        title: str, subtitle: str | None = None
     ) -> widgets.HTML:
         """
         Create formatted section header.

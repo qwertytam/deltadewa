@@ -1,6 +1,6 @@
 """Summary and insights mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List
 import numpy as np
 
 if TYPE_CHECKING:
@@ -27,11 +27,11 @@ class SummaryMixin:
         # pylint: disable=missing-function-docstring, unused-argument
         def risk_reward_analysis(
             self,
-            spot_range: Optional[np.ndarray] = None,
+            spot_range: np.ndarray | None = None,
             num_simulations: int = 10000,
         ) -> dict: ...
 
-    def format_risk_summary(self, stats: Optional[Dict] = None) -> str:
+    def format_risk_summary(self, stats: Dict | None = None) -> str:
         """
         Generate formatted risk summary text.
 
@@ -169,7 +169,7 @@ class SummaryMixin:
         return insights
 
     def format_risk_reward_summary(
-        self, spot_range: Optional[np.ndarray] = None
+        self, spot_range: np.ndarray | None = None
     ) -> str:
         """
         Generate formatted risk/reward summary text.
@@ -322,9 +322,7 @@ class SummaryMixin:
 
         return "\n".join(lines)
 
-    def print_risk_reward_summary(
-        self, spot_range: Optional[np.ndarray] = None
-    ):
+    def print_risk_reward_summary(self, spot_range: np.ndarray | None = None):
         """
         Print a formatted risk/reward summary of the portfolio.
 
