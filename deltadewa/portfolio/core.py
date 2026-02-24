@@ -9,7 +9,7 @@ from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.pnl import PnLMixin
 from deltadewa.portfolio.risk import RiskMixin
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
-from deltadewa.constants import OptionType
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class OptionPortfolioBase:
@@ -93,7 +93,7 @@ class OptionPortfolioBase:
         option_type: OptionType = OptionType.CALL,
         contract_size: int = 100,
         volatility: Optional[float] = None,
-        exercise_style: str = "American",
+        exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ):
         """
         Add an option position to the portfolio.
@@ -105,7 +105,7 @@ class OptionPortfolioBase:
             option_type: OptionType.CALL or OptionType.PUT
             contract_size: Number of underlying shares per option contract
             volatility: Optional position-specific volatility (uses portfolio default if None)
-            exercise_style: 'American' or 'European'
+            exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
         """
         # Use position-specific volatility or portfolio default
         option_volatility = (
@@ -301,7 +301,7 @@ class OptionPortfolioBase:
         for pos in self.positions:
             positions.append(
                 {
-                    "type": pos.option.option_type.capitalize(),
+                    "type": pos.option.option_type,
                     "strike": pos.option.strike_price,
                     "expiry": pos.option.maturity_date.date(),
                     "quantity": pos.quantity,
@@ -325,7 +325,7 @@ class OptionPortfolioBase:
         option_type: Optional[OptionType] = None,
         contract_size: Optional[int] = None,
         volatility: Optional[float] = None,
-        exercise_style: Optional[str] = None,
+        exercise_style: Optional[ExerciseStyle] = None,
     ):
         """Update a position's properties by index."""
         if index < 0 or index >= len(self.positions):

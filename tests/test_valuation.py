@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import time
 import pytest
 from deltadewa.valuation import OptionValuation
-from deltadewa.constants import OptionType
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class TestVolatilityQuoteCaching:
@@ -119,7 +119,7 @@ class TestVolatilityUpdatePerformance:
             risk_free_rate=0.05,
             dividend_yield=0.02,
             option_type=OptionType.CALL,
-            exercise_style="American",
+            exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Time SimpleQuote update (new method) with more iterations

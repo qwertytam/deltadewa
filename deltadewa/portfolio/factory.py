@@ -1,7 +1,7 @@
 """Factory functions for creating option portfolios."""
 
 from datetime import datetime, timedelta
-from deltadewa.constants import OptionType
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 def create_empty_portfolio(**kwargs):
@@ -123,6 +123,8 @@ def create_default_portfolio():
             volatility=pos_config.get(
                 "volatility", market_params.get("volatility", None)
             ),
-            exercise_style=pos_config.get("exercise_style", "american"),
+            exercise_style=pos_config.get(
+                "exercise_style", ExerciseStyle.AMERICAN
+            ),
         )
     return portfolio

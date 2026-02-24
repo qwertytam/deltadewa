@@ -6,7 +6,7 @@ from typing import Optional
 import QuantLib as ql  # type: ignore
 from deltadewa import constants as const
 from deltadewa.greeks_cache import GreeksCache
-from deltadewa.constants import OptionType
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class OptionValuation:
@@ -40,7 +40,7 @@ class OptionValuation:
         dividend_yield: float,
         option_type: OptionType = OptionType.CALL,
         valuation_date: Optional[datetime] = None,
-        exercise_style: str = "American",
+        exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ):
         """
         Initialize option.
@@ -54,7 +54,7 @@ class OptionValuation:
             dividend_yield: Dividend yield (annualized)
             option_type: OptionType.CALL or OptionType.PUT
             valuation_date: Date for valuation (defaults to today)
-            exercise_style: "American" or "European"
+            exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
         """
         self.spot_price = float(spot_price)
         self.strike_price = float(strike_price)
@@ -64,7 +64,7 @@ class OptionValuation:
         self.dividend_yield = float(dividend_yield)
         self.option_type = option_type
         self.valuation_date = valuation_date or datetime.now()
-        self.exercise_style = exercise_style.capitalize()
+        self.exercise_style = exercise_style
 
         # Initialize Greeks cache
         self._greeks_cache = GreeksCache()

@@ -6,7 +6,7 @@ import numpy as np
 from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class TestBatchPricer:
@@ -53,7 +53,7 @@ class TestBatchPricer:
             dividend_yield=0.02,
             option_type=OptionType.CALL,
             valuation_date=valuation_date,
-            exercise_style="American",
+            exercise_style=ExerciseStyle.AMERICAN,
         )
         expected = opt.price() * 2 * 100 + 100.0 * spot
 
@@ -102,7 +102,7 @@ class TestBatchPricer:
                 dividend_yield=0.0,
                 option_type=OptionType.CALL,
                 valuation_date=valuation_date,
-                exercise_style="American",
+                exercise_style=ExerciseStyle.AMERICAN,
             )
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)
@@ -343,7 +343,7 @@ class TestBatchPricer:
             dividend_yield=portfolio.dividend_yield,
             option_type=OptionType.CALL,
             valuation_date=valuation_date,
-            exercise_style="American",
+            exercise_style=ExerciseStyle.AMERICAN,
         )
         live_value = opt.price() * 100
 
@@ -467,7 +467,7 @@ class TestBatchPricer:
                 dividend_yield=portfolio.dividend_yield,
                 option_type=OptionType.PUT,
                 valuation_date=valuation_date,
-                exercise_style="American",
+                exercise_style=ExerciseStyle.AMERICAN,
             )
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)

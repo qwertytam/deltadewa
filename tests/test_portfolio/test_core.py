@@ -3,7 +3,7 @@
 import unittest
 from datetime import datetime, timedelta
 from deltadewa.portfolio.core import OptionPortfolioBase, OptionPortfolio
-from deltadewa.constants import OptionType
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class TestOptionPortfolioBase:
@@ -124,38 +124,38 @@ class TestOptionPortfolioBase:
             maturity_date=datetime.now() + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
-            exercise_style="american",
+            exercise_style=ExerciseStyle.AMERICAN,
         )
 
         pos = portfolio.positions[0]
-        assert pos.exercise_style == "American"
-        assert pos.option.exercise_style == "American"
+        assert pos.exercise_style == ExerciseStyle.AMERICAN
+        assert pos.option.exercise_style == ExerciseStyle.AMERICAN
 
         # Change exercise style via update_position
-        portfolio.update_position(0, exercise_style="european")
+        portfolio.update_position(0, exercise_style=ExerciseStyle.EUROPEAN)
 
         pos = portfolio.positions[0]
         # Both OptionPosition and OptionValuation attributes must reflect the change
         assert (
-            pos.option.exercise_style == "European"
+            pos.option.exercise_style == ExerciseStyle.EUROPEAN
         ), "OptionValuation.exercise_style not updated"
         assert (
-            pos.exercise_style == "European"
+            pos.exercise_style == ExerciseStyle.EUROPEAN
         ), "OptionPosition.exercise_style not synced after update"
 
         # Confirm to_dict (used by the position table) also reflects the change
         assert (
-            pos.to_dict()["exercise_style"] == "European"
+            pos.to_dict()["exercise_style"] == ExerciseStyle.EUROPEAN
         ), "to_dict() still returns stale exercise_style"
 
         # Confirm update_market_conditions preserves the updated exercise style
         portfolio.update_market_conditions(spot_price=105.0)
         pos = portfolio.positions[0]
         assert (
-            pos.exercise_style == "European"
+            pos.exercise_style == ExerciseStyle.EUROPEAN
         ), "exercise_style reverted after update_market_conditions"
         assert (
-            pos.option.exercise_style == "European"
+            pos.option.exercise_style == ExerciseStyle.EUROPEAN
         ), "OptionValuation.exercise_style reverted after update_market_conditions"
 
     def test_clear_positions(self):
@@ -452,7 +452,7 @@ class TestPortfolioCore(unittest.TestCase):
         pos = self.portfolio.positions[0]
 
         # Verify defaults
-        self.assertEqual(pos.exercise_style, "American")
+        self.assertEqual(pos.exercise_style, ExerciseStyle.AMERICAN)
 
     def test_european_position_pricing(self):
         """Test that a portfolio can hold and price European options"""
@@ -462,13 +462,15 @@ class TestPortfolioCore(unittest.TestCase):
             maturity_date=datetime.now() + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=1,
-            exercise_style="European",  # Explicitly European
+            exercise_style=ExerciseStyle.EUROPEAN,  # Explicitly European
         )
 
         # pylint: disable=assignment-from-no-return
         value = self.portfolio.total_value()
         self.assertGreater(value, 0)
-        self.assertEqual(self.portfolio.positions[0].exercise_style, "European")
+        self.assertEqual(
+            self.portfolio.positions[0].exercise_style, ExerciseStyle.EUROPEAN
+        )
 
     def test_mixed_styles(self):
         """Portfolio should handle both styles simultaneously"""
@@ -478,7 +480,7 @@ class TestPortfolioCore(unittest.TestCase):
             maturity_date=datetime.now() + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=1,
-            exercise_style="American",
+            exercise_style=ExerciseStyle.AMERICAN,
         )
         # Short European Call
         self.portfolio.add_position(
@@ -486,7 +488,7 @@ class TestPortfolioCore(unittest.TestCase):
             maturity_date=datetime.now() + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=-1,
-            exercise_style="European",
+            exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Since American >= European, Net Value should be >= 0

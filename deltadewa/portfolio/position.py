@@ -1,6 +1,7 @@
 """Option position representation."""
 
 from deltadewa.valuation import OptionValuation
+from deltadewa.constants import ExerciseStyle
 
 
 class OptionPosition:
@@ -12,7 +13,7 @@ class OptionPosition:
         quantity: int,
         contract_size: int = 100,
         custom_volatility: bool = False,
-        exercise_style: str = "American",
+        exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ):
         """
         Initialize an option position.
@@ -22,13 +23,13 @@ class OptionPosition:
             quantity: Number of contracts (positive for long, negative for short)
             contract_size: Number of underlying shares per option contract (e.g. 100)
             custom_volatility: Whether this position uses custom volatility
-            exercise_style: "American" or "European"
+            exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
         """
         self.option = option
         self.quantity = quantity
         self.contract_size = contract_size
         self.custom_volatility = custom_volatility
-        self.exercise_style = exercise_style.capitalize()
+        self.exercise_style = exercise_style
 
     def position_value(self) -> float:
         """Calculate the total value of the position.

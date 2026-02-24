@@ -5,7 +5,7 @@ import unittest
 import time
 from datetime import datetime, timedelta
 from deltadewa.valuation import OptionValuation
-from deltadewa.constants import OptionType
+from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class TestValuationStyles(unittest.TestCase):
@@ -26,10 +26,14 @@ class TestValuationStyles(unittest.TestCase):
 
         # For non-dividend paying stock, American Call == European Call
         amer_call = OptionValuation(
-            **params, option_type=OptionType.CALL, exercise_style="American"
+            **params,
+            option_type=OptionType.CALL,
+            exercise_style=ExerciseStyle.AMERICAN,
         ).price()
         euro_call = OptionValuation(
-            **params, option_type=OptionType.CALL, exercise_style="European"
+            **params,
+            option_type=OptionType.CALL,
+            exercise_style=ExerciseStyle.EUROPEAN,
         ).price()
 
         # Allow small numerical error from Finite Difference method
@@ -48,10 +52,14 @@ class TestValuationStyles(unittest.TestCase):
         }
 
         amer_put = OptionValuation(
-            **params, option_type=OptionType.PUT, exercise_style="American"
+            **params,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.AMERICAN,
         ).price()
         euro_put = OptionValuation(
-            **params, option_type=OptionType.PUT, exercise_style="European"
+            **params,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.EUROPEAN,
         ).price()
 
         print(f"American Put: {amer_put:.4f}, European Put: {euro_put:.4f}")
@@ -75,13 +83,17 @@ class TestValuationStyles(unittest.TestCase):
         # Measure American (Finite Difference)
         start = time.time()
         for _ in range(10):
-            OptionValuation(**params, exercise_style="American").price()
+            OptionValuation(
+                **params, exercise_style=ExerciseStyle.AMERICAN
+            ).price()
         amer_time = time.time() - start
 
         # Measure European (Analytic)
         start = time.time()
         for _ in range(10):
-            OptionValuation(**params, exercise_style="European").price()
+            OptionValuation(
+                **params, exercise_style=ExerciseStyle.EUROPEAN
+            ).price()
         euro_time = time.time() - start
 
         print(f"American Time (10 runs): {amer_time:.4f}s")
