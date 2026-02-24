@@ -1,6 +1,7 @@
 """Health metrics mixin for portfolio analysis."""
 
 from typing import TYPE_CHECKING, Any, Dict
+
 from deltadewa import constants as const
 
 if TYPE_CHECKING:

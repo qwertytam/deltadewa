@@ -2,14 +2,14 @@
 
 from typing import TYPE_CHECKING
 
+from deltadewa.analysis.carry import CarryMixin
+from deltadewa.analysis.health import HealthMixin
 # Import mixins after base class definition to avoid circular imports
 from deltadewa.analysis.maturity import MaturityMixin
-from deltadewa.analysis.carry import CarryMixin
 from deltadewa.analysis.recommendations import RecommendationsMixin
+from deltadewa.analysis.risk_reward import RiskRewardMixin
 from deltadewa.analysis.scenarios import ScenariosMixin
 from deltadewa.analysis.summary import SummaryMixin
-from deltadewa.analysis.risk_reward import RiskRewardMixin
-from deltadewa.analysis.health import HealthMixin
 
 if TYPE_CHECKING:
     pass

@@ -1,10 +1,11 @@
 """Caching utilities for portfolio analysis."""
 
-from typing import Dict, List, Tuple
-from datetime import datetime, timezone
 import hashlib
-import pandas as pd
+from datetime import datetime, timezone
+from typing import Dict, List, Tuple
+
 import numpy as np
+import pandas as pd
 
 
 def create_scenario_cache_key(

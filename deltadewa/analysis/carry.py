@@ -1,7 +1,9 @@
 """Carry and theta analysis mixin for portfolio analysis."""
 
 from typing import TYPE_CHECKING, Dict
+
 import pandas as pd
+
 from deltadewa import constants as const
 
 if TYPE_CHECKING:

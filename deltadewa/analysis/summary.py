@@ -1,6 +1,7 @@
 """Summary and insights mixin for portfolio analysis."""
 
 from typing import TYPE_CHECKING, Dict, List
+
 import numpy as np
 
 if TYPE_CHECKING:

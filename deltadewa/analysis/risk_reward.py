@@ -1,7 +1,9 @@
 """Risk/reward analysis mixin for portfolio analysis."""
 
 from typing import TYPE_CHECKING
+
 import numpy as np
+
 from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:

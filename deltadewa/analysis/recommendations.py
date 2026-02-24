@@ -1,7 +1,8 @@
 """Hedge and concentration recommendations mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Dict, List, Any
 import numbers
+from typing import TYPE_CHECKING, Any, Dict, List
+
 import numpy as np
 
 if TYPE_CHECKING:

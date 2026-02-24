@@ -6,6 +6,7 @@ including vega-weighted averaging, proportional scaling, and statistical analysi
 """
 
 from typing import TYPE_CHECKING
+
 import numpy as np
 
 if TYPE_CHECKING:

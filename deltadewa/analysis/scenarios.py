@@ -1,14 +1,13 @@
 """Scenario grid generation mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, List, Dict, Any
 from datetime import datetime, timezone
-import pandas as pd
-import numpy as np
+from typing import TYPE_CHECKING, Any, Dict, List
 
-from deltadewa.analysis.volatility import (
-    apply_proportional_volatility_shift,
-    restore_volatilities,
-)
+import numpy as np
+import pandas as pd
+
+from deltadewa.analysis.volatility import (apply_proportional_volatility_shift,
+                                           restore_volatilities)
 from deltadewa.batch_pricer import BatchPricer
 
 if TYPE_CHECKING:
