@@ -200,10 +200,8 @@ class HealthMixin:
         # Get current hedge P&L (options value change from initial)
         # This is a simplified measure - actual hedge P&L would need
         # historical tracking
-        stats = self.portfolio.summary_stats()
-
-        # pylint: disable=unused-variable
-        current_option_value = stats["total_value"]  # noqa: F841
+        # stats = self.portfolio.summary_stats()
+        # current_option_value = stats["total_value"]
 
         # For now, use crash protection value as a proxy for hedge value
         current_spot = self.portfolio.spot_price

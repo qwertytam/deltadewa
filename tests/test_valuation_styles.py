@@ -46,7 +46,7 @@ class TestValuationStyles(unittest.TestCase):
             "strike_price": 100,
             "maturity_date": datetime.now() + timedelta(days=365),
             "volatility": 0.2,
-            "risk_free_rate": 0.15,  # High rates increase value of early exercise for Puts
+            "risk_free_rate": 0.25,  # High rates increase value of early exercise for Puts
             "dividend_yield": 0.0,
             "valuation_date": datetime.now(),
         }

@@ -83,7 +83,6 @@ class OptionValuation:
         """Set up QuantLib calculation environment."""
 
         # 1. Calendar & Dates (Same as before)
-        # pylint: disable
         calendar = ql.UnitedStates(ql.UnitedStates.NYSE)
         day_count = ql.Actual365Fixed()
 
@@ -139,19 +138,19 @@ class OptionValuation:
         )
         payoff = ql.PlainVanillaPayoff(ql_option_type, self.strike_price)
 
-        # 5. Exercise & Engine Selection (THE NEW LOGIC)
-        if self.exercise_style == "European":
-            # Fast Analytic Formula
+        # 5. Exercise & Engine Selection
+        # Use the ExerciseStyle enum to decide which engine to use.
+        if self.exercise_style == ExerciseStyle.EUROPEAN:
+            # Fast Analytic Formula for European options
             exercise = ql.EuropeanExercise(self.ql_maturity_date)
             self.option = ql.VanillaOption(payoff, exercise)
             self.option.setPricingEngine(ql.AnalyticEuropeanEngine(bsm_process))
         else:
-            # Slower Finite Difference Grid (Default for American)
+            # Finite Difference Grid for American-style (or other) options
             exercise = ql.AmericanExercise(
                 self.ql_valuation_date, self.ql_maturity_date
             )
             self.option = ql.VanillaOption(payoff, exercise)
-            # Use 2000 time steps / 2000 grid points for accuracy
             self.option.setPricingEngine(
                 ql.FdBlackScholesVanillaEngine(
                     bsm_process, self._TIME_STEPS, self._PRICE_STEPS
@@ -401,15 +400,8 @@ class OptionValuation:
         else:
             self.valuation_date = new_valuation_date
 
-        try:
-            self._setup_quantlib()
-            self._invalidate_greeks_cache()
-        except RuntimeError:  # pylint: disable=try-except-raise
-            # If QuantLib raises due to date issues or other setup problems,
-            # fall back to a safe state where Greeks/price may be computed
-            # using intrinsic / simplified logic elsewhere in the code.
-            # Re-raise only if necessary for debugging.
-            raise
+        self._setup_quantlib()
+        self._invalidate_greeks_cache()
 
     def __repr__(self) -> str:
         """String representation of the option."""

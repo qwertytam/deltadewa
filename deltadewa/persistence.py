@@ -477,7 +477,8 @@ class PortfolioSerializer:
                 quantity=pos_config["quantity"],
                 option_type=(
                     OptionType.CALL
-                    if pos_config["option_type"].upper() == "CALL"
+                    if pos_config["option_type"].upper()
+                    == OptionType.CALL.value
                     else OptionType.PUT
                 ),
                 volatility=position_volatility,

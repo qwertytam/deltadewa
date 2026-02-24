@@ -80,7 +80,7 @@ def create_default_portfolio():
                 "maturity_days": 349,
                 "volatility": 0.366,
                 "quantity": 5,
-                "exercise_style": "european",
+                "exercise_style": ExerciseStyle.EUROPEAN,
             },
             {
                 "option_type": OptionType.PUT,
@@ -88,7 +88,7 @@ def create_default_portfolio():
                 "maturity_days": 349,
                 "volatility": 0.386,
                 "quantity": -5,
-                "exercise_style": "european",
+                "exercise_style": ExerciseStyle.EUROPEAN,
             },
         ],
     }
