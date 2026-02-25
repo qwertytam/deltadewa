@@ -763,10 +763,15 @@ class TestClosedFormAccuracyWarning:
     """Tests for ClosedFormAccuracyWarning emitted by BatchPricer."""
 
     def _deep_itm_call_portfolio(self) -> OptionPortfolio:
-        """Portfolio with a deep ITM call (spot 25% above strike)."""
+        """Portfolio with a deep ITM call.
+
+        ITM call: spot well ABOVE strike.
+        spot=125, strike=100 → S/K = 1.25, which is 25% ITM.
+        deep_itm_ratio = 1/0.85 ≈ 1.176, so 1.25 > 1.176 → warning fires.
+        """
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
-            spot_price=125.0,  # 25% ITM
+            spot_price=125.0,  # spot ABOVE strike → call is ITM
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
@@ -780,10 +785,15 @@ class TestClosedFormAccuracyWarning:
         return portfolio
 
     def _deep_itm_put_portfolio(self) -> OptionPortfolio:
-        """Portfolio with a deep ITM put (spot 25% below strike)."""
+        """Portfolio with a deep ITM put.
+
+        ITM put: spot well BELOW strike.
+        spot=75, strike=100 → K/S ≈ 1.333, which is 33% ITM.
+        deep_itm_ratio = 1/0.85 ≈ 1.176, so 1.333 > 1.176 → warning fires.
+        """
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
-            spot_price=75.0,  # K/S = 100/75 ≈ 1.33, well above 1/0.85
+            spot_price=75.0,  # spot BELOW strike → put is ITM
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,

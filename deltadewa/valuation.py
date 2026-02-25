@@ -118,12 +118,18 @@ class OptionValuation:
 
         Checked regimes
         ---------------
-        1. **Deep ITM** — call moneyness S/K < threshold, or put moneyness
-           K/S < threshold (default threshold: 0.85, i.e. >15% ITM).
+        1. **Deep ITM** — the ratio of in-the-money depth exceeds the
+           threshold (default: option is >15% in-the-money).
+
+           * Call: ``S/K > (1 / _CF_ITM_THRESHOLD)``  e.g. S/K > 1.176
+           * Put:  ``K/S > (1 / _CF_ITM_THRESHOLD)``  e.g. K/S > 1.176
+
            The early-exercise premium is large and BS2002 underestimates it.
+
         2. **Short-dated put** — PUT with < 7 calendar days to expiry.
            The early-exercise boundary collapses and the approximation
            diverges from the FD solution fastest here.
+
         3. **Very high volatility** — σ > 80%.  The log-normal approximation
            underlying BS2002 becomes less reliable at extreme vols.
 
@@ -139,22 +145,28 @@ class OptionValuation:
         days_to_expiry = (self.maturity_date - self.valuation_date).days
         reasons: list[str] = []
 
+        # Deep ITM threshold expressed as a moneyness ratio > 1.
+        # e.g. _CF_ITM_THRESHOLD = 0.85  →  deep_itm_ratio = 1/0.85 ≈ 1.176
+        deep_itm_ratio = 1.0 / self._CF_ITM_THRESHOLD
+
         # 1. Deep ITM
         if self.option_type == OptionType.CALL:
+            # Call is deep ITM when spot is well above strike: S/K > ratio
             moneyness = self.spot_price / self.strike_price
-            if moneyness < self._CF_ITM_THRESHOLD:
-                itm_pct = (1.0 - moneyness) * 100
+            if moneyness > deep_itm_ratio:
+                itm_pct = (moneyness - 1.0) * 100
                 reasons.append(
                     f"deep ITM call ({itm_pct:.1f}% in-the-money; "
-                    f"threshold {(1 - self._CF_ITM_THRESHOLD) * 100:.0f}%)",
+                    f"threshold {(deep_itm_ratio - 1.0) * 100:.0f}%)",
                 )
         else:  # PUT
+            # Put is deep ITM when strike is well above spot: K/S > ratio
             moneyness = self.strike_price / self.spot_price
-            if moneyness < self._CF_ITM_THRESHOLD:
-                itm_pct = (1.0 - moneyness) * 100
+            if moneyness > deep_itm_ratio:
+                itm_pct = (moneyness - 1.0) * 100
                 reasons.append(
                     f"deep ITM put ({itm_pct:.1f}% in-the-money; "
-                    f"threshold {(1 - self._CF_ITM_THRESHOLD) * 100:.0f}%)",
+                    f"threshold {(deep_itm_ratio - 1.0) * 100:.0f}%)",
                 )
 
         # 2. Short-dated put
@@ -273,7 +285,9 @@ class OptionValuation:
                 self.ql_maturity_date,
             )
             self.option = QtLib.VanillaOption(payoff, exercise)
-            self.option.setPricingEngine(QtLib.BjerksundStenslandApproximationEngine(bsm_process))
+            self.option.setPricingEngine(
+                QtLib.BjerksundStenslandApproximationEngine(bsm_process)
+            )
             # Warn after engine is set so the option object exists if needed
             self._check_closed_form_accuracy()
         else:
