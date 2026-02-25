@@ -104,6 +104,13 @@ class OptionValuation:
         self._greeks_cache = GreeksCache()
         self._setup_quantlib()
         self._register_greeks()
+        # Snapshot the accuracy warning at construction using the original
+        # spot price. After construction, spot_price is mutated by
+        # update_spot_price(), so calling _closed_form_accuracy_message()
+        # later would reflect the swept spot, not the original.
+        self._construction_accuracy_warning: str | None = (
+            self._closed_form_accuracy_message()
+        )
 
     # ------------------------------------------------------------------
     # Closed-form accuracy guard
@@ -270,6 +277,12 @@ class OptionValuation:
             )
             # Warn after engine is set so the option object exists if needed
             self._check_closed_form_accuracy()
+            # Refresh the construction-time snapshot so that callers using
+            # _construction_accuracy_warning see the updated spot/date.
+            if hasattr(self, "_construction_accuracy_warning"):
+                self._construction_accuracy_warning = (
+                    self._closed_form_accuracy_message()
+                )
         else:
             # Finite Difference Grid for American-style (or other) options
             exercise = QtLib.AmericanExercise(

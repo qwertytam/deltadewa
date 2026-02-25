@@ -1134,6 +1134,9 @@ class TestBatchPricerThreading:
             # so prior-test deduplication entries don't suppress these warnings.
             if hasattr(_valuation_module, "__warningregistry__"):
                 _valuation_module.__warningregistry__.clear()
+            import deltadewa.batch_pricer as _batch_pricer_module
+            if hasattr(_batch_pricer_module, "__warningregistry__"):
+                _batch_pricer_module.__warningregistry__.clear()
             pricer.portfolio_values_at(
                 np.linspace(110.0, 130.0, 10), dt.now(tz=datetime.UTC)
             )
