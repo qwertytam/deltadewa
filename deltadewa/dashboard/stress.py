@@ -366,6 +366,15 @@ class StressDashboard:
                 baseline_value=baseline_value,
             )
 
+        def _on_change(_change) -> None:
+            _render(
+                date_selector.value,
+                metric_selector.value,
+            )
+
+        date_selector.observe(_on_change, names="value")
+        metric_selector.observe(_on_change, names="value")
+
         header = widgets.HTML(
             value=f"""
             <div style="

@@ -120,7 +120,7 @@ class YieldTermStructureHandle: ...
 
 def FlatForward(
     date: Date,
-    rate: float,
+    rate: float | QuoteHandle,
     daycounter: DayCounter,
 ) -> YieldTermStructureHandle: ...
 

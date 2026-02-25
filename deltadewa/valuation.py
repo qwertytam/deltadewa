@@ -105,10 +105,16 @@ class OptionValuation:
         # 2. Market Data Handles (Same as before - strictly minimal handles)
         self.spot_quote = QtLib.SimpleQuote(self.spot_price)
         self.spot_handle = QtLib.QuoteHandle(self.spot_quote)
+
+        # Risk-free rate as a live SimpleQuote so rho bumps don't rebuild
+        self.risk_free_rate_quote = QtLib.SimpleQuote(self.risk_free_rate)
+        self.risk_free_rate_handle = QtLib.QuoteHandle(
+            self.risk_free_rate_quote,
+        )
         self.flat_ts = QtLib.YieldTermStructureHandle(
             QtLib.FlatForward(  # type: ignore[assignment]
                 self.ql_valuation_date,
-                self.risk_free_rate,
+                self.risk_free_rate_handle,  # type: ignore[arg-type]
                 day_count,
             ),
         )
@@ -305,18 +311,16 @@ class OptionValuation:
         try:
             return self.option.rho() / 100.0  # Convert to 1% change
         except RuntimeError:
-            # If rho not available, compute numerically
-            h = self._VOL_BUMP  # Use same bump size
+            # Numeric fallback: bump rate via SimpleQuote (no rebuild needed
+            # because risk_free_rate_quote is wired into flat_ts)
+            h = self._VOL_BUMP
             original_rate = self.risk_free_rate
-            self.risk_free_rate = original_rate + h
-            self._setup_quantlib()
+            self.risk_free_rate_quote.setValue(original_rate + h)
             price_up = self.option.NPV()
-            self.risk_free_rate = original_rate - h
-            self._setup_quantlib()
+            self.risk_free_rate_quote.setValue(original_rate - h)
             price_down = self.option.NPV()
-            self.risk_free_rate = original_rate
-            self._setup_quantlib()
-            # Already in terms of 1% change so no need to divide by h
+            self.risk_free_rate_quote.setValue(original_rate)
+            # Central difference; already in 1% terms so no division by h
             return (price_up - price_down) / 2.0
 
     def price(self) -> float:
@@ -381,6 +385,21 @@ class OptionValuation:
         safe_spot = max(new_spot_price, 1e-8)
         self.spot_price = safe_spot
         self.spot_quote.setValue(safe_spot)
+        self._invalidate_greeks_cache()
+
+    def update_risk_free_rate(self, new_rate: float) -> None:
+        """Update the risk-free rate efficiently via SimpleQuote.
+
+        Uses the live QuoteHandle wired into flat_ts so no QuantLib rebuild
+        is required.
+
+        Args:
+            new_rate: New annualized risk-free rate (e.g., 0.05 for 5%)
+
+        """
+        new_rate = float(new_rate)
+        self.risk_free_rate = new_rate
+        self.risk_free_rate_quote.setValue(new_rate)
         self._invalidate_greeks_cache()
 
     def update_volatility(self, new_volatility: float) -> None:
