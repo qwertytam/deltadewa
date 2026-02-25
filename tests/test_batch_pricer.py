@@ -1,8 +1,10 @@
 """Tests for BatchPricer class."""
 
+import datetime
 import threading
 import warnings
-from datetime import datetime, timedelta, timezone
+from datetime import datetime as dt
+from datetime import timedelta
 
 import numpy as np
 import pytest
@@ -30,7 +32,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=2,
             option_type=OptionType.CALL,
         )
@@ -44,7 +46,7 @@ class TestBatchPricer:
         )
 
         spot = 100.0
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
         spots = np.array([spot])
 
         # Get BatchPricer result
@@ -54,7 +56,7 @@ class TestBatchPricer:
         opt = OptionValuation(
             spot_price=spot,
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -78,7 +80,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -92,7 +94,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         portfolio_values = pricer.portfolio_values_at(spots, valuation_date)
 
@@ -104,7 +106,7 @@ class TestBatchPricer:
             opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
-                maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+                maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
                 volatility=0.25,
                 risk_free_rate=0.05,
                 dividend_yield=0.0,
@@ -128,7 +130,7 @@ class TestBatchPricer:
         # Set maturity to 1 day from now, but value it at 2 days from now
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=1),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=1),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -143,7 +145,7 @@ class TestBatchPricer:
 
         spots = np.array([90.0, 100.0, 110.0])
         # Value at a date after expiry
-        future_date = datetime.now(tz=timezone.utc) + timedelta(days=2)
+        future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
         portfolio_values = pricer.portfolio_values_at(spots, future_date)
 
         # Verify intrinsic values: max(0, spot - 95) * 100
@@ -160,7 +162,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -174,7 +176,7 @@ class TestBatchPricer:
         )
 
         spots1 = np.array([95.0, 100.0, 105.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         # First call - should create and cache option
         values1 = pricer.portfolio_values_at(spots1, valuation_date)
@@ -201,7 +203,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -215,8 +217,8 @@ class TestBatchPricer:
         )
 
         spots = np.array([100.0])
-        date1 = datetime.now(tz=timezone.utc)
-        date2 = datetime.now(tz=timezone.utc) + timedelta(days=5)
+        date1 = dt.now(tz=datetime.UTC)
+        date2 = dt.now(tz=datetime.UTC) + timedelta(days=5)
 
         # First call
         values1 = pricer.portfolio_values_at(spots, date1)
@@ -243,14 +245,14 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=2,
             option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=45),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=45),
             quantity=-1,
             option_type=OptionType.PUT,
         )
@@ -265,7 +267,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         # Get BatchPricer results
         batch_values = pricer.portfolio_values_at(spots, valuation_date)
@@ -300,9 +302,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        portfolio_values = pricer.portfolio_values_at(
-            spots, datetime.now(tz=timezone.utc)
-        )
+        portfolio_values = pricer.portfolio_values_at(spots, dt.now(tz=datetime.UTC))
 
         # Should be exactly underlying_quantity * spot
         expected = 1000.0 * spots
@@ -319,7 +319,7 @@ class TestBatchPricer:
         # Call that will be expired when valued
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=5),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=5),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -327,7 +327,7 @@ class TestBatchPricer:
         # Call that will still be alive when valued
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -343,7 +343,7 @@ class TestBatchPricer:
         spot = 100.0
         spots = np.array([spot])
         # Value at a date where first option is expired but second is still alive
-        valuation_date = datetime.now(tz=timezone.utc) + timedelta(days=10)
+        valuation_date = dt.now(tz=datetime.UTC) + timedelta(days=10)
 
         portfolio_value = pricer.portfolio_values_at(spots, valuation_date)[0]
 
@@ -354,7 +354,7 @@ class TestBatchPricer:
         opt = OptionValuation(
             spot_price=spot,
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             volatility=0.25,
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
@@ -377,7 +377,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -392,7 +392,7 @@ class TestBatchPricer:
 
         # Build cache
         spots = np.array([100.0])
-        pricer.portfolio_values_at(spots, datetime.now(tz=timezone.utc))
+        pricer.portfolio_values_at(spots, dt.now(tz=datetime.UTC))
         # pylint: disable=protected-access
         assert len(pricer._cache) == 1
 
@@ -413,7 +413,7 @@ class TestBatchPricer:
         for strike in [95.0, 100.0, 105.0]:
             portfolio.add_position(
                 strike_price=strike,
-                maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+                maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )
@@ -427,7 +427,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([100.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         # First call should cache 3 options (one per position)
         pricer.portfolio_values_at(spots, valuation_date)
@@ -440,7 +440,7 @@ class TestBatchPricer:
         assert len(pricer._cache) == 3
 
         # Call with different date should create 3 more
-        new_date = datetime.now(tz=timezone.utc) + timedelta(days=5)
+        new_date = dt.now(tz=datetime.UTC) + timedelta(days=5)
         pricer.portfolio_values_at(spots, new_date)
         # pylint: disable=protected-access
         assert len(pricer._cache) == 6  # 3 positions x 2 dates
@@ -455,7 +455,7 @@ class TestBatchPricer:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -469,7 +469,7 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         portfolio_values = pricer.portfolio_values_at(spots, valuation_date)
 
@@ -481,7 +481,7 @@ class TestBatchPricer:
             opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
-                maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+                maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
                 volatility=0.25,
                 risk_free_rate=portfolio.risk_free_rate,
                 dividend_yield=portfolio.dividend_yield,
@@ -505,7 +505,7 @@ class TestBatchPricer:
         # Set maturity to 1 day from now, but value it at 2 days from now
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=1),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=1),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -520,7 +520,7 @@ class TestBatchPricer:
 
         spots = np.array([90.0, 100.0, 110.0])
         # Value at a date after expiry
-        future_date = datetime.now(tz=timezone.utc) + timedelta(days=2)
+        future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
         portfolio_values = pricer.portfolio_values_at(spots, future_date)
 
         # Verify intrinsic values: max(0, 105 - spot) * 100
@@ -549,7 +549,7 @@ def _make_atm_call_portfolio(
     )
     portfolio.add_position(
         strike_price=spot,
-        maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=days),
+        maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=days),
         quantity=1,
         option_type=OptionType.CALL,
     )
@@ -568,7 +568,7 @@ def _make_multi_position_portfolio(n: int = 4) -> OptionPortfolio:
     for i in range(n):
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30 + i * 10),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30 + i * 10),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -603,7 +603,7 @@ class TestBatchPricerClosedForm:
         """BS2002 price for ATM call should be within 2% of FD price."""
         portfolio = _make_atm_call_portfolio(days=30)
         spots = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
             spots, valuation_date
@@ -619,7 +619,7 @@ class TestBatchPricerClosedForm:
         """Closed-form call prices must increase with spot."""
         portfolio = _make_atm_call_portfolio(days=30)
         spots = np.linspace(80.0, 120.0, 10)
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
             spots, valuation_date
@@ -637,13 +637,13 @@ class TestBatchPricerClosedForm:
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
 
         spots = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
             spots, valuation_date
@@ -665,14 +665,14 @@ class TestBatchPricerClosedForm:
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         spots = np.array([95.0, 100.0, 105.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         # Both should produce identical results for European options
         fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
@@ -702,13 +702,13 @@ class TestBatchPricerClosedForm:
         )
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=1),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=1),
             quantity=1,
             option_type=OptionType.CALL,
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        future_date = datetime.now(tz=timezone.utc) + timedelta(days=2)
+        future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
 
         cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
             spots, future_date
@@ -721,7 +721,7 @@ class TestBatchPricerClosedForm:
         """Two pricers with different engine flags maintain separate caches."""
         portfolio = _make_atm_call_portfolio()
         spots = np.array([100.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         pricer_fd = _pricer(portfolio, use_closed_form=False)
         pricer_cf = _pricer(portfolio, use_closed_form=True)
@@ -779,7 +779,7 @@ class TestClosedFormAccuracyWarning:
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -801,7 +801,7 @@ class TestClosedFormAccuracyWarning:
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -818,7 +818,7 @@ class TestClosedFormAccuracyWarning:
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=days),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=days),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -835,7 +835,7 @@ class TestClosedFormAccuracyWarning:
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -848,7 +848,7 @@ class TestClosedFormAccuracyWarning:
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
 
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
@@ -862,7 +862,7 @@ class TestClosedFormAccuracyWarning:
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(np.array([100.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([100.0]), dt.now(tz=datetime.UTC))
 
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
@@ -875,7 +875,7 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()  # ← inside the block
-            pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -888,7 +888,7 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([75.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([75.0]), dt.now(tz=datetime.UTC))
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -901,7 +901,7 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([100.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([100.0]), dt.now(tz=datetime.UTC))
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -914,7 +914,7 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([100.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([100.0]), dt.now(tz=datetime.UTC))
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -928,7 +928,7 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(spots, datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(spots, dt.now(tz=datetime.UTC))
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -938,7 +938,7 @@ class TestClosedFormAccuracyWarning:
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         spots = np.array([125.0])
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
@@ -956,7 +956,7 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -967,9 +967,7 @@ class TestClosedFormAccuracyWarning:
             warnings.simplefilter("error", ClosedFormAccuracyWarning)
             self._clear_registry()
             with pytest.raises(ClosedFormAccuracyWarning):
-                pricer2.portfolio_values_at(
-                    np.array([125.0]), datetime.now(tz=timezone.utc)
-                )
+                pricer2.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
 
     def test_warning_message_contains_suppress_hint(self):
         portfolio = self._deep_itm_call_portfolio()
@@ -977,7 +975,7 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
+            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -996,7 +994,7 @@ class TestBatchPricerThreading:
         """Parallel result matches sequential for a single position."""
         portfolio = _make_atm_call_portfolio()
         spots = np.linspace(80.0, 120.0, 15)
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
             spots, valuation_date
@@ -1011,7 +1009,7 @@ class TestBatchPricerThreading:
         """Parallel result matches sequential for multiple positions."""
         portfolio = _make_multi_position_portfolio(n=4)
         spots = np.linspace(80.0, 120.0, 20)
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
             spots, valuation_date
@@ -1026,7 +1024,7 @@ class TestBatchPricerThreading:
         """Parallel + closed-form matches sequential + closed-form."""
         portfolio = _make_multi_position_portfolio(n=4)
         spots = np.linspace(80.0, 120.0, 20)
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(
             portfolio, use_closed_form=True, max_workers=1
@@ -1043,7 +1041,7 @@ class TestBatchPricerThreading:
         pricer = _pricer(portfolio, max_workers=1)
 
         threads_before = threading.active_count()
-        pricer.portfolio_values_at(np.array([100.0]), datetime.now(tz=timezone.utc))
+        pricer.portfolio_values_at(np.array([100.0]), dt.now(tz=datetime.UTC))
         threads_after = threading.active_count()
 
         # No new persistent threads should remain after the call
@@ -1053,7 +1051,7 @@ class TestBatchPricerThreading:
         """Cache entries are created exactly once per (position, date) in parallel."""
         portfolio = _make_multi_position_portfolio(n=4)
         pricer = _pricer(portfolio, max_workers=4)
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = dt.now(tz=datetime.UTC)
 
         pricer.portfolio_values_at(np.array([100.0]), valuation_date)
 
@@ -1074,7 +1072,7 @@ class TestBatchPricerThreading:
         )
         spots = np.array([90.0, 100.0, 110.0])
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, datetime.now(tz=timezone.utc)
+            spots, dt.now(tz=datetime.UTC)
         )
 
         assert np.allclose(par_values, 1000.0 * spots, rtol=1e-10)
@@ -1088,19 +1086,19 @@ class TestBatchPricerThreading:
         )
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=1),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=1),
             quantity=1,
             option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        future_date = datetime.now(tz=timezone.utc) + timedelta(days=2)
+        future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
             spots, future_date
@@ -1123,7 +1121,7 @@ class TestBatchPricerThreading:
         for strike in [90.0, 95.0]:
             portfolio.add_position(
                 strike_price=strike,
-                maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+                maturity_date=dt.now(tz=datetime.UTC) + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )
@@ -1137,7 +1135,7 @@ class TestBatchPricerThreading:
             if hasattr(_valuation_module, "__warningregistry__"):
                 _valuation_module.__warningregistry__.clear()
             pricer.portfolio_values_at(
-                np.linspace(110.0, 130.0, 10), datetime.now(tz=timezone.utc)
+                np.linspace(110.0, 130.0, 10), dt.now(tz=datetime.UTC)
             )
 
         cf_warnings = [
