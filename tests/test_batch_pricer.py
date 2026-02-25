@@ -881,7 +881,7 @@ class TestClosedFormAccuracyWarning:
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1
-        assert "deep ITM call" in str(cf_warnings[0].message).lower()
+        assert "deep itm call" in str(cf_warnings[0].message).lower()
 
     def test_warning_for_deep_itm_put(self):
         """ClosedFormAccuracyWarning emitted for deep ITM put."""
@@ -896,7 +896,7 @@ class TestClosedFormAccuracyWarning:
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1
-        assert "deep ITM put" in str(cf_warnings[0].message).lower()
+        assert "deep itm put" in str(cf_warnings[0].message).lower()
 
     def test_warning_for_short_dated_put(self):
         """ClosedFormAccuracyWarning emitted for short-dated put."""

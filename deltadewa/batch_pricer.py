@@ -241,18 +241,15 @@ class BatchPricer:
                 self._cache[cache_key] = opt
 
         # Re-emit captured warnings exactly once (deduplicated by message)
+        # Use warnings.warn() — NOT warn_explicit() — so the warning passes
+        # through the active Python-level filter stack (including any
+        # catch_warnings(record=True) context in the caller or test).
         seen: set[str] = set()
         for w in caught:
             msg_key = str(w.message)
             if msg_key not in seen:
                 seen.add(msg_key)
-                warnings.warn_explicit(
-                    message=w.message,
-                    category=w.category,
-                    filename=w.filename,
-                    lineno=w.lineno,
-                    source=w.source,
-                )
+                warnings.warn(str(w.message), w.category, stacklevel=2)
 
         with self._cache_lock:
             return self._cache[cache_key]
