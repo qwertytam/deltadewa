@@ -1,8 +1,9 @@
 """American option pricing using QuantLib with Bjerksund-Stensland model."""
 
-from datetime import datetime, timezone
+import datetime
+from datetime import datetime as dt
 
-import QuantLib as ql  # type: ignore
+import QuantLib as QtLib  # type: ignore[import-untyped]
 
 from deltadewa import constants as const
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -10,11 +11,11 @@ from deltadewa.greeks_cache import GreeksCache
 
 
 class OptionValuation:
-    """
-    Option pricing engine supporting both American (Finite Difference) and
-    European (Analytic Black-Scholes) exercise styles.
+    """Option pricing engine.
 
-    This class provides pricing and Greeks calculation for options.
+    Supports both American (Finite Difference) and European (Analytic
+    Black-Scholes) exercise styles. This class provides pricing and Greeks
+    calculation for options.
 
     Performance Note:
         Spot price and volatility updates use QuantLib's SimpleQuote mechanism
@@ -34,16 +35,15 @@ class OptionValuation:
         self,
         spot_price: float,
         strike_price: float,
-        maturity_date: datetime,
+        maturity_date: dt,
         volatility: float,
         risk_free_rate: float,
         dividend_yield: float,
         option_type: OptionType = OptionType.CALL,
-        valuation_date: datetime | None = None,
+        valuation_date: dt | None = None,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
-    ):
-        """
-        Initialize option.
+    ) -> None:
+        """Initialize option.
 
         Args:
             spot_price: Current price of the underlying asset
@@ -55,6 +55,7 @@ class OptionValuation:
             option_type: OptionType.CALL or OptionType.PUT
             valuation_date: Date for valuation (defaults to today)
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
+
         """
         self.spot_price = float(spot_price)
         self.strike_price = float(strike_price)
@@ -63,7 +64,7 @@ class OptionValuation:
         self.risk_free_rate = float(risk_free_rate)
         self.dividend_yield = float(dividend_yield)
         self.option_type = option_type
-        self.valuation_date = valuation_date or datetime.now(tz=timezone.utc)
+        self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
         self.exercise_style = exercise_style
 
         # Initialize Greeks cache
@@ -79,85 +80,97 @@ class OptionValuation:
         """Check if option is at or past expiry."""
         return self.valuation_date.date() >= self.maturity_date.date()
 
-    def _setup_quantlib(self):
+    def _setup_quantlib(self) -> None:
         """Set up QuantLib calculation environment."""
-
         # 1. Calendar & Dates (Same as before)
-        calendar = ql.UnitedStates(ql.UnitedStates.NYSE)
-        day_count = ql.Actual365Fixed()
+        calendar = QtLib.UnitedStates(QtLib.UnitedStates.NYSE)
+        day_count = QtLib.Actual365Fixed()
 
         # Convert dates to QuantLib dates
-        self.ql_valuation_date = ql.Date(  # type: ignore
+        self.ql_valuation_date = QtLib.Date(
             self.valuation_date.day,
             self.valuation_date.month,
             self.valuation_date.year,
         )
-        self.ql_maturity_date = ql.Date(  # type: ignore
+        self.ql_maturity_date = QtLib.Date(
             self.maturity_date.day,
             self.maturity_date.month,
             self.maturity_date.year,
         )
 
-        ql.Settings.instance().evaluationDate = self.ql_valuation_date
+        QtLib.Settings.instance().evaluationDate = self.ql_valuation_date
 
         # 2. Market Data Handles (Same as before - strictly minimal handles)
-        self.spot_quote = ql.SimpleQuote(self.spot_price)
-        self.spot_handle = ql.QuoteHandle(self.spot_quote)
-        self.flat_ts = ql.YieldTermStructureHandle(
-            ql.FlatForward(  # type: ignore
-                self.ql_valuation_date, self.risk_free_rate, day_count
-            )
+        self.spot_quote = QtLib.SimpleQuote(self.spot_price)
+        self.spot_handle = QtLib.QuoteHandle(self.spot_quote)
+        self.flat_ts = QtLib.YieldTermStructureHandle(
+            QtLib.FlatForward(  # type: ignore[assignment]
+                self.ql_valuation_date,
+                self.risk_free_rate,
+                day_count,
+            ),
         )
-        self.dividend_ts = ql.YieldTermStructureHandle(
-            ql.FlatForward(  # type: ignore
-                self.ql_valuation_date, self.dividend_yield, day_count
-            )
+        self.dividend_ts = QtLib.YieldTermStructureHandle(
+            QtLib.FlatForward(  # type: ignore[assignment]
+                self.ql_valuation_date,
+                self.dividend_yield,
+                day_count,
+            ),
         )
 
-        self.vol_quote = ql.SimpleQuote(self.volatility)
-        self.vol_handle = ql.QuoteHandle(self.vol_quote)
-        self.flat_vol_ts = ql.BlackVolTermStructureHandle(
-            ql.BlackConstantVol(  # type: ignore
+        self.vol_quote = QtLib.SimpleQuote(self.volatility)
+        self.vol_handle = QtLib.QuoteHandle(self.vol_quote)
+        self.flat_vol_ts = QtLib.BlackVolTermStructureHandle(
+            QtLib.BlackConstantVol(  # type: ignore[assignment]
                 self.ql_valuation_date,
                 calendar,
-                self.vol_handle,  # type: ignore
+                self.vol_handle,  # type: ignore[assignment]
                 day_count,
-            )
+            ),
         )
 
         # 3. Process
-        bsm_process = ql.BlackScholesMertonProcess(
-            self.spot_handle, self.dividend_ts, self.flat_ts, self.flat_vol_ts
+        bsm_process = QtLib.BlackScholesMertonProcess(
+            self.spot_handle,
+            self.dividend_ts,
+            self.flat_ts,
+            self.flat_vol_ts,
         )
 
         # 4. Payoff
         ql_option_type = (
-            ql.Option.Call
+            QtLib.Option.Call
             if self.option_type == OptionType.CALL
-            else ql.Option.Put
+            else QtLib.Option.Put
         )
-        payoff = ql.PlainVanillaPayoff(ql_option_type, self.strike_price)
+        payoff = QtLib.PlainVanillaPayoff(ql_option_type, self.strike_price)
 
         # 5. Exercise & Engine Selection
         # Use the ExerciseStyle enum to decide which engine to use.
         if self.exercise_style == ExerciseStyle.EUROPEAN:
             # Fast Analytic Formula for European options
-            exercise = ql.EuropeanExercise(self.ql_maturity_date)
-            self.option = ql.VanillaOption(payoff, exercise)
-            self.option.setPricingEngine(ql.AnalyticEuropeanEngine(bsm_process))
+            exercise = QtLib.EuropeanExercise(self.ql_maturity_date)
+            self.option = QtLib.VanillaOption(payoff, exercise)
+            self.option.setPricingEngine(
+                QtLib.AnalyticEuropeanEngine(bsm_process),
+            )
         else:
             # Finite Difference Grid for American-style (or other) options
-            exercise = ql.AmericanExercise(
-                self.ql_valuation_date, self.ql_maturity_date
+            exercise = QtLib.AmericanExercise(
+                self.ql_valuation_date,
+                self.ql_maturity_date,
             )
-            self.option = ql.VanillaOption(payoff, exercise)
+            self.option = QtLib.VanillaOption(payoff, exercise)
             self.option.setPricingEngine(
-                ql.FdBlackScholesVanillaEngine(
-                    bsm_process, self._TIME_STEPS, self._PRICE_STEPS
-                )
+                QtLib.FdBlackScholesVanillaEngine(
+                    bsm_process,
+                    self._TIME_STEPS,
+                    self._PRICE_STEPS,
+                ),
             )
 
-        # If cache exists, just invalidate it since Greeks are already registered in __init__
+        # If cache exists, just invalidate it since Greeks are already
+        # registered in __init__
         if hasattr(self, "_greeks_cache"):
             self._invalidate_greeks_cache()
 
@@ -175,13 +188,13 @@ class OptionValuation:
         self._greeks_cache.invalidate_all()
 
     def _compute_price(self) -> float:
-        """Internal method to compute option price."""
+        """Compute option price."""
         if self._is_expired_or_at_expiry():
             return self.intrinsic_value()
         return self.option.NPV()
 
     def _compute_delta(self) -> float:
-        """Internal method to compute delta."""
+        """Compute option delta."""
         # At or past expiry, delta is 1.0 if in-the-money, 0.0 otherwise
         if self._is_expired_or_at_expiry():
             if self.option_type == OptionType.CALL:
@@ -205,7 +218,7 @@ class OptionValuation:
             return (price_up - price_down) / (up_spot - down_spot)
 
     def _compute_gamma(self) -> float:
-        """Internal method to compute gamma."""
+        """Compute option gamma."""
         # At or past expiry, gamma is zero (no curvature)
         if self._is_expired_or_at_expiry():
             return 0.0
@@ -226,7 +239,7 @@ class OptionValuation:
             return (delta_up - delta_down) / (up_spot - down_spot)
 
     def _compute_vega(self) -> float:
-        """Internal method to compute vega."""
+        """Compute option vega."""
         # At or past expiry, vega is zero (no time value)
         if self._is_expired_or_at_expiry():
             return 0.0
@@ -247,8 +260,7 @@ class OptionValuation:
             ) / 2.0  # Already in terms of 1% change
 
     def _compute_theta(self) -> float:
-        """
-        Internal method to compute theta (time decay per day).
+        """Compute option theta (time decay per day).
 
         Returns theta in dollars per calendar day. Note that the industry
         standard convention uses 365 calendar days for theta calculations,
@@ -262,6 +274,7 @@ class OptionValuation:
 
         Returns:
             float: Theta value ($ per calendar day)
+
         """
         # At or past expiry, theta is zero (no time decay)
         if self._is_expired_or_at_expiry():
@@ -273,15 +286,17 @@ class OptionValuation:
         except RuntimeError:
             # If theta not available, compute numerically
             # Move evaluation date forward by 1 day
-            current_date = ql.Settings.instance().evaluationDate
-            ql.Settings.instance().evaluationDate = current_date + 1  # type: ignore
+            current_date = QtLib.Settings.instance().evaluationDate
+            QtLib.Settings.instance().evaluationDate = (
+                current_date + QtLib.Period(1, QtLib.Days)  # type: ignore[operator]
+            )
             price_tomorrow = self.option.NPV()
-            ql.Settings.instance().evaluationDate = current_date
+            QtLib.Settings.instance().evaluationDate = current_date
             price_today = self.option.NPV()
             return price_tomorrow - price_today
 
     def _compute_rho(self) -> float:
-        """Internal method to compute rho."""
+        """Compute option rho."""
         # At or past expiry, rho is zero (no time value)
         if self._is_expired_or_at_expiry():
             return 0.0
@@ -312,7 +327,7 @@ class OptionValuation:
         return self._greeks_cache.get("delta")
 
     def gamma(self) -> float:
-        """Calculate Gamma (second derivative with respect to underlying price) (cached)."""
+        """Calculate Gamma (cached)."""
         return self._greeks_cache.get("gamma")
 
     def vega(self) -> float:
@@ -320,8 +335,7 @@ class OptionValuation:
         return self._greeks_cache.get("vega")
 
     def theta(self) -> float:
-        """
-        Calculate Theta (time decay per day) (cached).
+        """Calculate Theta (time decay per day) (cached).
 
         Returns theta in dollars per calendar day. Note that the industry
         standard convention uses 365 calendar days for theta calculations,
@@ -335,6 +349,7 @@ class OptionValuation:
 
         Returns:
             float: Theta value ($ per calendar day)
+
         """
         return self._greeks_cache.get("theta")
 
@@ -357,7 +372,7 @@ class OptionValuation:
         """Calculate time value of the option."""
         return self.price() - self.intrinsic_value()
 
-    def update_spot_price(self, new_spot_price: float):
+    def update_spot_price(self, new_spot_price: float) -> None:
         """Update the spot price and recalculate."""
         # Ensure spot remains strictly positive for QuantLib engines
         # Cast to float to handle numpy types which QuantLib rejects
@@ -367,15 +382,17 @@ class OptionValuation:
         self.spot_quote.setValue(safe_spot)
         self._invalidate_greeks_cache()
 
-    def update_volatility(self, new_volatility: float):
+    def update_volatility(self, new_volatility: float) -> None:
         """Update the volatility and recalculate.
 
-        Uses SimpleQuote for efficient update without rebuilding QuantLib objects.
-        This is significantly faster than the previous implementation which
-        called _setup_quantlib() on every volatility change.
+        Uses SimpleQuote for efficient update without rebuilding QuantLib
+        objects. This is significantly faster than the previous implementation
+        which called _setup_quantlib() on every volatility change.
 
         Args:
-            new_volatility: New volatility value (annualized, e.g., 0.25 for 25%)
+            new_volatility: New volatility value (annualized, e.g., 0.25 for
+            25%)
+
         """
         # Cast to float to handle numpy types which QuantLib rejects
         new_volatility = float(new_volatility)
@@ -387,7 +404,7 @@ class OptionValuation:
             self._setup_quantlib()
         self._invalidate_greeks_cache()
 
-    def update_valuation_date(self, new_valuation_date: datetime):
+    def update_valuation_date(self, new_valuation_date: dt) -> None:
         """Update the valuation date and recalculate."""
         # If the requested valuation date is after maturity, clamp to maturity
         if new_valuation_date is None:
@@ -404,7 +421,7 @@ class OptionValuation:
         self._invalidate_greeks_cache()
 
     def __repr__(self) -> str:
-        """String representation of the option."""
+        """Return string representation of the option."""
         return (
             f"OptionValuation(type={self.option_type}, "
             f"spot={self.spot_price:.2f}, "
