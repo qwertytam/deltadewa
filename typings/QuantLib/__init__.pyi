@@ -165,3 +165,21 @@ class FdBlackScholesVanillaEngine:
         time_steps: int,
         price_steps: int,
     ) -> None: ...
+
+class BjerksundStenslandApproximationEngine:
+    """Bjerksund-Stensland closed-form approximation engine."""
+
+    def __init__(
+        self,
+        process: BlackScholesMertonProcess,
+    ) -> None: ...
+
+class BjerksundStenslandSpreadEngine:
+    """Bjerksund-Stensland spread engine (two-process spread)."""
+
+    def __init__(
+        self,
+        process1: BlackScholesMertonProcess,
+        process2: BlackScholesMertonProcess,
+        correlation: float,
+    ) -> None: ...

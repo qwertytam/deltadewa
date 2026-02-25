@@ -1,6 +1,7 @@
 """American option pricing using QuantLib with Bjerksund-Stensland model."""
 
 import datetime
+import warnings
 from datetime import datetime as dt
 
 import QuantLib as QtLib  # type: ignore[import-untyped]
@@ -8,6 +9,7 @@ import QuantLib as QtLib  # type: ignore[import-untyped]
 from deltadewa import constants as const
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.greeks_cache import GreeksCache
+from deltadewa.warnings import ClosedFormAccuracyWarning
 
 
 class OptionValuation:
@@ -16,6 +18,21 @@ class OptionValuation:
     Supports both American (Finite Difference) and European (Analytic
     Black-Scholes) exercise styles. This class provides pricing and Greeks
     calculation for options.
+
+    For American options the engine can be selected at construction time:
+
+    * ``use_closed_form=False`` (default) — ``FdBlackScholesVanillaEngine``
+      (finite-difference grid). Most accurate; controlled by
+      ``grid_resolution``.
+    * ``use_closed_form=True`` — ``BjerksundStenslandEngine`` (BS 2002
+      closed-form approximation). ~10-20x faster per call; suitable for
+      scenario sweeps where speed matters more than the last basis point.
+      A :class:`~deltadewa.warnings.ClosedFormAccuracyWarning` is emitted
+      automatically when the option falls into a known low-accuracy regime
+      (deep ITM, short-dated put, very high volatility).
+
+    European options always use the analytic Black-Scholes engine regardless
+    of ``use_closed_form``.
 
     Performance Note:
         Spot price and volatility updates use QuantLib's SimpleQuote mechanism
@@ -26,6 +43,12 @@ class OptionValuation:
     # Numerical differentiation parameters
     _SPOT_BUMP = 0.01  # Bump size for delta/gamma calculation
     _VOL_BUMP = 0.01  # Bump size for vega calculation
+
+    # Closed-form accuracy thresholds
+    _CF_ITM_THRESHOLD = 0.85  # moneyness ratio below which = deep ITM
+    _CF_SHORT_DATED_DAYS = 7  # days-to-expiry below which puts are unreliable
+    _CF_HIGH_VOL_THRESHOLD = 0.80  # annualised vol above which accuracy
+    # degrades
 
     def __init__(
         self,
@@ -39,6 +62,7 @@ class OptionValuation:
         valuation_date: dt | None = None,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
         grid_resolution: FDGridResolution = FDGridResolution.STANDARD,
+        use_closed_form: bool = False,
     ) -> None:
         """Initialize option.
 
@@ -53,7 +77,14 @@ class OptionValuation:
             valuation_date: Date for valuation (defaults to today)
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
             grid_resolution: FDGridResolution for finite difference engine
-            (ignored for European options)
+                (ignored for European options and when use_closed_form=True)
+            use_closed_form: If True, use the Bjerksund-Stensland 2002
+                closed-form approximation for American options instead of the
+                finite-difference grid.  Approximately 10-20x faster per
+                price call with <1% typical error for near-ATM options.
+                A :class:`~deltadewa.warnings.ClosedFormAccuracyWarning` is
+                emitted when the option is in a known low-accuracy regime.
+                European options always use the analytic engine.
 
         """
         self.spot_price = float(spot_price)
@@ -66,17 +97,95 @@ class OptionValuation:
         self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
         self.exercise_style = exercise_style
         self.grid_resolution = grid_resolution
+        self.use_closed_form = use_closed_form
         self._time_steps = grid_resolution.value
         self._price_steps = grid_resolution.value
 
-        # Initialize Greeks cache
         self._greeks_cache = GreeksCache()
-
-        # Set up QuantLib objects
         self._setup_quantlib()
-
-        # Register Greek computation functions
         self._register_greeks()
+
+    # ------------------------------------------------------------------
+    # Closed-form accuracy guard
+    # ------------------------------------------------------------------
+
+    def _check_closed_form_accuracy(self) -> None:
+        """Check closed form accuracy and emit warning if applicable.
+
+        Emit a ClosedFormAccuracyWarning if the current option state is in
+        a regime where the Bjerksund-Stensland approximation is known to be
+        less accurate.
+
+        Checked regimes
+        ---------------
+        1. **Deep ITM** — call moneyness S/K < threshold, or put moneyness
+           K/S < threshold (default threshold: 0.85, i.e. >15% ITM).
+           The early-exercise premium is large and BS2002 underestimates it.
+        2. **Short-dated put** — PUT with < 7 calendar days to expiry.
+           The early-exercise boundary collapses and the approximation
+           diverges from the FD solution fastest here.
+        3. **Very high volatility** — σ > 80%.  The log-normal approximation
+           underlying BS2002 becomes less reliable at extreme vols.
+
+        Only emitted when ``use_closed_form=True`` and
+        ``exercise_style != EUROPEAN``.
+
+        """
+        if not self.use_closed_form:
+            return
+        if self.exercise_style == ExerciseStyle.EUROPEAN:
+            return
+
+        days_to_expiry = (self.maturity_date - self.valuation_date).days
+        reasons: list[str] = []
+
+        # 1. Deep ITM
+        if self.option_type == OptionType.CALL:
+            moneyness = self.spot_price / self.strike_price
+            if moneyness < self._CF_ITM_THRESHOLD:
+                itm_pct = (1.0 - moneyness) * 100
+                reasons.append(
+                    f"deep ITM call ({itm_pct:.1f}% in-the-money; "
+                    f"threshold {(1 - self._CF_ITM_THRESHOLD) * 100:.0f}%)",
+                )
+        else:  # PUT
+            moneyness = self.strike_price / self.spot_price
+            if moneyness < self._CF_ITM_THRESHOLD:
+                itm_pct = (1.0 - moneyness) * 100
+                reasons.append(
+                    f"deep ITM put ({itm_pct:.1f}% in-the-money; "
+                    f"threshold {(1 - self._CF_ITM_THRESHOLD) * 100:.0f}%)",
+                )
+
+        # 2. Short-dated put
+        if (
+            self.option_type == OptionType.PUT
+            and days_to_expiry < self._CF_SHORT_DATED_DAYS
+        ):
+            reasons.append(
+                f"short-dated put ({days_to_expiry}d to expiry; "
+                f"threshold {self._CF_SHORT_DATED_DAYS}d)",
+            )
+
+        # 3. Very high volatility
+        if self.volatility > self._CF_HIGH_VOL_THRESHOLD:
+            reasons.append(
+                f"very high volatility ({self.volatility:.0%}; "
+                f"threshold {self._CF_HIGH_VOL_THRESHOLD:.0%})",
+            )
+
+        if reasons:
+            reason_str = "; ".join(reasons)
+            warnings.warn(
+                f"Bjerksund-Stensland closed-form approximation may be "
+                f"less accurate for this option ({reason_str}). "
+                f"Consider use_closed_form=False for higher precision. "
+                f"Suppress with: "
+                f"warnings.filterwarnings('ignore', "
+                f"category=ClosedFormAccuracyWarning)",
+                ClosedFormAccuracyWarning,
+                stacklevel=3,
+            )
 
     def _is_expired_or_at_expiry(self) -> bool:
         """Check if option is at or past expiry."""
@@ -84,7 +193,7 @@ class OptionValuation:
 
     def _setup_quantlib(self) -> None:
         """Set up QuantLib calculation environment."""
-        # 1. Calendar & Dates (Same as before)
+        # 1. Calendar & Dates
         calendar = QtLib.UnitedStates(QtLib.UnitedStates.NYSE)
         day_count = QtLib.Actual365Fixed()
 
@@ -108,9 +217,7 @@ class OptionValuation:
 
         # Risk-free rate as a live SimpleQuote so rho bumps don't rebuild
         self.risk_free_rate_quote = QtLib.SimpleQuote(self.risk_free_rate)
-        self.risk_free_rate_handle = QtLib.QuoteHandle(
-            self.risk_free_rate_quote,
-        )
+        self.risk_free_rate_handle = QtLib.QuoteHandle(self.risk_free_rate_quote)
         self.flat_ts = QtLib.YieldTermStructureHandle(
             QtLib.FlatForward(  # type: ignore[assignment]
                 self.ql_valuation_date,
@@ -159,9 +266,16 @@ class OptionValuation:
             # Fast Analytic Formula for European options
             exercise = QtLib.EuropeanExercise(self.ql_maturity_date)
             self.option = QtLib.VanillaOption(payoff, exercise)
-            self.option.setPricingEngine(
-                QtLib.AnalyticEuropeanEngine(bsm_process),
+            self.option.setPricingEngine(QtLib.AnalyticEuropeanEngine(bsm_process))
+        elif self.use_closed_form:
+            exercise = QtLib.AmericanExercise(
+                self.ql_valuation_date,
+                self.ql_maturity_date,
             )
+            self.option = QtLib.VanillaOption(payoff, exercise)
+            self.option.setPricingEngine(QtLib.BjerksundStenslandApproximationEngine(bsm_process))
+            # Warn after engine is set so the option object exists if needed
+            self._check_closed_form_accuracy()
         else:
             # Finite Difference Grid for American-style (or other) options
             exercise = QtLib.AmericanExercise(
