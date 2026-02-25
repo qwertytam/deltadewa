@@ -178,8 +178,18 @@ class ExportControlsMixin:
             "import_button": import_button,
         }
 
-    def display_import(self) -> widgets.VBox:
+    def display_import(
+        self,
+        on_import_success: Callable | None = None,
+    ) -> widgets.VBox:
         """Create and display import interface.
+
+        Args:
+            on_import_success: Optional zero-argument callback invoked after a
+                successful import.  Use this to re-seed any stateful objects
+                (e.g. ``PortfolioChangeTracker.reset``) that hold a snapshot of
+                the portfolio, so they don't misclassify the imported positions
+                on the next change event.
 
         Returns:
             VBox widget containing import controls
@@ -189,7 +199,7 @@ class ExportControlsMixin:
         import_output = widgets.Output()
 
         # Import button handler
-        def on_import_clicked(b):  # pylint: disable=unused-argument
+        def on_import_clicked(b) -> None:  # pylint: disable=unused-argument
             with import_output:
                 import_output.clear_output()
                 try:
@@ -204,12 +214,12 @@ class ExportControlsMixin:
                         return
 
                     imported_portfolio = self.serializer.import_portfolio(
-                        str(filepath)
+                        str(filepath),
                     )["portfolio"]
                     if not isinstance(imported_portfolio, OptionPortfolio):
                         print(
                             "✗ Import failed: Expected OptionPortfolio, "
-                            + f"got {type(imported_portfolio)}"
+                            f"got {type(imported_portfolio)}"
                         )
                         return
 
@@ -231,6 +241,11 @@ class ExportControlsMixin:
 
                     print(f"✓ Loaded {len(self.portfolio.positions)} positions")
                     import_controls["import_button"].button_style = "success"
+
+                    # Notify caller that the portfolio has been replaced so
+                    # they can update any references if needed
+                    if on_import_success is not None:
+                        on_import_success()
 
                 except Exception as e:  # pylint: disable=broad-except
                     print(f"✗ Import failed: {e}")
