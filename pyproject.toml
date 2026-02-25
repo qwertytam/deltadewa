@@ -32,31 +32,45 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = [
+	"ANN", # type annotations
+	"ARG", # falke8 unused arguments
+	"B",   # flake8-bugbear
+	"COM", # flake8-commas (specifically trailing commas)
+	"C4",  # flake8-comprehensions
+	"D",   # pydocstyle
+	"E",   # Error
+	"ERA", # eradicate commented out code
 	"F",   # pyflakes
-	"E",   # pycodestyle errors
-	"W",   # pycodestyle warnings
-	"C90", # mccabe complexity
-	"N",   # pep8-naming
-	"Q",   # flake8-quotes
+	"FIX", # flake8 fixme
 	"I",   # isort
-	"UP",  # pyupgrade
-	"B",   # bugbear
-	"SIM", # flake8-simplify
-	"RUF", # ruff-specific rules
+	"ISC", # flake8-implicit-str-concat
+	"N",   # pep8-naming
+	# "NPY",  # NumPy specific rules
+	"PERF", # Perflint: performance
+	"PIE",  # flake8-pie 
+	"PGH",  # pygrep-hooks
+	"PTH",  # flake8-use-pathlib 
+	"Q",    # flake8-quotes
+	"RUF",  # Ruff specific rules
+	"S",    # bandit security checks 
+	"SIM",  # flake8-simplify
+	"UP",   # pyupgrade
+	"W",    # Warning
+	# "YTT",  # flake8-2020 
 ]
 ignore = [
-	"E501", # line too long
-	"W293", # blank line contains whitespace
-	"C901", # mccabe complexity
-	"N813", # argument name should be lowercase
-	"N814", # variable in function should be lowercase
-	"Q000", # double quotes
+	# "E501", # line too long
+	# "W293", # blank line contains whitespace
+	# "C901", # mccabe complexity
+	# "N813", # argument name should be lowercase
+	# "N814", # variable in function should be lowercase
+	# "Q000", # double quotes
 	# "I001",   # isort
-	"B007",   # f-string in logging function
-	"RUF003", # ruff-specific rule
-	"RUF010", # ruff-specific rule
-	"RUF001", # ruff-specific rule
-	"RUF003", # ruff-specific rule
+	# "B007",   # f-string in logging function
+	# "RUF003", # ruff-specific rule
+	# "RUF010", # ruff-specific rule
+	# "RUF001", # ruff-specific rule
+	# "RUF003", # ruff-specific rule
 ]
 
 [dependency-groups]
