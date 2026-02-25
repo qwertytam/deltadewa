@@ -6,7 +6,7 @@ from datetime import datetime as dt
 import QuantLib as QtLib  # type: ignore[import-untyped]
 
 from deltadewa import constants as const
-from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.greeks_cache import GreeksCache
 
 
@@ -27,10 +27,6 @@ class OptionValuation:
     _SPOT_BUMP = 0.01  # Bump size for delta/gamma calculation
     _VOL_BUMP = 0.01  # Bump size for vega calculation
 
-    # Grid dimensions for finite difference engine
-    _TIME_STEPS = 250
-    _PRICE_STEPS = 250
-
     def __init__(
         self,
         spot_price: float,
@@ -42,6 +38,7 @@ class OptionValuation:
         option_type: OptionType = OptionType.CALL,
         valuation_date: dt | None = None,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        grid_resolution: FDGridResolution = FDGridResolution.STANDARD,
     ) -> None:
         """Initialize option.
 
@@ -55,6 +52,8 @@ class OptionValuation:
             option_type: OptionType.CALL or OptionType.PUT
             valuation_date: Date for valuation (defaults to today)
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
+            grid_resolution: FDGridResolution for finite difference engine
+            (ignored for European options)
 
         """
         self.spot_price = float(spot_price)
@@ -66,6 +65,8 @@ class OptionValuation:
         self.option_type = option_type
         self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
         self.exercise_style = exercise_style
+        self._time_steps = grid_resolution.value
+        self._price_steps = grid_resolution.value
 
         # Initialize Greeks cache
         self._greeks_cache = GreeksCache()
@@ -164,8 +165,8 @@ class OptionValuation:
             self.option.setPricingEngine(
                 QtLib.FdBlackScholesVanillaEngine(
                     bsm_process,
-                    self._TIME_STEPS,
-                    self._PRICE_STEPS,
+                    self._time_steps,
+                    self._price_steps,
                 ),
             )
 

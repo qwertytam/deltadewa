@@ -5,7 +5,7 @@ these are constants; they are module-level values intended for import by
 other modules.
 """
 
-from enum import StrEnum
+from enum import Enum, StrEnum
 from typing import Final
 
 # Calendar / time constants
@@ -55,15 +55,24 @@ class ExerciseStyle(StrEnum):
     EUROPEAN = "EUROPEAN"
 
 
+class FDGridResolution(int, Enum):
+    """Grid dimensions for finite difference engine."""
+
+    FAST = 75
+    STANDARD = 125
+    PRECISE = 250
+
+
 __all__ = [
-    "DAYS_PER_YEAR",
-    "DAYS_PER_WEEK",
-    "HOURS_PER_DAY",
-    "WEEKS_PER_YEAR",
-    "TRADING_DAYS_PER_YEAR",
     "BUSINESS_DAYS_PER_YEAR",
     "CALENDAR_DAYS_PER_MONTH",
-    "PortfolioAction",
-    "OptionType",
+    "DAYS_PER_WEEK",
+    "DAYS_PER_YEAR",
+    "HOURS_PER_DAY",
+    "TRADING_DAYS_PER_YEAR",
+    "WEEKS_PER_YEAR",
     "ExerciseStyle",
+    "FDGridResolution",
+    "OptionType",
+    "PortfolioAction",
 ]
