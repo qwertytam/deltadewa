@@ -196,7 +196,7 @@ class OptionValuation:
                 f"warnings.filterwarnings('ignore', "
                 f"category=ClosedFormAccuracyWarning)",
                 ClosedFormAccuracyWarning,
-                stacklevel=3,
+                stacklevel=2,
             )
 
     def _is_expired_or_at_expiry(self) -> bool:
