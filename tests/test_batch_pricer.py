@@ -980,25 +980,20 @@ class TestClosedFormAccuracyWarning:
         spots = np.array([125.0])
         valuation_date = datetime.now(tz=timezone.utc)
 
-        # First call — constructs and caches, warning fires
-        with warnings.catch_warnings(record=True) as first_call:
+        # Both calls share the same catch_warnings context.
+        # The warning fires on the first call (cache miss → construction).
+        # The second call is a cache hit → no construction → no warning.
+        with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(spots, valuation_date)
 
-        # Second call — cache hit, no construction, no warning
-        with warnings.catch_warnings(record=True) as second_call:
-            warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(spots, valuation_date)
+            pricer.portfolio_values_at(spots, valuation_date)  # cache miss
+            pricer.portfolio_values_at(spots, valuation_date)  # cache hit
 
-        first_cf = [
-            w for w in first_call if issubclass(w.category, ClosedFormAccuracyWarning)
+        cf_warnings = [
+            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
-        second_cf = [
-            w for w in second_call if issubclass(w.category, ClosedFormAccuracyWarning)
-        ]
-
-        assert len(first_cf) == 1
-        assert len(second_cf) == 0
+        # Exactly 1: fired on construction (first call), not on cache hit (second call)
+        assert len(cf_warnings) == 1
 
     def test_warning_can_be_suppressed(self):
         """ClosedFormAccuracyWarning can be silenced with filterwarnings."""

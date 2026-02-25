@@ -203,10 +203,12 @@ class BatchPricer:
     ) -> OptionValuation:
         """Return a cached OptionValuation, creating one if absent.
 
-        When ``use_closed_form=True``, any
-        :class:`~deltadewa.warnings.ClosedFormAccuracyWarning` emitted
-        during construction is captured and re-emitted exactly once per
-        unique message — not once per spot price in the sweep.
+        The :class:`~deltadewa.warnings.ClosedFormAccuracyWarning` is emitted
+        directly by :class:`~deltadewa.valuation.OptionValuation` during
+        construction (inside ``_check_closed_form_accuracy``). Because
+        construction only happens once per ``(position, date)`` cache key,
+        the warning naturally fires at most once per position — no
+        capture-and-re-emit machinery is needed here.
         """
         cache_key = (pos_idx, valuation_date)
 
@@ -215,43 +217,26 @@ class BatchPricer:
                 return self._cache[cache_key]
 
         # Construct outside the lock (expensive QuantLib setup).
-        # Capture any ClosedFormAccuracyWarnings so they fire once per
-        # position, not once per spot in the outer sweep.
-        caught: list[warnings.WarningMessage] = []
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            opt = OptionValuation(
-                spot_price=float(spots[0]),
-                strike_price=position.option.strike_price,
-                maturity_date=position.option.maturity_date,
-                volatility=position.option.volatility,
-                risk_free_rate=self.risk_free_rate,
-                dividend_yield=self.dividend_yield,
-                option_type=position.option.option_type,
-                valuation_date=valuation_date,
-                exercise_style=position.exercise_style,
-                grid_resolution=self.grid_resolution,
-                use_closed_form=self.use_closed_form,
-            )
+        # The warning, if any, is emitted here directly by OptionValuation.
+        opt = OptionValuation(
+            spot_price=float(spots[0]),
+            strike_price=position.option.strike_price,
+            maturity_date=position.option.maturity_date,
+            volatility=position.option.volatility,
+            risk_free_rate=self.risk_free_rate,
+            dividend_yield=self.dividend_yield,
+            option_type=position.option.option_type,
+            valuation_date=valuation_date,
+            exercise_style=position.exercise_style,
+            grid_resolution=self.grid_resolution,
+            use_closed_form=self.use_closed_form,
+        )
 
         # Double-checked locking: another thread may have inserted while
         # we were constructing outside the lock.
         with self._cache_lock:
             if cache_key not in self._cache:
                 self._cache[cache_key] = opt
-
-        # Re-emit captured warnings exactly once (deduplicated by message)
-        # Use warnings.warn() — NOT warn_explicit() — so the warning passes
-        # through the active Python-level filter stack (including any
-        # catch_warnings(record=True) context in the caller or test).
-        seen: set[str] = set()
-        for w in caught:
-            msg_key = str(w.message)
-            if msg_key not in seen:
-                seen.add(msg_key)
-                warnings.warn(str(w.message), w.category, stacklevel=2)
-
-        with self._cache_lock:
             return self._cache[cache_key]
 
     @staticmethod
