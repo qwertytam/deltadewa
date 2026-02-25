@@ -58,9 +58,11 @@ class ExerciseStyle(StrEnum):
 class FDGridResolution(int, Enum):
     """Grid dimensions for finite difference engine."""
 
+    SUPERFAST = 25
     FAST = 75
     STANDARD = 125
     PRECISE = 250
+    ULTRAPRECISE = 500
 
 
 __all__ = [

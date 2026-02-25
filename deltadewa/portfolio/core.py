@@ -1,11 +1,12 @@
 """Core portfolio management and mixin composition."""
 
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List
+import datetime
+from datetime import datetime as dt
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
 from deltadewa.portfolio.pnl import PnLMixin
@@ -15,40 +16,49 @@ from deltadewa.valuation import OptionValuation
 
 
 class OptionPortfolioBase:
-    """
-    Base class for option portfolio management.
+    """Base class for option portfolio management.
 
     Handles core portfolio functionality including position management,
     market conditions, and basic value calculations.
     """
 
     if TYPE_CHECKING:
-        # pylint: disable=missing-function-docstring
-        def all_greeks(self) -> Dict[str, float]: ...
 
-        # pylint: disable=missing-function-docstring
-        def total_delta(self) -> float: ...
+        def all_greeks(self) -> dict[str, float]:
+            """Calculate all Greeks - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
-        # pylint: disable=missing-function-docstring
-        def total_gamma(self) -> float: ...
+        def total_delta(self) -> float:
+            """Calculate total delta - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
-        # pylint: disable=missing-function-docstring
-        def total_vega(self) -> float: ...
+        def total_gamma(self) -> float:
+            """Calculate total gamma - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
-        # pylint: disable=missing-function-docstring
-        def total_theta(self) -> float: ...
+        def total_vega(self) -> float:
+            """Calculate total vega - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
-        # pylint: disable=missing-function-docstring
-        def total_rho(self) -> float: ...
+        def total_theta(self) -> float:
+            """Calculate total theta - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
-        # pylint: disable=missing-function-docstring
-        def net_delta(self) -> float: ...
+        def total_rho(self) -> float:
+            """Calculate total rho - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
-        # pylint: disable=missing-function-docstring
-        def hedge_ratio(self) -> float: ...
+        def net_delta(self) -> float:
+            """Calculate net delta - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
-        # pylint: disable=missing-function-docstring
-        def delta_adjustment_needed(self) -> float: ...
+        def hedge_ratio(self) -> float:
+            """Calculate hedge ratio - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
+
+        def delta_adjustment_needed(self) -> float:
+            """Calculate delta adjustment needed - for type checking."""
+            ...  # pylint: disable=unnecessary-ellipsis
 
     def __init__(
         self,
@@ -57,11 +67,10 @@ class OptionPortfolioBase:
         volatility: float = 0.2,
         risk_free_rate: float = 0.05,
         dividend_yield: float = 0.0,
-        valuation_date: datetime | None = None,
+        valuation_date: dt | None = None,
         symbol: str = "UNKNOWN",
-    ):
-        """
-        Initialize option portfolio.
+    ) -> None:
+        """Initialize option portfolio.
 
         Args:
             underlying_quantity: The underlying notional position to hedge
@@ -71,6 +80,7 @@ class OptionPortfolioBase:
             dividend_yield: Dividend yield
             valuation_date: Valuation date for all options (defaults to now)
             symbol: Underlying symbol or identifier for display/export
+
         """
         self.positions: list[OptionPosition] = []
         self.underlying_quantity = underlying_quantity
@@ -78,27 +88,26 @@ class OptionPortfolioBase:
         self.volatility = volatility
         self.risk_free_rate = risk_free_rate
         self.dividend_yield = dividend_yield
-        self.valuation_date = valuation_date or datetime.now(tz=timezone.utc)
+        self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
         self.symbol = symbol
         self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
         self.monte_carlo_stale: bool = False
-        self.monte_carlo_timestamp: datetime | None = None
-        self.monte_carlo_last_modified: datetime | None = None
+        self.monte_carlo_timestamp: dt | None = None
+        self.monte_carlo_last_modified: dt | None = None
 
     def add_position(
         self,
         strike_price: float,
-        maturity_date: datetime,
+        maturity_date: dt,
         quantity: int,
         option_type: OptionType = OptionType.CALL,
         contract_size: int = 100,
         volatility: float | None = None,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
-    ):
-        """
-        Add an option position to the portfolio.
+    ) -> None:
+        """Add an option position to the portfolio.
 
         Args:
             strike_price: Strike price of the option
@@ -106,13 +115,17 @@ class OptionPortfolioBase:
             quantity: Number of contracts
             option_type: OptionType.CALL or OptionType.PUT
             contract_size: Number of underlying shares per option contract
-            volatility: Optional position-specific volatility (uses portfolio default if None)
+            volatility: Optional position-specific volatility (uses portfolio
+            default if None)
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
+
         """
         # Use position-specific volatility or portfolio default
-        option_volatility = (
-            volatility if volatility is not None else self.volatility
-        )
+        if volatility is not None:
+            option_volatility = volatility
+        else:
+            option_volatility = self.volatility
+
         custom_volatility = volatility is not None
 
         option = OptionValuation(
@@ -125,6 +138,7 @@ class OptionPortfolioBase:
             option_type=option_type,
             valuation_date=self.valuation_date,
             exercise_style=exercise_style,
+            grid_resolution=FDGridResolution.STANDARD,
         )
         position = OptionPosition(
             option,
@@ -135,8 +149,11 @@ class OptionPortfolioBase:
         )
         self.positions.append(position)
 
-    def set_volatility(self, volatility: float):
-        """Set portfolio volatility. Update positions without custom volatility."""
+    def set_volatility(self, volatility: float) -> None:
+        """Set portfolio volatility.
+
+        Update positions without custom volatility.
+        """
         self.volatility = volatility
         for pos in self.positions:
             if not pos.custom_volatility:
@@ -147,21 +164,23 @@ class OptionPortfolioBase:
         return self.symbol
 
     @property
-    def monte_carlo_results(self) -> Dict[str, Any] | None:
+    def monte_carlo_results(self) -> dict[str, Any] | None:
         """Get Monte Carlo simulation results if available.
 
         Returns:
-            Dictionary containing Monte Carlo analysis results, or None if not yet computed.
+            Dictionary containing Monte Carlo analysis results, or None if not
+            yet computed.
+
         """
         return self._monte_carlo_results
 
     @monte_carlo_results.setter
-    def monte_carlo_results(self, results: dict[str, Any] | None):
-        """
-        Set Monte Carlo simulation results.
+    def monte_carlo_results(self, results: dict[str, Any] | None) -> None:
+        """Set Monte Carlo simulation results.
 
         Args:
             results: dictionary containing Monte Carlo analysis results
+
         """
         self._monte_carlo_results = results
 
@@ -178,8 +197,7 @@ class OptionPortfolioBase:
         return self.total_value() + self.total_underlying_value()
 
     def summary_stats(self) -> dict:
-        """
-        Get summary statistics of the portfolio.
+        """Get summary statistics of the portfolio.
 
         Returns:
             Dictionary containing:
@@ -190,11 +208,15 @@ class OptionPortfolioBase:
             - total_delta: Portfolio delta from options only (if available)
             - underlying_quantity: Number of underlying shares
             - net_delta: Total delta exposure (if available)
-            - hedge_ratio: Percentage of underlying hedged by options (if available)
-            - delta_adjustment: Shares needed for delta neutrality (if available)
-            - total_gamma, total_vega, total_theta, total_rho: Greek totals (if available)
+            - hedge_ratio: Percentage of underlying hedged by options (if
+            available)
+            - delta_adjustment: Shares needed for delta neutrality (if
+            available)
+            - total_gamma, total_vega, total_theta, total_rho: Greek totals (if
+            available)
             - volatility_min, volatility_max: Volatility range
             - custom_volatility_count: Positions with custom volatility
+
         """
         stats = {
             "total_positions": len(self.positions),
@@ -297,22 +319,20 @@ class OptionPortfolioBase:
             f"Valuation Date: {self.valuation_date.date()}"
         )
 
-    def get_positions(self) -> List[dict]:
+    def get_positions(self) -> list[dict]:
         """Return positions in a format suitable for widgets/UI."""
-        positions = []
-        for pos in self.positions:
-            positions.append(
-                {
-                    "type": pos.option.option_type,
-                    "strike": pos.option.strike_price,
-                    "expiry": pos.option.maturity_date.date(),
-                    "quantity": pos.quantity,
-                    "contract_size": pos.contract_size,
-                }
-            )
-        return positions
+        return [
+            {
+                "type": pos.option.option_type,
+                "strike": pos.option.strike_price,
+                "expiry": pos.option.maturity_date.date(),
+                "quantity": pos.quantity,
+                "contract_size": pos.contract_size,
+            }
+            for pos in self.positions
+        ]
 
-    def remove_position(self, index: int):
+    def remove_position(self, index: int) -> None:
         """Remove a position by index."""
         if index < 0 or index >= len(self.positions):
             raise IndexError("Position index out of range")
@@ -323,12 +343,12 @@ class OptionPortfolioBase:
         index: int,
         quantity: int | None = None,
         strike: float | None = None,
-        expiry: datetime | None = None,
+        expiry: dt | None = None,
         option_type: OptionType | None = None,
         contract_size: int | None = None,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
-    ):
+    ) -> None:
         """Update a position's properties by index."""
         if index < 0 or index >= len(self.positions):
             raise IndexError("Position index out of range")
@@ -340,12 +360,14 @@ class OptionPortfolioBase:
             pos.contract_size = contract_size
 
         strike_price = strike if strike is not None else pos.option.strike_price
-        maturity_date = (
-            expiry if expiry is not None else pos.option.maturity_date
-        )
-        opt_type = (
-            option_type if option_type is not None else pos.option.option_type
-        )
+        if expiry is not None:
+            maturity_date = expiry
+        else:
+            maturity_date = pos.option.maturity_date
+        if option_type is not None:
+            opt_type = option_type
+        else:
+            opt_type = pos.option.option_type
         exercise_style = (
             exercise_style if exercise_style is not None else pos.exercise_style
         )
@@ -375,8 +397,10 @@ class OptionPortfolioBase:
                 option_type=opt_type,
                 valuation_date=self.valuation_date,
                 exercise_style=exercise_style,
+                grid_resolution=FDGridResolution.STANDARD,
             )
-            # Keep OptionPosition.exercise_style in sync with the new OptionValuation
+            # Keep OptionPosition.exercise_style in sync with the new
+            # OptionValuation
             pos.exercise_style = pos.option.exercise_style
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -391,9 +415,9 @@ class OptionPortfolioBase:
         df["maturity"] = df["maturity"].apply(
             lambda x: (
                 x.strftime("%Y-%m-%d")
-                if isinstance(x, datetime)
+                if isinstance(x, dt)
                 else pd.to_datetime(x).strftime("%Y-%m-%d")
-            )
+            ),
         )
 
         return df
@@ -404,11 +428,10 @@ class OptionPortfolioBase:
         volatility: float | None = None,
         risk_free_rate: float | None = None,
         dividend_yield: float | None = None,
-        valuation_date: datetime | None = None,
+        valuation_date: dt | None = None,
         override_custom_volatility: bool = False,
-    ):
-        """
-        Update market conditions for all positions.
+    ) -> None:
+        """Update market conditions for all positions.
 
         Args:
             spot_price: New spot price
@@ -418,6 +441,7 @@ class OptionPortfolioBase:
             valuation_date: New valuation date
             override_custom_volatility: If True, update all positions'
             volatility including custom ones
+
         """
         if spot_price is not None:
             self.spot_price = spot_price
@@ -427,7 +451,8 @@ class OptionPortfolioBase:
         if volatility is not None:
             self.volatility = volatility
             for pos in self.positions:
-                # Only update if not custom volatility, or if override is requested
+                # Only update if not custom volatility, or if override is
+                # requested
                 if override_custom_volatility or not pos.custom_volatility:
                     pos.option.update_volatility(volatility)
                     # If overriding, mark as no longer custom
@@ -446,46 +471,50 @@ class OptionPortfolioBase:
             if dividend_yield is not None:
                 self.dividend_yield = dividend_yield
 
-            # Recreate all positions with new rates, preserving custom volatility
+            # Recreate all positions with new rates, preserving custom
+            # volatility
             new_positions = []
             for pos in self.positions:
                 new_option = OptionValuation(
                     spot_price=self.spot_price,
                     strike_price=pos.option.strike_price,
                     maturity_date=pos.option.maturity_date,
-                    volatility=pos.option.volatility,  # Preserve existing volatility
+                    # Preserve existing volatility
+                    volatility=pos.option.volatility,
                     risk_free_rate=self.risk_free_rate,
                     dividend_yield=self.dividend_yield,
                     option_type=pos.option.option_type,
                     valuation_date=self.valuation_date,
                     exercise_style=pos.exercise_style,
+                    grid_resolution=pos.option.grid_resolution,
                 )
                 new_positions.append(
                     OptionPosition(
                         new_option,
                         pos.quantity,
                         contract_size=pos.contract_size,
-                        custom_volatility=pos.custom_volatility,  # Preserve custom volatility flag
+                        # Preserve custom volatility flag
+                        custom_volatility=pos.custom_volatility,
                         exercise_style=pos.exercise_style,
-                    )
+                    ),
                 )
             self.positions = new_positions
 
-    def clear_positions(self):
+    def clear_positions(self) -> None:
         """Clear all positions from the portfolio."""
         self.positions = []
 
     def __repr__(self) -> str:
-        """String representation of the portfolio."""
+        """Return string representation of the portfolio."""
         if hasattr(self, "net_delta"):
             s = (
                 f"<OptionPortfolio: {len(self.positions)} "
-                + f"positions, Net Delta: {self.net_delta():.2f}>"
+                f"positions, Net Delta: {self.net_delta():.2f}>"
             )
             return s
         return f"<OptionPortfolio: {len(self.positions)} positions>"
 
-    def get_furtherest_maturity(self) -> datetime | None:
+    def get_furtherest_maturity(self) -> dt | None:
         """Get the furthest maturity date among all positions."""
         if not self.positions:
             return None
@@ -508,8 +537,7 @@ class OptionPortfolio(
     MonteCarloMixin,
     OptionPortfolioBase,
 ):
-    """
-    Manages a portfolio of American options with hedge analysis.
+    """Manages a portfolio of American options with hedge analysis.
 
     This class combines all portfolio functionality through mixins:
     - Core portfolio management (OptionPortfolioBase)
@@ -521,4 +549,4 @@ class OptionPortfolio(
     For scenario analysis, use PortfolioAnalyzer from deltadewa.analysis.
     """
 
-    pass  # pylint: disable=unnecessary-pass
+    pass  # noqa: PIE790  pylint: disable=unnecessary-pass

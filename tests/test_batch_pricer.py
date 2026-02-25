@@ -6,7 +6,7 @@ import numpy as np
 from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType, ExerciseStyle
+from deltadewa.constants import OptionType, ExerciseStyle, FDGridResolution
 
 
 class TestBatchPricer:
@@ -34,6 +34,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spot = 100.0
@@ -81,6 +82,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([90.0, 100.0, 110.0])
@@ -96,14 +98,14 @@ class TestBatchPricer:
             opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
-                maturity_date=datetime.now(tz=timezone.utc)
-                + timedelta(days=30),
+                maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
                 volatility=0.25,
                 risk_free_rate=0.05,
                 dividend_yield=0.0,
                 option_type=OptionType.CALL,
                 valuation_date=valuation_date,
                 exercise_style=ExerciseStyle.AMERICAN,
+                grid_resolution=FDGridResolution.FAST,
             )
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)
@@ -130,6 +132,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([90.0, 100.0, 110.0])
@@ -161,6 +164,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots1 = np.array([95.0, 100.0, 105.0])
@@ -201,6 +205,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([100.0])
@@ -250,6 +255,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
@@ -284,6 +290,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([90.0, 100.0, 110.0])
@@ -324,6 +331,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spot = 100.0
@@ -373,6 +381,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         # Build cache
@@ -398,8 +407,7 @@ class TestBatchPricer:
         for strike in [95.0, 100.0, 105.0]:
             portfolio.add_position(
                 strike_price=strike,
-                maturity_date=datetime.now(tz=timezone.utc)
-                + timedelta(days=30),
+                maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )
@@ -409,6 +417,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([100.0])
@@ -450,6 +459,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([90.0, 100.0, 110.0])
@@ -465,14 +475,14 @@ class TestBatchPricer:
             opt = OptionValuation(
                 spot_price=spot,
                 strike_price=100.0,
-                maturity_date=datetime.now(tz=timezone.utc)
-                + timedelta(days=30),
+                maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
                 volatility=0.25,
                 risk_free_rate=portfolio.risk_free_rate,
                 dividend_yield=portfolio.dividend_yield,
                 option_type=OptionType.PUT,
                 valuation_date=valuation_date,
                 exercise_style=ExerciseStyle.AMERICAN,
+                grid_resolution=FDGridResolution.FAST,
             )
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)
@@ -499,6 +509,7 @@ class TestBatchPricer:
             risk_free_rate=portfolio.risk_free_rate,
             dividend_yield=portfolio.dividend_yield,
             underlying_quantity=portfolio.underlying_quantity,
+            grid_resolution=FDGridResolution.FAST,
         )
 
         spots = np.array([90.0, 100.0, 110.0])

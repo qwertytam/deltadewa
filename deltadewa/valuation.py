@@ -65,6 +65,7 @@ class OptionValuation:
         self.option_type = option_type
         self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
         self.exercise_style = exercise_style
+        self.grid_resolution = grid_resolution
         self._time_steps = grid_resolution.value
         self._price_steps = grid_resolution.value
 
@@ -256,9 +257,8 @@ class OptionValuation:
             self.vol_quote.setValue(original_vol - h)
             price_down = self.option.NPV()
             self.vol_quote.setValue(original_vol)
-            return (
-                price_up - price_down
-            ) / 2.0  # Already in terms of 1% change
+            # Already in terms of 1% change, so no need to divide by h
+            return (price_up - price_down) / 2.0
 
     def _compute_theta(self) -> float:
         """Compute option theta (time decay per day).
@@ -288,8 +288,9 @@ class OptionValuation:
             # If theta not available, compute numerically
             # Move evaluation date forward by 1 day
             current_date = QtLib.Settings.instance().evaluationDate
-            QtLib.Settings.instance().evaluationDate = (
-                current_date + QtLib.Period(1, QtLib.Days)  # type: ignore[operator]
+            QtLib.Settings.instance().evaluationDate = current_date + QtLib.Period(
+                1,
+                QtLib.Days,
             )
             price_tomorrow = self.option.NPV()
             QtLib.Settings.instance().evaluationDate = current_date
@@ -315,9 +316,8 @@ class OptionValuation:
             price_down = self.option.NPV()
             self.risk_free_rate = original_rate
             self._setup_quantlib()
-            return (
-                price_up - price_down
-            ) / 2.0  # Already in terms of 1% change
+            # Already in terms of 1% change so no need to divide by h
+            return (price_up - price_down) / 2.0
 
     def price(self) -> float:
         """Calculate the option price (cached)."""

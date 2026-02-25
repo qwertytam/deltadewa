@@ -1,18 +1,20 @@
 """Typing stubs for QuantLib.
 
-Minimal, hand-maintained typing stubs for the QuantLib symbols used in this project.
+Minimal, hand-maintained typing stubs for the QuantLib symbols used in this
+project.
 """
 
+# ruff: noqa: N802, UP037
 # pylint: disable=unused-argument missing-class-docstring missing-function-docstring
 # pylint: disable=invalid-name
-from typing import Any, Optional, Union
+from typing import Any
 
 # Settings
 
 class Settings:
     """QuantLib global settings."""
 
-    evaluationDate: Date
+    evaluationDate: Date  # noqa: N815
 
     @staticmethod
     def instance() -> "Settings": ...
@@ -24,6 +26,14 @@ class Date:
 
     def __init__(self, day: int, month: int, year: int) -> None: ...
 
+    # QuantLib supports arithmetic between Date and Period:
+    #   Date + Period -> Date
+    #   Date - Period -> Date
+    #   Date - Date   -> Period
+    def __add__(self, other: "Period") -> "Date": ...
+    def __sub__(self, other: "Period" | "Date") -> "Date" | "Period": ...
+
+class Days: ...
 class DayCounter: ...
 
 class Actual365Fixed(DayCounter):
@@ -44,7 +54,12 @@ class UnitedStates(Calendar):
 
     NYSE: int
 
-    def __init__(self, market: Optional[int] = ...) -> None: ...
+    def __init__(self, market: int | None = ...) -> None: ...
+
+class Period:
+    """QuantLib Period class."""
+
+    def __init__(self, length: int, unit: Any) -> None: ...
 
 # Options
 
@@ -75,7 +90,7 @@ class VanillaOption:
     def __init__(
         self,
         payoff: PlainVanillaPayoff,
-        exercise: Union[EuropeanExercise, AmericanExercise],
+        exercise: EuropeanExercise | AmericanExercise,
     ) -> None: ...
     def setPricingEngine(self, engine: Any) -> None: ...
     def NPV(self) -> float: ...
@@ -104,7 +119,9 @@ class BlackVolTermStructureHandle: ...
 class YieldTermStructureHandle: ...
 
 def FlatForward(
-    date: Date, rate: float, daycounter: DayCounter
+    date: Date,
+    rate: float,
+    daycounter: DayCounter,
 ) -> YieldTermStructureHandle: ...
 
 # Models, Processes and Engines
@@ -113,7 +130,11 @@ class BlackConstantVol:
     """Constant volatility model."""
 
     def __init__(
-        self, date: Date, calendar: Any, vol: float, daycounter: DayCounter
+        self,
+        date: Date,
+        calendar: Any,
+        vol: float,
+        daycounter: DayCounter,
     ) -> None: ...
 
 class BlackScholesMertonProcess:

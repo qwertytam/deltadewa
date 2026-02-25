@@ -1,14 +1,17 @@
 """Scenario grid generation mixin for portfolio analysis."""
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict
 
 import numpy as np
 import pandas as pd
 
-from deltadewa.analysis.volatility import (apply_proportional_volatility_shift,
-                                           restore_volatilities)
+from deltadewa.analysis.volatility import (
+    apply_proportional_volatility_shift,
+    restore_volatilities,
+)
 from deltadewa.batch_pricer import BatchPricer
+from deltadewa.constants import FDGridResolution
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
@@ -38,6 +41,8 @@ class ScenariosMixin:
             risk_free_rate=self.portfolio.risk_free_rate,
             dividend_yield=self.portfolio.dividend_yield,
             underlying_quantity=self.portfolio.underlying_quantity,
+            # Use FAST for scenario sweeps to balance speed and accuracy
+            grid_resolution=FDGridResolution.FAST,
         )
 
     def _calculate_portfolio_value_at(
@@ -64,17 +69,13 @@ class ScenariosMixin:
         # This reuses the pre-built QuantLib engines
         if pricer:
             # We treat the single spot as a 1-item array
-            values = pricer.portfolio_values_at(
-                np.array([spot]), valuation_date
-            )
+            values = pricer.portfolio_values_at(np.array([spot]), valuation_date)
             return values[0]
 
         # Fallback to creating a temporary pricer if none provided
         # This is still cleaner than the old loop as it delegates to the optimized class
         temp_pricer = self._create_batch_pricer()
-        return temp_pricer.portfolio_values_at(
-            np.array([spot]), valuation_date
-        )[0]
+        return temp_pricer.portfolio_values_at(np.array([spot]), valuation_date)[0]
 
     def _calculate_pnl_at_expiry_vectorized(
         self,
@@ -190,7 +191,7 @@ class ScenariosMixin:
                         }
                     )
 
-            # STRATEGY 2: Greeks (Requires state updates)
+            # TODO: STRATEGY 2: Greeks (Requires state updates)
             # Currently BatchPricer primarily handles 'value'.
             # Ideally, BatchPricer would be extended to return Greeks arrays.
             # However, to avoid 'feature restriction' or major refactor of BatchPricer
@@ -295,8 +296,7 @@ class ScenariosMixin:
 
         # Store original position vols
         original_position_vols = {
-            i: pos.option.volatility
-            for i, pos in enumerate(self.portfolio.positions)
+            i: pos.option.volatility for i, pos in enumerate(self.portfolio.positions)
         }
 
         # Initialize BatchPricer for Non-Greek calculations if applicable
@@ -326,9 +326,7 @@ class ScenariosMixin:
                     underlying_pnl = (
                         spot - original_spot
                     ) * self.portfolio.underlying_quantity
-                    metric_value = (
-                        current_value - baseline_value
-                    ) + underlying_pnl
+                    metric_value = (current_value - baseline_value) + underlying_pnl
                 elif metric == "value":
                     metric_value = self.portfolio.total_value()
                 elif metric == "delta":
