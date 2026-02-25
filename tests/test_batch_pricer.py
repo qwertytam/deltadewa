@@ -7,6 +7,7 @@ from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType, ExerciseStyle, FDGridResolution
+import deltadewa.valuation as _valuation_module
 
 
 class TestBatchPricer:
@@ -761,6 +762,21 @@ class TestBatchPricerClosedForm:
 
 class TestClosedFormAccuracyWarning:
     """Tests for ClosedFormAccuracyWarning emitted by BatchPricer."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_warning_registry(self):
+        """Clear the valuation module's __warningregistry__ before each test.
+
+        Python's warning system stores 'already seen' entries in a per-module
+        registry dict, checked before the filter stack. Clearing it ensures
+        each test starts fresh and simplefilter("always") actually works.
+        """
+        if hasattr(_valuation_module, "__warningregistry__"):
+            _valuation_module.__warningregistry__.clear()
+        yield
+        # Optionally clear again on teardown so we don't pollute later tests
+        if hasattr(_valuation_module, "__warningregistry__"):
+            _valuation_module.__warningregistry__.clear()
 
     def _deep_itm_call_portfolio(self) -> OptionPortfolio:
         """Portfolio with a deep ITM call.
