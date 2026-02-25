@@ -110,48 +110,31 @@ class OptionValuation:
     # ------------------------------------------------------------------
 
     def _check_closed_form_accuracy(self) -> None:
-        """Check closed form accuracy and emit warning if applicable.
+        """Check closed form accuracy and emit warning if applicable."""
+        msg = self._closed_form_accuracy_message()
+        if msg:
+            warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
 
-        Emit a ClosedFormAccuracyWarning if the current option state is in
-        a regime where the Bjerksund-Stensland approximation is known to be
-        less accurate.
+    def _closed_form_accuracy_message(self) -> str | None:
+        """Return a warning message string if this option is in a low-accuracy
+        regime, or ``None`` if no warning is needed.
 
-        Checked regimes
-        ---------------
-        1. **Deep ITM** — the ratio of in-the-money depth exceeds the
-           threshold (default: option is >15% in-the-money).
-
-           * Call: ``S/K > (1 / _CF_ITM_THRESHOLD)``  e.g. S/K > 1.176
-           * Put:  ``K/S > (1 / _CF_ITM_THRESHOLD)``  e.g. K/S > 1.176
-
-           The early-exercise premium is large and BS2002 underestimates it.
-
-        2. **Short-dated put** — PUT with < 7 calendar days to expiry.
-           The early-exercise boundary collapses and the approximation
-           diverges from the FD solution fastest here.
-
-        3. **Very high volatility** — σ > 80%.  The log-normal approximation
-           underlying BS2002 becomes less reliable at extreme vols.
-
-        Only emitted when ``use_closed_form=True`` and
-        ``exercise_style != EUROPEAN``.
-
+        Separated from ``_check_closed_form_accuracy`` so that worker threads
+        can compute the message without touching the warning machinery (which
+        is not thread-safe with respect to ``__warningregistry__``), and the
+        main thread can emit the warning after all workers have finished.
         """
         if not self.use_closed_form:
-            return
+            return None
         if self.exercise_style == ExerciseStyle.EUROPEAN:
-            return
+            return None
 
         days_to_expiry = (self.maturity_date - self.valuation_date).days
         reasons: list[str] = []
 
-        # Deep ITM threshold expressed as a moneyness ratio > 1.
-        # e.g. _CF_ITM_THRESHOLD = 0.85  →  deep_itm_ratio = 1/0.85 ≈ 1.176
         deep_itm_ratio = 1.0 / self._CF_ITM_THRESHOLD
 
-        # 1. Deep ITM
         if self.option_type == OptionType.CALL:
-            # Call is deep ITM when spot is well above strike: S/K > ratio
             moneyness = self.spot_price / self.strike_price
             if moneyness > deep_itm_ratio:
                 itm_pct = (moneyness - 1.0) * 100
@@ -159,8 +142,7 @@ class OptionValuation:
                     f"deep ITM call ({itm_pct:.1f}% in-the-money; "
                     f"threshold {(deep_itm_ratio - 1.0) * 100:.0f}%)",
                 )
-        else:  # PUT
-            # Put is deep ITM when strike is well above spot: K/S > ratio
+        else:
             moneyness = self.strike_price / self.spot_price
             if moneyness > deep_itm_ratio:
                 itm_pct = (moneyness - 1.0) * 100
@@ -169,7 +151,6 @@ class OptionValuation:
                     f"threshold {(deep_itm_ratio - 1.0) * 100:.0f}%)",
                 )
 
-        # 2. Short-dated put
         if (
             self.option_type == OptionType.PUT
             and days_to_expiry < self._CF_SHORT_DATED_DAYS
@@ -179,25 +160,24 @@ class OptionValuation:
                 f"threshold {self._CF_SHORT_DATED_DAYS}d)",
             )
 
-        # 3. Very high volatility
         if self.volatility > self._CF_HIGH_VOL_THRESHOLD:
             reasons.append(
                 f"very high volatility ({self.volatility:.0%}; "
                 f"threshold {self._CF_HIGH_VOL_THRESHOLD:.0%})",
             )
 
-        if reasons:
-            reason_str = "; ".join(reasons)
-            warnings.warn(
-                f"Bjerksund-Stensland closed-form approximation may be "
-                f"less accurate for this option ({reason_str}). "
-                f"Consider use_closed_form=False for higher precision. "
-                f"Suppress with: "
-                f"warnings.filterwarnings('ignore', "
-                f"category=ClosedFormAccuracyWarning)",
-                ClosedFormAccuracyWarning,
-                stacklevel=2,
-            )
+        if not reasons:
+            return None
+
+        reason_str = "; ".join(reasons)
+        return (
+            f"Bjerksund-Stensland closed-form approximation may be "
+            f"less accurate for this option ({reason_str}). "
+            f"Consider use_closed_form=False for higher precision. "
+            f"Suppress with: "
+            f"warnings.filterwarnings('ignore', "
+            f"category=ClosedFormAccuracyWarning)"
+        )
 
     def _is_expired_or_at_expiry(self) -> bool:
         """Check if option is at or past expiry."""

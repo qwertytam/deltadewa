@@ -171,6 +171,12 @@ class BatchPricer:
                     spots,
                     valuation_date,
                 )
+                # Emit warning in main thread for newly constructed options.
+                msg = (
+                    opt._closed_form_accuracy_message()
+                )  # pylint: disable=protected-access
+                if msg:
+                    warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
                 pos_values = self._sweep_spots(opt, spots)
                 portfolio_values += (
                     pos_values * position.quantity * position.contract_size
@@ -203,12 +209,10 @@ class BatchPricer:
     ) -> OptionValuation:
         """Return a cached OptionValuation, creating one if absent.
 
-        The :class:`~deltadewa.warnings.ClosedFormAccuracyWarning` is emitted
-        directly by :class:`~deltadewa.valuation.OptionValuation` during
-        construction (inside ``_check_closed_form_accuracy``). Because
-        construction only happens once per ``(position, date)`` cache key,
-        the warning naturally fires at most once per position — no
-        capture-and-re-emit machinery is needed here.
+        Construction-time warnings are suppressed here; callers are
+        responsible for emitting them via ``_closed_form_accuracy_message()``.
+        This keeps warning emission on the main thread and out of worker
+        threads, where ``__warningregistry__`` races can cause missed warnings.
         """
         cache_key = (pos_idx, valuation_date)
 
@@ -216,24 +220,23 @@ class BatchPricer:
             if cache_key in self._cache:
                 return self._cache[cache_key]
 
-        # Construct outside the lock (expensive QuantLib setup).
-        # The warning, if any, is emitted here directly by OptionValuation.
-        opt = OptionValuation(
-            spot_price=float(spots[0]),
-            strike_price=position.option.strike_price,
-            maturity_date=position.option.maturity_date,
-            volatility=position.option.volatility,
-            risk_free_rate=self.risk_free_rate,
-            dividend_yield=self.dividend_yield,
-            option_type=position.option.option_type,
-            valuation_date=valuation_date,
-            exercise_style=position.exercise_style,
-            grid_resolution=self.grid_resolution,
-            use_closed_form=self.use_closed_form,
-        )
+        # Suppress the warning during construction; the caller emits it.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ClosedFormAccuracyWarning)
+            opt = OptionValuation(
+                spot_price=float(spots[0]),
+                strike_price=position.option.strike_price,
+                maturity_date=position.option.maturity_date,
+                volatility=position.option.volatility,
+                risk_free_rate=self.risk_free_rate,
+                dividend_yield=self.dividend_yield,
+                option_type=position.option.option_type,
+                valuation_date=valuation_date,
+                exercise_style=position.exercise_style,
+                grid_resolution=self.grid_resolution,
+                use_closed_form=self.use_closed_form,
+            )
 
-        # Double-checked locking: another thread may have inserted while
-        # we were constructing outside the lock.
         with self._cache_lock:
             if cache_key not in self._cache:
                 self._cache[cache_key] = opt
@@ -263,8 +266,19 @@ class BatchPricer:
 
         Each position's spot sweep runs in a separate thread. Results are
         accumulated into ``portfolio_values`` under a lock.
+
+        Warning strategy
+        ----------------
+        ``warnings.warn()`` and ``__warningregistry__`` are not thread-safe.
+        Worker threads therefore *collect* any accuracy warning message via
+        ``OptionValuation._closed_form_accuracy_message()`` (pure computation,
+        no warning machinery) and return it to the main thread, which emits
+        the warning once per position after all workers have finished.
         """
         result_lock = threading.Lock()
+        # Collects (pos_idx, message_or_None) from each worker in order.
+        warning_messages: list[tuple[int, str | None]] = []
+        wm_lock = threading.Lock()
 
         def _price_position(pos_idx: int, position: OptionPosition) -> None:
             opt = self._get_or_create_cached_option(
@@ -273,6 +287,14 @@ class BatchPricer:
                 spots,
                 valuation_date,
             )
+            # Collect the accuracy message (pure computation — no warn() call)
+            # so the main thread can emit it safely after all workers finish.
+            msg = (
+                opt._closed_form_accuracy_message()
+            )  # pylint: disable=protected-access
+            with wm_lock:
+                warning_messages.append((pos_idx, msg))
+
             pos_values = self._sweep_spots(opt, spots)
             scaled = pos_values * position.quantity * position.contract_size
             with result_lock:
@@ -285,5 +307,12 @@ class BatchPricer:
             }
             for future in as_completed(futures):
                 future.result()  # re-raise any worker exception
+
+        # Emit deferred warnings from the main thread, one per position that
+        # needs one.  Sorted by pos_idx for deterministic ordering.
+        warning_messages.sort(key=lambda x: x[0])
+        for _pos_idx, msg in warning_messages:
+            if msg:
+                warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
 
         return portfolio_values

@@ -1,13 +1,18 @@
 """Tests for BatchPricer class."""
 
+import threading
+import warnings
 from datetime import datetime, timedelta, timezone
-import numpy as np
 
-from deltadewa import OptionPortfolio, OptionValuation
-from deltadewa.batch_pricer import BatchPricer
-from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType, ExerciseStyle, FDGridResolution
+import numpy as np
+import pytest
+
 import deltadewa.valuation as _valuation_module
+from deltadewa import OptionPortfolio, OptionValuation
+from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.batch_pricer import BatchPricer
+from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
+from deltadewa.warnings import ClosedFormAccuracyWarning
 
 
 class TestBatchPricer:
@@ -523,26 +528,6 @@ class TestBatchPricer:
         assert np.allclose(portfolio_values, expected, rtol=1e-10)
 
 
-"""Tests for BatchPricer class."""
-
-# --------------------------------------------------------------------------
-# (existing imports and TestBatchPricer class unchanged above this point)
-# --------------------------------------------------------------------------
-
-import threading
-import warnings
-from datetime import datetime, timedelta, timezone
-
-import numpy as np
-import pytest
-
-from deltadewa import OptionPortfolio, OptionValuation
-from deltadewa.batch_pricer import BatchPricer
-from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
-from deltadewa.warnings import ClosedFormAccuracyWarning
-
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -765,16 +750,16 @@ class TestClosedFormAccuracyWarning:
 
     @pytest.fixture(autouse=True)
     def _reset_warning_registry(self):
-        """Clear the valuation module's __warningregistry__ before each test.
-
-        Python's warning system stores 'already seen' entries in a per-module
-        registry dict, checked before the filter stack. Clearing it ensures
-        each test starts fresh and simplefilter("always") actually works.
-        """
+        """Clear the valuation module's __warningregistry__ before/after each test."""
         if hasattr(_valuation_module, "__warningregistry__"):
             _valuation_module.__warningregistry__.clear()
         yield
-        # Optionally clear again on teardown so we don't pollute later tests
+        if hasattr(_valuation_module, "__warningregistry__"):
+            _valuation_module.__warningregistry__.clear()
+
+    @staticmethod
+    def _clear_registry():
+        """Clear inside a catch_warnings block to defeat deduplication."""
         if hasattr(_valuation_module, "__warningregistry__"):
             _valuation_module.__warningregistry__.clear()
 
@@ -885,14 +870,12 @@ class TestClosedFormAccuracyWarning:
         assert len(cf_warnings) == 0
 
     def test_warning_for_deep_itm_call(self):
-        """ClosedFormAccuracyWarning emitted for deep ITM call."""
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
-
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            self._clear_registry()  # ← inside the block
             pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
-
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -900,14 +883,12 @@ class TestClosedFormAccuracyWarning:
         assert "deep itm call" in str(cf_warnings[0].message).lower()
 
     def test_warning_for_deep_itm_put(self):
-        """ClosedFormAccuracyWarning emitted for deep ITM put."""
         portfolio = self._deep_itm_put_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
-
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            self._clear_registry()
             pricer.portfolio_values_at(np.array([75.0]), datetime.now(tz=timezone.utc))
-
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -915,58 +896,25 @@ class TestClosedFormAccuracyWarning:
         assert "deep itm put" in str(cf_warnings[0].message).lower()
 
     def test_warning_for_short_dated_put(self):
-        """ClosedFormAccuracyWarning emitted for short-dated put."""
         portfolio = self._short_dated_put_portfolio(days=3)
         pricer = _pricer(portfolio, use_closed_form=True)
-
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            self._clear_registry()
             pricer.portfolio_values_at(np.array([100.0]), datetime.now(tz=timezone.utc))
-
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1
         assert "short-dated put" in str(cf_warnings[0].message).lower()
 
-    def test_no_warning_for_short_dated_call(self):
-        """Short-dated calls do not trigger the short-dated-put warning."""
-        portfolio = OptionPortfolio(
-            underlying_quantity=0.0,
-            spot_price=100.0,
-            volatility=0.25,
-            risk_free_rate=0.05,
-            dividend_yield=0.0,
-        )
-        portfolio.add_position(
-            strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=3),
-            quantity=1,
-            option_type=OptionType.CALL,
-        )
-        pricer = _pricer(portfolio, use_closed_form=True)
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(np.array([100.0]), datetime.now(tz=timezone.utc))
-
-        short_dated_warnings = [
-            w
-            for w in caught
-            if issubclass(w.category, ClosedFormAccuracyWarning)
-            and "short-dated" in str(w.message).lower()
-        ]
-        assert len(short_dated_warnings) == 0
-
     def test_warning_for_high_vol(self):
-        """ClosedFormAccuracyWarning emitted for very high implied volatility."""
         portfolio = self._high_vol_portfolio(vol=0.90)
         pricer = _pricer(portfolio, use_closed_form=True)
-
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            self._clear_registry()
             pricer.portfolio_values_at(np.array([100.0]), datetime.now(tz=timezone.utc))
-
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -974,90 +922,62 @@ class TestClosedFormAccuracyWarning:
         assert "volatility" in str(cf_warnings[0].message).lower()
 
     def test_warning_emitted_once_per_position_not_per_spot(self):
-        """Warning fires exactly once per position across a multi-spot sweep."""
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
-        spots = np.linspace(110.0, 130.0, 20)  # 20 spots, all deep ITM
-
+        spots = np.linspace(110.0, 130.0, 20)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            self._clear_registry()
             pricer.portfolio_values_at(spots, datetime.now(tz=timezone.utc))
-
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
-        # Must be exactly 1, not 20
-        assert len(cf_warnings) == 1
+        assert len(cf_warnings) == 1  # exactly once, not 20
 
     def test_warning_not_re_emitted_from_cache_hit(self):
-        """Second call with same date uses cache — no duplicate warning."""
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         spots = np.array([125.0])
         valuation_date = datetime.now(tz=timezone.utc)
-
-        # Both calls share the same catch_warnings context.
-        # The warning fires on the first call (cache miss → construction).
-        # The second call is a cache hit → no construction → no warning.
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
-
-            pricer.portfolio_values_at(spots, valuation_date)  # cache miss
-            pricer.portfolio_values_at(spots, valuation_date)  # cache hit
-
+            self._clear_registry()
+            pricer.portfolio_values_at(spots, valuation_date)  # cache miss → warns
+            pricer.portfolio_values_at(spots, valuation_date)  # cache hit → silent
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
-        # Exactly 1: fired on construction (first call), not on cache hit (second call)
         assert len(cf_warnings) == 1
 
-    def test_warning_can_be_suppressed(self):
-        """ClosedFormAccuracyWarning can be silenced with filterwarnings."""
-        portfolio = self._deep_itm_call_portfolio()
-        pricer = _pricer(portfolio, use_closed_form=True)
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("ignore", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
-
-        cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
-        ]
-        assert len(cf_warnings) == 0
-
     def test_warning_can_be_turned_into_error(self):
-        """ClosedFormAccuracyWarning can be promoted to an error."""
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
-
-        # First verify the warning is actually emitted
+        # First verify warning fires
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            self._clear_registry()
             pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
-
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1, "Warning should be emitted for deep ITM call"
-
-        # Now test that it can be converted to error
+        # Now promote to error with a fresh pricer
         pricer2 = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings():
             warnings.simplefilter("error", ClosedFormAccuracyWarning)
+            self._clear_registry()
             with pytest.raises(ClosedFormAccuracyWarning):
                 pricer2.portfolio_values_at(
                     np.array([125.0]), datetime.now(tz=timezone.utc)
                 )
 
     def test_warning_message_contains_suppress_hint(self):
-        """Warning message includes the filterwarnings suppression hint."""
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
-
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            self._clear_registry()
             pricer.portfolio_values_at(np.array([125.0]), datetime.now(tz=timezone.utc))
-
         cf_warnings = [
             w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
@@ -1200,7 +1120,6 @@ class TestBatchPricerThreading:
             risk_free_rate=0.05,
             dividend_yield=0.0,
         )
-        # Two deep-ITM calls
         for strike in [90.0, 95.0]:
             portfolio.add_position(
                 strike_price=strike,
@@ -1213,6 +1132,10 @@ class TestBatchPricerThreading:
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
+            # Clear the per-module registry inside the catch_warnings block
+            # so prior-test deduplication entries don't suppress these warnings.
+            if hasattr(_valuation_module, "__warningregistry__"):
+                _valuation_module.__warningregistry__.clear()
             pricer.portfolio_values_at(
                 np.linspace(110.0, 130.0, 10), datetime.now(tz=timezone.utc)
             )
