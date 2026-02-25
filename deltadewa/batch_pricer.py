@@ -165,18 +165,20 @@ class BatchPricer:
         # --- Live: sequential or parallel spot sweep ---
         if self.max_workers == 1:
             for pos_idx, position in live:
-                opt = self._get_or_create_cached_option(
+                opt, is_new = self._get_or_create_cached_option(
                     pos_idx,
                     position,
-                    spots,
                     valuation_date,
                 )
-                # Emit warning in main thread for newly constructed options.
-                msg = (
-                    opt._closed_form_accuracy_message()
-                )  # pylint: disable=protected-access
-                if msg:
-                    warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
+                # Emit warning in main thread for newly constructed options
+                # only (cache miss). Use the construction-time snapshot —
+                # spot_price will be mutated during the sweep below.
+                if is_new:
+                    msg = (
+                        opt._construction_accuracy_warning  # pylint: disable=protected-access
+                    )
+                    if msg:
+                        warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
                 pos_values = self._sweep_spots(opt, spots)
                 portfolio_values += (
                     pos_values * position.quantity * position.contract_size
@@ -204,13 +206,18 @@ class BatchPricer:
         self,
         pos_idx: int,
         position: OptionPosition,
-        spots: np.ndarray,
         valuation_date: dt,
-    ) -> OptionValuation:
+    ) -> tuple[OptionValuation, bool]:
         """Return a cached OptionValuation, creating one if absent.
 
+        Returns a ``(opt, is_new)`` tuple where ``is_new`` is ``True`` when
+        the option was just constructed (cache miss) and ``False`` on a cache
+        hit.  Callers should emit the accuracy warning only on a cache miss so
+        that the warning fires exactly once per position per valuation date,
+        not on every subsequent call with the same date.
+
         Construction-time warnings are suppressed here; callers are
-        responsible for emitting them via ``_closed_form_accuracy_message()``.
+        responsible for emitting them via ``_construction_accuracy_warning``.
         This keeps warning emission on the main thread and out of worker
         threads, where ``__warningregistry__`` races can cause missed warnings.
         """
@@ -218,13 +225,13 @@ class BatchPricer:
 
         with self._cache_lock:
             if cache_key in self._cache:
-                return self._cache[cache_key]
+                return self._cache[cache_key], False
 
         # Suppress the warning during construction; the caller emits it.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ClosedFormAccuracyWarning)
             opt = OptionValuation(
-                spot_price=float(spots[0]),
+                spot_price=position.option.spot_price,
                 strike_price=position.option.strike_price,
                 maturity_date=position.option.maturity_date,
                 volatility=position.option.volatility,
@@ -240,7 +247,7 @@ class BatchPricer:
         with self._cache_lock:
             if cache_key not in self._cache:
                 self._cache[cache_key] = opt
-            return self._cache[cache_key]
+            return self._cache[cache_key], True
 
     @staticmethod
     def _sweep_spots(opt: OptionValuation, spots: np.ndarray) -> np.ndarray:
@@ -281,17 +288,20 @@ class BatchPricer:
         wm_lock = threading.Lock()
 
         def _price_position(pos_idx: int, position: OptionPosition) -> None:
-            opt = self._get_or_create_cached_option(
+            opt, is_new = self._get_or_create_cached_option(
                 pos_idx,
                 position,
-                spots,
                 valuation_date,
             )
-            # Collect the accuracy message (pure computation — no warn() call)
-            # so the main thread can emit it safely after all workers finish.
+            # Use the construction-time snapshot — _closed_form_accuracy_message()
+            # would give the wrong result here since spot_price changes during
+            # the sweep below.  Only collect the message on a cache miss so
+            # the warning fires exactly once per position per valuation date.
             msg = (
-                opt._closed_form_accuracy_message()
-            )  # pylint: disable=protected-access
+                opt._construction_accuracy_warning  # pylint: disable=protected-access
+                if is_new
+                else None
+            )
             with wm_lock:
                 warning_messages.append((pos_idx, msg))
 
