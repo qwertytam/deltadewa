@@ -1,12 +1,13 @@
-"""
-Portfolio persistence module for import/export operations.
+"""Portfolio persistence module for import/export operations.
 
 This module provides utilities for saving and loading portfolio state
 in multiple formats (JSON, CSV, YAML).
 """
 
+import datetime
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime as dt
+from datetime import timedelta
 from pathlib import Path
 from typing import Union
 
@@ -24,10 +25,14 @@ except ImportError:
     YAML_AVAILABLE = False
 
 
-def load_config_yaml(filepath: Path = Path("portfolio_config_example.yaml")):
-    """
-    Load portfolio configuration from YAML file.
-    Returns dict with 'market_parameters' and 'positions', or None if not available.
+def load_config_yaml(
+    filepath: Path = Path("portfolio_config_example.yaml"),
+) -> dict | None:
+    """Load portfolio configuration from YAML file.
+
+    Returns dict with 'market_parameters' and 'positions', or None if not
+    available.
+
     """
     if not YAML_AVAILABLE:
         return None
@@ -38,7 +43,7 @@ def load_config_yaml(filepath: Path = Path("portfolio_config_example.yaml")):
     reporter = ConsoleReporter(width=100)
 
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with Path.open(filepath, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         # Validate structure
@@ -156,7 +161,7 @@ class PortfolioSerializer:
 
         data = {
             "metadata": {
-                "exported_at": datetime.now(tz=timezone.utc).isoformat(),
+                "exported_at": dt.now(tz=datetime.UTC).isoformat(),
                 "version": "1.0",
             },
             "market_parameters": {
@@ -189,9 +194,7 @@ class PortfolioSerializer:
                     "rho": pos.option.rho(),
                 },
                 "price": pos.option.price(),
-                "position_value": pos.option.price()
-                * pos.quantity
-                * pos.contract_size,
+                "position_value": pos.option.price() * pos.quantity * pos.contract_size,
             }
             data["positions"].append(position_data)
 
@@ -260,9 +263,7 @@ class PortfolioSerializer:
                     "volatility": pos.option.volatility,
                     "custom_volatility": pos.custom_volatility,
                     "price": pos.option.price(),
-                    "value": pos.option.price()
-                    * pos.quantity
-                    * pos.contract_size,
+                    "value": pos.option.price() * pos.quantity * pos.contract_size,
                     "delta": pos.option.delta(),
                     "gamma": pos.option.gamma(),
                     "theta": pos.option.theta(),
@@ -286,9 +287,7 @@ class PortfolioSerializer:
                     "resulting_positions": entry["portfolio_snapshot"][
                         "total_positions"
                     ],
-                    "resulting_net_delta": entry["portfolio_snapshot"][
-                        "net_delta"
-                    ],
+                    "resulting_net_delta": entry["portfolio_snapshot"]["net_delta"],
                 }
                 for entry in changelog.get_all_portfolio_snapshots()
             ]
@@ -338,9 +337,7 @@ class PortfolioSerializer:
 
         output_path = self.export_dir / filename
         with open(output_path, "w", encoding="utf-8") as f:
-            yaml.dump(
-                portfolio_data, f, default_flow_style=False, sort_keys=False
-            )
+            yaml.dump(portfolio_data, f, default_flow_style=False, sort_keys=False)
 
         return Path(output_path)
 
@@ -382,21 +379,17 @@ class PortfolioSerializer:
 
         # Add positions (robust to variations in exported field names)
         for pos_data in data["positions"]:
-            maturity_str = pos_data.get("maturity_date") or pos_data.get(
-                "maturity"
-            )
+            maturity_str = pos_data.get("maturity_date") or pos_data.get("maturity")
             if maturity_str is None:
                 raise ValueError("Position entry missing maturity date")
-            maturity = datetime.fromisoformat(maturity_str)
+            maturity = dt.fromisoformat(maturity_str)
 
             strike = pos_data.get("strike_price") or pos_data.get("strike")
             if strike is None:
                 raise ValueError("Position entry missing strike price")
 
             option_type = (
-                pos_data.get("option_type")
-                or pos_data.get("type")
-                or OptionType.CALL
+                pos_data.get("option_type") or pos_data.get("type") or OptionType.CALL
             )
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
 
@@ -424,20 +417,18 @@ class PortfolioSerializer:
         }
 
     def import_from_yaml(self, filepath) -> dict:
-        """
-        Import portfolio from YAML configuration file.
+        """Import portfolio from YAML configuration file.
 
         Args:
             filepath: path to YAML file
 
         Returns:
             dict with 'portfolio', 'market_params', and 'metadata' keys
+
         """
 
         if not YAML_AVAILABLE:
-            raise RuntimeError(
-                "⚠️  PyYAML not installed. Cannot import from YAML."
-            )
+            raise RuntimeError("⚠️  PyYAML not installed. Cannot import from YAML.")
 
         with open(filepath, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
@@ -455,20 +446,25 @@ class PortfolioSerializer:
             volatility=market_params["volatility"],
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
-            valuation_date=datetime.now(tz=timezone.utc),
+            valuation_date=dt.now(tz=datetime.UTC),
             symbol=market_params.get("symbol", "UNKNOWN"),
         )
 
         # Add positions
-        today = datetime.now(tz=timezone.utc)
+        today = dt.now(tz=datetime.UTC)
         for pos_config in config["positions"]:
             # Determine maturity date
             if "maturity_date" in pos_config:
-                maturity = datetime.fromisoformat(pos_config["maturity_date"])
+                maturity = dt.fromisoformat(pos_config["maturity_date"])
             elif "maturity_days" in pos_config:
                 maturity = today + timedelta(days=pos_config["maturity_days"])
             else:
                 continue
+
+            # Ensure maturity is timezone-aware. If the parsed datetime is
+            # naive, assume UTC to avoid downstream timezone-related bugs.
+            if maturity.tzinfo is None:
+                maturity = maturity.replace(tzinfo=datetime.UTC)
 
             # Get optional position-specific volatility
             position_volatility = pos_config.get("volatility", None)
@@ -479,8 +475,7 @@ class PortfolioSerializer:
                 quantity=pos_config["quantity"],
                 option_type=(
                     OptionType.CALL
-                    if pos_config["option_type"].upper()
-                    == OptionType.CALL.value
+                    if pos_config["option_type"].upper() == OptionType.CALL.value
                     else OptionType.PUT
                 ),
                 volatility=position_volatility,
