@@ -58,20 +58,7 @@ select = [
 	"W",    # Warning
 	# "YTT",  # flake8-2020 
 ]
-ignore = [
-	# "E501", # line too long
-	# "W293", # blank line contains whitespace
-	# "C901", # mccabe complexity
-	# "N813", # argument name should be lowercase
-	# "N814", # variable in function should be lowercase
-	# "Q000", # double quotes
-	# "I001",   # isort
-	# "B007",   # f-string in logging function
-	# "RUF003", # ruff-specific rule
-	# "RUF010", # ruff-specific rule
-	# "RUF001", # ruff-specific rule
-	# "RUF003", # ruff-specific rule
-]
+ignore = []
 
 [dependency-groups]
 dev = [
