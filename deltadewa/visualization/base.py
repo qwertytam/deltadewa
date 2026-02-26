@@ -24,7 +24,7 @@ class OptionChartsBase:
 
     """
 
-    def __init__(self, portfolio, style: str = "seaborn-v0_8-darkgrid"):
+    def __init__(self, portfolio, style: str = "seaborn-v0_8-darkgrid") -> None:
         """Initialize OptionChartsBase with a portfolio.
 
         Args:
@@ -36,7 +36,7 @@ class OptionChartsBase:
         self.style = style
         self._apply_style()
 
-    def _apply_style(self):
+    def _apply_style(self) -> None:
         """Apply matplotlib style if available."""
         try:
             plt.style.use(self.style)
@@ -122,5 +122,3 @@ class OptionCharts(
         style: Matplotlib style to use (default: 'seaborn-v0_8-darkgrid')
 
     """
-
-    # pylint: disable=unnecessary-pass
