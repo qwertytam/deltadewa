@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import ipywidgets as widgets  # type: ignore
+import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.config import (
     create_export_dir_widget,

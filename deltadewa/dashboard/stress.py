@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-import ipywidgets as widgets  # type: ignore
+import ipywidgets as widgets  # type: ignore[import-untyped]
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -129,9 +129,7 @@ class StressDashboard:
 
         original_spot: float = self.global_assumptions.spot_price.value
         original_date: datetime = portfolio.valuation_date
-        max_maturity = max(
-            pos.option.maturity_date for pos in portfolio.positions
-        )
+        max_maturity = max(pos.option.maturity_date for pos in portfolio.positions)
         days_to_max_maturity = (max_maturity - original_date).days
 
         # --- widgets ---
@@ -173,7 +171,10 @@ class StressDashboard:
         heatmap_output = widgets.Output()
 
         def _render(
-            spot_range_pct: float, metric_type: str, n_time: int, n_price: int,
+            spot_range_pct: float,
+            metric_type: str,
+            n_time: int,
+            n_price: int,
         ) -> None:
             self._render_time_heatmap(
                 heatmap_output,
@@ -280,9 +281,7 @@ class StressDashboard:
         vol_scenarios = np.linspace(vol_min, vol_max, grid_resolution)
 
         if portfolio.positions:
-            max_maturity = max(
-                pos.option.maturity_date for pos in portfolio.positions
-            )
+            max_maturity = max(pos.option.maturity_date for pos in portfolio.positions)
             max_days = (max_maturity - portfolio.valuation_date).days
         else:
             max_days = 90
@@ -300,7 +299,9 @@ class StressDashboard:
         # date selector via PortfolioWidgets helper
         try:
             date_selector = _pw_stub.create_date_selector(
-                max_days=max_days, description="Valuation Date:", num_steps=20,
+                max_days=max_days,
+                description="Valuation Date:",
+                num_steps=20,
             )
         except Exception:  # pylint: disable=broad-exception-caught
             # Fallback: plain IntSlider
@@ -454,7 +455,7 @@ class StressDashboard:
         if len(pnls_clean) < 20:
             self.reporter.error(
                 f"Insufficient valid data: {len(pnls_clean)} points "
-                 "(need at least 20)",
+                "(need at least 20)",
             )
             return
 
@@ -516,13 +517,11 @@ class StressDashboard:
             if var_95 >= 0:
                 print(f"   → 95% of outcomes are BETTER than ${var_95:,.2f}")
                 print(
-                    "   → Only 5% of scenarios result in less "
-                     f"than ${var_95:,.2f}",
+                    "   → Only 5% of scenarios result in less " f"than ${var_95:,.2f}",
                 )
             else:
                 print(
-                    "   → 5% of scenarios result in worse than "
-                     f"${var_95:,.2f} loss",
+                    "   → 5% of scenarios result in worse than " f"${var_95:,.2f} loss",
                 )
 
             print(f"   99% VaR (1st percentile): ${var_99:>10,.2f}")
@@ -535,8 +534,7 @@ class StressDashboard:
             if theoretical_max_loss is not None:
                 print("\n🔴 Theoretical Maximum Loss:")
                 print(
-                    "   Max possible loss:        "
-                     f"${theoretical_max_loss:>10,.2f}",
+                    "   Max possible loss:        " f"${theoretical_max_loss:>10,.2f}",
                 )
                 print(
                     "   → If all short options go fully ITM (spot → $0 for puts)",
@@ -638,7 +636,9 @@ class StressDashboard:
                 spot_min = original_spot * (1 - spot_range_pct)
                 spot_max = original_spot * (1 + spot_range_pct)
                 spot_scenarios = np.linspace(
-                    spot_min, spot_max, num_price_steps,
+                    spot_min,
+                    spot_max,
+                    num_price_steps,
                 )
 
                 time_days = np.unique(
@@ -661,7 +661,9 @@ class StressDashboard:
                 )
 
                 pivot_df = result_df.pivot(
-                    index="spot_price", columns="days_forward", values="value",
+                    index="spot_price",
+                    columns="days_forward",
+                    values="value",
                 ).sort_index(ascending=False)
 
                 def _col_label(d) -> str:
@@ -671,11 +673,7 @@ class StressDashboard:
                         return str(d)
                     future_date = original_date + timedelta(days=di)
                     date_str = future_date.strftime("%Y-%m-%d")
-                    return (
-                        f"Today\n{date_str}"
-                        if di == 0
-                        else f"T+{di}\n{date_str}"
-                    )
+                    return f"Today\n{date_str}" if di == 0 else f"T+{di}\n{date_str}"
 
                 def _row_label(s) -> str:
                     try:
@@ -695,7 +693,9 @@ class StressDashboard:
                 pivot_df.index.name = "Spot Price"
 
                 styled = apply_financial_gradient_2d(
-                    pivot_df.style, center=0.0, cmap="RdYlGn",
+                    pivot_df.style,
+                    center=0.0,
+                    cmap="RdYlGn",
                 )
 
                 current_spot_label = _row_label(original_spot)
@@ -754,7 +754,9 @@ class StressDashboard:
                     f"${_spot_formatter(spot_min)} to ${_spot_formatter(spot_max)} "
                     f"(±{spot_range_pct:.0%})"
                 )
-                time_range_str = f"{time_days[0]} to {time_days[-1]} days ({len(time_days)} points)"
+                time_range_str = (
+                    f"{time_days[0]} to {time_days[-1]} days ({len(time_days)} points)"
+                )
 
                 today_col = next(
                     (c for c in pivot_df.columns if c.startswith("Today")),
@@ -815,7 +817,9 @@ class StressDashboard:
 
             # --- calculating status ---
             status = self._make_status_widget(
-                "calculating", metric=metric_type, grid_size=grid_resolution,
+                "calculating",
+                metric=metric_type,
+                grid_size=grid_resolution,
             )
             display(status)
 
@@ -828,8 +832,7 @@ class StressDashboard:
 
                 if self.portfolio.positions:
                     earliest_expiry = min(
-                        pos.option.maturity_date
-                        for pos in self.portfolio.positions
+                        pos.option.maturity_date for pos in self.portfolio.positions
                     )
                     if valuation_date > earliest_expiry:
                         print(
@@ -864,7 +867,9 @@ class StressDashboard:
 
                 result_matrix = (
                     result_df.pivot(
-                        index="volatility", columns="spot_price", values="value",
+                        index="volatility",
+                        columns="spot_price",
+                        values="value",
                     )
                     .sort_index(ascending=True)
                     .values
@@ -873,7 +878,9 @@ class StressDashboard:
                 _, ax = plt.subplots(figsize=(12, 8))
 
                 norm, cmap_obj = get_matplotlib_norm_and_cmap(
-                    result_matrix, center=0.0, cmap_name="RdYlGn",
+                    result_matrix,
+                    center=0.0,
+                    cmap_name="RdYlGn",
                 )
 
                 im = ax.imshow(
@@ -912,11 +919,7 @@ class StressDashboard:
                     vmin_, vmax_ = np.nanmin(result_matrix), np.nanmax(
                         result_matrix,
                     )
-                    if (
-                        np.isfinite(vmin_)
-                        and np.isfinite(vmax_)
-                        and vmin_ != vmax_
-                    ):
+                    if np.isfinite(vmin_) and np.isfinite(vmax_) and vmin_ != vmax_:
                         ticks = np.linspace(vmin_, vmax_, 6)
                         cbar.set_ticks(ticks.tolist())
                         cbar.set_ticklabels(
@@ -973,13 +976,15 @@ class StressDashboard:
                     else f" (T+{days_forward} - {date_str})"
                 )
                 if metric_type == "pnl":
-                    subtitle = "\n(Relative to current market: showing change from baseline)"
-                elif metric_type == "value":
                     subtitle = (
-                        "\n(Absolute values: showing total portfolio value)"
+                        "\n(Relative to current market: showing change from baseline)"
                     )
+                elif metric_type == "value":
+                    subtitle = "\n(Absolute values: showing total portfolio value)"
                 else:
-                    subtitle = "\n(Absolute values: showing metric at each scenario point)"
+                    subtitle = (
+                        "\n(Absolute values: showing metric at each scenario point)"
+                    )
 
                 ax.set_xlabel("Spot Price", fontsize=12)
                 ax.set_ylabel("Volatility", fontsize=12)
@@ -1083,7 +1088,9 @@ class StressDashboard:
             )
         else:
             error_msg = kwargs.get("error_msg", "Unknown error")
-            message = f"<strong>{style['icon']} {style['title']}</strong><br/>{error_msg}"
+            message = (
+                f"<strong>{style['icon']} {style['title']}</strong><br/>{error_msg}"
+            )
 
         return widgets.HTML(
             value=f"""
@@ -1123,7 +1130,11 @@ class StressDashboard:
         """Render the side-by-side PDF histogram and CDF charts."""
 
         def _axis_fmt(
-            ax, title: str, ylbl: str, yint: float = 0.0, xint: float = 0.0,
+            ax,
+            title: str,
+            ylbl: str,
+            yint: float = 0.0,
+            xint: float = 0.0,
         ) -> None:
             ax.grid(False)
             ax.axhline(y=yint, color=DEFAULT_PALETTE.axis, linewidth=1)
@@ -1142,9 +1153,7 @@ class StressDashboard:
         ax2.patch.set_alpha(0.0)
 
         # ---- LEFT: PDF histogram ----
-        n_bins = (
-            30 if is_concentrated else min(50, max(20, len(pnls_clean) // 100))
-        )
+        n_bins = 30 if is_concentrated else min(50, max(20, len(pnls_clean) // 100))
         bin_edges = np.linspace(min_pnl, max_pnl, n_bins + 1)
         bin_edges[-1] += 1e-10
         counts, bin_edges = np.histogram(pnls_clean, bins=bin_edges)
@@ -1158,8 +1167,7 @@ class StressDashboard:
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
         colors = [
-            DEFAULT_PALETTE.negative if bc < 0 else "steelblue"
-            for bc in bin_centers
+            DEFAULT_PALETTE.negative if bc < 0 else "steelblue" for bc in bin_centers
         ]
         ax1.bar(
             bin_centers,
@@ -1240,7 +1248,11 @@ class StressDashboard:
             else "Monte Carlo P&L Distribution"
         )
         _axis_fmt(
-            ax1, title, ylbl="Probability Density", yint=yint_, xint=xint_,
+            ax1,
+            title,
+            ylbl="Probability Density",
+            yint=yint_,
+            xint=xint_,
         )
 
         if is_concentrated and most_common_pnl is not None:
@@ -1302,9 +1314,7 @@ class StressDashboard:
         )
 
         idx_exp = np.searchsorted(sorted_pnls, expected_pnl)
-        cdf_at_exp = (
-            idx_exp / len(sorted_pnls) if idx_exp < len(sorted_pnls) else 1.0
-        )
+        cdf_at_exp = idx_exp / len(sorted_pnls) if idx_exp < len(sorted_pnls) else 1.0
         ax2.axvline(
             expected_pnl,
             color=DEFAULT_PALETTE.medium_background,
@@ -1337,7 +1347,7 @@ class StressDashboard:
         xint_, _ = ax1.get_xlim()
         cdf_title = (
             "Cumulative Distribution Function\n"
-             '(Shows: "What % of outcomes are ≤ this P&L?")'
+            '(Shows: "What % of outcomes are ≤ this P&L?")'
         )
         _axis_fmt(
             ax2,
