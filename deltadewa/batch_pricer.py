@@ -148,14 +148,7 @@ class BatchPricer:
         portfolio_values += self.underlying_quantity * spots
 
         # Partition positions into expired / live
-        expired: list[tuple[int, OptionPosition]] = []
-        live: list[tuple[int, OptionPosition]] = []
-        for pos_idx, position in enumerate(self.positions):
-            days_to_maturity = (position.option.maturity_date - valuation_date).days
-            if days_to_maturity <= 0:
-                expired.append((pos_idx, position))
-            else:
-                live.append((pos_idx, position))
+        expired, live = self._partition_positions(valuation_date)
 
         # --- Expired: vectorized intrinsic value ---
         for _pos_idx, position in expired:
@@ -263,14 +256,7 @@ class BatchPricer:
         result["price"] += self.underlying_quantity * spots
 
         # Partition expired / live (same logic as portfolio_values_at)
-        expired: list[tuple[int, OptionPosition]] = []
-        live: list[tuple[int, OptionPosition]] = []
-        for pos_idx, position in enumerate(self.positions):
-            days = (position.option.maturity_date - valuation_date).days
-            if days <= 0:
-                expired.append((pos_idx, position))
-            else:
-                live.append((pos_idx, position))
+        expired, live = self._partition_positions(valuation_date)
 
         # Expired positions: vectorized intrinsic price; binary delta; all
         # other Greeks zero
@@ -482,3 +468,31 @@ class BatchPricer:
                 warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
 
         return portfolio_values
+
+    def _partition_positions(
+        self,
+        valuation_date: dt,
+    ) -> tuple[
+        list[tuple[int, OptionPosition]],
+        list[tuple[int, OptionPosition]],
+    ]:
+        """Partition positions into (expired, live) by maturity date.
+
+        A position is expired when ``days_to_maturity <= 0`` relative to
+        ``valuation_date``.  Expired positions are priced at intrinsic value
+        only; live positions are swept through the QuantLib engine.
+
+        Returns:
+            ``(expired, live)`` — each a list of ``(pos_idx, position)`` pairs
+            in their original enumeration order.
+
+        """
+        expired: list[tuple[int, OptionPosition]] = []
+        live: list[tuple[int, OptionPosition]] = []
+        for pos_idx, position in enumerate(self.positions):
+            days = (position.option.maturity_date - valuation_date).days
+            if days <= 0:
+                expired.append((pos_idx, position))
+            else:
+                live.append((pos_idx, position))
+        return expired, live
