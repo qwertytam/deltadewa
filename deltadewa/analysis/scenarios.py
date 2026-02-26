@@ -244,6 +244,8 @@ class ScenariosMixin:
                 )
 
         # ALWAYS Restore original state
+        # Likely this is now dead code, but kept for safety and future-proofing
+        # if we add any stateful calculations later.
         self.portfolio.update_market_conditions(
             spot_price=original_spot,
             valuation_date=original_date,
