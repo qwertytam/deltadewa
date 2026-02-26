@@ -97,7 +97,10 @@ def create_export_dir_widget(
                     'POSIX path of (choose folder with prompt "Select Export Directory")',
                 ]
                 result = subprocess.run(
-                    cmd, capture_output=True, text=True, check=True,
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    check=True,
                 )
                 path = result.stdout.strip()
             elif platform.system() == "Windows":
@@ -176,7 +179,11 @@ def create_export_dir_widget(
 
     def on_open_click(b):  # pylint: disable=unused-argument
         try:
-            export_dir = getattr(widget_container, "export_dir", Path.cwd())
+            if hasattr(widget_container, "export_dir"):
+                export_dir = widget_container.export_dir
+            else:
+                export_dir = Path.cwd()
+
             if platform.system() == "Darwin":
                 subprocess.run(["open", str(export_dir)], check=False)
             elif platform.system() == "Windows":
@@ -192,9 +199,7 @@ def create_export_dir_widget(
     browse_button.on_click(on_browse_click)
 
     # Assemble widget
-    action_buttons = (
-        [create_button, open_button] if show_browser else [create_button]
-    )
+    action_buttons = [create_button, open_button] if show_browser else [create_button]
 
     input_row = widgets.HBox(
         [custom_path_input, browse_button],
