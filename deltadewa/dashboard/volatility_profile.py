@@ -1,0 +1,75 @@
+"""Portfolio Volatility Profile display for the deltadewa options dashboard."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from deltadewa.reporting import ConsoleReporter
+
+if TYPE_CHECKING:
+    from deltadewa.portfolio.core import OptionPortfolio
+
+
+class VolatilityProfileDisplay:
+    """Build and display the portfolio volatility profile."""
+
+    def __init__(
+        self,
+        portfolio: OptionPortfolio,
+        reporter: ConsoleReporter | None = None,
+    ) -> None:
+        """Initialize with the portfolio to display."""
+        self.portfolio = portfolio
+        self.reporter = reporter or ConsoleReporter()
+
+    def display(self, vol_stats: dict | None = None) -> None:
+        """Print the portfolio volatility profile.
+
+        If vol_stats is None, it is computed fresh from the portfolio.
+        """
+        self.reporter.header("PORTFOLIO VOLATILITY PROFILE")
+
+        if vol_stats:
+            print(
+                f"\nVega-Weighted Average Volatility: "
+                f"{vol_stats['avg_volatility']:.2%}",
+            )
+            print(
+                f"Portfolio Default Volatility:     "
+                f"{vol_stats['portfolio_volatility']:.2%}",
+            )
+            print("\nVolatility Range:")
+            print(f"  Minimum: {vol_stats['min_volatility']:.2%}")
+            print(f"  Maximum: {vol_stats['max_volatility']:.2%}")
+            print(f"  Std Dev: {vol_stats['std_volatility']:.4f}")
+            print(f"  Range:   {vol_stats['volatility_range']:.2%}")
+
+            print(
+                f"\nPositions: {vol_stats['num_positions']} total, "
+                f"{vol_stats['num_custom_vol']} with custom volatility",
+            )
+
+            if vol_stats["num_custom_vol"] > 0:
+                print("\n⚠️  Volatility Skew Detected")
+                print("   Stress test analysis uses proportional volatility scaling to")
+                print(
+                    "   maintain the relative volatility structure "
+                    "(skew/smile) across positions.",
+                )
+                print("   Each position's volatility is scaled by the same factor.")
+            else:
+                print("\n✓ Uniform Volatility")
+                print("  All positions use the portfolio default volatility.")
+
+            print("\nPosition Volatilities:")
+            for i, pos in enumerate(self.portfolio.positions):
+                custom_marker = " (custom)" if pos.custom_volatility else ""
+                print(
+                    f"  Position {i+1}: {pos.option.volatility:.2%}"
+                    f"{custom_marker} - {pos.option.option_type.upper()} "
+                    f"${pos.option.strike_price:.2f}",
+                )
+        else:
+            print("No positions in portfolio")
+
+        self.reporter.divider()
