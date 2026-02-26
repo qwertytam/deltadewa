@@ -18,6 +18,7 @@ class BatchPricer:
 
     Optimizes portfolio valuation by:
 
+
     1. **Caching** ``OptionValuation`` instances per ``(position, date)``
        — reduces QuantLib environment constructions from PxSxT to PxT,
        where P=positions, S=spot scenarios, T=time points.
@@ -103,6 +104,11 @@ class BatchPricer:
         self._cache: dict[tuple[int, dt], OptionValuation] = {}
         # Protects both _cache reads/writes across threads
         self._cache_lock = threading.Lock()
+
+    # Valid greek names — matches OptionValuation public methods
+    _VALID_GREEKS: frozenset = frozenset(
+        {"price", "delta", "gamma", "vega", "theta", "rho"}
+    )
 
     # ------------------------------------------------------------------
     # Public API
@@ -198,6 +204,115 @@ class BatchPricer:
         with self._cache_lock:
             self._cache.clear()
 
+    def portfolio_greeks_at(
+        self,
+        spots: np.ndarray,
+        valuation_date: dt,
+        greeks: tuple = ("delta", "gamma", "vega", "theta"),
+    ) -> dict:
+        """Calculate portfolio Greeks at multiple spot prices for a given date.
+
+        Reuses the same (position, date) cache as portfolio_values_at().
+        After the initial QuantLib construction (P × T total across all calls),
+        each spot sweep uses only SimpleQuote.setValue() — no engine rebuilds.
+
+        The underlying position contributes delta=underlying_quantity,
+        gamma=vega=theta=rho=0 at every spot.
+
+        "net_delta" is not a separate greek name — callers requesting "delta"
+        already receive net delta (options delta + underlying_quantity).
+
+        Args:
+            spots: Array of spot prices.
+            valuation_date: Valuation date.
+            greeks: Tuple of Greek names to compute. Each must be one of:
+                "price", "delta", "gamma", "vega", "theta", "rho".
+                Defaults to ("delta", "gamma", "vega", "theta").
+
+        Returns:
+            Dict mapping each requested greek name (plus "price") to a
+            1-D NumPy array of portfolio totals at each spot price, scaled
+            by quantity × contract_size. The "delta" array includes the
+            underlying position (underlying_quantity * 1.0 per spot).
+
+        Raises:
+            ValueError: If any name in greeks is not a valid Greek.
+        """
+        invalid = set(greeks) - self._VALID_GREEKS
+        if invalid:
+            raise ValueError(
+                f"Unknown greek(s): {invalid!r}. "
+                f"Valid names: {sorted(self._VALID_GREEKS)}"
+            )
+
+        n = len(spots)
+        # Initialize result arrays
+        result: dict[str, np.ndarray] = {name: np.zeros(n) for name in greeks}
+        if "price" not in result:
+            result["price"] = np.zeros(n)
+
+        # Underlying contributions: delta += underlying_quantity, price += underlying_quantity * spots
+        if "delta" in result:
+            result["delta"] += self.underlying_quantity
+        result["price"] += self.underlying_quantity * spots
+
+        # Partition expired / live (same logic as portfolio_values_at)
+        expired: list[tuple[int, OptionPosition]] = []
+        live: list[tuple[int, OptionPosition]] = []
+        for pos_idx, position in enumerate(self.positions):
+            days = (position.option.maturity_date - valuation_date).days
+            if days <= 0:
+                expired.append((pos_idx, position))
+            else:
+                live.append((pos_idx, position))
+
+        # Expired positions: vectorized intrinsic price; binary delta; all other Greeks zero
+        for _pos_idx, position in expired:
+            mult = position.quantity * position.contract_size
+            if position.option.option_type == OptionType.CALL:
+                if "price" in result:
+                    result["price"] += (
+                        np.maximum(0, spots - position.option.strike_price) * mult
+                    )
+                if "delta" in result:
+                    result["delta"] += (
+                        (spots > position.option.strike_price).astype(float) * mult
+                    )
+            else:
+                if "price" in result:
+                    result["price"] += (
+                        np.maximum(0, position.option.strike_price - spots) * mult
+                    )
+                if "delta" in result:
+                    result["delta"] += (
+                        -(spots < position.option.strike_price).astype(float) * mult
+                    )
+            # gamma / vega / theta / rho are zero at expiry — arrays already zero
+
+        if not live:
+            return result
+
+        # Live positions: sequential sweep using cached OptionValuation instances
+        for pos_idx, position in live:
+            opt, is_new = self._get_or_create_cached_option(
+                pos_idx, position, valuation_date
+            )
+            if is_new:
+                msg = opt._construction_accuracy_warning  # pylint: disable=protected-access
+                if msg:
+                    warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
+
+            mult = position.quantity * position.contract_size
+            # Request only the greeks the caller asked for (price is always collected)
+            requested = tuple(g for g in greeks if g != "price")
+            per_contract = self._sweep_spots_and_greeks(opt, spots, requested)
+
+            result["price"] += per_contract["price"] * mult
+            for name in requested:
+                result[name] += per_contract[name] * mult
+
+        return result
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -261,6 +376,32 @@ class BatchPricer:
             opt.update_spot_price(spot)
             prices[i] = opt.price()
         return prices
+
+    @staticmethod
+    def _sweep_spots_and_greeks(
+        opt: OptionValuation,
+        spots: np.ndarray,
+        greek_names: tuple,
+    ) -> dict:
+        """Sweep spot prices, collecting price and any requested Greeks.
+
+        Calls update_spot_price() once per spot (cheap SimpleQuote.setValue()),
+        then reads each Greek from the GreeksCache — no QuantLib rebuild.
+
+        Returns a dict with keys from greek_names plus "price", each mapping
+        to an array of per-contract values of length len(spots).
+        """
+        n = len(spots)
+        arrays: dict[str, np.ndarray] = {name: np.empty(n) for name in greek_names}
+        arrays["price"] = np.empty(n)
+
+        for i, spot in enumerate(spots):
+            opt.update_spot_price(spot)
+            arrays["price"][i] = opt.price()
+            for name in greek_names:
+                arrays[name][i] = getattr(opt, name)()
+
+        return arrays
 
     def _sweep_parallel(
         self,

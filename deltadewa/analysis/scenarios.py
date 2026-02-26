@@ -16,6 +16,17 @@ from deltadewa.constants import FDGridResolution
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
+# Maps scenario_grid() metric names to BatchPricer greek names.
+# "net_delta" maps to "delta" because BatchPricer.portfolio_greeks_at()
+# already includes the underlying position in the "delta" array.
+_METRIC_TO_GREEK: dict[str, str] = {
+    "delta": "delta",
+    "net_delta": "delta",
+    "gamma": "gamma",
+    "vega": "vega",
+    "theta": "theta",
+}
+
 
 class ScenariosMixin:
     """
@@ -28,7 +39,7 @@ class ScenariosMixin:
     if TYPE_CHECKING:
         portfolio: "OptionPortfolio"
 
-    def _create_batch_pricer(self) -> BatchPricer:
+    def _create_batch_pricer(self, use_closed_form: bool = False) -> BatchPricer:
         """
         Creates a BatchPricer instance from the current portfolio state.
 
@@ -43,6 +54,7 @@ class ScenariosMixin:
             underlying_quantity=self.portfolio.underlying_quantity,
             # Use FAST for scenario sweeps to balance speed and accuracy
             grid_resolution=FDGridResolution.FAST,
+            use_closed_form=use_closed_form,
         )
 
     def _calculate_portfolio_value_at(
@@ -191,40 +203,36 @@ class ScenariosMixin:
                         }
                     )
 
-            # TODO: STRATEGY 2: Greeks (Requires state updates)
-            # Currently BatchPricer primarily handles 'value'.
-            # Ideally, BatchPricer would be extended to return Greeks arrays.
-            # However, to avoid 'feature restriction' or major refactor of BatchPricer
-            # right now, we will stick to the existing method for Greeks but
-            # clean up the loop structure.
+            # STRATEGY 2: Greeks via BatchPricer (no portfolio state mutations)
             else:
-                for spot in spot_scenarios:
-                    # We must update the actual portfolio for Greek calculations
-                    # because the Greek methods (total_delta etc) live on the portfolio
-                    self.portfolio.update_market_conditions(
-                        spot_price=spot, valuation_date=time_point
-                    )
+                greek_name = _METRIC_TO_GREEK.get(metric)
+                if greek_name is None:
+                    # Unknown metric — emit zeros for all spots and continue
+                    for spot in spot_scenarios:
+                        results.append(
+                            {
+                                "spot_price": spot,
+                                "valuation_date": time_point,
+                                "days_forward": days_forward,
+                                "metric": metric,
+                                "value": 0.0,
+                            }
+                        )
+                    continue
 
-                    if metric == "delta":
-                        metric_value = self.portfolio.total_delta()
-                    elif metric == "net_delta":
-                        metric_value = self.portfolio.net_delta()
-                    elif metric == "gamma":
-                        metric_value = self.portfolio.total_gamma()
-                    elif metric == "vega":
-                        metric_value = self.portfolio.total_vega()
-                    elif metric == "theta":
-                        metric_value = self.portfolio.total_theta()
-                    else:
-                        metric_value = 0.0
-
+                greek_arrays = pricer.portfolio_greeks_at(
+                    spot_scenarios,
+                    time_point,
+                    greeks=(greek_name,),
+                )
+                for j, spot in enumerate(spot_scenarios):
                     results.append(
                         {
                             "spot_price": spot,
                             "valuation_date": time_point,
                             "days_forward": days_forward,
                             "metric": metric,
-                            "value": metric_value,
+                            "value": greek_arrays[greek_name][j],
                         }
                     )
 
