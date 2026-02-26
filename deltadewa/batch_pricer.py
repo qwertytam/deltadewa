@@ -286,30 +286,47 @@ class BatchPricer:
         if not live:
             return result
 
-        # Live positions: sequential sweep using cached OptionValuation
-        # instances
-        for pos_idx, position in live:
-            opt, is_new = self._get_or_create_cached_option(
-                pos_idx,
-                position,
+        # Request only the greeks the caller asked for (price is always
+        # collected)
+        requested = tuple(g for g in greeks if g != "price")
+
+        # --- Live: sequential or parallel Greek sweep ---
+        if self.max_workers == 1:
+            for pos_idx, position in live:
+                opt, is_new = self._get_or_create_cached_option(
+                    pos_idx,
+                    position,
+                    valuation_date,
+                )
+                if is_new:
+                    msg = (
+                        opt._construction_accuracy_warning  # pylint: disable=protected-access
+                    )
+                    if msg:
+                        warnings.warn(
+                            msg,
+                            ClosedFormAccuracyWarning,
+                            stacklevel=2,
+                        )
+
+                mult = position.quantity * position.contract_size
+                per_contract = self._sweep_spots_and_greeks(
+                    opt,
+                    spots,
+                    requested,
+                )
+
+                result["price"] += per_contract["price"] * mult
+                for name in requested:
+                    result[name] += per_contract[name] * mult
+        else:
+            result = self._sweep_parallel_greeks(
+                live,
+                spots,
                 valuation_date,
+                requested,
+                result,
             )
-            if is_new:
-                msg = (
-                    opt._construction_accuracy_warning
-                )  # pylint: disable=protected-access
-                if msg:
-                    warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
-
-            mult = position.quantity * position.contract_size
-            # Request only the greeks the caller asked for (price is always
-            # collected)
-            requested = tuple(g for g in greeks if g != "price")
-            per_contract = self._sweep_spots_and_greeks(opt, spots, requested)
-
-            result["price"] += per_contract["price"] * mult
-            for name in requested:
-                result[name] += per_contract[name] * mult
 
         return result
 
@@ -468,6 +485,81 @@ class BatchPricer:
                 warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
 
         return portfolio_values
+
+    def _sweep_parallel_greeks(
+        self,
+        live_positions: list[tuple[int, OptionPosition]],
+        spots: np.ndarray,
+        valuation_date: dt,
+        requested: tuple[str, ...],
+        result: dict[str, np.ndarray],
+    ) -> dict[str, np.ndarray]:
+        """Calc Greeks for live positions in parallel and accumulate results.
+
+        Mirrors ``_sweep_parallel`` but uses ``_sweep_spots_and_greeks`` as the
+        inner sweep and accumulates into a ``dict[str, np.ndarray]`` rather than
+        a flat value array.
+
+        Warning strategy is identical to ``_sweep_parallel``: worker threads
+        collect the accuracy warning message (pure computation, no warning
+        machinery) and the main thread emits it after all workers finish.
+
+        Args:
+            live_positions: ``(pos_idx, position)`` pairs to price in parallel.
+            spots: Array of spot prices.
+            valuation_date: Valuation date.
+            requested: Greek names to compute (must not include ``"price"`` —
+                price is always collected).
+            result: Pre-initialised result dict (modified in-place and
+            returned).
+
+        Returns:
+            ``result`` with each Greek and ``"price"`` arrays accumulated.
+
+        """
+        result_lock = threading.Lock()
+        # Collects (pos_idx, message_or_None) from each worker in order.
+        warning_messages: list[tuple[int, str | None]] = []
+        wm_lock = threading.Lock()
+
+        def _greek_position(pos_idx: int, position: OptionPosition) -> None:
+            opt, is_new = self._get_or_create_cached_option(
+                pos_idx,
+                position,
+                valuation_date,
+            )
+            msg = (
+                opt._construction_accuracy_warning  # pylint: disable=protected-access
+                if is_new
+                else None
+            )
+            with wm_lock:
+                warning_messages.append((pos_idx, msg))
+
+            mult = position.quantity * position.contract_size
+            per_contract = self._sweep_spots_and_greeks(opt, spots, requested)
+
+            with result_lock:
+                result["price"] += per_contract["price"] * mult
+                for name in requested:
+                    result[name] += per_contract[name] * mult
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {
+                executor.submit(_greek_position, pos_idx, position): pos_idx
+                for pos_idx, position in live_positions
+            }
+            for future in as_completed(futures):
+                future.result()  # re-raise any worker exception
+
+        # Emit deferred warnings from the main thread, one per position that
+        # needs one. Sorted by pos_idx for deterministic ordering.
+        warning_messages.sort(key=lambda x: x[0])
+        for _pos_idx, msg in warning_messages:
+            if msg:
+                warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
+
+        return result
 
     def _partition_positions(
         self,
