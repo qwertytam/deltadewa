@@ -238,7 +238,7 @@ class GaugeIndicator:
 
             # Min/Mid/Max tick marks and labels
             if self.show_minmidmax_labels:
-                for val, label in [  # pylint: disable=unused-variable
+                for val, _label in [
                     (self.min_val, "min"),
                     (self.mid_val, "mid"),
                     (self.max_val, "max"),
@@ -394,13 +394,7 @@ class GaugeIndicator:
             self.actual = actual
 
         # Validate after update
-        if not (
-            self.start
-            <= self.min_val
-            <= self.mid_val
-            <= self.max_val
-            <= self.end
-        ):
+        if not (self.start <= self.min_val <= self.mid_val <= self.max_val <= self.end):
             raise ValueError(
                 f"Values must satisfy: start ({self.start}) <= min ({self.min_val}) "
                 f"<= mid ({self.mid_val}) <= max ({self.max_val}) <= end ({self.end})"

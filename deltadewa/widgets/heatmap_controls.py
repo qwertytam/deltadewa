@@ -4,7 +4,7 @@ This module provides mixin classes for heatmap functionality
 in the deltadewa dashboard.
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
@@ -24,7 +24,7 @@ class HeatmapControlsMixin:
         # pylint: disable=missing-function-docstring, unused-argument
         def create_metric_selector(
             self,
-            metrics: list[Tuple[str, str]] | None = None,
+            metrics: list[tuple[str, str]] | None = None,
             description: str = "Metric:",
             default: str = "pnl",
         ) -> widgets.Dropdown: ...
@@ -52,8 +52,8 @@ class HeatmapControlsMixin:
     # ==========================================================================
 
     def create_heatmap_controls(
-        self, metrics: list[Tuple[str, str]] | None = None
-    ) -> Dict[str, Any]:
+        self, metrics: list[tuple[str, str]] | None = None
+    ) -> dict[str, Any]:
         """
         Create complete heatmap configuration controls.
 
@@ -87,9 +87,7 @@ class HeatmapControlsMixin:
         )
 
         # pylint: disable=assignment-from-no-return
-        metric_selector = self.create_metric_selector(
-            metrics=metrics, default="pnl"
-        )
+        metric_selector = self.create_metric_selector(metrics=metrics, default="pnl")
 
         # pylint: disable=assignment-from-no-return
         date_selector = self.create_date_selector()

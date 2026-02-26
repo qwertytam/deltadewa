@@ -1,14 +1,14 @@
 """Lazy-loading Greeks cache with automatic invalidation."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from threading import RLock
-from typing import Any, Callable, Dict
+from typing import Any
 
 
 @dataclass
 class GreeksCache:
-    """
-    Thread-safe, lazy-loading cache for option Greeks.
+    """Thread-safe, lazy-loading cache for option Greeks.
 
     Each Greek is computed only when first accessed and cached until
     invalidation. The cache is invalidated when market conditions change.
@@ -24,7 +24,7 @@ class GreeksCache:
             "theta",
             "rho",
             "price",
-        }
+        },
     )
     _lock: RLock = field(default_factory=RLock)
 
@@ -63,9 +63,9 @@ class GreeksCache:
         with self._lock:
             return name in self._cache and name not in self._dirty
 
-    def compute_all(self) -> Dict[str, float]:
-        """
-        Compute all registered Greeks and return as dictionary.
+    def compute_all(self) -> dict[str, float]:
+        """Compute all registered Greeks and return as dictionary.
+
         Efficient for batch operations - reduced lock overhead.
         """
         with self._lock:
@@ -78,7 +78,7 @@ class GreeksCache:
             return result
 
     @property
-    def cache_stats(self) -> Dict[str, Any]:
+    def cache_stats(self) -> dict[str, Any]:
         """Return cache statistics for monitoring/debugging."""
         with self._lock:
             return {

@@ -66,9 +66,7 @@ class HealthMixin:
 
         return (hedge_pnl / underlying_value) * 100
 
-    def calculate_vega_sufficiency_pct(
-        self, vol_shock_points: float = 10.0
-    ) -> float:
+    def calculate_vega_sufficiency_pct(self, vol_shock_points: float = 10.0) -> float:
         """
         Calculate vega sufficiency: Portfolio % impact per vol shock.
 
@@ -113,9 +111,7 @@ class HealthMixin:
 
         return (net_delta / underlying_qty) * 100
 
-    def calculate_convexity_cliff_days(
-        self, cliff_threshold_days: int = 180
-    ) -> int:
+    def calculate_convexity_cliff_days(self, cliff_threshold_days: int = 180) -> int:
         """
         Calculate days until long puts enter high-gamma region.
 
@@ -133,7 +129,7 @@ class HealthMixin:
 
         for pos in self.portfolio.positions:
             # Check for long puts (negative quantity for puts means short)
-            is_put = pos.option.option_type.upper() == const.OptionType.PUT
+            is_put = pos.option.option_type == const.OptionType.PUT
             is_long = pos.quantity > 0
 
             if is_put and is_long:
@@ -232,7 +228,7 @@ class HealthMixin:
         scores = []
 
         for (
-            key,  # pylint: disable=unused-variable
+            _key,
             metric,
         ) in metrics.items():
             # Normalize metric to 0-100 score

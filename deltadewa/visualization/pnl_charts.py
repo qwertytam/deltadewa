@@ -12,10 +12,12 @@ from scipy import stats  # type: ignore
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.colours import DEFAULT_PALETTE
+
 # Import centralized formatters
 from deltadewa.formatters.values import format_currency_for_axis
-from deltadewa.formatters.values import \
-    format_spot_with_pct as format_spot_with_pct_centralized
+from deltadewa.formatters.values import (
+    format_spot_with_pct as format_spot_with_pct_centralized,
+)
 from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:
@@ -82,16 +84,12 @@ class PnLChartsMixin:
 
         # Determine expiration label
         # pylint: disable=assignment-from-no-return
-        expiry_label = (  # type: ignore
-            self._get_expiry_label()
-        )  # pylint: disable=unused-variable
+        expiry_label = self._get_expiry_label()
         _ = expiry_label  # To avoid unused variable warning
 
         # Create figure
         nrows = (
-            2
-            if (show_underlying and self.portfolio.underlying_quantity != 0)
-            else 1
+            2 if (show_underlying and self.portfolio.underlying_quantity != 0) else 1
         )
         fig, axes = plt.subplots(nrows, 1, figsize=figsize)
         if nrows == 1:
@@ -224,8 +222,7 @@ class PnLChartsMixin:
         # Log-normal parameters
         mu = (
             np.log(current_spot)
-            + (risk_free_rate - dividend_yield - 0.5 * volatility**2)
-            * time_to_maturity
+            + (risk_free_rate - dividend_yield - 0.5 * volatility**2) * time_to_maturity
         )
         sigma = volatility * np.sqrt(time_to_maturity)
 
@@ -260,9 +257,7 @@ class PnLChartsMixin:
         # For log-normal with parameters mu and sigma:
         # percentile_p = exp(mu + sigma * z_p) where z_p is the standard normal quantile
         try:
-            z_5th = stats.norm.ppf(
-                0.05
-            )  # Standard normal quantile for 5th percentile
+            z_5th = stats.norm.ppf(0.05)  # Standard normal quantile for 5th percentile
             z_95th = stats.norm.ppf(
                 0.95
             )  # Standard normal quantile for 95th percentile
@@ -281,12 +276,8 @@ class PnLChartsMixin:
         spot_range_max = spot_range.max()
 
         # Check if percentiles are within visible range
-        is_5th_in_range = (
-            spot_range_min <= spot_5th_percentile <= spot_range_max
-        )
-        is_95th_in_range = (
-            spot_range_min <= spot_95th_percentile <= spot_range_max
-        )
+        is_5th_in_range = spot_range_min <= spot_5th_percentile <= spot_range_max
+        is_95th_in_range = spot_range_min <= spot_95th_percentile <= spot_range_max
 
         # Add vertical dashed lines for percentiles only if in range
         if is_5th_in_range:
@@ -461,9 +452,7 @@ class PnLChartsMixin:
         )
 
         # Annotate break-even points
-        be_key = (
-            "breakeven_total" if include_underlying else "breakeven_options"
-        )
+        be_key = "breakeven_total" if include_underlying else "breakeven_options"
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
                 be_pnl = self.portfolio.calculate_pnl_at_expiry(  # type: ignore
@@ -589,9 +578,7 @@ class PnLChartsMixin:
                 )
 
         # Annotate maximum profit
-        mp_key = (
-            "max_profit_total" if include_underlying else "max_profit_options"
-        )
+        mp_key = "max_profit_total" if include_underlying else "max_profit_options"
         max_profit_info = analysis[mp_key]
         if not max_profit_info["is_unlimited"]:
             mp_spot = max_profit_info["spot_at_max_profit"]
@@ -622,9 +609,7 @@ class PnLChartsMixin:
                     alpha=0.8,
                     edgecolor=DEFAULT_PALETTE.positive,
                 ),
-                arrowprops=dict(
-                    arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
-                ),
+                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5),
             )
 
         # Annotate expected value
@@ -667,14 +652,10 @@ class PnLChartsMixin:
             )
 
         # Format axes and labels
-        ax.set_xlabel(
-            "Spot Price at Maturity ($)", fontsize=13, fontweight="bold"
-        )
+        ax.set_xlabel("Spot Price at Maturity ($)", fontsize=13, fontweight="bold")
         ax.set_ylabel("Profit / Loss ($)", fontsize=13, fontweight="bold")
         title_suffix = (
-            " (Options + Underlying)"
-            if include_underlying
-            else " (Options Only)"
+            " (Options + Underlying)" if include_underlying else " (Options Only)"
         )
         ax.set_title(
             f"P&L Distribution with Key Metrics{title_suffix}",
@@ -823,15 +804,11 @@ class PnLChartsMixin:
                 fontsize=11,
                 fontweight="bold",
                 color=DEFAULT_PALETTE.negative,
-                arrowprops=dict(
-                    arrowstyle="->", color=DEFAULT_PALETTE.negative, lw=2
-                ),
+                arrowprops=dict(arrowstyle="->", color=DEFAULT_PALETTE.negative, lw=2),
             )
 
         # Formatting
-        ax.set_xlabel(
-            "Spot Price at Expiration ($)", fontsize=12, fontweight="bold"
-        )
+        ax.set_xlabel("Spot Price at Expiration ($)", fontsize=12, fontweight="bold")
         ax.set_ylabel("P&L ($)", fontsize=12, fontweight="bold")
         ax.set_title(title, fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)

@@ -1,8 +1,7 @@
 """Caching utilities for portfolio analysis."""
 
 import hashlib
-from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -13,7 +12,7 @@ def create_scenario_cache_key(
     time_points: list[datetime],
     metric: str,
     portfolio_state_hash: str,
-) -> Tuple:
+) -> tuple:
     """
     Create a hashable cache key for scenario grid results.
 
@@ -24,7 +23,7 @@ def create_scenario_cache_key(
         portfolio_state_hash: Hash representing portfolio state
 
     Returns:
-        Tuple suitable for use as dictionary key
+        tuple suitable for use as dictionary key
     """
     # Convert numpy array to tuple for hashing
     spot_tuple = tuple(spot_scenarios.tolist())
@@ -38,7 +37,7 @@ def create_spot_vol_cache_key(
     vol_scenarios: np.ndarray,
     metric: str,
     portfolio_state_hash: str,
-) -> Tuple:
+) -> tuple:
     """
     Create hashable cache key for spot x vol scenario grid results.
 
@@ -49,7 +48,7 @@ def create_spot_vol_cache_key(
         portfolio_state_hash: Hash representing portfolio state
 
     Returns:
-        Tuple suitable for use as dictionary key
+        tuple suitable for use as dictionary key
 
     Note:
         Rounds to 6 decimal places for stability. This provides precision
@@ -132,9 +131,9 @@ class ScenarioGridCache:
         Args:
             max_size: Maximum number of cached results (LRU eviction)
         """
-        self._cache: dict[Tuple, pd.DataFrame] = {}
+        self._cache: dict[tuple, pd.DataFrame] = {}
         self._max_size = max_size
-        self._access_order: list[Tuple] = []
+        self._access_order: list[tuple] = []
 
     def get_or_calculate(
         self,

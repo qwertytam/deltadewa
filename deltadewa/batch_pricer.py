@@ -106,8 +106,8 @@ class BatchPricer:
         self._cache_lock = threading.Lock()
 
     # Valid greek names — matches OptionValuation public methods
-    _VALID_GREEKS: frozenset = frozenset(
-        {"price", "delta", "gamma", "vega", "theta", "rho"}
+    _VALID_GREEKS: frozenset[str] = frozenset(
+        {"price", "delta", "gamma", "vega", "theta", "rho"},
     )
 
     # ------------------------------------------------------------------
@@ -275,9 +275,9 @@ class BatchPricer:
                         np.maximum(0, spots - position.option.strike_price) * mult
                     )
                 if "delta" in result:
-                    result["delta"] += (
-                        (spots > position.option.strike_price).astype(float) * mult
-                    )
+                    result["delta"] += (spots > position.option.strike_price).astype(
+                        float
+                    ) * mult
             else:
                 if "price" in result:
                     result["price"] += (
@@ -298,7 +298,9 @@ class BatchPricer:
                 pos_idx, position, valuation_date
             )
             if is_new:
-                msg = opt._construction_accuracy_warning  # pylint: disable=protected-access
+                msg = (
+                    opt._construction_accuracy_warning
+                )  # pylint: disable=protected-access
                 if msg:
                     warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
 
