@@ -452,7 +452,10 @@ class BatchPricer:
                 valuation_date,
             )
             # Use the construction-time snapshot —
-            # _closed_form_accuracy_messag()  # noqa: ERA001
+            # _closed_form_accuracy_messag() would give the wrong result here
+            # since spot_price changes during the sweep below. Only collect the
+            # message on a cache miss so the warning fires exactly once per
+            # position per valuation date.
             # would give the wrong result here since spot_price changes during
             # the sweep below.  Only collect the message on a cache miss so
             # the warning fires exactly once per position per valuation date.
