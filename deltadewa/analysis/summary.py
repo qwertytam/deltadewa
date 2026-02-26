@@ -1,6 +1,6 @@
 """Summary and insights mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -9,8 +9,7 @@ if TYPE_CHECKING:
 
 
 class SummaryMixin:
-    """
-    Mixin for insights generation and summary formatting.
+    """Mixin for insights generation and summary formatting.
 
     Provides methods for generating formatted risk summaries,
     risk/reward summaries, and actionable insights based on portfolio analysis.
@@ -20,10 +19,10 @@ class SummaryMixin:
         portfolio: "OptionPortfolio"
 
         # pylint: disable=missing-function-docstring
-        def calculate_carry_metrics(self) -> Dict: ...
+        def calculate_carry_metrics(self) -> dict: ...
 
         # pylint: disable=missing-function-docstring
-        def analyze_risk_concentration(self) -> Dict: ...
+        def analyze_risk_concentration(self) -> dict: ...
 
         # pylint: disable=missing-function-docstring, unused-argument
         def risk_reward_analysis(
@@ -33,14 +32,14 @@ class SummaryMixin:
         ) -> dict: ...
 
     def format_risk_summary(self, stats: dict | None = None) -> str:
-        """
-        Generate formatted risk summary text.
+        """Generate formatted risk summary text.
 
         Args:
             stats: Portfolio summary stats (uses current if None)
 
         Returns:
             Formatted string with risk analysis
+
         """
         if stats is None:
             stats = self.portfolio.summary_stats()
@@ -57,7 +56,7 @@ class SummaryMixin:
         lines.append("DIRECTIONAL RISK (DELTA):")
         lines.append(f"  Portfolio Delta: {stats['total_delta']:,.2f}")
         lines.append(
-            f"  Notional Position: {stats['underlying_quantity']:,.2f}"
+            f"  Notional Position: {stats['underlying_quantity']:,.2f}",
         )
         lines.append(f"  Net Delta: {stats['net_delta']:,.2f}")
         lines.append(f"  Hedge Ratio: {stats['hedge_ratio']:.2f}%")
@@ -68,7 +67,7 @@ class SummaryMixin:
             lines.append("  ⚠ Net long exposure - vulnerable to price decline")
         else:
             lines.append(
-                "  ⚠ Net short exposure - vulnerable to price increase"
+                "  ⚠ Net short exposure - vulnerable to price increase",
             )
 
         lines.append("")
@@ -106,12 +105,12 @@ class SummaryMixin:
 
         return "\n".join(lines)
 
-    def generate_insights(self) -> List[str]:
-        """
-        Generate actionable insights based on portfolio analysis.
+    def generate_insights(self) -> list[str]:
+        """Generate actionable insights based on portfolio analysis.
 
         Returns:
-            List of insight strings
+            list of insight strings
+
         """
         insights = []
         stats = self.portfolio.summary_stats()
@@ -126,19 +125,19 @@ class SummaryMixin:
         if abs(stats["net_delta"]) > abs(stats["underlying_quantity"]) * 0.2:
             insights.append(
                 f"⚠ High net delta exposure ({stats['net_delta']:.0f}) - "
-                "consider rebalancing hedge"
+                "consider rebalancing hedge",
             )
 
         # Theta insights
         if carry_metrics["is_positive_carry"]:
             insights.append(
                 f"✓ Positive carry: Earning ${carry_metrics['total_theta_daily']:.2f}/day "
-                f"(${carry_metrics['total_theta_monthly']:.0f}/month)"
+                f"(${carry_metrics['total_theta_monthly']:.0f}/month)",
             )
         else:
             insights.append(
                 f"⚠ Negative carry: Paying ${-carry_metrics['total_theta_daily']:.2f}/day "
-                "for options positions"
+                "for options positions",
             )
 
         # Concentration insights
@@ -146,7 +145,7 @@ class SummaryMixin:
             if "strike" in metric and score > 30:
                 insights.append(
                     f"⚠ {metric.split('_')[0].upper()} concentrated in single strike "
-                    f"({score:.1f}%) - consider diversifying"
+                    f"({score:.1f}%) - consider diversifying",
                 )
 
         # Gamma insights
@@ -154,32 +153,31 @@ class SummaryMixin:
             direction = "long" if stats["total_gamma"] > 0 else "short"
             insights.append(
                 f"ℹ High {direction} gamma ({abs(stats['total_gamma']):.4f}) - "
-                "delta will change significantly with spot moves"
+                "delta will change significantly with spot moves",
             )
 
         # Vega insights
         if abs(stats["total_vega"]) > 100:
-            direction = (
-                "benefits from" if stats["total_vega"] > 0 else "hurt by"
-            )
+            direction = "benefits from" if stats["total_vega"] > 0 else "hurt by"
             insights.append(
                 f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f}) - "
-                f"portfolio {direction} volatility increases"
+                f"portfolio {direction} volatility increases",
             )
 
         return insights
 
     def format_risk_reward_summary(
-        self, spot_range: np.ndarray | None = None
+        self,
+        spot_range: np.ndarray | None = None,
     ) -> str:
-        """
-        Generate formatted risk/reward summary text.
+        """Generate formatted risk/reward summary text.
 
         Args:
             spot_range: Array of spot prices to analyze (optional)
 
         Returns:
             Formatted string with risk/reward analysis
+
         """
         # pylint: disable=assignment-from-no-return
         analysis = self.risk_reward_analysis(spot_range)
@@ -196,7 +194,7 @@ class SummaryMixin:
         net_debit = analysis["net_debit"]
         if net_debit > 0:
             lines.append(
-                f"  Net Debit: ${net_debit:,.2f} (capital required to implement)"
+                f"  Net Debit: ${net_debit:,.2f} (capital required to implement)",
             )
         else:
             lines.append(f"  Net Credit: ${-net_debit:,.2f} (capital received)")
@@ -216,7 +214,7 @@ class SummaryMixin:
                 loss_line += f" ({loss_pct:.1f}% of net debit)"
             lines.append(loss_line)
             lines.append(
-                f"    └─ Occurs at spot price: ${max_loss_opts['spot_at_max_loss']:.2f}"
+                f"    └─ Occurs at spot price: ${max_loss_opts['spot_at_max_loss']:.2f}",
             )
 
         if max_profit_opts["is_unlimited"]:
@@ -228,12 +226,12 @@ class SummaryMixin:
                 profit_line += f" ({roi:.1f}% return on net debit)"
             lines.append(profit_line)
             lines.append(
-                f"    └─ Occurs at spot price: ${max_profit_opts['spot_at_max_profit']:.2f}"
+                f"    └─ Occurs at spot price: ${max_profit_opts['spot_at_max_profit']:.2f}",
             )
 
         if analysis["breakeven_options"]:
             breakevens_str = ", ".join(
-                [f"${be:.2f}" for be in analysis["breakeven_options"]]
+                [f"${be:.2f}" for be in analysis["breakeven_options"]],
             )
             lines.append(f"  Breakeven Points: {breakevens_str}")
         else:
@@ -248,33 +246,29 @@ class SummaryMixin:
 
             if max_loss_total["is_unlimited"]:
                 lines.append(
-                    "  Max Loss: UNLIMITED (short underlying position)"
+                    "  Max Loss: UNLIMITED (short underlying position)",
                 )
             else:
                 portfolio_value = self.portfolio.total_portfolio_value()
                 loss_line = f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}"
                 if portfolio_value > 0:
-                    loss_pct = (
-                        -max_loss_total["max_loss"] / portfolio_value
-                    ) * 100
+                    loss_pct = (-max_loss_total["max_loss"] / portfolio_value) * 100
                     loss_line += f" ({loss_pct:.1f}% of portfolio value)"
                 lines.append(loss_line)
                 lines.append(
-                    f"    └─ Occurs at spot price: ${max_loss_total['spot_at_max_loss']:.2f}"
+                    f"    └─ Occurs at spot price: ${max_loss_total['spot_at_max_loss']:.2f}",
                 )
 
             if max_profit_total["is_unlimited"]:
                 if self.portfolio.underlying_quantity > 0:
                     lines.append(
-                        "  Max Profit: UNLIMITED (long underlying position)"
+                        "  Max Profit: UNLIMITED (long underlying position)",
                     )
                 else:
                     lines.append("  Max Profit: UNLIMITED")
                 lines.append("    └─ Profit increases with spot price")
             else:
-                profit_line = (
-                    f"  Max Profit: ${max_profit_total['max_profit']:,.2f}"
-                )
+                profit_line = f"  Max Profit: ${max_profit_total['max_profit']:,.2f}"
                 if portfolio_value > 0:
                     profit_pct = (
                         max_profit_total["max_profit"] / portfolio_value
@@ -282,12 +276,12 @@ class SummaryMixin:
                     profit_line += f" ({profit_pct:.1f}% of portfolio value)"
                 lines.append(profit_line)
                 lines.append(
-                    f"    └─ Occurs at spot price: ${max_profit_total['spot_at_max_profit']:.2f}"
+                    f"    └─ Occurs at spot price: ${max_profit_total['spot_at_max_profit']:.2f}",
                 )
 
             if analysis["breakeven_total"]:
                 breakevens_str = ", ".join(
-                    [f"${be:.2f}" for be in analysis["breakeven_total"]]
+                    [f"${be:.2f}" for be in analysis["breakeven_total"]],
                 )
                 lines.append(f"  Breakeven Points: {breakevens_str}")
             else:
@@ -299,36 +293,28 @@ class SummaryMixin:
         prob = analysis["prob_profit"]
         lines.append(f"  Chance of Profit: {prob*100:.1f}%")
         lines.append(
-            f"  Expected Value: ${analysis['expected_pnl']:,.2f} (probabilistic weighted average)"
+            f"  Expected Value: ${analysis['expected_pnl']:,.2f} (probabilistic weighted average)",
         )
         lines.append("")
 
         # Risk/Reward Ratio
-        if (
-            not max_loss_opts["is_unlimited"]
-            and not max_profit_opts["is_unlimited"]
-        ):
-            if (
-                max_profit_opts["max_profit"] > 0
-                and max_loss_opts["max_loss"] < 0
-            ):
+        if not max_loss_opts["is_unlimited"] and not max_profit_opts["is_unlimited"]:
+            if max_profit_opts["max_profit"] > 0 and max_loss_opts["max_loss"] < 0:
                 # Standard risk/reward ratio: profit potential to loss potential
-                rr_ratio = (
-                    max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
-                )
+                rr_ratio = max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
                 lines.append(
-                    f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)"
+                    f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)",
                 )
         lines.append("=" * 80)
 
         return "\n".join(lines)
 
     def print_risk_reward_summary(self, spot_range: np.ndarray | None = None):
-        """
-        Print a formatted risk/reward summary of the portfolio.
+        """Print a formatted risk/reward summary of the portfolio.
 
         Args:
             spot_range: Array of spot prices to analyze (optional)
+
         """
         summary = self.format_risk_reward_summary(spot_range)
         print(summary)

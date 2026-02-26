@@ -1,5 +1,4 @@
-"""
-Volatility analysis utilities for options portfolios.
+"""Volatility analysis utilities for options portfolios.
 
 This module provides functions for analyzing and manipulating portfolio volatility,
 including vega-weighted averaging, proportional scaling, and statistical analysis.
@@ -13,16 +12,15 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
 __all__ = [
-    "calculate_portfolio_avg_volatility",
     "apply_proportional_volatility_shift",
-    "restore_volatilities",
+    "calculate_portfolio_avg_volatility",
     "get_volatility_stats",
+    "restore_volatilities",
 ]
 
 
 def calculate_portfolio_avg_volatility(portfolio: "OptionPortfolio") -> float:
-    """
-    Calculate vega-weighted average volatility across all positions.
+    """Calculate vega-weighted average volatility across all positions.
 
     This function computes a weighted average of position volatilities,
     where the weights are the absolute vega values of each position.
@@ -45,6 +43,7 @@ def calculate_portfolio_avg_volatility(portfolio: "OptionPortfolio") -> float:
         >>> # With respective vegas of 100, 200, 150
         >>> avg_vol = calculate_portfolio_avg_volatility(portfolio)
         >>> # Returns (30*100 + 20*200 + 25*150) / (100+200+150) = 23.33%
+
     """
     if not portfolio.positions:
         return portfolio.volatility
@@ -71,8 +70,7 @@ def apply_proportional_volatility_shift(
     target_avg_vol: float,
     preserve_structure: bool = True,
 ) -> dict:
-    """
-    Scale all position volatilities proportionally to achieve target average.
+    """Scale all position volatilities proportionally to achieve target average.
 
     This function shifts volatilities while maintaining the relative volatility
     structure (skew/smile) of the portfolio. Each position's volatility is
@@ -99,6 +97,7 @@ def apply_proportional_volatility_shift(
         >>> original_vols = apply_proportional_volatility_shift(portfolio, 0.30)
         >>> # Positions become [36%, 24%, 30%] (all scaled by 1.2x)
         >>> restore_volatilities(portfolio, original_vols)  # Restore original
+
     """
     original_vols = {}
 
@@ -131,10 +130,9 @@ def apply_proportional_volatility_shift(
 
 
 def restore_volatilities(
-    portfolio: "OptionPortfolio", original_vols: dict
+    portfolio: "OptionPortfolio", original_vols: dict,
 ) -> None:
-    """
-    Restore position volatilities to their original values.
+    """Restore position volatilities to their original values.
 
     This function reverses changes made by apply_proportional_volatility_shift()
     by restoring each position's volatility to its saved value.
@@ -153,6 +151,7 @@ def restore_volatilities(
         >>> original_vols = apply_proportional_volatility_shift(portfolio, 0.30)
         >>> # ... perform analysis ...
         >>> restore_volatilities(portfolio, original_vols)  # Restore original state
+
     """
     for i, vol in original_vols.items():
         if i < len(portfolio.positions):
@@ -160,8 +159,7 @@ def restore_volatilities(
 
 
 def get_volatility_stats(portfolio: "OptionPortfolio") -> dict:
-    """
-    Get statistical summary of volatility distribution across positions.
+    """Get statistical summary of volatility distribution across positions.
 
     This function analyzes the volatility structure of a portfolio,
     providing insights into volatility skew, custom volatility usage,
@@ -191,6 +189,7 @@ def get_volatility_stats(portfolio: "OptionPortfolio") -> dict:
         >>> print(f"Average: {stats['avg_volatility']:.2%}")
         >>> print(f"Range: {stats['min_volatility']:.2%} - {stats['max_volatility']:.2%}")
         >>> print(f"Positions with custom vol: {stats['num_custom_vol']}/{stats['num_positions']}")
+
     """
     if not portfolio.positions:
         return {}

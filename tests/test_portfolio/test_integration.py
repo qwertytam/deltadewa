@@ -1,15 +1,17 @@
 """Integration tests for the complete OptionPortfolio with all mixins."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.portfolio.position import OptionPosition
-from deltadewa.portfolio.factory import (
-    create_empty_portfolio,
-    create_demo_portfolio,
-)
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.factory import (
+    create_demo_portfolio,
+    create_empty_portfolio,
+)
+from deltadewa.portfolio.position import OptionPosition
 
 
 class TestPortfolioIntegration:
@@ -26,20 +28,20 @@ class TestPortfolioIntegration:
         """Test a complete portfolio workflow."""
         # Create portfolio
         portfolio = OptionPortfolio(
-            underlying_quantity=100.0, spot_price=100.0, volatility=0.2
+            underlying_quantity=100.0, spot_price=100.0, volatility=0.2,
         )
 
         # Add positions
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -87,13 +89,13 @@ class TestPortfolioIntegration:
         # Short put spread
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.PUT,
         )
         portfolio.add_position(
             strike_price=90.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -101,13 +103,13 @@ class TestPortfolioIntegration:
         # Short call spread
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -170,7 +172,7 @@ class TestPortfolioIntegration:
         # Add position with portfolio volatility
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -178,7 +180,7 @@ class TestPortfolioIntegration:
         # Add position with custom volatility
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.3,
@@ -226,12 +228,11 @@ class TestPortfolioIntegration:
 
     def test_risk_reward_full_analysis(self):
         """Test complete risk/reward analysis using PortfolioAnalyzer."""
-
         portfolio = OptionPortfolio(spot_price=100.0)
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )

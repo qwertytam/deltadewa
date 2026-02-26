@@ -1,11 +1,13 @@
 """Tests for deltadewa.visualization.pnl_charts module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import matplotlib
 import matplotlib.pyplot as plt
+
+from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
-from deltadewa.constants import OptionType
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
@@ -25,7 +27,7 @@ class TestPnLChartsMixin:
     def test_plot_pnl_diagram_with_positions(self):
         """Test plot_pnl_diagram with positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -43,7 +45,7 @@ class TestPnLChartsMixin:
     def test_plot_pnl_diagram_with_underlying(self):
         """Test plot_pnl_diagram with underlying position."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -63,7 +65,7 @@ class TestPnLChartsMixin:
     def test_plot_pnl_distribution_with_metrics(self):
         """Test plot_pnl_distribution_with_metrics."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -81,7 +83,7 @@ class TestPnLChartsMixin:
     def test_plot_pnl_distribution_custom_params(self):
         """Test plot_pnl_distribution_with_metrics with custom parameters."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,

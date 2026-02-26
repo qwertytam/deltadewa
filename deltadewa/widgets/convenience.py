@@ -5,15 +5,15 @@ dashboard-level widgets to portfolio objects. Keep helpers lightweight and
 focused on wiring/translation logic only.
 """
 
-from datetime import datetime, timezone
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 from deltadewa.portfolio.core import OptionPortfolioBase
 from deltadewa.widgets.assumptions import GlobalAssumptions
 
 
 def link_portfolio_to_assumptions(
-    portfolio: OptionPortfolioBase, assumptions: GlobalAssumptions
+    portfolio: OptionPortfolioBase, assumptions: GlobalAssumptions,
 ) -> Callable:
     """Link a portfolio object's market fields to a GlobalAssumptions widget.
 
@@ -36,10 +36,10 @@ def link_portfolio_to_assumptions(
         # Valuation date widget stores a date; convert to datetime
         val_date_widget = assumptions.valuation_date.value
         if val_date_widget is None:
-            valuation_date = datetime.now(tz=timezone.utc)
+            valuation_date = datetime.now(tz=UTC)
         else:
             valuation_date = datetime.combine(
-                val_date_widget, datetime.min.time(), tzinfo=timezone.utc
+                val_date_widget, datetime.min.time(), tzinfo=UTC,
             )
 
         # Update portfolio market fields and refresh positions

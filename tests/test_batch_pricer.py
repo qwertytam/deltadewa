@@ -278,7 +278,7 @@ class TestBatchPricer:
                 # pylint: disable=protected-access
                 analyzer._calculate_portfolio_value_at(spot, valuation_date)
                 for spot in spots
-            ]
+            ],
         )
 
         # Should match closely (within numerical precision)
@@ -606,10 +606,10 @@ class TestBatchPricerClosedForm:
         valuation_date = dt.now(tz=datetime.UTC)
 
         fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
         cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
 
         # Near-ATM options should agree within 2%
@@ -622,7 +622,7 @@ class TestBatchPricerClosedForm:
         valuation_date = dt.now(tz=datetime.UTC)
 
         cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
         assert np.all(np.diff(cf_values) > 0)
 
@@ -646,10 +646,10 @@ class TestBatchPricerClosedForm:
         valuation_date = dt.now(tz=datetime.UTC)
 
         fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
         cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
 
         assert np.allclose(fd_values, cf_values, rtol=0.02)
@@ -676,10 +676,10 @@ class TestBatchPricerClosedForm:
 
         # Both should produce identical results for European options
         fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
         cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
 
         assert np.allclose(fd_values, cf_values, rtol=1e-6)
@@ -711,7 +711,7 @@ class TestBatchPricerClosedForm:
         future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
 
         cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, future_date
+            spots, future_date,
         )
 
         expected = np.array([0.0, 500.0, 1500.0])
@@ -997,10 +997,10 @@ class TestBatchPricerThreading:
         valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
@@ -1012,10 +1012,10 @@ class TestBatchPricerThreading:
         valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, valuation_date
+            spots, valuation_date,
         )
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
@@ -1027,10 +1027,10 @@ class TestBatchPricerThreading:
         valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(
-            portfolio, use_closed_form=True, max_workers=1
+            portfolio, use_closed_form=True, max_workers=1,
         ).portfolio_values_at(spots, valuation_date)
         par_values = _pricer(
-            portfolio, use_closed_form=True, max_workers=4
+            portfolio, use_closed_form=True, max_workers=4,
         ).portfolio_values_at(spots, valuation_date)
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
@@ -1072,7 +1072,7 @@ class TestBatchPricerThreading:
         )
         spots = np.array([90.0, 100.0, 110.0])
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, dt.now(tz=datetime.UTC)
+            spots, dt.now(tz=datetime.UTC),
         )
 
         assert np.allclose(par_values, 1000.0 * spots, rtol=1e-10)
@@ -1101,10 +1101,10 @@ class TestBatchPricerThreading:
         future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
-            spots, future_date
+            spots, future_date,
         )
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, future_date
+            spots, future_date,
         )
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
@@ -1138,7 +1138,7 @@ class TestBatchPricerThreading:
             if hasattr(_batch_pricer_module, "__warningregistry__"):
                 _batch_pricer_module.__warningregistry__.clear()
             pricer.portfolio_values_at(
-                np.linspace(110.0, 130.0, 10), dt.now(tz=datetime.UTC)
+                np.linspace(110.0, 130.0, 10), dt.now(tz=datetime.UTC),
             )
 
         cf_warnings = [

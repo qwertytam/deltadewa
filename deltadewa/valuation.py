@@ -273,7 +273,7 @@ class OptionValuation:
             )
             self.option = QtLib.VanillaOption(payoff, exercise)
             self.option.setPricingEngine(
-                QtLib.BjerksundStenslandApproximationEngine(bsm_process)
+                QtLib.BjerksundStenslandApproximationEngine(bsm_process),
             )
             # Warn after engine is set so the option object exists if needed
             self._check_closed_form_accuracy()

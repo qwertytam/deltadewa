@@ -1,5 +1,4 @@
-"""
-Reporting package for DeltaDewa.
+"""Reporting package for DeltaDewa.
 """
 
 from deltadewa.reporting.console import ConsoleReporter

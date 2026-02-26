@@ -1,5 +1,4 @@
-"""
-Financial Color Gradients and Heatmap Styling
+"""Financial Color Gradients and Heatmap Styling
 
 This module provides color gradient functions for financial data visualization:
 - Heatmap styling for DataFrames
@@ -13,7 +12,7 @@ These functions are self-contained with no dependencies on other formatter submo
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,8 +33,7 @@ def create_heatmap_style(
     vmin: float | None = None,
     vmax: float | None = None,
 ) -> Styler:
-    """
-    Create a heatmap-style DataFrame (for pivot tables, correlation matrices).
+    """Create a heatmap-style DataFrame (for pivot tables, correlation matrices).
 
     Args:
         df: Input DataFrame
@@ -47,9 +45,13 @@ def create_heatmap_style(
 
     Returns:
         Styled DataFrame with heatmap coloring
+
     """
     styled = df.style.background_gradient(
-        cmap=cmap, axis=None, vmin=vmin, vmax=vmax
+        cmap=cmap,
+        axis=None,
+        vmin=vmin,
+        vmax=vmax,
     )
 
     styled = styled.format(format_str, na_rep="-")
@@ -63,7 +65,7 @@ def create_heatmap_style(
                     ("border", "1px solid #ddd"),
                     ("text-align", "right"),
                 ],
-            }
+            },
         ],
         overwrite=False,
     )
@@ -77,8 +79,7 @@ def apply_traffic_light_colors(
     thresholds: dict[str, float],
     reverse: bool = False,
 ) -> Styler:
-    """
-    Apply traffic light colors (red/yellow/green) based on thresholds.
+    """Apply traffic light colors (red/yellow/green) based on thresholds.
 
     Args:
         styler: Pandas Styler object
@@ -92,6 +93,7 @@ def apply_traffic_light_colors(
     Example:
         thresholds = {'red': -1000, 'yellow': 0, 'green': 1000}
         apply_traffic_light_colors(styler, 'pnl', thresholds)
+
     """
 
     def color_traffic_light(val):
@@ -102,21 +104,34 @@ def apply_traffic_light_colors(
 
         if reverse:
             if val >= thresholds["green"]:
-                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
+                return (
+                    f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
+                )
             elif val >= thresholds["yellow"]:
-                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
+                return (
+                    f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
+                )
             else:
-                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
+                return (
+                    f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
+                )
         else:
             if val <= thresholds["red"]:
-                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
+                return (
+                    f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
+                )
             elif val <= thresholds["yellow"]:
-                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
+                return (
+                    f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
+                )
             else:
-                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
+                return (
+                    f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
+                )
 
     return styler.apply(
-        lambda col: col.map(color_traffic_light), subset=[column]
+        lambda col: col.map(color_traffic_light),
+        subset=[column],
     )
 
 
@@ -124,8 +139,7 @@ def get_diverging_color_params(
     values: np.ndarray,
     center: float = 0.0,
 ) -> tuple[float, float]:
-    """
-    Calculate vmin and vmax for a diverging colormap centered at a value.
+    """Calculate vmin and vmax for a diverging colormap centered at a value.
 
     This ensures the colormap is symmetric around the center value,
     so that the center color (white) appears exactly at the center value.
@@ -135,7 +149,8 @@ def get_diverging_color_params(
         center: Value to center the colormap at (default: 0.0)
 
     Returns:
-        Tuple of (vmin, vmax) for use with colormaps
+        tuple of (vmin, vmax) for use with colormaps
+
     """
     # Flatten if needed and remove NaN
     flat_values = np.asarray(values).flatten()
@@ -162,8 +177,7 @@ def apply_financial_gradient_2d(
     center: float = 0.0,
     cmap: str = "RdYlGn",
 ) -> Styler:
-    """
-    Apply consistent financial diverging gradient to entire 2D DataFrame.
+    """Apply consistent financial diverging gradient to entire 2D DataFrame.
 
     Args:
         styler: Pandas Styler object
@@ -172,6 +186,7 @@ def apply_financial_gradient_2d(
 
     Returns:
         Styled DataFrame with consistent diverging gradient
+
     """
     df = cast(Any, styler).data
     all_values = df.values
@@ -190,8 +205,7 @@ def get_matplotlib_norm_and_cmap(
     center: float = 0.0,
     cmap_name: str = "RdYlGn",
 ) -> tuple:
-    """
-    Get matplotlib Normalize and colormap for consistent financial visualization.
+    """Get matplotlib Normalize and colormap for consistent financial visualization.
 
     Args:
         values: Array of values to display
@@ -199,7 +213,8 @@ def get_matplotlib_norm_and_cmap(
         cmap_name: Colormap name (default: 'RdYlGn')
 
     Returns:
-        Tuple of (norm, cmap) for use with matplotlib
+        tuple of (norm, cmap) for use with matplotlib
+
     """
     vmin, vmax = get_diverging_color_params(values, center)
 
@@ -211,9 +226,9 @@ def get_matplotlib_norm_and_cmap(
 
 
 __all__ = [
-    "create_heatmap_style",
-    "apply_traffic_light_colors",
-    "get_diverging_color_params",
     "apply_financial_gradient_2d",
+    "apply_traffic_light_colors",
+    "create_heatmap_style",
+    "get_diverging_color_params",
     "get_matplotlib_norm_and_cmap",
 ]

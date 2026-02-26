@@ -1,10 +1,12 @@
 """Tests for deltadewa.valuation module."""
 
-from datetime import datetime, timedelta, timezone
 import time
+from datetime import UTC, datetime, timedelta
+
 import pytest
+
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.valuation import OptionValuation
-from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class TestVolatilityQuoteCaching:
@@ -16,7 +18,7 @@ class TestVolatilityQuoteCaching:
         return OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -110,11 +112,10 @@ class TestVolatilityUpdatePerformance:
 
     def test_vol_update_faster_than_rebuild(self):
         """Verify SimpleQuote update is faster than full rebuild."""
-
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -146,7 +147,7 @@ class TestVolatilityUpdatePerformance:
         speedup = rebuild_time / quote_time
         print(
             f"\n  Performance: Quote={quote_time:.4f}s, "
-            f"Rebuild={rebuild_time:.4f}s, Speedup={speedup:.2f}x"
+            f"Rebuild={rebuild_time:.4f}s, Speedup={speedup:.2f}x",
         )
         # Be lenient in assertion since timing can vary, but at least verify
         # the quote method doesn't regress performance
@@ -164,7 +165,7 @@ class TestGreeksCaching:
         return OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
@@ -209,7 +210,7 @@ class TestGreeksCaching:
         # pylint: disable=protected-access
         assert option._greeks_cache.is_cached("theta")
 
-        new_date = datetime.now(tz=timezone.utc) + timedelta(days=1)
+        new_date = datetime.now(tz=UTC) + timedelta(days=1)
         option.update_valuation_date(new_date)
         # pylint: disable=protected-access
         assert not option._greeks_cache.is_cached("theta")
@@ -230,7 +231,7 @@ class TestGreeksCaching:
         # (as they are computed last and don't trigger setup)
         # pylint: disable=protected-access
         assert option._greeks_cache.is_cached(
-            "price"
+            "price",
             # pylint: disable=protected-access
         ) or option._greeks_cache.is_cached("rho")
 

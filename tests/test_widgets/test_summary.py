@@ -1,8 +1,10 @@
 """Tests for deltadewa.widgets.summary module."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import Mock
+
 import pytest
+
 from deltadewa.widgets.summary import NetHedgeSummary
 
 

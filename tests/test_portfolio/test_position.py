@@ -1,9 +1,10 @@
 """Tests for deltadewa.portfolio.position module."""
 
-from datetime import datetime, timedelta, timezone
-from deltadewa.valuation import OptionValuation
+from datetime import UTC, datetime, timedelta
+
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.position import OptionPosition
-from deltadewa.constants import OptionType, ExerciseStyle
+from deltadewa.valuation import OptionValuation
 
 
 class TestOptionPosition:
@@ -14,7 +15,7 @@ class TestOptionPosition:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
@@ -33,7 +34,7 @@ class TestOptionPosition:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
@@ -51,7 +52,7 @@ class TestOptionPosition:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
@@ -69,7 +70,7 @@ class TestOptionPosition:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
@@ -89,7 +90,7 @@ class TestOptionPosition:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
@@ -107,7 +108,7 @@ class TestOptionPosition:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
@@ -134,7 +135,7 @@ class TestOptionPosition:
         option = OptionValuation(
             spot_price=100.0,
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.0,

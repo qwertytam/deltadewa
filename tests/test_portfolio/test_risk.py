@@ -1,9 +1,11 @@
 """Tests for deltadewa.portfolio.risk module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
+
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestRiskMixin:
@@ -37,7 +39,7 @@ class TestRiskMixin:
         # Long call - limited loss
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -58,7 +60,7 @@ class TestRiskMixin:
         # Long call - unlimited profit
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -78,7 +80,7 @@ class TestRiskMixin:
         # Short call - unlimited loss
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -94,7 +96,7 @@ class TestRiskMixin:
         # Short call - limited profit (premium received)
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -134,7 +136,7 @@ class TestRiskMixin:
         # Long call
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -161,7 +163,7 @@ class TestRiskMixin:
         # Long call
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -170,13 +172,13 @@ class TestRiskMixin:
 
         # Compute PnL array
         pnl_array = portfolio.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=False
+            spot_range, include_underlying=False,
         )
 
         # Check increasing trend (profit)
         # pylint: disable=protected-access
         result = portfolio._check_unlimited_trend(
-            pnl_array, check_increasing=True
+            pnl_array, check_increasing=True,
         )
 
         assert isinstance(result, bool)
@@ -188,25 +190,25 @@ class TestRiskMixin:
         # Create a complex multi-leg position (iron condor)
         portfolio.add_position(
             strike_price=90.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.PUT,
         )
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -219,7 +221,7 @@ class TestRiskMixin:
         max_loss_vec = portfolio.calculate_max_loss_options(spot_range)
         max_profit_vec = portfolio.calculate_max_profit_options(spot_range)
         breakeven_vec = portfolio.calculate_breakeven_points(
-            spot_range, include_underlying=False
+            spot_range, include_underlying=False,
         )
 
         # Verify results are computed properly (types and reasonable values)
@@ -237,13 +239,13 @@ class TestRiskMixin:
         # Verify vectorized gives same results by comparing PnL at a few key spots
         test_spots = np.array([80.0, 90.0, 95.0, 100.0, 105.0, 110.0, 120.0])
         pnl_vectorized = portfolio.vectorized_pnl_at_expiry(
-            test_spots, include_underlying=False
+            test_spots, include_underlying=False,
         )
 
         for i, spot in enumerate(test_spots):
             pnl_scalar = portfolio.calculate_pnl_at_expiry(
-                spot, include_underlying=False
+                spot, include_underlying=False,
             )
             assert np.isclose(
-                pnl_vectorized[i], pnl_scalar, rtol=1e-10
+                pnl_vectorized[i], pnl_scalar, rtol=1e-10,
             ), f"Mismatch at spot={spot}: vectorized={pnl_vectorized[i]}, scalar={pnl_scalar}"

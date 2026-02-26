@@ -1,7 +1,9 @@
 """Tests for deltadewa.greeks_cache module."""
 
 import threading
+
 import pytest
+
 from deltadewa.greeks_cache import GreeksCache
 
 
@@ -69,7 +71,6 @@ class TestGreeksCache:
 
     def test_thread_safety(self):
         """Verify concurrent access doesn't cause issues."""
-
         cache = GreeksCache()
         cache.register("delta", lambda: 0.5)
 

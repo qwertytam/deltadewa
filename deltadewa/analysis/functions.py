@@ -2,14 +2,14 @@
 
 
 def classify_maturity_bucket(days_to_expiry: int) -> str:
-    """
-    Convenience function for maturity classification.
+    """Convenience function for maturity classification.
 
     Args:
         days_to_expiry: Days until expiration
 
     Returns:
         Bucket label string
+
     """
     # Lazy import to prevent circular dependency:
     # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
@@ -20,14 +20,14 @@ def classify_maturity_bucket(days_to_expiry: int) -> str:
 
 
 def quick_carry_analysis(portfolio) -> dict:
-    """
-    Quick carry analysis for a portfolio.
+    """Quick carry analysis for a portfolio.
 
     Args:
         portfolio: OptionPortfolio instance
 
     Returns:
         Dictionary with carry metrics
+
     """
     # Lazy import to prevent circular dependency:
     # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
@@ -39,8 +39,7 @@ def quick_carry_analysis(portfolio) -> dict:
 
 
 def quick_risk_concentration(portfolio, metrics: list[str] | None = None) -> dict:
-    """
-    Quick risk concentration analysis.
+    """Quick risk concentration analysis.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -48,6 +47,7 @@ def quick_risk_concentration(portfolio, metrics: list[str] | None = None) -> dic
 
     Returns:
         Dictionary with concentration analysis
+
     """
     # Lazy import to prevent circular dependency:
     # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions

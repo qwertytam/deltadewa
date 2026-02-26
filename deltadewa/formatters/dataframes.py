@@ -1,5 +1,4 @@
-"""
-DataFrame Styling and Formatting Utilities for Options Dashboard
+"""DataFrame Styling and Formatting Utilities for Options Dashboard
 
 This module provides consistent styling and formatting functions for DataFrames:
 - Core display preparation and styling helpers
@@ -15,8 +14,13 @@ All functions work with pandas DataFrames and Styler objects.
 from __future__ import annotations
 
 import warnings
-from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Literal, Mapping,
-                    Union, cast)
+from collections.abc import Callable, Mapping
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    cast,
+)
 
 import pandas as pd
 
@@ -47,8 +51,7 @@ def prepare_dataframe_display(
     sort_by: list[str] | None = None,
     index_name: str | None = None,
 ) -> pd.DataFrame:
-    """
-    Prepare a DataFrame for display with consistent formatting.
+    """Prepare a DataFrame for display with consistent formatting.
 
     Args:
         df: Input DataFrame
@@ -59,19 +62,20 @@ def prepare_dataframe_display(
 
     Returns:
         Formatted DataFrame (copy)
+
     """
     df_display = df.copy()
 
     # Format column names
     if title_case:
         df_display = df_display.rename(
-            columns=lambda s: s.replace("_", " ").title()
+            columns=lambda s: s.replace("_", " ").title(),
         )
 
     # Reset index with custom numbering
     if start_index is not None:
         df_display.index = pd.RangeIndex(
-            start=start_index, stop=start_index + len(df_display)
+            start=start_index, stop=start_index + len(df_display),
         )
 
     if index_name:
@@ -90,14 +94,13 @@ def prepare_dataframe_display(
 
 def apply_gradient_style(
     styler: Styler,
-    columns: Union[str, List[str]],
+    columns: str | list[str],
     cmap: str = "RdYlGn",
     vmin: float | None = None,
     vmax: float | None = None,
     axis: Literal["index", "columns", 0, 1] | None = None,
 ) -> Styler:
-    """
-    Apply color gradient to specified columns.
+    """Apply color gradient to specified columns.
 
     Args:
         styler: Pandas Styler object
@@ -109,21 +112,21 @@ def apply_gradient_style(
 
     Returns:
         Styler with gradient applied
+
     """
     if isinstance(columns, str):
         columns = [columns]
 
     return styler.background_gradient(
-        subset=columns, cmap=cmap, vmin=vmin, vmax=vmax, axis=axis
+        subset=columns, cmap=cmap, vmin=vmin, vmax=vmax, axis=axis,
     )
 
 
 def apply_format_dict(
     styler: Styler,
-    format_dict: Mapping[Any, Union[str, Callable[[object], str]]] | None,
+    format_dict: Mapping[Any, str | Callable[[object], str]] | None,
 ) -> Styler:
-    """
-    Apply formatting to columns based on format dictionary.
+    """Apply formatting to columns based on format dictionary.
 
     Args:
         styler: Pandas Styler object
@@ -132,6 +135,7 @@ def apply_format_dict(
 
     Returns:
         Styler with formatting applied
+
     """
     # If no format dict provided, call Styler.format with default formatter
     if not format_dict:
@@ -155,8 +159,7 @@ def format_portfolio_dataframe(
     include_greeks: bool = True,
     sort_by: list[str] | None = None,
 ) -> Styler:
-    """
-    Format portfolio positions DataFrame with standard styling.
+    """Format portfolio positions DataFrame with standard styling.
 
     Args:
         df: Portfolio DataFrame (from portfolio.to_dataframe())
@@ -169,10 +172,11 @@ def format_portfolio_dataframe(
 
     Returns:
         Styled DataFrame ready for display
+
     """
     # Prepare display DataFrame
     df_display = prepare_dataframe_display(
-        df=df, title_case=title_case, start_index=start_index, sort_by=sort_by
+        df=df, title_case=title_case, start_index=start_index, sort_by=sort_by,
     )
 
     # Define format dictionary
@@ -221,8 +225,7 @@ def format_greeks_dataframe(
     precision: int = 4,
     sort_by: list[str] | None = None,
 ) -> Styler:
-    """
-    Format Greeks analysis DataFrame (e.g., delta by strike/maturity).
+    """Format Greeks analysis DataFrame (e.g., delta by strike/maturity).
 
     Args:
         df: Greeks DataFrame
@@ -234,9 +237,10 @@ def format_greeks_dataframe(
 
     Returns:
         Styled DataFrame
+
     """
     df_display = prepare_dataframe_display(
-        df, title_case, sort_by=sort_by, start_index=None
+        df, title_case, sort_by=sort_by, start_index=None,
     )
 
     # Determine format based on metric
@@ -259,8 +263,7 @@ def format_risk_metrics_dataframe(
     title_case: bool = True,
     sort_by: list[str] | None = None,
 ) -> Styler:
-    """
-    Format risk metrics DataFrame with appropriate numeric formatting.
+    """Format risk metrics DataFrame with appropriate numeric formatting.
 
     Args:
         df: Risk metrics DataFrame
@@ -271,9 +274,10 @@ def format_risk_metrics_dataframe(
 
     Returns:
         Styled DataFrame
+
     """
     df_display = prepare_dataframe_display(
-        df, title_case, sort_by=sort_by, start_index=None
+        df, title_case, sort_by=sort_by, start_index=None,
     )
 
     # Build format dictionary
@@ -302,8 +306,7 @@ def format_scenario_dataframe(
     cmap: str = "RdYlGn",
     sort_by: list[str] | None = None,
 ) -> Styler:
-    """
-    Format scenario analysis DataFrame with color gradients.
+    """Format scenario analysis DataFrame with color gradients.
 
     Args:
         df: Scenario analysis DataFrame
@@ -314,9 +317,10 @@ def format_scenario_dataframe(
 
     Returns:
         Styled DataFrame
+
     """
     df_display = prepare_dataframe_display(
-        df, title_case, sort_by=sort_by, start_index=1
+        df, title_case, sort_by=sort_by, start_index=1,
     )
 
     # Format dictionary
@@ -355,8 +359,7 @@ def create_diverging_style(
     title_case: bool = True,
     currency_columns: list[str] | None = None,
 ) -> Styler:
-    """
-    Create DataFrame style with diverging colormap and consistent formatting.
+    """Create DataFrame style with diverging colormap and consistent formatting.
 
     This function creates a styled DataFrame with a diverging color scale centered
     at zero (negative=red, zero=white, positive=green) and consistent currency
@@ -371,6 +374,7 @@ def create_diverging_style(
 
     Returns:
         Styled DataFrame with diverging colors and currency formatting
+
     """
     df_styled = df.copy()
 
@@ -379,7 +383,7 @@ def create_diverging_style(
         # Ensure assignment uses an Index[str] to satisfy type checkers (avoid
         # assigning list[str] to Index)
         df_styled.columns = pd.Index(
-            [str(c).replace("_", " ").title() for c in df_styled.columns]
+            [str(c).replace("_", " ").title() for c in df_styled.columns],
         )
         value_columns = [c.replace("_", " ").title() for c in value_columns]
         if currency_columns:
@@ -410,11 +414,11 @@ def create_diverging_style(
         # This ensures: negative=red, zero=white, positive=green
         abs_max = max(abs(vmin), abs(vmax))
         styler = styler.background_gradient(
-            subset=[col], cmap=cmap, vmin=-abs_max, vmax=abs_max, axis=0
+            subset=[col], cmap=cmap, vmin=-abs_max, vmax=abs_max, axis=0,
         )
 
     # Format currency columns with consistent formatting
-    format_dict: dict[Any, Union[str, Callable[[object], str]]] = {}
+    format_dict: dict[Any, str | Callable[[object], str]] = {}
     for col in currency_columns:
         if col in df_styled.columns:
             format_dict[col] = format_currency_for_df
@@ -422,7 +426,7 @@ def create_diverging_style(
     if format_dict:
         styler = styler.format(
             cast(
-                Mapping[Any, Union[str, Callable[[object], str], None]],
+                Mapping[Any, str | Callable[[object], str] | None],
                 format_dict,
             ),
             na_rep="-",
@@ -437,8 +441,7 @@ def format_pivot_table(
     cmap: str = "RdYlGn",
     highlight_zeros: bool = True,  # pylint: disable=unused-argument
 ) -> Styler:
-    """
-    Format pivot table with consistent styling.
+    """Format pivot table with consistent styling.
 
     Args:
         pivot: Pivot table DataFrame
@@ -448,6 +451,7 @@ def format_pivot_table(
 
     Returns:
         Styled pivot table
+
     """
     styled = pivot.style.background_gradient(cmap=cmap, axis=None)
     styled = styled.format(format_str, na_rep="-")
@@ -462,7 +466,7 @@ def format_pivot_table(
                     ("padding", "5px"),
                     ("text-align", "center"),
                 ],
-            }
+            },
         ],
         overwrite=False,
     )
@@ -480,7 +484,7 @@ def format_pivot_table(
                 ],
             },
             {"selector": "td", "props": [("text-align", "right")]},
-        ]
+        ],
     )
 
     return styled
@@ -496,8 +500,7 @@ def highlight_negative_values(
     columns: list[str] | None = None,
     color: str = DEFAULT_PALETTE.negative_faded,
 ) -> Styler:
-    """
-    Highlight negative values in specified columns.
+    """Highlight negative values in specified columns.
 
     Args:
         styler: Pandas Styler object
@@ -506,6 +509,7 @@ def highlight_negative_values(
 
     Returns:
         Styler with highlighted negative values
+
     """
 
     def highlight_neg(val):
@@ -526,8 +530,7 @@ def highlight_max_min(
     max_color: str = DEFAULT_PALETTE.positive_faded,
     min_color: str = DEFAULT_PALETTE.negative_faded,
 ) -> Styler:
-    """
-    Highlight maximum and minimum values in a column.
+    """Highlight maximum and minimum values in a column.
 
     Args:
         styler: Pandas Styler object
@@ -537,6 +540,7 @@ def highlight_max_min(
 
     Returns:
         Styler with highlighted max/min
+
     """
     return styler.apply(
         lambda col: [
@@ -557,8 +561,7 @@ def highlight_max_min(
 
 
 def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
-    """
-    Apply predefined table styling presets.
+    """Apply predefined table styling presets.
 
     Args:
         styler: Pandas Styler object
@@ -566,6 +569,7 @@ def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
 
     Returns:
         Styler with preset applied
+
     """
     if preset == "minimal":
         styles = [
@@ -608,7 +612,7 @@ def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
             {
                 "selector": "tr:nth-child(even)",
                 "props": [
-                    ("background-color", DEFAULT_PALETTE.very_light_grey)
+                    ("background-color", DEFAULT_PALETTE.very_light_grey),
                 ],
             },
             {
@@ -656,8 +660,7 @@ def to_excel_styled(
     styler: Styler | None = None,
     sheet_name: str = "Sheet1",
 ):
-    """
-    Export DataFrame to Excel with styling preserved (when possible).
+    """Export DataFrame to Excel with styling preserved (when possible).
 
     Args:
         df: DataFrame to export
@@ -668,6 +671,7 @@ def to_excel_styled(
     Note:
         Not all Pandas styling is preserved in Excel. Background colors and
         some basic formatting will transfer, but complex styles may not.
+
     """
     try:
         if styler is not None:
@@ -684,12 +688,12 @@ def to_excel_styled(
 
 
 def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10):
-    """
-    Display a summary of a DataFrame (first/last rows, shape, dtypes).
+    """Display a summary of a DataFrame (first/last rows, shape, dtypes).
 
     Args:
         df: DataFrame to summarize
         max_rows: Maximum number of rows to display from each end
+
     """
     print(f"\nDataFrame Shape: {df.shape[0]} rows x {df.shape[1]} columns")
     print("\nColumn Data Types:")
@@ -716,18 +720,18 @@ def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10):
 
 
 __all__ = [
-    "prepare_dataframe_display",
-    "apply_gradient_style",
     "apply_format_dict",
-    "format_portfolio_dataframe",
+    "apply_gradient_style",
+    "apply_table_preset",
+    "create_diverging_style",
+    "display_dataframe_summary",
     "format_greeks_dataframe",
+    "format_pivot_table",
+    "format_portfolio_dataframe",
     "format_risk_metrics_dataframe",
     "format_scenario_dataframe",
-    "create_diverging_style",
-    "format_pivot_table",
-    "highlight_negative_values",
     "highlight_max_min",
-    "apply_table_preset",
+    "highlight_negative_values",
+    "prepare_dataframe_display",
     "to_excel_styled",
-    "display_dataframe_summary",
 ]

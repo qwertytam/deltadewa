@@ -1,10 +1,12 @@
 """Integration tests for deltadewa.analysis package."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestPortfolioAnalyzerIntegration:
@@ -24,21 +26,21 @@ class TestPortfolioAnalyzerIntegration:
         # Add diverse positions
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,  # Short call
             option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,  # Long put
             option_type=OptionType.PUT,
         )
 
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=60),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=60),
             quantity=-1,  # Short call
             option_type=OptionType.CALL,
         )
@@ -67,7 +69,7 @@ class TestPortfolioAnalyzerIntegration:
 
         # Test hedge recommendations
         hedge_actions = analyzer.calculate_hedge_actions(
-            target_hedge_ratio=50.0
+            target_hedge_ratio=50.0,
         )
         assert "current_state" in hedge_actions
         assert "target_state" in hedge_actions
@@ -75,9 +77,9 @@ class TestPortfolioAnalyzerIntegration:
 
         # Test scenario grid
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now(tz=timezone.utc)]
+        time_points = [datetime.now(tz=UTC)]
         scenario_result = analyzer.scenario_grid(
-            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl"
+            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl",
         )
         assert len(scenario_result) > 0
 
@@ -110,33 +112,33 @@ class TestPortfolioAnalyzerIntegration:
         analyzer = PortfolioAnalyzer(portfolio)
 
         # Maturity methods
-        assert callable(getattr(analyzer, "classify_maturity_bucket"))
-        assert callable(getattr(analyzer, "add_maturity_buckets"))
+        assert callable(analyzer.classify_maturity_bucket)
+        assert callable(analyzer.add_maturity_buckets)
 
         # Carry methods
-        assert callable(getattr(analyzer, "calculate_carry_metrics"))
-        assert callable(getattr(analyzer, "_empty_carry_metrics"))
-        assert callable(getattr(analyzer, "create_theta_summary_table"))
+        assert callable(analyzer.calculate_carry_metrics)
+        assert callable(analyzer._empty_carry_metrics)
+        assert callable(analyzer.create_theta_summary_table)
 
         # Concentration methods
-        assert callable(getattr(analyzer, "analyze_risk_concentration"))
-        assert callable(getattr(analyzer, "_empty_concentration"))
+        assert callable(analyzer.analyze_risk_concentration)
+        assert callable(analyzer._empty_concentration)
 
         # Hedge methods
-        assert callable(getattr(analyzer, "calculate_hedge_actions"))
-        assert callable(getattr(analyzer, "_calculate_option_alternatives"))
+        assert callable(analyzer.calculate_hedge_actions)
+        assert callable(analyzer._calculate_option_alternatives)
 
         # Scenario methods
-        assert callable(getattr(analyzer, "_calculate_portfolio_value_at"))
+        assert callable(analyzer._calculate_portfolio_value_at)
         assert callable(
-            getattr(analyzer, "_calculate_pnl_at_expiry_vectorized")
+            analyzer._calculate_pnl_at_expiry_vectorized,
         )
-        assert callable(getattr(analyzer, "scenario_grid"))
-        assert callable(getattr(analyzer, "scenario_grid_spot_vol"))
+        assert callable(analyzer.scenario_grid)
+        assert callable(analyzer.scenario_grid_spot_vol)
 
         # Insights methods
-        assert callable(getattr(analyzer, "format_risk_summary"))
-        assert callable(getattr(analyzer, "generate_insights"))
+        assert callable(analyzer.format_risk_summary)
+        assert callable(analyzer.generate_insights)
 
     def test_mixin_methods_work_together(self):
         """Test that methods from different mixins work together."""
@@ -149,14 +151,14 @@ class TestPortfolioAnalyzerIntegration:
         # Add positions at different maturities
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=10),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=10),
             quantity=1,
             option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=40),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=40),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -194,7 +196,7 @@ class TestPortfolioAnalyzerIntegration:
             for j, days in enumerate(maturities):
                 portfolio.add_position(
                     strike_price=float(strike),
-                    maturity_date=datetime.now(tz=timezone.utc)
+                    maturity_date=datetime.now(tz=UTC)
                     + timedelta(days=days),
                     quantity=(-1) ** (i + j),  # Mix of long/short
                     option_type=(
@@ -208,7 +210,7 @@ class TestPortfolioAnalyzerIntegration:
         carry_metrics = analyzer.calculate_carry_metrics()
         concentration = analyzer.analyze_risk_concentration()
         hedge_actions = analyzer.calculate_hedge_actions(
-            target_hedge_ratio=60.0
+            target_hedge_ratio=60.0,
         )
         insights = analyzer.generate_insights()
 

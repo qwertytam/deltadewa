@@ -1,8 +1,8 @@
 """Monte Carlo simulation mixin for option portfolio."""
 
 from collections import Counter
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class MonteCarloMixin:
 
         # pylint: disable=missing-function-docstring, unused-argument
         def vectorized_pnl_at_expiry(
-            self, spots: np.ndarray, include_underlying: bool = False
+            self, spots: np.ndarray, include_underlying: bool = False,
         ) -> np.ndarray: ...
 
         # pylint: disable=missing-function-docstring, unused-argument
@@ -39,11 +39,11 @@ class MonteCarloMixin:
             include_underlying: bool = False,
             spot_min_pct: float = 0.0,
             spot_max_pct: float = 200.0,
-        ) -> List[float]: ...
+        ) -> list[float]: ...
 
         # pylint: disable=missing-function-docstring, unused-argument
         def calculate_pnl_at_expiry(
-            self, spot: float, include_underlying: bool = False
+            self, spot: float, include_underlying: bool = False,
         ) -> float: ...
 
     def _calculate_theoretical_max_loss(self) -> float | None:
@@ -86,7 +86,7 @@ class MonteCarloMixin:
 
         return is_concentrated, concentration_pct, most_common_pnl
 
-    def _empty_monte_carlo_results(self, days_to_expiry: int) -> Dict[str, Any]:
+    def _empty_monte_carlo_results(self, days_to_expiry: int) -> dict[str, Any]:
         """Return safe empty results structure."""
         return {
             "simulated_pnls": np.array([]),
@@ -119,9 +119,8 @@ class MonteCarloMixin:
         include_underlying: bool = True,
         random_seed: int | None = 42,  # Set to None for true randomness
         days_to_expiry: int | None = None,
-    ) -> Dict[str, Any]:
-        """
-        Run Monte Carlo simulation and store results on portfolio object.
+    ) -> dict[str, Any]:
+        """Run Monte Carlo simulation and store results on portfolio object.
 
         This is the core simulation engine. It vectorizes the Geometric
         Brownian Motion path generation and P&L calculation for maximum
@@ -135,8 +134,8 @@ class MonteCarloMixin:
 
         Returns:
             dict: Monte Carlo results dictionary
-        """
 
+        """
         # 1. Determine time horizon (days to expiry)
         min_time_horizon = 1
         if days_to_expiry is None:
@@ -145,7 +144,7 @@ class MonteCarloMixin:
                     pos.option.maturity_date for pos in self.positions
                 )
                 days_to_expiry = max(
-                    min_time_horizon, (min_maturity - self.valuation_date).days
+                    min_time_horizon, (min_maturity - self.valuation_date).days,
                 )
             else:
                 days_to_expiry = const.CALENDAR_DAYS_PER_MONTH  # Default
@@ -176,10 +175,10 @@ class MonteCarloMixin:
         simulated_pnls = np.array(
             [
                 self.calculate_pnl_at_expiry(
-                    spot, include_underlying=include_underlying
+                    spot, include_underlying=include_underlying,
                 )
                 for spot in final_spots
-            ]
+            ],
         )
 
         # 5. Clean data
@@ -229,7 +228,7 @@ class MonteCarloMixin:
         # 9. Breakeven Analysis (Delegate to existing method)
         # pylint: disable=assignment-from-no-return
         breakeven_points = self.calculate_breakeven_points(
-            include_underlying=include_underlying
+            include_underlying=include_underlying,
         )
 
         results = {

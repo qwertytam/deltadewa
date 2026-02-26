@@ -1,6 +1,6 @@
 """Risk analysis mixin for option portfolio."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -21,12 +21,16 @@ class RiskMixin:
 
         # pylint: disable=missing-function-docstring, unused-argument
         def calculate_pnl_at_expiry(
-            self, spot_price: float, include_underlying: bool = True
+            self,
+            spot_price: float,
+            include_underlying: bool = True,
         ) -> float: ...
 
         # pylint: disable=missing-function-docstring, unused-argument
         def vectorized_pnl_at_expiry(
-            self, spot_scenarios: np.ndarray, include_underlying: bool = True
+            self,
+            spot_scenarios: np.ndarray,
+            include_underlying: bool = True,
         ) -> np.ndarray: ...
 
     def _get_spot_range(
@@ -37,8 +41,7 @@ class RiskMixin:
         num_points: int = 250,
         use_comprehensive_range: bool = False,
     ) -> np.ndarray:
-        """
-        Get or create a spot price range for analysis.
+        """Get or create a spot price range for analysis.
 
         Delegates to analysis.functions.generate_spot_range() for consistent
         spot range generation across the codebase.
@@ -54,6 +57,7 @@ class RiskMixin:
 
         Returns:
             NumPy array of spot prices for analysis
+
         """
         return generate_spot_range(
             spot_price=self.spot_price,
@@ -69,8 +73,7 @@ class RiskMixin:
         pnl_array: np.ndarray,
         check_increasing: bool,
     ) -> bool:
-        """
-        Check if P&L trend continues at the extreme end of the PnL array.
+        """Check if P&L trend continues at the extreme end of the PnL array.
 
         This helps detect unlimited profit/loss scenarios by examining if
         the trend continues beyond the sampled range.
@@ -82,6 +85,7 @@ class RiskMixin:
 
         Returns:
             True if unlimited trend is detected, False otherwise
+
         """
         if len(pnl_array) < 10:
             return False
@@ -104,8 +108,7 @@ class RiskMixin:
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
-        """
-        Calculate maximum loss from options positions only.
+        """Calculate maximum loss from options positions only.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot values
         to ensure accurate max loss detection for all portfolio types.
@@ -118,7 +121,8 @@ class RiskMixin:
             (default: 200% i.e., spot = 2x current spot)
 
         Returns:
-            Dict with 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
+            dictwith 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
+
         """
         # Use comprehensive range to check extreme scenarios
         spot_range = self._get_spot_range(
@@ -133,7 +137,8 @@ class RiskMixin:
         # Vectorized P&L calculation
         # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=False
+            spot_range,
+            include_underlying=False,
         )
         idx = int(np.argmin(pnl_array))
         max_loss = float(pnl_array[idx])
@@ -147,7 +152,8 @@ class RiskMixin:
 
         # Enhanced unlimited loss detection using helper method
         is_unlimited = has_naked_short_calls or self._check_unlimited_trend(
-            pnl_array, check_increasing=False
+            pnl_array,
+            check_increasing=False,
         )
 
         return {
@@ -162,8 +168,7 @@ class RiskMixin:
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
-        """
-        Calculate maximum profit from options positions only.
+        """Calculate maximum profit from options positions only.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot values
         to ensure accurate max profit detection for all portfolio types.
@@ -176,7 +181,8 @@ class RiskMixin:
             (default: 200% i.e., spot = 2x current spot)
 
         Returns:
-            Dict with 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
+            dictwith 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
+
         """
         # Use comprehensive range to check extreme scenarios
         spot_range = self._get_spot_range(
@@ -191,7 +197,8 @@ class RiskMixin:
         # Vectorized P&L calculation
         # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=False
+            spot_range,
+            include_underlying=False,
         )
         idx = int(np.argmax(pnl_array))
         max_profit = float(pnl_array[idx])
@@ -205,7 +212,8 @@ class RiskMixin:
 
         # Enhanced unlimited profit detection using helper method
         is_unlimited = has_long_calls or self._check_unlimited_trend(
-            pnl_array, check_increasing=True
+            pnl_array,
+            check_increasing=True,
         )
 
         return {
@@ -220,8 +228,7 @@ class RiskMixin:
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
-        """
-        Calculate maximum loss including underlying position.
+        """Calculate maximum loss including underlying position.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot values
         to ensure accurate max loss detection for all portfolio types.
@@ -234,7 +241,8 @@ class RiskMixin:
             (default: 200% i.e., spot = 2x current spot)
 
         Returns:
-            Dict with 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
+            dictwith 'max_loss', 'spot_at_max_loss', and 'is_unlimited'
+
         """
         # Use comprehensive range to check extreme scenarios
         spot_range = self._get_spot_range(
@@ -249,7 +257,8 @@ class RiskMixin:
         # Vectorized P&L calculation
         # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=True
+            spot_range,
+            include_underlying=True,
         )
         idx = int(np.argmin(pnl_array))
         max_loss = float(pnl_array[idx])
@@ -274,7 +283,8 @@ class RiskMixin:
         # Enhanced unlimited loss detection using helper method
         if not is_unlimited:
             is_unlimited = self._check_unlimited_trend(
-                pnl_array, check_increasing=False
+                pnl_array,
+                check_increasing=False,
             )
 
         return {
@@ -289,8 +299,7 @@ class RiskMixin:
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
     ) -> dict:
-        """
-        Calculate maximum profit including underlying position.
+        """Calculate maximum profit including underlying position.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot values
         to ensure accurate max profit detection for all portfolio types.
@@ -303,7 +312,8 @@ class RiskMixin:
             (default: 200% i.e., spot = 2x current spot)
 
         Returns:
-            Dict with 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
+            dictwith 'max_profit', 'spot_at_max_profit', and 'is_unlimited'
+
         """
         # Use comprehensive range to check extreme scenarios
         spot_range = self._get_spot_range(
@@ -318,7 +328,8 @@ class RiskMixin:
         # Vectorized P&L calculation
         # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=True
+            spot_range,
+            include_underlying=True,
         )
         idx = int(np.argmax(pnl_array))
         max_profit = float(pnl_array[idx])
@@ -340,7 +351,8 @@ class RiskMixin:
         # Enhanced unlimited profit detection using helper method
         if not is_unlimited:
             is_unlimited = self._check_unlimited_trend(
-                pnl_array, check_increasing=True
+                pnl_array,
+                check_increasing=True,
             )
 
         return {
@@ -355,9 +367,8 @@ class RiskMixin:
         include_underlying: bool = False,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
-    ) -> List[float]:
-        """
-        Calculate breakeven spot prices at expiration.
+    ) -> list[float]:
+        """Calculate breakeven spot prices at expiration.
 
         Args:
             spot_range: Array of spot prices to analyze (optional)
@@ -368,7 +379,8 @@ class RiskMixin:
             (default: 200% i.e., spot = 2x current spot)
 
         Returns:
-            List of breakeven spot prices
+            list of breakeven spot prices
+
         """
         spot_range = self._get_spot_range(
             spot_range,
@@ -380,7 +392,8 @@ class RiskMixin:
         # Vectorized P&L calculation
         # pylint: disable=assignment-from-no-return
         pnl_array = self.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=include_underlying
+            spot_range,
+            include_underlying=include_underlying,
         )
 
         # Find sign changes to detect breakeven points

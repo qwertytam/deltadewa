@@ -1,10 +1,12 @@
 """Tests for deltadewa.analysis.scenarios module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestScenariosMixin:
@@ -21,7 +23,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -31,7 +33,7 @@ class TestScenariosMixin:
         # Calculate value at current spot and date
         # pylint: disable=protected-access
         value = analyzer._calculate_portfolio_value_at(
-            spot=100.0, valuation_date=datetime.now(tz=timezone.utc)
+            spot=100.0, valuation_date=datetime.now(tz=UTC),
         )
 
         assert isinstance(value, float)
@@ -47,7 +49,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc),  # At expiry
+            maturity_date=datetime.now(tz=UTC),  # At expiry
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -58,7 +60,7 @@ class TestScenariosMixin:
         spot_scenarios = np.array([90, 95, 100, 105, 110, 115])
         # pylint: disable=protected-access
         pnl = analyzer._calculate_pnl_at_expiry_vectorized(
-            spot_scenarios=spot_scenarios, include_underlying=True
+            spot_scenarios=spot_scenarios, include_underlying=True,
         )
 
         assert isinstance(pnl, np.ndarray)
@@ -75,7 +77,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -85,12 +87,12 @@ class TestScenariosMixin:
         # Create scenarios
         spot_scenarios = np.array([95, 100, 105])
         time_points = [
-            datetime.now(tz=timezone.utc),
-            datetime.now(tz=timezone.utc) + timedelta(days=10),
+            datetime.now(tz=UTC),
+            datetime.now(tz=UTC) + timedelta(days=10),
         ]
 
         result = analyzer.scenario_grid(
-            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl"
+            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl",
         )
 
         assert hasattr(result, "columns")
@@ -109,7 +111,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -117,7 +119,7 @@ class TestScenariosMixin:
         analyzer = PortfolioAnalyzer(portfolio)
 
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now(tz=timezone.utc)]
+        time_points = [datetime.now(tz=UTC)]
 
         result = analyzer.scenario_grid(
             spot_scenarios=spot_scenarios,
@@ -139,7 +141,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -170,7 +172,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -199,7 +201,7 @@ class TestScenariosMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -210,7 +212,7 @@ class TestScenariosMixin:
         original_date = portfolio.valuation_date
 
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now(tz=timezone.utc)]
+        time_points = [datetime.now(tz=UTC)]
 
         analyzer.scenario_grid(
             spot_scenarios=spot_scenarios,

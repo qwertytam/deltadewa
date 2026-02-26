@@ -1,6 +1,6 @@
 """Scenario analysis visualization for option charts."""
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -25,8 +25,7 @@ class ScenarioChartsMixin:
         current_spot: float,
         figsize: tuple[int, int] = (14, 10),
     ) -> Figure:
-        """
-        Plot P&L and delta profiles for a scenario analysis at a forward date.
+        """Plot P&L and delta profiles for a scenario analysis at a forward date.
 
         Args:
             scenario_df: DataFrame with columns: spot_price, portfolio_pnl,
@@ -38,6 +37,7 @@ class ScenarioChartsMixin:
 
         Returns:
             Matplotlib Figure
+
         """
         fig, axes = plt.subplots(2, 1, figsize=figsize)
 
@@ -64,7 +64,7 @@ class ScenarioChartsMixin:
             color=DEFAULT_PALETTE.black,
         )
         ax1.axhline(
-            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1
+            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1,
         )
         ax1.axvline(
             x=current_spot,
@@ -106,7 +106,7 @@ class ScenarioChartsMixin:
             linewidth=2.5,
         )
         ax2.axhline(
-            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1
+            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1,
         )
         ax2.axvline(
             x=current_spot,
@@ -118,7 +118,7 @@ class ScenarioChartsMixin:
         ax2.set_xlabel("Spot Price", fontsize=11)
         ax2.set_ylabel("Delta", fontsize=11)
         ax2.set_title(
-            "Delta Profile Across Spot Prices", fontsize=13, fontweight="bold"
+            "Delta Profile Across Spot Prices", fontsize=13, fontweight="bold",
         )
         ax2.legend(loc="best")
         ax2.grid(True, alpha=0.3)

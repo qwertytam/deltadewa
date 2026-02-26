@@ -1,18 +1,16 @@
-"""
-Base widget classes for the deltadewa interactive widgets.
+"""Base widget classes for the deltadewa interactive widgets.
 
 This module provides fundamental widget wrapper classes used throughout
 the deltadewa widget system.
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 
 class InteractiveOutput:
-    """
-    Wrapper for widget output with automatic clearing.
+    """Wrapper for widget output with automatic clearing.
 
     Provides a convenient decorator pattern for widget callbacks that
     automatically clears previous output before displaying new content.
@@ -26,6 +24,7 @@ class InteractiveOutput:
 
         slider.observe(my_callback, 'value')
         display(output.widget)
+
     """
 
     def __init__(self):
@@ -33,14 +32,14 @@ class InteractiveOutput:
         self.widget = widgets.Output()
 
     def update(self, func: Callable) -> Callable:
-        """
-        Decorator to handle output clearing.
+        """Decorator to handle output clearing.
 
         Args:
             func: Function to wrap with output clearing logic
 
         Returns:
             Wrapped function that clears output before executing
+
         """
 
         def wrapper(*args, **kwargs):

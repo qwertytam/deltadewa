@@ -1,5 +1,4 @@
-"""
-To hold pallete for colours
+"""To hold pallete for colours
 """
 
 from dataclasses import dataclass
@@ -39,8 +38,7 @@ AFRICAN_TURQUOISE = "#000000"
 # Optional grouped palette
 @dataclass(frozen=True)
 class Palette:
-    """
-    To hold colours
+    """To hold colours
     """
 
     positive: str = GAMMA_GREEN
@@ -70,6 +68,6 @@ class Palette:
 
 DEFAULT_PALETTE = Palette()
 __all__ = [
-    "Palette",
     "DEFAULT_PALETTE",
+    "Palette",
 ]

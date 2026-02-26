@@ -4,21 +4,23 @@ This module provides mixin classes for export/import functionality
 in the deltadewa dashboard.
 """
 
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Union
+from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
-from deltadewa.config import create_export_dir_widget as _create_export_dir_widget
+from deltadewa.config import (
+    create_export_dir_widget as _create_export_dir_widget,
+)
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.audit import PortfolioLogger
 
 
 class ExportControlsMixin:
-    """
-    Mixin providing export/import control widgets.
+    """Mixin providing export/import control widgets.
 
     This mixin expects the host class to have:
     - self.portfolio: OptionPortfolio instance
@@ -38,7 +40,7 @@ class ExportControlsMixin:
         return self.serializer.export_dir
 
     @export_dir.setter
-    def export_dir(self, value: Union[Path, str]):
+    def export_dir(self, value: Path | str):
         """Set the export directory and update UI."""
         self.serializer.update_export_dir(value)
         self._update_export_ui_state()
@@ -89,15 +91,15 @@ class ExportControlsMixin:
     # Import/Export Widgets
     # ==========================================================================
 
-    def create_export_controls(self, default_format: str = "JSON") -> Dict[str, Any]:
-        """
-        Create export format selection and execution controls.
+    def create_export_controls(self, default_format: str = "JSON") -> dict[str, Any]:
+        """Create export format selection and execution controls.
 
         Args:
             default_format: Default export format ('JSON', 'CSV', or 'YAML')
 
         Returns:
             Dictionary with export-related widgets
+
         """
         format_selector = widgets.RadioButtons(
             options=["JSON", "CSV", "YAML"],
@@ -136,7 +138,7 @@ class ExportControlsMixin:
             "export_button": export_button,
         }
 
-    def create_import_controls(self) -> Dict[str, Any]:
+    def create_import_controls(self) -> dict[str, Any]:
         """Create import file selection and preview controls.
 
         Returns:
@@ -219,7 +221,7 @@ class ExportControlsMixin:
                     if not isinstance(imported_portfolio, OptionPortfolio):
                         print(
                             "✗ Import failed: Expected OptionPortfolio, "
-                            f"got {type(imported_portfolio)}"
+                            f"got {type(imported_portfolio)}",
                         )
                         return
 
@@ -282,11 +284,11 @@ class ExportControlsMixin:
                     print("-" * 50)
                     print(f"Symbol:              {symbol}")
                     print(
-                        f"Risk-Free Rate:      {preview_portfolio.risk_free_rate:.2%}"
+                        f"Risk-Free Rate:      {preview_portfolio.risk_free_rate:.2%}",
                     )
                     print(f"Spot Price:          {preview_portfolio.spot_price:.2f}")
                     print(
-                        f"Underlying Quantity: {preview_portfolio.underlying_quantity:.0f}"
+                        f"Underlying Quantity: {preview_portfolio.underlying_quantity:.0f}",
                     )
                     print(f"Number of Positions: {positions_count}")
                     print("-" * 50)
@@ -343,7 +345,7 @@ class ExportControlsMixin:
                 import_controls["file_select"],
                 import_controls["preview_button"],
                 import_controls["import_button"],
-            ]
+            ],
         )
 
         # Assemble interface
@@ -353,17 +355,17 @@ class ExportControlsMixin:
                 import_controls["filename_input"],
                 action_buttons,
                 import_output,
-            ]
+            ],
         )
 
         return import_section
 
     def display_export(self) -> widgets.VBox:
-        """
-        Create and display export interface.
+        """Create and display export interface.
 
         Returns:
             VBox widget containing export controls
+
         """
         export_controls = self.create_export_controls()
         export_output = widgets.Output()
@@ -379,7 +381,7 @@ class ExportControlsMixin:
             {
                 "button": export_controls["export_button"],
                 "warning": warning_label,
-            }
+            },
         )
 
         # Initial status check
@@ -398,7 +400,7 @@ class ExportControlsMixin:
                 except (ValueError, AttributeError):
                     print(
                         "✗ Error: Export directory is not set. "
-                        + "Please configure it in the Setup section."
+                         "Please configure it in the Setup section.",
                     )
                     return
 
@@ -409,7 +411,7 @@ class ExportControlsMixin:
 
                     ts = ""
                     if inc_timestamp:
-                        ts = datetime.now(tz=timezone.utc).strftime("_%Y%m%d_%H%M%S")
+                        ts = datetime.now(tz=UTC).strftime("_%Y%m%d_%H%M%S")
 
                     # Add extension if not present
                     if not filename.endswith(f".{file_format}"):
@@ -419,15 +421,15 @@ class ExportControlsMixin:
 
                     if file_format == "json":
                         self.serializer.export_to_json(
-                            self.portfolio, self.portfolio_changelog, filename
+                            self.portfolio, self.portfolio_changelog, filename,
                         )
                     elif file_format == "csv":
                         self.serializer.export_to_csv(
-                            self.portfolio, self.portfolio_changelog, filename
+                            self.portfolio, self.portfolio_changelog, filename,
                         )
                     elif file_format == "yaml":
                         self.serializer.export_to_yaml(
-                            self.portfolio, self.portfolio_changelog, filename
+                            self.portfolio, self.portfolio_changelog, filename,
                         )
                     else:
                         print(f"✗ Unknown format: {file_format}")
@@ -453,7 +455,7 @@ class ExportControlsMixin:
                 widgets.HTML("<br>"),
                 export_controls["export_button"],
                 export_output,
-            ]
+            ],
         )
 
         return export_section
@@ -463,8 +465,7 @@ class ExportControlsMixin:
         show_browser: bool = True,
         on_change_callback: Callable[[Path], None] | None = None,
     ) -> widgets.VBox:
-        """
-        Create an export-directory selection widget and keep `self.export_dir` in sync.
+        """Create an export-directory selection widget and keep `self.export_dir` in sync.
 
         Args:
             show_browser: Whether to show the "Open in Finder" button
@@ -476,6 +477,7 @@ class ExportControlsMixin:
         Notes:
             This wraps `deltadewa.config.create_export_dir_widget` so the dashboard
             can reuse the common UI while updating the PortfolioWidgets' `export_dir`.
+
         """
 
         def _on_change(export_dir: Path):
@@ -508,15 +510,13 @@ class ExportControlsMixin:
         show_browser: bool = True,
         on_change_callback: Callable[[Path], None] | None = None,
     ) -> widgets.VBox:
-        """
-        Convenience display wrapper for the export-directory widget.
+        """Convenience display wrapper for the export-directory widget.
 
         Returns a small VBox containing a header and the export-dir selector
         so dashboards can simply call this method and `display(...)` the result.
         """
-
         widget = self.create_export_dir_widget(
-            show_browser=show_browser, on_change_callback=on_change_callback
+            show_browser=show_browser, on_change_callback=on_change_callback,
         )
 
         header = widgets.HTML("<h3>Export Directory</h3>")

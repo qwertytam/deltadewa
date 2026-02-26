@@ -1,22 +1,24 @@
 """Tests for deltadewa.analysis.functions module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
+
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.functions import (
-    classify_maturity_bucket,
-    quick_carry_analysis,
-    quick_risk_concentration,
-)
-from deltadewa.spot_utils import generate_spot_range
 from deltadewa.analysis.cache import (
     ScenarioGridCache,
     create_scenario_cache_key,
     create_spot_vol_cache_key,
     get_portfolio_state_hash,
 )
+from deltadewa.analysis.functions import (
+    classify_maturity_bucket,
+    quick_carry_analysis,
+    quick_risk_concentration,
+)
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.spot_utils import generate_spot_range
 
 
 class TestGenerateSpotRange:
@@ -114,7 +116,7 @@ class TestGenerateSpotRange:
 
         for cp in critical_points:
             assert np.any(
-                np.isclose(result, cp)
+                np.isclose(result, cp),
             ), f"Critical point {cp} not found"
 
     def test_results_are_sorted(self):
@@ -127,7 +129,7 @@ class TestGenerateSpotRange:
 
         # Test comprehensive range
         result_comprehensive = generate_spot_range(
-            spot_price, use_comprehensive_range=True
+            spot_price, use_comprehensive_range=True,
         )
         assert np.all(result_comprehensive[:-1] <= result_comprehensive[1:])
 
@@ -195,7 +197,7 @@ class TestGenerateSpotRange:
             use_comprehensive_range=True,
         )
         np.testing.assert_array_equal(
-            result_standalone_comp, result_riskmixin_comp
+            result_standalone_comp, result_riskmixin_comp,
         )
 
 
@@ -220,7 +222,7 @@ class TestModuleLevelFunctions:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -241,7 +243,7 @@ class TestModuleLevelFunctions:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -262,7 +264,7 @@ class TestModuleLevelFunctions:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -283,7 +285,7 @@ class TestCachingFunctions:
         portfolio_hash = "abc123"
 
         key = create_scenario_cache_key(
-            spot_scenarios, time_points, metric, portfolio_hash
+            spot_scenarios, time_points, metric, portfolio_hash,
         )
 
         assert isinstance(key, tuple)
@@ -297,7 +299,7 @@ class TestCachingFunctions:
         portfolio_hash = "abc123"
 
         key = create_spot_vol_cache_key(
-            spot_scenarios, vol_scenarios, metric, portfolio_hash
+            spot_scenarios, vol_scenarios, metric, portfolio_hash,
         )
 
         assert isinstance(key, tuple)
@@ -322,7 +324,7 @@ class TestCachingFunctions:
         # Different portfolio should produce different hash
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -350,7 +352,7 @@ class TestScenarioGridCache:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -359,10 +361,10 @@ class TestScenarioGridCache:
         analyzer = PortfolioAnalyzer(portfolio)
 
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now(tz=timezone.utc)]
+        time_points = [datetime.now(tz=UTC)]
 
         result = cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl"
+            portfolio, analyzer, spot_scenarios, time_points, "pnl",
         )
 
         assert result is not None
@@ -378,7 +380,7 @@ class TestScenarioGridCache:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -387,14 +389,14 @@ class TestScenarioGridCache:
         analyzer = PortfolioAnalyzer(portfolio)
 
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now(tz=timezone.utc)]
+        time_points = [datetime.now(tz=UTC)]
 
         result1 = cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl"
+            portfolio, analyzer, spot_scenarios, time_points, "pnl",
         )
 
         result2 = cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl"
+            portfolio, analyzer, spot_scenarios, time_points, "pnl",
         )
 
         # Should still be cached
@@ -411,7 +413,7 @@ class TestScenarioGridCache:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -423,7 +425,7 @@ class TestScenarioGridCache:
         vol_scenarios = np.array([0.2, 0.3, 0.4])
 
         result = cache.get_or_calculate_spot_vol(
-            portfolio, analyzer, spot_scenarios, vol_scenarios, "pnl"
+            portfolio, analyzer, spot_scenarios, vol_scenarios, "pnl",
         )
 
         assert result is not None
@@ -439,7 +441,7 @@ class TestScenarioGridCache:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -448,10 +450,10 @@ class TestScenarioGridCache:
         analyzer = PortfolioAnalyzer(portfolio)
 
         spot_scenarios = np.array([95, 100, 105])
-        time_points = [datetime.now(tz=timezone.utc)]
+        time_points = [datetime.now(tz=UTC)]
 
         cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl"
+            portfolio, analyzer, spot_scenarios, time_points, "pnl",
         )
 
         assert cache.size() == 1
@@ -469,7 +471,7 @@ class TestScenarioGridCache:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -477,17 +479,17 @@ class TestScenarioGridCache:
         cache = ScenarioGridCache(max_size=2)
         analyzer = PortfolioAnalyzer(portfolio)
 
-        time_points = [datetime.now(tz=timezone.utc)]
+        time_points = [datetime.now(tz=UTC)]
 
         # Add 3 different scenarios
         cache.get_or_calculate(
-            portfolio, analyzer, np.array([95, 100]), time_points, "pnl"
+            portfolio, analyzer, np.array([95, 100]), time_points, "pnl",
         )
         cache.get_or_calculate(
-            portfolio, analyzer, np.array([100, 105]), time_points, "pnl"
+            portfolio, analyzer, np.array([100, 105]), time_points, "pnl",
         )
         cache.get_or_calculate(
-            portfolio, analyzer, np.array([105, 110]), time_points, "pnl"
+            portfolio, analyzer, np.array([105, 110]), time_points, "pnl",
         )
 
         # Should only keep 2 (most recent)

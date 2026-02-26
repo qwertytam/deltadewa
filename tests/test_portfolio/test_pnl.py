@@ -1,9 +1,11 @@
 """Tests for deltadewa.portfolio.pnl module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
+
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestPnLMixin:
@@ -15,7 +17,7 @@ class TestPnLMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -32,7 +34,7 @@ class TestPnLMixin:
         # Buy a call at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -56,7 +58,7 @@ class TestPnLMixin:
         # Buy a put at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -77,13 +79,13 @@ class TestPnLMixin:
 
         # No options, just underlying
         pnl_up = portfolio.calculate_pnl_at_expiry(
-            110.0, include_underlying=True
+            110.0, include_underlying=True,
         )
         # Underlying gained 10 per share * 100 shares = 1000
         assert pnl_up == 1000.0
 
         pnl_down = portfolio.calculate_pnl_at_expiry(
-            90.0, include_underlying=True
+            90.0, include_underlying=True,
         )
         # Underlying lost 10 per share * 100 shares = -1000
         assert pnl_down == -1000.0
@@ -95,7 +97,7 @@ class TestPnLMixin:
         # Sell a call at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -125,7 +127,7 @@ class TestPnLMixin:
         # Sell OTM put (collect premium)
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.PUT,
         )
@@ -133,7 +135,7 @@ class TestPnLMixin:
         # Buy further OTM put (pay premium)
         portfolio.add_position(
             strike_price=90.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -145,13 +147,12 @@ class TestPnLMixin:
 
     def test_vectorized_pnl_at_expiry(self):
         """Test vectorized_pnl_at_expiry method."""
-
         portfolio = OptionPortfolio(spot_price=100.0)
 
         # Buy a call at 100 strike
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -159,7 +160,7 @@ class TestPnLMixin:
         # Test with array of spot prices
         spot_range = np.array([90.0, 100.0, 110.0, 120.0])
         pnl_array = portfolio.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=False
+            spot_range, include_underlying=False,
         )
 
         # Should return numpy array
@@ -169,7 +170,7 @@ class TestPnLMixin:
         # Verify results match scalar calculation
         for i, spot in enumerate(spot_range):
             scalar_pnl = portfolio.calculate_pnl_at_expiry(
-                spot, include_underlying=False
+                spot, include_underlying=False,
             )
             assert np.isclose(pnl_array[i], scalar_pnl), (
                 f"Mismatch at spot={spot}: vectorized={pnl_array[i]}, "
@@ -178,36 +179,34 @@ class TestPnLMixin:
 
     def test_vectorized_pnl_with_underlying(self):
         """Test vectorized_pnl_at_expiry including underlying position."""
-
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
         spot_range = np.array([90.0, 100.0, 110.0])
         pnl_array = portfolio.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=True
+            spot_range, include_underlying=True,
         )
 
         # Verify against scalar calculation
         for i, spot in enumerate(spot_range):
             scalar_pnl = portfolio.calculate_pnl_at_expiry(
-                spot, include_underlying=True
+                spot, include_underlying=True,
             )
             assert np.isclose(pnl_array[i], scalar_pnl)
 
     def test_vectorized_pnl_multi_position(self):
         """Test vectorized calculation with multiple positions."""
-
         portfolio = OptionPortfolio(spot_price=100.0)
 
         # Create a bull call spread
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )

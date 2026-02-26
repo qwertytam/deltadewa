@@ -1,11 +1,10 @@
-"""
-Console reporting utilities for DeltaDewa.
+"""Console reporting utilities for DeltaDewa.
 
 Handles formatted output to stdout/stderr with support for headers,
 tables, status messages, and progress bars.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from IPython.display import clear_output
 
@@ -13,8 +12,7 @@ from deltadewa.formatters.values import format_number_auto_precision
 
 
 class ConsoleReporter:
-    """
-    Builder for formatted console output.
+    """Builder for formatted console output.
 
     Encapsulates printing logic to allow for consistent formatting,
     configuration (e.g. width), and potential redirection of output.
@@ -44,7 +42,7 @@ class ConsoleReporter:
             print(content)
 
     def key_value(
-        self, key: str, value: Any, width: int = 40, align: str = "left"
+        self, key: str, value: Any, width: int = 40, align: str = "left",
     ) -> None:
         """Print a key-value pair with aligned formatting."""
         if align == "right":
@@ -53,7 +51,7 @@ class ConsoleReporter:
             print(f"{key}: {value}")
 
     def metric_summary(
-        self, metrics: dict[str, Any], title: str | None = None
+        self, metrics: dict[str, Any], title: str | None = None,
     ) -> None:
         """Print a formatted summary of metrics."""
         if title:
@@ -69,57 +67,57 @@ class ConsoleReporter:
             self.divider(char="=")
 
     def success(self, message: str, prefix: str = "✓") -> None:
-        """
-        Print a success message.
+        """Print a success message.
 
         Args:
             message: Success message text
             prefix: Prefix symbol (default: '✓')
+
         """
         print(f"{prefix} {message}")
 
     def warning(self, message: str, prefix: str = "⚠") -> None:
-        """
-        Print a warning message.
+        """Print a warning message.
 
         Args:
             message: Warning message text
             prefix: Prefix symbol (default: '⚠')
+
         """
         print(f"{prefix} {message}")
 
     def error(self, message: str, prefix: str = "✗") -> None:
-        """
-        Print an error message.
+        """Print an error message.
 
         Args:
             message: Error message text
             prefix: Prefix symbol (default: '✗')
+
         """
         print(f"{prefix} {message}")
 
     def info(self, message: str, prefix: str = "ℹ️") -> None:
-        """
-        Print an informational message.
+        """Print an informational message.
 
         Args:
             message: Informational message text
             prefix: Prefix symbol (default: 'ℹ️')
+
         """
         print(f"{prefix}  {message}")
 
     def table_row(
-        self, columns: list[Any], widths: list[int], separator: str = "|"
+        self, columns: list[Any], widths: list[int], separator: str = "|",
     ) -> None:
         """Print a formatted table row."""
         row = separator.join(
-            f" {str(col):<{w-2}} " for col, w in zip(columns, widths)
+            f" {col!s:<{w-2}} " for col, w in zip(columns, widths)
         )
         print(row)
 
     def table(
         self,
-        data: list[List[Any]],
+        data: list[list[Any]],
         headers: list[str],
         widths: list[int] | None = None,
     ) -> None:
@@ -157,8 +155,7 @@ class ConsoleReporter:
         suffix: str = "",
         length: int = 50,
     ) -> None:
-        """
-        Print a progress bar.
+        """Print a progress bar.
 
         Args:
             current: Current progress value
@@ -166,6 +163,7 @@ class ConsoleReporter:
             prefix: Prefix text before progress bar (default: '')
             suffix: Suffix text after progress bar (default: '')
             length: Length of the progress bar in characters (default: 50)
+
         """
         percent = f"{100 * (current / float(total)):.1f}"
         filled_length = int(length * current // total)

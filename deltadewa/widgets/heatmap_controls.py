@@ -10,8 +10,7 @@ import ipywidgets as widgets  # type: ignore[import-untyped]
 
 
 class HeatmapControlsMixin:
-    """
-    Mixin providing heatmap control widgets.
+    """Mixin providing heatmap control widgets.
 
     This mixin expects the host class to have:
     - self.create_metric_selector(): method to create metric selector
@@ -52,16 +51,16 @@ class HeatmapControlsMixin:
     # ==========================================================================
 
     def create_heatmap_controls(
-        self, metrics: list[tuple[str, str]] | None = None
+        self, metrics: list[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
-        """
-        Create complete heatmap configuration controls.
+        """Create complete heatmap configuration controls.
 
         Args:
             metrics: list of (display_name, value) tuples for metric options
 
         Returns:
             Dictionary with heatmap control widgets
+
         """
         if metrics is None:
             metrics = [

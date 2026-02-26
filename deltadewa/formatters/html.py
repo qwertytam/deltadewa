@@ -1,5 +1,4 @@
-"""
-HTML Badge and Metric Formatters for Dashboard Widgets
+"""HTML Badge and Metric Formatters for Dashboard Widgets
 
 This module provides HTML formatting functions for dashboard widgets:
 - Badge creation with flexible styling
@@ -9,8 +8,11 @@ These formatters are designed for use in Jupyter notebooks with HTML display.
 """
 
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa.formatters.values import (format_currency, format_number,
-                                         format_percentage)
+from deltadewa.formatters.values import (
+    format_currency,
+    format_number,
+    format_percentage,
+)
 
 
 def format_html_badge(
@@ -20,8 +22,7 @@ def format_html_badge(
     text_color: str = "white",
     size: str = "normal",
 ) -> str:
-    """
-    Create an HTML badge for dashboard display.
+    """Create an HTML badge for dashboard display.
 
     Args:
         label: Badge label text
@@ -33,6 +34,7 @@ def format_html_badge(
 
     Returns:
         HTML string for the badge
+
     """
     # Map color names to hex codes
     color_map = {
@@ -73,8 +75,7 @@ def format_html_metric(
     is_cost: bool = False,
     is_neutral: bool = False,
 ) -> str:
-    """
-    Format a metric as colored HTML badge (consolidates _format_greek from widgets).
+    """Format a metric as colored HTML badge (consolidates _format_greek from widgets).
 
     Args:
         name: Metric name
@@ -85,6 +86,7 @@ def format_html_metric(
 
     Returns:
         HTML string with formatted badge
+
     """
     # Handle near-zero values
     # For percentages (in decimal form), use 0.0001 threshold (= 0.01%)
@@ -128,7 +130,7 @@ def format_html_metric(
         color = "neutral"
 
     return format_html_badge(
-        name, value_str, color=color, text_color="white", size="large"
+        name, value_str, color=color, text_color="white", size="large",
     )
 
 

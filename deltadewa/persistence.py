@@ -9,7 +9,6 @@ import json
 from datetime import datetime as dt
 from datetime import timedelta
 from pathlib import Path
-from typing import Union
 
 import pandas as pd
 
@@ -52,7 +51,7 @@ def load_config_yaml(
 
         if "market_parameters" not in config or "positions" not in config:
             raise ValueError(
-                "YAML must contain 'market_parameters' and 'positions' sections"
+                "YAML must contain 'market_parameters' and 'positions' sections",
             )
 
         required_params = [
@@ -74,12 +73,12 @@ def load_config_yaml(
 class PortfolioSerializer:
     """Handle portfolio export/import in multiple formats."""
 
-    def __init__(self, export_dir: Union[str, Path]):
-        """
-        Initialize the serializer.
+    def __init__(self, export_dir: str | Path):
+        """Initialize the serializer.
 
         Args:
             export_dir: Directory path for exports (str or Path). If None, must be set later.
+
         """
         self.export_dir = Path(export_dir)
         try:
@@ -91,11 +90,11 @@ class PortfolioSerializer:
     # ========== Helper Functions ==========
 
     def list_available_files(self):
-        """
-        List all available portfolio files in the export directory.
+        """List all available portfolio files in the export directory.
 
         Returns:
             dict with 'json' and 'yaml' keys containing lists of file paths
+
         """
         json_files = sorted(
             self.export_dir.glob("*.json"),
@@ -112,30 +111,30 @@ class PortfolioSerializer:
                 self.export_dir.glob("*.yml"),
                 key=lambda x: x.stat().st_mtime,
                 reverse=True,
-            )
+            ),
         )
         return {"json": json_files, "yaml": yaml_files}
 
-    def update_export_dir(self, new_dir: Union[str, Path]) -> None:
-        """
-        Update the export directory and ensure it exists.
+    def update_export_dir(self, new_dir: str | Path) -> None:
+        """Update the export directory and ensure it exists.
 
         Args:
             new_dir: New directory path for exports
+
         """
         self.export_dir = Path(new_dir)
         self.export_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def detect_file_format(filepath):
-        """
-        Detect portfolio file format from extension.
+        """Detect portfolio file format from extension.
 
         Args:
             filepath: Path to file
 
         Returns:
             str: 'yaml', 'json', or None if unsupported
+
         """
         suffix = Path(filepath).suffix.lower()
         if suffix in [".yaml", ".yml"]:
@@ -148,8 +147,7 @@ class PortfolioSerializer:
     # ========== Export Functions ==========
 
     def _build_export_data(self, portfolio, changelog) -> dict:
-        """
-        Build a comprehensive data structure representing the portfolio state,
+        """Build a comprehensive data structure representing the portfolio state,
         including market parameters, positions, and risk metrics.
 
         Args:
@@ -157,8 +155,8 @@ class PortfolioSerializer:
             changelog: PortfolioLogger instance
         Returns:
             dict with complete portfolio data for export
-        """
 
+        """
         data = {
             "metadata": {
                 "exported_at": dt.now(tz=datetime.UTC).isoformat(),
@@ -207,16 +205,15 @@ class PortfolioSerializer:
                     "impact_delta": entry["impact_delta"],
                     "impact_cost": entry["impact_cost"],
                     "portfolio_snapshot": entry["portfolio_snapshot"],
-                }
+                },
             )
 
         return data
 
     def export_to_json(
-        self, portfolio, changelog, filename="portfolio_book.json"
+        self, portfolio, changelog, filename="portfolio_book.json",
     ) -> Path:
-        """
-        Export complete portfolio state to JSON format.
+        """Export complete portfolio state to JSON format.
 
         Args:
             portfolio: OptionPortfolio instance
@@ -225,6 +222,7 @@ class PortfolioSerializer:
 
         Returns:
             Path to saved file
+
         """
         portfolio_data = self._build_export_data(portfolio, changelog)
 
@@ -236,8 +234,7 @@ class PortfolioSerializer:
         return Path(output_path)
 
     def export_to_csv(self, portfolio, changelog, filename="portfolio.csv"):
-        """
-        Export portfolio to CSV files (positions and risk).
+        """Export portfolio to CSV files (positions and risk).
 
         Args:
             portfolio: OptionPortfolio instance
@@ -246,6 +243,7 @@ class PortfolioSerializer:
 
         Returns:
             dict with paths to saved files
+
         """
         filename_prefix = Path(filename).stem
 
@@ -273,7 +271,7 @@ class PortfolioSerializer:
                     "position_gamma": pos.position_gamma(),
                     "position_theta": pos.position_theta(),
                     "position_vega": pos.position_vega(),
-                }
+                },
             )
 
         changelog_df = pd.DataFrame(
@@ -290,7 +288,7 @@ class PortfolioSerializer:
                     "resulting_net_delta": entry["portfolio_snapshot"]["net_delta"],
                 }
                 for entry in changelog.get_all_portfolio_snapshots()
-            ]
+            ],
         )
 
         df_positions_export = pd.DataFrame(positions_data)
@@ -313,10 +311,9 @@ class PortfolioSerializer:
         return {"positions": positions_file, "risk": risk_file}
 
     def export_to_yaml(
-        self, portfolio, changelog, filename="portfolio_export.yaml"
+        self, portfolio, changelog, filename="portfolio_export.yaml",
     ) -> Path | None:
-        """
-        Export portfolio configuration to YAML format (useful for edits/versioning).
+        """Export portfolio configuration to YAML format (useful for edits/versioning).
 
         The saved structure contains 'market_parameters' and a list of 'positions' with
         option_type, strike_price, maturity_date (ISO YYYY-MM-DD), quantity and symbol.
@@ -328,6 +325,7 @@ class PortfolioSerializer:
 
         Returns:
             Path to saved file, or None if YAML not available
+
         """
         if not YAML_AVAILABLE:
             print("⚠️  PyYAML not installed. Cannot export to YAML.")
@@ -344,8 +342,7 @@ class PortfolioSerializer:
     # ========== Import Functions ==========
 
     def import_from_json(self, filepath, create_portfolio=True) -> dict:
-        """
-        Import portfolio from JSON file.
+        """Import portfolio from JSON file.
 
         Args:
             filepath: path to JSON file
@@ -353,9 +350,9 @@ class PortfolioSerializer:
 
         Returns:
             dict with portfolio data (and 'portfolio' key if create_portfolio=True)
-        """
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        """
+        with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
 
         if not create_portfolio:
@@ -366,7 +363,7 @@ class PortfolioSerializer:
 
         # Create new portfolio
         underlying = data.get("risk_metrics", {}).get(
-            "underlying_quantity", market_params.get("underlying_quantity", 0.0)
+            "underlying_quantity", market_params.get("underlying_quantity", 0.0),
         )
         imported_portfolio = OptionPortfolio(
             underlying_quantity=underlying,
@@ -426,11 +423,10 @@ class PortfolioSerializer:
             dict with 'portfolio', 'market_params', and 'metadata' keys
 
         """
-
         if not YAML_AVAILABLE:
             raise RuntimeError("⚠️  PyYAML not installed. Cannot import from YAML.")
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         # Extract market parameters
@@ -488,14 +484,14 @@ class PortfolioSerializer:
         }
 
     def import_portfolio(self, filepath) -> dict:
-        """
-        Universal import function - auto-detects file format.
+        """Universal import function - auto-detects file format.
 
         Args:
             filepath: path to JSON or YAML file
 
         Returns:
             dict with 'portfolio', 'market_params', and 'metadata' keys
+
         """
         file_format = self.detect_file_format(filepath)
 

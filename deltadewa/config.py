@@ -1,13 +1,12 @@
-"""
-Configuration utilities for DeltaDewa dashboard.
+"""Configuration utilities for DeltaDewa dashboard.
 
 Provides interactive configuration widgets and default settings management.
 """
 
 import platform
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
@@ -17,8 +16,7 @@ def create_export_dir_widget(
     on_change_callback: Callable | None = None,
     show_browser: bool = True,
 ) -> widgets.VBox:
-    """
-    Create interactive export directory configuration widget.
+    """Create interactive export directory configuration widget.
 
     Args:
         default_dir: Default export directory name
@@ -39,8 +37,8 @@ def create_export_dir_widget(
             on_change_callback=on_dir_change
         )
         display(widget)
-    """
 
+    """
     if not Path(default_dir).exists():
         initial_value = str(Path.cwd())
     else:
@@ -85,7 +83,7 @@ def create_export_dir_widget(
     widget_container = widgets.VBox()
     # store as a public attribute; use setattr to avoid static analyzer
     # complaints on unknown attributes
-    setattr(widget_container, "export_dir", Path(default_dir))
+    widget_container.export_dir = Path(default_dir)
 
     def on_browse_click(b):  # pylint: disable=unused-argument
         """Handle browse button click using OS-native dialogs."""
@@ -99,7 +97,7 @@ def create_export_dir_widget(
                     'POSIX path of (choose folder with prompt "Select Export Directory")',
                 ]
                 result = subprocess.run(
-                    cmd, capture_output=True, text=True, check=True
+                    cmd, capture_output=True, text=True, check=True,
                 )
                 path = result.stdout.strip()
             elif platform.system() == "Windows":
@@ -143,14 +141,14 @@ def create_export_dir_widget(
                 test_file.touch()
                 test_file.unlink()
 
-                setattr(widget_container, "export_dir", export_dir)
+                widget_container.export_dir = export_dir
 
                 if export_dir.exists():
                     create_button.button_style = "success"
                     print(f"✅ Export directory set to:  {export_dir}")
                 else:
                     raise ValueError(
-                        f"Unable to set export directory to {export_dir}"
+                        f"Unable to set export directory to {export_dir}",
                     )
 
                 # Count existing files
@@ -161,7 +159,7 @@ def create_export_dir_widget(
 
                 if total > 0:
                     print(
-                        f"   Found:  {json_count} JSON, {yaml_count} YAML, {csv_count} CSV"
+                        f"   Found:  {json_count} JSON, {yaml_count} YAML, {csv_count} CSV",
                     )
                 else:
                     print("   Directory is empty")
@@ -174,7 +172,7 @@ def create_export_dir_widget(
 
             except Exception as e:  # pylint: disable=broad-exception-caught
                 create_button.button_style = "danger"
-                print(f"❌ Error:  {str(e)}")
+                print(f"❌ Error:  {e!s}")
 
     def on_open_click(b):  # pylint: disable=unused-argument
         try:
@@ -206,7 +204,7 @@ def create_export_dir_widget(
     widget_container.children = [
         widgets.HTML("<h4>📁 Export Directory Configuration</h4>"),
         widgets.HTML(
-            "<p style='color: #666;'>Choose where to save portfolio exports</p>"
+            "<p style='color: #666;'>Choose where to save portfolio exports</p>",
         ),
         input_row,
         widgets.HBox(action_buttons),
@@ -216,19 +214,19 @@ def create_export_dir_widget(
     # Auto-initialize default
     default_path = Path(default_dir).expanduser().resolve()
     default_path.mkdir(parents=True, exist_ok=True)
-    setattr(widget_container, "export_dir", default_path)
+    widget_container.export_dir = default_path
 
     return widget_container
 
 
 def get_export_dir_from_widget(widget: widgets.VBox) -> Path:
-    """
-    Extract export directory Path from configuration widget.
+    """Extract export directory Path from configuration widget.
 
     Args:
         widget: Widget created by create_export_dir_widget()
 
     Returns:
         Path object for export directory
+
     """
-    return getattr(widget, "export_dir")
+    return widget.export_dir

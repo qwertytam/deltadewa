@@ -76,7 +76,7 @@ class TestGaugeIndicator:
         # It does NOT check actual vs start/end.
 
         gauge.update(
-            actual=150.0
+            actual=150.0,
         )  # Should accept it, display logic clamps visual marker
         gauge.update(actual=-50.0)  # Should accept it
 

@@ -48,7 +48,7 @@ class TestBatchPricerGreeks:
         pricer = _make_pricer(portfolio)
         spots = np.array([90.0, 100.0, 110.0])
         result = pricer.portfolio_greeks_at(
-            spots, valuation_date, greeks=("delta", "gamma", "vega", "theta")
+            spots, valuation_date, greeks=("delta", "gamma", "vega", "theta"),
         )
 
         for i, spot in enumerate(spots):
@@ -71,7 +71,7 @@ class TestBatchPricerGreeks:
             assert np.isclose(result["theta"][i], opt.theta() * mult, atol=1e-6)
 
     def test_net_delta_includes_underlying(self):
-        """delta array must include underlying_quantity offset at every spot."""
+        """Delta array must include underlying_quantity offset at every spot."""
         valuation_date = dt.now(tz=datetime.UTC)
         maturity = valuation_date + timedelta(days=30)
 
@@ -101,7 +101,7 @@ class TestBatchPricerGreeks:
             grid_resolution=FDGridResolution.FAST,
         )
         result_no_underlying = pricer_no_underlying.portfolio_greeks_at(
-            spots, valuation_date, greeks=("delta",)
+            spots, valuation_date, greeks=("delta",),
         )
 
         expected_delta = result_no_underlying["delta"] + 50.0
@@ -252,7 +252,7 @@ class TestBatchPricerGreeks:
         pricer = _make_pricer(portfolio)
         spots = np.array([100.0])
         result = pricer.portfolio_greeks_at(
-            spots, valuation_date, greeks=("delta", "gamma")
+            spots, valuation_date, greeks=("delta", "gamma"),
         )
 
         assert "delta" in result

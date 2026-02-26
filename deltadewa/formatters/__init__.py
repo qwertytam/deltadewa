@@ -1,5 +1,4 @@
-"""
-Formatting utilities for the DeltaDewa options dashboard.
+"""Formatting utilities for the DeltaDewa options dashboard.
 
 This package provides consistent styling and formatting functions for:
 - Scalar value formatting (currency, percentages, numbers, Greeks)

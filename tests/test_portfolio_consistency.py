@@ -1,8 +1,9 @@
 """Unit tests for portfolio consistency and integrity."""
 
-from datetime import datetime, timedelta, timezone
-from deltadewa.portfolio.core import OptionPortfolio
+from datetime import UTC, datetime, timedelta
+
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestPortfolioConsistency:
@@ -20,7 +21,7 @@ class TestPortfolioConsistency:
         # We don't pass symbol here, it should be auto-assigned
         portfolio.add_position(
             strike_price=210,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             option_type=OptionType.CALL,
             quantity=1,
         )

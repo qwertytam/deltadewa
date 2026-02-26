@@ -68,7 +68,7 @@ class BatchPricer:
         """Initialize batch pricer.
 
         Args:
-            positions: List of option positions to price.
+            positions: list of option positions to price.
             risk_free_rate: Risk-free interest rate (annualized).
             dividend_yield: Dividend yield (annualized).
             underlying_quantity: Quantity of underlying shares in portfolio.
@@ -225,24 +225,25 @@ class BatchPricer:
         Args:
             spots: Array of spot prices.
             valuation_date: Valuation date.
-            greeks: Tuple of Greek names to compute. Each must be one of:
+            greeks: tuple of Greek names to compute. Each must be one of:
                 "price", "delta", "gamma", "vega", "theta", "rho".
                 Defaults to ("delta", "gamma", "vega", "theta").
 
         Returns:
-            Dict mapping each requested greek name (plus "price") to a
+            dictmapping each requested greek name (plus "price") to a
             1-D NumPy array of portfolio totals at each spot price, scaled
             by quantity × contract_size. The "delta" array includes the
             underlying position (underlying_quantity * 1.0 per spot).
 
         Raises:
             ValueError: If any name in greeks is not a valid Greek.
+
         """
         invalid = set(greeks) - self._VALID_GREEKS
         if invalid:
             raise ValueError(
                 f"Unknown greek(s): {invalid!r}. "
-                f"Valid names: {sorted(self._VALID_GREEKS)}"
+                f"Valid names: {sorted(self._VALID_GREEKS)}",
             )
 
         n = len(spots)
@@ -276,7 +277,7 @@ class BatchPricer:
                     )
                 if "delta" in result:
                     result["delta"] += (spots > position.option.strike_price).astype(
-                        float
+                        float,
                     ) * mult
             else:
                 if "price" in result:
@@ -295,7 +296,9 @@ class BatchPricer:
         # Live positions: sequential sweep using cached OptionValuation instances
         for pos_idx, position in live:
             opt, is_new = self._get_or_create_cached_option(
-                pos_idx, position, valuation_date
+                pos_idx,
+                position,
+                valuation_date,
             )
             if is_new:
                 msg = (

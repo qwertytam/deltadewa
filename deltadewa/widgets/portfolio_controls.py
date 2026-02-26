@@ -5,9 +5,10 @@ and managing option portfolios in the deltadewa dashboard.
 """
 
 import datetime
+from collections.abc import Callable
 from datetime import datetime as dt
 from datetime import timedelta
-from typing import Any, Callable
+from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
@@ -17,8 +18,7 @@ from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
 
 
 class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
-    """
-    Comprehensive widget creation utilities for portfolio analysis.
+    """Comprehensive widget creation utilities for portfolio analysis.
 
     This class provides factory methods for creating standardized, reusable
     widgets for common portfolio management tasks.
@@ -27,16 +27,17 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         portfolio: OptionPortfolio instance to manage
         serializer: PortfolioSerializer instance to manage
         portfolio_changelog: PortfolioLogger instance to track changes
+
     """
 
     def __init__(self, portfolio, serializer, portfolio_changelog):
-        """
-        Initialize widget factory.
+        """Initialize widget factory.
 
         Args:
             portfolio: OptionPortfolio instance
             serializer: PortfolioSerializer instance
             portfolio_changelog: PortfolioLogger instance
+
         """
         self.portfolio = portfolio
         self.serializer = serializer
@@ -52,8 +53,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         width: str = "500px",
         include_index: bool = True,
     ) -> widgets.Dropdown:  # type: ignore[name-defined]
-        """
-        Create dropdown for position selection.
+        """Create dropdown for position selection.
 
         Args:
             description: Widget label
@@ -62,6 +62,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             Dropdown widget populated with current positions
+
         """
         positions = self.portfolio.get_positions()
 
@@ -90,10 +91,10 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
     def create_position_editor(
-        self, on_change_callback: Callable | None = None
+        self,
+        on_change_callback: Callable | None = None,
     ) -> widgets.VBox:  # type: ignore[name-defined]
-        """
-        Create complete position editor interface.
+        """Create complete position editor interface.
 
         Provides widgets for adding, updating, and removing positions with
         proper event handling and validation.
@@ -103,6 +104,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             VBox widget containing the complete editor interface
+
         """
         # Position selector
         position_selector = widgets.Dropdown(
@@ -259,7 +261,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 self.portfolio.add_position(
                     strike_price=strike_input.value,
                     maturity_date=dt.combine(
-                        expiry_input.value, dt.min.time(), datetime.UTC
+                        expiry_input.value,
+                        dt.min.time(),
+                        datetime.UTC,
                     ),
                     option_type=(
                         OptionType.CALL
@@ -278,7 +282,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 )
                 status_label.value = (
                     f"✓ Added {quantity_input.value} "
-                    + f"{option_type_selector.value} @ {strike_input.value}"
+                    f"{option_type_selector.value} @ {strike_input.value}"
                 )
                 refresh_position_list()
                 with output:
@@ -288,7 +292,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 if on_change_callback:
                     on_change_callback()
             except Exception as e:  # pylint: disable=broad-except
-                status_label.value = f"✗ Error: {str(e)}"
+                status_label.value = f"✗ Error: {e!s}"
 
         def on_remove_clicked(b):  # pylint: disable=unused-argument
             """Remove selected position."""
@@ -310,7 +314,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                                 on_change_callback()
                             break
                 except Exception as e:  # pylint: disable=broad-except
-                    status_label.value = f"✗ Error: {str(e)}"
+                    status_label.value = f"✗ Error: {e!s}"
 
         def on_update_clicked(b):  # pylint: disable=unused-argument
             """Update selected position."""
@@ -384,7 +388,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 widgets.HBox([add_button, update_button, remove_button]),
                 status_label,
                 output,
-            ]
+            ],
         )
 
     # ==========================================================================
@@ -399,8 +403,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         vol_range: tuple[float, float] = (0.05, 0.5),
         continuous_update: bool = False,
     ) -> dict[str, Any]:
-        """
-        Create slider controls for market parameters.
+        """Create slider controls for market parameters.
 
         Args:
             spot_price: Current spot price (for centering slider)
@@ -411,6 +414,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             Dictionary containing 'spot' and 'vol' slider widgets
+
         """
         spot_min = spot_price * (1 - spot_range)
         spot_max = spot_price * (1 + spot_range)
@@ -451,8 +455,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         description: str = "Valuation Date:",
         num_steps: int = 10,
     ) -> widgets.SelectionSlider:
-        """
-        Create date selection slider for scenario analysis.
+        """Create date selection slider for scenario analysis.
 
         Args:
             max_days: Maximum days forward (None = use last expiry)
@@ -461,6 +464,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             SelectionSlider widget with date options
+
         """
         if max_days is None:
             # Use last option expiry
@@ -484,7 +488,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         date_options = [
             (
                 f"Day {d}: "
-                + f"{(self.portfolio.valuation_date + timedelta(days=d)).strftime('%Y-%m-%d')}",
+                f"{(self.portfolio.valuation_date + timedelta(days=d)).strftime('%Y-%m-%d')}",
                 d,
             )
             for d in date_range_days
@@ -505,8 +509,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         description: str = "Metric:",
         default: str = "pnl",
     ) -> widgets.Dropdown:
-        """
-        Create metric selection dropdown.
+        """Create metric selection dropdown.
 
         Args:
             metrics: list of (display_name, value) tuples (None = default set)
@@ -515,6 +518,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             Dropdown widget for metric selection
+
         """
         if metrics is None:
             metrics = [
@@ -543,8 +547,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         max_val: float = 50.0,
         step: float = 5.0,
     ) -> widgets.FloatSlider:
-        """
-        Create price range slider for scenario analysis.
+        """Create price range slider for scenario analysis.
 
         Args:
             description: Widget label
@@ -555,6 +558,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             FloatSlider widget
+
         """
         return widgets.FloatSlider(
             value=default,
@@ -572,10 +576,11 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     # ==========================================================================
 
     def create_transaction_cost_controls(
-        self, default_slippage_bps: int = 10, default_commission: float = 0.65
+        self,
+        default_slippage_bps: int = 10,
+        default_commission: float = 0.65,
     ) -> dict[str, Any]:
-        """
-        Create transaction cost parameter controls.
+        """Create transaction cost parameter controls.
 
         Args:
             default_slippage_bps: Default slippage in basis points
@@ -583,6 +588,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             Dictionary with 'slippage' and 'commission' widgets
+
         """
         slippage_widget = widgets.IntSlider(
             value=default_slippage_bps,
@@ -608,10 +614,11 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         return {"slippage": slippage_widget, "commission": commission_widget}
 
     def create_target_hedge_slider(
-        self, current_ratio: float = 100.0, description: str = "Target Hedge %:"
+        self,
+        current_ratio: float = 100.0,
+        description: str = "Target Hedge %:",
     ) -> widgets.IntSlider:
-        """
-        Create target hedge ratio slider.
+        """Create target hedge ratio slider.
 
         Args:
             current_ratio: Current hedge ratio for default value
@@ -619,6 +626,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             IntSlider widget
+
         """
         return widgets.IntSlider(
             value=int(current_ratio),
@@ -636,14 +644,14 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     # ==========================================================================
 
     def create_roll_controls(self, default_days_forward: int = 30) -> dict[str, Any]:
-        """
-        Create complete roll analysis control panel.
+        """Create complete roll analysis control panel.
 
         Args:
             default_days_forward: Default days forward for new maturity
 
         Returns:
             Dictionary with all roll-related widgets
+
         """
         position_selector = widgets.Dropdown(
             options=["Select Position..."]
@@ -720,10 +728,12 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     # ==========================================================================
 
     def create_interactive_dashboard(
-        self, spot_price: float, volatility: float, spot_range: float = 0.3
+        self,
+        spot_price: float,
+        volatility: float,
+        spot_range: float = 0.3,
     ) -> tuple[widgets.Widget, dict[str, Any]]:
-        """
-        Create complete interactive dashboard with market controls.
+        """Create complete interactive dashboard with market controls.
 
         Args:
             spot_price: Current spot price
@@ -731,7 +741,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             spot_range: Range for spot price slider (±%)
 
         Returns:
-            Tuple of (dashboard_widget, controls_dict)
+            tuple of (dashboard_widget, controls_dict)
+
         """
         market_controls = self.create_market_params_controls(
             spot_price=spot_price,
@@ -748,12 +759,12 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             [
                 widgets.HTML("<h3>Interactive Market Scenario Dashboard</h3>"),
                 widgets.HTML(
-                    "<p>Adjust market parameters to see real-time portfolio impact</p>"
+                    "<p>Adjust market parameters to see real-time portfolio impact</p>",
                 ),
                 market_controls["spot"],
                 market_controls["vol"],
                 output,
-            ]
+            ],
         )
 
         return dashboard, {**market_controls, "output": output}
@@ -764,8 +775,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     @staticmethod
     def create_section_header(title: str, subtitle: str | None = None) -> widgets.HTML:
-        """
-        Create formatted section header.
+        """Create formatted section header.
 
         Args:
             title: Section title
@@ -773,6 +783,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             HTML widget with formatted header
+
         """
         html = f"<h3>{title}</h3>"
         if subtitle:
@@ -781,10 +792,10 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     @staticmethod
     def create_button_group(
-        buttons: list[widgets.Button], layout: str = "horizontal"
+        buttons: list[widgets.Button],
+        layout: str = "horizontal",
     ) -> widgets.Widget:
-        """
-        Create group of buttons with consistent spacing.
+        """Create group of buttons with consistent spacing.
 
         Args:
             buttons: list of button widgets
@@ -792,6 +803,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             HBox or VBox containing the buttons
+
         """
         if layout == "horizontal":
             return widgets.HBox(buttons, layout=widgets.Layout(margin="5px"))
@@ -800,10 +812,10 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     @staticmethod
     def create_two_column_layout(
-        left_widgets: list[widgets.Widget], right_widgets: list[widgets.Widget]
+        left_widgets: list[widgets.Widget],
+        right_widgets: list[widgets.Widget],
     ) -> widgets.HBox:
-        """
-        Create two-column layout for widgets.
+        """Create two-column layout for widgets.
 
         Args:
             left_widgets: Widgets for left column
@@ -811,11 +823,14 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         Returns:
             HBox with two VBox columns
+
         """
         left_column = widgets.VBox(
-            left_widgets, layout=widgets.Layout(width="50%", padding="5px")
+            left_widgets,
+            layout=widgets.Layout(width="50%", padding="5px"),
         )
         right_column = widgets.VBox(
-            right_widgets, layout=widgets.Layout(width="50%", padding="5px")
+            right_widgets,
+            layout=widgets.Layout(width="50%", padding="5px"),
         )
         return widgets.HBox([left_column, right_column])

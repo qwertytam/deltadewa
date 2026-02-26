@@ -1,10 +1,12 @@
 """Tests for deltadewa.analysis.risk_reward module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestRiskRewardMixin:
@@ -20,7 +22,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -58,7 +60,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -82,7 +84,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -104,7 +106,7 @@ class TestRiskRewardMixin:
             volatility=0.3,
         )
 
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
         # Iron condor: buy put spread, buy call spread
         portfolio.add_position(
             strike_price=95.0,
@@ -163,7 +165,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -188,7 +190,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -224,7 +226,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -239,7 +241,6 @@ class TestRiskRewardMixin:
 
     def test_risk_reward_analysis_with_spot_range(self):
         """Test risk_reward_analysis with custom spot_range."""
-
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
@@ -247,7 +248,7 @@ class TestRiskRewardMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -256,7 +257,7 @@ class TestRiskRewardMixin:
         spot_range = np.linspace(50, 150, 100)
         # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(
-            spot_range=spot_range, num_simulations=100
+            spot_range=spot_range, num_simulations=100,
         )
 
         # Should still return valid analysis

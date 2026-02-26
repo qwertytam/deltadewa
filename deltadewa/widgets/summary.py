@@ -1,17 +1,17 @@
-"""
-Net hedge summary widget for portfolio metrics.
+"""Net hedge summary widget for portfolio metrics.
 
 This module provides a widget that displays key portfolio metrics and health
 indicators in a compact, always-visible format.
 """
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
+
 # Import centralized formatters
 from deltadewa.formatters.html import format_html_badge, format_html_metric
 
@@ -20,8 +20,7 @@ if TYPE_CHECKING:
 
 
 class NetHedgeSummary:
-    """
-    Always-visible KPI header showing key portfolio hedge metrics.
+    """Always-visible KPI header showing key portfolio hedge metrics.
 
     Displays core Greeks, crash convexity indicators, and probabilistic
     stats in a compact, color-coded format. Designed to be shown at the
@@ -37,27 +36,28 @@ class NetHedgeSummary:
 
         # Update when portfolio changes
         summary.update()
+
     """
 
     def __init__(self, portfolio: "OptionPortfolio"):
-        """
-        Initialize net hedge summary widget.
+        """Initialize net hedge summary widget.
 
         Args:
             portfolio: OptionPortfolio instance
+
         """
         self.portfolio = portfolio
         self.widget = None
         self._create_widget()
 
     def _format_large_block(
-        self, color: str, text_color: str, name: str, value_str: str
+        self, color: str, text_color: str, name: str, value_str: str,
     ) -> str:
-        """
-        Return formatted HTML for large block.
+        """Return formatted HTML for large block.
 
         Note:
             Uses centralized formatter from deltadewa.formatters
+
         """
         return format_html_badge(
             label=name,
@@ -74,8 +74,7 @@ class NetHedgeSummary:
         is_cost: bool = False,
         is_neutral: bool = False,
     ) -> str:
-        """
-        Format a Greek metric as colored HTML badge.
+        """Format a Greek metric as colored HTML badge.
 
         Args:
             name: Greek name
@@ -88,6 +87,7 @@ class NetHedgeSummary:
 
         Note:
             Uses centralized formatter from deltadewa.formatters
+
         """
         # Determine the format type based on the metric name
         matches_to_format_as_currency = [
@@ -118,10 +118,9 @@ class NetHedgeSummary:
         )
 
     def _format_pct(
-        self, name: str, value: float, is_neutral: bool = False
+        self, name: str, value: float, is_neutral: bool = False,
     ) -> str:
-        """
-        Format a percentage metric as colored HTML badge.
+        """Format a percentage metric as colored HTML badge.
 
         Args:
             name: Percent metric name
@@ -133,6 +132,7 @@ class NetHedgeSummary:
 
         Note:
             Uses centralized formatter from deltadewa.formatters
+
         """
         return format_html_metric(
             name=name,
@@ -143,8 +143,7 @@ class NetHedgeSummary:
         )
 
     def _format_crash_indicator(self, shock_pct: float, pnl: float) -> str:
-        """
-        Format crash convexity indicator.
+        """Format crash convexity indicator.
 
         Args:
             shock_pct: Spot price shock percentage
@@ -152,6 +151,7 @@ class NetHedgeSummary:
 
         Returns:
             HTML string with formatted indicator
+
         """
         if pnl >= 0:
             color = DEFAULT_PALETTE.positive
@@ -183,17 +183,17 @@ class NetHedgeSummary:
                 widgets.HTML(
                     f"""
                     <div style="background-color:{DEFAULT_PALETTE.med_dark_background};"""
-                    + """ color:white; padding:10px; border-radius:5px 5px 0 0;">
+                     """ color:white; padding:10px; border-radius:5px 5px 0 0;">
                     <h3 style="margin:0;">Hedge Summary</h3>
                     </div>
-                    """
+                    """,
                 ),
                 widgets.HTML(
-                    "<h4 style='margin:10px 10px 5px 10px;'>Portfolio Value</h4>"
+                    "<h4 style='margin:10px 10px 5px 10px;'>Portfolio Value</h4>",
                 ),
                 self.value_metrics_html,
                 widgets.HTML(
-                    "<h4 style='margin:10px 10px 5px 10px;'>Health Indicators</h4>"
+                    "<h4 style='margin:10px 10px 5px 10px;'>Health Indicators</h4>",
                 ),
                 self.health_indicators_r1_html,
                 self.health_indicators_r2_html,
@@ -204,7 +204,7 @@ class NetHedgeSummary:
                                 self.diagnostics_html,
                                 self.vol_metrics_html,
                                 self.crash_indicators_html,
-                            ]
+                            ],
                         ),
                     ],
                     titles=("Diagnostics (Expandable)",),
@@ -225,11 +225,11 @@ class NetHedgeSummary:
 
         value_html = (
             self._format_greek(
-                "Underlying Value", stats["total_underlying_value"]
+                "Underlying Value", stats["total_underlying_value"],
             )
             + self._format_greek("Option Value", stats["total_value"])
             + self._format_greek(
-                "Total Portfolio Value", stats["total_portfolio_value"]
+                "Total Portfolio Value", stats["total_portfolio_value"],
             )
         )
         self.value_metrics_html.value = (
@@ -239,16 +239,16 @@ class NetHedgeSummary:
         # Crash convexity
         current_spot = self.portfolio.spot_price
         pnl_0 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 1.00, include_underlying=True
+            current_spot * 1.00, include_underlying=True,
         )
         pnl_10 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.90, include_underlying=True
+            current_spot * 0.90, include_underlying=True,
         )
         pnl_20 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.80, include_underlying=True
+            current_spot * 0.80, include_underlying=True,
         )
         pnl_30 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.70, include_underlying=True
+            current_spot * 0.70, include_underlying=True,
         )
 
         crash_html = (
@@ -291,13 +291,13 @@ class NetHedgeSummary:
 
         vol_html = (
             self._format_pct(
-                "Min Vol", stats["volatility_min"], is_neutral=True
+                "Min Vol", stats["volatility_min"], is_neutral=True,
             )
             + self._format_pct(
-                "Max Vol", stats["volatility_max"], is_neutral=True
+                "Max Vol", stats["volatility_max"], is_neutral=True,
             )
             + self._format_pct(
-                "Vega-W.Avg Vol", vol_stats["avg_volatility"], is_neutral=True
+                "Vega-W.Avg Vol", vol_stats["avg_volatility"], is_neutral=True,
             )
             + self._format_greek(
                 "Custom Vol Count",
@@ -385,11 +385,11 @@ class NetHedgeSummary:
         prob_html += "</div>"
         self.prob_stats_html.value = prob_html
 
-    def display(self) -> Union[widgets.VBox, None]:
-        """
-        Get the display widget.
+    def display(self) -> widgets.VBox | None:
+        """Get the display widget.
 
         Returns:
             VBox widget containing the KPI summary
+
         """
         return self.widget

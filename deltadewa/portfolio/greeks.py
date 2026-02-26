@@ -1,6 +1,6 @@
 """Greeks calculations mixin for option portfolio."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.position import OptionPosition
@@ -14,8 +14,7 @@ class GreeksMixin:
         underlying_quantity: float
 
     def total_delta(self) -> float:
-        """
-        Calculate total portfolio delta from option positions only.
+        """Calculate total portfolio delta from option positions only.
 
         This is the sum of all option position deltas, excluding the underlying position.
         Also referred to as "Portfolio Delta" or "Total Delta".
@@ -23,6 +22,7 @@ class GreeksMixin:
         Returns:
             Total delta from options only (positive = net long options,
             negative = net short options)
+
         """
         return sum(pos.position_delta() for pos in self.positions)
 
@@ -43,8 +43,7 @@ class GreeksMixin:
         return sum(pos.position_rho() for pos in self.positions)
 
     def net_delta(self) -> float:
-        """
-        Calculate net delta including both options and underlying position.
+        """Calculate net delta including both options and underlying position.
 
         This is the total directional exposure combining:
         - Portfolio delta (from all option positions)
@@ -59,32 +58,32 @@ class GreeksMixin:
             - Portfolio delta (options): -100
             - Underlying position: +100 shares
             - Net delta: 0 (perfectly hedged)
+
         """
         return self.total_delta() + self.underlying_quantity
 
     def hedge_ratio(self) -> float:
-        """
-        Calculate the hedge ratio (how much of the notional is hedged).
+        """Calculate the hedge ratio (how much of the notional is hedged).
 
         Returns:
             Hedge ratio as a percentage
+
         """
         if self.underlying_quantity == 0:
             return 0.0
         return -(self.total_delta() / self.underlying_quantity) * 100
 
     def delta_adjustment_needed(self) -> float:
-        """
-        Calculate the delta adjustment needed to achieve delta neutrality.
+        """Calculate the delta adjustment needed to achieve delta neutrality.
 
         Returns:
             Number of shares to buy/sell to achieve delta neutrality
+
         """
         return -self.net_delta()
 
     def all_greeks(self) -> dict:
-        """
-        Calculate all portfolio Greeks in a single efficient pass.
+        """Calculate all portfolio Greeks in a single efficient pass.
 
         More efficient than calling individual methods when you need all Greeks.
         Uses the cached greeks() method on each option for batch computation.
@@ -97,6 +96,7 @@ class GreeksMixin:
             - total_theta: Portfolio theta (per day)
             - total_rho: Portfolio rho
             - net_delta: Total delta exposure (options + underlying)
+
         """
         total_delta = 0.0
         total_gamma = 0.0

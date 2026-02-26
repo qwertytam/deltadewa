@@ -1,13 +1,13 @@
-"""
-Global assumptions and market parameters widget.
+"""Global assumptions and market parameters widget.
 
 This module provides a centralized widget for managing market parameters
 and scenario assumptions across the deltadewa dashboard.
 """
 
-from datetime import datetime, timedelta, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
@@ -16,8 +16,7 @@ from deltadewa.colours import DEFAULT_PALETTE
 
 
 class GlobalAssumptions:
-    """
-    Centralized market parameters and scenario assumptions.
+    """Centralized market parameters and scenario assumptions.
 
     This class provides a single source of truth for all market parameters
     used throughout the dashboard. It eliminates duplicate slider controls
@@ -46,6 +45,7 @@ class GlobalAssumptions:
 
         # Register callback for changes
         assumptions.on_change(my_update_function)
+
     """
 
     def __init__(
@@ -59,8 +59,7 @@ class GlobalAssumptions:
         vol_range: tuple[float, float] = (0.05, 1.00),
         portfolio_time_horizon: int | None = None,
     ):
-        """
-        Initialize global assumptions panel.
+        """Initialize global assumptions panel.
 
         Args:
             spot_price: Initial spot price
@@ -72,9 +71,10 @@ class GlobalAssumptions:
             vol_range: Min/max for volatility slider
             portfolio_time_horizon: Optional default time horizon in days for
             portfolio (overrides time horizon selector)
+
         """
         if valuation_date is None:
-            valuation_date = datetime.now(tz=timezone.utc)
+            valuation_date = datetime.now(tz=UTC)
 
         # Market parameters
         spot_min = spot_price * (1 - spot_range_pct / 100)
@@ -293,20 +293,20 @@ class GlobalAssumptions:
             callback(change)
 
     def on_change(self, callback: Callable):
-        """
-        Register a callback to be called when any parameter changes.
+        """Register a callback to be called when any parameter changes.
 
         Args:
             callback: Function to call with change dict
+
         """
         self._callbacks.append(callback)
 
     def get_days_forward(self) -> int:
-        """
-        Get the selected number of days forward.
+        """Get the selected number of days forward.
 
         Returns:
             Days forward based on time horizon selector
+
         """
         if self.time_horizon.value == -1:
             return self.custom_days.value
@@ -314,35 +314,35 @@ class GlobalAssumptions:
 
     @property
     def time_horizon_days(self):
-        """
-        Property to get the selected number of days forward.
+        """Property to get the selected number of days forward.
 
         This is a convenience property that wraps get_days_forward()
         to match the expected interface in the notebook.
 
         Returns:
             Widget-like object with a 'value' attribute containing the days forward
+
         """
         return SimpleNamespace(value=self.get_days_forward())
 
     def get_valuation_date_forward(self) -> datetime:
-        """
-        Get the future valuation date based on time horizon.
+        """Get the future valuation date based on time horizon.
 
         Returns:
             Future datetime based on selected horizon
+
         """
         val_date = datetime.combine(
-            self.valuation_date.value, datetime.min.time()
+            self.valuation_date.value, datetime.min.time(),
         )
         return val_date + timedelta(days=self.get_days_forward())
 
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Export current assumptions as dictionary.
+    def to_dict(self) -> dict[str, Any]:
+        """Export current assumptions as dictionary.
 
         Returns:
             Dictionary with all current parameter values
+
         """
         return {
             "spot_price": self.spot_price.value,
@@ -359,11 +359,11 @@ class GlobalAssumptions:
         }
 
     def display(self) -> widgets.VBox:
-        """
-        Create and return the display widget.
+        """Create and return the display widget.
 
         Returns:
             VBox widget containing all assumption controls
+
         """
         market_section = widgets.VBox(
             [
@@ -373,16 +373,16 @@ class GlobalAssumptions:
                 self.risk_free_rate,
                 self.dividend_yield,
                 self.valuation_date,
-            ]
+            ],
         )
 
         time_section = widgets.VBox(
             [
                 widgets.HTML(
-                    "<h4>Time Horizon: Days Forward From Valuation Date</h4>"
+                    "<h4>Time Horizon: Days Forward From Valuation Date</h4>",
                 ),
                 widgets.HBox([self.time_horizon, self.custom_days]),
-            ]
+            ],
         )
 
         scenario_selectors = widgets.VBox(
@@ -392,7 +392,7 @@ class GlobalAssumptions:
                 self.grid_resolution,
                 self.monte_carlo_num_sims,
                 self.monte_carlo_inc_ul,
-            ]
+            ],
         )
         scenario_section = widgets.Accordion(children=[scenario_selectors])
         scenario_section.set_title(0, "Scenario Grid Parameters (Expand)")
@@ -403,12 +403,12 @@ class GlobalAssumptions:
                 widgets.HTML(
                     f"""
                     <div style="background-color:{DEFAULT_PALETTE.med_dark_background}; """
-                    + """color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
+                     """color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
                     <h3 style="margin:0;">Global Assumptions Panel</h3>
                     <p style="margin:5px 0 0 0; font-size:14px;">
                     Single source of truth for all market parameters</p>
                     </div>
-                    """
+                    """,
                 ),
                 market_section,
                 time_section,

@@ -23,8 +23,7 @@ def generate_spot_range(
     num_points: int = 250,
     use_comprehensive_range: bool = False,
 ) -> np.ndarray:
-    """
-    Generate a spot price range for analysis.
+    """Generate a spot price range for analysis.
 
     This is the single source of truth for spot range generation across
     the entire codebase. All consumers (portfolio/risk.py, visualization/pnl_charts.py,
@@ -53,6 +52,7 @@ def generate_spot_range(
         >>> # Use existing range (passthrough)
         >>> existing = np.array([90, 100, 110])
         >>> generate_spot_range(100.0, spot_range=existing)
+
     """
     if spot_range is not None:
         return spot_range

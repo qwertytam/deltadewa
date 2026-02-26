@@ -1,14 +1,15 @@
 """Tests for deltadewa.analysis.volatility module."""
 
-from datetime import datetime, timedelta, timezone
-from deltadewa.portfolio.core import OptionPortfolio
+from datetime import UTC, datetime, timedelta
+
 from deltadewa.analysis.volatility import (
-    calculate_portfolio_avg_volatility,
     apply_proportional_volatility_shift,
-    restore_volatilities,
+    calculate_portfolio_avg_volatility,
     get_volatility_stats,
+    restore_volatilities,
 )
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestCalculatePortfolioAvgVolatility:
@@ -35,7 +36,7 @@ class TestCalculatePortfolioAvgVolatility:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -56,7 +57,7 @@ class TestCalculatePortfolioAvgVolatility:
         # Add positions with different volatilities and vegas
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -64,7 +65,7 @@ class TestCalculatePortfolioAvgVolatility:
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=2,
             option_type=OptionType.PUT,
             volatility=0.20,
@@ -86,7 +87,7 @@ class TestCalculatePortfolioAvgVolatility:
         # Add long and short positions with same strike/maturity
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -94,7 +95,7 @@ class TestCalculatePortfolioAvgVolatility:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
             volatility=0.20,
@@ -116,7 +117,7 @@ class TestCalculatePortfolioAvgVolatility:
         # Add deep ITM position (very low vega)
         portfolio.add_position(
             strike_price=50.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=1),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=1),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -141,7 +142,7 @@ class TestApplyProportionalVolatilityShift:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -149,7 +150,7 @@ class TestApplyProportionalVolatilityShift:
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
             volatility=0.20,
@@ -163,7 +164,7 @@ class TestApplyProportionalVolatilityShift:
 
         # Shift to 30% average
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.30, preserve_structure=True
+            portfolio, 0.30, preserve_structure=True,
         )
 
         # Check ratio is preserved
@@ -188,7 +189,7 @@ class TestApplyProportionalVolatilityShift:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -196,7 +197,7 @@ class TestApplyProportionalVolatilityShift:
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
             volatility=0.20,
@@ -204,7 +205,7 @@ class TestApplyProportionalVolatilityShift:
 
         # Apply uniform shift
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.35, preserve_structure=False
+            portfolio, 0.35, preserve_structure=False,
         )
 
         # All positions should now be at target
@@ -225,7 +226,7 @@ class TestApplyProportionalVolatilityShift:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.01,  # Very small but non-zero
@@ -233,7 +234,7 @@ class TestApplyProportionalVolatilityShift:
 
         # Should scale proportionally or uniformly
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.30, preserve_structure=True
+            portfolio, 0.30, preserve_structure=True,
         )
 
         # Position should now be at or near target (scaled from 0.01 to 0.30)
@@ -252,14 +253,14 @@ class TestApplyProportionalVolatilityShift:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
         )
 
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.35, preserve_structure=True
+            portfolio, 0.35, preserve_structure=True,
         )
 
         # Check return value structure
@@ -281,7 +282,7 @@ class TestRestoreVolatilities:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -289,7 +290,7 @@ class TestRestoreVolatilities:
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
             volatility=0.20,
@@ -301,7 +302,7 @@ class TestRestoreVolatilities:
 
         # Apply shift
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.35, preserve_structure=False
+            portfolio, 0.35, preserve_structure=False,
         )
 
         # Verify changed
@@ -331,7 +332,7 @@ class TestRestoreVolatilities:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -355,7 +356,7 @@ class TestRestoreVolatilities:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -394,7 +395,7 @@ class TestGetVolatilityStats:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -425,7 +426,7 @@ class TestGetVolatilityStats:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -451,7 +452,7 @@ class TestGetVolatilityStats:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,
@@ -459,7 +460,7 @@ class TestGetVolatilityStats:
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
             volatility=0.20,
@@ -467,7 +468,7 @@ class TestGetVolatilityStats:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -492,7 +493,7 @@ class TestGetVolatilityStats:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
             volatility=0.30,

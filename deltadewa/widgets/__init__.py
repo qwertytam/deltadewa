@@ -1,5 +1,4 @@
-"""
-Interactive Widget Components for Options Dashboard
+"""Interactive Widget Components for Options Dashboard
 
 This module provides reusable ipywidgets components for building interactive
 portfolio analysis dashboards. It standardizes widget creation patterns and
@@ -28,20 +27,22 @@ from deltadewa.widgets.assumptions import GlobalAssumptions
 from deltadewa.widgets.base import InteractiveOutput
 from deltadewa.widgets.export_controls import ExportControlsMixin
 from deltadewa.widgets.gauges import GaugeIndicator
-from deltadewa.widgets.health_dashboard import (HedgeHealthDashboard,
-                                                HedgeHealthMetric)
+from deltadewa.widgets.health_dashboard import (
+                                                HedgeHealthDashboard,
+                                                HedgeHealthMetric,
+)
 from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
 from deltadewa.widgets.summary import NetHedgeSummary
 
 __all__ = [
-    "InteractiveOutput",
-    "GlobalAssumptions",
-    "NetHedgeSummary",
-    "PortfolioWidgets",
-    "ExportControlsMixin",
-    "HeatmapControlsMixin",
-    "GaugeIndicator",
-    "HedgeHealthMetric",
-    "HedgeHealthDashboard",
+                                                "ExportControlsMixin",
+                                                "GaugeIndicator",
+                                                "GlobalAssumptions",
+                                                "HeatmapControlsMixin",
+                                                "HedgeHealthDashboard",
+                                                "HedgeHealthMetric",
+                                                "InteractiveOutput",
+                                                "NetHedgeSummary",
+                                                "PortfolioWidgets",
 ]

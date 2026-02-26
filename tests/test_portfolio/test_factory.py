@@ -1,11 +1,11 @@
 """Tests for deltadewa.portfolio.factory module."""
 
-from deltadewa.portfolio.factory import (
-    create_empty_portfolio,
-    create_demo_portfolio,
-)
-from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.factory import (
+    create_demo_portfolio,
+    create_empty_portfolio,
+)
 
 
 class TestFactoryFunctions:
@@ -22,7 +22,7 @@ class TestFactoryFunctions:
     def test_create_empty_portfolio_with_kwargs(self):
         """Test create_empty_portfolio with custom parameters."""
         portfolio = create_empty_portfolio(
-            spot_price=150.0, volatility=0.3, underlying_quantity=200.0
+            spot_price=150.0, volatility=0.3, underlying_quantity=200.0,
         )
 
         assert portfolio.spot_price == 150.0
@@ -89,7 +89,7 @@ class TestFactoryFunctions:
     def test_create_empty_portfolio_different_params(self):
         """Test create_empty_portfolio with different rate parameters."""
         portfolio = create_empty_portfolio(
-            risk_free_rate=0.03, dividend_yield=0.02
+            risk_free_rate=0.03, dividend_yield=0.02,
         )
 
         assert portfolio.risk_free_rate == 0.03

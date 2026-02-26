@@ -3,20 +3,21 @@
 # pylint: disable=redefined-outer-name
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-import yaml
+
 import pandas as pd
 import pytest
+import yaml
 
 from deltadewa import OptionPortfolio
+from deltadewa.constants import OptionType
 from deltadewa.persistence import (
+    YAML_AVAILABLE,
     PortfolioSerializer,
     load_config_yaml,
-    YAML_AVAILABLE,
 )
 from deltadewa.reporting.audit import PortfolioLogger
-from deltadewa.constants import OptionType
 
 # ========== Fixtures ==========
 
@@ -32,7 +33,7 @@ def sample_portfolio():
         underlying_quantity=100.0,
         symbol="TEST",
     )
-    maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+    maturity = datetime.now(tz=UTC) + timedelta(days=30)
     portfolio.add_position(
         strike_price=100.0,
         maturity_date=maturity,
@@ -145,7 +146,7 @@ class TestJsonRoundtrip:
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json"
+            sample_portfolio, changelog, "test.json",
         )
 
         assert output_path.exists()
@@ -153,7 +154,7 @@ class TestJsonRoundtrip:
         assert output_path.name == "test.json"
 
     def test_json_roundtrip_preserves_market_params(
-        self, tmp_path, sample_portfolio
+        self, tmp_path, sample_portfolio,
     ):
         """Export then import JSON — market params should match."""
         serializer = PortfolioSerializer(tmp_path)
@@ -161,7 +162,7 @@ class TestJsonRoundtrip:
 
         # Export
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json"
+            sample_portfolio, changelog, "test.json",
         )
 
         # Import
@@ -170,21 +171,21 @@ class TestJsonRoundtrip:
 
         # Compare market parameters
         assert imported_params["spot_price"] == pytest.approx(
-            sample_portfolio.spot_price
+            sample_portfolio.spot_price,
         )
         assert imported_params["volatility"] == pytest.approx(
-            sample_portfolio.volatility
+            sample_portfolio.volatility,
         )
         assert imported_params["risk_free_rate"] == pytest.approx(
-            sample_portfolio.risk_free_rate
+            sample_portfolio.risk_free_rate,
         )
         assert imported_params["dividend_yield"] == pytest.approx(
-            sample_portfolio.dividend_yield
+            sample_portfolio.dividend_yield,
         )
         assert imported_params["symbol"] == sample_portfolio.symbol
 
     def test_json_roundtrip_preserves_positions(
-        self, tmp_path, sample_portfolio
+        self, tmp_path, sample_portfolio,
     ):
         """Export then import JSON — position count, strikes, types, quantities should match."""
         serializer = PortfolioSerializer(tmp_path)
@@ -192,7 +193,7 @@ class TestJsonRoundtrip:
 
         # Export
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json"
+            sample_portfolio, changelog, "test.json",
         )
 
         # Import
@@ -201,14 +202,14 @@ class TestJsonRoundtrip:
 
         # Compare positions
         assert len(imported_portfolio.positions) == len(
-            sample_portfolio.positions
+            sample_portfolio.positions,
         )
 
         for orig_pos, imported_pos in zip(
-            sample_portfolio.positions, imported_portfolio.positions
+            sample_portfolio.positions, imported_portfolio.positions,
         ):
             assert imported_pos.option.strike_price == pytest.approx(
-                orig_pos.option.strike_price
+                orig_pos.option.strike_price,
             )
             assert (
                 imported_pos.option.option_type == orig_pos.option.option_type
@@ -224,7 +225,7 @@ class TestJsonRoundtrip:
             risk_free_rate=0.05,
             dividend_yield=0.02,
         )
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
@@ -238,7 +239,7 @@ class TestJsonRoundtrip:
 
         # Export
         output_path = serializer.export_to_json(
-            portfolio, changelog, "test.json"
+            portfolio, changelog, "test.json",
         )
 
         # Import
@@ -252,7 +253,7 @@ class TestJsonRoundtrip:
         ].option.volatility == pytest.approx(0.5)
 
     def test_import_from_json_without_portfolio_creation(
-        self, tmp_path, sample_portfolio
+        self, tmp_path, sample_portfolio,
     ):
         """Test import_from_json with create_portfolio=False returns raw dict."""
         serializer = PortfolioSerializer(tmp_path)
@@ -260,12 +261,12 @@ class TestJsonRoundtrip:
 
         # Export
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json"
+            sample_portfolio, changelog, "test.json",
         )
 
         # Import without creating portfolio
         result = serializer.import_from_json(
-            output_path, create_portfolio=False
+            output_path, create_portfolio=False,
         )
 
         # Should return raw data dict without 'portfolio' key
@@ -293,7 +294,7 @@ class TestJsonRoundtrip:
                     "strike_price": 100.0,
                     # Missing maturity_date
                     "quantity": 1,
-                }
+                },
             ],
         }
 
@@ -321,10 +322,10 @@ class TestJsonRoundtrip:
                     "option_type": OptionType.CALL,
                     # Missing strike_price
                     "maturity_date": (
-                        datetime.now(tz=timezone.utc) + timedelta(days=30)
+                        datetime.now(tz=UTC) + timedelta(days=30)
                     ).isoformat(),
                     "quantity": 1,
-                }
+                },
             ],
         }
 
@@ -348,7 +349,7 @@ class TestYamlRoundtrip:
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         output_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml"
+            sample_portfolio, changelog, "test.yaml",
         )
 
         assert output_path is not None
@@ -357,7 +358,7 @@ class TestYamlRoundtrip:
         assert output_path.name == "test.yaml"
 
     def test_yaml_roundtrip_preserves_market_params(
-        self, tmp_path, sample_portfolio
+        self, tmp_path, sample_portfolio,
     ):
         """Export then import YAML — market params should match."""
         serializer = PortfolioSerializer(tmp_path)
@@ -365,7 +366,7 @@ class TestYamlRoundtrip:
 
         # Export
         output_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml"
+            sample_portfolio, changelog, "test.yaml",
         )
 
         # Import
@@ -374,21 +375,21 @@ class TestYamlRoundtrip:
 
         # Compare market parameters
         assert imported_params["spot_price"] == pytest.approx(
-            sample_portfolio.spot_price
+            sample_portfolio.spot_price,
         )
         assert imported_params["volatility"] == pytest.approx(
-            sample_portfolio.volatility
+            sample_portfolio.volatility,
         )
         assert imported_params["risk_free_rate"] == pytest.approx(
-            sample_portfolio.risk_free_rate
+            sample_portfolio.risk_free_rate,
         )
         assert imported_params["dividend_yield"] == pytest.approx(
-            sample_portfolio.dividend_yield
+            sample_portfolio.dividend_yield,
         )
         assert imported_params["symbol"] == sample_portfolio.symbol
 
     def test_yaml_roundtrip_preserves_positions(
-        self, tmp_path, sample_portfolio
+        self, tmp_path, sample_portfolio,
     ):
         """Export then import YAML — positions should match."""
         serializer = PortfolioSerializer(tmp_path)
@@ -396,7 +397,7 @@ class TestYamlRoundtrip:
 
         # Export
         output_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml"
+            sample_portfolio, changelog, "test.yaml",
         )
 
         # Import
@@ -405,14 +406,14 @@ class TestYamlRoundtrip:
 
         # Compare positions
         assert len(imported_portfolio.positions) == len(
-            sample_portfolio.positions
+            sample_portfolio.positions,
         )
 
         for orig_pos, imported_pos in zip(
-            sample_portfolio.positions, imported_portfolio.positions
+            sample_portfolio.positions, imported_portfolio.positions,
         ):
             assert imported_pos.option.strike_price == pytest.approx(
-                orig_pos.option.strike_price
+                orig_pos.option.strike_price,
             )
             assert (
                 imported_pos.option.option_type == orig_pos.option.option_type
@@ -421,7 +422,6 @@ class TestYamlRoundtrip:
 
     def test_yaml_roundtrip_with_maturity_days(self, tmp_path):
         """Test YAML import with maturity_days instead of maturity_date."""
-
         # Create YAML with maturity_days
         config = {
             "market_parameters": {
@@ -438,7 +438,7 @@ class TestYamlRoundtrip:
                     "strike_price": 100.0,
                     "maturity_days": 30,
                     "quantity": 1,
-                }
+                },
             ],
         }
 
@@ -456,7 +456,7 @@ class TestYamlRoundtrip:
 
         # Check that maturity is approximately 30 days from now
         time_to_maturity = (
-            position.option.maturity_date - datetime.now(tz=timezone.utc)
+            position.option.maturity_date - datetime.now(tz=UTC)
         ).total_seconds() / 86400
         assert time_to_maturity == pytest.approx(30, abs=1)
 
@@ -482,7 +482,6 @@ class TestCsvExport:
 
     def test_csv_positions_content(self, tmp_path, sample_portfolio):
         """Test that positions CSV contains correct columns and data."""
-
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         result = serializer.export_to_csv(sample_portfolio, changelog, "test")
@@ -513,7 +512,6 @@ class TestCsvExport:
 
     def test_csv_risk_content(self, tmp_path, sample_portfolio):
         """Test that risk CSV contains summary stats."""
-
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         result = serializer.export_to_csv(sample_portfolio, changelog, "test")
@@ -544,7 +542,7 @@ class TestUniversalImport:
 
         # Export as JSON
         json_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json"
+            sample_portfolio, changelog, "test.json",
         )
 
         # Import using universal function
@@ -561,7 +559,7 @@ class TestUniversalImport:
 
         # Export as YAML
         yaml_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml"
+            sample_portfolio, changelog, "test.yaml",
         )
 
         # Import using universal function
@@ -591,7 +589,6 @@ class TestLoadConfigYaml:
 
     def test_load_valid_config(self, tmp_path):
         """Test loading a valid YAML config with all required fields."""
-
         # Create valid YAML config
         config = {
             "market_parameters": {
@@ -607,7 +604,7 @@ class TestLoadConfigYaml:
                     "strike_price": 100.0,
                     "maturity_date": "2024-12-31",
                     "quantity": 1,
-                }
+                },
             ],
         }
 
@@ -629,7 +626,6 @@ class TestLoadConfigYaml:
 
     def test_load_missing_required_param_returns_none(self, tmp_path):
         """Test that missing required market parameter returns None."""
-
         # Create YAML with missing volatility
         config = {
             "market_parameters": {
@@ -659,7 +655,6 @@ class TestLoadConfigYaml:
 
     def test_load_missing_sections_returns_none(self, tmp_path):
         """Test that missing market_parameters or positions section returns None."""
-
         # Create YAML with missing positions section
         config = {
             "market_parameters": {
@@ -667,7 +662,7 @@ class TestLoadConfigYaml:
                 "volatility": 0.3,
                 "risk_free_rate": 0.05,
                 "dividend_yield": 0.02,
-            }
+            },
             # Missing positions section
         }
 
@@ -732,7 +727,7 @@ class TestConvenienceFunctions:
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         json_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json"
+            sample_portfolio, changelog, "test.json",
         )
 
         # Import using convenience function

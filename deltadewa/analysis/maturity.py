@@ -4,8 +4,7 @@ import pandas as pd
 
 
 class MaturityMixin:
-    """
-    Mixin for maturity bucket classification.
+    """Mixin for maturity bucket classification.
 
     Provides methods for classifying options by time to expiration
     and adding maturity bucket columns to DataFrames.
@@ -13,8 +12,7 @@ class MaturityMixin:
 
     @staticmethod
     def classify_maturity_bucket(days_to_expiry: int) -> str:
-        """
-        Classify option by time to expiration bucket.
+        """Classify option by time to expiration bucket.
 
         Buckets:
         - 0-7 days: Weekly options (high theta, significant gamma)
@@ -28,6 +26,7 @@ class MaturityMixin:
 
         Returns:
             Bucket label string
+
         """
         if days_to_expiry <= 7:
             return "0-7 days (Weekly)"
@@ -41,25 +40,25 @@ class MaturityMixin:
             return "90+ days (Long-term)"
 
     def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Add maturity bucket column to positions DataFrame.
+        """Add maturity bucket column to positions DataFrame.
 
         Args:
             df: DataFrame with 'maturity' column
 
         Returns:
             DataFrame with added 'maturity_bucket' and 'days_to_expiry' columns
+
         """
         df = df.copy()
 
         # Calculate days to expiry
         df["days_to_expiry"] = df["maturity"].apply(
-            lambda x: (pd.to_datetime(x) - pd.Timestamp.now()).days
+            lambda x: (pd.to_datetime(x) - pd.Timestamp.now()).days,
         )
 
         # Classify into buckets
         df["maturity_bucket"] = df["days_to_expiry"].apply(
-            self.classify_maturity_bucket
+            self.classify_maturity_bucket,
         )
 
         return df

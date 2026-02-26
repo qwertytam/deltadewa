@@ -1,9 +1,10 @@
 """Tests for deltadewa.analysis.maturity module."""
 
-from datetime import datetime, timedelta, timezone
-from deltadewa.portfolio.core import OptionPortfolio
+from datetime import UTC, datetime, timedelta
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestMaturityMixin:
@@ -86,7 +87,7 @@ class TestMaturityMixin:
         # Add a position
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=15),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=15),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -121,7 +122,7 @@ class TestMaturityMixin:
             # We'll test with a real position instead
             portfolio.add_position(
                 strike_price=100.0,
-                maturity_date=datetime.now(tz=timezone.utc)
+                maturity_date=datetime.now(tz=UTC)
                 + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,

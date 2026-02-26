@@ -13,8 +13,7 @@ def create_scenario_cache_key(
     metric: str,
     portfolio_state_hash: str,
 ) -> tuple:
-    """
-    Create a hashable cache key for scenario grid results.
+    """Create a hashable cache key for scenario grid results.
 
     Args:
         spot_scenarios: Array of spot prices
@@ -24,6 +23,7 @@ def create_scenario_cache_key(
 
     Returns:
         tuple suitable for use as dictionary key
+
     """
     # Convert numpy array to tuple for hashing
     spot_tuple = tuple(spot_scenarios.tolist())
@@ -38,8 +38,7 @@ def create_spot_vol_cache_key(
     metric: str,
     portfolio_state_hash: str,
 ) -> tuple:
-    """
-    Create hashable cache key for spot x vol scenario grid results.
+    """Create hashable cache key for spot x vol scenario grid results.
 
     Args:
         spot_scenarios: Array of spot prices
@@ -54,6 +53,7 @@ def create_spot_vol_cache_key(
         Rounds to 6 decimal places for stability. This provides precision
         to 0.000001 for typical spot prices and 0.0001% for volatilities,
         which is more than sufficient for caching purposes.
+
     """
     # Convert numpy arrays to tuples for hashing (rounded for stability)
     spot_tuple = tuple(np.round(spot_scenarios, 6).tolist())
@@ -63,8 +63,7 @@ def create_spot_vol_cache_key(
 
 
 def get_portfolio_state_hash(portfolio) -> str:
-    """
-    Generate a hash representing the current portfolio state.
+    """Generate a hash representing the current portfolio state.
 
     This is used for cache invalidation - if the portfolio changes,
     the hash changes and cached scenario grids are invalidated.
@@ -74,8 +73,8 @@ def get_portfolio_state_hash(portfolio) -> str:
 
     Returns:
         String hash of portfolio state
-    """
 
+    """
     # Collect all relevant state
     state_elements = [
         str(portfolio.spot_price),
@@ -95,7 +94,7 @@ def get_portfolio_state_hash(portfolio) -> str:
                 str(pos.option.maturity_date.isoformat()),
                 pos.option.option_type,
                 str(pos.option.volatility),
-            ]
+            ],
         )
 
     # Create hash
@@ -104,8 +103,7 @@ def get_portfolio_state_hash(portfolio) -> str:
 
 
 class ScenarioGridCache:
-    """
-    Cache for scenario grid calculations with automatic invalidation.
+    """Cache for scenario grid calculations with automatic invalidation.
 
     This class provides caching for expensive scenario grid calculations.
     The cache is automatically invalidated when portfolio state changes.
@@ -125,11 +123,11 @@ class ScenarioGridCache:
     """
 
     def __init__(self, max_size: int = 128):
-        """
-        Initialize cache.
+        """Initialize cache.
 
         Args:
             max_size: Maximum number of cached results (LRU eviction)
+
         """
         self._cache: dict[tuple, pd.DataFrame] = {}
         self._max_size = max_size
@@ -145,8 +143,7 @@ class ScenarioGridCache:
         baseline_spot: float | None = None,
         baseline_valuation_date: datetime | None = None,
     ) -> pd.DataFrame:
-        """
-        Get cached result or calculate if not available.
+        """Get cached result or calculate if not available.
 
         Args:
             portfolio: OptionPortfolio instance
@@ -159,11 +156,12 @@ class ScenarioGridCache:
 
         Returns:
             DataFrame with scenario grid results
+
         """
         # Generate cache key
         portfolio_hash = get_portfolio_state_hash(portfolio)
         cache_key = create_scenario_cache_key(
-            spot_scenarios, time_points, metric, portfolio_hash
+            spot_scenarios, time_points, metric, portfolio_hash,
         )
 
         # Check cache
@@ -205,8 +203,7 @@ class ScenarioGridCache:
         baseline_value: float | None = None,
         proportional_vol_scaling: bool = True,
     ) -> pd.DataFrame:
-        """
-        Get cached spot x vol result or calculate if not available.
+        """Get cached spot x vol result or calculate if not available.
 
         Uses vectorized calculation for P&L at expiry for maximum performance.
 
@@ -221,11 +218,12 @@ class ScenarioGridCache:
 
         Returns:
             DataFrame with scenario grid results (columns: spot_price, volatility, value)
+
         """
         # Generate cache key
         portfolio_hash = get_portfolio_state_hash(portfolio)
         cache_key = create_spot_vol_cache_key(
-            spot_scenarios, vol_scenarios, metric, portfolio_hash
+            spot_scenarios, vol_scenarios, metric, portfolio_hash,
         )
 
         # Check cache

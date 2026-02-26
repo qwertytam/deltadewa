@@ -1,6 +1,6 @@
 """P&L calculations mixin for option portfolio."""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -22,11 +22,11 @@ class PnLMixin:
         def total_value(self) -> float: ...
 
     def calculate_net_debit(self) -> float:
-        """
-        Calculate the net debit/credit for implementing the portfolio.
+        """Calculate the net debit/credit for implementing the portfolio.
 
         Returns:
             Net debit (positive) or net credit (negative) in dollars
+
         """
         return self.total_value()
 
@@ -35,8 +35,7 @@ class PnLMixin:
         spot_price_at_expiry: float,
         include_underlying: bool = False,
     ) -> float:
-        """
-        Calculate P&L at expiration for a given spot price.
+        """Calculate P&L at expiration for a given spot price.
 
         Args:
             spot_price_at_expiry: Spot price at expiration
@@ -44,6 +43,7 @@ class PnLMixin:
 
         Returns:
             Total P&L at expiration
+
         """
         # pylint: disable=assignment-from-no-return
         initial_cost = self.total_value()
@@ -57,11 +57,11 @@ class PnLMixin:
         for pos in self.positions:
             if pos.option.option_type == OptionType.CALL:
                 intrinsic = max(
-                    0, spot_price_at_expiry - pos.option.strike_price
+                    0, spot_price_at_expiry - pos.option.strike_price,
                 )
             else:  # put
                 intrinsic = max(
-                    0, pos.option.strike_price - spot_price_at_expiry
+                    0, pos.option.strike_price - spot_price_at_expiry,
                 )
 
             pnl += intrinsic * pos.quantity * pos.contract_size
@@ -80,8 +80,7 @@ class PnLMixin:
         spot_scenarios: np.ndarray,
         include_underlying: bool = True,
     ) -> np.ndarray:
-        """
-        Calculate P&L at expiry using vectorized NumPy operations.
+        """Calculate P&L at expiry using vectorized NumPy operations.
 
         This method provides a vectorized alternative to calculate_pnl_at_expiry
         for computing P&L across many spot scenarios simultaneously. It's much
@@ -94,6 +93,7 @@ class PnLMixin:
 
         Returns:
             np.ndarray of P&L values for each spot scenario (shape: (n,))
+
         """
         if len(self.positions) == 0:
             # Empty portfolio case
@@ -111,7 +111,7 @@ class PnLMixin:
             [
                 pos.option.option_type == OptionType.CALL
                 for pos in self.positions
-            ]
+            ],
         )
 
         # Vectorized intrinsic value calculation using broadcasting

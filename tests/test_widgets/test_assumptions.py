@@ -1,6 +1,7 @@
 """Tests for deltadewa.widgets.assumptions module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+
 from deltadewa.widgets.assumptions import GlobalAssumptions
 
 

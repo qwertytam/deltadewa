@@ -1,12 +1,14 @@
 """Tests for deltadewa.visualization.scenarios module."""
 
-from datetime import datetime, timedelta, timezone
-import pandas as pd
+from datetime import UTC, datetime, timedelta
+
 import matplotlib
 import matplotlib.pyplot as plt
+import pandas as pd
+
+from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
-from deltadewa.constants import OptionType
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
@@ -17,7 +19,7 @@ class TestScenarioChartsMixin:
     def test_plot_scenario_analysis(self):
         """Test plot_scenario_analysis."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -36,11 +38,11 @@ class TestScenarioChartsMixin:
                 "total_pnl": [-900, -300, 300, 900, 1500],
                 "total_delta": [0.5, 0.6, 0.7, 0.8, 0.9],
                 "net_delta": [50.5, 50.6, 50.7, 50.8, 50.9],
-            }
+            },
         )
 
         charts = OptionCharts(portfolio)
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = datetime.now(tz=UTC)
         fig = charts.plot_scenario_analysis(
             scenario_df=scenario_df,
             days_forward=10,
@@ -56,7 +58,7 @@ class TestScenarioChartsMixin:
     def test_plot_scenario_analysis_today(self):
         """Test plot_scenario_analysis with days_forward=0."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -73,11 +75,11 @@ class TestScenarioChartsMixin:
                 "total_pnl": [0, 100, 200],
                 "total_delta": [0.5, 0.6, 0.7],
                 "net_delta": [0.5, 0.6, 0.7],
-            }
+            },
         )
 
         charts = OptionCharts(portfolio)
-        valuation_date = datetime.now(tz=timezone.utc)
+        valuation_date = datetime.now(tz=UTC)
         fig = charts.plot_scenario_analysis(
             scenario_df=scenario_df,
             days_forward=0,

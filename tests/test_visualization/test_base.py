@@ -1,9 +1,10 @@
 """Tests for deltadewa.visualization.base module."""
 
-from datetime import datetime, timedelta, timezone
-from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.visualization.base import OptionChartsBase, OptionCharts
+from datetime import UTC, datetime, timedelta
+
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.visualization.base import OptionCharts, OptionChartsBase
 
 
 class TestOptionChartsBase:
@@ -37,7 +38,7 @@ class TestOptionChartsBase:
     def test_get_expiry_label_single_maturity(self):
         """Test _get_expiry_label with single maturity."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
@@ -54,8 +55,8 @@ class TestOptionChartsBase:
     def test_get_expiry_label_multiple_maturities(self):
         """Test _get_expiry_label with multiple maturities."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity1 = datetime.now(tz=timezone.utc) + timedelta(days=30)
-        maturity2 = datetime.now(tz=timezone.utc) + timedelta(days=60)
+        maturity1 = datetime.now(tz=UTC) + timedelta(days=30)
+        maturity2 = datetime.now(tz=UTC) + timedelta(days=60)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -76,7 +77,7 @@ class TestOptionChartsBase:
 
         expected = (
             f"{maturity1.strftime('%Y-%m-%d')} "
-            + f"→ {maturity2.strftime('%Y-%m-%d')}"
+             f"→ {maturity2.strftime('%Y-%m-%d')}"
         )
         assert label == expected
 

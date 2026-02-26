@@ -1,9 +1,10 @@
 """Tests for deltadewa.analysis.summary module (insights functionality)."""
 
-from datetime import datetime, timedelta, timezone
-from deltadewa.portfolio.core import OptionPortfolio
+from datetime import UTC, datetime, timedelta
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestSummaryMixinInsights:
@@ -20,7 +21,7 @@ class TestSummaryMixinInsights:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -46,7 +47,7 @@ class TestSummaryMixinInsights:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -80,7 +81,7 @@ class TestSummaryMixinInsights:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -104,7 +105,7 @@ class TestSummaryMixinInsights:
         # Short call has positive theta (positive carry)
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -130,7 +131,7 @@ class TestSummaryMixinInsights:
         # Long call has negative theta (negative carry)
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -163,7 +164,7 @@ class TestSummaryMixinInsights:
         for _ in range(5):
             portfolio.add_position(
                 strike_price=105.0,
-                maturity_date=datetime.now(tz=timezone.utc)
+                maturity_date=datetime.now(tz=UTC)
                 + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,

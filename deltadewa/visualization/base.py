@@ -1,7 +1,6 @@
 """Base class and final composition for option charts visualization."""
 
 import warnings
-from typing import List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,8 +13,7 @@ from deltadewa.visualization.theta_charts import ThetaChartsMixin
 
 
 class OptionChartsBase:
-    """
-    Base class with portfolio reference and style setup.
+    """Base class with portfolio reference and style setup.
 
     This class provides the foundation for all charting utilities, managing
     the portfolio reference and matplotlib style configuration.
@@ -23,15 +21,16 @@ class OptionChartsBase:
     Attributes:
         portfolio: OptionPortfolio instance to visualize
         style: Matplotlib style to use
+
     """
 
     def __init__(self, portfolio, style: str = "seaborn-v0_8-darkgrid"):
-        """
-        Initialize OptionChartsBase with a portfolio.
+        """Initialize OptionChartsBase with a portfolio.
 
         Args:
             portfolio: OptionPortfolio instance to visualize
             style: Matplotlib style name (default: 'seaborn-v0_8-darkgrid')
+
         """
         self.portfolio = portfolio
         self.style = style
@@ -48,14 +47,14 @@ class OptionChartsBase:
         """Get expiry label for chart titles."""
         if self.portfolio.positions:
             maturities = sorted(
-                {pos.option.maturity_date for pos in self.portfolio.positions}
+                {pos.option.maturity_date for pos in self.portfolio.positions},
             )
             if len(maturities) == 1:
                 return maturities[0].strftime("%Y-%m-%d")
             else:
                 result = (
                     f"{maturities[0].strftime('%Y-%m-%d')} "
-                    + f"→ {maturities[-1].strftime('%Y-%m-%d')}"
+                    f"→ {maturities[-1].strftime('%Y-%m-%d')}"
                 )
                 return result
         return "N/A"
@@ -66,9 +65,8 @@ class OptionChartsBase:
         cols: int,
         titles: list[str],
         figsize: tuple[int, int] | None = None,
-    ) -> Tuple[Figure, np.ndarray]:
-        """
-        Create standardized multi-panel chart grid with consistent styling.
+    ) -> tuple[Figure, np.ndarray]:
+        """Create standardized multi-panel chart grid with consistent styling.
 
         Args:
             rows: Number of rows
@@ -77,7 +75,8 @@ class OptionChartsBase:
             figsize: Figure size tuple (default: calculated based on rows/cols)
 
         Returns:
-            Tuple of (Figure, axes array)
+            tuple of (Figure, axes array)
+
         """
         if figsize is None:
             figsize = (8 * cols, 6 * rows)
@@ -105,8 +104,7 @@ class OptionCharts(
     ScenarioChartsMixin,
     OptionChartsBase,
 ):
-    """
-    Comprehensive charting utilities for options portfolio analysis.
+    """Comprehensive charting utilities for options portfolio analysis.
 
     This class provides methods to create standardized, publication-quality
     charts for options analysis including P&L diagrams, Greek distributions,
@@ -122,6 +120,7 @@ class OptionCharts(
     Attributes:
         portfolio: OptionPortfolio instance
         style: Matplotlib style to use (default: 'seaborn-v0_8-darkgrid')
+
     """
 
-    pass  # pylint: disable=unnecessary-pass
+    # pylint: disable=unnecessary-pass

@@ -1,11 +1,13 @@
 """Tests for deltadewa.widgets.health_dashboard module."""
 
 from unittest.mock import Mock
-import pytest
+
 import ipywidgets as widgets  # type: ignore[import-untyped]
+import pytest
+
 from deltadewa.widgets.health_dashboard import (
-    HedgeHealthMetric,
     HedgeHealthDashboard,
+    HedgeHealthMetric,
 )
 
 
@@ -163,7 +165,7 @@ class TestHedgeHealthDashboard:
     def test_with_carry_paid(self, mock_portfolio):
         """Test that cumulative carry paid is handled correctly."""
         dashboard = HedgeHealthDashboard(
-            mock_portfolio, cumulative_carry_paid=100.0
+            mock_portfolio, cumulative_carry_paid=100.0,
         )
         assert dashboard.cumulative_carry_paid == 100.0
         widget = dashboard.display()
@@ -239,7 +241,7 @@ class TestHedgeHealthDashboard:
             "parameters": {
                 "historical_vol_low": 0.18,
                 "historical_vol_high": 0.38,
-            }
+            },
         }
 
         dashboard.load_config(new_config)
@@ -260,8 +262,8 @@ class TestHedgeHealthDashboard:
                     "end": 15.0,
                     "min_val": -8.0,
                     "max_val": 4.0,
-                }
-            }
+                },
+            },
         }
 
         dashboard.load_config(new_config)

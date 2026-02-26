@@ -1,9 +1,10 @@
 """Tests for deltadewa.analysis.recommendations module (hedge functionality)."""
 
-from datetime import datetime, timedelta, timezone
-from deltadewa.portfolio.core import OptionPortfolio
+from datetime import UTC, datetime, timedelta
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestRecommendationsMixinHedge:
@@ -21,7 +22,7 @@ class TestRecommendationsMixinHedge:
         # Add a long call
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -60,14 +61,14 @@ class TestRecommendationsMixinHedge:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
         result = analyzer.calculate_hedge_actions(
-            target_hedge_ratio=50.0, include_option_alternatives=False
+            target_hedge_ratio=50.0, include_option_alternatives=False,
         )
 
         assert "option_alternatives" in result
@@ -84,14 +85,14 @@ class TestRecommendationsMixinHedge:
         # Add positions
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
 
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -118,7 +119,7 @@ class TestRecommendationsMixinHedge:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -126,7 +127,7 @@ class TestRecommendationsMixinHedge:
         analyzer = PortfolioAnalyzer(portfolio)
         # pylint: disable=protected-access
         alternatives = analyzer._calculate_option_alternatives(
-            delta_change_needed=-10.0, max_alternatives=10
+            delta_change_needed=-10.0, max_alternatives=10,
         )
 
         assert isinstance(alternatives, list)
@@ -154,7 +155,7 @@ class TestRecommendationsMixinHedge:
         for strike in [95, 100, 105, 110, 115]:
             portfolio.add_position(
                 strike_price=float(strike),
-                maturity_date=datetime.now(tz=timezone.utc)
+                maturity_date=datetime.now(tz=UTC)
                 + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
@@ -163,7 +164,7 @@ class TestRecommendationsMixinHedge:
         analyzer = PortfolioAnalyzer(portfolio)
         # pylint: disable=protected-access
         alternatives = analyzer._calculate_option_alternatives(
-            delta_change_needed=-10.0, max_alternatives=3
+            delta_change_needed=-10.0, max_alternatives=3,
         )
 
         # Should return at most 3 alternatives

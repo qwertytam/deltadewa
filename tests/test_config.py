@@ -44,7 +44,7 @@ class TestCreateExportDirWidget:
         )
 
         assert hasattr(widget, "export_dir")
-        assert isinstance(getattr(widget, "export_dir"), Path)
+        assert isinstance(widget.export_dir, Path)
 
     def test_widget_has_children(self, tmp_path):
         """Test that the VBox contains expected child widgets."""
@@ -116,7 +116,7 @@ class TestCreateExportDirWidget:
         assert custom_dir.exists()
 
         # Widget's export_dir should match
-        widget_dir = getattr(widget, "export_dir")
+        widget_dir = widget.export_dir
         assert widget_dir == custom_dir
 
 

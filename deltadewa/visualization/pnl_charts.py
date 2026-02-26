@@ -1,6 +1,6 @@
 """P&L diagram plotting methods for option charts."""
 
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -39,8 +39,7 @@ class PnLChartsMixin:
         show_underlying: bool = True,
         figsize: tuple[int, int] = (14, 12),
     ) -> Figure:
-        """
-        Create comprehensive P&L diagram at expiration.
+        """Create comprehensive P&L diagram at expiration.
 
         Shows two panels:
         1. Options-only P&L
@@ -56,6 +55,7 @@ class PnLChartsMixin:
 
         Returns:
             Matplotlib Figure object
+
         """
         # Create spot price range
         # Note: spot_range_pct is symmetric ± percentage (e.g., 40 means 60% to 140%)
@@ -71,10 +71,10 @@ class PnLChartsMixin:
 
         # Calculate P&L curves using vectorized operations
         pnl_options = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
-            spot_range, include_underlying=False
+            spot_range, include_underlying=False,
         )
         pnl_total = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
-            spot_range, include_underlying=True
+            spot_range, include_underlying=True,
         )
 
         # Get risk/reward metrics
@@ -127,8 +127,7 @@ class PnLChartsMixin:
         include_underlying: bool = True,
         show_probability_overlay: bool = False,
     ) -> Figure:
-        """
-        Create P&L distribution chart with annotated key metrics and probability analysis.
+        """Create P&L distribution chart with annotated key metrics and probability analysis.
 
         Shows:
         - P&L curve at maturity
@@ -152,6 +151,7 @@ class PnLChartsMixin:
 
         Returns:
             Matplotlib Figure object with P&L distribution and probability overlay
+
         """
         # Note: show_probability_overlay parameter is reserved for future implementation
         # Currently, PDF overlay is always displayed
@@ -172,7 +172,7 @@ class PnLChartsMixin:
 
         # Calculate P&L curve using vectorized operations
         pnl_values = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
-            spot_range, include_underlying=include_underlying
+            spot_range, include_underlying=include_underlying,
         )
 
         # Get risk/reward metrics
@@ -206,7 +206,7 @@ class PnLChartsMixin:
                 pos.option.maturity_date for pos in self.portfolio.positions
             )
             days_to_maturity = max(
-                1, (min_maturity - self.portfolio.valuation_date).days
+                1, (min_maturity - self.portfolio.valuation_date).days,
             )
             time_to_maturity = days_to_maturity / const.DAYS_PER_YEAR
         else:
@@ -228,7 +228,7 @@ class PnLChartsMixin:
 
         # Calculate PDF values
         pdf_values = (1 / (spot_range * sigma * np.sqrt(2 * np.pi))) * np.exp(
-            -((np.log(spot_range) - mu) ** 2) / (2 * sigma**2)
+            -((np.log(spot_range) - mu) ** 2) / (2 * sigma**2),
         )
 
         # Scale PDF to fit full height of chart
@@ -259,7 +259,7 @@ class PnLChartsMixin:
         try:
             z_5th = stats.norm.ppf(0.05)  # Standard normal quantile for 5th percentile
             z_95th = stats.norm.ppf(
-                0.95
+                0.95,
             )  # Standard normal quantile for 95th percentile
         except ImportError:
             # Fallback to approximation if scipy not available
@@ -456,7 +456,7 @@ class PnLChartsMixin:
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
                 be_pnl = self.portfolio.calculate_pnl_at_expiry(  # type: ignore
-                    be, include_underlying=include_underlying
+                    be, include_underlying=include_underlying,
                 )
                 # Add vertical dashed line at break-even
                 ax.axvline(
@@ -495,7 +495,7 @@ class PnLChartsMixin:
                         edgecolor=DEFAULT_PALETTE.black,
                     ),
                     arrowprops=dict(
-                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
+                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5,
                     ),
                 )
 
@@ -537,7 +537,7 @@ class PnLChartsMixin:
                         edgecolor=DEFAULT_PALETTE.negative,
                     ),
                     arrowprops=dict(
-                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
+                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5,
                     ),
                 )
             else:
@@ -647,7 +647,7 @@ class PnLChartsMixin:
                     edgecolor="orange",
                 ),
                 arrowprops=dict(
-                    arrowstyle="->", connectionstyle="arc3,rad=0.2", lw=1.5
+                    arrowstyle="->", connectionstyle="arc3,rad=0.2", lw=1.5,
                 ),
             )
 
@@ -675,7 +675,7 @@ class PnLChartsMixin:
 
         ax.xaxis.set_major_formatter(FuncFormatter(format_spot_with_pct))
         ax.tick_params(
-            axis="x", which="major", pad=8
+            axis="x", which="major", pad=8,
         )  # Add padding for two-line labels
 
         # Return figure
@@ -691,8 +691,7 @@ class PnLChartsMixin:
         analysis_key: str,
         title: str,
     ):
-        """
-        Plot a single P&L panel.
+        """Plot a single P&L panel.
 
         Args:
             ax: Matplotlib axes
@@ -701,6 +700,7 @@ class PnLChartsMixin:
             analysis: Risk/reward analysis dictionary
             analysis_key: 'options' or 'total'
             title: Chart title
+
         """
         # Reference lines
         ax.axhline(
@@ -754,7 +754,7 @@ class PnLChartsMixin:
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
                 be_pnl = self.portfolio.calculate_pnl_at_expiry(  # type: ignore
-                    be, include_underlying=(analysis_key == "total")
+                    be, include_underlying=(analysis_key == "total"),
                 )
                 ax.plot(
                     be,

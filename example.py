@@ -1,10 +1,10 @@
-"""
-Example script demonstrating the deltadewa American options portfolio management.
+"""Example script demonstrating the deltadewa American options portfolio management.
 
 This script creates a sample portfolio and demonstrates key functionality.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 from deltadewa import OptionPortfolio
 from deltadewa.constants import OptionType
 
@@ -42,7 +42,7 @@ def main():
 
     # Add positions
     print("Adding Option Positions...")
-    today = datetime.now(tz=timezone.utc)
+    today = datetime.now(tz=UTC)
     maturity_30d = today + timedelta(days=30)
     maturity_60d = today + timedelta(days=60)
     maturity_90d = today + timedelta(days=90)
@@ -110,11 +110,11 @@ def main():
 
     if stats["delta_adjustment"] > 0:
         print(
-            f"→ Consider BUYING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality"
+            f"→ Consider BUYING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality",
         )
     elif stats["delta_adjustment"] < 0:
         print(
-            f"→ Consider SELLING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality"
+            f"→ Consider SELLING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality",
         )
     else:
         print("✓ Portfolio is delta neutral")
@@ -159,7 +159,7 @@ def main():
     print()
     print("=" * 70)
     print(
-        "For full interactive analysis, run: jupyter lab options_dashboard.ipynb"
+        "For full interactive analysis, run: jupyter lab options_dashboard.ipynb",
     )
     print("=" * 70)
 

@@ -1,16 +1,16 @@
 """Tests for deltadewa.formatters module - centralized formatting functions."""
 
+from deltadewa.formatters.html import format_html_badge, format_html_metric
 from deltadewa.formatters.values import (
     format_currency,
     format_currency_for_axis,
-    format_percentage,
-    format_percentage_for_axis,
+    format_greek_value,
     format_number,
     format_number_auto_precision,
-    format_greek_value,
+    format_percentage,
+    format_percentage_for_axis,
     format_spot_with_pct,
 )
-from deltadewa.formatters.html import format_html_badge, format_html_metric
 
 
 class TestFormatCurrency:
@@ -186,7 +186,7 @@ class TestFormatHtmlMetric:
         assert "5.00K" in result
         # Very large values should use M notation
         result = format_html_metric(
-            "VeryLarge", 5000000.0, format_type="number"
+            "VeryLarge", 5000000.0, format_type="number",
         )
         assert "5.00M" in result
 
@@ -200,7 +200,7 @@ class TestFormatHtmlMetric:
     def test_format_html_metric_percentage(self):
         """Test HTML metric formatting for percentages."""
         result = format_html_metric(
-            "Volatility", 0.25, format_type="percentage"
+            "Volatility", 0.25, format_type="percentage",
         )
         assert "Volatility" in result
         assert "%" in result

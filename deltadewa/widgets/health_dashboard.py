@@ -1,12 +1,11 @@
-"""
-Hedge health dashboard widgets for portfolio analysis.
+"""Hedge health dashboard widgets for portfolio analysis.
 
 This module provides visual gauge-based dashboard widgets for monitoring
 the health and effectiveness of equity hedges through key metrics.
 """
 
 import json
-from typing import Any, Dict
+from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 import yaml
@@ -18,8 +17,7 @@ from .gauges import GaugeIndicator
 
 
 class HedgeHealthMetric:
-    """
-    Configuration and calculation for a single hedge health metric.
+    """Configuration and calculation for a single hedge health metric.
 
     Attributes:
         name: Display name of the metric
@@ -32,6 +30,7 @@ class HedgeHealthMetric:
         actual: Calculated actual value
         unit: Display unit (%, days, etc.)
         invert_colors: If True, low values are good (green), high are bad (red)
+
     """
 
     def __init__(
@@ -62,8 +61,7 @@ class HedgeHealthMetric:
 
 
 class HedgeHealthDashboard:
-    """
-    Comprehensive hedge health dashboard with visual gauge indicators.
+    """Comprehensive hedge health dashboard with visual gauge indicators.
 
     Displays seven key hedge health metrics as visual gauges with configurable thresholds.
     Supports loading configuration from YAML/JSON files.
@@ -90,6 +88,7 @@ class HedgeHealthDashboard:
         # Load configuration from file
         config_loader = dashboard.display_config_loader()
         display(config_loader)
+
     """
 
     def __init__(
@@ -100,8 +99,7 @@ class HedgeHealthDashboard:
         historical_vol_high: float = 0.35,
         convexity_cliff_days: int = 180,
     ):
-        """
-        Initialize the Hedge Health Dashboard.
+        """Initialize the Hedge Health Dashboard.
 
         Args:
             portfolio: OptionPortfolio instance
@@ -109,6 +107,7 @@ class HedgeHealthDashboard:
             historical_vol_low: 25th percentile IV for vol regime assessment
             historical_vol_high: 75th percentile IV for vol regime assessment
             convexity_cliff_days: Days threshold for high-gamma convexity cliff
+
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
@@ -128,11 +127,11 @@ class HedgeHealthDashboard:
         self._gauges: dict[str, GaugeIndicator] = {}
 
     def add_carry_paid(self, amount: float) -> None:
-        """
-        Add to cumulative carry paid (for tracking hedge success).
+        """Add to cumulative carry paid (for tracking hedge success).
 
         Args:
             amount: Amount of carry paid (positive = cost)
+
         """
         self.cumulative_carry_paid += amount
 
@@ -140,7 +139,7 @@ class HedgeHealthDashboard:
         """Reset cumulative carry paid to zero."""
         self.cumulative_carry_paid = 0.0
 
-    def _get_default_config(self) -> Dict[str, Any]:
+    def _get_default_config(self) -> dict[str, Any]:
         """Return the default configuration dictionary."""
         return {
             "parameters": {
@@ -209,11 +208,11 @@ class HedgeHealthDashboard:
         }
 
     def load_config(self, config_data: dict[str, Any]) -> None:
-        """
-        Update configuration from a dictionary and refresh dashboard.
+        """Update configuration from a dictionary and refresh dashboard.
 
         Args:
             config_data: dictionary containing 'parameters' and/or 'metrics' keys.
+
         """
         if "parameters" in config_data:
             self.config["parameters"].update(config_data["parameters"])
@@ -229,12 +228,12 @@ class HedgeHealthDashboard:
     # Metric Calculations - Delegated to HealthMixin in analyzer
     # ==========================================================================
 
-    def _get_health_metrics(self) -> Dict[str, Any]:
-        """
-        Get all health metrics from the analyzer.
+    def _get_health_metrics(self) -> dict[str, Any]:
+        """Get all health metrics from the analyzer.
 
         Returns:
             Dictionary containing all calculated health metrics.
+
         """
         params = self.config["parameters"]
         return self.analyzer.calculate_health_metrics(
@@ -248,12 +247,12 @@ class HedgeHealthDashboard:
     # Metric Configuration
     # ==========================================================================
 
-    def _configure_metrics(self) -> Dict[str, HedgeHealthMetric]:
-        """
-        Configure all seven health metrics with their gauge parameters using self.config values.
+    def _configure_metrics(self) -> dict[str, HedgeHealthMetric]:
+        """Configure all seven health metrics with their gauge parameters using self.config values.
 
         Returns:
             Dictionary of metric name -> HedgeHealthMetric configuration.
+
         """
         # Get all calculated metrics from the analyzer
         health_data = self._get_health_metrics()
@@ -336,7 +335,7 @@ class HedgeHealthDashboard:
             mid_val=c["mid_val"],
             max_val=c["max_val"],
             actual=min(
-                health_data["convexity_cliff_days"], 365
+                health_data["convexity_cliff_days"], 365,
             ),  # Cap at 365 for display
             unit=" days",
             invert_colors=c["invert_colors"],
@@ -383,14 +382,14 @@ class HedgeHealthDashboard:
     # ==========================================================================
 
     def _create_gauge_html(self, metric: HedgeHealthMetric) -> str:
-        """
-        Create HTML for a single gauge indicator.
+        """Create HTML for a single gauge indicator.
 
         Args:
             metric: HedgeHealthMetric configuration
 
         Returns:
             HTML string for the gauge.
+
         """
         # Determine colors based on invert_colors flag
         if metric.invert_colors:
@@ -426,10 +425,9 @@ class HedgeHealthDashboard:
         return gauge.create_widget().value
 
     def _build_metric_card_html(
-        self, metric: HedgeHealthMetric, gauge_html: str
+        self, metric: HedgeHealthMetric, gauge_html: str,
     ) -> str:
-        """
-        Build HTML for a metric card with title, gauge, and description.
+        """Build HTML for a metric card with title, gauge, and description.
 
         Args:
             metric: HedgeHealthMetric configuration
@@ -437,6 +435,7 @@ class HedgeHealthDashboard:
 
         Returns:
             HTML string for the complete metric card.
+
         """
         # Determine status color based on where actual falls
         if metric.invert_colors:
@@ -520,11 +519,11 @@ class HedgeHealthDashboard:
         return card_html
 
     def _build_dashboard_html(self) -> str:
-        """
-        Build the complete dashboard HTML with all metrics.
+        """Build the complete dashboard HTML with all metrics.
 
         Returns:
             Complete HTML string for the dashboard.
+
         """
         self._metrics = self._configure_metrics()
 
@@ -567,7 +566,7 @@ class HedgeHealthDashboard:
             <!-- Header -->
             <div style="
                 background: linear-gradient(135deg, """
-            + f"""{DEFAULT_PALETTE.med_dark_background} 0%, {DEFAULT_PALETTE.dark_background} 100%);
+             f"""{DEFAULT_PALETTE.med_dark_background} 0%, {DEFAULT_PALETTE.dark_background} 100%);
                 color: white;
                 padding: 15px 20px;
                 border-radius: 6px 6px 0 0;
@@ -606,11 +605,11 @@ class HedgeHealthDashboard:
         return dashboard_html
 
     def _calculate_overall_health_score(self) -> float:
-        """
-        Calculate an overall health score (0-100) based on all metrics.
+        """Calculate an overall health score (0-100) based on all metrics.
 
         Returns:
             Overall health score.
+
         """
         return self.analyzer.calculate_overall_health_score(self._metrics)
 
@@ -619,11 +618,11 @@ class HedgeHealthDashboard:
     # ==========================================================================
 
     def create_widget(self) -> "widgets.HTML":
-        """
-        Create and return the ipywidgets HTML widget.
+        """Create and return the ipywidgets HTML widget.
 
         Returns:
             ipywidgets.HTML widget containing the dashboard.
+
         """
         self._widget = widgets.HTML(value=self._build_dashboard_html())
         return self._widget
@@ -634,20 +633,20 @@ class HedgeHealthDashboard:
             self._widget.value = self._build_dashboard_html()
 
     def display(self) -> "widgets.HTML":
-        """
-        Create the widget and return it for display.
+        """Create the widget and return it for display.
 
         Returns:
             The created HTML widget.
+
         """
         return self.create_widget()
 
-    def get_metrics_summary(self) -> Dict[str, Any]:
-        """
-        Get a dictionary summary of all metrics for programmatic access.
+    def get_metrics_summary(self) -> dict[str, Any]:
+        """Get a dictionary summary of all metrics for programmatic access.
 
         Returns:
             Dictionary with metric values and status, plus an 'overall_score' float.
+
         """
         self._metrics = self._configure_metrics()
 
@@ -682,14 +681,14 @@ class HedgeHealthDashboard:
         return summary
 
     def display_config_loader(self) -> widgets.VBox:
-        """
-        Display a widget to load configuration from YAML/JSON file.
+        """Display a widget to load configuration from YAML/JSON file.
 
         Returns:
             VBox widget containing file upload and status output.
+
         """
         uploader = widgets.FileUpload(
-            accept=".json,.yaml,.yml", multiple=False, description="Load Config"
+            accept=".json,.yaml,.yml", multiple=False, description="Load Config",
         )
         output = widgets.Output()
 
@@ -715,13 +714,13 @@ class HedgeHealthDashboard:
                         try:
                             data = json.loads(content)
                         except json.JSONDecodeError as e:
-                            print(f"❌ Invalid JSON format: {str(e)}")
+                            print(f"❌ Invalid JSON format: {e!s}")
                             return
                     elif filename.endswith((".yaml", ".yml")):
                         try:
                             data = yaml.safe_load(content)
                         except yaml.YAMLError as e:
-                            print(f"❌ Invalid YAML format: {str(e)}")
+                            print(f"❌ Invalid YAML format: {e!s}")
                             return
                     else:
                         print(f"❌ Unsupported file type: {filename}")
@@ -735,8 +734,8 @@ class HedgeHealthDashboard:
 
                 except (KeyError, TypeError) as e:
                     print(
-                        f"❌ Invalid config structure: {str(e)}. "
-                        "Expected 'parameters' and/or 'metrics' keys."
+                        f"❌ Invalid config structure: {e!s}. "
+                        "Expected 'parameters' and/or 'metrics' keys.",
                     )
 
         uploader.observe(on_upload, names="value")
@@ -746,5 +745,5 @@ class HedgeHealthDashboard:
                 widgets.HTML("<b>Load Dashboard Configuration</b>"),
                 uploader,
                 output,
-            ]
+            ],
         )

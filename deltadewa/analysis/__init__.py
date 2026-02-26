@@ -1,5 +1,4 @@
-"""
-Portfolio Analysis Module for Options Portfolios
+"""Portfolio Analysis Module for Options Portfolios
 
 This module provides advanced analytical utilities for options portfolio management,
 including carry analysis, risk concentration, maturity classification, scenario

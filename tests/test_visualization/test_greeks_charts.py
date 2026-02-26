@@ -1,12 +1,13 @@
 """Tests for deltadewa.visualization.greeks_charts module."""
 
-from datetime import datetime, timedelta, timezone
-import matplotlib
+from datetime import UTC, datetime, timedelta
 
+import matplotlib
 import matplotlib.pyplot as plt
+
+from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
-from deltadewa.constants import OptionType
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
@@ -33,7 +34,7 @@ class TestGreeksChartsMixin:
     def test_plot_greeks_by_strike_with_positions(self):
         """Test plot_greeks_by_strike with positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -59,7 +60,7 @@ class TestGreeksChartsMixin:
     def test_plot_greeks_by_strike_custom_metrics(self):
         """Test plot_greeks_by_strike with custom metrics."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -79,8 +80,8 @@ class TestGreeksChartsMixin:
     def test_plot_greeks_by_maturity(self):
         """Test plot_greeks_by_maturity."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity1 = datetime.now(tz=timezone.utc) + timedelta(days=30)
-        maturity2 = datetime.now(tz=timezone.utc) + timedelta(days=60)
+        maturity1 = datetime.now(tz=UTC) + timedelta(days=30)
+        maturity2 = datetime.now(tz=UTC) + timedelta(days=60)
 
         portfolio.add_position(
             strike_price=100.0,
@@ -106,7 +107,7 @@ class TestGreeksChartsMixin:
     def test_plot_greeks_by_maturity_custom_metrics(self):
         """Test plot_greeks_by_maturity with custom metrics."""
         portfolio = OptionPortfolio(spot_price=100.0)
-        maturity = datetime.now(tz=timezone.utc) + timedelta(days=30)
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
             strike_price=100.0,

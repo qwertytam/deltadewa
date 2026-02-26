@@ -1,6 +1,6 @@
 """Carry and theta analysis mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -11,8 +11,7 @@ if TYPE_CHECKING:
 
 
 class CarryMixin:
-    """
-    Mixin for theta and carry analysis.
+    """Mixin for theta and carry analysis.
 
     Provides methods for analyzing portfolio carry (theta decay)
     characteristics and creating theta summary tables.
@@ -24,9 +23,8 @@ class CarryMixin:
         # pylint: disable=unused-argument, missing-function-docstring
         def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame: ...
 
-    def calculate_carry_metrics(self) -> Dict:
-        """
-        Analyze portfolio carry (theta decay) characteristics.
+    def calculate_carry_metrics(self) -> dict:
+        """Analyze portfolio carry (theta decay) characteristics.
 
         Note: All theta calculations use the industry standard convention of
         365 calendar days (not 252 trading days). This matches:
@@ -35,7 +33,7 @@ class CarryMixin:
         - Volatility calculations which use calendar time in T
 
         Returns:
-            Dict containing:
+            dictcontaining:
                 - total_theta_daily: Daily theta across all positions
                 - total_theta_weekly: Weekly theta (daily * 7 calendar days)
                 - total_theta_monthly: Monthly theta (daily * 30 calendar days)
@@ -48,6 +46,7 @@ class CarryMixin:
                 - short_put_theta: Theta from short puts (income)
                 - net_carry: Net daily carry (equals total_theta_daily)
                 - carry_efficiency: Theta / position value ratio by bucket
+
         """
         df = self.portfolio.to_dataframe()
         if df.empty:
@@ -68,9 +67,7 @@ class CarryMixin:
         theta_by_type = df.groupby("type")["position_theta"].sum().to_dict()
 
         # Covered call analysis (short calls - earning premium)
-        short_calls = df[
-            (df["type"] == const.OptionType.CALL) & (df["quantity"] < 0)
-        ]
+        short_calls = df[(df["type"] == const.OptionType.CALL) & (df["quantity"] < 0)]
         covered_call_theta = (
             short_calls["position_theta"].sum() if len(short_calls) > 0 else 0.0
         )
@@ -79,17 +76,13 @@ class CarryMixin:
         )
 
         # Long call analysis (paying premium)
-        long_calls = df[
-            (df["type"] == const.OptionType.CALL) & (df["quantity"] > 0)
-        ]
+        long_calls = df[(df["type"] == const.OptionType.CALL) & (df["quantity"] > 0)]
         long_call_theta = (
             long_calls["position_theta"].sum() if len(long_calls) > 0 else 0.0
         )
 
         # Hedge put analysis (long puts - paying for downside protection)
-        long_puts = df[
-            (df["type"] == const.OptionType.PUT) & (df["quantity"] > 0)
-        ]
+        long_puts = df[(df["type"] == const.OptionType.PUT) & (df["quantity"] > 0)]
         hedge_put_theta = (
             long_puts["position_theta"].sum() if len(long_puts) > 0 else 0.0
         )
@@ -98,9 +91,7 @@ class CarryMixin:
         )
 
         # Short put analysis (short puts - earning premium)
-        short_puts = df[
-            (df["type"] == const.OptionType.PUT) & (df["quantity"] < 0)
-        ]
+        short_puts = df[(df["type"] == const.OptionType.PUT) & (df["quantity"] < 0)]
         short_put_theta = (
             short_puts["position_theta"].sum() if len(short_puts) > 0 else 0.0
         )
@@ -110,13 +101,10 @@ class CarryMixin:
 
         # Carry efficiency by bucket (annualized theta / position value)
         bucket_summary = df.groupby("maturity_bucket").agg(
-            {"position_theta": "sum", "position_value": lambda x: x.abs().sum()}
+            {"position_theta": "sum", "position_value": lambda x: x.abs().sum()},
         )
         bucket_summary["carry_efficiency_pct"] = (
-            (
-                bucket_summary["position_theta"]
-                / bucket_summary["position_value"]
-            )
+            (bucket_summary["position_theta"] / bucket_summary["position_value"])
             * 100
             * const.DAYS_PER_YEAR
         )
@@ -125,8 +113,7 @@ class CarryMixin:
         return {
             "total_theta_daily": total_theta_daily,
             "total_theta_weekly": total_theta_daily * const.DAYS_PER_WEEK,
-            "total_theta_monthly": total_theta_daily
-            * const.CALENDAR_DAYS_PER_MONTH,
+            "total_theta_monthly": total_theta_daily * const.CALENDAR_DAYS_PER_MONTH,
             "total_theta_annual": total_theta_daily * const.DAYS_PER_YEAR,
             "theta_by_bucket": theta_by_bucket,
             "theta_by_type": theta_by_type,
@@ -141,7 +128,7 @@ class CarryMixin:
             "is_positive_carry": net_carry > 0,
         }
 
-    def _empty_carry_metrics(self) -> Dict:
+    def _empty_carry_metrics(self) -> dict:
         """Return empty carry metrics structure."""
         return {
             "total_theta_daily": 0.0,
@@ -164,8 +151,7 @@ class CarryMixin:
     def create_theta_summary_table(
         self,
     ) -> pd.DataFrame:
-        """
-        Create consolidated theta/carry summary table.
+        """Create consolidated theta/carry summary table.
 
         Returns a DataFrame showing theta breakdown by source (income/cost) and timeframe
         (daily, weekly, monthly, annual). This provides a clear view of where theta is
@@ -174,6 +160,7 @@ class CarryMixin:
         Returns:
             DataFrame with theta breakdown by source (income/cost) and timeframe,
             with multi-index (category, source) and columns for different time periods
+
         """
         carry_metrics = self.calculate_carry_metrics()
 
@@ -186,13 +173,11 @@ class CarryMixin:
                     "category": "Income",
                     "source": "Short Calls",
                     "daily": carry_metrics["covered_call_theta"],
-                    "weekly": carry_metrics["covered_call_theta"]
-                    * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["covered_call_theta"] * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["covered_call_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["covered_call_theta"]
-                    * const.DAYS_PER_YEAR,
-                }
+                    "annual": carry_metrics["covered_call_theta"] * const.DAYS_PER_YEAR,
+                },
             )
 
         if carry_metrics["short_put_theta"] != 0:
@@ -201,13 +186,11 @@ class CarryMixin:
                     "category": "Income",
                     "source": "Short Puts",
                     "daily": carry_metrics["short_put_theta"],
-                    "weekly": carry_metrics["short_put_theta"]
-                    * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["short_put_theta"] * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["short_put_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["short_put_theta"]
-                    * const.DAYS_PER_YEAR,
-                }
+                    "annual": carry_metrics["short_put_theta"] * const.DAYS_PER_YEAR,
+                },
             )
 
         # Cost sources (negative theta - paying premium)
@@ -217,13 +200,11 @@ class CarryMixin:
                     "category": "Cost",
                     "source": "Long Puts (Hedge)",
                     "daily": carry_metrics["hedge_put_theta"],
-                    "weekly": carry_metrics["hedge_put_theta"]
-                    * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["hedge_put_theta"] * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["hedge_put_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["hedge_put_theta"]
-                    * const.DAYS_PER_YEAR,
-                }
+                    "annual": carry_metrics["hedge_put_theta"] * const.DAYS_PER_YEAR,
+                },
             )
 
         if carry_metrics["long_call_theta"] != 0:
@@ -232,13 +213,11 @@ class CarryMixin:
                     "category": "Cost",
                     "source": "Long Calls",
                     "daily": carry_metrics["long_call_theta"],
-                    "weekly": carry_metrics["long_call_theta"]
-                    * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["long_call_theta"] * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["long_call_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["long_call_theta"]
-                    * const.DAYS_PER_YEAR,
-                }
+                    "annual": carry_metrics["long_call_theta"] * const.DAYS_PER_YEAR,
+                },
             )
 
         # Net total (always show, even if zero)
@@ -250,7 +229,7 @@ class CarryMixin:
                 "weekly": carry_metrics["total_theta_weekly"],
                 "monthly": carry_metrics["total_theta_monthly"],
                 "annual": carry_metrics["total_theta_annual"],
-            }
+            },
         )
 
         df = pd.DataFrame(data)

@@ -1,9 +1,11 @@
 """Tests for deltadewa.portfolio.monte_carlo module."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+
 import numpy as np
-from deltadewa.portfolio.core import OptionPortfolio
+
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 
 
 class TestMonteCarloMixin:
@@ -15,7 +17,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -72,13 +74,13 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
 
         result = portfolio.run_monte_carlo_simulation(
-            num_simulations=1000, include_underlying=True
+            num_simulations=1000, include_underlying=True,
         )
 
         assert "prob_profit" in result
@@ -92,13 +94,13 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
 
         result = portfolio.run_monte_carlo_simulation(
-            num_simulations=1000, days_to_expiry=60
+            num_simulations=1000, days_to_expiry=60,
         )
 
         assert "prob_profit" in result
@@ -122,7 +124,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -142,7 +144,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -161,7 +163,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -172,7 +174,7 @@ class TestMonteCarloMixin:
         # Verify spot prices generate correct P&L
         test_spots = np.array([90.0, 100.0, 110.0])
         pnls = portfolio.vectorized_pnl_at_expiry(
-            test_spots, include_underlying=False
+            test_spots, include_underlying=False,
         )
 
         # Manually compute expected P&L
@@ -190,11 +192,11 @@ class TestMonteCarloMixin:
     def test_underlying_only_portfolio(self):
         """Test Monte Carlo with underlying position only (no options)."""
         portfolio = OptionPortfolio(
-            underlying_quantity=100.0, spot_price=100.0, volatility=0.2
+            underlying_quantity=100.0, spot_price=100.0, volatility=0.2,
         )
 
         result = portfolio.run_monte_carlo_simulation(
-            num_simulations=10000, include_underlying=True
+            num_simulations=10000, include_underlying=True,
         )
 
         assert "prob_profit" in result
@@ -209,7 +211,7 @@ class TestMonteCarloMixin:
 
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=timezone.utc) + timedelta(days=30),
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )

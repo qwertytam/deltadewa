@@ -1,11 +1,13 @@
 """Test different valuation styles (European vs American) to ensure correct
-pricing and performance characteristics."""
+pricing and performance characteristics.
+"""
 
-import unittest
 import time
-from datetime import datetime, timedelta, timezone
+import unittest
+from datetime import UTC, datetime, timedelta
+
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.valuation import OptionValuation
-from deltadewa.constants import OptionType, ExerciseStyle
 
 
 class TestValuationStyles(unittest.TestCase):
@@ -17,12 +19,12 @@ class TestValuationStyles(unittest.TestCase):
         params = {
             "spot_price": 100,
             "strike_price": 100,
-            "maturity_date": datetime.now(tz=timezone.utc)
+            "maturity_date": datetime.now(tz=UTC)
             + timedelta(days=365),
             "volatility": 0.2,
             "risk_free_rate": 0.05,
             "dividend_yield": 0.0,  # No dividends
-            "valuation_date": datetime.now(tz=timezone.utc),
+            "valuation_date": datetime.now(tz=UTC),
         }
 
         # For non-dividend paying stock, American Call == European Call
@@ -45,12 +47,12 @@ class TestValuationStyles(unittest.TestCase):
         params = {
             "spot_price": 100,
             "strike_price": 100,
-            "maturity_date": datetime.now(tz=timezone.utc)
+            "maturity_date": datetime.now(tz=UTC)
             + timedelta(days=365),
             "volatility": 0.2,
             "risk_free_rate": 0.25,  # High rates increase value of early exercise for Puts
             "dividend_yield": 0.0,
-            "valuation_date": datetime.now(tz=timezone.utc),
+            "valuation_date": datetime.now(tz=UTC),
         }
 
         amer_put = OptionValuation(
@@ -71,23 +73,22 @@ class TestValuationStyles(unittest.TestCase):
 
     def test_european_speed_advantage(self):
         """Verify European engine is significantly faster"""
-
         params = {
             "spot_price": 100,
             "strike_price": 105,
-            "maturity_date": datetime.now(tz=timezone.utc)
+            "maturity_date": datetime.now(tz=UTC)
             + timedelta(days=365),
             "volatility": 0.2,
             "risk_free_rate": 0.05,
             "dividend_yield": 0.02,
-            "valuation_date": datetime.now(tz=timezone.utc),
+            "valuation_date": datetime.now(tz=UTC),
         }
 
         # Measure American (Finite Difference)
         start = time.time()
         for _ in range(10):
             OptionValuation(
-                **params, exercise_style=ExerciseStyle.AMERICAN
+                **params, exercise_style=ExerciseStyle.AMERICAN,
             ).price()
         amer_time = time.time() - start
 
@@ -95,7 +96,7 @@ class TestValuationStyles(unittest.TestCase):
         start = time.time()
         for _ in range(10):
             OptionValuation(
-                **params, exercise_style=ExerciseStyle.EUROPEAN
+                **params, exercise_style=ExerciseStyle.EUROPEAN,
             ).price()
         euro_time = time.time() - start
 

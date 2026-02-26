@@ -1,6 +1,6 @@
 """Greek visualization methods for option charts."""
 
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -25,8 +25,7 @@ class GreeksChartsMixin:
         metrics: list[str] | None = None,
         figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
-        """
-        Create stacked bar charts of Greeks by strike price.
+        """Create stacked bar charts of Greeks by strike price.
 
         Args:
             metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
@@ -34,6 +33,7 @@ class GreeksChartsMixin:
 
         Returns:
             Matplotlib Figure object
+
         """
         if metrics is None:
             metrics = ["delta", "gamma", "vega"]
@@ -62,8 +62,7 @@ class GreeksChartsMixin:
         metrics: list[str] | None = None,
         figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
-        """
-        Create stacked bar charts of Greeks by maturity date.
+        """Create stacked bar charts of Greeks by maturity date.
 
         Args:
             metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
@@ -71,13 +70,14 @@ class GreeksChartsMixin:
 
         Returns:
             Matplotlib Figure object
+
         """
         if metrics is None:
             metrics = ["delta", "gamma", "vega"]
 
         df_positions = self.portfolio.to_dataframe()
         df_positions["maturity_label"] = pd.to_datetime(
-            df_positions["maturity"]
+            df_positions["maturity"],
         ).dt.strftime("%Y-%m-%d")
 
         nrows = len(metrics)
@@ -107,8 +107,7 @@ class GreeksChartsMixin:
         title: str,
         xlabel: str | None = None,
     ):
-        """
-        Plot Greek exposure by a dimension (strike or maturity).
+        """Plot Greek exposure by a dimension (strike or maturity).
 
         Args:
             ax: Matplotlib axes
@@ -117,6 +116,7 @@ class GreeksChartsMixin:
             dimension: Grouping dimension ('strike', 'maturity_label', etc.)
             title: Chart title
             xlabel: X-axis label (defaults to dimension.title())
+
         """
         position_metric = f"position_{metric}"
 
@@ -153,5 +153,5 @@ class GreeksChartsMixin:
         for container in ax.containers:
             if isinstance(container, BarContainer):
                 ax.bar_label(
-                    container, fmt="%.0f", label_type="edge", fontsize=8
+                    container, fmt="%.0f", label_type="edge", fontsize=8,
                 )

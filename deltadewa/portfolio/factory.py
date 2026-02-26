@@ -1,13 +1,12 @@
 """Factory functions for creating option portfolios."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from deltadewa.constants import ExerciseStyle, OptionType
 
 
 def create_empty_portfolio(**kwargs):
-    """
-    Create and return an empty `OptionPortfolio` with sensible defaults.
+    """Create and return an empty `OptionPortfolio` with sensible defaults.
 
     Args:
         **kwargs: Any `OptionPortfolio` constructor kwargs (spot_price, volatility, etc.)
@@ -17,6 +16,7 @@ def create_empty_portfolio(**kwargs):
 
     Example:
         p = create_empty_portfolio(spot_price=150.0, volatility=0.25)
+
     """
     # Import here to avoid circular imports
     # pylint: disable=import-outside-toplevel
@@ -26,12 +26,12 @@ def create_empty_portfolio(**kwargs):
 
 
 def create_demo_portfolio():
-    """
-    Create and return a small demo `OptionPortfolio` pre-populated with
+    """Create and return a small demo `OptionPortfolio` pre-populated with
     example positions. Useful for notebook demos and initial UI setup.
 
     Returns:
         OptionPortfolio: portfolio with a couple of example positions
+
     """
     # Import here to avoid circular imports
     # pylint: disable=import-outside-toplevel
@@ -44,7 +44,7 @@ def create_demo_portfolio():
         symbol="DEMO",
     )
 
-    today = datetime.now(tz=timezone.utc)
+    today = datetime.now(tz=UTC)
     # Short-dated call
     p.add_position(
         strike_price=100.0,
@@ -105,7 +105,7 @@ def create_default_portfolio():
 
     portfolio.positions.clear()
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     for pos_config in default_config["positions"]:
         if "maturity_date" in pos_config:
             # Absolute date specified
@@ -122,10 +122,10 @@ def create_default_portfolio():
             quantity=pos_config["quantity"],
             option_type=pos_config["option_type"],
             volatility=pos_config.get(
-                "volatility", market_params.get("volatility", None)
+                "volatility", market_params.get("volatility"),
             ),
             exercise_style=pos_config.get(
-                "exercise_style", ExerciseStyle.AMERICAN
+                "exercise_style", ExerciseStyle.AMERICAN,
             ),
         )
     return portfolio

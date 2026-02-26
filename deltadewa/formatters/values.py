@@ -1,5 +1,4 @@
-"""
-Scalar Value Formatters for Options Dashboard
+"""Scalar Value Formatters for Options Dashboard
 
 This module provides consistent formatting functions for scalar values:
 - Currency formatting (format_currency, format_currency_for_axis)
@@ -15,7 +14,7 @@ on other formatter submodules.
 
 from __future__ import annotations
 
-from typing import Any, Union, cast
+from typing import Any, cast
 
 import pandas as pd
 
@@ -30,13 +29,12 @@ except ImportError:
 
 
 def format_currency(
-    value: Union[int, float],
+    value: int | float,
     compact: bool = False,
     precision: int = 2,
     show_sign: bool = False,
 ) -> str:
-    """
-    Unified currency formatting - SINGLE SOURCE OF TRUTH.
+    """Unified currency formatting - SINGLE SOURCE OF TRUTH.
 
     Args:
         value: Numeric value to format
@@ -60,6 +58,7 @@ def format_currency(
         '$1.23M'
         >>> format_currency(1234.56, show_sign=True)
         '+$1,234.56'
+
     """
     if not compact:
         sign = "+" if show_sign and value > 0 else ""
@@ -79,8 +78,7 @@ def format_currency(
 
 
 def format_currency_for_axis(x: float, pos: int | None = None) -> str:
-    """
-    FuncFormatter-compatible currency formatter for matplotlib axes.
+    """FuncFormatter-compatible currency formatter for matplotlib axes.
 
     Args:
         x: Value to format
@@ -93,6 +91,7 @@ def format_currency_for_axis(x: float, pos: int | None = None) -> str:
         - Values < $10k: $X,XXX
         - Values < $10M: $XXXk
         - Values >= $10M: $X.XM
+
     """
     _ = pos  # Unused parameter
     if abs(x) < 10_000:
@@ -109,8 +108,7 @@ def format_percentage(
     from_decimal: bool = True,
     show_sign: bool = False,
 ) -> str:
-    """
-    Unified percentage formatting.
+    """Unified percentage formatting.
 
     Args:
         value: Value to format
@@ -129,6 +127,7 @@ def format_percentage(
         '15.2%'
         >>> format_percentage(15.23, from_decimal=False)
         '15.23%'
+
     """
     pct_value = value * 100 if from_decimal else value
     sign = "+" if show_sign and pct_value > 0 else ""
@@ -136,8 +135,7 @@ def format_percentage(
 
 
 def format_percentage_for_axis(x: float, pos: int | None = None) -> str:
-    """
-    FuncFormatter-compatible percentage formatter for matplotlib axes.
+    """FuncFormatter-compatible percentage formatter for matplotlib axes.
 
     Args:
         x: Value to format (in decimal form, e.g., 0.25 = 25%)
@@ -145,19 +143,19 @@ def format_percentage_for_axis(x: float, pos: int | None = None) -> str:
 
     Returns:
         Formatted percentage string
+
     """
     _ = pos  # Unused parameter
     return f"{x*100:.0f}%"
 
 
 def format_number(
-    value: Union[int, float],
+    value: int | float,
     decimals: int = 2,
     thousands_sep: bool = True,
     compact: bool = False,
 ) -> str:
-    """
-    Unified number formatting.
+    """Unified number formatting.
 
     Args:
         value: Numeric value to format
@@ -175,11 +173,12 @@ def format_number(
         '1,234.5678'
         >>> format_number(1234567, compact=True)
         '1.23M'
+
     """
     if compact:
         # Reuse currency formatting logic but remove the $
         return format_currency(value, compact=True, precision=decimals).replace(
-            "$", ""
+            "$", "",
         )
 
     if thousands_sep:
@@ -193,8 +192,7 @@ def format_greek_value(
     greek: str = "delta",
     compact: bool = True,
 ) -> str:
-    """
-    Greek-specific formatting with appropriate precision.
+    """Greek-specific formatting with appropriate precision.
 
     Args:
         value: Greek value to format
@@ -210,6 +208,7 @@ def format_greek_value(
         - Vega: 2 decimals
         - Theta: 2 decimals
         - Rho: 4 decimals
+
     """
     greek_lower = greek.lower()
 
@@ -246,11 +245,10 @@ def format_number_auto_precision(value: float) -> str:
 
     Returns:
         Formatted string with appropriate precision
+
     """
     abs_val = abs(value)
-    if abs_val >= 1_000_000:
-        return f"{value:,.0f}"
-    elif abs_val >= 10_000:
+    if abs_val >= 1_000_000 or abs_val >= 10_000:
         return f"{value:,.0f}"
     elif abs_val >= 100:
         return f"{value:,.2f}"
@@ -263,10 +261,9 @@ def format_number_auto_precision(value: float) -> str:
 
 
 def format_spot_with_pct(
-    x: float, current_spot: float, pos: int | None = None
+    x: float, current_spot: float, pos: int | None = None,
 ) -> str:
-    """
-    Format spot price with percentage change for axis labels.
+    """Format spot price with percentage change for axis labels.
 
     Note: Parameter order (x, current_spot, pos) is intentional for clarity
           when used with lambda/partial. Use get_spot_price_axis_formatter()
@@ -283,6 +280,7 @@ def format_spot_with_pct(
     Example:
         $420
         +10%
+
     """
     _ = pos  # Unused parameter
 
@@ -315,12 +313,13 @@ def format_currency_for_df(value: object) -> str:
         (e.g., "$-1,234.56"). This differs from the old closure which used
         "-$X" format (e.g., "-$1,234.56"). This change standardizes on the
         canonical format used throughout the codebase.
+
     """
     if pd.isna(cast(Any, value)):
         return "-"
     try:
         return format_currency(
-            float(cast(Any, value)), compact=False, precision=2
+            float(cast(Any, value)), compact=False, precision=2,
         )
     except (TypeError, ValueError):
         return "-" if value is None else str(value)
@@ -332,14 +331,14 @@ def format_currency_for_df(value: object) -> str:
 
 
 def get_currency_axis_formatter(compact: bool = True) -> Any:
-    """
-    Return a matplotlib FuncFormatter for currency values.
+    """Return a matplotlib FuncFormatter for currency values.
 
     Args:
         compact: Use compact notation (k, M) for large values
 
     Returns:
         FuncFormatter instance for matplotlib axes
+
     """
     if FuncFormatter is None:
         raise ImportError("matplotlib is required for axis formatters")
@@ -348,19 +347,19 @@ def get_currency_axis_formatter(compact: bool = True) -> Any:
         return FuncFormatter(format_currency_for_axis)
     else:
         return FuncFormatter(
-            lambda x, pos: format_currency(x, compact=False, precision=0)
+            lambda x, pos: format_currency(x, compact=False, precision=0),
         )
 
 
 def get_percentage_axis_formatter(from_decimal: bool = True) -> Any:
-    """
-    Return a matplotlib FuncFormatter for percentage values.
+    """Return a matplotlib FuncFormatter for percentage values.
 
     Args:
         from_decimal: If True, input values are decimals (0.25 = 25%)
 
     Returns:
         FuncFormatter instance for matplotlib axes
+
     """
     if FuncFormatter is None:
         raise ImportError("matplotlib is required for axis formatters")
@@ -369,25 +368,25 @@ def get_percentage_axis_formatter(from_decimal: bool = True) -> Any:
         return FuncFormatter(format_percentage_for_axis)
     else:
         return FuncFormatter(
-            lambda x, pos: format_percentage(x, from_decimal=False, decimals=0)
+            lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),
         )
 
 
 def get_spot_price_axis_formatter(current_spot: float) -> Any:
-    """
-    Return a matplotlib FuncFormatter for spot price with % change.
+    """Return a matplotlib FuncFormatter for spot price with % change.
 
     Args:
         current_spot: Current spot price to calculate percentage from
 
     Returns:
         FuncFormatter instance for matplotlib axes
+
     """
     if FuncFormatter is None:
         raise ImportError("matplotlib is required for axis formatters")
 
     return FuncFormatter(
-        lambda x, pos: format_spot_with_pct(x, current_spot, pos)
+        lambda x, pos: format_spot_with_pct(x, current_spot, pos),
     )
 
 
@@ -395,11 +394,11 @@ __all__ = [
     "format_currency",
     "format_currency_for_axis",
     "format_currency_for_df",
-    "format_percentage",
-    "format_percentage_for_axis",
+    "format_greek_value",
     "format_number",
     "format_number_auto_precision",
-    "format_greek_value",
+    "format_percentage",
+    "format_percentage_for_axis",
     "format_spot_with_pct",
     "get_currency_axis_formatter",
     "get_percentage_axis_formatter",

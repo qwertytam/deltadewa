@@ -1,7 +1,7 @@
 """Tests for deltadewa.analysis.base module."""
 
+from deltadewa.analysis.base import PortfolioAnalyzer, PortfolioAnalyzerBase
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.analysis.base import PortfolioAnalyzerBase, PortfolioAnalyzer
 
 
 class TestPortfolioAnalyzerBase:

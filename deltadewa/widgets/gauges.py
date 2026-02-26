@@ -1,5 +1,4 @@
-"""
-Gauge indicator widgets for visual metrics display.
+"""Gauge indicator widgets for visual metrics display.
 
 This module provides visual gauge indicators with configurable color gradients
 and value markers for displaying portfolio health metrics.
@@ -11,8 +10,7 @@ from deltadewa.colours import DEFAULT_PALETTE
 
 
 class GaugeIndicator:
-    """
-    A visual gauge indicator bar with configurable color gradient and value marker.
+    """A visual gauge indicator bar with configurable color gradient and value marker.
 
     The gauge displays a horizontal or vertical bar with a color gradient transitioning
     through three key points (min, mid, max) between start and end values. An arrow
@@ -49,6 +47,7 @@ class GaugeIndicator:
         show_startend_labels: Whether to display start/end value labels
         label_format: Format string for numeric labels (default: '{:.1f}')
         title: Optional title for the gauge
+
     """
 
     def __init__(
@@ -71,8 +70,7 @@ class GaugeIndicator:
         label_format: str = "{:.1f}",
         title: str | None = None,
     ):
-        """
-        Initialize the GaugeIndicator.
+        """Initialize the GaugeIndicator.
 
         Args:
             start: Minimum value of the gauge scale
@@ -92,12 +90,13 @@ class GaugeIndicator:
             show_startend_labels: Display start/end labels
             label_format: Format string for labels
             title: Optional title text
+
         """
         # Validate inputs
         if not start <= min_val <= mid_val <= max_val <= end:
             raise ValueError(
                 f"Values must satisfy: start ({start}) <= min ({min_val}) "
-                f"<= mid ({mid_val}) <= max ({max_val}) <= end ({end})"
+                f"<= mid ({mid_val}) <= max ({max_val}) <= end ({end})",
             )
 
         self.start = start
@@ -351,11 +350,11 @@ class GaugeIndicator:
         return html
 
     def create_widget(self) -> "widgets.HTML":
-        """
-        Create and return the ipywidgets HTML widget.
+        """Create and return the ipywidgets HTML widget.
 
         Returns:
             ipywidgets.HTML widget containing the gauge visualization
+
         """
         self._widget = widgets.HTML(value=self._build_html())
         return self._widget
@@ -369,8 +368,7 @@ class GaugeIndicator:
         start: float | None = None,
         end: float | None = None,
     ) -> None:
-        """
-        Update the gauge values and refresh the display.
+        """Update the gauge values and refresh the display.
 
         Args:
             actual: New actual value (optional)
@@ -379,6 +377,7 @@ class GaugeIndicator:
             max_val: New max value (optional)
             start: New start value (optional)
             end: New end value (optional)
+
         """
         if start is not None:
             self.start = start
@@ -397,18 +396,18 @@ class GaugeIndicator:
         if not (self.start <= self.min_val <= self.mid_val <= self.max_val <= self.end):
             raise ValueError(
                 f"Values must satisfy: start ({self.start}) <= min ({self.min_val}) "
-                f"<= mid ({self.mid_val}) <= max ({self.max_val}) <= end ({self.end})"
+                f"<= mid ({self.mid_val}) <= max ({self.max_val}) <= end ({self.end})",
             )
 
         if self._widget is not None:
             self._widget.value = self._build_html()
 
     def display(self) -> "widgets.HTML":
-        """
-        Create the widget and display it.
+        """Create the widget and display it.
 
         Returns:
             The created HTML widget
+
         """
         widget = self.create_widget()
         return widget

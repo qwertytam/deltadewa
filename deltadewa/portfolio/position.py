@@ -15,8 +15,7 @@ class OptionPosition:
         custom_volatility: bool = False,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ):
-        """
-        Initialize an option position.
+        """Initialize an option position.
 
         Args:
             option: OptionValuation instance
@@ -24,6 +23,7 @@ class OptionPosition:
             contract_size: Number of underlying shares per option contract (e.g. 100)
             custom_volatility: Whether this position uses custom volatility
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
+
         """
         self.option = option
         self.quantity = quantity

@@ -1,7 +1,7 @@
 """Hedge and concentration recommendations mixin for portfolio analysis."""
 
 import numbers
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -10,8 +10,7 @@ if TYPE_CHECKING:
 
 
 class RecommendationsMixin:
-    """
-    Mixin for hedge recommendations and risk concentration analysis.
+    """Mixin for hedge recommendations and risk concentration analysis.
 
     Provides methods for:
     - Generating specific hedge recommendations to achieve target hedge ratios
@@ -30,9 +29,8 @@ class RecommendationsMixin:
         target_hedge_ratio: float,
         include_option_alternatives: bool = True,
         max_alternatives: int = 10,
-    ) -> Dict:
-        """
-        Generate specific hedge recommendations to achieve target hedge ratio.
+    ) -> dict:
+        """Generate specific hedge recommendations to achieve target hedge ratio.
 
         Args:
             target_hedge_ratio: Target hedge ratio (0-100, where 100 = fully hedged)
@@ -47,6 +45,7 @@ class RecommendationsMixin:
             - underlying_trade: Shares to buy/sell
             - underlying_cost: Estimated cost of share trade
             - option_alternatives: list of option trades to achieve same delta (if enabled)
+
         """
         stats = self.portfolio.summary_stats()
 
@@ -84,7 +83,8 @@ class RecommendationsMixin:
         # Add option alternatives if requested
         if include_option_alternatives and abs(delta_change_needed) >= 1:
             result["option_alternatives"] = self._calculate_option_alternatives(
-                delta_change_needed, max_alternatives
+                delta_change_needed,
+                max_alternatives,
             )
         else:
             result["option_alternatives"] = []
@@ -95,16 +95,16 @@ class RecommendationsMixin:
         self,
         delta_change_needed: float,
         max_alternatives: int,
-    ) -> List[Dict]:
-        """
-        Calculate option-based hedge alternatives.
+    ) -> list[dict]:
+        """Calculate option-based hedge alternatives.
 
         Args:
             delta_change_needed: Delta adjustment required
             max_alternatives: Maximum alternatives to return
 
         Returns:
-            List of option trade recommendations
+            list of option trade recommendations
+
         """
         alternatives = []
 
@@ -123,15 +123,13 @@ class RecommendationsMixin:
                         "type": pos.option.option_type.upper(),
                         "strike": float(pos.option.strike_price),
                         "maturity": pos.option.maturity_date.strftime(
-                            "%Y-%m-%d"
+                            "%Y-%m-%d",
                         ),
                         "delta_per_contract": float(per_contract_delta),
                         "contracts_needed": abs(contracts_needed),
                         "price": float(price),
-                        "cost": abs(contracts_needed)
-                        * price
-                        * 100,  # Per contract
-                    }
+                        "cost": abs(contracts_needed) * price * 100,  # Per contract
+                    },
                 )
 
         # Sort by number of contracts (prefer fewer contracts)
@@ -143,9 +141,8 @@ class RecommendationsMixin:
         self,
         metrics: list[str] | None = None,
         top_n: int = 3,
-    ) -> Dict:
-        """
-        Identify concentrated risk by strike and maturity.
+    ) -> dict:
+        """Identify concentrated risk by strike and maturity.
 
         Analyzes which strikes/maturities contribute most to portfolio Greeks.
         Useful for identifying over-concentration that should be diversified.
@@ -159,6 +156,7 @@ class RecommendationsMixin:
             - by_strike: Top strikes for each Greek
             - by_maturity: Top maturities for each Greek
             - concentration_scores: Percentage contribution of top strikes/maturities
+
         """
         if metrics is None:
             metrics = ["delta", "gamma", "vega"]
@@ -192,7 +190,8 @@ class RecommendationsMixin:
                     # If val is a native numeric type or numpy numeric,
                     # return float; otherwise preserve original
                     if isinstance(
-                        val, (int, float, np.integer, np.floating, numbers.Real)
+                        val,
+                        (int, float, np.integer, np.floating, numbers.Real),
                     ):
                         return float(val)
                     try:
@@ -216,7 +215,7 @@ class RecommendationsMixin:
                     else 0
                 )
                 result["concentration_scores"][f"{metric}_strike"] = float(
-                    top_pct
+                    top_pct,
                 )
 
             # Concentration by maturity
@@ -241,11 +240,11 @@ class RecommendationsMixin:
                     else 0
                 )
                 result["concentration_scores"][f"{metric}_maturity"] = float(
-                    top_pct
+                    top_pct,
                 )
 
         return result
 
-    def _empty_concentration(self) -> Dict:
+    def _empty_concentration(self) -> dict:
         """Return empty concentration structure."""
         return {"by_strike": {}, "by_maturity": {}, "concentration_scores": {}}

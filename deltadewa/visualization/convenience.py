@@ -4,7 +4,6 @@ This module provides module-level convenience functions that wrap
 OptionCharts methods for easier use.
 """
 
-from typing import Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -17,8 +16,7 @@ from deltadewa.visualization.base import OptionCharts
 
 
 def plot_pnl_diagram(portfolio, **kwargs):
-    """
-    Convenience function to plot P&L diagram.
+    """Convenience function to plot P&L diagram.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -26,14 +24,14 @@ def plot_pnl_diagram(portfolio, **kwargs):
 
     Returns:
         Matplotlib Figure
+
     """
     charts = OptionCharts(portfolio)
     return charts.plot_pnl_diagram(**kwargs)
 
 
 def plot_pnl_distribution_with_metrics(portfolio, **kwargs):
-    """
-    Convenience function to plot P&L distribution with key metrics.
+    """Convenience function to plot P&L distribution with key metrics.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -41,14 +39,14 @@ def plot_pnl_distribution_with_metrics(portfolio, **kwargs):
 
     Returns:
         Matplotlib Figure
+
     """
     charts = OptionCharts(portfolio)
     return charts.plot_pnl_distribution_with_metrics(**kwargs)
 
 
 def plot_greeks_by_strike(portfolio, **kwargs):
-    """
-    Convenience function to plot Greeks by strike.
+    """Convenience function to plot Greeks by strike.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -56,14 +54,14 @@ def plot_greeks_by_strike(portfolio, **kwargs):
 
     Returns:
         Matplotlib Figure
+
     """
     charts = OptionCharts(portfolio)
     return charts.plot_greeks_by_strike(**kwargs)
 
 
 def plot_theta_analysis(portfolio, **kwargs):
-    """
-    Convenience function to plot theta analysis.
+    """Convenience function to plot theta analysis.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -71,6 +69,7 @@ def plot_theta_analysis(portfolio, **kwargs):
 
     Returns:
         Matplotlib Figure
+
     """
     charts = OptionCharts(portfolio)
     return charts.plot_theta_analysis(**kwargs)
@@ -81,8 +80,7 @@ def plot_greeks_consolidated(
     top_n: int = 5,
     figsize: tuple[int, int] = (16, 10),
 ) -> Figure:
-    """
-    Create consolidated Greeks view optimized for the EXPLAIN mode.
+    """Create consolidated Greeks view optimized for the EXPLAIN mode.
 
     This function provides the default 80% use case view: a compact summary
     showing net portfolio Greeks and top contributors. Detailed breakdowns
@@ -105,6 +103,7 @@ def plot_greeks_consolidated(
     Panels (detailed view):
         4. Strike-by-strike breakdown
         5. Maturity-by-maturity breakdown
+
     """
     df = portfolio.to_dataframe()
 
@@ -148,7 +147,7 @@ def plot_greeks_consolidated(
 
     # Panel 1 & 2: Top Contributors for Delta and Gamma
     for idx, (greek_name, column_name) in enumerate(
-        [("Delta", "position_delta"), ("Gamma", "position_gamma")]
+        [("Delta", "position_delta"), ("Gamma", "position_gamma")],
     ):
         ax = axes[0, idx]
         ax.patch.set_alpha(0.0)
@@ -174,7 +173,7 @@ def plot_greeks_consolidated(
             ax.set_xlabel(greek_name)
             yint, _ = ax.get_ylim()
             _set_axis_formatting(
-                ax, f"Top {top_n} {greek_name} Contributors", yint=yint
+                ax, f"Top {top_n} {greek_name} Contributors", yint=yint,
             )
 
             # Add value labels
@@ -271,7 +270,7 @@ def plot_greeks_consolidated(
     # Group by strike and sum position values
     strike_values = df_sorted.groupby("strike")["position_value"].sum()
     strike_values = strike_values.reindex(
-        strike_values.abs().nlargest(top_n).index
+        strike_values.abs().nlargest(top_n).index,
     )
 
     if len(strike_values) > 0:
@@ -286,7 +285,7 @@ def plot_greeks_consolidated(
         ax.set_xlabel("Position Value")
         yint, _ = ax.get_ylim()
         _set_axis_formatting(
-            ax, f"Top {top_n} Position Values by Strike", yint=yint
+            ax, f"Top {top_n} Position Values by Strike", yint=yint,
         )
         ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:
@@ -305,7 +304,7 @@ def plot_greeks_consolidated(
     ax.patch.set_alpha(0.0)
     df_sorted = df.copy()
     df_sorted["maturity_label"] = pd.to_datetime(
-        df_sorted["maturity"]
+        df_sorted["maturity"],
     ).dt.strftime("%Y-%m-%d")
 
     # Group by maturity and sum position values
@@ -313,7 +312,7 @@ def plot_greeks_consolidated(
         "position_value"
     ].sum()
     maturity_values = maturity_values.reindex(
-        maturity_values.abs().nlargest(top_n).index
+        maturity_values.abs().nlargest(top_n).index,
     )
 
     if len(maturity_values) > 0:
@@ -328,7 +327,7 @@ def plot_greeks_consolidated(
         ax.set_xlabel("Position Value")
         yint, _ = ax.get_ylim()
         _set_axis_formatting(
-            ax, f"Top {top_n} Position Values by Maturity", yint=yint
+            ax, f"Top {top_n} Position Values by Maturity", yint=yint,
         )
         ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:
@@ -346,7 +345,7 @@ def plot_greeks_consolidated(
     ax = axes[3, 0]
     ax.patch.set_alpha(0.0)
     greek_by_strike = df.groupby("strike").agg(
-        {"position_delta": "sum", "position_gamma": "sum"}
+        {"position_delta": "sum", "position_gamma": "sum"},
     )
 
     if len(greek_by_strike) > 0:
@@ -373,10 +372,10 @@ def plot_greeks_consolidated(
     ax = axes[3, 1]
     ax.patch.set_alpha(0.0)
     df["maturity_label"] = pd.to_datetime(df["maturity"]).dt.strftime(
-        "%Y-%m-%d"
+        "%Y-%m-%d",
     )
     greek_by_maturity = df.groupby("maturity_label").agg(
-        {"position_delta": "sum", "position_gamma": "sum"}
+        {"position_delta": "sum", "position_gamma": "sum"},
     )
 
     if len(greek_by_maturity) > 0:
