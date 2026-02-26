@@ -198,7 +198,8 @@ class TestOptionPortfolioBase:
     def test_total_underlying_value(self):
         """Test total_underlying_value calculation."""
         portfolio = OptionPortfolioBase(
-            underlying_quantity=100, spot_price=50.0,
+            underlying_quantity=100,
+            spot_price=50.0,
         )
 
         assert portfolio.total_underlying_value() == 5000.0
@@ -206,7 +207,8 @@ class TestOptionPortfolioBase:
     def test_total_portfolio_value(self):
         """Test total_portfolio_value calculation."""
         portfolio = OptionPortfolioBase(
-            underlying_quantity=100, spot_price=100.0,
+            underlying_quantity=100,
+            spot_price=100.0,
         )
 
         portfolio.add_position(
@@ -315,7 +317,9 @@ class TestOptionPortfolioBase:
     def test_update_market_conditions(self):
         """Test updating market conditions."""
         portfolio = OptionPortfolioBase(
-            spot_price=100.0, volatility=0.2, symbol="TEST",
+            spot_price=100.0,
+            volatility=0.2,
+            symbol="TEST",
         )
 
         portfolio.add_position(
@@ -464,11 +468,11 @@ class TestPortfolioCore(unittest.TestCase):
             exercise_style=ExerciseStyle.EUROPEAN,  # Explicitly European
         )
 
-        # pylint: disable=assignment-from-no-return
         value = self.portfolio.total_value()
         self.assertGreater(value, 0)
         self.assertEqual(
-            self.portfolio.positions[0].exercise_style, ExerciseStyle.EUROPEAN,
+            self.portfolio.positions[0].exercise_style,
+            ExerciseStyle.EUROPEAN,
         )
 
     def test_mixed_styles(self):
@@ -491,6 +495,5 @@ class TestPortfolioCore(unittest.TestCase):
         )
 
         # Since American >= European, Net Value should be >= 0
-        # pylint: disable=assignment-from-no-return
         net_value = self.portfolio.total_value()
         self.assertGreaterEqual(net_value, -0.01)  # Allow for float precision

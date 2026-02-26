@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.analysis._protocols import _AnalyzerProtocol
 
 
 class RecommendationsMixin:
@@ -19,13 +19,10 @@ class RecommendationsMixin:
     """
 
     if TYPE_CHECKING:
-        portfolio: "OptionPortfolio"
-
-        # pylint: disable=unused-argument, missing-function-docstring
-        def add_maturity_buckets(self, df: Any) -> Any: ...
+        _self: "_AnalyzerProtocol"
 
     def calculate_hedge_actions(
-        self,
+        self: "_AnalyzerProtocol",
         target_hedge_ratio: float,
         include_option_alternatives: bool = True,
         max_alternatives: int = 10,
@@ -33,7 +30,8 @@ class RecommendationsMixin:
         """Generate specific hedge recommendations to achieve target hedge ratio.
 
         Args:
-            target_hedge_ratio: Target hedge ratio (0-100, where 100 = fully hedged)
+            target_hedge_ratio: Target hedge ratio (0-100, where 100 = fully
+            hedged)
             include_option_alternatives: Whether to suggest option-based hedges
             max_alternatives: Maximum number of option alternatives to return
 
@@ -44,7 +42,8 @@ class RecommendationsMixin:
             - delta_change_needed: Delta adjustment required
             - underlying_trade: Shares to buy/sell
             - underlying_cost: Estimated cost of share trade
-            - option_alternatives: list of option trades to achieve same delta (if enabled)
+            - option_alternatives: list of option trades to achieve same delta
+            (if enabled)
 
         """
         stats = self.portfolio.summary_stats()
@@ -92,7 +91,7 @@ class RecommendationsMixin:
         return result
 
     def _calculate_option_alternatives(
-        self,
+        self: "_AnalyzerProtocol",
         delta_change_needed: float,
         max_alternatives: int,
     ) -> list[dict]:
@@ -138,7 +137,7 @@ class RecommendationsMixin:
         return alternatives[:max_alternatives]
 
     def analyze_risk_concentration(
-        self,
+        self: "_AnalyzerProtocol",
         metrics: list[str] | None = None,
         top_n: int = 3,
     ) -> dict:
@@ -148,14 +147,16 @@ class RecommendationsMixin:
         Useful for identifying over-concentration that should be diversified.
 
         Args:
-            metrics: list of Greeks to analyze (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to analyze (default: ['delta', 'gamma'
+            'vega'])
             top_n: Number of top contributors to identify
 
         Returns:
             Dictionary with concentration analysis:
             - by_strike: Top strikes for each Greek
             - by_maturity: Top maturities for each Greek
-            - concentration_scores: Percentage contribution of top strikes/maturities
+            - concentration_scores: Percentage contribution of top strikes
+            maturities
 
         """
         if metrics is None:
@@ -165,7 +166,6 @@ class RecommendationsMixin:
         if df.empty:
             return self._empty_concentration()
 
-        # pylint: disable=assignment-from-no-return
         df = self.add_maturity_buckets(df)
 
         result: dict[str, Any] = {

@@ -3,21 +3,20 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.position import OptionPosition
+    from deltadewa.portfolio._protocols import _PortfolioProtocol
 
 
 class GreeksMixin:
     """Mixin providing Greek calculations for option portfolio."""
 
     if TYPE_CHECKING:
-        positions: list["OptionPosition"]
-        underlying_quantity: float
+        _self: "_PortfolioProtocol"
 
-    def total_delta(self) -> float:
+    def total_delta(self: "_PortfolioProtocol") -> float:
         """Calculate total portfolio delta from option positions only.
 
-        This is the sum of all option position deltas, excluding the underlying position.
-        Also referred to as "Portfolio Delta" or "Total Delta".
+        This is the sum of all option position deltas, excluding the underlying
+        position. Also referred to as "Portfolio Delta" or "Total Delta".
 
         Returns:
             Total delta from options only (positive = net long options,
@@ -26,23 +25,23 @@ class GreeksMixin:
         """
         return sum(pos.position_delta() for pos in self.positions)
 
-    def total_gamma(self) -> float:
+    def total_gamma(self: "_PortfolioProtocol") -> float:
         """Calculate total portfolio gamma."""
         return sum(pos.position_gamma() for pos in self.positions)
 
-    def total_vega(self) -> float:
+    def total_vega(self: "_PortfolioProtocol") -> float:
         """Calculate total portfolio vega."""
         return sum(pos.position_vega() for pos in self.positions)
 
-    def total_theta(self) -> float:
+    def total_theta(self: "_PortfolioProtocol") -> float:
         """Calculate total portfolio theta."""
         return sum(pos.position_theta() for pos in self.positions)
 
-    def total_rho(self) -> float:
+    def total_rho(self: "_PortfolioProtocol") -> float:
         """Calculate total portfolio rho."""
         return sum(pos.position_rho() for pos in self.positions)
 
-    def net_delta(self) -> float:
+    def net_delta(self: "_PortfolioProtocol") -> float:
         """Calculate net delta including both options and underlying position.
 
         This is the total directional exposure combining:
@@ -62,7 +61,7 @@ class GreeksMixin:
         """
         return self.total_delta() + self.underlying_quantity
 
-    def hedge_ratio(self) -> float:
+    def hedge_ratio(self: "_PortfolioProtocol") -> float:
         """Calculate the hedge ratio (how much of the notional is hedged).
 
         Returns:
@@ -73,7 +72,7 @@ class GreeksMixin:
             return 0.0
         return -(self.total_delta() / self.underlying_quantity) * 100
 
-    def delta_adjustment_needed(self) -> float:
+    def delta_adjustment_needed(self: "_PortfolioProtocol") -> float:
         """Calculate the delta adjustment needed to achieve delta neutrality.
 
         Returns:
@@ -82,7 +81,7 @@ class GreeksMixin:
         """
         return -self.net_delta()
 
-    def all_greeks(self) -> dict:
+    def all_greeks(self: "_PortfolioProtocol") -> dict:
         """Calculate all portfolio Greeks in a single efficient pass.
 
         More efficient than calling individual methods when you need all Greeks.

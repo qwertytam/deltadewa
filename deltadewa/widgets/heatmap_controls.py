@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING, Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
+if TYPE_CHECKING:
+    from deltadewa.widgets._protocols import WidgetsProtocol
+
 
 class HeatmapControlsMixin:
     """Mixin providing heatmap control widgets.
@@ -19,39 +22,15 @@ class HeatmapControlsMixin:
     """
 
     if TYPE_CHECKING:
-
-        # pylint: disable=missing-function-docstring, unused-argument
-        def create_metric_selector(
-            self,
-            metrics: list[tuple[str, str]] | None = None,
-            description: str = "Metric:",
-            default: str = "pnl",
-        ) -> widgets.Dropdown: ...
-
-        # pylint: disable=missing-function-docstring, unused-argument
-        def create_price_range_slider(
-            self,
-            description: str = "Price Range (%):",
-            default: float = 20.0,
-            min_val: float = 5.0,
-            max_val: float = 50.0,
-            step: float = 5.0,
-        ) -> widgets.FloatSlider: ...
-
-        # pylint: disable=missing-function-docstring, unused-argument
-        def create_date_selector(
-            self,
-            max_days: int | None = None,
-            description: str = "Valuation Date:",
-            num_steps: int = 10,
-        ) -> widgets.SelectionSlider: ...
+        _self: "WidgetsProtocol"
 
     # ==========================================================================
     # Heatmap Widgets
     # ==========================================================================
 
     def create_heatmap_controls(
-        self, metrics: list[tuple[str, str]] | None = None,
+        self: "WidgetsProtocol",
+        metrics: list[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Create complete heatmap configuration controls.
 
@@ -75,7 +54,6 @@ class HeatmapControlsMixin:
                 ("Rho", "rho"),
             ]
 
-        # pylint: disable=assignment-from-no-return
         price_range_slider = self.create_price_range_slider()
 
         display_format = widgets.Dropdown(
@@ -85,10 +63,8 @@ class HeatmapControlsMixin:
             style={"description_width": "150px"},
         )
 
-        # pylint: disable=assignment-from-no-return
         metric_selector = self.create_metric_selector(metrics=metrics, default="pnl")
 
-        # pylint: disable=assignment-from-no-return
         date_selector = self.create_date_selector()
 
         return {

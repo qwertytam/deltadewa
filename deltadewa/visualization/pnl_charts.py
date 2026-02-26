@@ -7,7 +7,7 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
-from scipy import stats  # type: ignore
+from scipy import stats
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -21,19 +21,17 @@ from deltadewa.formatters.values import (
 from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolioBase
+    from deltadewa.visualization._protocols import _VisualizationProtocol
 
 
 class PnLChartsMixin:
     """Mixin providing P&L diagram plotting methods."""
 
     if TYPE_CHECKING:
-        portfolio: "OptionPortfolioBase"
-
-        def _get_expiry_label(self) -> str: ...
+        _self: "_VisualizationProtocol"
 
     def plot_pnl_diagram(
-        self,
+        self: "_VisualizationProtocol",
         spot_range_pct: float = 40.0,
         num_points: int = 300,
         show_underlying: bool = True,
@@ -58,7 +56,8 @@ class PnLChartsMixin:
 
         """
         # Create spot price range
-        # Note: spot_range_pct is symmetric ± percentage (e.g., 40 means 60% to 140%)
+        # Note: spot_range_pct is symmetric ± percentage (e.g., 40 means 60% to
+        # 140%)
         # Convert to spot_min_pct and spot_max_pct for generate_spot_range
         spot_min_pct = 100 - spot_range_pct
         spot_max_pct = 100 + spot_range_pct
@@ -70,20 +69,20 @@ class PnLChartsMixin:
         )
 
         # Calculate P&L curves using vectorized operations
-        pnl_options = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
-            spot_range, include_underlying=False,
+        pnl_options = self.portfolio.vectorized_pnl_at_expiry(
+            spot_range,
+            include_underlying=False,
         )
-        pnl_total = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
-            spot_range, include_underlying=True,
+        pnl_total = self.portfolio.vectorized_pnl_at_expiry(
+            spot_range,
+            include_underlying=True,
         )
 
         # Get risk/reward metrics
         analyzer = PortfolioAnalyzer(self.portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis()
 
         # Determine expiration label
-        # pylint: disable=assignment-from-no-return
         expiry_label = self._get_expiry_label()
         _ = expiry_label  # To avoid unused variable warning
 
@@ -120,7 +119,7 @@ class PnLChartsMixin:
         return fig
 
     def plot_pnl_distribution_with_metrics(
-        self,
+        self: "_VisualizationProtocol",
         spot_range_pct: float = 100.0,
         num_points: int = 1000,
         figsize: tuple[int, int] = (16, 8),
@@ -171,19 +170,20 @@ class PnLChartsMixin:
         )
 
         # Calculate P&L curve using vectorized operations
-        pnl_values = self.portfolio.vectorized_pnl_at_expiry(  # type: ignore
-            spot_range, include_underlying=include_underlying,
+        pnl_values = self.portfolio.vectorized_pnl_at_expiry(
+            spot_range,
+            include_underlying=include_underlying,
         )
 
         # Get risk/reward metrics
-        # CRITICAL: Pass spot_range=None to allow comprehensive range check for max loss/profit
+        # CRITICAL: Pass spot_range=None to allow comprehensive range check for
+        # max loss/profit
         # The visualization uses spot_range only for the chart display
         analyzer = PortfolioAnalyzer(self.portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(spot_range=None)
 
-        # Use pre-calculated Monte Carlo expected value if available to ensure consistency
-        # between the main analysis and the chart visualization
+        # Use pre-calculated Monte Carlo expected value if available to ensure
+        # consistency between the main analysis and the chart visualization
         mc_results = self.portfolio.monte_carlo_results
         if (
             mc_results is not None
@@ -206,7 +206,8 @@ class PnLChartsMixin:
                 pos.option.maturity_date for pos in self.portfolio.positions
             )
             days_to_maturity = max(
-                1, (min_maturity - self.portfolio.valuation_date).days,
+                1,
+                (min_maturity - self.portfolio.valuation_date).days,
             )
             time_to_maturity = days_to_maturity / const.DAYS_PER_YEAR
         else:
@@ -324,12 +325,12 @@ class PnLChartsMixin:
                 fontsize=9,
                 color=DEFAULT_PALETTE.dark_background,
                 fontweight="bold",
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    facecolor=DEFAULT_PALETTE.white,
-                    edgecolor=DEFAULT_PALETTE.dark_background,
-                    alpha=0.8,
-                ),
+                bbox={
+                    "boxstyle": "round,pad=0.3",
+                    "facecolor": DEFAULT_PALETTE.white,
+                    "edgecolor": DEFAULT_PALETTE.dark_background,
+                    "alpha": 0.8,
+                },
             )
         else:
             # 5th percentile is below visible range - show arrow on left edge
@@ -455,8 +456,9 @@ class PnLChartsMixin:
         be_key = "breakeven_total" if include_underlying else "breakeven_options"
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
-                be_pnl = self.portfolio.calculate_pnl_at_expiry(  # type: ignore
-                    be, include_underlying=include_underlying,
+                be_pnl = self.portfolio.calculate_pnl_at_expiry(
+                    be,
+                    include_underlying=include_underlying,
                 )
                 # Add vertical dashed line at break-even
                 ax.axvline(
@@ -495,7 +497,9 @@ class PnLChartsMixin:
                         edgecolor=DEFAULT_PALETTE.black,
                     ),
                     arrowprops=dict(
-                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5,
+                        arrowstyle="->",
+                        connectionstyle="arc3,rad=0",
+                        lw=1.5,
                     ),
                 )
 
@@ -537,7 +541,9 @@ class PnLChartsMixin:
                         edgecolor=DEFAULT_PALETTE.negative,
                     ),
                     arrowprops=dict(
-                        arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5,
+                        arrowstyle="->",
+                        connectionstyle="arc3,rad=0",
+                        lw=1.5,
                     ),
                 )
             else:
@@ -647,7 +653,9 @@ class PnLChartsMixin:
                     edgecolor="orange",
                 ),
                 arrowprops=dict(
-                    arrowstyle="->", connectionstyle="arc3,rad=0.2", lw=1.5,
+                    arrowstyle="->",
+                    connectionstyle="arc3,rad=0.2",
+                    lw=1.5,
                 ),
             )
 
@@ -668,14 +676,20 @@ class PnLChartsMixin:
         # Apply currency formatters
         ax.yaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
 
-        # Custom x-axis formatter showing price + % change (use centralized formatter)
-        def format_spot_with_pct(x, pos):  # pylint: disable=unused-argument
+        # Custom x-axis formatter showing price + % change (use centralized
+        # formatter)
+        def format_spot_with_pct(
+            x: float,
+            pos: int | None = None,
+        ) -> str:  # pylint: disable=unused-argument
             """Format x-axis to show spot price and % change from current spot."""
             return format_spot_with_pct_centralized(x, current_spot, pos)
 
         ax.xaxis.set_major_formatter(FuncFormatter(format_spot_with_pct))
         ax.tick_params(
-            axis="x", which="major", pad=8,
+            axis="x",
+            which="major",
+            pad=8,
         )  # Add padding for two-line labels
 
         # Return figure
@@ -683,14 +697,14 @@ class PnLChartsMixin:
         return fig
 
     def _plot_pnl_panel(
-        self,
+        self: "_VisualizationProtocol",
         ax: Axes,
         spot_range: np.ndarray,
-        pnl_values: list[float],
+        pnl_values: list[float] | np.ndarray,
         analysis: dict,
         analysis_key: str,
         title: str,
-    ):
+    ) -> None:
         """Plot a single P&L panel.
 
         Args:
@@ -753,8 +767,9 @@ class PnLChartsMixin:
         be_key = f"breakeven_{analysis_key}"
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
-                be_pnl = self.portfolio.calculate_pnl_at_expiry(  # type: ignore
-                    be, include_underlying=(analysis_key == "total"),
+                be_pnl = self.portfolio.calculate_pnl_at_expiry(
+                    be,
+                    include_underlying=(analysis_key == "total"),
                 )
                 ax.plot(
                     be,

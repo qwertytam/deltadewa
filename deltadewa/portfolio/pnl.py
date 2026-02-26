@@ -7,21 +7,16 @@ import numpy as np
 from deltadewa.constants import OptionType
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.position import OptionPosition
+    from deltadewa.portfolio._protocols import _PortfolioProtocol
 
 
 class PnLMixin:
     """Mixin providing P&L calculations for option portfolio."""
 
     if TYPE_CHECKING:
-        positions: list["OptionPosition"]
-        underlying_quantity: float
-        spot_price: float
+        _self: "_PortfolioProtocol"
 
-        # pylint: disable=missing-function-docstring
-        def total_value(self) -> float: ...
-
-    def calculate_net_debit(self) -> float:
+    def calculate_net_debit(self: "_PortfolioProtocol") -> float:
         """Calculate the net debit/credit for implementing the portfolio.
 
         Returns:
@@ -31,7 +26,7 @@ class PnLMixin:
         return self.total_value()
 
     def calculate_pnl_at_expiry(
-        self,
+        self: "_PortfolioProtocol",
         spot_price_at_expiry: float,
         include_underlying: bool = False,
     ) -> float:
@@ -45,23 +40,21 @@ class PnLMixin:
             Total P&L at expiration
 
         """
-        # pylint: disable=assignment-from-no-return
         initial_cost = self.total_value()
-        if initial_cost is None:
-            initial_cost = 0.0
-        else:
-            initial_cost = float(initial_cost)
+        initial_cost = 0.0 if initial_cost is None else float(initial_cost)
         pnl = -initial_cost  # Start with negative of initial cost
 
         # Calculate intrinsic value at expiry for each position
         for pos in self.positions:
             if pos.option.option_type == OptionType.CALL:
                 intrinsic = max(
-                    0, spot_price_at_expiry - pos.option.strike_price,
+                    0,
+                    spot_price_at_expiry - pos.option.strike_price,
                 )
             else:  # put
                 intrinsic = max(
-                    0, pos.option.strike_price - spot_price_at_expiry,
+                    0,
+                    pos.option.strike_price - spot_price_at_expiry,
                 )
 
             pnl += intrinsic * pos.quantity * pos.contract_size
@@ -76,7 +69,7 @@ class PnLMixin:
         return pnl
 
     def vectorized_pnl_at_expiry(
-        self,
+        self: "_PortfolioProtocol",
         spot_scenarios: np.ndarray,
         include_underlying: bool = True,
     ) -> np.ndarray:
@@ -98,9 +91,7 @@ class PnLMixin:
         if len(self.positions) == 0:
             # Empty portfolio case
             if include_underlying and self.underlying_quantity != 0:
-                return self.underlying_quantity * (
-                    spot_scenarios - self.spot_price
-                )
+                return self.underlying_quantity * (spot_scenarios - self.spot_price)
             return np.zeros_like(spot_scenarios)
 
         # Pre-extract position data into arrays
@@ -108,16 +99,13 @@ class PnLMixin:
         quantities = np.array([pos.quantity for pos in self.positions])
         contract_sizes = np.array([pos.contract_size for pos in self.positions])
         is_call = np.array(
-            [
-                pos.option.option_type == OptionType.CALL
-                for pos in self.positions
-            ],
+            [pos.option.option_type == OptionType.CALL for pos in self.positions],
         )
 
         # Vectorized intrinsic value calculation using broadcasting
-        # Shape: spot_scenarios[:, None] is (n_spots, 1)
-        # Shape: strikes[None, :] is (1, n_positions)
-        # Result: (n_spots, n_positions)
+        # Shape: spot_scenarios[:, None] is (n_spots, 1)  # noqa: ERA001
+        # Shape: strikes[None, :] is (1, n_positions)  # noqa: ERA001
+        # Result: (n_spots, n_positions)  # noqa: ERA001
         spots_2d = spot_scenarios[:, np.newaxis]
         strikes_2d = strikes[np.newaxis, :]
 
@@ -127,14 +115,11 @@ class PnLMixin:
 
         # Apply quantity and contract size
         position_values = (
-            intrinsic
-            * quantities[np.newaxis, :]
-            * contract_sizes[np.newaxis, :]
+            intrinsic * quantities[np.newaxis, :] * contract_sizes[np.newaxis, :]
         )
         total_option_value = position_values.sum(axis=1)
 
         # Calculate P&L relative to initial cost
-        # pylint: disable=assignment-from-no-return
         initial_cost = self.total_value()
         pnl = total_option_value - initial_cost
 

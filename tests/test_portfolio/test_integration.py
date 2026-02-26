@@ -28,7 +28,9 @@ class TestPortfolioIntegration:
         """Test a complete portfolio workflow."""
         # Create portfolio
         portfolio = OptionPortfolio(
-            underlying_quantity=100.0, spot_price=100.0, volatility=0.2,
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.2,
         )
 
         # Add positions
@@ -238,7 +240,6 @@ class TestPortfolioIntegration:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Ensure analysis is not None

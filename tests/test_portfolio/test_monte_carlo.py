@@ -80,7 +80,8 @@ class TestMonteCarloMixin:
         )
 
         result = portfolio.run_monte_carlo_simulation(
-            num_simulations=1000, include_underlying=True,
+            num_simulations=1000,
+            include_underlying=True,
         )
 
         assert "prob_profit" in result
@@ -100,7 +101,8 @@ class TestMonteCarloMixin:
         )
 
         result = portfolio.run_monte_carlo_simulation(
-            num_simulations=1000, days_to_expiry=60,
+            num_simulations=1000,
+            days_to_expiry=60,
         )
 
         assert "prob_profit" in result
@@ -174,11 +176,11 @@ class TestMonteCarloMixin:
         # Verify spot prices generate correct P&L
         test_spots = np.array([90.0, 100.0, 110.0])
         pnls = portfolio.vectorized_pnl_at_expiry(
-            test_spots, include_underlying=False,
+            test_spots,
+            include_underlying=False,
         )
 
         # Manually compute expected P&L
-        # pylint: disable=assignment-from-no-return
         initial_cost = portfolio.total_value()
         expected_pnls = []
         for spot in test_spots:
@@ -192,11 +194,14 @@ class TestMonteCarloMixin:
     def test_underlying_only_portfolio(self):
         """Test Monte Carlo with underlying position only (no options)."""
         portfolio = OptionPortfolio(
-            underlying_quantity=100.0, spot_price=100.0, volatility=0.2,
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.2,
         )
 
         result = portfolio.run_monte_carlo_simulation(
-            num_simulations=10000, include_underlying=True,
+            num_simulations=10000,
+            include_underlying=True,
         )
 
         assert "prob_profit" in result

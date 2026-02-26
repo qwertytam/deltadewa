@@ -1,7 +1,6 @@
 """Monte Carlo simulation mixin for option portfolio."""
 
 from collections import Counter
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -9,45 +8,17 @@ import numpy as np
 from deltadewa import constants as const
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.position import OptionPosition
+    from deltadewa.portfolio._protocols import _PortfolioProtocol
 
 
 class MonteCarloMixin:
     """Mixin providing Monte Carlo simulation for option portfolio."""
 
     if TYPE_CHECKING:
-        positions: list["OptionPosition"]
-        valuation_date: datetime
-        risk_free_rate: float
-        dividend_yield: float
-        volatility: float
-        spot_price: float
-        # Monte Carlo results and staleness tracking provided by the host
-        monte_carlo_results: dict[str, Any] | None
-        monte_carlo_stale: bool
-        monte_carlo_last_modified: datetime | None
+        _self: "_PortfolioProtocol"
 
-        # pylint: disable=missing-function-docstring, unused-argument
-        def vectorized_pnl_at_expiry(
-            self, spots: np.ndarray, include_underlying: bool = False,
-        ) -> np.ndarray: ...
-
-        # pylint: disable=missing-function-docstring, unused-argument
-        def calculate_breakeven_points(
-            self,
-            spot_range: np.ndarray | None = None,
-            include_underlying: bool = False,
-            spot_min_pct: float = 0.0,
-            spot_max_pct: float = 200.0,
-        ) -> list[float]: ...
-
-        # pylint: disable=missing-function-docstring, unused-argument
-        def calculate_pnl_at_expiry(
-            self, spot: float, include_underlying: bool = False,
-        ) -> float: ...
-
-    def _calculate_theoretical_max_loss(self) -> float | None:
-        """Helper to calculate theoretical max loss based on position structure."""
+    def _calculate_theoretical_max_loss(self: "_PortfolioProtocol") -> float | None:
+        """Calculate theoretical max loss based on position structure."""
         if not hasattr(self, "positions") or not self.positions:
             return None
 
@@ -57,9 +28,7 @@ class MonteCarloMixin:
                 if pos.option.option_type == const.OptionType.PUT:
                     # Short put max loss = strike * quantity
                     loss = (
-                        pos.option.strike_price
-                        * abs(pos.quantity)
-                        * pos.contract_size
+                        pos.option.strike_price * abs(pos.quantity) * pos.contract_size
                     )
                     max_loss_theoretical += loss
                 else:
@@ -70,8 +39,11 @@ class MonteCarloMixin:
             return -max_loss_theoretical
         return None
 
-    def _analyze_concentration(self, pnls: np.ndarray):
-        """Helper to analyze P&L distribution concentration."""
+    def _analyze_concentration(
+        self: "_PortfolioProtocol",
+        pnls: np.ndarray,
+    ) -> tuple[bool, float, tuple[float, int] | None]:
+        """Analyze P&L distribution concentration."""
         unique_rounded = np.unique(np.round(pnls, 2))
         is_concentrated = len(unique_rounded) < (len(pnls) / 100)
 
@@ -86,7 +58,10 @@ class MonteCarloMixin:
 
         return is_concentrated, concentration_pct, most_common_pnl
 
-    def _empty_monte_carlo_results(self, days_to_expiry: int) -> dict[str, Any]:
+    def _empty_monte_carlo_results(
+        self: "_PortfolioProtocol",
+        days_to_expiry: int,
+    ) -> dict[str, Any]:
         """Return safe empty results structure."""
         return {
             "simulated_pnls": np.array([]),
@@ -114,7 +89,7 @@ class MonteCarloMixin:
         }
 
     def run_monte_carlo_simulation(
-        self,
+        self: "_PortfolioProtocol",
         num_simulations: int = 10**5,
         include_underlying: bool = True,
         random_seed: int | None = 42,  # Set to None for true randomness
@@ -129,7 +104,8 @@ class MonteCarloMixin:
         Args:
             num_simulations: Number of simulation paths
             include_underlying: Include underlying position in P&L
-            random_seed: Random seed for reproducibility (None for true randomness)
+            random_seed: Random seed for reproducibility (None for true
+            randomness)
             days_to_expiry: Days to expiration (uses nearest maturity if None)
 
         Returns:
@@ -140,11 +116,10 @@ class MonteCarloMixin:
         min_time_horizon = 1
         if days_to_expiry is None:
             if len(self.positions) > 0:
-                min_maturity = min(
-                    pos.option.maturity_date for pos in self.positions
-                )
+                min_maturity = min(pos.option.maturity_date for pos in self.positions)
                 days_to_expiry = max(
-                    min_time_horizon, (min_maturity - self.valuation_date).days,
+                    min_time_horizon,
+                    (min_maturity - self.valuation_date).days,
                 )
             else:
                 days_to_expiry = const.CALENDAR_DAYS_PER_MONTH  # Default
@@ -175,7 +150,8 @@ class MonteCarloMixin:
         simulated_pnls = np.array(
             [
                 self.calculate_pnl_at_expiry(
-                    spot, include_underlying=include_underlying,
+                    spot,
+                    include_underlying=include_underlying,
                 )
                 for spot in final_spots
             ],
@@ -220,13 +196,11 @@ class MonteCarloMixin:
 
         # 8. Distribution analysis (for short option strategies)
         unique_rounded = np.unique(np.round(pnls_clean, 2))
-        # is_concentrated = len(unique_rounded) < (len(pnls_clean) / 100)
         is_concentrated, concentration_pct, most_common_pnl = (
             self._analyze_concentration(pnls_clean)
         )
 
         # 9. Breakeven Analysis (Delegate to existing method)
-        # pylint: disable=assignment-from-no-return
         breakeven_points = self.calculate_breakeven_points(
             include_underlying=include_underlying,
         )

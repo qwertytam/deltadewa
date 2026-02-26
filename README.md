@@ -170,7 +170,9 @@ The dashboard provides a complete workflow:
 You can also use the library programmatically:
 
 ```python
-from datetime import datetime, timedelta
+import datetime
+from datetime import datetime as dt
+from datetime import timedelta
 from deltadewa import AmericanOption, OptionPortfolio
 
 # Create a portfolio
@@ -183,7 +185,7 @@ portfolio = OptionPortfolio(
 )
 
 # Add option positions
-maturity = datetime.now() + timedelta(days=60)
+maturity = dt.now(datetime.UTC) + timedelta(days=60)
 portfolio.add_position(
     strike_price=95.0,
     maturity_date=maturity,

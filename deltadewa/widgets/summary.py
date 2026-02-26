@@ -51,7 +51,11 @@ class NetHedgeSummary:
         self._create_widget()
 
     def _format_large_block(
-        self, color: str, text_color: str, name: str, value_str: str,
+        self,
+        color: str,
+        text_color: str,
+        name: str,
+        value_str: str,
     ) -> str:
         """Return formatted HTML for large block.
 
@@ -118,7 +122,10 @@ class NetHedgeSummary:
         )
 
     def _format_pct(
-        self, name: str, value: float, is_neutral: bool = False,
+        self,
+        name: str,
+        value: float,
+        is_neutral: bool = False,
     ) -> str:
         """Format a percentage metric as colored HTML badge.
 
@@ -183,7 +190,7 @@ class NetHedgeSummary:
                 widgets.HTML(
                     f"""
                     <div style="background-color:{DEFAULT_PALETTE.med_dark_background};"""
-                     """ color:white; padding:10px; border-radius:5px 5px 0 0;">
+                    """ color:white; padding:10px; border-radius:5px 5px 0 0;">
                     <h3 style="margin:0;">Hedge Summary</h3>
                     </div>
                     """,
@@ -225,30 +232,34 @@ class NetHedgeSummary:
 
         value_html = (
             self._format_greek(
-                "Underlying Value", stats["total_underlying_value"],
+                "Underlying Value",
+                stats["total_underlying_value"],
             )
             + self._format_greek("Option Value", stats["total_value"])
             + self._format_greek(
-                "Total Portfolio Value", stats["total_portfolio_value"],
+                "Total Portfolio Value",
+                stats["total_portfolio_value"],
             )
         )
-        self.value_metrics_html.value = (
-            f'<div style="padding:10px;">{value_html}</div>'
-        )
+        self.value_metrics_html.value = f'<div style="padding:10px;">{value_html}</div>'
 
         # Crash convexity
         current_spot = self.portfolio.spot_price
         pnl_0 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 1.00, include_underlying=True,
+            current_spot * 1.00,
+            include_underlying=True,
         )
         pnl_10 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.90, include_underlying=True,
+            current_spot * 0.90,
+            include_underlying=True,
         )
         pnl_20 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.80, include_underlying=True,
+            current_spot * 0.80,
+            include_underlying=True,
         )
         pnl_30 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.70, include_underlying=True,
+            current_spot * 0.70,
+            include_underlying=True,
         )
 
         crash_html = (
@@ -291,13 +302,19 @@ class NetHedgeSummary:
 
         vol_html = (
             self._format_pct(
-                "Min Vol", stats["volatility_min"], is_neutral=True,
+                "Min Vol",
+                stats["volatility_min"],
+                is_neutral=True,
             )
             + self._format_pct(
-                "Max Vol", stats["volatility_max"], is_neutral=True,
+                "Max Vol",
+                stats["volatility_max"],
+                is_neutral=True,
             )
             + self._format_pct(
-                "Vega-W.Avg Vol", vol_stats["avg_volatility"], is_neutral=True,
+                "Vega-W.Avg Vol",
+                vol_stats["avg_volatility"],
+                is_neutral=True,
             )
             + self._format_greek(
                 "Custom Vol Count",
@@ -305,33 +322,29 @@ class NetHedgeSummary:
                 is_neutral=True,
             )
         )
-        self.vol_metrics_html.value = (
-            f'<div style="padding:10px;">{vol_html}</div>'
-        )
+        self.vol_metrics_html.value = f'<div style="padding:10px;">{vol_html}</div>'
 
         # Probabilistic stats (expandable)
         analyzer = PortfolioAnalyzer(self.portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis()
 
         prob_html = "<div style='padding:10px;'>"
 
         # Check if Monte Carlo results exist
         mc_results = self.portfolio.monte_carlo_results
-        if (
-            mc_results is not None
-            and len(mc_results.get("simulated_pnls", [])) > 0
-        ):
+        if mc_results is not None and len(mc_results.get("simulated_pnls", [])) > 0:
             expected_pnl = mc_results.get("expected_pnl", 0)
 
             prob_profit = mc_results.get("prob_profit", 0)
-            prob_html += f"<p><strong>Probability of Profit:</strong> {prob_profit*100:.1f}%</p>"
             prob_html += (
-                f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
+                f"<p><strong>Probability of Profit:</strong> {prob_profit*100:.1f}%</p>"
             )
+            prob_html += f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
         else:
             prob_html += "<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
-            prob_html += "<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
+            prob_html += (
+                "<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
+            )
 
         max_loss_opt = analysis.get("max_loss_options", None)
         max_loss_total = analysis.get("max_loss_total", None)
@@ -367,9 +380,7 @@ class NetHedgeSummary:
         if max_profit_total is None:
             max_profit_result += "N/A"
         elif not max_profit_total.get("is_unlimited", True):
-            max_profit_result += (
-                f"${-max_profit_total.get('max_profit', 0):,.2f}"
-            )
+            max_profit_result += f"${-max_profit_total.get('max_profit', 0):,.2f}"
         else:
             max_profit_result += "Unlimited"
         max_profit_result += "</p>"

@@ -7,7 +7,7 @@ import numpy as np
 from deltadewa.spot_utils import generate_spot_range
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.analysis._protocols import _AnalyzerProtocol
 
 
 class RiskRewardMixin:
@@ -18,12 +18,12 @@ class RiskRewardMixin:
     """
 
     if TYPE_CHECKING:
-        portfolio: OptionPortfolio
+        _self: "_AnalyzerProtocol"
 
     def risk_reward_analysis(
-        self,
+        self: "_AnalyzerProtocol",
         spot_range: np.ndarray | None = None,
-        num_simulations: int = 10000,
+        num_simulations: int = 10**4,
     ) -> dict:
         """Generate comprehensive risk/reward analysis of the portfolio.
 

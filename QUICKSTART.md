@@ -21,14 +21,16 @@ poetry shell
 ### Example 1: Price a Single American Option
 
 ```python
-from datetime import datetime, timedelta
+import datetime
+from datetime import datetime as dt
+from datetime import timedelta
 from deltadewa import AmericanOption
 
 # Create an American put option
 put = AmericanOption(
     spot_price=100.0,
     strike_price=95.0,
-    maturity_date=datetime.now() + timedelta(days=30),
+    maturity_date=dt.now(datetime.UTC) + timedelta(days=30),
     volatility=0.25,
     risk_free_rate=0.05,
     dividend_yield=0.02,
@@ -58,7 +60,7 @@ portfolio = OptionPortfolio(
 )
 
 # Add protective puts
-maturity = datetime.now() + timedelta(days=60)
+maturity = dt.now(datetime.UTC) + timedelta(days=60)
 portfolio.add_position(95.0, maturity, 10, "put")
 portfolio.add_position(100.0, maturity, 5, "put")
 

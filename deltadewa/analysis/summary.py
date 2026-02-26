@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.analysis._protocols import _AnalyzerProtocol
 
 
 class SummaryMixin:
@@ -16,22 +16,12 @@ class SummaryMixin:
     """
 
     if TYPE_CHECKING:
-        portfolio: "OptionPortfolio"
+        _self: "_AnalyzerProtocol"
 
-        # pylint: disable=missing-function-docstring
-        def calculate_carry_metrics(self) -> dict: ...
-
-        # pylint: disable=missing-function-docstring
-        def analyze_risk_concentration(self) -> dict: ...
-
-        # pylint: disable=missing-function-docstring, unused-argument
-        def risk_reward_analysis(
-            self,
-            spot_range: np.ndarray | None = None,
-            num_simulations: int = 10000,
-        ) -> dict: ...
-
-    def format_risk_summary(self, stats: dict | None = None) -> str:
+    def format_risk_summary(
+        self: "_AnalyzerProtocol",
+        stats: dict | None = None,
+    ) -> str:
         """Generate formatted risk summary text.
 
         Args:
@@ -105,7 +95,7 @@ class SummaryMixin:
 
         return "\n".join(lines)
 
-    def generate_insights(self) -> list[str]:
+    def generate_insights(self: "_AnalyzerProtocol") -> list[str]:
         """Generate actionable insights based on portfolio analysis.
 
         Returns:
@@ -115,10 +105,8 @@ class SummaryMixin:
         insights = []
         stats = self.portfolio.summary_stats()
 
-        # pylint: disable=assignment-from-no-return
         carry_metrics = self.calculate_carry_metrics()
 
-        # pylint: disable=assignment-from-no-return
         concentration = self.analyze_risk_concentration()
 
         # Delta insights
@@ -131,12 +119,14 @@ class SummaryMixin:
         # Theta insights
         if carry_metrics["is_positive_carry"]:
             insights.append(
-                f"✓ Positive carry: Earning ${carry_metrics['total_theta_daily']:.2f}/day "
+                f"✓ Positive carry: Earning $"
+                f"{carry_metrics['total_theta_daily']:.2f}/day "
                 f"(${carry_metrics['total_theta_monthly']:.0f}/month)",
             )
         else:
             insights.append(
-                f"⚠ Negative carry: Paying ${-carry_metrics['total_theta_daily']:.2f}/day "
+                f"⚠ Negative carry: Paying $"
+                f"{-carry_metrics['total_theta_daily']:.2f}/day "
                 "for options positions",
             )
 
@@ -144,8 +134,8 @@ class SummaryMixin:
         for metric, score in concentration["concentration_scores"].items():
             if "strike" in metric and score > 30:
                 insights.append(
-                    f"⚠ {metric.split('_')[0].upper()} concentrated in single strike "
-                    f"({score:.1f}%) - consider diversifying",
+                    f"⚠ {metric.split('_')[0].upper()} concentrated in single "
+                    f"strike ({score:.1f}%) - consider diversifying",
                 )
 
         # Gamma insights
@@ -160,14 +150,14 @@ class SummaryMixin:
         if abs(stats["total_vega"]) > 100:
             direction = "benefits from" if stats["total_vega"] > 0 else "hurt by"
             insights.append(
-                f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f}) - "
-                f"portfolio {direction} volatility increases",
+                f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f})"
+                f" - portfolio {direction} volatility increases",
             )
 
         return insights
 
     def format_risk_reward_summary(
-        self,
+        self: "_AnalyzerProtocol",
         spot_range: np.ndarray | None = None,
     ) -> str:
         """Generate formatted risk/reward summary text.
@@ -179,7 +169,6 @@ class SummaryMixin:
             Formatted string with risk/reward analysis
 
         """
-        # pylint: disable=assignment-from-no-return
         analysis = self.risk_reward_analysis(spot_range)
         portfolio_value = 0.0
 
@@ -214,7 +203,8 @@ class SummaryMixin:
                 loss_line += f" ({loss_pct:.1f}% of net debit)"
             lines.append(loss_line)
             lines.append(
-                f"    └─ Occurs at spot price: ${max_loss_opts['spot_at_max_loss']:.2f}",
+                f"    └─ Occurs at spot price: $"
+                f"{max_loss_opts['spot_at_max_loss']:.2f}",
             )
 
         if max_profit_opts["is_unlimited"]:
@@ -226,7 +216,8 @@ class SummaryMixin:
                 profit_line += f" ({roi:.1f}% return on net debit)"
             lines.append(profit_line)
             lines.append(
-                f"    └─ Occurs at spot price: ${max_profit_opts['spot_at_max_profit']:.2f}",
+                f"    └─ Occurs at spot price: $"
+                f"{max_profit_opts['spot_at_max_profit']:.2f}",
             )
 
         if analysis["breakeven_options"]:
@@ -309,7 +300,10 @@ class SummaryMixin:
 
         return "\n".join(lines)
 
-    def print_risk_reward_summary(self, spot_range: np.ndarray | None = None):
+    def print_risk_reward_summary(
+        self: "_AnalyzerProtocol",
+        spot_range: np.ndarray | None = None,
+    ) -> None:
         """Print a formatted risk/reward summary of the portfolio.
 
         Args:

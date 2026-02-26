@@ -184,7 +184,11 @@ class BatchPricer:
                         opt._construction_accuracy_warning  # pylint: disable=protected-access
                     )
                     if msg:
-                        warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
+                        warnings.warn(
+                            msg,
+                            ClosedFormAccuracyWarning,
+                            stacklevel=2,
+                        )
                 pos_values = self._sweep_spots(opt, spots)
                 portfolio_values += (
                     pos_values * position.quantity * position.contract_size
@@ -208,12 +212,12 @@ class BatchPricer:
         self,
         spots: np.ndarray,
         valuation_date: dt,
-        greeks: tuple = ("delta", "gamma", "vega", "theta"),
-    ) -> dict:
+        greeks: tuple[str, ...] = ("delta", "gamma", "vega", "theta"),
+    ) -> dict[str, np.ndarray]:
         """Calculate portfolio Greeks at multiple spot prices for a given date.
 
         Reuses the same (position, date) cache as portfolio_values_at().
-        After the initial QuantLib construction (P × T total across all calls),
+        After the initial QuantLib construction (P x T total across all calls),
         each spot sweep uses only SimpleQuote.setValue() — no engine rebuilds.
 
         The underlying position contributes delta=underlying_quantity,
@@ -232,7 +236,7 @@ class BatchPricer:
         Returns:
             dictmapping each requested greek name (plus "price") to a
             1-D NumPy array of portfolio totals at each spot price, scaled
-            by quantity × contract_size. The "delta" array includes the
+            by quantity x contract_size. The "delta" array includes the
             underlying position (underlying_quantity * 1.0 per spot).
 
         Raises:
@@ -252,7 +256,8 @@ class BatchPricer:
         if "price" not in result:
             result["price"] = np.zeros(n)
 
-        # Underlying contributions: delta += underlying_quantity, price += underlying_quantity * spots
+        # Underlying contributions: delta += underlying_quantity, price +=
+        # underlying_quantity * spots
         if "delta" in result:
             result["delta"] += self.underlying_quantity
         result["price"] += self.underlying_quantity * spots
@@ -267,7 +272,8 @@ class BatchPricer:
             else:
                 live.append((pos_idx, position))
 
-        # Expired positions: vectorized intrinsic price; binary delta; all other Greeks zero
+        # Expired positions: vectorized intrinsic price; binary delta; all
+        # other Greeks zero
         for _pos_idx, position in expired:
             mult = position.quantity * position.contract_size
             if position.option.option_type == OptionType.CALL:
@@ -288,12 +294,14 @@ class BatchPricer:
                     result["delta"] += (
                         -(spots < position.option.strike_price).astype(float) * mult
                     )
-            # gamma / vega / theta / rho are zero at expiry — arrays already zero
+            # gamma / vega / theta / rho are zero at expiry — arrays already
+            # zero
 
         if not live:
             return result
 
-        # Live positions: sequential sweep using cached OptionValuation instances
+        # Live positions: sequential sweep using cached OptionValuation
+        # instances
         for pos_idx, position in live:
             opt, is_new = self._get_or_create_cached_option(
                 pos_idx,
@@ -308,7 +316,8 @@ class BatchPricer:
                     warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
 
             mult = position.quantity * position.contract_size
-            # Request only the greeks the caller asked for (price is always collected)
+            # Request only the greeks the caller asked for (price is always
+            # collected)
             requested = tuple(g for g in greeks if g != "price")
             per_contract = self._sweep_spots_and_greeks(opt, spots, requested)
 
@@ -439,7 +448,8 @@ class BatchPricer:
                 position,
                 valuation_date,
             )
-            # Use the construction-time snapshot — _closed_form_accuracy_message()
+            # Use the construction-time snapshot —
+            # _closed_form_accuracy_messag()  # noqa: ERA001
             # would give the wrong result here since spot_price changes during
             # the sweep below.  Only collect the message on a cache miss so
             # the warning fires exactly once per position per valuation date.

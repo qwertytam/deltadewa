@@ -136,12 +136,10 @@ def main():
         ("Up 10%", spot_price * 1.1),
     ]
 
-    # pylint: disable=assignment-from-no-return
     current_value = portfolio.total_value()
 
     for name, new_spot in scenarios:
         portfolio.update_market_conditions(spot_price=new_spot)
-        # pylint: disable=assignment-from-no-return
         new_value = portfolio.total_value()
         pnl = new_value - current_value
         underlying_pnl = (new_spot - spot_price) * underlying_quantity

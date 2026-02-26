@@ -28,7 +28,6 @@ class TestRiskRewardMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Verify all expected keys exist
@@ -66,7 +65,6 @@ class TestRiskRewardMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Long call should have unlimited profit
@@ -90,7 +88,6 @@ class TestRiskRewardMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Short call should have unlimited loss
@@ -134,7 +131,6 @@ class TestRiskRewardMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Just verify the analysis structure is valid
@@ -148,7 +144,6 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(spot_price=100.0)
         analyzer = PortfolioAnalyzer(portfolio)
 
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
 
         # Empty portfolio should still return valid structure
@@ -255,9 +250,9 @@ class TestRiskRewardMixin:
 
         analyzer = PortfolioAnalyzer(portfolio)
         spot_range = np.linspace(50, 150, 100)
-        # pylint: disable=assignment-from-no-return
         analysis = analyzer.risk_reward_analysis(
-            spot_range=spot_range, num_simulations=100,
+            spot_range=spot_range,
+            num_simulations=100,
         )
 
         # Should still return valid analysis

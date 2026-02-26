@@ -14,6 +14,9 @@ from deltadewa.portfolio.position import OptionPosition
 from deltadewa.portfolio.risk import RiskMixin
 from deltadewa.valuation import OptionValuation
 
+if TYPE_CHECKING:
+    from deltadewa.portfolio._protocols import _PortfolioProtocol
+
 
 class OptionPortfolioBase:
     """Base class for option portfolio management.
@@ -23,42 +26,7 @@ class OptionPortfolioBase:
     """
 
     if TYPE_CHECKING:
-
-        def all_greeks(self) -> dict[str, float]:
-            """Calculate all Greeks - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def total_delta(self) -> float:
-            """Calculate total delta - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def total_gamma(self) -> float:
-            """Calculate total gamma - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def total_vega(self) -> float:
-            """Calculate total vega - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def total_theta(self) -> float:
-            """Calculate total theta - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def total_rho(self) -> float:
-            """Calculate total rho - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def net_delta(self) -> float:
-            """Calculate net delta - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def hedge_ratio(self) -> float:
-            """Calculate hedge ratio - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
-
-        def delta_adjustment_needed(self) -> float:
-            """Calculate delta adjustment needed - for type checking."""
-            ...  # pylint: disable=unnecessary-ellipsis
+        _self: "_PortfolioProtocol"
 
     def __init__(
         self,
@@ -196,7 +164,9 @@ class OptionPortfolioBase:
         """Total portfolio value including options and underlying notional."""
         return self.total_value() + self.total_underlying_value()
 
-    def summary_stats(self) -> dict:
+    def summary_stats(
+        self: "_PortfolioProtocol",
+    ) -> dict:
         """Get summary statistics of the portfolio.
 
         Returns:
@@ -228,7 +198,6 @@ class OptionPortfolioBase:
 
         # Use batch Greek calculation if available (optimized path)
         if hasattr(self, "all_greeks"):
-            # pylint: disable=assignment-from-no-return
             greeks = self.all_greeks()
             stats["total_delta"] = greeks["total_delta"]
             stats["net_delta"] = greeks["net_delta"]
@@ -248,28 +217,28 @@ class OptionPortfolioBase:
         else:
             # Fallback to individual methods (existing code)
             if hasattr(self, "total_delta"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["total_delta"] = self.total_delta()
             if hasattr(self, "net_delta"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["net_delta"] = self.net_delta()
             if hasattr(self, "hedge_ratio"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["hedge_ratio"] = self.hedge_ratio()
             if hasattr(self, "delta_adjustment_needed"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["delta_adjustment"] = self.delta_adjustment_needed()
             if hasattr(self, "total_gamma"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["total_gamma"] = self.total_gamma()
             if hasattr(self, "total_vega"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["total_vega"] = self.total_vega()
             if hasattr(self, "total_theta"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["total_theta"] = self.total_theta()
             if hasattr(self, "total_rho"):
-                # pylint: disable=assignment-from-no-return
+
                 stats["total_rho"] = self.total_rho()
 
         # Add volatility statistics
@@ -290,7 +259,7 @@ class OptionPortfolioBase:
 
         return stats
 
-    def summary(self) -> str:
+    def summary(self: "_PortfolioProtocol") -> str:
         """Return a human-readable summary of the portfolio."""
         stats = self.summary_stats()
         parts = [f"Positions: {stats['total_positions']}"]
@@ -504,7 +473,9 @@ class OptionPortfolioBase:
         """Clear all positions from the portfolio."""
         self.positions = []
 
-    def __repr__(self) -> str:
+    def __repr__(
+        self: "_PortfolioProtocol",
+    ) -> str:
         """Return string representation of the portfolio."""
         if hasattr(self, "net_delta"):
             s = (

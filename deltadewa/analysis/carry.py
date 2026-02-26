@@ -7,7 +7,7 @@ import pandas as pd
 from deltadewa import constants as const
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.analysis._protocols import _AnalyzerProtocol
 
 
 class CarryMixin:
@@ -18,12 +18,9 @@ class CarryMixin:
     """
 
     if TYPE_CHECKING:
-        portfolio: "OptionPortfolio"
+        _self: "_AnalyzerProtocol"
 
-        # pylint: disable=unused-argument, missing-function-docstring
-        def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame: ...
-
-    def calculate_carry_metrics(self) -> dict:
+    def calculate_carry_metrics(self: "_AnalyzerProtocol") -> dict:
         """Analyze portfolio carry (theta decay) characteristics.
 
         Note: All theta calculations use the industry standard convention of
@@ -52,7 +49,6 @@ class CarryMixin:
         if df.empty:
             return self._empty_carry_metrics()
 
-        # pylint: disable=assignment-from-no-return
         df = self.add_maturity_buckets(df)
 
         # Total theta metrics
@@ -149,17 +145,18 @@ class CarryMixin:
         }
 
     def create_theta_summary_table(
-        self,
+        self: "_AnalyzerProtocol",
     ) -> pd.DataFrame:
         """Create consolidated theta/carry summary table.
 
-        Returns a DataFrame showing theta breakdown by source (income/cost) and timeframe
-        (daily, weekly, monthly, annual). This provides a clear view of where theta is
-        coming from and going to in the portfolio.
+        Returns a DataFrame showing theta breakdown by source (income/cost) and
+        timeframe (daily, weekly, monthly, annual). This provides a clear view
+        of where theta is coming from and going to in the portfolio.
 
         Returns:
-            DataFrame with theta breakdown by source (income/cost) and timeframe,
-            with multi-index (category, source) and columns for different time periods
+            DataFrame with theta breakdown by source (income/cost) and
+            timeframe with multi-index (category, source) and columns for
+            different time periods
 
         """
         carry_metrics = self.calculate_carry_metrics()
