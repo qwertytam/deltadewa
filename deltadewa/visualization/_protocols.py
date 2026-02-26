@@ -15,13 +15,16 @@ import numpy as np
 from matplotlib.axes import Axes
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.core import OptionPortfolioBase
 
 
 class _VisualizationProtocol(Protocol):
     """Structural type of self inside all Visualization mixins."""
 
-    portfolio: "OptionPortfolio"  # noqa: UP037
+    # Use the base portfolio type here (mutable/invariant) so static
+    # analysers accept both the composed `OptionPortfolio` and the
+    # lightweight `OptionPortfolioBase` instances used in some places.
+    portfolio: "OptionPortfolioBase"  # noqa: UP037
 
     # Mixin methods (defined in their respective mixin classes, but declared
     # here for static type checking)
