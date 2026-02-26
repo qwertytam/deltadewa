@@ -53,10 +53,8 @@ class _PortfolioProtocol(Protocol):
     ) -> float: ...
     def vectorized_pnl_at_expiry(
         self,
-        spot_range: np.ndarray | None = None,
-        include_underlying: bool = False,
-        spot_min_pct: float = 0.0,
-        spot_max_pct: float = 200.0,
+        spot_scenarios: np.ndarray,
+        include_underlying: bool = True,
     ) -> np.ndarray: ...
 
     # MonteCarloMixin methods
