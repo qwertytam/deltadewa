@@ -24,7 +24,7 @@ class PortfolioAnalyzerBase:
     mixins build upon this base class.
     """
 
-    def __init__(self, portfolio):
+    def __init__(self, portfolio) -> None:  # noqa: ANN001
         """Initialize analyzer with portfolio.
 
         Args:
@@ -57,5 +57,3 @@ class PortfolioAnalyzer(
     - Risk/reward analysis
     - Portfolio health metrics
     """
-
-    # pylint: disable=unnecessary-pass
