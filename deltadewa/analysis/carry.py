@@ -30,7 +30,7 @@ class CarryMixin:
         - Volatility calculations which use calendar time in T
 
         Returns:
-            dictcontaining:
+            dict containing:
                 - total_theta_daily: Daily theta across all positions
                 - total_theta_weekly: Weekly theta (daily * 7 calendar days)
                 - total_theta_monthly: Monthly theta (daily * 30 calendar days)

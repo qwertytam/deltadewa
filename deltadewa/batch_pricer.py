@@ -227,7 +227,7 @@ class BatchPricer:
                 Defaults to ("delta", "gamma", "vega", "theta").
 
         Returns:
-            dictmapping each requested greek name (plus "price") to a
+            dict mapping each requested greek name (plus "price") to a
             1-D NumPy array of portfolio totals at each spot price, scaled
             by quantity x contract_size. The "delta" array includes the
             underlying position (underlying_quantity * 1.0 per spot).

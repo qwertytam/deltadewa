@@ -32,7 +32,7 @@ class RiskRewardMixin:
             num_simulations: Number of Monte Carlo simulations for probability
 
         Returns:
-            dictcontaining all risk/reward metrics
+            dict containing all risk/reward metrics
 
         """
         net_debit = self.portfolio.calculate_net_debit()
