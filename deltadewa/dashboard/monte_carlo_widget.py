@@ -27,9 +27,9 @@ class MonteCarloStalenessWidget:
     ) -> None:
         """Initialize the widget with portfolio and MC parameters."""
         self.portfolio = portfolio
-        self.num_simulations = num_simulations
-        self.include_underlying = include_underlying
-        self.reporter = reporter or ConsoleReporter()
+        self._num_simulations = num_simulations
+        self._include_underlying = include_underlying
+        self._reporter = reporter or ConsoleReporter()
 
     def check_and_warn(self) -> bool:
         """Display the stale-MC warning widget if results are stale.
@@ -92,16 +92,16 @@ class MonteCarloStalenessWidget:
                     b.disabled = True
                     try:
                         print(
-                            f"Re-running Monte Carlo with {self.num_simulations:,}"
+                            f"Re-running Monte Carlo with {self._num_simulations:,}"
                             f" simulations...",
                         )
                         mc_results = self.portfolio.run_monte_carlo_simulation(
-                            num_simulations=self.num_simulations,
-                            include_underlying=self.include_underlying,
+                            num_simulations=self._num_simulations,
+                            include_underlying=self._include_underlying,
                         )
                         self.portfolio.monte_carlo_stale = False
                         self.portfolio.monte_carlo_timestamp = dt.now(tz=datetime.UTC)
-                        self.reporter.success(
+                        self._reporter.success(
                             f"✓ Monte Carlo re-run complete! "
                             f"{mc_results['num_simulations']:,} scenarios",
                         )
@@ -109,7 +109,7 @@ class MonteCarloStalenessWidget:
                         b.description = "✓ Complete - Refresh Results"
                         b.button_style = "success"
                     except Exception as e:  # pylint: disable=broad-except
-                        self.reporter.error(f"Error re-running Monte Carlo: {e}")
+                        self._reporter.error(f"Error re-running Monte Carlo: {e}")
                         b.description = "❌ Error - Try Again"
                         b.button_style = "danger"
                         b.disabled = False

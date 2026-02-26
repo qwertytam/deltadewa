@@ -19,15 +19,15 @@ class VolatilityProfileDisplay:
         reporter: ConsoleReporter | None = None,
     ) -> None:
         """Initialize with the portfolio to display."""
-        self.portfolio = portfolio
-        self.reporter = reporter or ConsoleReporter()
+        self._portfolio = portfolio
+        self._reporter = reporter or ConsoleReporter()
 
     def display(self, vol_stats: dict | None = None) -> None:
         """Print the portfolio volatility profile.
 
         If vol_stats is None, it is computed fresh from the portfolio.
         """
-        self.reporter.header("PORTFOLIO VOLATILITY PROFILE")
+        self._reporter.header("PORTFOLIO VOLATILITY PROFILE")
 
         if vol_stats:
             print(
@@ -62,7 +62,7 @@ class VolatilityProfileDisplay:
                 print("  All positions use the portfolio default volatility.")
 
             print("\nPosition Volatilities:")
-            for i, pos in enumerate(self.portfolio.positions):
+            for i, pos in enumerate(self._portfolio.positions):
                 custom_marker = " (custom)" if pos.custom_volatility else ""
                 print(
                     f"  Position {i+1}: {pos.option.volatility:.2%}"
@@ -72,4 +72,4 @@ class VolatilityProfileDisplay:
         else:
             print("No positions in portfolio")
 
-        self.reporter.divider()
+        self._reporter.divider()

@@ -14,18 +14,27 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
 
+def _fmt_enum_val(v) -> str:  # noqa: ANN001
+    if hasattr(v, "name"):
+        return v.name.capitalize()
+    s = str(v)
+    if "." in s:
+        return s.rsplit(".", maxsplit=1)[-1].capitalize()
+    return str(s).capitalize()
+
+
 class PositionDetailDisplay:
     """Build and display the position detail table."""
 
     def __init__(self, portfolio: OptionPortfolio) -> None:
         """Initialize with the portfolio to display."""
-        self.portfolio = portfolio
+        self._portfolio = portfolio
 
     def display(self) -> None:
         """Build and display the styled position detail table."""
         # Position Detail Table
 
-        df_positions = self.portfolio.to_dataframe()
+        df_positions = self._portfolio.to_dataframe()
 
         if not df_positions.empty:
             # Create a copy for display with title case column names
@@ -41,14 +50,6 @@ class PositionDetailDisplay:
 
             # Normalize option `type` and `exercise_style` for user-friendly
             # display
-            def _fmt_enum_val(v) -> str:  # noqa: ANN001
-                if hasattr(v, "name"):
-                    return v.name.capitalize()
-                s = str(v)
-                if "." in s:
-                    return s.rsplit(".", maxsplit=1)[-1].capitalize()
-                return str(s).capitalize()
-
             if "type" in display_df.columns:
                 display_df["type"] = display_df["type"].apply(_fmt_enum_val)
 

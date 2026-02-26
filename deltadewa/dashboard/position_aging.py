@@ -45,14 +45,14 @@ class PositionAgingDisplay:
     ) -> None:
         """Initialize with the portfolio to analyze and an optional reporter."""
         self.portfolio = portfolio
-        self.reporter = reporter or ConsoleReporter()
+        self._reporter = reporter or ConsoleReporter()
 
     def display(self) -> None:
         """Print the expiration calendar and aging insights."""
         # Position Aging & Expiration Calendar
 
         print()
-        self.reporter.header("📅 POSITION AGING & EXPIRATION CALENDAR")
+        self._reporter.header("📅 POSITION AGING & EXPIRATION CALENDAR")
         print()
 
         # Group positions by expiration urgency
@@ -94,7 +94,7 @@ class PositionAgingDisplay:
 
                 if len(positions_in_category) > 0:
                     print(f"\n{category}:  {len(positions_in_category)} position(s)")
-                    self.reporter.divider()
+                    self._reporter.divider()
 
                     for _, pos in positions_in_category.iterrows():
                         days_left = pos["days_to_expiry"]
@@ -123,7 +123,7 @@ class PositionAgingDisplay:
                             print("       → PLAN:  Start evaluating roll opportunities")
 
             print()
-            self.reporter.divider()
+            self._reporter.divider()
             print("💡 AGING INSIGHTS:")
 
             # Calculate aggregate theta by expiration bucket
@@ -140,7 +140,7 @@ class PositionAgingDisplay:
                 f"  • Near-term positions (7-21d): Burning ${abs(soon_theta):.2f}/day"
             )
             print("  • Recommendation: Focus rolls on urgent positions first")
-            self.reporter.divider()
+            self._reporter.divider()
 
         else:
             print("No positions in portfolio yet.")
