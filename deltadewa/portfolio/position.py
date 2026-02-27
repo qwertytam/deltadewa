@@ -14,13 +14,15 @@ class OptionPosition:
         contract_size: int = 100,
         custom_volatility: bool = False,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
-    ):
+    ) -> None:
         """Initialize an option position.
 
         Args:
             option: OptionValuation instance
-            quantity: Number of contracts (positive for long, negative for short)
-            contract_size: Number of underlying shares per option contract (e.g. 100)
+            quantity: Number of contracts (positive for long, negative for
+            short)
+            contract_size: Number of underlying shares per option
+            contract (e.g. 100)
             custom_volatility: Whether this position uses custom volatility
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
 
@@ -41,7 +43,8 @@ class OptionPosition:
 
     def position_delta(self) -> float:
         """Calculate the total delta of the position (in shares)."""
-        # option.delta() is per-share; multiply by contract size and number of contracts
+        # option.delta() is per-share; multiply by contract size and number of
+        # contracts
         return self.option.delta() * self.quantity * self.contract_size
 
     def position_gamma(self) -> float:
@@ -61,7 +64,7 @@ class OptionPosition:
         return self.option.rho() * self.quantity * self.contract_size
 
     def to_dict(self) -> dict:
-        """Convert position to dictionary (optimized with batch Greek computation)."""
+        """Convert position to dict (optimized with batch Greek computation)."""
         # Use batch computation - gets all Greeks in one efficient call
         greeks = self.option.greeks()
         multiplier = self.quantity * self.contract_size
