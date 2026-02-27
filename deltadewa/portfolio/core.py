@@ -292,7 +292,7 @@ class OptionPortfolioBase:
         """Return positions in a format suitable for widgets/UI."""
         return [
             {
-                "type": pos.option.option_type,
+                "option_type": pos.option.option_type,
                 "strike": pos.option.strike_price,
                 "expiry": pos.option.maturity_date.date(),
                 "quantity": pos.quantity,

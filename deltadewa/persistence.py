@@ -211,7 +211,10 @@ class PortfolioSerializer:
         return data
 
     def export_to_json(
-        self, portfolio, changelog, filename="portfolio_book.json",
+        self,
+        portfolio,
+        changelog,
+        filename="portfolio_book.json",
     ) -> Path:
         """Export complete portfolio state to JSON format.
 
@@ -311,7 +314,10 @@ class PortfolioSerializer:
         return {"positions": positions_file, "risk": risk_file}
 
     def export_to_yaml(
-        self, portfolio, changelog, filename="portfolio_export.yaml",
+        self,
+        portfolio,
+        changelog,
+        filename="portfolio_export.yaml",
     ) -> Path | None:
         """Export portfolio configuration to YAML format (useful for edits/versioning).
 
@@ -363,7 +369,8 @@ class PortfolioSerializer:
 
         # Create new portfolio
         underlying = data.get("risk_metrics", {}).get(
-            "underlying_quantity", market_params.get("underlying_quantity", 0.0),
+            "underlying_quantity",
+            market_params.get("underlying_quantity", 0.0),
         )
         imported_portfolio = OptionPortfolio(
             underlying_quantity=underlying,
@@ -385,9 +392,7 @@ class PortfolioSerializer:
             if strike is None:
                 raise ValueError("Position entry missing strike price")
 
-            option_type = (
-                pos_data.get("option_type") or pos_data.get("type") or OptionType.CALL
-            )
+            option_type = pos_data.get("option_type") or OptionType.CALL
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
 
             # Handle volatility - check for both explicit flag and presence of volatility data

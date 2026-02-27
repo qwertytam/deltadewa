@@ -206,7 +206,7 @@ class TestPortfolioIntegration:
 
         assert len(df) == 2
         assert "strike" in df.columns
-        assert "type" in df.columns
+        assert "option_type" in df.columns
         assert "quantity" in df.columns
 
     def test_summary_methods(self):

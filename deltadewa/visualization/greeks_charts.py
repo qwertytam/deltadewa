@@ -124,7 +124,7 @@ class GreeksChartsMixin:
         pivot = df.pivot_table(
             values=position_metric,
             index=dimension,
-            columns="type",
+            columns="option_type",
             aggfunc="sum",
             fill_value=0,
         )
@@ -145,7 +145,7 @@ class GreeksChartsMixin:
         ax.set_xlabel(xlabel or dimension.replace("_", " ").title())
         ax.set_ylabel(f"Position {metric.title()}")
         ax.set_title(title, fontsize=12, fontweight="bold")
-        ax.legend(title="Type", loc="best")
+        ax.legend(title="option_type", loc="best")
         ax.grid(True, alpha=0.3, axis="y")
         ax.tick_params(axis="x", rotation=45)
 
@@ -153,5 +153,8 @@ class GreeksChartsMixin:
         for container in ax.containers:
             if isinstance(container, BarContainer):
                 ax.bar_label(
-                    container, fmt="%.0f", label_type="edge", fontsize=8,
+                    container,
+                    fmt="%.0f",
+                    label_type="edge",
+                    fontsize=8,
                 )

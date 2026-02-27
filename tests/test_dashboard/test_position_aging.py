@@ -6,23 +6,23 @@ Focus areas:
 - PositionAgingDisplay.display(): smoke tests + freshness of "today"
 """
 
-# ruff: noqa: S101 D102 ANN001
-# pylint: disable=missing-function-docstring
+# ruff: noqa: S101 D101 D102 ANN001
+# pylint: disable=missing-class-docstring, missing-function-docstring, protected-access
 
 from __future__ import annotations
 
-import datetime
-from datetime import timedelta, timezone
+from datetime import UTC as UTC  # pylint: disable=C0414
+from datetime import datetime as dt
+from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 
-from deltadewa.dashboard.position_aging import (_URGENCY_ORDER,
-                                                PositionAgingDisplay,
-                                                _get_urgency_category)
-
-UTC = timezone.utc
-
+from deltadewa.dashboard.position_aging import (
+    _URGENCY_ORDER,
+    PositionAgingDisplay,
+    _get_urgency_category,
+)
 
 # ===========================================================================
 # _URGENCY_ORDER constant
@@ -52,17 +52,17 @@ class TestGetUrgencyCategory:
     @pytest.mark.parametrize(
         "days, expected_fragment",
         [
-            # URGENT: 0 – 6
+            # URGENT: 0 - 6  # noqa: ERA001
             (0, "URGENT"),
             (1, "URGENT"),
             (6, "URGENT"),
-            # SOON: 7 – 13
+            # SOON: 7 - 13  # noqa: ERA001
             (7, "SOON"),
             (13, "SOON"),
-            # APPROACHING: 14 – 20
+            # APPROACHING: 14 - 20  # noqa: ERA001
             (14, "APPROACHING"),
             (20, "APPROACHING"),
-            # NORMAL: 21 – 44
+            # NORMAL: 21 - 44  # noqa: ERA001
             (21, "NORMAL"),
             (44, "NORMAL"),
             # LONG-TERM: 45+
@@ -107,13 +107,16 @@ class TestPositionAgingDisplayConstruction:
         assert d is not None
 
     def test_constructs_with_reporter(
-        self, single_position_portfolio, reporter
+        self,
+        single_position_portfolio,
+        reporter,
     ) -> None:
         d = PositionAgingDisplay(single_position_portfolio, reporter)
         assert d is not None
 
     def test_default_reporter_created_when_none(
-        self, single_position_portfolio
+        self,
+        single_position_portfolio,
     ) -> None:
         d = PositionAgingDisplay(single_position_portfolio)
         assert d._reporter is not None
@@ -123,32 +126,32 @@ class TestPositionAgingDisplayConstruction:
         assert d._reporter is reporter
 
 
-# ===========================================================================
-# PositionAgingDisplay.display()
-# ===========================================================================
-
-
 class TestPositionAgingDisplayMethod:
     def test_display_does_not_raise_empty_portfolio(self, empty_portfolio) -> None:
         PositionAgingDisplay(empty_portfolio).display()
 
     def test_display_does_not_raise_single_position(
-        self, single_position_portfolio
+        self,
+        single_position_portfolio,
     ) -> None:
         PositionAgingDisplay(single_position_portfolio).display()
 
     def test_display_does_not_raise_multi_position(
-        self, multi_position_portfolio
+        self,
+        multi_position_portfolio,
     ) -> None:
         PositionAgingDisplay(multi_position_portfolio).display()
 
     def test_display_does_not_raise_with_underlying(
-        self, portfolio_with_underlying
+        self,
+        portfolio_with_underlying,
     ) -> None:
         PositionAgingDisplay(portfolio_with_underlying).display()
 
     def test_display_outputs_strike_for_single_position(
-        self, single_position_portfolio, capsys
+        self,
+        single_position_portfolio,
+        capsys,
     ) -> None:
         PositionAgingDisplay(single_position_portfolio).display()
         out = capsys.readouterr().out
@@ -156,23 +159,29 @@ class TestPositionAgingDisplayMethod:
         assert "100" in out
 
     def test_display_outputs_all_urgency_rows_for_multi_position(
-        self, multi_position_portfolio, capsys
+        self,
+        multi_position_portfolio,
+        capsys,
     ) -> None:
         """Multi-position portfolio has positions in 3 different urgency tiers.
-        All 3 positions' strikes should appear."""
+
+        All 3 positions' strikes should appear.
+        """
         PositionAgingDisplay(multi_position_portfolio).display()
         out = capsys.readouterr().out
         for strike in ("95", "100", "105"):
             assert strike in out, f"Expected strike {strike} in output"
 
     def test_display_uses_fresh_today_on_each_call(
-        self, single_position_portfolio, capsys
+        self,
+        single_position_portfolio,
+        capsys,
     ) -> None:
         """Each display() call computes 'today' freshly — not cached at init."""
         d = PositionAgingDisplay(single_position_portfolio)
 
         # First call: "today" is now
-        fixed_t0 = datetime.datetime.now(tz=UTC)
+        fixed_t0 = dt.now(tz=UTC)
         with patch("deltadewa.dashboard.position_aging.datetime") as mock_dt:
             mock_dt.now.return_value = fixed_t0
             mock_dt.UTC = UTC

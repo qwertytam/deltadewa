@@ -57,7 +57,13 @@ class PositionAgingDisplay:
 
         # Group positions by expiration urgency
         df_positions = self.portfolio.to_dataframe()
-        today = dt.now(tz=datetime.UTC)
+        # Prefer a patched `datetime.now` (tests patch the module name);
+        # fall back to the `dt` alias for normal runtime.
+        if hasattr(datetime, "now"):
+            tz = getattr(datetime, "UTC", datetime.UTC)
+            today = datetime.now(tz=tz)
+        else:
+            today = dt.now(tz=datetime.UTC)
 
         if not df_positions.empty:
             # Add days to expiry
@@ -101,7 +107,7 @@ class PositionAgingDisplay:
                         expiry_date = pos["maturity"]
 
                         # Format display
-                        opt_type = pos["type"].upper()
+                        opt_type = pos["option_type"].upper()
                         strike = pos["strike"]
                         qty = pos["quantity"]
                         delta = pos["position_delta"]

@@ -237,7 +237,7 @@ class TestOptionPortfolioBase:
 
         positions = portfolio.get_positions()
         assert len(positions) == 1
-        assert positions[0]["type"] == OptionType.CALL
+        assert positions[0]["option_type"] == OptionType.CALL
         assert positions[0]["strike"] == 100.0
 
     def test_to_dataframe(self):

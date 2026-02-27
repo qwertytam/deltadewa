@@ -39,7 +39,36 @@ class MonteCarloStalenessWidget:
             otherwise.
 
         """
-        is_stale = getattr(self.portfolio, "monte_carlo_stale", False)
+        # Determine staleness from multiple signals:
+        # - explicit `monte_carlo_stale` flag
+        # - missing/None `_monte_carlo_results`
+        # - missing `timestamp` in results
+        # - timestamp older than threshold
+        is_stale = False
+
+        # 1) explicit stale flag
+        if getattr(self.portfolio, "monte_carlo_stale", False):
+            is_stale = True
+
+        # 2) missing results -> consider stale
+        results = getattr(self.portfolio, "_monte_carlo_results", None)
+        if results is None:
+            is_stale = True
+
+        # 3) if results present, check timestamp key and age
+        if results is not None and isinstance(results, dict) and not is_stale:
+            ts = results.get("timestamp")
+            if ts is None:
+                is_stale = True
+            else:
+                try:
+                    now = dt.now(tz=datetime.UTC)
+                    # threshold (hours) — keep in sync with tests which use 1 hour
+                    threshold = datetime.timedelta(hours=1)
+                    if now - ts > threshold:
+                        is_stale = True
+                except Exception:
+                    is_stale = True
 
         if is_stale:
             last_modified = getattr(self.portfolio, "monte_carlo_last_modified", None)

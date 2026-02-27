@@ -66,7 +66,8 @@ class ThetaChartsMixin:
         return fig
 
     def _prepare_theta_data(
-        self, df: pd.DataFrame,
+        self,
+        df: pd.DataFrame,
     ) -> tuple[pd.DataFrame, dict]:
         """Prepare data for theta analysis."""
         df_carry = df.copy()
@@ -107,7 +108,7 @@ class ThetaChartsMixin:
     def _plot_theta_by_bucket(self, ax: Axes, df_carry: pd.DataFrame):
         """Plot theta by maturity bucket."""
         theta_by_bucket = (
-            df_carry.groupby(["maturity_bucket", "type"])
+            df_carry.groupby(["maturity_bucket", "option_type"])
             .agg({"position_theta": "sum"})
             .reset_index()
         )
@@ -115,7 +116,7 @@ class ThetaChartsMixin:
         theta_pivot = theta_by_bucket.pivot_table(
             values="position_theta",
             index="maturity_bucket",
-            columns="type",
+            columns="option_type",
             aggfunc="sum",
             fill_value=0,
         )
@@ -134,10 +135,17 @@ class ThetaChartsMixin:
 
         if len(theta_pivot) > 0:
             theta_pivot.plot(
-                kind="bar", stacked=True, ax=ax, alpha=0.8, width=0.7,
+                kind="bar",
+                stacked=True,
+                ax=ax,
+                alpha=0.8,
+                width=0.7,
             )
             ax.axhline(
-                y=0, color=DEFAULT_PALETTE.black, linestyle="--", linewidth=1,
+                y=0,
+                color=DEFAULT_PALETTE.black,
+                linestyle="--",
+                linewidth=1,
             )
 
             # Net theta annotations
@@ -163,7 +171,9 @@ class ThetaChartsMixin:
         ax.set_xlabel("Maturity Bucket")
         ax.set_ylabel("Daily Theta ($)")
         ax.set_title(
-            "Daily Theta by Maturity Bucket", fontsize=12, fontweight="bold",
+            "Daily Theta by Maturity Bucket",
+            fontsize=12,
+            fontweight="bold",
         )
         ax.grid(True, alpha=0.3, axis="y")
         ax.legend(loc="best")
@@ -187,7 +197,10 @@ class ThetaChartsMixin:
             markevery=5,
         )
         ax.axhline(
-            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1,
+            y=0,
+            color=DEFAULT_PALETTE.medium_grey,
+            linestyle=":",
+            linewidth=1,
         )
         ax.fill_between(days_range, 0, cumulative_theta, alpha=0.2)
 
@@ -202,14 +215,18 @@ class ThetaChartsMixin:
                     textcoords="offset points",
                     fontsize=9,
                     bbox=dict(
-                        boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3,
+                        boxstyle="round,pad=0.3",
+                        facecolor="yellow",
+                        alpha=0.3,
                     ),
                 )
 
         ax.set_xlabel("Days Forward")
         ax.set_ylabel("Cumulative Theta P&L ($)")
         ax.set_title(
-            "Projected Theta Accumulation", fontsize=12, fontweight="bold",
+            "Projected Theta Accumulation",
+            fontsize=12,
+            fontweight="bold",
         )
         ax.grid(True, alpha=0.3)
 
@@ -235,10 +252,7 @@ class ThetaChartsMixin:
         )
 
         bucket_summary["theta_pct"] = (
-            (
-                bucket_summary["position_theta"]
-                / bucket_summary["position_value"]
-            )
+            (bucket_summary["position_theta"] / bucket_summary["position_value"])
             * 100
             * const.DAYS_PER_YEAR
         )
@@ -248,19 +262,22 @@ class ThetaChartsMixin:
             [b for b in bucket_order if b in bucket_summary.index],
         )
 
-        if (
-            len(bucket_summary) > 0
-            and not bucket_summary["theta_pct"].isna().all()
-        ):
+        if len(bucket_summary) > 0 and not bucket_summary["theta_pct"].isna().all():
             colors = [
                 DEFAULT_PALETTE.negative if x > 0 else DEFAULT_PALETTE.negative
                 for x in bucket_summary["theta_pct"]
             ]
             bucket_summary["theta_pct"].plot(
-                kind="barh", ax=ax, color=colors, alpha=0.7,
+                kind="barh",
+                ax=ax,
+                color=colors,
+                alpha=0.7,
             )
             ax.axvline(
-                x=0, color=DEFAULT_PALETTE.black, linestyle="--", linewidth=1,
+                x=0,
+                color=DEFAULT_PALETTE.black,
+                linestyle="--",
+                linewidth=1,
             )
         else:
             ax.text(
@@ -275,7 +292,9 @@ class ThetaChartsMixin:
         ax.set_xlabel("Annualized Theta / Position Value (%)")
         ax.set_ylabel("Maturity Bucket")
         ax.set_title(
-            "Carry Efficiency by Bucket", fontsize=12, fontweight="bold",
+            "Carry Efficiency by Bucket",
+            fontsize=12,
+            fontweight="bold",
         )
         ax.grid(True, alpha=0.3, axis="x")
 
@@ -341,7 +360,9 @@ class ThetaChartsMixin:
 
         ax.set_xlabel("Maturity Bucket")
         ax.set_title(
-            "Contracts vs Theta Contribution", fontsize=12, fontweight="bold",
+            "Contracts vs Theta Contribution",
+            fontsize=12,
+            fontweight="bold",
         )
         ax.tick_params(axis="x", rotation=45)
         ax.grid(True, alpha=0.3, axis="y")

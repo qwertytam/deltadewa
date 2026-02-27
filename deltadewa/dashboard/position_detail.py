@@ -50,8 +50,10 @@ class PositionDetailDisplay:
 
             # Normalize option `type` and `exercise_style` for user-friendly
             # display
-            if "type" in display_df.columns:
-                display_df["type"] = display_df["type"].apply(_fmt_enum_val)
+            if "option_type" in display_df.columns:
+                display_df["option_type"] = display_df["option_type"].apply(
+                    _fmt_enum_val
+                )
 
             if "exercise_style" in display_df.columns:
                 display_df["exercise_style"] = display_df["exercise_style"].apply(
@@ -77,7 +79,7 @@ class PositionDetailDisplay:
             # Rename columns to title case with better formatting
             column_renames = {
                 "symbol": "Symbol",
-                "type": "Type",
+                "option_type": "Type",
                 "strike": "Strike",
                 "maturity": "Maturity",
                 "days_to_maturity": "Days to Maturity",

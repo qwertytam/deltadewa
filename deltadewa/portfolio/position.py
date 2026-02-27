@@ -67,7 +67,7 @@ class OptionPosition:
         multiplier = self.quantity * self.contract_size
 
         return {
-            "type": self.option.option_type,
+            "option_type": self.option.option_type,
             "strike": self.option.strike_price,
             "maturity": self.option.maturity_date,
             "quantity": self.quantity,

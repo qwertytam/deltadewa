@@ -119,7 +119,7 @@ class TestOptionPosition:
 
         pos_dict = position.to_dict()
 
-        assert pos_dict["type"] == OptionType.PUT
+        assert pos_dict["option_type"] == OptionType.PUT
         assert pos_dict["strike"] == 105.0
         assert pos_dict["quantity"] == 3
         assert pos_dict["contract_size"] == 100

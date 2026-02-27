@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from deltadewa.reporting import ConsoleReporter
+from deltadewa.analysis.volatility import get_volatility_stats
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
@@ -28,6 +29,10 @@ class VolatilityProfileDisplay:
         If vol_stats is None, it is computed fresh from the portfolio.
         """
         self._reporter.header("PORTFOLIO VOLATILITY PROFILE")
+
+        # Compute vol_stats from portfolio when not provided
+        if vol_stats is None:
+            vol_stats = self._compute_vol_stats()
 
         if vol_stats:
             print(
@@ -73,3 +78,12 @@ class VolatilityProfileDisplay:
             print("No positions in portfolio")
 
         self._reporter.divider()
+
+    def _compute_vol_stats(self) -> dict:
+        """Compute volatility statistics for the portfolio.
+
+        Delegates to `deltadewa.analysis.volatility.get_volatility_stats`
+        to ensure consistent behavior with analysis utilities and tests.
+        Returns an empty dict for empty portfolios.
+        """
+        return get_volatility_stats(self._portfolio)

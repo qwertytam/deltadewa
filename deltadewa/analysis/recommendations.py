@@ -119,7 +119,7 @@ class RecommendationsMixin:
                 alternatives.append(
                     {
                         "action": "BUY" if contracts_needed > 0 else "SELL",
-                        "type": pos.option.option_type.upper(),
+                        "option_type": pos.option.option_type.upper(),
                         "strike": float(pos.option.strike_price),
                         "maturity": pos.option.maturity_date.strftime(
                             "%Y-%m-%d",

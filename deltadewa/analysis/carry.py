@@ -60,10 +60,12 @@ class CarryMixin:
         )
 
         # Theta by type
-        theta_by_type = df.groupby("type")["position_theta"].sum().to_dict()
+        theta_by_type = df.groupby("option_type")["position_theta"].sum().to_dict()
 
         # Covered call analysis (short calls - earning premium)
-        short_calls = df[(df["type"] == const.OptionType.CALL) & (df["quantity"] < 0)]
+        short_calls = df[
+            (df["option_type"] == const.OptionType.CALL) & (df["quantity"] < 0)
+        ]
         covered_call_theta = (
             short_calls["position_theta"].sum() if len(short_calls) > 0 else 0.0
         )
@@ -72,13 +74,17 @@ class CarryMixin:
         )
 
         # Long call analysis (paying premium)
-        long_calls = df[(df["type"] == const.OptionType.CALL) & (df["quantity"] > 0)]
+        long_calls = df[
+            (df["option_type"] == const.OptionType.CALL) & (df["quantity"] > 0)
+        ]
         long_call_theta = (
             long_calls["position_theta"].sum() if len(long_calls) > 0 else 0.0
         )
 
         # Hedge put analysis (long puts - paying for downside protection)
-        long_puts = df[(df["type"] == const.OptionType.PUT) & (df["quantity"] > 0)]
+        long_puts = df[
+            (df["option_type"] == const.OptionType.PUT) & (df["quantity"] > 0)
+        ]
         hedge_put_theta = (
             long_puts["position_theta"].sum() if len(long_puts) > 0 else 0.0
         )
@@ -87,7 +93,9 @@ class CarryMixin:
         )
 
         # Short put analysis (short puts - earning premium)
-        short_puts = df[(df["type"] == const.OptionType.PUT) & (df["quantity"] < 0)]
+        short_puts = df[
+            (df["option_type"] == const.OptionType.PUT) & (df["quantity"] < 0)
+        ]
         short_put_theta = (
             short_puts["position_theta"].sum() if len(short_puts) > 0 else 0.0
         )

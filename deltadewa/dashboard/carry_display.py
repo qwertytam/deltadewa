@@ -201,7 +201,7 @@ class CarryDisplay:
         self._reporter.subheader("Theta by Position (Detailed)")
 
         position_theta_cols = [
-            "type",
+            "option_type",
             "strike",
             "maturity_bucket",
             "quantity",

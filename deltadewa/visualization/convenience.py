@@ -4,7 +4,6 @@ This module provides module-level convenience functions that wrap
 OptionCharts methods for easier use.
 """
 
-
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.figure import Figure
@@ -160,7 +159,7 @@ def plot_greeks_consolidated(
         if len(df_sorted) > 0:
             # Create labels combining symbol, type, strike
             labels = [
-                f"{row['type'].upper()[:1]}{row['strike']:.0f}"
+                f"{row["option_type"].upper()[:1]}{row['strike']:.0f}"
                 for _, row in df_sorted.iterrows()
             ]
             values = df_sorted[column_name].tolist()
@@ -173,16 +172,16 @@ def plot_greeks_consolidated(
             ax.set_xlabel(greek_name)
             yint, _ = ax.get_ylim()
             _set_axis_formatting(
-                ax, f"Top {top_n} {greek_name} Contributors", yint=yint,
+                ax,
+                f"Top {top_n} {greek_name} Contributors",
+                yint=yint,
             )
 
             # Add value labels
             for b, value in zip(bars, values):
                 if value != 0:
                     label_x = value + (
-                        0.05
-                        * max(abs(v) for v in values)
-                        * (1 if value > 0 else -1)
+                        0.05 * max(abs(v) for v in values) * (1 if value > 0 else -1)
                     )
                     ax.text(
                         label_x,
@@ -213,7 +212,7 @@ def plot_greeks_consolidated(
 
     if len(df_sorted) > 0:
         labels = [
-            f"{row['type'].upper()[:1]}{row['strike']:.0f}"
+            f"{row["option_type"].upper()[:1]}{row['strike']:.0f}"
             for _, row in df_sorted.iterrows()
         ]
         values = df_sorted["position_vega"].tolist()
@@ -247,7 +246,7 @@ def plot_greeks_consolidated(
 
     if len(df_sorted) > 0:
         labels = [
-            f"{row['type'].upper()[:1]}{row['strike']:.0f}"
+            f"{row["option_type"].upper()[:1]}{row['strike']:.0f}"
             for _, row in df_sorted.iterrows()
         ]
         values = df_sorted["position_theta"].tolist()
@@ -285,7 +284,9 @@ def plot_greeks_consolidated(
         ax.set_xlabel("Position Value")
         yint, _ = ax.get_ylim()
         _set_axis_formatting(
-            ax, f"Top {top_n} Position Values by Strike", yint=yint,
+            ax,
+            f"Top {top_n} Position Values by Strike",
+            yint=yint,
         )
         ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:
@@ -308,9 +309,7 @@ def plot_greeks_consolidated(
     ).dt.strftime("%Y-%m-%d")
 
     # Group by maturity and sum position values
-    maturity_values = df_sorted.groupby("maturity_label")[
-        "position_value"
-    ].sum()
+    maturity_values = df_sorted.groupby("maturity_label")["position_value"].sum()
     maturity_values = maturity_values.reindex(
         maturity_values.abs().nlargest(top_n).index,
     )
@@ -327,7 +326,9 @@ def plot_greeks_consolidated(
         ax.set_xlabel("Position Value")
         yint, _ = ax.get_ylim()
         _set_axis_formatting(
-            ax, f"Top {top_n} Position Values by Maturity", yint=yint,
+            ax,
+            f"Top {top_n} Position Values by Maturity",
+            yint=yint,
         )
         ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:

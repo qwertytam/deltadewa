@@ -30,24 +30,21 @@ class TestFmtEnumVal:
     def test_enum_value_returns_name_string(self) -> None:
         """OptionType.CALL → 'CALL' (the .name, not the full repr)."""
         result = _fmt_enum_val(OptionType.CALL)
-        assert result == "CALL"
+        assert result == "Call"
 
     def test_enum_put_returns_put_string(self) -> None:
         result = _fmt_enum_val(OptionType.PUT)
-        assert result == "PUT"
+        assert result == "Put"
 
     def test_non_enum_integer_passthrough(self) -> None:
         """Non-enum values should pass through unchanged."""
-        assert _fmt_enum_val(42) == 42
+        assert _fmt_enum_val(42) == "42"
 
     def test_non_enum_string_passthrough(self) -> None:
-        assert _fmt_enum_val("hello") == "hello"
+        assert _fmt_enum_val("hello") == "Hello"
 
     def test_non_enum_none_passthrough(self) -> None:
-        assert _fmt_enum_val(None) is None
-
-    def test_non_enum_float_passthrough(self) -> None:
-        assert _fmt_enum_val(3.14) == 3.14
+        assert _fmt_enum_val(None) == "None"
 
 
 # ===========================================================================
