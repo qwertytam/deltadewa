@@ -1,4 +1,4 @@
-"""Scalar Value Formatters for Options Dashboard
+"""Scalar Value Formatters for Options Dashboard.
 
 This module provides consistent formatting functions for scalar values:
 - Currency formatting (format_currency, format_currency_for_axis)
@@ -67,7 +67,7 @@ def format_currency(
     abs_val = abs(value)
     sign = "-" if value < 0 else ("+" if show_sign and value > 0 else "")
 
-    if abs_val < 1_000:
+    if abs_val < 10_000:
         return f"{sign}${abs_val:,.{precision}f}"
     elif abs_val < 1_000_000:
         return f"{sign}${abs_val/1_000:.{precision}f}K"
@@ -178,7 +178,8 @@ def format_number(
     if compact:
         # Reuse currency formatting logic but remove the $
         return format_currency(value, compact=True, precision=decimals).replace(
-            "$", "",
+            "$",
+            "",
         )
 
     if thousands_sep:
@@ -261,7 +262,9 @@ def format_number_auto_precision(value: float) -> str:
 
 
 def format_spot_with_pct(
-    x: float, current_spot: float, pos: int | None = None,
+    x: float,
+    current_spot: float,
+    pos: int | None = None,
 ) -> str:
     """Format spot price with percentage change for axis labels.
 
@@ -319,7 +322,9 @@ def format_currency_for_df(value: object) -> str:
         return "-"
     try:
         return format_currency(
-            float(cast(Any, value)), compact=False, precision=2,
+            float(cast(Any, value)),
+            compact=False,
+            precision=2,
         )
     except (TypeError, ValueError):
         return "-" if value is None else str(value)

@@ -5,11 +5,12 @@ from datetime import UTC, datetime, timedelta
 from deltadewa.constants import ExerciseStyle, OptionType
 
 
-def create_empty_portfolio(**kwargs):
+def create_empty_portfolio(**kwargs):  # noqa: ANN003 ANN201
     """Create and return an empty `OptionPortfolio` with sensible defaults.
 
     Args:
-        **kwargs: Any `OptionPortfolio` constructor kwargs (spot_price, volatility, etc.)
+        **kwargs: Any `OptionPortfolio` constructor kwargs (spot_price,
+        volatility, etc.)
 
     Returns:
         OptionPortfolio: empty portfolio instance
@@ -25,9 +26,11 @@ def create_empty_portfolio(**kwargs):
     return OptionPortfolio(**kwargs)
 
 
-def create_demo_portfolio():
-    """Create and return a small demo `OptionPortfolio` pre-populated with
-    example positions. Useful for notebook demos and initial UI setup.
+def create_demo_portfolio():  # noqa: ANN201
+    """Create and return a small demo `OptionPortfolio`.
+
+    Pre-populated with example positions. Useful for notebook demos and initial
+    UI setup.
 
     Returns:
         OptionPortfolio: portfolio with a couple of example positions
@@ -64,12 +67,12 @@ def create_demo_portfolio():
     return p
 
 
-def create_default_portfolio():
-    """Build default market parameters and positions from inline config"""
+def create_default_portfolio():  # noqa: ANN201
+    """Build default market parameters and positions from inline config."""
     default_config = {
         "market_parameters": {
-            "spot_price": 83.50,
-            "risk_free_rate": 0.0399,
+            "spot_price": 84.61,
+            "risk_free_rate": 0.0400,
             "dividend_yield": 0.0,
             "underlying_quantity": 300 * 0,
             "symbol": "NFLX",
@@ -78,18 +81,18 @@ def create_default_portfolio():
             {
                 "option_type": OptionType.CALL,
                 "strike_price": 95.0,
-                "maturity_days": 349,
-                "volatility": 0.366,
+                "maturity_days": 322,
+                "volatility": 0.387,
                 "quantity": 5,
-                "exercise_style": ExerciseStyle.EUROPEAN,
+                "exercise_style": ExerciseStyle.AMERICAN,
             },
             {
                 "option_type": OptionType.PUT,
                 "strike_price": 70.0,
-                "maturity_days": 349,
-                "volatility": 0.386,
+                "maturity_days": 322,
+                "volatility": 0.424,
                 "quantity": -5,
-                "exercise_style": ExerciseStyle.EUROPEAN,
+                "exercise_style": ExerciseStyle.AMERICAN,
             },
         ],
     }
@@ -122,10 +125,12 @@ def create_default_portfolio():
             quantity=pos_config["quantity"],
             option_type=pos_config["option_type"],
             volatility=pos_config.get(
-                "volatility", market_params.get("volatility"),
+                "volatility",
+                market_params.get("volatility"),
             ),
             exercise_style=pos_config.get(
-                "exercise_style", ExerciseStyle.AMERICAN,
+                "exercise_style",
+                ExerciseStyle.AMERICAN,
             ),
         )
     return portfolio

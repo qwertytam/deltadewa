@@ -58,8 +58,14 @@ class MonteCarloStalenessWidget:
             is_stale = True
             stale_reason = "missing results"
 
-        # 3) missing timestamp -> consider stale
+        # 3) prefer explicit portfolio timestamp, but fall back to any
+        # `timestamp` embedded in the results dict. Only consider missing
+        # timestamp stale if neither exists.
         ts = getattr(self.portfolio, "monte_carlo_timestamp", None)
+        if ts is None and results is not None:
+            # results may include a timestamp key (tests set this), so use it
+            ts = results.get("timestamp")
+
         if ts is None and not is_stale:
             is_stale = True
             stale_reason = "missing timestamp"

@@ -1,4 +1,4 @@
-"""HTML Badge and Metric Formatters for Dashboard Widgets
+"""HTML Badge and Metric Formatters for Dashboard Widgets.
 
 This module provides HTML formatting functions for dashboard widgets:
 - Badge creation with flexible styling
@@ -75,7 +75,7 @@ def format_html_metric(
     is_cost: bool = False,
     is_neutral: bool = False,
 ) -> str:
-    """Format a metric as colored HTML badge (consolidates _format_greek from widgets).
+    """Format a metric as colored HTML badge.
 
     Args:
         name: Metric name
@@ -91,12 +91,9 @@ def format_html_metric(
     # Handle near-zero values
     # For percentages (in decimal form), use 0.0001 threshold (= 0.01%)
     # For currency and numbers, use 0.01 threshold
-    if format_type == "percentage":
-        threshold = 0.0001  # 0.01% in decimal form
-    else:
-        threshold = 0.01
+    zero_threshold = 0.01 / 100 if format_type == "percentage" else 0.01
 
-    if abs(value) < threshold:
+    if abs(value) < zero_threshold:
         if format_type == "percentage":
             value_str = "- %"
         elif format_type == "currency":
@@ -130,7 +127,11 @@ def format_html_metric(
         color = "neutral"
 
     return format_html_badge(
-        name, value_str, color=color, text_color="white", size="large",
+        name,
+        value_str,
+        color=color,
+        text_color="white",
+        size="large",
     )
 
 

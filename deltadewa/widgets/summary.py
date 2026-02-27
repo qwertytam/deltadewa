@@ -7,6 +7,7 @@ indicators in a compact, always-visible format.
 from typing import TYPE_CHECKING
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
+import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.volatility import get_volatility_stats
@@ -39,7 +40,7 @@ class NetHedgeSummary:
 
     """
 
-    def __init__(self, portfolio: "OptionPortfolio"):
+    def __init__(self, portfolio: "OptionPortfolio") -> None:
         """Initialize net hedge summary widget.
 
         Args:
@@ -175,7 +176,7 @@ class NetHedgeSummary:
             f"</div>"
         )
 
-    def _create_widget(self):
+    def _create_widget(self) -> None:
         """Create the KPI display widget."""
         self.value_metrics_html = widgets.HTML(value="")
         self.health_indicators_r1_html = widgets.HTML(value="")
@@ -225,7 +226,7 @@ class NetHedgeSummary:
 
         self.update()
 
-    def update(self):
+    def update(self) -> None:
         """Update all metrics with current portfolio data."""
         stats = self.portfolio.summary_stats()
         vol_stats = get_volatility_stats(self.portfolio)
@@ -330,16 +331,18 @@ class NetHedgeSummary:
 
         prob_html = "<div style='padding:10px;'>"
 
-        # Check if Monte Carlo results exist
+        # Check if Monte Carlo results exist and contain a sized array
         mc_results = self.portfolio.monte_carlo_results
-        if mc_results is not None and len(mc_results.get("simulated_pnls", [])) > 0:
-            expected_pnl = mc_results.get("expected_pnl", 0)
+        if mc_results is not None:
+            sim_pnls = mc_results.get("simulated_pnls")
+            if isinstance(sim_pnls, (list, tuple, np.ndarray)) and len(sim_pnls) > 0:
+                expected_pnl = mc_results.get("expected_pnl", 0)
 
-            prob_profit = mc_results.get("prob_profit", 0)
-            prob_html += (
-                f"<p><strong>Probability of Profit:</strong> {prob_profit*100:.1f}%</p>"
-            )
-            prob_html += f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
+                prob_profit = mc_results.get("prob_profit", 0)
+                prob_html += f"<p><strong>Probability of Profit:</strong> {prob_profit*100:.1f}%</p>"
+                prob_html += (
+                    f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
+                )
         else:
             prob_html += "<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
             prob_html += (

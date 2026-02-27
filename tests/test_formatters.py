@@ -27,8 +27,8 @@ class TestFormatCurrency:
         assert format_currency(500, compact=True) == "$500.00"
         assert format_currency(999.99, compact=True) == "$999.99"
         # Values >= 1000 get compact notation
-        assert format_currency(1234.56, compact=True) == "$1.23K"
-        assert format_currency(1500, compact=True) == "$1.50K"
+        assert format_currency(12345.67, compact=True) == "$12.35K"
+        assert format_currency(1500, compact=True) == "$1,500.00"
         assert format_currency(1234567, compact=True) == "$1.23M"
         assert format_currency(1234567890, compact=True) == "$1.23B"
 
@@ -78,9 +78,7 @@ class TestFormatPercentage:
     def test_format_percentage_already_percent(self):
         """Test percentage formatting when value is already percentage."""
         assert format_percentage(15.23, from_decimal=False) == "15.23%"
-        assert (
-            format_percentage(15.23, from_decimal=False, decimals=1) == "15.2%"
-        )
+        assert format_percentage(15.23, from_decimal=False, decimals=1) == "15.2%"
 
     def test_format_percentage_show_sign(self):
         """Test show_sign parameter."""
@@ -113,7 +111,7 @@ class TestFormatNumber:
     def test_format_number_compact(self):
         """Test compact number formatting."""
         assert format_number(1234567, compact=True) == "1.23M"
-        assert format_number(1234, compact=True) == "1.23K"
+        assert format_number(12345, compact=True) == "12.35K"
 
 
 class TestFormatGreekValue:
@@ -122,7 +120,7 @@ class TestFormatGreekValue:
     def test_format_greek_delta(self):
         """Test Greek formatting for delta."""
         assert format_greek_value(0.5432, greek="delta") == "0.5432"
-        assert format_greek_value(1500, greek="delta", compact=True) == "1.50K"
+        assert format_greek_value(15000, greek="delta", compact=True) == "15.00K"
 
     def test_format_greek_gamma(self):
         """Test Greek formatting for gamma."""
@@ -171,10 +169,10 @@ class TestFormatHtmlMetric:
 
     def test_format_html_metric_number(self):
         """Test HTML metric formatting for numbers."""
-        result = format_html_metric("Delta", 1234.56, format_type="number")
+        result = format_html_metric("Delta", 12345.67, format_type="number")
         assert "Delta" in result
-        # Should format as "1.23K" (compact notation for values >= 1000)
-        assert "1.23K" in result
+        # Should format as "12.35K" (compact notation for values >= 10000)
+        assert "12.35K" in result
 
     def test_format_html_metric_number_delegates_compact(self):
         """Test that format_html_metric delegates to format_number with compact=True."""
@@ -182,11 +180,13 @@ class TestFormatHtmlMetric:
         result = format_html_metric("Small", 500.0, format_type="number")
         assert "500.00" in result
         # Values >= 1000 should use compact notation
-        result = format_html_metric("Large", 5000.0, format_type="number")
-        assert "5.00K" in result
+        result = format_html_metric("Large", 50000.0, format_type="number")
+        assert "50.00K" in result
         # Very large values should use M notation
         result = format_html_metric(
-            "VeryLarge", 5000000.0, format_type="number",
+            "VeryLarge",
+            5000000.0,
+            format_type="number",
         )
         assert "5.00M" in result
 
@@ -200,7 +200,9 @@ class TestFormatHtmlMetric:
     def test_format_html_metric_percentage(self):
         """Test HTML metric formatting for percentages."""
         result = format_html_metric(
-            "Volatility", 0.25, format_type="percentage",
+            "Volatility",
+            0.25,
+            format_type="percentage",
         )
         assert "Volatility" in result
         assert "%" in result
