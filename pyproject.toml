@@ -1,7 +1,7 @@
 [project]
 name = "deltadewa"
-version = "0.1.0"
-description = "American options dashboard using QuantLib"
+version = "0.2.0"
+description = "Options dashboard using QuantLib"
 readme = "README.md"
 authors = [{ name = "qwertytam" }]
 requires-python = ">=3.11,<4.0"
