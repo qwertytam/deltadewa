@@ -21,14 +21,14 @@ if TYPE_CHECKING:
 class _PortfolioProtocol(Protocol):
     """Structural type of self inside all PortfolioAnalyzer mixins."""
 
-    positions: list["OptionPosition"]
+    positions: list["OptionPosition"]  # noqa: UP037
     underlying_quantity: float
     volatility: float
     valuation_date: datetime
     spot_price: float
     risk_free_rate: float
     dividend_yield: float
-    monte_carlo_results: dict[str, Any]
+    monte_carlo_results: dict[str, float | int | np.ndarray] | None
 
     # OptionPortfolioBase methods
     def total_value(self) -> float: ...
@@ -49,7 +49,9 @@ class _PortfolioProtocol(Protocol):
 
     # PnLMixin methods
     def calculate_pnl_at_expiry(
-        self, spot_price_at_expiry: float, include_underlying: bool = False
+        self,
+        spot_price_at_expiry: float,
+        include_underlying: bool = False,
     ) -> float: ...
     def vectorized_pnl_at_expiry(
         self,
@@ -61,7 +63,8 @@ class _PortfolioProtocol(Protocol):
     def _empty_monte_carlo_results(self, days_to_expiry: int) -> dict[str, Any]: ...
     def _calculate_theoretical_max_loss(self) -> float | None: ...
     def _analyze_concentration(
-        self, pnls: np.ndarray
+        self,
+        pnls: np.ndarray,
     ) -> tuple[bool, float, tuple[float, int] | None]: ...
 
     # RiskMixin methods

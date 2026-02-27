@@ -17,6 +17,10 @@ class MonteCarloMixin:
     if TYPE_CHECKING:
         _self: "_PortfolioProtocol"
 
+    # Declare attribute for static type checkers. The concrete
+    # `OptionPortfolioBase` provides a property for this name at runtime.
+    monte_carlo_results: dict[str, float | int | np.ndarray] | None
+
     def _calculate_theoretical_max_loss(self: "_PortfolioProtocol") -> float | None:
         """Calculate theoretical max loss based on position structure."""
         if not hasattr(self, "positions") or not self.positions:

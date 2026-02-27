@@ -45,30 +45,37 @@ class MonteCarloStalenessWidget:
         # - missing `timestamp` in results
         # - timestamp older than threshold
         is_stale = False
+        stale_reason = "unknown reason"
 
         # 1) explicit stale flag
         if getattr(self.portfolio, "monte_carlo_stale", False):
             is_stale = True
+            stale_reason = "explicit flag"
 
         # 2) missing results -> consider stale
         results = getattr(self.portfolio, "_monte_carlo_results", None)
-        if results is None:
+        if results is None and not is_stale:
             is_stale = True
+            stale_reason = "missing results"
 
-        # 3) if results present, check timestamp key and age
-        if results is not None and isinstance(results, dict) and not is_stale:
-            ts = results.get("timestamp")
-            if ts is None:
-                is_stale = True
-            else:
-                try:
-                    now = dt.now(tz=datetime.UTC)
-                    # threshold (hours) — keep in sync with tests which use 1 hour
-                    threshold = datetime.timedelta(hours=1)
-                    if now - ts > threshold:
-                        is_stale = True
-                except Exception:
+        # 3) missing timestamp -> consider stale
+        ts = getattr(self.portfolio, "monte_carlo_timestamp", None)
+        if ts is None and not is_stale:
+            is_stale = True
+            stale_reason = "missing timestamp"
+
+        # 4) timestamp too old -> consider stale
+        if ts and not is_stale:
+            try:
+                now = dt.now(tz=datetime.UTC)
+                # threshold (hours) — keep in sync with tests which use 1 hour
+                threshold = datetime.timedelta(hours=1)
+                if now - ts > threshold:
                     is_stale = True
+                    stale_reason = "timestamp too old"
+            except Exception:  # pylint: disable=broad-except
+                is_stale = True
+                stale_reason = "timestamp parsing error"
 
         if is_stale:
             last_modified = getattr(self.portfolio, "monte_carlo_last_modified", None)
@@ -94,7 +101,7 @@ class MonteCarloStalenessWidget:
                         <strong>Portfolio has been modified since Monte Carlo
                         simulation ran.
                         </strong><br>
-                        Last modified: {last_modified_str}
+                        Last modified: {last_modified_str} ({stale_reason})
                     </p>
                     <p style="margin: 10px 0 0 0; font-size: 13px; opacity: 0.95;">
                         → Results below may not reflect your current portfolio<br>
