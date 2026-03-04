@@ -13,9 +13,11 @@ from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.values import format_currency_for_axis
 from deltadewa.visualization.base import OptionCharts
 
+# ruff: noqa: ANN001 ANN003
 
-def plot_pnl_diagram(portfolio, **kwargs):
-    """Convenience function to plot P&L diagram.
+
+def plot_pnl_diagram(portfolio, **kwargs) -> Figure:
+    """Plot P&L diagram - convenience function.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -29,8 +31,8 @@ def plot_pnl_diagram(portfolio, **kwargs):
     return charts.plot_pnl_diagram(**kwargs)
 
 
-def plot_pnl_distribution_with_metrics(portfolio, **kwargs):
-    """Convenience function to plot P&L distribution with key metrics.
+def plot_pnl_distribution_with_metrics(portfolio, **kwargs) -> Figure:
+    """Plot P&L distribution with key metrics - convenience function.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -44,8 +46,8 @@ def plot_pnl_distribution_with_metrics(portfolio, **kwargs):
     return charts.plot_pnl_distribution_with_metrics(**kwargs)
 
 
-def plot_greeks_by_strike(portfolio, **kwargs):
-    """Convenience function to plot Greeks by strike.
+def plot_greeks_by_strike(portfolio, **kwargs) -> Figure:
+    """Plot Greeks by strike - convenience function.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -59,8 +61,8 @@ def plot_greeks_by_strike(portfolio, **kwargs):
     return charts.plot_greeks_by_strike(**kwargs)
 
 
-def plot_theta_analysis(portfolio, **kwargs):
-    """Convenience function to plot theta analysis.
+def plot_theta_analysis(portfolio, **kwargs) -> Figure:
+    """Plot theta analysis - convenience function.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -132,7 +134,7 @@ def plot_greeks_consolidated(
         yaxis: bool = True,
         xint: float = 0,
         yint: float = 0,
-    ):
+    ) -> None:
         ax.grid(False)
         if xaxis:
             ax.axhline(y=yint, color=DEFAULT_PALETTE.axis, linewidth=1)
@@ -159,7 +161,7 @@ def plot_greeks_consolidated(
         if len(df_sorted) > 0:
             # Create labels combining symbol, type, strike
             labels = [
-                f"{row["option_type"].upper()[:1]}{row['strike']:.0f}"
+                f"{row['option_type'].upper()[:1]}{row['strike']:.0f}"
                 for _, row in df_sorted.iterrows()
             ]
             values = df_sorted[column_name].tolist()
@@ -178,7 +180,7 @@ def plot_greeks_consolidated(
             )
 
             # Add value labels
-            for b, value in zip(bars, values):
+            for b, value in zip(bars, values, strict=False):
                 if value != 0:
                     label_x = value + (
                         0.05 * max(abs(v) for v in values) * (1 if value > 0 else -1)
@@ -212,7 +214,7 @@ def plot_greeks_consolidated(
 
     if len(df_sorted) > 0:
         labels = [
-            f"{row["option_type"].upper()[:1]}{row['strike']:.0f}"
+            f"{row['option_type'].upper()[:1]}{row['strike']:.0f}"
             for _, row in df_sorted.iterrows()
         ]
         values = df_sorted["position_vega"].tolist()
@@ -246,7 +248,7 @@ def plot_greeks_consolidated(
 
     if len(df_sorted) > 0:
         labels = [
-            f"{row["option_type"].upper()[:1]}{row['strike']:.0f}"
+            f"{row['option_type'].upper()[:1]}{row['strike']:.0f}"
             for _, row in df_sorted.iterrows()
         ]
         values = df_sorted["position_theta"].tolist()

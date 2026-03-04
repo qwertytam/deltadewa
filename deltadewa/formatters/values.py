@@ -24,7 +24,7 @@ try:
 
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
-    FuncFormatter = None  # type: ignore
+    FuncFormatter = None
     MATPLOTLIB_AVAILABLE = False
 
 
@@ -335,7 +335,7 @@ def format_currency_for_df(value: object) -> str:
 # ============================================================================
 
 
-def get_currency_axis_formatter(compact: bool = True) -> Any:
+def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
     """Return a matplotlib FuncFormatter for currency values.
 
     Args:
@@ -356,7 +356,7 @@ def get_currency_axis_formatter(compact: bool = True) -> Any:
         )
 
 
-def get_percentage_axis_formatter(from_decimal: bool = True) -> Any:
+def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
     """Return a matplotlib FuncFormatter for percentage values.
 
     Args:
@@ -377,7 +377,7 @@ def get_percentage_axis_formatter(from_decimal: bool = True) -> Any:
         )
 
 
-def get_spot_price_axis_formatter(current_spot: float) -> Any:
+def get_spot_price_axis_formatter(current_spot: float):  # noqa: ANN201
     """Return a matplotlib FuncFormatter for spot price with % change.
 
     Args:

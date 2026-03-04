@@ -41,7 +41,10 @@ class OptionChartsBase:
         try:
             plt.style.use(self.style)
         except Exception:  # pylint: disable=broad-except
-            warnings.warn(f"Style '{self.style}' not available, using default")
+            warnings.warn(
+                f"Style '{self.style}' not available, using default",
+                stacklevel=1,
+            )
 
     def _get_expiry_label(self) -> str:
         """Get expiry label for chart titles."""
@@ -90,7 +93,7 @@ class OptionChartsBase:
             axes = np.array(axes).flatten()
 
         # Apply titles and styling
-        for ax, title in zip(axes, titles):
+        for ax, title in zip(axes, titles, strict=False):
             ax.set_title(title, fontsize=12, fontweight="bold")
             ax.grid(True, alpha=0.3)
 

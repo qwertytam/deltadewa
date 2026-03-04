@@ -18,7 +18,8 @@ class ConsoleReporter:
     configuration (e.g. width), and potential redirection of output.
     """
 
-    def __init__(self, width: int = 80):
+    def __init__(self, width: int = 80) -> None:
+        """Initialize."""
         self.width = width
 
     def header(self, title: str, char: str = "=") -> None:
@@ -42,7 +43,11 @@ class ConsoleReporter:
             print(content)
 
     def key_value(
-        self, key: str, value: Any, width: int = 40, align: str = "left",
+        self,
+        key: str,
+        value: Any,  # noqa: ANN401
+        width: int = 40,
+        align: str = "left",
     ) -> None:
         """Print a key-value pair with aligned formatting."""
         if align == "right":
@@ -51,7 +56,9 @@ class ConsoleReporter:
             print(f"{key}: {value}")
 
     def metric_summary(
-        self, metrics: dict[str, Any], title: str | None = None,
+        self,
+        metrics: dict[str, Any],
+        title: str | None = None,
     ) -> None:
         """Print a formatted summary of metrics."""
         if title:
@@ -96,7 +103,7 @@ class ConsoleReporter:
         """
         print(f"{prefix} {message}")
 
-    def info(self, message: str, prefix: str = "ℹ️") -> None:
+    def info(self, message: str, prefix: str = "ℹ️") -> None:  # noqa: RUF001
         """Print an informational message.
 
         Args:
@@ -107,11 +114,14 @@ class ConsoleReporter:
         print(f"{prefix}  {message}")
 
     def table_row(
-        self, columns: list[Any], widths: list[int], separator: str = "|",
+        self,
+        columns: list[Any],
+        widths: list[int],
+        separator: str = "|",
     ) -> None:
         """Print a formatted table row."""
         row = separator.join(
-            f" {col!s:<{w-2}} " for col, w in zip(columns, widths)
+            f" {col!s:<{w-2}} " for col, w in zip(columns, widths, strict=False)
         )
         print(row)
 

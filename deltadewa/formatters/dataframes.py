@@ -1,4 +1,4 @@
-"""DataFrame Styling and Formatting Utilities for Options Dashboard
+"""DataFrame Styling and Formatting Utilities for Options Dashboard.
 
 This module provides consistent styling and formatting functions for DataFrames:
 - Core display preparation and styling helpers
@@ -75,7 +75,8 @@ def prepare_dataframe_display(
     # Reset index with custom numbering
     if start_index is not None:
         df_display.index = pd.RangeIndex(
-            start=start_index, stop=start_index + len(df_display),
+            start=start_index,
+            stop=start_index + len(df_display),
         )
 
     if index_name:
@@ -84,8 +85,7 @@ def prepare_dataframe_display(
     # Sort by specified columns
     if sort_by:
         sort_by_display = [
-            col.replace("_", " ").title() if title_case else col
-            for col in sort_by
+            col.replace("_", " ").title() if title_case else col for col in sort_by
         ]
         df_display = df_display.sort_values(by=sort_by_display)
 
@@ -118,7 +118,11 @@ def apply_gradient_style(
         columns = [columns]
 
     return styler.background_gradient(
-        subset=columns, cmap=cmap, vmin=vmin, vmax=vmax, axis=axis,
+        subset=columns,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        axis=axis,
     )
 
 
@@ -176,7 +180,10 @@ def format_portfolio_dataframe(
     """
     # Prepare display DataFrame
     df_display = prepare_dataframe_display(
-        df=df, title_case=title_case, start_index=start_index, sort_by=sort_by,
+        df=df,
+        title_case=title_case,
+        start_index=start_index,
+        sort_by=sort_by,
     )
 
     # Define format dictionary
@@ -207,9 +214,7 @@ def format_portfolio_dataframe(
 
     # Apply gradient if column exists
     gradient_col_display = (
-        gradient_column.replace("_", " ").title()
-        if title_case
-        else gradient_column
+        gradient_column.replace("_", " ").title() if title_case else gradient_column
     )
     if gradient_col_display in df_display.columns:
         styled = apply_gradient_style(styled, gradient_col_display, cmap=cmap)
@@ -240,7 +245,10 @@ def format_greeks_dataframe(
 
     """
     df_display = prepare_dataframe_display(
-        df, title_case, sort_by=sort_by, start_index=None,
+        df,
+        title_case,
+        sort_by=sort_by,
+        start_index=None,
     )
 
     # Determine format based on metric
@@ -277,7 +285,10 @@ def format_risk_metrics_dataframe(
 
     """
     df_display = prepare_dataframe_display(
-        df, title_case, sort_by=sort_by, start_index=None,
+        df,
+        title_case,
+        sort_by=sort_by,
+        start_index=None,
     )
 
     # Build format dictionary
@@ -320,7 +331,10 @@ def format_scenario_dataframe(
 
     """
     df_display = prepare_dataframe_display(
-        df, title_case, sort_by=sort_by, start_index=1,
+        df,
+        title_case,
+        sort_by=sort_by,
+        start_index=1,
     )
 
     # Format dictionary
@@ -387,9 +401,7 @@ def create_diverging_style(
         )
         value_columns = [c.replace("_", " ").title() for c in value_columns]
         if currency_columns:
-            currency_columns = [
-                c.replace("_", " ").title() for c in currency_columns
-            ]
+            currency_columns = [c.replace("_", " ").title() for c in currency_columns]
 
     if currency_columns is None:
         currency_columns = value_columns
@@ -414,7 +426,11 @@ def create_diverging_style(
         # This ensures: negative=red, zero=white, positive=green
         abs_max = max(abs(vmin), abs(vmax))
         styler = styler.background_gradient(
-            subset=[col], cmap=cmap, vmin=-abs_max, vmax=abs_max, axis=0,
+            subset=[col],
+            cmap=cmap,
+            vmin=-abs_max,
+            vmax=abs_max,
+            axis=0,
         )
 
     # Format currency columns with consistent formatting
@@ -439,7 +455,7 @@ def format_pivot_table(
     pivot: pd.DataFrame,
     format_str: str = "{:,.2f}",
     cmap: str = "RdYlGn",
-    highlight_zeros: bool = True,  # pylint: disable=unused-argument
+    highlight_zeros: bool = True,  # pylint: disable=unused-argument  # noqa: ARG001
 ) -> Styler:
     """Format pivot table with consistent styling.
 
@@ -456,7 +472,8 @@ def format_pivot_table(
     styled = pivot.style.background_gradient(cmap=cmap, axis=None)
     styled = styled.format(format_str, na_rep="-")
 
-    # Add borders for better readability (use set_table_styles to avoid typing issues)
+    # Add borders for better readability (use set_table_styles to avoid typing
+    # issues)
     styled = styled.set_table_styles(
         [
             {
@@ -512,7 +529,7 @@ def highlight_negative_values(
 
     """
 
-    def highlight_neg(val):
+    def highlight_neg(val) -> str:  # noqa: ANN001
         try:
             return f"background-color: {color}" if float(val) < 0 else ""
         except (ValueError, TypeError):
@@ -659,7 +676,7 @@ def to_excel_styled(
     filepath: str,
     styler: Styler | None = None,
     sheet_name: str = "Sheet1",
-):
+) -> None:
     """Export DataFrame to Excel with styling preserved (when possible).
 
     Args:
@@ -680,14 +697,14 @@ def to_excel_styled(
             df.to_excel(filepath, sheet_name=sheet_name, engine="openpyxl")
         print(f"✓ DataFrame exported to {filepath}")
     except Exception as e:  # pylint: disable=broad-except
-        warnings.warn(f"Error exporting to Excel: {e}")
+        warnings.warn(f"Error exporting to Excel: {e}", stacklevel=1)
         # Fallback to CSV
         csv_path = filepath.replace(".xlsx", ".csv")
         df.to_csv(csv_path)
-        print(f"ℹ️  Exported to CSV instead: {csv_path}")
+        print(f"ℹ️  Exported to CSV instead: {csv_path}")  # noqa: RUF001
 
 
-def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10):
+def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10) -> None:
     """Display a summary of a DataFrame (first/last rows, shape, dtypes).
 
     Args:

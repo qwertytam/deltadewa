@@ -58,7 +58,7 @@ class GlobalAssumptions:
         spot_range_pct: float = 30.0,
         vol_range: tuple[float, float] = (0.05, 1.00),
         portfolio_time_horizon: int | None = None,
-    ):
+    ) -> None:
         """Initialize global assumptions panel.
 
         Args:
@@ -201,7 +201,7 @@ class GlobalAssumptions:
         )
 
         # Link time horizon selector to custom days field
-        def on_horizon_change(change):
+        def on_horizon_change(change) -> None:  # noqa: ANN001
             if change["new"] == -1:
                 self.custom_days.disabled = False
             else:
@@ -287,12 +287,12 @@ class GlobalAssumptions:
         ]:
             getattr(self, widget_attr).observe(self._notify_callbacks, "value")
 
-    def _notify_callbacks(self, change):
+    def _notify_callbacks(self, change) -> None:  # noqa: ANN001
         """Notify all registered callbacks when any parameter changes."""
         for callback in self._callbacks:
             callback(change)
 
-    def on_change(self, callback: Callable):
+    def on_change(self, callback: Callable) -> None:
         """Register a callback to be called when any parameter changes.
 
         Args:
@@ -313,7 +313,7 @@ class GlobalAssumptions:
         return self.time_horizon.value
 
     @property
-    def time_horizon_days(self):
+    def time_horizon_days(self):  # noqa: ANN201
         """Property to get the selected number of days forward.
 
         This is a convenience property that wraps get_days_forward()
@@ -333,7 +333,8 @@ class GlobalAssumptions:
 
         """
         val_date = datetime.combine(
-            self.valuation_date.value, datetime.min.time(),
+            self.valuation_date.value,
+            datetime.min.time(),
         )
         return val_date + timedelta(days=self.get_days_forward())
 
@@ -403,7 +404,7 @@ class GlobalAssumptions:
                 widgets.HTML(
                     f"""
                     <div style="background-color:{DEFAULT_PALETTE.med_dark_background}; """
-                     """color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
+                    """color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
                     <h3 style="margin:0;">Global Assumptions Panel</h3>
                     <p style="margin:5px 0 0 0; font-size:14px;">
                     Single source of truth for all market parameters</p>

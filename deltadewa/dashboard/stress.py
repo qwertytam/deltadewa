@@ -21,6 +21,7 @@ import pandas as pd
 from IPython.display import display
 from matplotlib.ticker import FuncFormatter
 
+from deltadewa.analysis import PortfolioAnalyzer, ScenarioGridCache
 from deltadewa.analysis.volatility import calculate_portfolio_avg_volatility
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.gradients import (
@@ -28,7 +29,9 @@ from deltadewa.formatters.gradients import (
     get_matplotlib_norm_and_cmap,
 )
 from deltadewa.formatters.values import format_currency_for_axis
+from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting import ConsoleReporter
+from deltadewa.widgets import GlobalAssumptions
 
 # ---------------------------------------------------------------------------
 # Metric configuration shared across heatmap methods
@@ -78,12 +81,13 @@ class StressDashboard:
 
     def __init__(
         self,
-        portfolio,
-        analyzer,
-        cache,
-        global_assumptions,
+        portfolio: OptionPortfolio,
+        analyzer: PortfolioAnalyzer,
+        cache: ScenarioGridCache,
+        global_assumptions: GlobalAssumptions,
         reporter: ConsoleReporter | None = None,
     ) -> None:
+        """Initialize StressDashboard instance."""
         self.portfolio = portfolio
         self.analyzer = analyzer
         self.cache = cache
@@ -187,7 +191,7 @@ class StressDashboard:
                 days_to_max_maturity=days_to_max_maturity,
             )
 
-        def _on_change(_change) -> None:
+        def _on_change(_change) -> None:  # noqa: ANN001
             _render(
                 self.global_assumptions.spot_shock_pct.value,
                 metric_selector.value,
@@ -290,10 +294,10 @@ class StressDashboard:
         # directly
         # pylint: disable=import-outside-toplevel
         from deltadewa.widgets.portfolio_controls import (
-            PortfolioWidgets as _PW,  # local import to avoid hard dep
+            PortfolioWidgets as _PfW,  # local import to avoid hard dep
         )
 
-        _pw_stub = _PW.__new__(_PW)
+        _pw_stub = _PfW.__new__(_PfW)
         _pw_stub.portfolio = portfolio
 
         # date selector via PortfolioWidgets helper
@@ -369,11 +373,12 @@ class StressDashboard:
                 baseline_value=baseline_value,
             )
 
-        def _on_change(_change) -> None:
-            _render(
-                date_selector.value,
-                metric_selector.value,
-            )
+        def _on_change(_change) -> None:  # noqa: ANN001
+            if metric_selector.value is not None:
+                _render(
+                    date_selector.value,
+                    metric_selector.value,
+                )
 
         date_selector.observe(_on_change, names="value")
         metric_selector.observe(_on_change, names="value")
@@ -517,11 +522,11 @@ class StressDashboard:
             if var_95 >= 0:
                 print(f"   → 95% of outcomes are BETTER than ${var_95:,.2f}")
                 print(
-                    "   → Only 5% of scenarios result in less " f"than ${var_95:,.2f}",
+                    "   → Only 5% of scenarios result in less than ${var_95:,.2f}",
                 )
             else:
                 print(
-                    "   → 5% of scenarios result in worse than " f"${var_95:,.2f} loss",
+                    "   → 5% of scenarios result in worse than {var_95:,.2f} loss",
                 )
 
             print(f"   99% VaR (1st percentile): ${var_99:>10,.2f}")
@@ -534,7 +539,7 @@ class StressDashboard:
             if theoretical_max_loss is not None:
                 print("\n🔴 Theoretical Maximum Loss:")
                 print(
-                    "   Max possible loss:        " f"${theoretical_max_loss:>10,.2f}",
+                    "   Max possible loss:        ${theoretical_max_loss:>10,.2f}",
                 )
                 print(
                     "   → If all short options go fully ITM (spot → $0 for puts)",
@@ -666,7 +671,7 @@ class StressDashboard:
                     values="value",
                 ).sort_index(ascending=False)
 
-                def _col_label(d) -> str:
+                def _col_label(d) -> str:  # noqa: ANN001
                     try:
                         di = int(float(d))
                     except Exception:  # pylint: disable=broad-exception-caught
@@ -675,7 +680,7 @@ class StressDashboard:
                     date_str = future_date.strftime("%Y-%m-%d")
                     return f"Today\n{date_str}" if di == 0 else f"T+{di}\n{date_str}"
 
-                def _row_label(s) -> str:
+                def _row_label(s) -> str:  # noqa: ANN001
                     try:
                         si = float(s)
                     except Exception:  # pylint: disable=broad-exception-caught
@@ -686,7 +691,7 @@ class StressDashboard:
                     sign = "+" if pct > 0 else ""
                     return f"${_spot_formatter(si)}\n({sign}{pct:.0%})"
 
-                pivot_df.columns = [_col_label(d) for d in pivot_df.columns]
+                pivot_df.columns = pd.Index([_col_label(d) for d in pivot_df.columns])
                 pivot_df.index = pd.Index(
                     [_row_label(s) for s in pivot_df.index],
                 )
@@ -957,7 +962,7 @@ class StressDashboard:
                     label="Current Position",
                 )
 
-                def _fmt_spot(x, _pos):
+                def _fmt_spot(x, _pos) -> str:  # noqa: ANN001
                     pct = (x - original_spot) / original_spot
                     if abs(pct) < 0.001:
                         return f"${x:,.0f}\n(~0%)"
@@ -1048,7 +1053,7 @@ class StressDashboard:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_status_widget(status_type: str, **kwargs) -> widgets.HTML:
+    def _make_status_widget(status_type: str, **kwargs) -> widgets.HTML:  # noqa: ANN003
         """Return a styled HTML status indicator widget."""
         styles = {
             "calculating": {
@@ -1124,13 +1129,13 @@ class StressDashboard:
         cvar_95: float,
         max_loss: float,
         is_concentrated: bool,
-        most_common_pnl,
+        most_common_pnl: float,
         concentration_pct: float,
     ) -> None:
         """Render the side-by-side PDF histogram and CDF charts."""
 
         def _axis_fmt(
-            ax,
+            ax,  # noqa: ANN001
             title: str,
             ylbl: str,
             yint: float = 0.0,

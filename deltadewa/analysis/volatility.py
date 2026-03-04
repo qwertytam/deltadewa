@@ -1,7 +1,8 @@
 """Volatility analysis utilities for options portfolios.
 
-This module provides functions for analyzing and manipulating portfolio volatility,
-including vega-weighted averaging, proportional scaling, and statistical analysis.
+This module provides functions for analyzing and manipulating portfolio
+volatility, including vega-weighted averaging, proportional scaling, and
+statistical analysis.
 """
 
 from typing import TYPE_CHECKING
@@ -34,9 +35,12 @@ def calculate_portfolio_avg_volatility(portfolio: "OptionPortfolio") -> float:
         Vega-weighted average volatility as a decimal (e.g., 0.25 for 25%)
 
     Notes:
-        - If total vega is zero or portfolio is empty, returns portfolio.volatility
-        - Uses absolute vega values to weight all positions equally regardless of direction
-        - Each position uses its current volatility value (position.option.volatility)
+        - If total vega is zero or portfolio is empty, returns portfolio
+        volatility
+        - Uses absolute vega values to weight all positions equally regardless \
+            of direction
+        - Each position uses its current volatility value (position.option
+        volatility)
 
     Example:
         >>> # Portfolio with positions at 30%, 20%, 25% volatility
@@ -78,8 +82,10 @@ def apply_proportional_volatility_shift(
 
     Args:
         portfolio: OptionPortfolio instance to modify
-        target_avg_vol: Target vega-weighted average volatility (decimal, e.g., 0.30)
-        preserve_structure: If True, scale proportionally; if False, set all to target
+        target_avg_vol: Target vega-weighted average volatility (decimal, e.g.,
+        0.30)
+        preserve_structure: If True, scale proportionally; if False, set all to
+        target
 
     Returns:
         Dictionary mapping position index to original volatility value
@@ -88,7 +94,8 @@ def apply_proportional_volatility_shift(
     Notes:
         - Modifies portfolio positions in-place
         - Returns original values for restoration
-        - If preserve_structure=False, sets all positions to target_avg_vol uniformly
+        - If preserve_structure=False, sets all positions to target_avg_vol
+        uniformly
         - If current average is zero, sets all to target_avg_vol
 
     Example:
@@ -130,7 +137,8 @@ def apply_proportional_volatility_shift(
 
 
 def restore_volatilities(
-    portfolio: "OptionPortfolio", original_vols: dict,
+    portfolio: "OptionPortfolio",
+    original_vols: dict,
 ) -> None:
     """Restore position volatilities to their original values.
 
@@ -150,7 +158,8 @@ def restore_volatilities(
     Example:
         >>> original_vols = apply_proportional_volatility_shift(portfolio, 0.30)
         >>> # ... perform analysis ...
-        >>> restore_volatilities(portfolio, original_vols)  # Restore original state
+        >>> restore_volatilities(portfolio, original_vols)  # Restore original
+        state
 
     """
     for i, vol in original_vols.items():
@@ -187,17 +196,17 @@ def get_volatility_stats(portfolio: "OptionPortfolio") -> dict:
     Example:
         >>> stats = get_volatility_stats(portfolio)
         >>> print(f"Average: {stats['avg_volatility']:.2%}")
-        >>> print(f"Range: {stats['min_volatility']:.2%} - {stats['max_volatility']:.2%}")
-        >>> print(f"Positions with custom vol: {stats['num_custom_vol']}/{stats['num_positions']}")
+        >>> print(f"Range: {stats['min_volatility']:.2%} - {stat
+        ['max_volatility']:.2%}")
+        >>> print(f"Positions with custom vol: {stats['num_custom_vol']}/{stat
+        ['num_positions']}")
 
     """
     if not portfolio.positions:
         return {}
 
     volatilities = [pos.option.volatility for pos in portfolio.positions]
-    custom_vol_count = sum(
-        1 for pos in portfolio.positions if pos.custom_volatility
-    )
+    custom_vol_count = sum(1 for pos in portfolio.positions if pos.custom_volatility)
 
     return {
         "avg_volatility": calculate_portfolio_avg_volatility(portfolio),

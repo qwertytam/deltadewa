@@ -6,6 +6,9 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.portfolio.core import OptionPortfolio
+
 
 def create_scenario_cache_key(
     spot_scenarios: np.ndarray,
@@ -62,7 +65,7 @@ def create_spot_vol_cache_key(
     return ("spot_vol", spot_tuple, vol_tuple, metric, portfolio_state_hash)
 
 
-def get_portfolio_state_hash(portfolio) -> str:
+def get_portfolio_state_hash(portfolio: OptionPortfolio) -> str:
     """Generate a hash representing the current portfolio state.
 
     This is used for cache invalidation - if the portfolio changes,
@@ -99,7 +102,7 @@ def get_portfolio_state_hash(portfolio) -> str:
 
     # Create hash
     state_str = "|".join(state_elements)
-    return hashlib.md5(state_str.encode()).hexdigest()
+    return hashlib.sha256(state_str.encode()).hexdigest()
 
 
 class ScenarioGridCache:
@@ -122,7 +125,7 @@ class ScenarioGridCache:
         )
     """
 
-    def __init__(self, max_size: int = 128):
+    def __init__(self, max_size: int = 128) -> None:
         """Initialize cache.
 
         Args:
@@ -135,8 +138,8 @@ class ScenarioGridCache:
 
     def get_or_calculate(
         self,
-        portfolio,
-        analyzer,
+        portfolio: OptionPortfolio,
+        analyzer: PortfolioAnalyzer,
         spot_scenarios: np.ndarray,
         time_points: list[datetime],
         metric: str,
@@ -161,7 +164,10 @@ class ScenarioGridCache:
         # Generate cache key
         portfolio_hash = get_portfolio_state_hash(portfolio)
         cache_key = create_scenario_cache_key(
-            spot_scenarios, time_points, metric, portfolio_hash,
+            spot_scenarios,
+            time_points,
+            metric,
+            portfolio_hash,
         )
 
         # Check cache
@@ -195,8 +201,8 @@ class ScenarioGridCache:
 
     def get_or_calculate_spot_vol(
         self,
-        portfolio,
-        analyzer,
+        portfolio: OptionPortfolio,
+        analyzer: PortfolioAnalyzer,
         spot_scenarios: np.ndarray,
         vol_scenarios: np.ndarray,
         metric: str = "pnl",
@@ -214,16 +220,21 @@ class ScenarioGridCache:
             vol_scenarios: Array of volatilities
             metric: Metric to calculate
             baseline_value: Portfolio value for P&L baseline
-            proportional_vol_scaling: If True, scale position vols proportionally
+            proportional_vol_scaling: If True, scale position vols
+            proportionally
 
         Returns:
-            DataFrame with scenario grid results (columns: spot_price, volatility, value)
+            DataFrame with scenario grid results (columns: spot_price,
+            volatility, value)
 
         """
         # Generate cache key
         portfolio_hash = get_portfolio_state_hash(portfolio)
         cache_key = create_spot_vol_cache_key(
-            spot_scenarios, vol_scenarios, metric, portfolio_hash,
+            spot_scenarios,
+            vol_scenarios,
+            metric,
+            portfolio_hash,
         )
 
         # Check cache
@@ -254,7 +265,7 @@ class ScenarioGridCache:
 
         return result
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all cached results."""
         self._cache.clear()
         self._access_order.clear()

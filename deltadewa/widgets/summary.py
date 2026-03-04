@@ -12,8 +12,6 @@ import numpy as np
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
-
-# Import centralized formatters
 from deltadewa.formatters.html import format_html_badge, format_html_metric
 
 if TYPE_CHECKING:

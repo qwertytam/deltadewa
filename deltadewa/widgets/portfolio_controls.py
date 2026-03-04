@@ -72,12 +72,12 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         else:
             if include_index:
                 options = [
-                    f"{i}: {p["option_type"].value.capitalize()} {p['strike']} @ {p['expiry']}"
+                    f"{i}: {p['option_type'].value.capitalize()} {p['strike']} @ {p['expiry']}"
                     for i, p in enumerate(positions)
                 ]
             else:
                 options = [
-                    f"{p["option_type"].value.capitalize()} {p['strike']} @ {p['expiry']}"
+                    f"{p['option_type'].value.capitalize()} {p['strike']} @ {p['expiry']}"
                     for p in positions
                 ]
             disabled = False

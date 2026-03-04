@@ -63,8 +63,8 @@ class HedgeHealthMetric:
 class HedgeHealthDashboard:
     """Comprehensive hedge health dashboard with visual gauge indicators.
 
-    Displays seven key hedge health metrics as visual gauges with configurable thresholds.
-    Supports loading configuration from YAML/JSON files.
+    Displays seven key hedge health metrics as visual gauges with configurable
+    thresholds. Supports loading configuration from YAML/JSON files.
 
     Attributes:
         portfolio: OptionPortfolio instance to analyze
@@ -335,7 +335,8 @@ class HedgeHealthDashboard:
             mid_val=c["mid_val"],
             max_val=c["max_val"],
             actual=min(
-                health_data["convexity_cliff_days"], 365,
+                health_data["convexity_cliff_days"],
+                365,
             ),  # Cap at 365 for display
             unit=" days",
             invert_colors=c["invert_colors"],
@@ -425,7 +426,9 @@ class HedgeHealthDashboard:
         return gauge.create_widget().value
 
     def _build_metric_card_html(
-        self, metric: HedgeHealthMetric, gauge_html: str,
+        self,
+        metric: HedgeHealthMetric,
+        gauge_html: str,
     ) -> str:
         """Build HTML for a metric card with title, gauge, and description.
 
@@ -566,7 +569,7 @@ class HedgeHealthDashboard:
             <!-- Header -->
             <div style="
                 background: linear-gradient(135deg, """
-             f"""{DEFAULT_PALETTE.med_dark_background} 0%, {DEFAULT_PALETTE.dark_background} 100%);
+            f"""{DEFAULT_PALETTE.med_dark_background} 0%, {DEFAULT_PALETTE.dark_background} 100%);
                 color: white;
                 padding: 15px 20px;
                 border-radius: 6px 6px 0 0;
@@ -688,7 +691,9 @@ class HedgeHealthDashboard:
 
         """
         uploader = widgets.FileUpload(
-            accept=".json,.yaml,.yml", multiple=False, description="Load Config",
+            accept=".json,.yaml,.yml",
+            multiple=False,
+            description="Load Config",
         )
         output = widgets.Output()
 
@@ -701,9 +706,7 @@ class HedgeHealthDashboard:
                 try:
                     uploaded_file = change["new"][0]
                     try:
-                        content = (
-                            uploaded_file["content"].tobytes().decode("utf-8")
-                        )
+                        content = uploaded_file["content"].tobytes().decode("utf-8")
                     except UnicodeDecodeError:
                         print("❌ Error: File must be UTF-8 encoded")
                         return

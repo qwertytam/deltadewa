@@ -1,8 +1,10 @@
 """Module-level convenience functions for portfolio analysis."""
 
+from deltadewa.portfolio.core import OptionPortfolio
+
 
 def classify_maturity_bucket(days_to_expiry: int) -> str:
-    """Convenience function for maturity classification.
+    """Classify maturities - convenience function.
 
     Args:
         days_to_expiry: Days until expiration
@@ -12,14 +14,15 @@ def classify_maturity_bucket(days_to_expiry: int) -> str:
 
     """
     # Lazy import to prevent circular dependency:
-    # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
+    # analysis.functions -> analysis.base -> analysis.risk_reward ->
+    # analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
 
     return PortfolioAnalyzer.classify_maturity_bucket(days_to_expiry)
 
 
-def quick_carry_analysis(portfolio) -> dict:
+def quick_carry_analysis(portfolio: OptionPortfolio) -> dict:
     """Quick carry analysis for a portfolio.
 
     Args:
@@ -30,7 +33,8 @@ def quick_carry_analysis(portfolio) -> dict:
 
     """
     # Lazy import to prevent circular dependency:
-    # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
+    # analysis.functions -> analysis.base -> analysis.risk_reward ->
+    # analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
 
@@ -38,7 +42,10 @@ def quick_carry_analysis(portfolio) -> dict:
     return analyzer.calculate_carry_metrics()
 
 
-def quick_risk_concentration(portfolio, metrics: list[str] | None = None) -> dict:
+def quick_risk_concentration(
+    portfolio: OptionPortfolio,
+    metrics: list[str] | None = None,
+) -> dict:
     """Quick risk concentration analysis.
 
     Args:
@@ -50,7 +57,8 @@ def quick_risk_concentration(portfolio, metrics: list[str] | None = None) -> dic
 
     """
     # Lazy import to prevent circular dependency:
-    # analysis.functions -> analysis.base -> analysis.risk_reward -> analysis.functions
+    # analysis.functions -> analysis.base -> analysis.risk_reward ->
+    # analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
 

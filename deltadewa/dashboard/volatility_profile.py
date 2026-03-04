@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from deltadewa.reporting import ConsoleReporter
 from deltadewa.analysis.volatility import get_volatility_stats
+from deltadewa.reporting import ConsoleReporter
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio

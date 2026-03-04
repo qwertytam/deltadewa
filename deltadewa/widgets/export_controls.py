@@ -11,9 +11,8 @@ from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
-from deltadewa.config import (
-    create_export_dir_widget as _create_export_dir_widget,
-)
+from deltadewa.config import \
+    create_export_dir_widget as _create_export_dir_widget
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.audit import PortfolioLogger

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class _AnalyzerProtocol(Protocol):
     """Structural type of self inside all PortfolioAnalyzer mixins."""
 
-    portfolio: "OptionPortfolio"
+    portfolio: "OptionPortfolio"  # noqa: UP037
 
     # Mixin methods (defined in their respective mixin classes, but declared
     # here for static type checking)
@@ -49,7 +49,9 @@ class _AnalyzerProtocol(Protocol):
 
     # RiskRewardMixin
     def risk_reward_analysis(
-        self, spot_range: np.ndarray | None = None, num_simulations: int = 10**4
+        self,
+        spot_range: np.ndarray | None = None,
+        num_simulations: int = 10**4,
     ) -> dict: ...
 
     # SummaryMixin

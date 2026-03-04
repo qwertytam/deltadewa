@@ -13,7 +13,8 @@ from deltadewa.widgets.assumptions import GlobalAssumptions
 
 
 def link_portfolio_to_assumptions(
-    portfolio: OptionPortfolioBase, assumptions: GlobalAssumptions,
+    portfolio: OptionPortfolioBase,
+    assumptions: GlobalAssumptions,
 ) -> Callable:
     """Link a portfolio object's market fields to a GlobalAssumptions widget.
 
@@ -26,7 +27,7 @@ def link_portfolio_to_assumptions(
     additional callbacks; callers may ignore the return value).
     """
 
-    def _on_assumptions_change(_change) -> None:
+    def _on_assumptions_change(_change) -> None:  # noqa: ANN001
         # Read widget values and update portfolio
         spot = float(assumptions.spot_price.value)
         vol = float(assumptions.volatility.value)
@@ -39,7 +40,9 @@ def link_portfolio_to_assumptions(
             valuation_date = datetime.now(tz=UTC)
         else:
             valuation_date = datetime.combine(
-                val_date_widget, datetime.min.time(), tzinfo=UTC,
+                val_date_widget,
+                datetime.min.time(),
+                tzinfo=UTC,
             )
 
         # Update portfolio market fields and refresh positions
@@ -54,7 +57,8 @@ def link_portfolio_to_assumptions(
     # Register and perform initial sync
     assumptions.on_change(_on_assumptions_change)
 
-    # Perform an initial synchronization so callers don't have to trigger a change
+    # Perform an initial synchronization so callers don't have to trigger a
+    # change
     _on_assumptions_change({})
 
     return _on_assumptions_change

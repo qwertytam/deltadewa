@@ -78,7 +78,7 @@ class ThetaChartsMixin:
         )
 
         # Maturity buckets
-        def classify_maturity(days):
+        def classify_maturity(days: int) -> str:
             if days <= const.DAYS_PER_WEEK:
                 return "0-7 days"
             elif days <= const.CALENDAR_DAYS_PER_MONTH:
@@ -105,7 +105,7 @@ class ThetaChartsMixin:
 
         return df_carry, theta_metrics
 
-    def _plot_theta_by_bucket(self, ax: Axes, df_carry: pd.DataFrame):
+    def _plot_theta_by_bucket(self, ax: Axes, df_carry: pd.DataFrame) -> None:
         """Plot theta by maturity bucket."""
         theta_by_bucket = (
             df_carry.groupby(["maturity_bucket", "option_type"])
@@ -183,7 +183,7 @@ class ThetaChartsMixin:
         ax: Axes,
         theta_metrics: dict,
         projection_days: int,
-    ):
+    ) -> None:
         """Plot cumulative theta projection."""
         days_range = np.arange(0, projection_days + 1)
         cumulative_theta = days_range * theta_metrics["daily"]
@@ -230,7 +230,7 @@ class ThetaChartsMixin:
         )
         ax.grid(True, alpha=0.3)
 
-    def _plot_carry_efficiency(self, ax: Axes, df_carry: pd.DataFrame):
+    def _plot_carry_efficiency(self, ax: Axes, df_carry: pd.DataFrame) -> None:
         """Plot theta/value ratio by bucket."""
         bucket_order = [
             "0-7 days",
@@ -264,7 +264,7 @@ class ThetaChartsMixin:
 
         if len(bucket_summary) > 0 and not bucket_summary["theta_pct"].isna().all():
             colors = [
-                DEFAULT_PALETTE.negative if x > 0 else DEFAULT_PALETTE.negative
+                DEFAULT_PALETTE.positive if x > 0 else DEFAULT_PALETTE.negative
                 for x in bucket_summary["theta_pct"]
             ]
             bucket_summary["theta_pct"].plot(
@@ -298,7 +298,11 @@ class ThetaChartsMixin:
         )
         ax.grid(True, alpha=0.3, axis="x")
 
-    def _plot_theta_vs_contracts(self, ax: Axes, df_carry: pd.DataFrame):
+    def _plot_theta_vs_contracts(
+        self,
+        ax: Axes,
+        df_carry: pd.DataFrame,
+    ) -> None:
         """Plot contract count vs theta contribution."""
         bucket_order = [
             "0-7 days",

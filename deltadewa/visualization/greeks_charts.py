@@ -45,7 +45,7 @@ class GreeksChartsMixin:
         if nrows == 1:
             axes = [axes]
 
-        for ax, metric in zip(axes, metrics):
+        for ax, metric in zip(axes, metrics, strict=False):
             self._plot_greek_by_dimension(
                 ax,
                 df_positions,
@@ -85,7 +85,7 @@ class GreeksChartsMixin:
         if nrows == 1:
             axes = [axes]
 
-        for ax, metric in zip(axes, metrics):
+        for ax, metric in zip(axes, metrics, strict=False):
             self._plot_greek_by_dimension(
                 ax,
                 df_positions,
@@ -106,7 +106,7 @@ class GreeksChartsMixin:
         dimension: str,
         title: str,
         xlabel: str | None = None,
-    ):
+    ) -> None:
         """Plot Greek exposure by a dimension (strike or maturity).
 
         Args:

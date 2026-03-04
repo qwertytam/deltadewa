@@ -1,5 +1,6 @@
 """Scenario analysis visualization for option charts."""
 
+from datetime import datetime as dt
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ class ScenarioChartsMixin:
         self,
         scenario_df: pd.DataFrame,
         days_forward: int,
-        valuation_date,
+        valuation_date: dt,
         current_spot: float,
         figsize: tuple[int, int] = (14, 10),
     ) -> Figure:
@@ -64,7 +65,10 @@ class ScenarioChartsMixin:
             color=DEFAULT_PALETTE.black,
         )
         ax1.axhline(
-            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1,
+            y=0,
+            color=DEFAULT_PALETTE.medium_grey,
+            linestyle=":",
+            linewidth=1,
         )
         ax1.axvline(
             x=current_spot,
@@ -106,7 +110,10 @@ class ScenarioChartsMixin:
             linewidth=2.5,
         )
         ax2.axhline(
-            y=0, color=DEFAULT_PALETTE.medium_grey, linestyle=":", linewidth=1,
+            y=0,
+            color=DEFAULT_PALETTE.medium_grey,
+            linestyle=":",
+            linewidth=1,
         )
         ax2.axvline(
             x=current_spot,
@@ -118,7 +125,9 @@ class ScenarioChartsMixin:
         ax2.set_xlabel("Spot Price", fontsize=11)
         ax2.set_ylabel("Delta", fontsize=11)
         ax2.set_title(
-            "Delta Profile Across Spot Prices", fontsize=13, fontweight="bold",
+            "Delta Profile Across Spot Prices",
+            fontsize=13,
+            fontweight="bold",
         )
         ax2.legend(loc="best")
         ax2.grid(True, alpha=0.3)

@@ -27,12 +27,12 @@ class InteractiveOutput:
 
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize output widget."""
         self.widget = widgets.Output()
 
     def update(self, func: Callable) -> Callable:
-        """Decorator to handle output clearing.
+        """Create wrapper function to handle output clearing.
 
         Args:
             func: Function to wrap with output clearing logic
@@ -42,13 +42,13 @@ class InteractiveOutput:
 
         """
 
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):  # noqa: ANN002 ANN003 ANN202
             with self.widget:
                 self.widget.clear_output(wait=True)
                 return func(*args, **kwargs)
 
         return wrapper
 
-    def clear(self):
+    def clear(self) -> None:
         """Manually clear the output widget."""
         self.widget.clear_output()

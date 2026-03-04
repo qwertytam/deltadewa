@@ -61,7 +61,7 @@ class PositionAgingDisplay:
         # fall back to the `dt` alias for normal runtime.
         if hasattr(datetime, "now"):
             tz = getattr(datetime, "UTC", datetime.UTC)
-            today = datetime.now(tz=tz)
+            today = dt.now(tz=tz)
         else:
             today = dt.now(tz=datetime.UTC)
 
@@ -143,7 +143,7 @@ class PositionAgingDisplay:
 
             print(f"  • Urgent positions (<7d): Burning ${abs(urgent_theta):.2f}/day")
             print(
-                f"  • Near-term positions (7-21d): Burning ${abs(soon_theta):.2f}/day"
+                f"  • Near-term positions (7-21d): Burning ${abs(soon_theta):.2f}/day",
             )
             print("  • Recommendation: Focus rolls on urgent positions first")
             self._reporter.divider()

@@ -395,9 +395,11 @@ class PortfolioSerializer:
             option_type = pos_data.get("option_type") or OptionType.CALL
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
 
-            # Handle volatility - check for both explicit flag and presence of volatility data
+            # Handle volatility - check for both explicit flag and presence of
+            # volatility data
             custom_volatility = pos_data.get("custom_volatility", False)
-            # Use custom volatility if explicitly marked OR if volatility data exists without flag
+            # Use custom volatility if explicitly marked OR if volatility data
+            # exists without flag
             position_volatility = (
                 pos_data.get("volatility")
                 if (custom_volatility or "volatility" in pos_data)

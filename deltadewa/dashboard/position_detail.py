@@ -52,7 +52,7 @@ class PositionDetailDisplay:
             # display
             if "option_type" in display_df.columns:
                 display_df["option_type"] = display_df["option_type"].apply(
-                    _fmt_enum_val
+                    _fmt_enum_val,
                 )
 
             if "exercise_style" in display_df.columns:

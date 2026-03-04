@@ -142,7 +142,7 @@ class SummaryMixin:
         if abs(stats["total_gamma"]) > 0.1:
             direction = "long" if stats["total_gamma"] > 0 else "short"
             insights.append(
-                f"ℹ High {direction} gamma ({abs(stats['total_gamma']):.4f}) - "
+                f"ℹ High {direction} gamma ({abs(stats['total_gamma']):.4f}) - "  # noqa: RUF001
                 "delta will change significantly with spot moves",
             )
 
@@ -150,7 +150,7 @@ class SummaryMixin:
         if abs(stats["total_vega"]) > 100:
             direction = "benefits from" if stats["total_vega"] > 0 else "hurt by"
             insights.append(
-                f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f})"
+                f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f})"  # noqa: RUF001
                 f" - portfolio {direction} volatility increases",
             )
 
@@ -289,13 +289,17 @@ class SummaryMixin:
         lines.append("")
 
         # Risk/Reward Ratio
-        if not max_loss_opts["is_unlimited"] and not max_profit_opts["is_unlimited"]:
-            if max_profit_opts["max_profit"] > 0 and max_loss_opts["max_loss"] < 0:
-                # Standard risk/reward ratio: profit potential to loss potential
-                rr_ratio = max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
-                lines.append(
-                    f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)",
-                )
+        if (
+            not max_loss_opts["is_unlimited"]
+            and not max_profit_opts["is_unlimited"]
+            and max_profit_opts["max_profit"] > 0
+            and max_loss_opts["max_loss"] < 0
+        ):
+            # Standard risk/reward ratio: profit potential to loss potential
+            rr_ratio = max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
+            lines.append(
+                f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)",
+            )
         lines.append("=" * 80)
 
         return "\n".join(lines)

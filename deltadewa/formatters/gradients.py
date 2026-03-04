@@ -1,4 +1,4 @@
-"""Financial Color Gradients and Heatmap Styling
+"""Financial Color Gradients and Heatmap Styling.
 
 This module provides color gradient functions for financial data visualization:
 - Heatmap styling for DataFrames
@@ -96,7 +96,7 @@ def apply_traffic_light_colors(
 
     """
 
-    def color_traffic_light(val):
+    def color_traffic_light(val) -> float | str:  # noqa: ANN001
         try:
             val = float(val)
         except (ValueError, TypeError):
