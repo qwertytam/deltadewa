@@ -11,11 +11,13 @@ from deltadewa.visualization.base import OptionCharts
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
+# ruff: noqa: S101
+
 
 class TestGreeksChartsMixin:
     """Test cases for GreeksChartsMixin class."""
 
-    def test_plot_greeks_by_strike_empty(self):
+    def test_plot_greeks_by_strike_empty(self) -> None:
         """Test plot_greeks_by_strike with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
         charts = OptionCharts(portfolio)
@@ -31,7 +33,7 @@ class TestGreeksChartsMixin:
             # Expected for empty portfolio
             pass
 
-    def test_plot_greeks_by_strike_with_positions(self):
+    def test_plot_greeks_by_strike_with_positions(self) -> None:
         """Test plot_greeks_by_strike with positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -57,7 +59,7 @@ class TestGreeksChartsMixin:
         assert len(fig.axes) == 3
         plt.close(fig)
 
-    def test_plot_greeks_by_strike_custom_metrics(self):
+    def test_plot_greeks_by_strike_custom_metrics(self) -> None:
         """Test plot_greeks_by_strike with custom metrics."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -77,7 +79,7 @@ class TestGreeksChartsMixin:
         assert len(fig.axes) == 2
         plt.close(fig)
 
-    def test_plot_greeks_by_maturity(self):
+    def test_plot_greeks_by_maturity(self) -> None:
         """Test plot_greeks_by_maturity."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity1 = datetime.now(tz=UTC) + timedelta(days=30)
@@ -104,7 +106,7 @@ class TestGreeksChartsMixin:
         assert len(fig.axes) == 3
         plt.close(fig)
 
-    def test_plot_greeks_by_maturity_custom_metrics(self):
+    def test_plot_greeks_by_maturity_custom_metrics(self) -> None:
         """Test plot_greeks_by_maturity with custom metrics."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)

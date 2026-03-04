@@ -6,11 +6,13 @@ from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts, OptionChartsBase
 
+# ruff: noqa: S101
+
 
 class TestOptionChartsBase:
     """Test cases for OptionChartsBase class."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test OptionChartsBase can be instantiated."""
         portfolio = OptionPortfolio()
         charts = OptionChartsBase(portfolio)
@@ -19,14 +21,14 @@ class TestOptionChartsBase:
         assert charts.portfolio is portfolio
         assert charts.style == "seaborn-v0_8-darkgrid"
 
-    def test_initialization_custom_style(self):
+    def test_initialization_custom_style(self) -> None:
         """Test OptionChartsBase with custom style."""
         portfolio = OptionPortfolio()
         charts = OptionChartsBase(portfolio, style="ggplot")
 
         assert charts.style == "ggplot"
 
-    def test_get_expiry_label_empty(self):
+    def test_get_expiry_label_empty(self) -> None:
         """Test _get_expiry_label with empty portfolio."""
         portfolio = OptionPortfolio()
         charts = OptionChartsBase(portfolio)
@@ -35,7 +37,7 @@ class TestOptionChartsBase:
         label = charts._get_expiry_label()
         assert label == "N/A"
 
-    def test_get_expiry_label_single_maturity(self):
+    def test_get_expiry_label_single_maturity(self) -> None:
         """Test _get_expiry_label with single maturity."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -52,7 +54,7 @@ class TestOptionChartsBase:
         expected = maturity.strftime("%Y-%m-%d")
         assert label == expected
 
-    def test_get_expiry_label_multiple_maturities(self):
+    def test_get_expiry_label_multiple_maturities(self) -> None:
         """Test _get_expiry_label with multiple maturities."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity1 = datetime.now(tz=UTC) + timedelta(days=30)
@@ -76,12 +78,11 @@ class TestOptionChartsBase:
         label = charts._get_expiry_label()
 
         expected = (
-            f"{maturity1.strftime('%Y-%m-%d')} "
-             f"→ {maturity2.strftime('%Y-%m-%d')}"
+            f"{maturity1.strftime('%Y-%m-%d')} → {maturity2.strftime('%Y-%m-%d')}"
         )
         assert label == expected
 
-    def test_create_chart_grid(self):
+    def test_create_chart_grid(self) -> None:
         """Test create_chart_grid static method."""
         fig, axes = OptionChartsBase.create_chart_grid(
             rows=2,
@@ -96,7 +97,7 @@ class TestOptionChartsBase:
 class TestOptionCharts:
     """Test cases for full OptionCharts composition."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test OptionCharts can be instantiated."""
         portfolio = OptionPortfolio()
         charts = OptionCharts(portfolio)
@@ -108,7 +109,7 @@ class TestOptionCharts:
         assert hasattr(charts, "plot_theta_analysis")
         assert hasattr(charts, "plot_scenario_analysis")
 
-    def test_has_pnl_methods(self):
+    def test_has_pnl_methods(self) -> None:
         """Test OptionCharts has P&L methods."""
         portfolio = OptionPortfolio()
         charts = OptionCharts(portfolio)
@@ -117,7 +118,7 @@ class TestOptionCharts:
         assert hasattr(charts, "plot_pnl_distribution_with_metrics")
         assert hasattr(charts, "_plot_pnl_panel")
 
-    def test_has_greeks_methods(self):
+    def test_has_greeks_methods(self) -> None:
         """Test OptionCharts has Greek methods."""
         portfolio = OptionPortfolio()
         charts = OptionCharts(portfolio)
@@ -126,7 +127,7 @@ class TestOptionCharts:
         assert hasattr(charts, "plot_greeks_by_maturity")
         assert hasattr(charts, "_plot_greek_by_dimension")
 
-    def test_has_theta_methods(self):
+    def test_has_theta_methods(self) -> None:
         """Test OptionCharts has theta methods."""
         portfolio = OptionPortfolio()
         charts = OptionCharts(portfolio)
@@ -138,7 +139,7 @@ class TestOptionCharts:
         assert hasattr(charts, "_plot_carry_efficiency")
         assert hasattr(charts, "_plot_theta_vs_contracts")
 
-    def test_has_scenario_methods(self):
+    def test_has_scenario_methods(self) -> None:
         """Test OptionCharts has scenario methods."""
         portfolio = OptionPortfolio()
         charts = OptionCharts(portfolio)

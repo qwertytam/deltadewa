@@ -5,16 +5,19 @@ from unittest.mock import Mock
 import ipywidgets as widgets  # type: ignore[import-untyped]
 import pytest
 
+from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.widgets.health_dashboard import (
     HedgeHealthDashboard,
     HedgeHealthMetric,
 )
 
+# ruff: noqa: S101
+
 
 class TestHedgeHealthMetric:
     """Test cases for HedgeHealthMetric class."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test HedgeHealthMetric can be instantiated."""
         metric = HedgeHealthMetric(
             name="Test Metric",
@@ -40,7 +43,7 @@ class TestHedgeHealthMetric:
         assert metric.unit == "%"
         assert metric.invert_colors is False
 
-    def test_metric_attributes(self):
+    def test_metric_attributes(self) -> None:
         """Test all metric attributes are accessible."""
         metric = HedgeHealthMetric(
             name="Delta",
@@ -66,7 +69,7 @@ class TestHedgeHealthDashboard:
     """Test cases for HedgeHealthDashboard class."""
 
     @pytest.fixture
-    def mock_portfolio(self):
+    def mock_portfolio(self) -> OptionPortfolio:
         """Create a mock portfolio for testing."""
         portfolio = Mock()
         portfolio.spot_price = 100.0
@@ -92,7 +95,7 @@ class TestHedgeHealthDashboard:
         return portfolio
 
     @pytest.fixture
-    def sample_metrics(self):
+    def sample_metrics(self) -> list:
         """Create sample metrics for testing."""
         return [
             HedgeHealthMetric(
@@ -117,7 +120,7 @@ class TestHedgeHealthDashboard:
             ),
         ]
 
-    def test_initialization(self, mock_portfolio):
+    def test_initialization(self, mock_portfolio: OptionPortfolio) -> None:
         """Test HedgeHealthDashboard can be instantiated."""
         # Note: Init only takes portfolio, other args are optional scalars.
         # It creates its OWN analyzer internally: self.analyzer = PortfolioAnalyzer(portfolio)
@@ -126,25 +129,25 @@ class TestHedgeHealthDashboard:
         assert dashboard.portfolio == mock_portfolio
         assert hasattr(dashboard, "analyzer")
 
-    def test_initialization_with_metrics(self, mock_portfolio):
+    def test_initialization_with_metrics(self, mock_portfolio: OptionPortfolio) -> None:
         """Test HedgeHealthDashboard initialization."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         # Just check it runs
         assert dashboard is not None
 
-    def test_display_method(self, mock_portfolio):
+    def test_display_method(self, mock_portfolio: OptionPortfolio) -> None:
         """Test display method returns a widget."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         # Ensure cumulative_carry_paid is float (default 0.0)
         widget = dashboard.display()
         assert widget is not None
 
-    def test_update_method(self, mock_portfolio):
+    def test_update_method(self, mock_portfolio: OptionPortfolio) -> None:
         """Test update method can be called."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         dashboard.update()
 
-    def test_update_with_params(self, mock_portfolio):
+    def test_update_with_params(self, mock_portfolio: OptionPortfolio) -> None:
         """Test update method with parameters."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
 
@@ -154,7 +157,7 @@ class TestHedgeHealthDashboard:
 
         dashboard.update()
 
-    def test_attributes_exist(self, mock_portfolio):
+    def test_attributes_exist(self, mock_portfolio: OptionPortfolio) -> None:
         """Test all expected attributes exist."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         assert hasattr(dashboard, "portfolio")
@@ -162,16 +165,17 @@ class TestHedgeHealthDashboard:
         assert hasattr(dashboard, "display")
         assert hasattr(dashboard, "update")
 
-    def test_with_carry_paid(self, mock_portfolio):
+    def test_with_carry_paid(self, mock_portfolio: OptionPortfolio) -> None:
         """Test that cumulative carry paid is handled correctly."""
         dashboard = HedgeHealthDashboard(
-            mock_portfolio, cumulative_carry_paid=100.0,
+            mock_portfolio,
+            cumulative_carry_paid=100.0,
         )
         assert dashboard.cumulative_carry_paid == 100.0
         widget = dashboard.display()
         assert widget is not None
 
-    def test_with_empty_metrics(self, mock_portfolio):
+    def test_with_empty_metrics(self, mock_portfolio: OptionPortfolio) -> None:
         """Test dashboard with empty metrics list."""
         # Dashboard doesn't take 'metrics' arg.
         dashboard = HedgeHealthDashboard(mock_portfolio)
@@ -179,7 +183,7 @@ class TestHedgeHealthDashboard:
         widget = dashboard.display()
         assert widget is not None
 
-    def test_config_initialization(self, mock_portfolio):
+    def test_config_initialization(self, mock_portfolio: OptionPortfolio) -> None:
         """Test that config is initialized with defaults."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         assert hasattr(dashboard, "config")
@@ -189,7 +193,10 @@ class TestHedgeHealthDashboard:
         assert "historical_vol_high" in dashboard.config["parameters"]
         assert "convexity_cliff_days" in dashboard.config["parameters"]
 
-    def test_config_override_with_init_params(self, mock_portfolio):
+    def test_config_override_with_init_params(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
         """Test that init parameters override default config."""
         dashboard = HedgeHealthDashboard(
             mock_portfolio,
@@ -201,10 +208,10 @@ class TestHedgeHealthDashboard:
         assert dashboard.config["parameters"]["historical_vol_high"] == 0.40
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 200
 
-    def test_get_default_config(self, mock_portfolio):
+    def test_get_default_config(self, mock_portfolio: OptionPortfolio) -> None:
         """Test that _get_default_config returns expected structure."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
-        config = dashboard._get_default_config()
+        config = dashboard._get_default_config()  # pylint: disable=W0212
 
         assert "parameters" in config
         assert "metrics" in config
@@ -233,7 +240,7 @@ class TestHedgeHealthDashboard:
             assert "max_val" in config["metrics"][metric]
             assert "invert_colors" in config["metrics"][metric]
 
-    def test_load_config_parameters(self, mock_portfolio):
+    def test_load_config_parameters(self, mock_portfolio: OptionPortfolio) -> None:
         """Test loading configuration with parameter updates."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
 
@@ -251,7 +258,7 @@ class TestHedgeHealthDashboard:
         # convexity_cliff_days should remain unchanged
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 180
 
-    def test_load_config_metrics(self, mock_portfolio):
+    def test_load_config_metrics(self, mock_portfolio: OptionPortfolio) -> None:
         """Test loading configuration with metric threshold updates."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
 
@@ -275,7 +282,7 @@ class TestHedgeHealthDashboard:
         # mid_val should remain unchanged
         assert dashboard.config["metrics"]["net_carry"]["mid_val"] == 0.0
 
-    def test_load_config_full(self, mock_portfolio):
+    def test_load_config_full(self, mock_portfolio: OptionPortfolio) -> None:
         """Test loading full configuration with both parameters and metrics."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
 
@@ -308,7 +315,7 @@ class TestHedgeHealthDashboard:
         assert dashboard.config["metrics"]["vol_regime"]["min_val"] == 20
         assert dashboard.config["metrics"]["vol_regime"]["max_val"] == 80
 
-    def test_display_config_loader(self, mock_portfolio):
+    def test_display_config_loader(self, mock_portfolio: OptionPortfolio) -> None:
         """Test that display_config_loader returns a widget."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         loader_widget = dashboard.display_config_loader()

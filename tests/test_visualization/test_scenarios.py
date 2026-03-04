@@ -12,11 +12,13 @@ from deltadewa.visualization.base import OptionCharts
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
+# ruff: noqa: S101
+
 
 class TestScenarioChartsMixin:
     """Test cases for ScenarioChartsMixin class."""
 
-    def test_plot_scenario_analysis(self):
+    def test_plot_scenario_analysis(self) -> None:
         """Test plot_scenario_analysis."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -55,7 +57,7 @@ class TestScenarioChartsMixin:
         assert len(fig.axes) == 2
         plt.close(fig)
 
-    def test_plot_scenario_analysis_today(self):
+    def test_plot_scenario_analysis_today(self) -> None:
         """Test plot_scenario_analysis with days_forward=0."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)

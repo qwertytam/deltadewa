@@ -2,24 +2,26 @@
 
 from deltadewa.widgets.base import InteractiveOutput
 
+# ruff: noqa: S101
+
 
 class TestInteractiveOutput:
     """Test cases for InteractiveOutput class."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test InteractiveOutput can be instantiated."""
         output = InteractiveOutput()
         assert output is not None
         assert hasattr(output, "widget")
         assert output.widget is not None
 
-    def test_update_decorator(self):
+    def test_update_decorator(self) -> None:
         """Test update decorator wraps function correctly."""
         output = InteractiveOutput()
         call_count = []
 
         @output.update
-        def test_func(value):
+        def test_func(value) -> str:  # noqa: ANN001
             call_count.append(value)
             return f"processed: {value}"
 
@@ -27,19 +29,19 @@ class TestInteractiveOutput:
         assert result == "processed: 42"
         assert call_count == [42]
 
-    def test_clear_method(self):
+    def test_clear_method(self) -> None:
         """Test clear method can be called."""
         output = InteractiveOutput()
         # Should not raise any exception
         output.clear()
 
-    def test_update_with_args_kwargs(self):
+    def test_update_with_args_kwargs(self) -> None:
         """Test update decorator handles args and kwargs."""
         output = InteractiveOutput()
         results = []
 
         @output.update
-        def test_func(*args, **kwargs):
+        def test_func(*args, **kwargs) -> int:  # noqa: ANN002 ANN003
             results.append((args, kwargs))
             return len(args) + len(kwargs)
 
@@ -47,7 +49,7 @@ class TestInteractiveOutput:
         assert result == 5
         assert results == [((1, 2, 3), {"foo": "bar", "baz": "qux"})]
 
-    def test_widget_attribute(self):
+    def test_widget_attribute(self) -> None:
         """Test that widget attribute is an ipywidgets Output."""
         output = InteractiveOutput()
         # Widget should have expected methods

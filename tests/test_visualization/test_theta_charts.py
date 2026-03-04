@@ -11,11 +11,13 @@ from deltadewa.visualization.base import OptionCharts
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
+# ruff: noqa: S101
+
 
 class TestThetaChartsMixin:
     """Test cases for ThetaChartsMixin class."""
 
-    def test_plot_theta_analysis_empty(self):
+    def test_plot_theta_analysis_empty(self) -> None:
         """Test plot_theta_analysis with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
         charts = OptionCharts(portfolio)
@@ -31,7 +33,7 @@ class TestThetaChartsMixin:
             # Expected for empty portfolio
             pass
 
-    def test_plot_theta_analysis_with_positions(self):
+    def test_plot_theta_analysis_with_positions(self) -> None:
         """Test plot_theta_analysis with positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -58,7 +60,7 @@ class TestThetaChartsMixin:
         assert len(fig.axes) >= 4
         plt.close(fig)
 
-    def test_plot_theta_analysis_custom_projection(self):
+    def test_plot_theta_analysis_custom_projection(self) -> None:
         """Test plot_theta_analysis with custom projection days."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -76,7 +78,7 @@ class TestThetaChartsMixin:
         assert fig is not None
         plt.close(fig)
 
-    def test_prepare_theta_data(self):
+    def test_prepare_theta_data(self) -> None:
         """Test _prepare_theta_data."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)

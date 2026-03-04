@@ -2,16 +2,18 @@
 
 from deltadewa.widgets.gauges import GaugeIndicator
 
+# ruff: noqa: S101
+
 
 class TestGaugeIndicator:
     """Test cases for GaugeIndicator class."""
 
-    def test_initialization_defaults(self):
+    def test_initialization_defaults(self) -> None:
         """Test GaugeIndicator can be instantiated with defaults."""
         gauge = GaugeIndicator()
         assert gauge is not None
 
-    def test_initialization_with_value(self):
+    def test_initialization_with_value(self) -> None:
         """Test GaugeIndicator with initial value."""
         gauge = GaugeIndicator(
             actual=0.75,
@@ -24,7 +26,7 @@ class TestGaugeIndicator:
         )
         assert gauge is not None
 
-    def test_initialization_with_thresholds(self):
+    def test_initialization_with_thresholds(self) -> None:
         """Test GaugeIndicator with custom thresholds."""
         gauge = GaugeIndicator(
             actual=0.5,
@@ -40,27 +42,27 @@ class TestGaugeIndicator:
         )
         assert gauge is not None
 
-    def test_update_method(self):
+    def test_update_method(self) -> None:
         """Test update method changes gauge value."""
         gauge = GaugeIndicator(actual=50.0)
         gauge.update(actual=80.0)
         assert gauge.actual == 80.0
 
-    def test_display_returns_widget(self):
+    def test_display_returns_widget(self) -> None:
         """Test display method returns a widget."""
         # Provide compatible values or just use defaults (0-100)
         gauge = GaugeIndicator(actual=50.0)
         widget = gauge.display()
         assert widget is not None
 
-    def test_widget_attribute_exists(self):
+    def test_widget_attribute_exists(self) -> None:
         """Test that widget attribute exists after creation."""
         gauge = GaugeIndicator(actual=50.0)
         widget = gauge.display()
         # Verify that display() returns a valid widget
         assert widget is not None
 
-    def test_value_clamping(self):
+    def test_value_clamping(self) -> None:
         """Test that values are clamped to min/max range for display."""
         # The display logic (internal _build_html) clamps, but the actual value
         # storage (self.actual) doesn't strictly have to be clamped unless
@@ -82,7 +84,7 @@ class TestGaugeIndicator:
 
         assert gauge.actual == -50.0
 
-    def test_with_label(self):
+    def test_with_label(self) -> None:
         """Test gauge with label."""
         gauge = GaugeIndicator(actual=50.0, title="My Gauge")
         assert gauge is not None

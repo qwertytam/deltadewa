@@ -7,6 +7,8 @@ import pytest
 
 from deltadewa.widgets.summary import NetHedgeSummary
 
+# ruff: noqa: S101
+
 
 class TestNetHedgeSummary:
     """Test cases for NetHedgeSummary class."""

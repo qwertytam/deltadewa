@@ -11,11 +11,13 @@ from deltadewa.visualization.base import OptionCharts
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
+# ruff: noqa: S101
+
 
 class TestPnLChartsMixin:
     """Test cases for PnLChartsMixin class."""
 
-    def test_plot_pnl_diagram_empty_portfolio(self):
+    def test_plot_pnl_diagram_empty_portfolio(self) -> None:
         """Test plot_pnl_diagram with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
         charts = OptionCharts(portfolio)
@@ -24,7 +26,7 @@ class TestPnLChartsMixin:
         assert fig is not None
         plt.close(fig)
 
-    def test_plot_pnl_diagram_with_positions(self):
+    def test_plot_pnl_diagram_with_positions(self) -> None:
         """Test plot_pnl_diagram with positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -42,7 +44,7 @@ class TestPnLChartsMixin:
         assert fig is not None
         plt.close(fig)
 
-    def test_plot_pnl_diagram_with_underlying(self):
+    def test_plot_pnl_diagram_with_underlying(self) -> None:
         """Test plot_pnl_diagram with underlying position."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -62,7 +64,7 @@ class TestPnLChartsMixin:
         assert len(fig.axes) == 2
         plt.close(fig)
 
-    def test_plot_pnl_distribution_with_metrics(self):
+    def test_plot_pnl_distribution_with_metrics(self) -> None:
         """Test plot_pnl_distribution_with_metrics."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -80,7 +82,7 @@ class TestPnLChartsMixin:
         assert fig is not None
         plt.close(fig)
 
-    def test_plot_pnl_distribution_custom_params(self):
+    def test_plot_pnl_distribution_custom_params(self) -> None:
         """Test plot_pnl_distribution_with_metrics with custom parameters."""
         portfolio = OptionPortfolio(spot_price=100.0)
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
