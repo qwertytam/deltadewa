@@ -19,11 +19,13 @@ from deltadewa.persistence import (
 )
 from deltadewa.reporting.audit import PortfolioLogger
 
+# ruff: noqa: S101 ANN001
+
 # ========== Fixtures ==========
 
 
 @pytest.fixture
-def sample_portfolio():
+def sample_portfolio() -> OptionPortfolio:
     """Create a test portfolio with 2 positions (call + put)."""
     portfolio = OptionPortfolio(
         spot_price=100.0,
@@ -50,7 +52,7 @@ def sample_portfolio():
 
 
 @pytest.fixture
-def market_params():
+def market_params() -> dict:
     """Create test market parameters dict."""
     return {
         "spot_price": 100.0,
@@ -67,7 +69,7 @@ def market_params():
 class TestPortfolioSerializer:
     """Tests for PortfolioSerializer class."""
 
-    def test_init_creates_export_dir(self, tmp_path):
+    def test_init_creates_export_dir(self, tmp_path) -> None:
         """Test that __init__ creates the export directory."""
         export_dir = tmp_path / "test_exports"
         assert not export_dir.exists()
@@ -77,7 +79,7 @@ class TestPortfolioSerializer:
         assert export_dir.exists()
         assert serializer.export_dir == export_dir
 
-    def test_detect_file_format_json(self):
+    def test_detect_file_format_json(self) -> None:
         """Test format detection for .json files."""
         assert PortfolioSerializer.detect_file_format("test.json") == "json"
         assert (
@@ -88,7 +90,7 @@ class TestPortfolioSerializer:
             PortfolioSerializer.detect_file_format(Path("test.json")) == "json"
         )
 
-    def test_detect_file_format_yaml(self):
+    def test_detect_file_format_yaml(self) -> None:
         """Test format detection for .yaml and .yml files."""
         assert PortfolioSerializer.detect_file_format("test.yaml") == "yaml"
         assert PortfolioSerializer.detect_file_format("test.yml") == "yaml"
@@ -97,14 +99,14 @@ class TestPortfolioSerializer:
             == "yaml"
         )
 
-    def test_detect_file_format_unsupported(self):
+    def test_detect_file_format_unsupported(self) -> None:
         """Test format detection returns None for unsupported extensions."""
         assert PortfolioSerializer.detect_file_format("test.txt") is None
         assert PortfolioSerializer.detect_file_format("test.csv") is None
         assert PortfolioSerializer.detect_file_format("test.pdf") is None
         assert PortfolioSerializer.detect_file_format("test") is None
 
-    def test_list_available_files_empty(self, tmp_path):
+    def test_list_available_files_empty(self, tmp_path) -> None:
         """Test listing files in empty directory."""
         serializer = PortfolioSerializer(tmp_path / "empty")
         files = serializer.list_available_files()
@@ -114,7 +116,7 @@ class TestPortfolioSerializer:
         assert len(files["json"]) == 0
         assert len(files["yaml"]) == 0
 
-    def test_list_available_files_with_files(self, tmp_path):
+    def test_list_available_files_with_files(self, tmp_path) -> None:
         """Test listing files when JSON and YAML files exist."""
         export_dir = tmp_path / "exports"
         export_dir.mkdir()
@@ -141,12 +143,18 @@ class TestPortfolioSerializer:
 class TestJsonRoundtrip:
     """Test JSON export/import roundtrip."""
 
-    def test_export_to_json_creates_file(self, tmp_path, sample_portfolio):
+    def test_export_to_json_creates_file(
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
         """Test that export_to_json creates the file."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json",
+            sample_portfolio,
+            changelog,
+            "test.json",
         )
 
         assert output_path.exists()
@@ -154,15 +162,19 @@ class TestJsonRoundtrip:
         assert output_path.name == "test.json"
 
     def test_json_roundtrip_preserves_market_params(
-        self, tmp_path, sample_portfolio,
-    ):
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
         """Export then import JSON — market params should match."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
 
         # Export
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json",
+            sample_portfolio,
+            changelog,
+            "test.json",
         )
 
         # Import
@@ -185,15 +197,22 @@ class TestJsonRoundtrip:
         assert imported_params["symbol"] == sample_portfolio.symbol
 
     def test_json_roundtrip_preserves_positions(
-        self, tmp_path, sample_portfolio,
-    ):
-        """Export then import JSON — position count, strikes, types, quantities should match."""
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
+        """Export then import JSON.
+
+        Export/import — position count, strikes, types, quantities should match
+        """
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
 
         # Export
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json",
+            sample_portfolio,
+            changelog,
+            "test.json",
         )
 
         # Import
@@ -206,7 +225,9 @@ class TestJsonRoundtrip:
         )
 
         for orig_pos, imported_pos in zip(
-            sample_portfolio.positions, imported_portfolio.positions,
+            sample_portfolio.positions,
+            imported_portfolio.positions,
+            strict=False,
         ):
             assert imported_pos.option.strike_price == pytest.approx(
                 orig_pos.option.strike_price,
@@ -216,7 +237,7 @@ class TestJsonRoundtrip:
             )
             assert imported_pos.quantity == orig_pos.quantity
 
-    def test_json_roundtrip_preserves_custom_volatility(self, tmp_path):
+    def test_json_roundtrip_preserves_custom_volatility(self, tmp_path) -> None:
         """Export/import with custom per-position volatility."""
         # Create portfolio with custom volatility position
         portfolio = OptionPortfolio(
@@ -239,7 +260,9 @@ class TestJsonRoundtrip:
 
         # Export
         output_path = serializer.export_to_json(
-            portfolio, changelog, "test.json",
+            portfolio,
+            changelog,
+            "test.json",
         )
 
         # Import
@@ -253,20 +276,29 @@ class TestJsonRoundtrip:
         ].option.volatility == pytest.approx(0.5)
 
     def test_import_from_json_without_portfolio_creation(
-        self, tmp_path, sample_portfolio,
-    ):
-        """Test import_from_json with create_portfolio=False returns raw dict."""
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
+        """Test import_from_json with create_portfolio=False returns raw dict.
+
+        Export a portfolio, then import with create_portfolio=False. Should
+        return raw data dict without 'portfolio' key.
+        """
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
 
         # Export
         output_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json",
+            sample_portfolio,
+            changelog,
+            "test.json",
         )
 
         # Import without creating portfolio
         result = serializer.import_from_json(
-            output_path, create_portfolio=False,
+            output_path,
+            create_portfolio=False,
         )
 
         # Should return raw data dict without 'portfolio' key
@@ -276,8 +308,12 @@ class TestJsonRoundtrip:
         assert isinstance(result, dict)
         assert "symbol" in result["market_parameters"]
 
-    def test_import_from_json_missing_maturity_raises(self, tmp_path):
-        """Test that importing JSON with missing maturity_date raises ValueError."""
+    def test_import_from_json_missing_maturity_raises(self, tmp_path) -> None:
+        """Test importing JSON.
+
+        Test that importing JSON with missing maturity_date raises
+        ValueError.
+        """
         serializer = PortfolioSerializer(tmp_path)
 
         # Create invalid JSON file
@@ -299,14 +335,18 @@ class TestJsonRoundtrip:
         }
 
         json_path = tmp_path / "invalid.json"
-        with open(json_path, "w", encoding="utf-8") as f:
+        with Path.open(json_path, "w", encoding="utf-8") as f:
             json.dump(invalid_data, f)
 
         with pytest.raises(ValueError, match="missing maturity date"):
             serializer.import_from_json(json_path, create_portfolio=True)
 
-    def test_import_from_json_missing_strike_raises(self, tmp_path):
-        """Test that importing JSON with missing strike_price raises ValueError."""
+    def test_import_from_json_missing_strike_raises(self, tmp_path) -> None:
+        """Test that importing JSON with missing strike_price raises ValueError.
+
+        Importing the JSON should raise ValueError with message about missing
+        strike price.
+        """
         serializer = PortfolioSerializer(tmp_path)
 
         # Create invalid JSON file
@@ -330,7 +370,7 @@ class TestJsonRoundtrip:
         }
 
         json_path = tmp_path / "invalid.json"
-        with open(json_path, "w", encoding="utf-8") as f:
+        with Path.open(json_path, "w", encoding="utf-8") as f:
             json.dump(invalid_data, f)
 
         with pytest.raises(ValueError, match="missing strike price"):
@@ -344,12 +384,18 @@ class TestJsonRoundtrip:
 class TestYamlRoundtrip:
     """Test YAML export/import roundtrip."""
 
-    def test_export_to_yaml_creates_file(self, tmp_path, sample_portfolio):
+    def test_export_to_yaml_creates_file(
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
         """Test that export_to_yaml creates the file."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         output_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml",
+            sample_portfolio,
+            changelog,
+            "test.yaml",
         )
 
         assert output_path is not None
@@ -358,15 +404,19 @@ class TestYamlRoundtrip:
         assert output_path.name == "test.yaml"
 
     def test_yaml_roundtrip_preserves_market_params(
-        self, tmp_path, sample_portfolio,
-    ):
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
         """Export then import YAML — market params should match."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
 
         # Export
         output_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml",
+            sample_portfolio,
+            changelog,
+            "test.yaml",
         )
 
         # Import
@@ -389,15 +439,19 @@ class TestYamlRoundtrip:
         assert imported_params["symbol"] == sample_portfolio.symbol
 
     def test_yaml_roundtrip_preserves_positions(
-        self, tmp_path, sample_portfolio,
-    ):
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
         """Export then import YAML — positions should match."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
 
         # Export
         output_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml",
+            sample_portfolio,
+            changelog,
+            "test.yaml",
         )
 
         # Import
@@ -410,7 +464,9 @@ class TestYamlRoundtrip:
         )
 
         for orig_pos, imported_pos in zip(
-            sample_portfolio.positions, imported_portfolio.positions,
+            sample_portfolio.positions,
+            imported_portfolio.positions,
+            strict=False,
         ):
             assert imported_pos.option.strike_price == pytest.approx(
                 orig_pos.option.strike_price,
@@ -420,7 +476,7 @@ class TestYamlRoundtrip:
             )
             assert imported_pos.quantity == orig_pos.quantity
 
-    def test_yaml_roundtrip_with_maturity_days(self, tmp_path):
+    def test_yaml_roundtrip_with_maturity_days(self, tmp_path) -> None:
         """Test YAML import with maturity_days instead of maturity_date."""
         # Create YAML with maturity_days
         config = {
@@ -443,7 +499,7 @@ class TestYamlRoundtrip:
         }
 
         yaml_path = tmp_path / "maturity_days.yaml"
-        with open(yaml_path, "w", encoding="utf-8") as f:
+        with Path.open(yaml_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f)
 
         serializer = PortfolioSerializer(tmp_path)
@@ -467,7 +523,11 @@ class TestYamlRoundtrip:
 class TestCsvExport:
     """Test CSV export functionality."""
 
-    def test_export_to_csv_creates_files(self, tmp_path, sample_portfolio):
+    def test_export_to_csv_creates_files(
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
         """Test that export creates both positions and risk CSV files."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -480,7 +540,7 @@ class TestCsvExport:
         assert result["positions"].suffix == ".csv"
         assert result["risk"].suffix == ".csv"
 
-    def test_csv_positions_content(self, tmp_path, sample_portfolio):
+    def test_csv_positions_content(self, tmp_path, sample_portfolio) -> None:
         """Test that positions CSV contains correct columns and data."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -510,7 +570,7 @@ class TestCsvExport:
         assert df["option_type"].iloc[0] in [OptionType.CALL, OptionType.PUT]
         assert df["quantity"].iloc[0] in [1, -1]
 
-    def test_csv_risk_content(self, tmp_path, sample_portfolio):
+    def test_csv_risk_content(self, tmp_path, sample_portfolio) -> None:
         """Test that risk CSV contains summary stats."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -535,14 +595,16 @@ class TestCsvExport:
 class TestUniversalImport:
     """Test import_portfolio auto-detection."""
 
-    def test_import_portfolio_json(self, tmp_path, sample_portfolio):
+    def test_import_portfolio_json(self, tmp_path, sample_portfolio) -> None:
         """Test auto-detection for JSON files."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
 
         # Export as JSON
         json_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json",
+            sample_portfolio,
+            changelog,
+            "test.json",
         )
 
         # Import using universal function
@@ -552,14 +614,16 @@ class TestUniversalImport:
         assert isinstance(result["portfolio"], OptionPortfolio)
 
     @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
-    def test_import_portfolio_yaml(self, tmp_path, sample_portfolio):
+    def test_import_portfolio_yaml(self, tmp_path, sample_portfolio) -> None:
         """Test auto-detection for YAML files."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
 
         # Export as YAML
         yaml_path = serializer.export_to_yaml(
-            sample_portfolio, changelog, "test.yaml",
+            sample_portfolio,
+            changelog,
+            "test.yaml",
         )
 
         # Import using universal function
@@ -568,7 +632,7 @@ class TestUniversalImport:
         assert "portfolio" in result
         assert isinstance(result["portfolio"], OptionPortfolio)
 
-    def test_import_portfolio_unsupported_raises(self, tmp_path):
+    def test_import_portfolio_unsupported_raises(self, tmp_path) -> None:
         """Test that unsupported format raises ValueError."""
         serializer = PortfolioSerializer(tmp_path)
 
@@ -587,7 +651,7 @@ class TestUniversalImport:
 class TestLoadConfigYaml:
     """Test the standalone load_config_yaml function."""
 
-    def test_load_valid_config(self, tmp_path):
+    def test_load_valid_config(self, tmp_path) -> None:
         """Test loading a valid YAML config with all required fields."""
         # Create valid YAML config
         config = {
@@ -609,7 +673,7 @@ class TestLoadConfigYaml:
         }
 
         yaml_path = tmp_path / "config.yaml"
-        with open(yaml_path, "w", encoding="utf-8") as f:
+        with Path.open(yaml_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f)
 
         result = load_config_yaml(yaml_path)
@@ -619,12 +683,12 @@ class TestLoadConfigYaml:
         assert "positions" in result
         assert result["market_parameters"]["spot_price"] == 100.0
 
-    def test_load_missing_file_returns_none(self, tmp_path):
+    def test_load_missing_file_returns_none(self, tmp_path) -> None:
         """Test that a missing file returns None."""
         result = load_config_yaml(tmp_path / "nonexistent.yaml")
         assert result is None
 
-    def test_load_missing_required_param_returns_none(self, tmp_path):
+    def test_load_missing_required_param_returns_none(self, tmp_path) -> None:
         """Test that missing required market parameter returns None."""
         # Create YAML with missing volatility
         config = {
@@ -638,13 +702,13 @@ class TestLoadConfigYaml:
         }
 
         yaml_path = tmp_path / "invalid.yaml"
-        with open(yaml_path, "w", encoding="utf-8") as f:
+        with Path.open(yaml_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f)
 
         result = load_config_yaml(yaml_path)
         assert result is None
 
-    def test_load_invalid_structure_returns_none(self, tmp_path):
+    def test_load_invalid_structure_returns_none(self, tmp_path) -> None:
         """Test that a non-dict YAML returns None."""
         # Create YAML that's a list instead of dict
         yaml_path = tmp_path / "invalid.yaml"
@@ -653,8 +717,12 @@ class TestLoadConfigYaml:
         result = load_config_yaml(yaml_path)
         assert result is None
 
-    def test_load_missing_sections_returns_none(self, tmp_path):
-        """Test that missing market_parameters or positions section returns None."""
+    def test_load_missing_sections_returns_none(self, tmp_path) -> None:
+        """Test that missing market_parameters.
+
+        Test that missing market parameters or positions section returns
+        None.
+        """
         # Create YAML with missing positions section
         config = {
             "market_parameters": {
@@ -667,7 +735,7 @@ class TestLoadConfigYaml:
         }
 
         yaml_path = tmp_path / "incomplete.yaml"
-        with open(yaml_path, "w", encoding="utf-8") as f:
+        with Path.open(yaml_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f)
 
         result = load_config_yaml(yaml_path)
@@ -680,7 +748,7 @@ class TestLoadConfigYaml:
 class TestConvenienceFunctions:
     """Test module-level convenience functions."""
 
-    def test_export_portfolio_to_json(self, tmp_path, sample_portfolio):
+    def test_export_portfolio_to_json(self, tmp_path, sample_portfolio) -> None:
         """Test the convenience wrapper for JSON export."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -693,7 +761,7 @@ class TestConvenienceFunctions:
         assert output_path.exists()
         assert output_path.name == "convenience.json"
 
-    def test_export_portfolio_to_csv(self, tmp_path, sample_portfolio):
+    def test_export_portfolio_to_csv(self, tmp_path, sample_portfolio) -> None:
         """Test the convenience wrapper for CSV export."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -707,7 +775,7 @@ class TestConvenienceFunctions:
         assert result["risk"].exists()
 
     @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
-    def test_export_portfolio_to_yaml(self, tmp_path, sample_portfolio):
+    def test_export_portfolio_to_yaml(self, tmp_path, sample_portfolio) -> None:
         """Test the convenience wrapper for YAML export."""
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -721,13 +789,19 @@ class TestConvenienceFunctions:
         assert output_path.exists()
         assert output_path.name == "convenience.yaml"
 
-    def test_import_portfolio_from_json(self, tmp_path, sample_portfolio):
+    def test_import_portfolio_from_json(
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
         """Test the convenience wrapper for JSON import."""
         # First export
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
         json_path = serializer.export_to_json(
-            sample_portfolio, changelog, "test.json",
+            sample_portfolio,
+            changelog,
+            "test.json",
         )
 
         # Import using convenience function

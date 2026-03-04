@@ -11,8 +11,10 @@ from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 
+# ruff: noqa: S101 ANN001
 
-def _make_pricer(portfolio, **kwargs) -> BatchPricer:
+
+def _make_pricer(portfolio, **kwargs) -> BatchPricer:  # noqa: ANN003
     return BatchPricer(
         positions=portfolio.positions,
         risk_free_rate=portfolio.risk_free_rate,
@@ -26,7 +28,7 @@ def _make_pricer(portfolio, **kwargs) -> BatchPricer:
 class TestBatchPricerGreeks:
     """Test cases for BatchPricer.portfolio_greeks_at()."""
 
-    def test_portfolio_greeks_at_matches_direct_valuation(self):
+    def test_portfolio_greeks_at_matches_direct_valuation(self) -> None:
         """Greeks arrays must match direct OptionValuation at each spot."""
         valuation_date = dt.now(tz=datetime.UTC)
         maturity = valuation_date + timedelta(days=45)
@@ -48,7 +50,9 @@ class TestBatchPricerGreeks:
         pricer = _make_pricer(portfolio)
         spots = np.array([90.0, 100.0, 110.0])
         result = pricer.portfolio_greeks_at(
-            spots, valuation_date, greeks=("delta", "gamma", "vega", "theta"),
+            spots,
+            valuation_date,
+            greeks=("delta", "gamma", "vega", "theta"),
         )
 
         for i, spot in enumerate(spots):
@@ -70,7 +74,7 @@ class TestBatchPricerGreeks:
             assert np.isclose(result["vega"][i], opt.vega() * mult, atol=1e-6)
             assert np.isclose(result["theta"][i], opt.theta() * mult, atol=1e-6)
 
-    def test_net_delta_includes_underlying(self):
+    def test_net_delta_includes_underlying(self) -> None:
         """Delta array must include underlying_quantity offset at every spot."""
         valuation_date = dt.now(tz=datetime.UTC)
         maturity = valuation_date + timedelta(days=30)
@@ -90,9 +94,14 @@ class TestBatchPricerGreeks:
 
         pricer = _make_pricer(portfolio)
         spots = np.array([90.0, 100.0, 110.0])
-        result = pricer.portfolio_greeks_at(spots, valuation_date, greeks=("delta",))
+        result = pricer.portfolio_greeks_at(
+            spots,
+            valuation_date,
+            greeks=("delta",),
+        )
 
-        # Build option-only delta by creating a pricer with underlying_quantity=0
+        # Build option-only delta by creating a
+        # pricer with underlying_quantity=0
         pricer_no_underlying = BatchPricer(
             positions=portfolio.positions,
             risk_free_rate=portfolio.risk_free_rate,
@@ -101,14 +110,20 @@ class TestBatchPricerGreeks:
             grid_resolution=FDGridResolution.FAST,
         )
         result_no_underlying = pricer_no_underlying.portfolio_greeks_at(
-            spots, valuation_date, greeks=("delta",),
+            spots,
+            valuation_date,
+            greeks=("delta",),
         )
 
         expected_delta = result_no_underlying["delta"] + 50.0
         np.testing.assert_allclose(result["delta"], expected_delta, atol=1e-6)
 
-    def test_greeks_and_values_share_cache(self):
-        """After both calls, cache has exactly P entries (no duplicate constructions)."""
+    def test_greeks_and_values_share_cache(self) -> None:
+        """Test greeks and values share the same cache entries.
+
+        After both calls, cache has exactly P entries (no duplicate
+        constructions).
+        """
         valuation_date = dt.now(tz=datetime.UTC)
         maturity = valuation_date + timedelta(days=30)
 
@@ -140,7 +155,7 @@ class TestBatchPricerGreeks:
         # pylint: disable=protected-access
         assert len(pricer._cache) == len(portfolio.positions)
 
-    def test_invalid_greek_raises_value_error(self):
+    def test_invalid_greek_raises_value_error(self) -> None:
         """Requesting an unknown greek name must raise ValueError."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -164,10 +179,14 @@ class TestBatchPricerGreeks:
                 greeks=("zomega",),
             )
 
-    def test_expired_positions_delta(self):
-        """Expired positions: delta is +mult ITM call, -mult ITM put, 0 otherwise."""
+    def test_expired_positions_delta(self) -> None:
+        """Test expired positions have correct delta.
+
+        Expired positions: delta is +mult ITM call, -mult ITM put, 0 otherwise.
+        """
         now = dt.now(tz=datetime.UTC)
-        # Maturity 1 day from now; value at 2 days from now => positions are expired
+        # Maturity 1 day from now; value at 2 days from now => positions are
+        # expired
         maturity = now + timedelta(days=1)
         valuation_date = now + timedelta(days=2)
 
@@ -192,7 +211,11 @@ class TestBatchPricerGreeks:
 
         pricer = _make_pricer(portfolio)
         spots = np.array([90.0, 100.0, 110.0])
-        result = pricer.portfolio_greeks_at(spots, valuation_date, greeks=("delta",))
+        result = pricer.portfolio_greeks_at(
+            spots,
+            valuation_date,
+            greeks=("delta",),
+        )
 
         call_mult = 2 * 100
         put_mult = 3 * 100
@@ -204,7 +227,7 @@ class TestBatchPricerGreeks:
         # spot=110: call ITM (+call_mult), put OTM (0)
         assert np.isclose(result["delta"][2], call_mult, atol=1e-10)
 
-    def test_greeks_at_price_matches_portfolio_values_at(self):
+    def test_greeks_at_price_matches_portfolio_values_at(self) -> None:
         """portfolio_greeks_at price array must match portfolio_values_at."""
         valuation_date = dt.now(tz=datetime.UTC)
         maturity = valuation_date + timedelta(days=30)
@@ -227,11 +250,15 @@ class TestBatchPricerGreeks:
         spots = np.array([90.0, 100.0, 110.0])
 
         values = pricer.portfolio_values_at(spots, valuation_date)
-        greeks_result = pricer.portfolio_greeks_at(spots, valuation_date, greeks=())
+        greeks_result = pricer.portfolio_greeks_at(
+            spots,
+            valuation_date,
+            greeks=(),
+        )
 
         np.testing.assert_allclose(greeks_result["price"], values, atol=1e-6)
 
-    def test_single_spot_greeks(self):
+    def test_single_spot_greeks(self) -> None:
         """Sanity check with a 1-element spots array."""
         valuation_date = dt.now(tz=datetime.UTC)
         maturity = valuation_date + timedelta(days=30)
@@ -252,7 +279,9 @@ class TestBatchPricerGreeks:
         pricer = _make_pricer(portfolio)
         spots = np.array([100.0])
         result = pricer.portfolio_greeks_at(
-            spots, valuation_date, greeks=("delta", "gamma"),
+            spots,
+            valuation_date,
+            greeks=("delta", "gamma"),
         )
 
         assert "delta" in result

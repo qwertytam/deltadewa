@@ -9,6 +9,7 @@ from datetime import timedelta
 import numpy as np
 import pytest
 
+import deltadewa.batch_pricer as _batch_pricer_module
 import deltadewa.valuation as _valuation_module
 from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -16,11 +17,14 @@ from deltadewa.batch_pricer import BatchPricer
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.warnings import ClosedFormAccuracyWarning
 
+# ruff: noqa: S101 D102
+# pylint: disable=too-many-lines, missing-function-docstring
+
 
 class TestBatchPricer:
     """Test cases for BatchPricer class."""
 
-    def test_single_spot_matches_american_option(self):
+    def test_single_spot_matches_american_option(self) -> None:
         """Verify BatchPricer matches OptionValuation for a single spot."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -68,7 +72,7 @@ class TestBatchPricer:
 
         assert np.isclose(batch_result, expected, rtol=1e-4)
 
-    def test_multiple_spots_consistency(self):
+    def test_multiple_spots_consistency(self) -> None:
         """Verify prices are consistent across spot sweep."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,  # No underlying for clearer test
@@ -118,7 +122,7 @@ class TestBatchPricer:
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)
 
-    def test_expired_positions_use_intrinsic(self):
+    def test_expired_positions_use_intrinsic(self) -> None:
         """Verify expired positions fall back to intrinsic value."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -152,7 +156,7 @@ class TestBatchPricer:
         expected = np.array([0.0, 500.0, 1500.0])
         assert np.allclose(portfolio_values, expected, rtol=1e-10)
 
-    def test_cache_reuses_option_for_same_date(self):
+    def test_cache_reuses_option_for_same_date(self) -> None:
         """Verify QL environment is reused when date unchanged."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -193,7 +197,7 @@ class TestBatchPricer:
         assert values1[1] > 0  # At-the-money call has value
         assert values2[0] > 0
 
-    def test_cache_rebuilds_on_date_change(self):
+    def test_cache_rebuilds_on_date_change(self) -> None:
         """Verify QL environment rebuilds when date changes."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -233,7 +237,7 @@ class TestBatchPricer:
         # Value should decrease as time passes (theta decay)
         assert values1[0] > values2[0]
 
-    def test_matches_calculate_portfolio_value_at(self):
+    def test_matches_calculate_portfolio_value_at(self) -> None:
         """Verify BatchPricer matches _calculate_portfolio_value_at exactly."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -284,7 +288,7 @@ class TestBatchPricer:
         # Should match closely (within numerical precision)
         assert np.allclose(batch_values, expected_values, rtol=1e-4)
 
-    def test_underlying_position_included(self):
+    def test_underlying_position_included(self) -> None:
         """Verify underlying shares are included in total."""
         portfolio = OptionPortfolio(
             underlying_quantity=1000.0,
@@ -302,13 +306,16 @@ class TestBatchPricer:
         )
 
         spots = np.array([90.0, 100.0, 110.0])
-        portfolio_values = pricer.portfolio_values_at(spots, dt.now(tz=datetime.UTC))
+        portfolio_values = pricer.portfolio_values_at(
+            spots,
+            dt.now(tz=datetime.UTC),
+        )
 
         # Should be exactly underlying_quantity * spot
         expected = 1000.0 * spots
         assert np.allclose(portfolio_values, expected, rtol=1e-10)
 
-    def test_mixed_expired_and_alive(self):
+    def test_mixed_expired_and_alive(self) -> None:
         """Verify correct handling when some positions expired, some alive."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -342,7 +349,8 @@ class TestBatchPricer:
 
         spot = 100.0
         spots = np.array([spot])
-        # Value at a date where first option is expired but second is still alive
+        # Value at a date where first option is expired but second is still
+        # alive
         valuation_date = dt.now(tz=datetime.UTC) + timedelta(days=10)
 
         portfolio_value = pricer.portfolio_values_at(spots, valuation_date)[0]
@@ -367,7 +375,7 @@ class TestBatchPricer:
         expected = expired_value + live_value
         assert np.isclose(portfolio_value, expected, rtol=1e-4)
 
-    def test_clear_cache(self):
+    def test_clear_cache(self) -> None:
         """Verify cache clearing works."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -401,7 +409,7 @@ class TestBatchPricer:
         # pylint: disable=protected-access
         assert len(pricer._cache) == 0
 
-    def test_multiple_positions_cache(self):
+    def test_multiple_positions_cache(self) -> None:
         """Verify cache handles multiple positions correctly."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -445,7 +453,7 @@ class TestBatchPricer:
         # pylint: disable=protected-access
         assert len(pricer._cache) == 6  # 3 positions x 2 dates
 
-    def test_put_option_pricing(self):
+    def test_put_option_pricing(self) -> None:
         """Test BatchPricer works correctly for put options."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -493,7 +501,7 @@ class TestBatchPricer:
             expected = opt.price() * 100
             assert np.isclose(portfolio_values[i], expected, rtol=1e-4)
 
-    def test_expired_put_intrinsic(self):
+    def test_expired_put_intrinsic(self) -> None:
         """Test expired put uses correct intrinsic value."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -599,34 +607,46 @@ def _pricer(
 class TestBatchPricerClosedForm:
     """Tests for use_closed_form=True engine in BatchPricer."""
 
-    def test_closed_form_atm_call_close_to_fd(self):
+    def test_closed_form_atm_call_close_to_fd(self) -> None:
         """BS2002 price for ATM call should be within 2% of FD price."""
         portfolio = _make_atm_call_portfolio(days=30)
         spots = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
         valuation_date = dt.now(tz=datetime.UTC)
 
-        fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
-            spots, valuation_date,
+        fd_values = _pricer(
+            portfolio,
+            use_closed_form=False,
+        ).portfolio_values_at(
+            spots,
+            valuation_date,
         )
-        cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date,
+        cf_values = _pricer(
+            portfolio,
+            use_closed_form=True,
+        ).portfolio_values_at(
+            spots,
+            valuation_date,
         )
 
         # Near-ATM options should agree within 2%
         assert np.allclose(fd_values, cf_values, rtol=0.02)
 
-    def test_closed_form_preserves_call_monotonicity(self):
+    def test_closed_form_preserves_call_monotonicity(self) -> None:
         """Closed-form call prices must increase with spot."""
         portfolio = _make_atm_call_portfolio(days=30)
         spots = np.linspace(80.0, 120.0, 10)
         valuation_date = dt.now(tz=datetime.UTC)
 
-        cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date,
+        cf_values = _pricer(
+            portfolio,
+            use_closed_form=True,
+        ).portfolio_values_at(
+            spots,
+            valuation_date,
         )
         assert np.all(np.diff(cf_values) > 0)
 
-    def test_closed_form_put_close_to_fd(self):
+    def test_closed_form_put_close_to_fd(self) -> None:
         """BS2002 price for ATM put should be within 2% of FD price."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -645,16 +665,24 @@ class TestBatchPricerClosedForm:
         spots = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
         valuation_date = dt.now(tz=datetime.UTC)
 
-        fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
-            spots, valuation_date,
+        fd_values = _pricer(
+            portfolio,
+            use_closed_form=False,
+        ).portfolio_values_at(
+            spots,
+            valuation_date,
         )
-        cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date,
+        cf_values = _pricer(
+            portfolio,
+            use_closed_form=True,
+        ).portfolio_values_at(
+            spots,
+            valuation_date,
         )
 
         assert np.allclose(fd_values, cf_values, rtol=0.02)
 
-    def test_closed_form_european_uses_analytic_engine(self):
+    def test_closed_form_european_uses_analytic_engine(self) -> None:
         """European options use analytic BS regardless of use_closed_form."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -675,16 +703,24 @@ class TestBatchPricerClosedForm:
         valuation_date = dt.now(tz=datetime.UTC)
 
         # Both should produce identical results for European options
-        fd_values = _pricer(portfolio, use_closed_form=False).portfolio_values_at(
-            spots, valuation_date,
+        fd_values = _pricer(
+            portfolio,
+            use_closed_form=False,
+        ).portfolio_values_at(
+            spots,
+            valuation_date,
         )
-        cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, valuation_date,
+        cf_values = _pricer(
+            portfolio,
+            use_closed_form=True,
+        ).portfolio_values_at(
+            spots,
+            valuation_date,
         )
 
         assert np.allclose(fd_values, cf_values, rtol=1e-6)
 
-    def test_closed_form_stores_flag_on_instance(self):
+    def test_closed_form_stores_flag_on_instance(self) -> None:
         """use_closed_form is stored as an instance attribute."""
         portfolio = _make_atm_call_portfolio()
         pricer_fd = _pricer(portfolio, use_closed_form=False)
@@ -693,8 +729,12 @@ class TestBatchPricerClosedForm:
         assert pricer_fd.use_closed_form is False
         assert pricer_cf.use_closed_form is True
 
-    def test_closed_form_expired_positions_still_use_intrinsic(self):
-        """Expired positions must use intrinsic value even with closed_form=True."""
+    def test_closed_form_expired_positions_still_use_intrinsic(self) -> None:
+        """Test expired positions.
+
+        Expired positions must use intrinsic value even with
+        closed_form=True.
+        """
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
             spot_price=100.0,
@@ -710,14 +750,18 @@ class TestBatchPricerClosedForm:
         spots = np.array([90.0, 100.0, 110.0])
         future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
 
-        cf_values = _pricer(portfolio, use_closed_form=True).portfolio_values_at(
-            spots, future_date,
+        cf_values = _pricer(
+            portfolio,
+            use_closed_form=True,
+        ).portfolio_values_at(
+            spots,
+            future_date,
         )
 
         expected = np.array([0.0, 500.0, 1500.0])
         assert np.allclose(cf_values, expected, rtol=1e-10)
 
-    def test_closed_form_and_fd_cache_independently(self):
+    def test_closed_form_and_fd_cache_independently(self) -> None:
         """Two pricers with different engine flags maintain separate caches."""
         portfolio = _make_atm_call_portfolio()
         spots = np.array([100.0])
@@ -733,8 +777,8 @@ class TestBatchPricerClosedForm:
         assert len(pricer_fd._cache) == 1
         assert len(pricer_cf._cache) == 1
         # The cached OptionValuation objects are distinct instances
-        fd_opt = list(pricer_fd._cache.values())[0]
-        cf_opt = list(pricer_cf._cache.values())[0]
+        fd_opt = list(pricer_fd._cache.values())[0]  # noqa: RUF015
+        cf_opt = list(pricer_cf._cache.values())[0]  # noqa: RUF015
         assert fd_opt is not cf_opt
         assert fd_opt.use_closed_form is False
         assert cf_opt.use_closed_form is True
@@ -749,8 +793,11 @@ class TestClosedFormAccuracyWarning:
     """Tests for ClosedFormAccuracyWarning emitted by BatchPricer."""
 
     @pytest.fixture(autouse=True)
-    def _reset_warning_registry(self):
-        """Clear the valuation module's __warningregistry__ before/after each test."""
+    def _reset_warning_registry(self):  # noqa: ANN202
+        """Reset warning registry.
+
+        Clear the valuation module's __warningregistry__ before/after each test
+        """
         if hasattr(_valuation_module, "__warningregistry__"):
             _valuation_module.__warningregistry__.clear()
         yield
@@ -758,7 +805,7 @@ class TestClosedFormAccuracyWarning:
             _valuation_module.__warningregistry__.clear()
 
     @staticmethod
-    def _clear_registry():
+    def _clear_registry():  # noqa: ANN205
         """Clear inside a catch_warnings block to defeat deduplication."""
         if hasattr(_valuation_module, "__warningregistry__"):
             _valuation_module.__warningregistry__.clear()
@@ -841,87 +888,117 @@ class TestClosedFormAccuracyWarning:
         )
         return portfolio
 
-    def test_no_warning_for_fd_engine(self):
+    def test_no_warning_for_fd_engine(self) -> None:
         """No ClosedFormAccuracyWarning when use_closed_form=False."""
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=False)
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([125.0]),
+                dt.now(tz=datetime.UTC),
+            )
 
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) == 0
 
-    def test_no_warning_for_near_atm_normal_vol(self):
+    def test_no_warning_for_near_atm_normal_vol(self) -> None:
         """No warning for a near-ATM call with normal vol using closed form."""
         portfolio = _make_atm_call_portfolio(days=30, vol=0.25)
         pricer = _pricer(portfolio, use_closed_form=True)
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
-            pricer.portfolio_values_at(np.array([100.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([100.0]),
+                dt.now(tz=datetime.UTC),
+            )
 
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) == 0
 
-    def test_warning_for_deep_itm_call(self):
+    def test_warning_for_deep_itm_call(self) -> None:
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()  # ← inside the block
-            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([125.0]),
+                dt.now(tz=datetime.UTC),
+            )
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1
         assert "deep itm call" in str(cf_warnings[0].message).lower()
 
-    def test_warning_for_deep_itm_put(self):
+    def test_warning_for_deep_itm_put(self) -> None:
         portfolio = self._deep_itm_put_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([75.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([75.0]),
+                dt.now(tz=datetime.UTC),
+            )
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1
         assert "deep itm put" in str(cf_warnings[0].message).lower()
 
-    def test_warning_for_short_dated_put(self):
+    def test_warning_for_short_dated_put(self) -> None:
         portfolio = self._short_dated_put_portfolio(days=3)
         pricer = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([100.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([100.0]),
+                dt.now(tz=datetime.UTC),
+            )
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1
         assert "short-dated put" in str(cf_warnings[0].message).lower()
 
-    def test_warning_for_high_vol(self):
+    def test_warning_for_high_vol(self) -> None:
         portfolio = self._high_vol_portfolio(vol=0.90)
         pricer = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([100.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([100.0]),
+                dt.now(tz=datetime.UTC),
+            )
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) >= 1
         assert "volatility" in str(cf_warnings[0].message).lower()
 
-    def test_warning_emitted_once_per_position_not_per_spot(self):
+    def test_warning_emitted_once_per_position_not_per_spot(self) -> None:
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         spots = np.linspace(110.0, 130.0, 20)
@@ -930,11 +1007,13 @@ class TestClosedFormAccuracyWarning:
             self._clear_registry()
             pricer.portfolio_values_at(spots, dt.now(tz=datetime.UTC))
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) == 1  # exactly once, not 20
 
-    def test_warning_not_re_emitted_from_cache_hit(self):
+    def test_warning_not_re_emitted_from_cache_hit(self) -> None:
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         spots = np.array([125.0])
@@ -942,42 +1021,65 @@ class TestClosedFormAccuracyWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(spots, valuation_date)  # cache miss → warns
-            pricer.portfolio_values_at(spots, valuation_date)  # cache hit → silent
+            pricer.portfolio_values_at(
+                spots,
+                valuation_date,
+            )  # cache miss → warns
+            pricer.portfolio_values_at(
+                spots,
+                valuation_date,
+            )  # cache hit → silent
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert len(cf_warnings) == 1
 
-    def test_warning_can_be_turned_into_error(self):
+    def test_warning_can_be_turned_into_error(self) -> None:
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         # First verify warning fires
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([125.0]),
+                dt.now(tz=datetime.UTC),
+            )
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
-        assert len(cf_warnings) >= 1, "Warning should be emitted for deep ITM call"
+        assert (
+            len(cf_warnings) >= 1
+        ), "Warning should be emitted for deep ITM call"
         # Now promote to error with a fresh pricer
         pricer2 = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings():
             warnings.simplefilter("error", ClosedFormAccuracyWarning)
             self._clear_registry()
             with pytest.raises(ClosedFormAccuracyWarning):
-                pricer2.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
+                pricer2.portfolio_values_at(
+                    np.array([125.0]),
+                    dt.now(tz=datetime.UTC),
+                )
 
-    def test_warning_message_contains_suppress_hint(self):
+    def test_warning_message_contains_suppress_hint(self) -> None:
         portfolio = self._deep_itm_call_portfolio()
         pricer = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always", ClosedFormAccuracyWarning)
             self._clear_registry()
-            pricer.portfolio_values_at(np.array([125.0]), dt.now(tz=datetime.UTC))
+            pricer.portfolio_values_at(
+                np.array([125.0]),
+                dt.now(tz=datetime.UTC),
+            )
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         assert "filterwarnings" in str(cf_warnings[0].message).lower()
 
@@ -990,52 +1092,60 @@ class TestClosedFormAccuracyWarning:
 class TestBatchPricerThreading:
     """Tests for max_workers > 1 parallel pricing in BatchPricer."""
 
-    def test_parallel_matches_sequential_single_position(self):
+    def test_parallel_matches_sequential_single_position(self) -> None:
         """Parallel result matches sequential for a single position."""
         portfolio = _make_atm_call_portfolio()
         spots = np.linspace(80.0, 120.0, 15)
         valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
-            spots, valuation_date,
+            spots,
+            valuation_date,
         )
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, valuation_date,
+            spots,
+            valuation_date,
         )
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
 
-    def test_parallel_matches_sequential_multi_position(self):
+    def test_parallel_matches_sequential_multi_position(self) -> None:
         """Parallel result matches sequential for multiple positions."""
         portfolio = _make_multi_position_portfolio(n=4)
         spots = np.linspace(80.0, 120.0, 20)
         valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
-            spots, valuation_date,
+            spots,
+            valuation_date,
         )
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, valuation_date,
+            spots,
+            valuation_date,
         )
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
 
-    def test_parallel_closed_form_matches_sequential_closed_form(self):
+    def test_parallel_closed_form_matches_sequential_closed_form(self) -> None:
         """Parallel + closed-form matches sequential + closed-form."""
         portfolio = _make_multi_position_portfolio(n=4)
         spots = np.linspace(80.0, 120.0, 20)
         valuation_date = dt.now(tz=datetime.UTC)
 
         seq_values = _pricer(
-            portfolio, use_closed_form=True, max_workers=1,
+            portfolio,
+            use_closed_form=True,
+            max_workers=1,
         ).portfolio_values_at(spots, valuation_date)
         par_values = _pricer(
-            portfolio, use_closed_form=True, max_workers=4,
+            portfolio,
+            use_closed_form=True,
+            max_workers=4,
         ).portfolio_values_at(spots, valuation_date)
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
 
-    def test_max_workers_one_disables_threading(self):
+    def test_max_workers_one_disables_threading(self) -> None:
         """max_workers=1 should not spawn any extra threads."""
         portfolio = _make_atm_call_portfolio()
         pricer = _pricer(portfolio, max_workers=1)
@@ -1047,8 +1157,11 @@ class TestBatchPricerThreading:
         # No new persistent threads should remain after the call
         assert threads_after <= threads_before
 
-    def test_parallel_cache_populated_correctly(self):
-        """Cache entries are created exactly once per (position, date) in parallel."""
+    def test_parallel_cache_populated_correctly(self) -> None:
+        """Test cache population in parallel mode.
+
+        Cache entries are created exactly once per (position, date) in parallel
+        """
         portfolio = _make_multi_position_portfolio(n=4)
         pricer = _pricer(portfolio, max_workers=4)
         valuation_date = dt.now(tz=datetime.UTC)
@@ -1063,8 +1176,11 @@ class TestBatchPricerThreading:
         # pylint: disable=protected-access
         assert len(pricer._cache) == 4
 
-    def test_parallel_underlying_only_no_options(self):
-        """Parallel pricer handles an underlying-only portfolio without errors."""
+    def test_parallel_underlying_only_no_options(self) -> None:
+        """Test parallel pricer with an underlying-only portfolio (no options).
+
+        Parallel pricer handles an underlying-only portfolio without errors.
+        """
         portfolio = OptionPortfolio(
             underlying_quantity=1000.0,
             spot_price=100.0,
@@ -1072,12 +1188,13 @@ class TestBatchPricerThreading:
         )
         spots = np.array([90.0, 100.0, 110.0])
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, dt.now(tz=datetime.UTC),
+            spots,
+            dt.now(tz=datetime.UTC),
         )
 
         assert np.allclose(par_values, 1000.0 * spots, rtol=1e-10)
 
-    def test_parallel_expired_positions_handled(self):
+    def test_parallel_expired_positions_handled(self) -> None:
         """Parallel pricer handles expired positions correctly."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -1101,15 +1218,17 @@ class TestBatchPricerThreading:
         future_date = dt.now(tz=datetime.UTC) + timedelta(days=2)
 
         seq_values = _pricer(portfolio, max_workers=1).portfolio_values_at(
-            spots, future_date,
+            spots,
+            future_date,
         )
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
-            spots, future_date,
+            spots,
+            future_date,
         )
 
         assert np.allclose(seq_values, par_values, rtol=1e-6)
 
-    def test_parallel_warning_emitted_once_per_position(self):
+    def test_parallel_warning_emitted_once_per_position(self) -> None:
         """Accuracy warning fires once per position in parallel mode."""
         portfolio = OptionPortfolio(
             underlying_quantity=0.0,
@@ -1134,20 +1253,23 @@ class TestBatchPricerThreading:
             # so prior-test deduplication entries don't suppress these warnings.
             if hasattr(_valuation_module, "__warningregistry__"):
                 _valuation_module.__warningregistry__.clear()
-            import deltadewa.batch_pricer as _batch_pricer_module
+
             if hasattr(_batch_pricer_module, "__warningregistry__"):
                 _batch_pricer_module.__warningregistry__.clear()
             pricer.portfolio_values_at(
-                np.linspace(110.0, 130.0, 10), dt.now(tz=datetime.UTC),
+                np.linspace(110.0, 130.0, 10),
+                dt.now(tz=datetime.UTC),
             )
 
         cf_warnings = [
-            w for w in caught if issubclass(w.category, ClosedFormAccuracyWarning)
+            w
+            for w in caught
+            if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
         # One warning per position (2 positions), not one per spot (10 spots)
         assert len(cf_warnings) == 2
 
-    def test_negative_max_workers_clamped_to_one(self):
+    def test_negative_max_workers_clamped_to_one(self) -> None:
         """max_workers <= 0 is silently clamped to 1."""
         portfolio = _make_atm_call_portfolio()
         pricer = _pricer(portfolio, max_workers=0)

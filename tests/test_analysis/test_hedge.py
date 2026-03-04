@@ -10,7 +10,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestRecommendationsMixinHedge:
     """Test cases for RecommendationsMixin hedge functionality."""
 
-    def test_calculate_hedge_actions_basic(self):
+    def test_calculate_hedge_actions_basic(self) -> None:
         """Test basic hedge action calculation."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -51,7 +51,7 @@ class TestRecommendationsMixinHedge:
         assert "shares" in result["underlying_trade"]
         assert "cost" in result["underlying_trade"]
 
-    def test_calculate_hedge_actions_without_alternatives(self):
+    def test_calculate_hedge_actions_without_alternatives(self) -> None:
         """Test hedge actions without option alternatives."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -75,7 +75,7 @@ class TestRecommendationsMixinHedge:
         assert "option_alternatives" in result
         assert result["option_alternatives"] == []
 
-    def test_calculate_hedge_actions_with_alternatives(self):
+    def test_calculate_hedge_actions_with_alternatives(self) -> None:
         """Test hedge actions with option alternatives."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -110,7 +110,7 @@ class TestRecommendationsMixinHedge:
         if result["target_state"]["delta_change_needed"] >= 1:
             assert isinstance(result["option_alternatives"], list)
 
-    def test_calculate_option_alternatives(self):
+    def test_calculate_option_alternatives(self) -> None:
         """Test _calculate_option_alternatives method."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -145,7 +145,7 @@ class TestRecommendationsMixinHedge:
             assert "price" in alt
             assert "cost" in alt
 
-    def test_calculate_option_alternatives_max_limit(self):
+    def test_calculate_option_alternatives_max_limit(self) -> None:
         """Test max_alternatives parameter."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,

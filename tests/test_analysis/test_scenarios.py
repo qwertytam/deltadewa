@@ -12,7 +12,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestScenariosMixin:
     """Test cases for ScenariosMixin."""
 
-    def test_calculate_portfolio_value_at(self):
+    def test_calculate_portfolio_value_at(self) -> None:
         """Test _calculate_portfolio_value_at method."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -33,13 +33,14 @@ class TestScenariosMixin:
         # Calculate value at current spot and date
         # pylint: disable=protected-access
         value = analyzer._calculate_portfolio_value_at(
-            spot=100.0, valuation_date=datetime.now(tz=UTC),
+            spot=100.0,
+            valuation_date=datetime.now(tz=UTC),
         )
 
         assert isinstance(value, float)
         assert value != 0.0
 
-    def test_calculate_pnl_at_expiry_vectorized(self):
+    def test_calculate_pnl_at_expiry_vectorized(self) -> None:
         """Test _calculate_pnl_at_expiry_vectorized method."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -60,13 +61,14 @@ class TestScenariosMixin:
         spot_scenarios = np.array([90, 95, 100, 105, 110, 115])
         # pylint: disable=protected-access
         pnl = analyzer._calculate_pnl_at_expiry_vectorized(
-            spot_scenarios=spot_scenarios, include_underlying=True,
+            spot_scenarios=spot_scenarios,
+            include_underlying=True,
         )
 
         assert isinstance(pnl, np.ndarray)
         assert len(pnl) == len(spot_scenarios)
 
-    def test_scenario_grid_pnl(self):
+    def test_scenario_grid_pnl(self) -> None:
         """Test scenario_grid with PnL metric."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -92,7 +94,9 @@ class TestScenariosMixin:
         ]
 
         result = analyzer.scenario_grid(
-            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl",
+            spot_scenarios=spot_scenarios,
+            time_points=time_points,
+            metric="pnl",
         )
 
         assert hasattr(result, "columns")
@@ -101,7 +105,7 @@ class TestScenariosMixin:
         assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(time_points)
 
-    def test_scenario_grid_delta(self):
+    def test_scenario_grid_delta(self) -> None:
         """Test scenario_grid with delta metric."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -130,7 +134,7 @@ class TestScenariosMixin:
         assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(time_points)
 
-    def test_scenario_grid_spot_vol_pnl(self):
+    def test_scenario_grid_spot_vol_pnl(self) -> None:
         """Test scenario_grid_spot_vol with PnL metric."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -162,7 +166,7 @@ class TestScenariosMixin:
         assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(vol_scenarios)
 
-    def test_scenario_grid_spot_vol_vega(self):
+    def test_scenario_grid_spot_vol_vega(self) -> None:
         """Test scenario_grid_spot_vol with vega metric."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -191,7 +195,7 @@ class TestScenariosMixin:
         assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(vol_scenarios)
 
-    def test_scenario_grid_restores_state(self):
+    def test_scenario_grid_restores_state(self) -> None:
         """Test that scenario_grid restores original portfolio state."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,

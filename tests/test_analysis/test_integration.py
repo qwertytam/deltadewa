@@ -12,7 +12,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestPortfolioAnalyzerIntegration:
     """Integration tests for full PortfolioAnalyzer with all mixins."""
 
-    def test_full_analysis_workflow(self):
+    def test_full_analysis_workflow(self) -> None:
         """Test complete analysis workflow with all features."""
         # Create portfolio with positions
         portfolio = OptionPortfolio(
@@ -79,7 +79,9 @@ class TestPortfolioAnalyzerIntegration:
         spot_scenarios = np.array([95, 100, 105])
         time_points = [datetime.now(tz=UTC)]
         scenario_result = analyzer.scenario_grid(
-            spot_scenarios=spot_scenarios, time_points=time_points, metric="pnl",
+            spot_scenarios=spot_scenarios,
+            time_points=time_points,
+            metric="pnl",
         )
         assert len(scenario_result) > 0
 
@@ -101,7 +103,7 @@ class TestPortfolioAnalyzerIntegration:
         insights = analyzer.generate_insights()
         assert isinstance(insights, list)
 
-    def test_all_methods_accessible(self):
+    def test_all_methods_accessible(self) -> None:
         """Test that all methods from all mixins are accessible."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -140,7 +142,7 @@ class TestPortfolioAnalyzerIntegration:
         assert callable(analyzer.format_risk_summary)
         assert callable(analyzer.generate_insights)
 
-    def test_mixin_methods_work_together(self):
+    def test_mixin_methods_work_together(self) -> None:
         """Test that methods from different mixins work together."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -179,7 +181,7 @@ class TestPortfolioAnalyzerIntegration:
         insights = analyzer.generate_insights()
         assert isinstance(insights, list)
 
-    def test_portfolio_analyzer_with_complex_portfolio(self):
+    def test_portfolio_analyzer_with_complex_portfolio(self) -> None:
         """Test analyzer with complex multi-position portfolio."""
         portfolio = OptionPortfolio(
             underlying_quantity=1000.0,
@@ -196,12 +198,9 @@ class TestPortfolioAnalyzerIntegration:
             for j, days in enumerate(maturities):
                 portfolio.add_position(
                     strike_price=float(strike),
-                    maturity_date=datetime.now(tz=UTC)
-                    + timedelta(days=days),
+                    maturity_date=datetime.now(tz=UTC) + timedelta(days=days),
                     quantity=(-1) ** (i + j),  # Mix of long/short
-                    option_type=(
-                        OptionType.CALL if i % 2 == 0 else OptionType.PUT
-                    ),
+                    option_type=(OptionType.CALL if i % 2 == 0 else OptionType.PUT),
                 )
 
         analyzer = PortfolioAnalyzer(portfolio)

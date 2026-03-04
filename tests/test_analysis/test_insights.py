@@ -10,7 +10,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestSummaryMixinInsights:
     """Test cases for SummaryMixin insights functionality."""
 
-    def test_format_risk_summary_basic(self):
+    def test_format_risk_summary_basic(self) -> None:
         """Test basic risk summary formatting."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -37,7 +37,7 @@ class TestSummaryMixinInsights:
         assert "VOLATILITY RISK" in summary
         assert "TIME DECAY" in summary
 
-    def test_format_risk_summary_with_stats(self):
+    def test_format_risk_summary_with_stats(self) -> None:
         """Test risk summary with provided stats."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -59,7 +59,7 @@ class TestSummaryMixinInsights:
         assert isinstance(summary, str)
         assert "PORTFOLIO RISK SUMMARY" in summary
 
-    def test_format_risk_summary_empty_portfolio(self):
+    def test_format_risk_summary_empty_portfolio(self) -> None:
         """Test risk summary with empty portfolio."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)
@@ -70,7 +70,7 @@ class TestSummaryMixinInsights:
         # Empty portfolio should still produce a summary
         assert len(summary) > 0
 
-    def test_generate_insights_basic(self):
+    def test_generate_insights_basic(self) -> None:
         """Test basic insights generation."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -93,7 +93,7 @@ class TestSummaryMixinInsights:
         # Should have at least some insights
         assert len(insights) >= 0
 
-    def test_generate_insights_positive_carry(self):
+    def test_generate_insights_positive_carry(self) -> None:
         """Test insights with positive carry position."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -120,7 +120,7 @@ class TestSummaryMixinInsights:
         ]
         assert len(carry_insights) > 0
 
-    def test_generate_insights_negative_carry(self):
+    def test_generate_insights_negative_carry(self) -> None:
         """Test insights with negative carry position."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -141,7 +141,7 @@ class TestSummaryMixinInsights:
 
         assert isinstance(insights, list)
 
-    def test_generate_insights_empty_portfolio(self):
+    def test_generate_insights_empty_portfolio(self) -> None:
         """Test insights generation with empty portfolio."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)
@@ -152,7 +152,7 @@ class TestSummaryMixinInsights:
         # Empty portfolio should produce minimal or no insights
         assert len(insights) >= 0
 
-    def test_generate_insights_high_concentration(self):
+    def test_generate_insights_high_concentration(self) -> None:
         """Test insights detect high concentration."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -164,8 +164,7 @@ class TestSummaryMixinInsights:
         for _ in range(5):
             portfolio.add_position(
                 strike_price=105.0,
-                maturity_date=datetime.now(tz=UTC)
-                + timedelta(days=30),
+                maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )

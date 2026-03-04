@@ -9,11 +9,13 @@ from deltadewa.config import (
     get_export_dir_from_widget,
 )
 
+# ruff: noqa: S101 ANN001
+
 
 class TestCreateExportDirWidget:
     """Tests for create_export_dir_widget."""
 
-    def test_returns_vbox_widget(self, tmp_path):
+    def test_returns_vbox_widget(self, tmp_path) -> None:
         """Test that the function returns an ipywidgets.VBox."""
         widget = create_export_dir_widget(
             default_dir=str(tmp_path / "exports"),
@@ -22,8 +24,12 @@ class TestCreateExportDirWidget:
 
         assert isinstance(widget, widgets.VBox)
 
-    def test_default_dir_creates_directory(self, tmp_path):
-        """Test that the default directory is created on widget initialization."""
+    def test_default_dir_creates_directory(self, tmp_path) -> None:
+        """Test that the default directory is created on widget initialization.
+
+        The widget should create the directory specified by default_dir if it
+        does not already exist.
+        """
         export_dir = tmp_path / "test_exports"
         assert not export_dir.exists()
 
@@ -34,7 +40,7 @@ class TestCreateExportDirWidget:
 
         assert export_dir.exists()
 
-    def test_export_dir_attribute_set(self, tmp_path):
+    def test_export_dir_attribute_set(self, tmp_path) -> None:
         """Test that the widget has an 'export_dir' attribute set to a Path."""
         export_dir = tmp_path / "exports"
 
@@ -46,7 +52,7 @@ class TestCreateExportDirWidget:
         assert hasattr(widget, "export_dir")
         assert isinstance(widget.export_dir, Path)
 
-    def test_widget_has_children(self, tmp_path):
+    def test_widget_has_children(self, tmp_path) -> None:
         """Test that the VBox contains expected child widgets."""
         widget = create_export_dir_widget(
             default_dir=str(tmp_path / "exports"),
@@ -74,7 +80,7 @@ class TestCreateExportDirWidget:
         assert has_hbox, "Widget should contain HBox widgets"
         assert has_output, "Widget should contain Output widget"
 
-    def test_show_browser_false_hides_open_button(self, tmp_path):
+    def test_show_browser_false_hides_open_button(self, tmp_path) -> None:
         """Test that show_browser=False omits the 'Open in Finder' button."""
         widget = create_export_dir_widget(
             default_dir=str(tmp_path / "exports"),
@@ -83,12 +89,12 @@ class TestCreateExportDirWidget:
 
         # Check that no button with "Open in Finder" text exists
         # by searching through all children recursively
-        def find_buttons(w):
+        def find_buttons(w) -> list[widgets.Button]:
             buttons = []
             if isinstance(w, widgets.Button):
                 buttons.append(w)
             if hasattr(w, "children"):
-                for child in w.children:  # type: ignore
+                for child in w.children:
                     buttons.extend(find_buttons(child))
             return buttons
 
@@ -103,7 +109,7 @@ class TestCreateExportDirWidget:
             len(open_buttons) == 0
         ), "No 'Open in Finder' button should exist when show_browser=False"
 
-    def test_custom_default_dir(self, tmp_path):
+    def test_custom_default_dir(self, tmp_path) -> None:
         """Test widget creation with a custom default directory."""
         custom_dir = tmp_path / "my_custom_dir"
 
@@ -123,7 +129,7 @@ class TestCreateExportDirWidget:
 class TestGetExportDirFromWidget:
     """Tests for get_export_dir_from_widget."""
 
-    def test_extracts_path(self, tmp_path):
+    def test_extracts_path(self, tmp_path) -> None:
         """Test that get_export_dir_from_widget returns the correct Path."""
         export_dir = tmp_path / "exports"
 
@@ -136,7 +142,7 @@ class TestGetExportDirFromWidget:
 
         assert extracted_path == export_dir
 
-    def test_returns_path_type(self, tmp_path):
+    def test_returns_path_type(self, tmp_path) -> None:
         """Test that the returned value is a Path instance."""
         widget = create_export_dir_widget(
             default_dir=str(tmp_path / "exports"),

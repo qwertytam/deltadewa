@@ -5,16 +5,18 @@ from datetime import UTC, datetime, timedelta
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
+# ruff: noqa: S101
+
 
 class TestPortfolioConsistency:
     """Tests for portfolio logic and data integrity."""
 
-    def test_portfolio_initialization_sets_symbol(self):
+    def test_portfolio_initialization_sets_symbol(self) -> None:
         """Verify portfolio has a symbol on init."""
         portfolio = OptionPortfolio(symbol="SPX", spot_price=4000)
         assert portfolio.symbol == "SPX"
 
-    def test_add_position_inherits_symbol(self):
+    def test_add_position_inherits_symbol(self) -> None:
         """Verify adding a position automatically inherits portfolio symbol."""
         portfolio = OptionPortfolio(symbol="TSLA", spot_price=200)
 

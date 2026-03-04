@@ -15,9 +15,7 @@ import pandas as pd
 
 from deltadewa.constants import OptionType
 from deltadewa.dashboard.position_detail import (  # module-level private helper
-    PositionDetailDisplay,
-    _fmt_enum_val,
-)
+    PositionDetailDisplay, _fmt_enum_val)
 
 # ===========================================================================
 # _fmt_enum_val

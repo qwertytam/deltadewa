@@ -13,7 +13,7 @@ class TestPortfolioWidgets:
     """Test cases for PortfolioWidgets class."""
 
     @pytest.fixture
-    def mock_portfolio(self):
+    def mock_portfolio(self) -> None:
         """Create a mock portfolio for testing."""
         portfolio = Mock()
         portfolio.spot_price = 100.0
@@ -27,7 +27,7 @@ class TestPortfolioWidgets:
         return portfolio
 
     @pytest.fixture
-    def mock_serializer(self):
+    def mock_serializer(self) -> None:
         """Create a mock serializer for testing."""
         serializer = Mock()
         serializer.serialize = Mock(return_value="serialized_data")
@@ -35,7 +35,7 @@ class TestPortfolioWidgets:
         return serializer
 
     @pytest.fixture
-    def mock_changelog(self):
+    def mock_changelog(self) -> None:
         """Create a mock changelog for testing."""
         changelog = Mock()
         changelog.log = Mock()

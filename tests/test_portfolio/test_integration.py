@@ -7,24 +7,22 @@ import numpy as np
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.portfolio.factory import (
-    create_demo_portfolio,
-    create_empty_portfolio,
-)
+from deltadewa.portfolio.factory import (create_demo_portfolio,
+                                         create_empty_portfolio)
 from deltadewa.portfolio.position import OptionPosition
 
 
 class TestPortfolioIntegration:
     """Integration tests for full portfolio functionality."""
 
-    def test_imports(self):
+    def test_imports(self) -> None:
         """Test that all expected classes can be imported."""
         assert OptionPortfolio is not None
         assert OptionPosition is not None
         assert create_empty_portfolio is not None
         assert create_demo_portfolio is not None
 
-    def test_full_workflow(self):
+    def test_full_workflow(self) -> None:
         """Test a complete portfolio workflow."""
         # Create portfolio
         portfolio = OptionPortfolio(
@@ -83,7 +81,7 @@ class TestPortfolioIntegration:
         )
         assert len(scenarios) == 5
 
-    def test_complex_strategy(self):
+    def test_complex_strategy(self) -> None:
         """Test a complex options strategy (iron condor)."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -138,7 +136,7 @@ class TestPortfolioIntegration:
         # Note: Depending on pricing, might be 0, 2, or 4 breakevens
         assert isinstance(breakevens, list)
 
-    def test_position_update_and_removal(self):
+    def test_position_update_and_removal(self) -> None:
         """Test updating and removing positions."""
         portfolio = create_demo_portfolio()
 
@@ -157,7 +155,7 @@ class TestPortfolioIntegration:
         portfolio.clear_positions()
         assert len(portfolio.positions) == 0
 
-    def test_market_conditions_update(self):
+    def test_market_conditions_update(self) -> None:
         """Test updating market conditions across portfolio."""
         portfolio = create_demo_portfolio()
 
@@ -167,7 +165,7 @@ class TestPortfolioIntegration:
         assert portfolio.spot_price == 110.0
         assert portfolio.spot_price != original_spot
 
-    def test_custom_volatility_positions(self):
+    def test_custom_volatility_positions(self) -> None:
         """Test portfolio with custom volatility positions."""
         portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
 
@@ -198,7 +196,7 @@ class TestPortfolioIntegration:
         assert portfolio.positions[0].option.volatility == 0.25
         assert portfolio.positions[1].option.volatility == 0.3
 
-    def test_dataframe_export(self):
+    def test_dataframe_export(self) -> None:
         """Test exporting portfolio to DataFrame."""
         portfolio = create_demo_portfolio()
 
@@ -209,7 +207,7 @@ class TestPortfolioIntegration:
         assert "option_type" in df.columns
         assert "quantity" in df.columns
 
-    def test_summary_methods(self):
+    def test_summary_methods(self) -> None:
         """Test summary generation methods."""
         portfolio = create_demo_portfolio()
 
@@ -228,7 +226,7 @@ class TestPortfolioIntegration:
         assert isinstance(stats, dict)
         assert "total_positions" in stats
 
-    def test_risk_reward_full_analysis(self):
+    def test_risk_reward_full_analysis(self) -> None:
         """Test complete risk/reward analysis using PortfolioAnalyzer."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -261,7 +259,7 @@ class TestPortfolioIntegration:
         for key in expected_keys:
             assert analysis[key] is not None, f"Missing key in analysis: {key}"
 
-    def test_empty_portfolio_operations(self):
+    def test_empty_portfolio_operations(self) -> None:
         """Test that operations work on empty portfolio."""
         portfolio = create_empty_portfolio()
 

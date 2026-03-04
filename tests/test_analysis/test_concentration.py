@@ -10,7 +10,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestRecommendationsMixinConcentration:
     """Test cases for RecommendationsMixin concentration functionality."""
 
-    def test_analyze_risk_concentration_empty(self):
+    def test_analyze_risk_concentration_empty(self) -> None:
         """Test concentration analysis on empty portfolio."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)
@@ -24,7 +24,7 @@ class TestRecommendationsMixinConcentration:
         assert len(result["by_maturity"]) == 0
         assert len(result["concentration_scores"]) == 0
 
-    def test_analyze_risk_concentration_with_positions(self):
+    def test_analyze_risk_concentration_with_positions(self) -> None:
         """Test concentration analysis with positions."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -63,7 +63,7 @@ class TestRecommendationsMixinConcentration:
             assert "value" in result["by_strike"]["delta"][0]
             assert "percentage" in result["by_strike"]["delta"][0]
 
-    def test_analyze_risk_concentration_custom_metrics(self):
+    def test_analyze_risk_concentration_custom_metrics(self) -> None:
         """Test concentration analysis with custom metrics."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -85,7 +85,7 @@ class TestRecommendationsMixinConcentration:
         assert "by_strike" in result
         assert "by_maturity" in result
 
-    def test_analyze_risk_concentration_top_n(self):
+    def test_analyze_risk_concentration_top_n(self) -> None:
         """Test top_n parameter limits results."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -97,8 +97,7 @@ class TestRecommendationsMixinConcentration:
         for strike in [100, 105, 110, 115, 120]:
             portfolio.add_position(
                 strike_price=float(strike),
-                maturity_date=datetime.now(tz=UTC)
-                + timedelta(days=30),
+                maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )
@@ -110,7 +109,7 @@ class TestRecommendationsMixinConcentration:
         if "delta" in result["by_strike"]:
             assert len(result["by_strike"]["delta"]) <= 2
 
-    def test_empty_concentration(self):
+    def test_empty_concentration(self) -> None:
         """Test _empty_concentration returns correct structure."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)

@@ -10,7 +10,7 @@ from deltadewa.portfolio.core import OptionPortfolio, OptionPortfolioBase
 class TestOptionPortfolioBase:
     """Test cases for OptionPortfolioBase class."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test OptionPortfolioBase can be instantiated."""
         portfolio = OptionPortfolioBase(
             underlying_quantity=100.0,
@@ -30,7 +30,7 @@ class TestOptionPortfolioBase:
         assert portfolio.symbol == "TEST"
         assert len(portfolio.positions) == 0
 
-    def test_add_position(self):
+    def test_add_position(self) -> None:
         """Test adding a position to the portfolio."""
         portfolio = OptionPortfolioBase()
 
@@ -44,7 +44,7 @@ class TestOptionPortfolioBase:
         assert len(portfolio.positions) == 1
         assert portfolio.positions[0].quantity == 1
 
-    def test_add_position_with_custom_volatility(self):
+    def test_add_position_with_custom_volatility(self) -> None:
         """Test adding position with custom volatility."""
         portfolio = OptionPortfolioBase(volatility=0.2)
 
@@ -60,7 +60,7 @@ class TestOptionPortfolioBase:
         assert portfolio.positions[0].custom_volatility is True
         assert portfolio.positions[0].option.volatility == 0.3
 
-    def test_remove_position(self):
+    def test_remove_position(self) -> None:
         """Test removing a position."""
         portfolio = OptionPortfolioBase(symbol="TEST")
 
@@ -83,7 +83,7 @@ class TestOptionPortfolioBase:
         assert portfolio.positions[0].option.strike_price == 105.0
         assert portfolio.symbol == "TEST"
 
-    def test_remove_position_invalid_index(self):
+    def test_remove_position_invalid_index(self) -> None:
         """Test removing position with invalid index."""
         portfolio = OptionPortfolioBase()
 
@@ -93,7 +93,7 @@ class TestOptionPortfolioBase:
         except IndexError:
             pass
 
-    def test_update_position(self):
+    def test_update_position(self) -> None:
         """Test updating a position."""
         portfolio = OptionPortfolioBase(symbol="TEST")
 
@@ -109,7 +109,7 @@ class TestOptionPortfolioBase:
         assert portfolio.positions[0].quantity == 2
         assert portfolio.symbol == "TEST"
 
-    def test_update_position_exercise_style_synced(self):
+    def test_update_position_exercise_style_synced(self) -> None:
         """Regression test: updating exercise_style must sync both
         OptionPosition.exercise_style and OptionPosition.option.exercise_style.
         Previously, update_position only updated the OptionValuation attribute,
@@ -158,7 +158,7 @@ class TestOptionPortfolioBase:
             pos.option.exercise_style == ExerciseStyle.EUROPEAN
         ), "OptionValuation.exercise_style reverted after update_market_conditions"
 
-    def test_clear_positions(self):
+    def test_clear_positions(self) -> None:
         """Test clearing all positions."""
         portfolio = OptionPortfolioBase(symbol="TEST")
 
@@ -181,7 +181,7 @@ class TestOptionPortfolioBase:
         assert len(portfolio.positions) == 0
         assert portfolio.symbol == "TEST"
 
-    def test_total_value(self):
+    def test_total_value(self) -> None:
         """Test total_value calculation."""
         portfolio = OptionPortfolioBase(spot_price=100.0)
 
@@ -195,7 +195,7 @@ class TestOptionPortfolioBase:
         total_value = portfolio.total_value()
         assert total_value > 0
 
-    def test_total_underlying_value(self):
+    def test_total_underlying_value(self) -> None:
         """Test total_underlying_value calculation."""
         portfolio = OptionPortfolioBase(
             underlying_quantity=100,
@@ -204,7 +204,7 @@ class TestOptionPortfolioBase:
 
         assert portfolio.total_underlying_value() == 5000.0
 
-    def test_total_portfolio_value(self):
+    def test_total_portfolio_value(self) -> None:
         """Test total_portfolio_value calculation."""
         portfolio = OptionPortfolioBase(
             underlying_quantity=100,
@@ -224,7 +224,7 @@ class TestOptionPortfolioBase:
 
         assert total_portfolio == total_options + total_underlying
 
-    def test_get_positions(self):
+    def test_get_positions(self) -> None:
         """Test get_positions returns proper format."""
         portfolio = OptionPortfolioBase()
 
@@ -240,7 +240,7 @@ class TestOptionPortfolioBase:
         assert positions[0]["option_type"] == OptionType.CALL
         assert positions[0]["strike"] == 100.0
 
-    def test_to_dataframe(self):
+    def test_to_dataframe(self) -> None:
         """Test to_dataframe conversion."""
         portfolio = OptionPortfolioBase()
 
@@ -256,14 +256,14 @@ class TestOptionPortfolioBase:
         assert "strike" in df.columns
         assert "quantity" in df.columns
 
-    def test_to_dataframe_empty(self):
+    def test_to_dataframe_empty(self) -> None:
         """Test to_dataframe with empty portfolio."""
         portfolio = OptionPortfolioBase()
 
         df = portfolio.to_dataframe()
         assert len(df) == 0
 
-    def test_summary_stats(self):
+    def test_summary_stats(self) -> None:
         """Test summary_stats returns all required fields."""
         portfolio = OptionPortfolioBase()
 
@@ -288,7 +288,7 @@ class TestOptionPortfolioBase:
         # They would be present in the composed OptionPortfolio
         # but not in OptionPortfolioBase
 
-    def test_summary(self):
+    def test_summary(self) -> None:
         """Test summary string generation."""
         portfolio = OptionPortfolioBase(symbol="TEST")
 
@@ -304,7 +304,7 @@ class TestOptionPortfolioBase:
         assert "Positions" in summary
         assert "Value" in summary
 
-    def test_summary_market(self):
+    def test_summary_market(self) -> None:
         """Test summary_market string generation."""
         portfolio = OptionPortfolioBase(symbol="TEST")
 
@@ -314,7 +314,7 @@ class TestOptionPortfolioBase:
         assert "Volatility" in summary
         assert "TEST" in summary
 
-    def test_update_market_conditions(self):
+    def test_update_market_conditions(self) -> None:
         """Test updating market conditions."""
         portfolio = OptionPortfolioBase(
             spot_price=100.0,
@@ -337,7 +337,7 @@ class TestOptionPortfolioBase:
         assert portfolio.volatility == 0.3
         assert portfolio.symbol == "TEST"
 
-    def test_set_volatility(self):
+    def test_set_volatility(self) -> None:
         """Test set_volatility method."""
         portfolio = OptionPortfolioBase(volatility=0.2)
 
@@ -353,7 +353,7 @@ class TestOptionPortfolioBase:
         assert portfolio.volatility == 0.3
         assert portfolio.positions[0].option.volatility == 0.3
 
-    def test_get_symbol(self):
+    def test_get_symbol(self) -> None:
         """Test get_symbol method."""
         portfolio = OptionPortfolioBase()
 
@@ -373,7 +373,7 @@ class TestOptionPortfolioBase:
         portfolio.symbol = "TEST"
         assert portfolio.get_symbol() == "TEST"
 
-    def test_monte_carlo_results_property(self):
+    def test_monte_carlo_results_property(self) -> None:
         """Test monte_carlo_results property."""
         portfolio = OptionPortfolioBase()
 
@@ -384,7 +384,7 @@ class TestOptionPortfolioBase:
 
         assert portfolio.monte_carlo_results == results
 
-    def test_repr(self):
+    def test_repr(self) -> None:
         """Test __repr__ method."""
         portfolio = OptionPortfolioBase()
 
@@ -396,7 +396,7 @@ class TestOptionPortfolioBase:
 class TestOptionPortfolio:
     """Test cases for composed OptionPortfolio class."""
 
-    def test_has_all_mixins(self):
+    def test_has_all_mixins(self) -> None:
         """Test that OptionPortfolio has methods from all mixins."""
         portfolio = OptionPortfolio()
 
@@ -418,7 +418,7 @@ class TestOptionPortfolio:
 
         # ScenariosMixin has been removed - use PortfolioAnalyzer instead
 
-    def test_instantiation(self):
+    def test_instantiation(self) -> None:
         """Test OptionPortfolio can be instantiated."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -433,16 +433,16 @@ class TestOptionPortfolio:
 class TestPortfolioCore(unittest.TestCase):
     """Test cases for core portfolio functionality."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         # Initialize with explicit Symbol
         self.portfolio = OptionPortfolio(symbol="TSLA", spot_price=200.0)
 
-    def test_portfolio_symbol_storage(self):
+    def test_portfolio_symbol_storage(self) -> None:
         """Test that symbol is stored at portfolio level"""
         pf = OptionPortfolio(symbol="TSLA")
         self.assertEqual(pf.get_symbol(), "TSLA")
 
-    def test_add_position_defaults(self):
+    def test_add_position_defaults(self) -> None:
         """Test adding position uses defaults and works without position-level symbol"""
         self.portfolio.add_position(
             strike_price=210,
@@ -458,7 +458,7 @@ class TestPortfolioCore(unittest.TestCase):
         # Verify defaults
         self.assertEqual(pos.exercise_style, ExerciseStyle.AMERICAN)
 
-    def test_european_position_pricing(self):
+    def test_european_position_pricing(self) -> None:
         """Test that a portfolio can hold and price European options"""
         self.portfolio.add_position(
             strike_price=210,
@@ -475,7 +475,7 @@ class TestPortfolioCore(unittest.TestCase):
             ExerciseStyle.EUROPEAN,
         )
 
-    def test_mixed_styles(self):
+    def test_mixed_styles(self) -> None:
         """Portfolio should handle both styles simultaneously"""
         # Long American Call
         self.portfolio.add_position(

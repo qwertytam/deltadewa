@@ -5,17 +5,13 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.cache import (
-    ScenarioGridCache,
-    create_scenario_cache_key,
-    create_spot_vol_cache_key,
-    get_portfolio_state_hash,
-)
-from deltadewa.analysis.functions import (
-    classify_maturity_bucket,
-    quick_carry_analysis,
-    quick_risk_concentration,
-)
+from deltadewa.analysis.cache import (ScenarioGridCache,
+                                      create_scenario_cache_key,
+                                      create_spot_vol_cache_key,
+                                      get_portfolio_state_hash)
+from deltadewa.analysis.functions import (classify_maturity_bucket,
+                                          quick_carry_analysis,
+                                          quick_risk_concentration)
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.spot_utils import generate_spot_range
@@ -24,7 +20,7 @@ from deltadewa.spot_utils import generate_spot_range
 class TestGenerateSpotRange:
     """Test cases for generate_spot_range function."""
 
-    def test_passthrough_existing_spot_range(self):
+    def test_passthrough_existing_spot_range(self) -> None:
         """Test that existing spot_range is returned as-is."""
         existing_range = np.array([90.0, 100.0, 110.0])
         result = generate_spot_range(100.0, spot_range=existing_range)
@@ -32,7 +28,7 @@ class TestGenerateSpotRange:
         # Should be the exact same array
         np.testing.assert_array_equal(result, existing_range)
 
-    def test_standard_range_with_defaults(self):
+    def test_standard_range_with_defaults(self) -> None:
         """Test standard range generation with default parameters."""
         spot_price = 100.0
         result = generate_spot_range(spot_price)
@@ -52,7 +48,7 @@ class TestGenerateSpotRange:
         # Check it's sorted
         assert np.all(result[:-1] <= result[1:])
 
-    def test_standard_range_with_custom_bounds(self):
+    def test_standard_range_with_custom_bounds(self) -> None:
         """Test standard range with custom min/max percentages."""
         spot_price = 100.0
         result = generate_spot_range(
@@ -74,7 +70,7 @@ class TestGenerateSpotRange:
         # Check it's sorted
         assert np.all(result[:-1] <= result[1:])
 
-    def test_comprehensive_range_includes_extremes(self):
+    def test_comprehensive_range_includes_extremes(self) -> None:
         """Test comprehensive range includes extreme values."""
         spot_price = 100.0
         result = generate_spot_range(spot_price, use_comprehensive_range=True)
@@ -93,7 +89,7 @@ class TestGenerateSpotRange:
         # Check it's sorted
         assert np.all(result[:-1] <= result[1:])
 
-    def test_comprehensive_range_includes_critical_points(self):
+    def test_comprehensive_range_includes_critical_points(self) -> None:
         """Test comprehensive range includes critical points."""
         spot_price = 100.0
         result = generate_spot_range(spot_price, use_comprehensive_range=True)
@@ -119,7 +115,7 @@ class TestGenerateSpotRange:
                 np.isclose(result, cp),
             ), f"Critical point {cp} not found"
 
-    def test_results_are_sorted(self):
+    def test_results_are_sorted(self) -> None:
         """Test that results are always sorted."""
         spot_price = 100.0
 
@@ -129,11 +125,12 @@ class TestGenerateSpotRange:
 
         # Test comprehensive range
         result_comprehensive = generate_spot_range(
-            spot_price, use_comprehensive_range=True,
+            spot_price,
+            use_comprehensive_range=True,
         )
         assert np.all(result_comprehensive[:-1] <= result_comprehensive[1:])
 
-    def test_near_zero_floor_logic(self):
+    def test_near_zero_floor_logic(self) -> None:
         """Test that near-zero floor logic correctly handles edge cases.
 
         The near-zero floor (0.01) is used as the minimum for the linspace calculation,
@@ -161,7 +158,7 @@ class TestGenerateSpotRange:
         # So result[0] will be the near_zero value = 1.0
         assert result[0] == 1.0
 
-    def test_standalone_produces_same_results_as_riskmixin(self):
+    def test_standalone_produces_same_results_as_riskmixin(self) -> None:
         """Test standalone function produces identical results to RiskMixin._get_spot_range()."""
         # Create a portfolio with RiskMixin
         portfolio = OptionPortfolio(
@@ -197,14 +194,15 @@ class TestGenerateSpotRange:
             use_comprehensive_range=True,
         )
         np.testing.assert_array_equal(
-            result_standalone_comp, result_riskmixin_comp,
+            result_standalone_comp,
+            result_riskmixin_comp,
         )
 
 
 class TestModuleLevelFunctions:
     """Test cases for module-level convenience functions."""
 
-    def test_classify_maturity_bucket_function(self):
+    def test_classify_maturity_bucket_function(self) -> None:
         """Test standalone classify_maturity_bucket function."""
         assert classify_maturity_bucket(5) == "0-7 days (Weekly)"
         assert classify_maturity_bucket(15) == "8-30 days (Monthly)"
@@ -212,7 +210,7 @@ class TestModuleLevelFunctions:
         assert classify_maturity_bucket(75) == "61-90 days (3M)"
         assert classify_maturity_bucket(120) == "90+ days (Long-term)"
 
-    def test_quick_carry_analysis(self):
+    def test_quick_carry_analysis(self) -> None:
         """Test quick_carry_analysis function."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -233,7 +231,7 @@ class TestModuleLevelFunctions:
         assert "total_theta_daily" in metrics
         assert "is_positive_carry" in metrics
 
-    def test_quick_risk_concentration(self):
+    def test_quick_risk_concentration(self) -> None:
         """Test quick_risk_concentration function."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -254,7 +252,7 @@ class TestModuleLevelFunctions:
         assert "by_strike" in result
         assert "by_maturity" in result
 
-    def test_quick_risk_concentration_custom_metrics(self):
+    def test_quick_risk_concentration_custom_metrics(self) -> None:
         """Test quick_risk_concentration with custom metrics."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -277,7 +275,7 @@ class TestModuleLevelFunctions:
 class TestCachingFunctions:
     """Test cases for caching utility functions."""
 
-    def test_create_scenario_cache_key(self):
+    def test_create_scenario_cache_key(self) -> None:
         """Test scenario cache key creation."""
         spot_scenarios = np.array([90, 100, 110])
         time_points = [datetime(2024, 1, 1), datetime(2024, 1, 2)]
@@ -285,13 +283,16 @@ class TestCachingFunctions:
         portfolio_hash = "abc123"
 
         key = create_scenario_cache_key(
-            spot_scenarios, time_points, metric, portfolio_hash,
+            spot_scenarios,
+            time_points,
+            metric,
+            portfolio_hash,
         )
 
         assert isinstance(key, tuple)
         assert len(key) == 4
 
-    def test_create_spot_vol_cache_key(self):
+    def test_create_spot_vol_cache_key(self) -> None:
         """Test spot/vol cache key creation."""
         spot_scenarios = np.array([90, 100, 110])
         vol_scenarios = np.array([0.2, 0.3, 0.4])
@@ -299,13 +300,16 @@ class TestCachingFunctions:
         portfolio_hash = "abc123"
 
         key = create_spot_vol_cache_key(
-            spot_scenarios, vol_scenarios, metric, portfolio_hash,
+            spot_scenarios,
+            vol_scenarios,
+            metric,
+            portfolio_hash,
         )
 
         assert isinstance(key, tuple)
         assert key[0] == "spot_vol"
 
-    def test_get_portfolio_state_hash(self):
+    def test_get_portfolio_state_hash(self) -> None:
         """Test portfolio state hash generation."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -335,14 +339,14 @@ class TestCachingFunctions:
 class TestScenarioGridCache:
     """Test cases for ScenarioGridCache class."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test ScenarioGridCache initialization."""
         cache = ScenarioGridCache(max_size=64)
 
         assert cache is not None
         assert cache.size() == 0
 
-    def test_get_or_calculate_first_call(self):
+    def test_get_or_calculate_first_call(self) -> None:
         """Test first call to get_or_calculate calculates."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -364,13 +368,17 @@ class TestScenarioGridCache:
         time_points = [datetime.now(tz=UTC)]
 
         result = cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl",
+            portfolio,
+            analyzer,
+            spot_scenarios,
+            time_points,
+            "pnl",
         )
 
         assert result is not None
         assert cache.size() == 1
 
-    def test_get_or_calculate_second_call_cached(self):
+    def test_get_or_calculate_second_call_cached(self) -> None:
         """Test second call returns cached result."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -392,18 +400,26 @@ class TestScenarioGridCache:
         time_points = [datetime.now(tz=UTC)]
 
         result1 = cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl",
+            portfolio,
+            analyzer,
+            spot_scenarios,
+            time_points,
+            "pnl",
         )
 
         result2 = cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl",
+            portfolio,
+            analyzer,
+            spot_scenarios,
+            time_points,
+            "pnl",
         )
 
         # Should still be cached
         assert cache.size() == 1
         assert len(result1) == len(result2)
 
-    def test_get_or_calculate_spot_vol(self):
+    def test_get_or_calculate_spot_vol(self) -> None:
         """Test get_or_calculate_spot_vol method."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -425,13 +441,17 @@ class TestScenarioGridCache:
         vol_scenarios = np.array([0.2, 0.3, 0.4])
 
         result = cache.get_or_calculate_spot_vol(
-            portfolio, analyzer, spot_scenarios, vol_scenarios, "pnl",
+            portfolio,
+            analyzer,
+            spot_scenarios,
+            vol_scenarios,
+            "pnl",
         )
 
         assert result is not None
         assert cache.size() == 1
 
-    def test_clear_cache(self):
+    def test_clear_cache(self) -> None:
         """Test cache clearing."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -453,7 +473,11 @@ class TestScenarioGridCache:
         time_points = [datetime.now(tz=UTC)]
 
         cache.get_or_calculate(
-            portfolio, analyzer, spot_scenarios, time_points, "pnl",
+            portfolio,
+            analyzer,
+            spot_scenarios,
+            time_points,
+            "pnl",
         )
 
         assert cache.size() == 1
@@ -461,7 +485,7 @@ class TestScenarioGridCache:
         cache.clear()
         assert cache.size() == 0
 
-    def test_cache_max_size(self):
+    def test_cache_max_size(self) -> None:
         """Test cache respects max_size with LRU eviction."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -483,13 +507,25 @@ class TestScenarioGridCache:
 
         # Add 3 different scenarios
         cache.get_or_calculate(
-            portfolio, analyzer, np.array([95, 100]), time_points, "pnl",
+            portfolio,
+            analyzer,
+            np.array([95, 100]),
+            time_points,
+            "pnl",
         )
         cache.get_or_calculate(
-            portfolio, analyzer, np.array([100, 105]), time_points, "pnl",
+            portfolio,
+            analyzer,
+            np.array([100, 105]),
+            time_points,
+            "pnl",
         )
         cache.get_or_calculate(
-            portfolio, analyzer, np.array([105, 110]), time_points, "pnl",
+            portfolio,
+            analyzer,
+            np.array([105, 110]),
+            time_points,
+            "pnl",
         )
 
         # Should only keep 2 (most recent)

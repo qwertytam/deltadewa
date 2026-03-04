@@ -6,10 +6,8 @@ import ipywidgets as widgets  # type: ignore[import-untyped]
 import pytest
 
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.widgets.health_dashboard import (
-    HedgeHealthDashboard,
-    HedgeHealthMetric,
-)
+from deltadewa.widgets.health_dashboard import (HedgeHealthDashboard,
+                                                HedgeHealthMetric)
 
 # ruff: noqa: S101
 

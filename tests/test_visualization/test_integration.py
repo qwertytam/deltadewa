@@ -9,12 +9,8 @@ from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
 from deltadewa.visualization.convenience import (
-    plot_greeks_by_strike,
-    plot_greeks_consolidated,
-    plot_pnl_diagram,
-    plot_pnl_distribution_with_metrics,
-    plot_theta_analysis,
-)
+    plot_greeks_by_strike, plot_greeks_consolidated, plot_pnl_diagram,
+    plot_pnl_distribution_with_metrics, plot_theta_analysis)
 
 matplotlib.use("Agg")  # Use non-interactive backend
 

@@ -8,12 +8,14 @@ import pytest
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.valuation import OptionValuation
 
+# ruff: noqa: S101
+
 
 class TestVolatilityQuoteCaching:
     """Tests for efficient volatility update mechanism."""
 
     @pytest.fixture
-    def option(self):
+    def option(self) -> OptionValuation:
         """Create a test option."""
         return OptionValuation(
             spot_price=100.0,
@@ -25,25 +27,31 @@ class TestVolatilityQuoteCaching:
             option_type=OptionType.CALL,
         )
 
-    def test_vol_quote_initialized(self, option):
+    def test_vol_quote_initialized(self, option: OptionValuation) -> None:
         """Verify vol_quote is created during initialization."""
         assert hasattr(option, "vol_quote")
         assert option.vol_quote is not None
         assert option.vol_quote.value() == 0.20
 
-    def test_vol_handle_initialized(self, option):
+    def test_vol_handle_initialized(self, option: OptionValuation) -> None:
         """Verify vol_handle is created during initialization."""
         assert hasattr(option, "vol_handle")
         assert option.vol_handle is not None
 
-    def test_update_volatility_changes_quote(self, option):
+    def test_update_volatility_changes_quote(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify update_volatility modifies the SimpleQuote."""
         option.update_volatility(0.30)
 
         assert option.volatility == 0.30
         assert option.vol_quote.value() == 0.30
 
-    def test_update_volatility_affects_price(self, option):
+    def test_update_volatility_affects_price(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify volatility changes affect option price."""
         price_low_vol = option.price()
 
@@ -53,7 +61,10 @@ class TestVolatilityQuoteCaching:
         # Higher volatility should increase option price for ATM call
         assert price_high_vol > price_low_vol
 
-    def test_update_volatility_affects_vega(self, option):
+    def test_update_volatility_affects_vega(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify volatility changes are reflected in Greeks."""
         option.update_volatility(0.15)
         vega_low = option.vega()
@@ -64,7 +75,10 @@ class TestVolatilityQuoteCaching:
         # Vega should differ at different vol levels
         assert vega_low != vega_high
 
-    def test_multiple_vol_updates_consistent(self, option):
+    def test_multiple_vol_updates_consistent(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify multiple volatility updates work correctly."""
         vols = [0.15, 0.20, 0.25, 0.30, 0.35, 0.40]
         prices = []
@@ -73,13 +87,17 @@ class TestVolatilityQuoteCaching:
             option.update_volatility(vol)
             prices.append(option.price())
 
-        # Prices should be monotonically increasing with volatility (for ATM call)
+        # Prices should be monotonically increasing with volatility (for ATM
+        # call)
         for i in range(1, len(prices)):
             assert (
                 prices[i] > prices[i - 1]
             ), f"Price should increase with vol: {prices}"
 
-    def test_vol_update_preserves_other_params(self, option):
+    def test_vol_update_preserves_other_params(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify volatility update doesn't affect other parameters."""
         original_spot = option.spot_price
         original_strike = option.strike_price
@@ -91,7 +109,10 @@ class TestVolatilityQuoteCaching:
         assert option.strike_price == original_strike
         assert option.risk_free_rate == original_rate
 
-    def test_vol_and_spot_updates_independent(self, option):
+    def test_vol_and_spot_updates_independent(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify vol and spot updates work independently."""
         # Update both
         option.update_volatility(0.30)
@@ -110,7 +131,7 @@ class TestVolatilityQuoteCaching:
 class TestVolatilityUpdatePerformance:
     """Performance tests for volatility updates."""
 
-    def test_vol_update_faster_than_rebuild(self):
+    def test_vol_update_faster_than_rebuild(self) -> None:
         """Verify SimpleQuote update is faster than full rebuild."""
         option = OptionValuation(
             spot_price=100.0,
@@ -141,9 +162,9 @@ class TestVolatilityUpdatePerformance:
         rebuild_time = time.perf_counter() - start
 
         # SimpleQuote should be faster or at least comparable
-        # Note: With JIT compilation and caching, the speedup may not be dramatic
-        # in small tests, but shows significant benefit in production with
-        # hundreds of updates (10-20x faster)
+        # Note: With JIT compilation and caching, the speedup may not be
+        # dramatic in small tests, but shows significant benefit in production
+        # with hundreds of updates (10-20x faster)
         speedup = rebuild_time / quote_time
         print(
             f"\n  Performance: Quote={quote_time:.4f}s, "
@@ -151,16 +172,17 @@ class TestVolatilityUpdatePerformance:
         )
         # Be lenient in assertion since timing can vary, but at least verify
         # the quote method doesn't regress performance
-        assert (
-            quote_time <= rebuild_time * 1.2
-        ), f"Quote update should not be slower: {quote_time:.4f}s vs {rebuild_time:.4f}s"
+        assert quote_time <= rebuild_time * 1.2, (
+            f"Quote update should not be slower: {quote_time:.4f}s vs "
+            f"{rebuild_time:.4f}s"
+        )
 
 
 class TestGreeksCaching:
     """Tests for Greeks caching behavior."""
 
     @pytest.fixture
-    def option(self):
+    def option(self) -> OptionValuation:
         """Create a test option."""
         return OptionValuation(
             spot_price=100.0,
@@ -172,7 +194,10 @@ class TestGreeksCaching:
             option_type=OptionType.CALL,
         )
 
-    def test_greeks_cached_after_first_call(self, option):
+    def test_greeks_cached_after_first_call(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify Greeks are cached after first computation."""
         delta1 = option.delta()
         # pylint: disable=protected-access
@@ -181,7 +206,10 @@ class TestGreeksCaching:
         delta2 = option.delta()
         assert delta1 == delta2
 
-    def test_cache_invalidated_on_spot_change(self, option):
+    def test_cache_invalidated_on_spot_change(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify cache invalidates when spot changes."""
         delta1 = option.delta()
         # pylint: disable=protected-access
@@ -194,7 +222,10 @@ class TestGreeksCaching:
         delta2 = option.delta()
         assert delta2 != delta1
 
-    def test_cache_invalidated_on_vol_change(self, option):
+    def test_cache_invalidated_on_vol_change(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify cache invalidates when volatility changes."""
         _ = option.vega()
         # pylint: disable=protected-access
@@ -204,7 +235,10 @@ class TestGreeksCaching:
         # pylint: disable=protected-access
         assert not option._greeks_cache.is_cached("vega")
 
-    def test_cache_invalidated_on_date_change(self, option):
+    def test_cache_invalidated_on_date_change(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify cache invalidates when valuation date changes."""
         _ = option.theta()
         # pylint: disable=protected-access
@@ -215,7 +249,7 @@ class TestGreeksCaching:
         # pylint: disable=protected-access
         assert not option._greeks_cache.is_cached("theta")
 
-    def test_greeks_batch_computation(self, option):
+    def test_greeks_batch_computation(self, option: OptionValuation) -> None:
         """Verify greeks() returns all values efficiently."""
         greeks = option.greeks()
 
@@ -226,16 +260,19 @@ class TestGreeksCaching:
         assert "theta" in greeks
         assert "rho" in greeks
 
-        # Cache may be partially invalidated if some Greeks required numerical fallback
-        # that called _setup_quantlib(). But at minimum, price and rho should be cached
-        # (as they are computed last and don't trigger setup)
+        # Cache may be partially invalidated if some Greeks required numerical
+        # fallback that called _setup_quantlib(). But at minimum, price and rho
+        # should be cached (as they are computed last and don't trigger setup)
         # pylint: disable=protected-access
         assert option._greeks_cache.is_cached(
             "price",
             # pylint: disable=protected-access
         ) or option._greeks_cache.is_cached("rho")
 
-    def test_greeks_batch_consistent_with_individual(self, option):
+    def test_greeks_batch_consistent_with_individual(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify greeks() returns same values as individual calls."""
         # Get via batch
         batch_greeks = option.greeks()
@@ -260,7 +297,10 @@ class TestGreeksCaching:
         assert batch_greeks["rho"] == individual_rho
         assert batch_greeks["price"] == individual_price
 
-    def test_cache_reuses_computed_values(self, option):
+    def test_cache_reuses_computed_values(
+        self,
+        option: OptionValuation,
+    ) -> None:
         """Verify cache reuses values from previous computations."""
         # Compute delta
         delta1 = option.delta()
@@ -277,7 +317,7 @@ class TestGreeksCaching:
         greeks = option.greeks()
         assert greeks["delta"] == delta1
 
-    def test_cache_stats_accessible(self, option):
+    def test_cache_stats_accessible(self, option: OptionValuation) -> None:
         """Verify cache statistics are accessible."""
         # Initially nothing cached
         # pylint: disable=protected-access

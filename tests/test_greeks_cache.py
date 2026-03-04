@@ -1,20 +1,23 @@
 """Tests for deltadewa.greeks_cache module."""
 
 import threading
+from collections.abc import Callable
 
 import pytest
 
 from deltadewa.greeks_cache import GreeksCache
 
+# ruff: noqa: S101 ANN001
+
 
 class TestGreeksCache:
     """Test cases for GreeksCache."""
 
-    def test_lazy_computation(self):
+    def test_lazy_computation(self) -> None:
         """Verify Greeks are only computed when accessed."""
         call_count = 0
 
-        def compute_delta():
+        def compute_delta() -> float:
             nonlocal call_count
             call_count += 1
             return 0.5
@@ -32,11 +35,11 @@ class TestGreeksCache:
         assert result == 0.5
         assert call_count == 1  # Still 1, used cache
 
-    def test_invalidation(self):
+    def test_invalidation(self) -> None:
         """Verify invalidation triggers recomputation."""
         call_count = 0
 
-        def compute_delta():
+        def compute_delta() -> float:
             nonlocal call_count
             call_count += 1
             return 0.5 + call_count * 0.1
@@ -53,7 +56,7 @@ class TestGreeksCache:
         assert call_count == 2
         assert result2 != result1  # Different value after recompute
 
-    def test_compute_all(self):
+    def test_compute_all(self) -> None:
         """Verify batch computation works."""
         cache = GreeksCache()
         cache.register("delta", lambda: 0.5)
@@ -69,16 +72,16 @@ class TestGreeksCache:
         assert result["gamma"] == 0.1
         assert result["vega"] == 0.2
 
-    def test_thread_safety(self):
+    def test_thread_safety(self) -> None:
         """Verify concurrent access doesn't cause issues."""
         cache = GreeksCache()
         cache.register("delta", lambda: 0.5)
 
         results = []
 
-        def get_delta():
+        def get_delta() -> None:
             for _ in range(100):
-                results.append(cache.get("delta"))
+                results.append(cache.get("delta"))  # noqa: PERF401
 
         threads = [threading.Thread(target=get_delta) for _ in range(10)]
         for t in threads:
@@ -89,7 +92,7 @@ class TestGreeksCache:
         assert len(results) == 1000
         assert all(r == 0.5 for r in results)
 
-    def test_is_cached(self):
+    def test_is_cached(self) -> None:
         """Verify is_cached reports correct state."""
         cache = GreeksCache()
         cache.register("delta", lambda: 0.5)
@@ -102,7 +105,7 @@ class TestGreeksCache:
         cache.invalidate_all()
         assert not cache.is_cached("delta")  # Invalidated
 
-    def test_cache_stats(self):
+    def test_cache_stats(self) -> None:
         """Verify cache_stats returns correct information."""
         cache = GreeksCache()
         cache.register("delta", lambda: 0.5)
@@ -118,14 +121,14 @@ class TestGreeksCache:
         assert "delta" in stats["cached"]
         assert "delta" not in stats["dirty"]
 
-    def test_key_error_on_unregistered_greek(self):
+    def test_key_error_on_unregistered_greek(self) -> None:
         """Verify KeyError is raised for unregistered Greeks."""
         cache = GreeksCache()
 
         with pytest.raises(KeyError, match="Greek 'delta' not registered"):
             cache.get("delta")
 
-    def test_selective_invalidation(self):
+    def test_selective_invalidation(self) -> None:
         """Verify selective invalidation works."""
         cache = GreeksCache()
         cache.register("delta", lambda: 0.5)
@@ -144,12 +147,12 @@ class TestGreeksCache:
         assert not cache.is_cached("delta")
         assert cache.is_cached("gamma")  # Gamma still cached
 
-    def test_compute_all_caches_results(self):
+    def test_compute_all_caches_results(self) -> None:
         """Verify compute_all caches all computed values."""
         call_counts = {"delta": 0, "gamma": 0, "vega": 0}
 
-        def make_counter(name):
-            def compute():
+        def make_counter(name) -> Callable:
+            def compute() -> float:
                 call_counts[name] += 1
                 return float(call_counts[name])
 

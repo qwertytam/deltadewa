@@ -11,7 +11,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestPnLMixin:
     """Test cases for PnLMixin."""
 
-    def test_calculate_net_debit(self):
+    def test_calculate_net_debit(self) -> None:
         """Test calculate_net_debit method."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -27,7 +27,7 @@ class TestPnLMixin:
         assert net_debit == portfolio.total_value()
         assert net_debit > 0
 
-    def test_calculate_pnl_at_expiry(self):
+    def test_calculate_pnl_at_expiry(self) -> None:
         """Test calculate_pnl_at_expiry method."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -51,7 +51,7 @@ class TestPnLMixin:
         # PnL = 0 - initial cost (loss)
         assert pnl_low < 0
 
-    def test_calculate_pnl_at_expiry_put(self):
+    def test_calculate_pnl_at_expiry_put(self) -> None:
         """Test calculate_pnl_at_expiry with put option."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -73,24 +73,26 @@ class TestPnLMixin:
         # PnL = 0 - initial cost (loss)
         assert pnl_high < 0
 
-    def test_calculate_pnl_with_underlying(self):
+    def test_calculate_pnl_with_underlying(self) -> None:
         """Test calculate_pnl_at_expiry including underlying position."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
         # No options, just underlying
         pnl_up = portfolio.calculate_pnl_at_expiry(
-            110.0, include_underlying=True,
+            110.0,
+            include_underlying=True,
         )
         # Underlying gained 10 per share * 100 shares = 1000
         assert pnl_up == 1000.0
 
         pnl_down = portfolio.calculate_pnl_at_expiry(
-            90.0, include_underlying=True,
+            90.0,
+            include_underlying=True,
         )
         # Underlying lost 10 per share * 100 shares = -1000
         assert pnl_down == -1000.0
 
-    def test_calculate_pnl_short_option(self):
+    def test_calculate_pnl_short_option(self) -> None:
         """Test calculate_pnl_at_expiry with short option."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -112,7 +114,7 @@ class TestPnLMixin:
         # Should be positive (kept the premium)
         assert pnl_low > 0
 
-    def test_calculate_pnl_empty_portfolio(self):
+    def test_calculate_pnl_empty_portfolio(self) -> None:
         """Test calculate_pnl_at_expiry with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -120,7 +122,7 @@ class TestPnLMixin:
         # No positions, no P&L
         assert pnl == 0.0
 
-    def test_calculate_net_debit_credit(self):
+    def test_calculate_net_debit_credit(self) -> None:
         """Test calculate_net_debit for credit spread."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -145,7 +147,7 @@ class TestPnLMixin:
         # Note: This depends on pricing, but typically credit spreads are net negative
         assert isinstance(net_debit, float)
 
-    def test_vectorized_pnl_at_expiry(self):
+    def test_vectorized_pnl_at_expiry(self) -> None:
         """Test vectorized_pnl_at_expiry method."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -160,7 +162,8 @@ class TestPnLMixin:
         # Test with array of spot prices
         spot_range = np.array([90.0, 100.0, 110.0, 120.0])
         pnl_array = portfolio.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=False,
+            spot_range,
+            include_underlying=False,
         )
 
         # Should return numpy array
@@ -170,30 +173,33 @@ class TestPnLMixin:
         # Verify results match scalar calculation
         for i, spot in enumerate(spot_range):
             scalar_pnl = portfolio.calculate_pnl_at_expiry(
-                spot, include_underlying=False,
+                spot,
+                include_underlying=False,
             )
             assert np.isclose(pnl_array[i], scalar_pnl), (
                 f"Mismatch at spot={spot}: vectorized={pnl_array[i]}, "
                 f"scalar={scalar_pnl}"
             )
 
-    def test_vectorized_pnl_with_underlying(self):
+    def test_vectorized_pnl_with_underlying(self) -> None:
         """Test vectorized_pnl_at_expiry including underlying position."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
         spot_range = np.array([90.0, 100.0, 110.0])
         pnl_array = portfolio.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=True,
+            spot_range,
+            include_underlying=True,
         )
 
         # Verify against scalar calculation
         for i, spot in enumerate(spot_range):
             scalar_pnl = portfolio.calculate_pnl_at_expiry(
-                spot, include_underlying=True,
+                spot,
+                include_underlying=True,
             )
             assert np.isclose(pnl_array[i], scalar_pnl)
 
-    def test_vectorized_pnl_multi_position(self):
+    def test_vectorized_pnl_multi_position(self) -> None:
         """Test vectorized calculation with multiple positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
 

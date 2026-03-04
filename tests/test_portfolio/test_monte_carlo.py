@@ -11,7 +11,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestMonteCarloMixin:
     """Test cases for MonteCarloMixin."""
 
-    def test_run_monte_carlo_simulation(self):
+    def test_run_monte_carlo_simulation(self) -> None:
         """Test run_monte_carlo_simulation method with enriched metrics."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -68,7 +68,7 @@ class TestMonteCarloMixin:
         assert isinstance(result["expected_pnl"], float)
         assert isinstance(result["breakeven_points"], list)
 
-    def test_run_monte_carlo_simulation_with_underlying(self):
+    def test_run_monte_carlo_simulation_with_underlying(self) -> None:
         """Test run_monte_carlo_simulation including underlying."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
@@ -89,7 +89,7 @@ class TestMonteCarloMixin:
         assert "simulated_pnls" in result
         assert len(result["simulated_pnls"]) > 0
 
-    def test_run_monte_carlo_simulation_custom_days(self):
+    def test_run_monte_carlo_simulation_custom_days(self) -> None:
         """Test run_monte_carlo_simulation with custom days_to_expiry."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -108,7 +108,7 @@ class TestMonteCarloMixin:
         assert "prob_profit" in result
         assert result["days_to_expiry"] == 60
 
-    def test_run_monte_carlo_simulation_empty_portfolio(self):
+    def test_run_monte_carlo_simulation_empty_portfolio(self) -> None:
         """Test run_monte_carlo_simulation with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -120,7 +120,7 @@ class TestMonteCarloMixin:
         # Empty portfolio should have zero P&L
         assert abs(result["expected_pnl"]) < 0.01
 
-    def test_monte_carlo_results_storage(self):
+    def test_monte_carlo_results_storage(self) -> None:
         """Test that Monte Carlo results can be stored in portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -140,7 +140,7 @@ class TestMonteCarloMixin:
         stored = portfolio.monte_carlo_results
         assert stored == result
 
-    def test_probability_high_simulations(self):
+    def test_probability_high_simulations(self) -> None:
         """Test with higher number of simulations."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -157,7 +157,7 @@ class TestMonteCarloMixin:
         assert 0.0 <= result["prob_profit"] <= 1.0
         assert result["num_simulations"] == 10000
 
-    def test_vectorized_vs_scalar_consistency(self):
+    def test_vectorized_vs_scalar_consistency(self) -> None:
         """Test that vectorized results are consistent with scalar approach."""
         np.random.seed(42)  # For reproducibility
 
@@ -191,7 +191,7 @@ class TestMonteCarloMixin:
         # Check they match
         np.testing.assert_allclose(pnls, expected_pnls, rtol=1e-5)
 
-    def test_underlying_only_portfolio(self):
+    def test_underlying_only_portfolio(self) -> None:
         """Test Monte Carlo with underlying position only (no options)."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -210,7 +210,7 @@ class TestMonteCarloMixin:
         # Using larger sample size (10k) and tighter bounds for better validation
         assert 0.45 <= result["prob_profit"] <= 0.55
 
-    def test_single_position_portfolio(self):
+    def test_single_position_portfolio(self) -> None:
         """Test Monte Carlo with single option position."""
         portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
 

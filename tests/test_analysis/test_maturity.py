@@ -10,73 +10,37 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestMaturityMixin:
     """Test cases for MaturityMixin."""
 
-    def test_classify_maturity_bucket_weekly(self):
+    def test_classify_maturity_bucket_weekly(self) -> None:
         """Test classification for weekly options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(0) == "0-7 days (Weekly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(3) == "0-7 days (Weekly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(7) == "0-7 days (Weekly)"
-        )
+        assert PortfolioAnalyzer.classify_maturity_bucket(0) == "0-7 days (Weekly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(3) == "0-7 days (Weekly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(7) == "0-7 days (Weekly)"
 
-    def test_classify_maturity_bucket_monthly(self):
+    def test_classify_maturity_bucket_monthly(self) -> None:
         """Test classification for monthly options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(8)
-            == "8-30 days (Monthly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(15)
-            == "8-30 days (Monthly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(30)
-            == "8-30 days (Monthly)"
-        )
+        assert PortfolioAnalyzer.classify_maturity_bucket(8) == "8-30 days (Monthly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(15) == "8-30 days (Monthly)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(30) == "8-30 days (Monthly)"
 
-    def test_classify_maturity_bucket_2month(self):
+    def test_classify_maturity_bucket_2month(self) -> None:
         """Test classification for 2-month options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(31) == "31-60 days (2M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(45) == "31-60 days (2M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(60) == "31-60 days (2M)"
-        )
+        assert PortfolioAnalyzer.classify_maturity_bucket(31) == "31-60 days (2M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(45) == "31-60 days (2M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(60) == "31-60 days (2M)"
 
-    def test_classify_maturity_bucket_3month(self):
+    def test_classify_maturity_bucket_3month(self) -> None:
         """Test classification for 3-month options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(61) == "61-90 days (3M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(75) == "61-90 days (3M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(90) == "61-90 days (3M)"
-        )
+        assert PortfolioAnalyzer.classify_maturity_bucket(61) == "61-90 days (3M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(75) == "61-90 days (3M)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(90) == "61-90 days (3M)"
 
-    def test_classify_maturity_bucket_long_term(self):
+    def test_classify_maturity_bucket_long_term(self) -> None:
         """Test classification for long-term options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(91)
-            == "90+ days (Long-term)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(180)
-            == "90+ days (Long-term)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(365)
-            == "90+ days (Long-term)"
-        )
+        assert PortfolioAnalyzer.classify_maturity_bucket(91) == "90+ days (Long-term)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(180) == "90+ days (Long-term)"
+        assert PortfolioAnalyzer.classify_maturity_bucket(365) == "90+ days (Long-term)"
 
-    def test_add_maturity_buckets(self):
+    def test_add_maturity_buckets(self) -> None:
         """Test adding maturity bucket columns to DataFrame."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -105,11 +69,9 @@ class TestMaturityMixin:
         # Check values make sense
         assert df_with_buckets["days_to_expiry"].iloc[0] >= 14
         assert df_with_buckets["days_to_expiry"].iloc[0] <= 16
-        assert (
-            df_with_buckets["maturity_bucket"].iloc[0] == "8-30 days (Monthly)"
-        )
+        assert df_with_buckets["maturity_bucket"].iloc[0] == "8-30 days (Monthly)"
 
-    def test_add_maturity_buckets_empty(self):
+    def test_add_maturity_buckets_empty(self) -> None:
         """Test add_maturity_buckets with empty DataFrame."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)
@@ -122,8 +84,7 @@ class TestMaturityMixin:
             # We'll test with a real position instead
             portfolio.add_position(
                 strike_price=100.0,
-                maturity_date=datetime.now(tz=UTC)
-                + timedelta(days=30),
+                maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
                 quantity=1,
                 option_type=OptionType.CALL,
             )

@@ -10,7 +10,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestCarryMixin:
     """Test cases for CarryMixin."""
 
-    def test_calculate_carry_metrics_empty(self):
+    def test_calculate_carry_metrics_empty(self) -> None:
         """Test carry metrics on empty portfolio."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)
@@ -24,7 +24,7 @@ class TestCarryMixin:
         assert metrics["is_positive_carry"] is False
         assert len(metrics["theta_by_bucket"]) == 0
 
-    def test_calculate_carry_metrics_with_position(self):
+    def test_calculate_carry_metrics_with_position(self) -> None:
         """Test carry metrics with a position."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -58,7 +58,7 @@ class TestCarryMixin:
         assert metrics["covered_call_theta"] > 0
         assert metrics["is_positive_carry"]
 
-    def test_empty_carry_metrics(self):
+    def test_empty_carry_metrics(self) -> None:
         """Test _empty_carry_metrics returns correct structure."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)
@@ -80,7 +80,7 @@ class TestCarryMixin:
         assert not metrics["carry_efficiency"]
         assert metrics["is_positive_carry"] is False
 
-    def test_create_theta_summary_table(self):
+    def test_create_theta_summary_table(self) -> None:
         """Test theta summary table creation."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -119,7 +119,7 @@ class TestCarryMixin:
         # Check we have at least NET row
         assert "NET" in [idx[0] for idx in summary_table.index]
 
-    def test_create_theta_summary_table_empty(self):
+    def test_create_theta_summary_table_empty(self) -> None:
         """Test theta summary table with empty portfolio."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)

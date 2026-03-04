@@ -10,7 +10,7 @@ from deltadewa.valuation import OptionValuation
 class TestOptionPosition:
     """Test cases for OptionPosition class."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test OptionPosition can be instantiated."""
         option = OptionValuation(
             spot_price=100.0,
@@ -29,7 +29,7 @@ class TestOptionPosition:
         assert position.contract_size == 100
         assert position.custom_volatility is False
 
-    def test_position_value(self):
+    def test_position_value(self) -> None:
         """Test position_value calculation."""
         option = OptionValuation(
             spot_price=100.0,
@@ -47,7 +47,7 @@ class TestOptionPosition:
         expected_pnl = option.price() * 2 * 100
         assert position.position_value() == expected_pnl
 
-    def test_position_delta(self):
+    def test_position_delta(self) -> None:
         """Test position_delta calculation."""
         option = OptionValuation(
             spot_price=100.0,
@@ -65,7 +65,7 @@ class TestOptionPosition:
         expected_delta = option.delta() * 2 * 100
         assert position.position_delta() == expected_delta
 
-    def test_position_greeks(self):
+    def test_position_greeks(self) -> None:
         """Test all Greek calculations."""
         option = OptionValuation(
             spot_price=100.0,
@@ -85,7 +85,7 @@ class TestOptionPosition:
         assert position.position_theta() == option.theta() * 100
         assert position.position_rho() == option.rho() * 100
 
-    def test_negative_quantity(self):
+    def test_negative_quantity(self) -> None:
         """Test position with negative quantity (short position)."""
         option = OptionValuation(
             spot_price=100.0,
@@ -103,7 +103,7 @@ class TestOptionPosition:
         assert position.position_value() < 0
         assert position.position_delta() < 0
 
-    def test_to_dict(self):
+    def test_to_dict(self) -> None:
         """Test to_dict conversion."""
         option = OptionValuation(
             spot_price=100.0,
@@ -130,7 +130,7 @@ class TestOptionPosition:
         assert pos_dict["volatility"] == 0.25
         assert pos_dict["custom_volatility"] is False
 
-    def test_custom_volatility_flag(self):
+    def test_custom_volatility_flag(self) -> None:
         """Test custom_volatility flag."""
         option = OptionValuation(
             spot_price=100.0,

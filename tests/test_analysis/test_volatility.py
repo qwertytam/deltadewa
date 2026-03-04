@@ -2,12 +2,10 @@
 
 from datetime import UTC, datetime, timedelta
 
-from deltadewa.analysis.volatility import (
-    apply_proportional_volatility_shift,
-    calculate_portfolio_avg_volatility,
-    get_volatility_stats,
-    restore_volatilities,
-)
+from deltadewa.analysis.volatility import (apply_proportional_volatility_shift,
+                                           calculate_portfolio_avg_volatility,
+                                           get_volatility_stats,
+                                           restore_volatilities)
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -15,7 +13,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestCalculatePortfolioAvgVolatility:
     """Test cases for calculate_portfolio_avg_volatility function."""
 
-    def test_empty_portfolio_returns_portfolio_volatility(self):
+    def test_empty_portfolio_returns_portfolio_volatility(self) -> None:
         """Test that empty portfolio returns portfolio-level volatility."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -26,7 +24,7 @@ class TestCalculatePortfolioAvgVolatility:
         avg_vol = calculate_portfolio_avg_volatility(portfolio)
         assert avg_vol == 0.25
 
-    def test_single_position(self):
+    def test_single_position(self) -> None:
         """Test vega-weighted average with single position."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -46,7 +44,7 @@ class TestCalculatePortfolioAvgVolatility:
         # With single position, average should equal position volatility
         assert abs(avg_vol - 0.30) < 0.001
 
-    def test_multi_position_weighted_average(self):
+    def test_multi_position_weighted_average(self) -> None:
         """Test vega-weighted average with multiple positions."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -76,7 +74,7 @@ class TestCalculatePortfolioAvgVolatility:
         # Vega-weighted average should be between min and max
         assert 0.20 <= avg_vol <= 0.30
 
-    def test_negative_position_uses_absolute_vega(self):
+    def test_negative_position_uses_absolute_vega(self) -> None:
         """Test that negative positions use absolute vega for weighting."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -106,7 +104,7 @@ class TestCalculatePortfolioAvgVolatility:
         # Both should contribute equally (abs vega), so average should be 0.25
         assert abs(avg_vol - 0.25) < 0.01
 
-    def test_zero_vega_positions_fallback(self):
+    def test_zero_vega_positions_fallback(self) -> None:
         """Test fallback when all positions have zero vega."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -132,7 +130,7 @@ class TestCalculatePortfolioAvgVolatility:
 class TestApplyProportionalVolatilityShift:
     """Test cases for apply_proportional_volatility_shift function."""
 
-    def test_proportional_scaling(self):
+    def test_proportional_scaling(self) -> None:
         """Test proportional scaling maintains volatility structure."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -164,7 +162,9 @@ class TestApplyProportionalVolatilityShift:
 
         # Shift to 30% average
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.30, preserve_structure=True,
+            portfolio,
+            0.30,
+            preserve_structure=True,
         )
 
         # Check ratio is preserved
@@ -179,7 +179,7 @@ class TestApplyProportionalVolatilityShift:
         assert 0 in original_vols
         assert 1 in original_vols
 
-    def test_uniform_shift(self):
+    def test_uniform_shift(self) -> None:
         """Test uniform shift sets all positions to target."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -205,7 +205,9 @@ class TestApplyProportionalVolatilityShift:
 
         # Apply uniform shift
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.35, preserve_structure=False,
+            portfolio,
+            0.35,
+            preserve_structure=False,
         )
 
         # All positions should now be at target
@@ -216,7 +218,7 @@ class TestApplyProportionalVolatilityShift:
         assert original_vols[0] == 0.30
         assert original_vols[1] == 0.20
 
-    def test_zero_avg_vol_edge_case(self):
+    def test_zero_avg_vol_edge_case(self) -> None:
         """Test handling when current average volatility is near zero."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -234,16 +236,16 @@ class TestApplyProportionalVolatilityShift:
 
         # Should scale proportionally or uniformly
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.30, preserve_structure=True,
+            portfolio,
+            0.30,
+            preserve_structure=True,
         )
 
         # Position should now be at or near target (scaled from 0.01 to 0.30)
-        assert (
-            portfolio.positions[0].option.volatility > 0.20
-        )  # Should be scaled up
+        assert portfolio.positions[0].option.volatility > 0.20  # Should be scaled up
         assert original_vols[0] == 0.01
 
-    def test_returns_original_volatilities_dict(self):
+    def test_returns_original_volatilities_dict(self) -> None:
         """Test that function returns dict of original volatilities."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -260,7 +262,9 @@ class TestApplyProportionalVolatilityShift:
         )
 
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.35, preserve_structure=True,
+            portfolio,
+            0.35,
+            preserve_structure=True,
         )
 
         # Check return value structure
@@ -272,7 +276,7 @@ class TestApplyProportionalVolatilityShift:
 class TestRestoreVolatilities:
     """Test cases for restore_volatilities function."""
 
-    def test_basic_restore(self):
+    def test_basic_restore(self) -> None:
         """Test basic restoration of volatilities."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -302,7 +306,9 @@ class TestRestoreVolatilities:
 
         # Apply shift
         original_vols = apply_proportional_volatility_shift(
-            portfolio, 0.35, preserve_structure=False,
+            portfolio,
+            0.35,
+            preserve_structure=False,
         )
 
         # Verify changed
@@ -313,16 +319,10 @@ class TestRestoreVolatilities:
         restore_volatilities(portfolio, original_vols)
 
         # Verify restored
-        assert (
-            abs(portfolio.positions[0].option.volatility - original_vol_0)
-            < 0.001
-        )
-        assert (
-            abs(portfolio.positions[1].option.volatility - original_vol_1)
-            < 0.001
-        )
+        assert abs(portfolio.positions[0].option.volatility - original_vol_0) < 0.001
+        assert abs(portfolio.positions[1].option.volatility - original_vol_1) < 0.001
 
-    def test_partial_restore_missing_indices(self):
+    def test_partial_restore_missing_indices(self) -> None:
         """Test restore handles missing position indices gracefully."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -346,7 +346,7 @@ class TestRestoreVolatilities:
 
         assert abs(portfolio.positions[0].option.volatility - 0.30) < 0.001
 
-    def test_empty_restore_dict(self):
+    def test_empty_restore_dict(self) -> None:
         """Test restore with empty dict does nothing."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -374,7 +374,7 @@ class TestRestoreVolatilities:
 class TestGetVolatilityStats:
     """Test cases for get_volatility_stats function."""
 
-    def test_empty_portfolio_returns_empty_dict(self):
+    def test_empty_portfolio_returns_empty_dict(self) -> None:
         """Test that empty portfolio returns empty dict."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -385,7 +385,7 @@ class TestGetVolatilityStats:
         stats = get_volatility_stats(portfolio)
         assert not stats
 
-    def test_populated_portfolio_has_expected_keys(self):
+    def test_populated_portfolio_has_expected_keys(self) -> None:
         """Test that stats dict has all expected keys."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -416,7 +416,7 @@ class TestGetVolatilityStats:
         }
         assert set(stats.keys()) == expected_keys
 
-    def test_single_position_stats(self):
+    def test_single_position_stats(self) -> None:
         """Test stats with single position."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -442,7 +442,7 @@ class TestGetVolatilityStats:
         assert stats["std_volatility"] == 0.0
         assert abs(stats["portfolio_volatility"] - 0.25) < 0.001
 
-    def test_multiple_positions_stats(self):
+    def test_multiple_positions_stats(self) -> None:
         """Test stats with multiple positions."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -483,7 +483,7 @@ class TestGetVolatilityStats:
         assert stats["std_volatility"] > 0  # Should have some variation
         assert abs(stats["portfolio_volatility"] - 0.25) < 0.001
 
-    def test_avg_volatility_is_vega_weighted(self):
+    def test_avg_volatility_is_vega_weighted(self) -> None:
         """Test that avg_volatility uses vega weighting."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,

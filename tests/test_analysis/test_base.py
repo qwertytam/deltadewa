@@ -7,7 +7,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestPortfolioAnalyzerBase:
     """Test cases for PortfolioAnalyzerBase class."""
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test PortfolioAnalyzerBase can be instantiated."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -23,7 +23,7 @@ class TestPortfolioAnalyzerBase:
         assert analyzer.portfolio is portfolio
         assert analyzer.portfolio.spot_price == 100.0
 
-    def test_portfolio_analyzer_composition(self):
+    def test_portfolio_analyzer_composition(self) -> None:
         """Test PortfolioAnalyzer includes all mixins."""
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
@@ -50,7 +50,7 @@ class TestPortfolioAnalyzerBase:
         assert hasattr(analyzer, "format_risk_summary")
         assert hasattr(analyzer, "generate_insights")
 
-    def test_empty_portfolio(self):
+    def test_empty_portfolio(self) -> None:
         """Test analyzer with empty portfolio."""
         portfolio = OptionPortfolio()
         analyzer = PortfolioAnalyzer(portfolio)

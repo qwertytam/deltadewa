@@ -12,7 +12,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestRiskRewardMixin:
     """Test cases for RiskRewardMixin."""
 
-    def test_risk_reward_analysis_basic(self):
+    def test_risk_reward_analysis_basic(self) -> None:
         """Test basic risk_reward_analysis method."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -50,7 +50,7 @@ class TestRiskRewardMixin:
         assert "spot_at_max_profit" in analysis["max_profit_options"]
         assert "is_unlimited" in analysis["max_profit_options"]
 
-    def test_risk_reward_analysis_long_call(self):
+    def test_risk_reward_analysis_long_call(self) -> None:
         """Test risk_reward_analysis with long call strategy."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -73,7 +73,7 @@ class TestRiskRewardMixin:
         assert analysis["max_loss_options"]["is_unlimited"] is False
         assert analysis["max_loss_options"]["max_loss"] < 0
 
-    def test_risk_reward_analysis_short_call(self):
+    def test_risk_reward_analysis_short_call(self) -> None:
         """Test risk_reward_analysis with short call strategy."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -96,7 +96,7 @@ class TestRiskRewardMixin:
         assert analysis["max_profit_options"]["is_unlimited"] is False
         assert analysis["max_profit_options"]["max_profit"] > 0
 
-    def test_risk_reward_analysis_iron_condor(self):
+    def test_risk_reward_analysis_iron_condor(self) -> None:
         """Test risk_reward_analysis with iron condor strategy."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -139,7 +139,7 @@ class TestRiskRewardMixin:
         assert "breakeven_options" in analysis
         assert isinstance(analysis["breakeven_options"], list)
 
-    def test_risk_reward_analysis_empty_portfolio(self):
+    def test_risk_reward_analysis_empty_portfolio(self) -> None:
         """Test risk_reward_analysis with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
         analyzer = PortfolioAnalyzer(portfolio)
@@ -151,7 +151,7 @@ class TestRiskRewardMixin:
         assert "max_loss_options" in analysis
         assert "prob_profit" in analysis
 
-    def test_format_risk_reward_summary_basic(self):
+    def test_format_risk_reward_summary_basic(self) -> None:
         """Test format_risk_reward_summary returns string."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -175,7 +175,7 @@ class TestRiskRewardMixin:
         assert "OPTIONS ONLY RISK/REWARD" in summary
         assert "PROBABILITY ANALYSIS" in summary
 
-    def test_format_risk_reward_summary_sections(self):
+    def test_format_risk_reward_summary_sections(self) -> None:
         """Test format_risk_reward_summary contains expected sections."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -201,7 +201,7 @@ class TestRiskRewardMixin:
         # Should have total portfolio section when underlying exists
         assert "TOTAL PORTFOLIO RISK/REWARD" in summary
 
-    def test_format_risk_reward_summary_empty_portfolio(self):
+    def test_format_risk_reward_summary_empty_portfolio(self) -> None:
         """Test format_risk_reward_summary with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
         analyzer = PortfolioAnalyzer(portfolio)
@@ -212,7 +212,7 @@ class TestRiskRewardMixin:
         assert len(summary) > 0
         assert "PORTFOLIO RISK/REWARD ANALYSIS" in summary
 
-    def test_print_risk_reward_summary_no_error(self):
+    def test_print_risk_reward_summary_no_error(self) -> None:
         """Test print_risk_reward_summary doesn't raise exceptions."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
@@ -234,7 +234,7 @@ class TestRiskRewardMixin:
         except Exception as e:  # pylint: disable=broad-exception-caught
             assert False, f"print_risk_reward_summary raised {e}"
 
-    def test_risk_reward_analysis_with_spot_range(self):
+    def test_risk_reward_analysis_with_spot_range(self) -> None:
         """Test risk_reward_analysis with custom spot_range."""
         portfolio = OptionPortfolio(
             spot_price=100.0,

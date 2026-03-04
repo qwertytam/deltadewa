@@ -11,7 +11,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestRiskMixin:
     """Test cases for RiskMixin."""
 
-    def test_get_spot_range(self):
+    def test_get_spot_range(self) -> None:
         """Test _get_spot_range helper method."""
         portfolio = OptionPortfolio(spot_price=100.0)
         # pylint: disable=protected-access
@@ -20,7 +20,7 @@ class TestRiskMixin:
         assert isinstance(spot_range, np.ndarray)
         assert len(spot_range) == 10
 
-    def test_get_spot_range_comprehensive(self):
+    def test_get_spot_range_comprehensive(self) -> None:
         """Test _get_spot_range with comprehensive range."""
         portfolio = OptionPortfolio(spot_price=100.0)
         # pylint: disable=protected-access
@@ -32,7 +32,7 @@ class TestRiskMixin:
         assert min(spot_range) < 1.0
         assert max(spot_range) > 500.0
 
-    def test_calculate_max_loss_options(self):
+    def test_calculate_max_loss_options(self) -> None:
         """Test calculate_max_loss_options method."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -53,7 +53,7 @@ class TestRiskMixin:
         assert result["is_unlimited"] is False
         assert result["max_loss"] < 0
 
-    def test_calculate_max_profit_options(self):
+    def test_calculate_max_profit_options(self) -> None:
         """Test calculate_max_profit_options method."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -73,7 +73,7 @@ class TestRiskMixin:
         # Long call has unlimited profit
         assert result["is_unlimited"] is True
 
-    def test_calculate_max_loss_short_call(self):
+    def test_calculate_max_loss_short_call(self) -> None:
         """Test calculate_max_loss_options with naked short call."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -89,7 +89,7 @@ class TestRiskMixin:
 
         assert result["is_unlimited"] is True
 
-    def test_calculate_max_profit_short_call(self):
+    def test_calculate_max_profit_short_call(self) -> None:
         """Test calculate_max_profit_options with short call."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -107,7 +107,7 @@ class TestRiskMixin:
         # Profit limited to premium
         assert result["max_profit"] > 0
 
-    def test_calculate_max_loss_total(self):
+    def test_calculate_max_loss_total(self) -> None:
         """Test calculate_max_loss_total with underlying."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
@@ -118,7 +118,7 @@ class TestRiskMixin:
         # Long underlying has limited loss (spot to zero)
         assert result["is_unlimited"] is False
 
-    def test_calculate_max_profit_total(self):
+    def test_calculate_max_profit_total(self) -> None:
         """Test calculate_max_profit_total with underlying."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
@@ -129,7 +129,7 @@ class TestRiskMixin:
         # Long underlying has unlimited profit
         assert result["is_unlimited"] is True
 
-    def test_calculate_breakeven_points(self):
+    def test_calculate_breakeven_points(self) -> None:
         """Test calculate_breakeven_points method."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -147,7 +147,7 @@ class TestRiskMixin:
         # Long call should have one breakeven point
         assert len(breakevens) > 0
 
-    def test_breakeven_empty_portfolio(self):
+    def test_breakeven_empty_portfolio(self) -> None:
         """Test calculate_breakeven_points with empty portfolio."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -156,7 +156,7 @@ class TestRiskMixin:
         # Empty portfolio has no breakeven
         assert len(breakevens) == 0
 
-    def test_check_unlimited_trend(self):
+    def test_check_unlimited_trend(self) -> None:
         """Test _check_unlimited_trend helper method."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -172,18 +172,20 @@ class TestRiskMixin:
 
         # Compute PnL array
         pnl_array = portfolio.vectorized_pnl_at_expiry(
-            spot_range, include_underlying=False,
+            spot_range,
+            include_underlying=False,
         )
 
         # Check increasing trend (profit)
         # pylint: disable=protected-access
         result = portfolio._check_unlimited_trend(
-            pnl_array, check_increasing=True,
+            pnl_array,
+            check_increasing=True,
         )
 
         assert isinstance(result, bool)
 
-    def test_vectorized_risk_methods_numerical_equivalence(self):
+    def test_vectorized_risk_methods_numerical_equivalence(self) -> None:
         """Test that vectorized risk methods produce identical results to scalar approach."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -221,7 +223,8 @@ class TestRiskMixin:
         max_loss_vec = portfolio.calculate_max_loss_options(spot_range)
         max_profit_vec = portfolio.calculate_max_profit_options(spot_range)
         breakeven_vec = portfolio.calculate_breakeven_points(
-            spot_range, include_underlying=False,
+            spot_range,
+            include_underlying=False,
         )
 
         # Verify results are computed properly (types and reasonable values)
@@ -239,13 +242,17 @@ class TestRiskMixin:
         # Verify vectorized gives same results by comparing PnL at a few key spots
         test_spots = np.array([80.0, 90.0, 95.0, 100.0, 105.0, 110.0, 120.0])
         pnl_vectorized = portfolio.vectorized_pnl_at_expiry(
-            test_spots, include_underlying=False,
+            test_spots,
+            include_underlying=False,
         )
 
         for i, spot in enumerate(test_spots):
             pnl_scalar = portfolio.calculate_pnl_at_expiry(
-                spot, include_underlying=False,
+                spot,
+                include_underlying=False,
             )
             assert np.isclose(
-                pnl_vectorized[i], pnl_scalar, rtol=1e-10,
+                pnl_vectorized[i],
+                pnl_scalar,
+                rtol=1e-10,
             ), f"Mismatch at spot={spot}: vectorized={pnl_vectorized[i]}, scalar={pnl_scalar}"

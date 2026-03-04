@@ -9,7 +9,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 class TestGreeksMixin:
     """Test cases for GreeksMixin."""
 
-    def test_total_delta(self):
+    def test_total_delta(self) -> None:
         """Test total_delta calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -25,7 +25,7 @@ class TestGreeksMixin:
         # ATM call should have positive delta
         assert delta > 0
 
-    def test_total_delta_multiple_positions(self):
+    def test_total_delta_multiple_positions(self) -> None:
         """Test total_delta with multiple positions."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -49,7 +49,7 @@ class TestGreeksMixin:
         # Should be sum of both deltas
         assert isinstance(delta, float)
 
-    def test_total_gamma(self):
+    def test_total_gamma(self) -> None:
         """Test total_gamma calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -64,7 +64,7 @@ class TestGreeksMixin:
         assert isinstance(gamma, float)
         assert gamma > 0
 
-    def test_total_vega(self):
+    def test_total_vega(self) -> None:
         """Test total_vega calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -79,7 +79,7 @@ class TestGreeksMixin:
         assert isinstance(vega, float)
         assert vega > 0
 
-    def test_total_theta(self):
+    def test_total_theta(self) -> None:
         """Test total_theta calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -95,7 +95,7 @@ class TestGreeksMixin:
         # Long options have negative theta
         assert theta < 0
 
-    def test_total_rho(self):
+    def test_total_rho(self) -> None:
         """Test total_rho calculation."""
         portfolio = OptionPortfolio(spot_price=100.0)
 
@@ -109,7 +109,7 @@ class TestGreeksMixin:
         rho = portfolio.total_rho()
         assert isinstance(rho, float)
 
-    def test_net_delta(self):
+    def test_net_delta(self) -> None:
         """Test net_delta calculation."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
@@ -125,7 +125,7 @@ class TestGreeksMixin:
         expected = portfolio.total_delta() + 100.0
         assert net_delta == expected
 
-    def test_hedge_ratio(self):
+    def test_hedge_ratio(self) -> None:
         """Test hedge_ratio calculation."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
@@ -139,7 +139,7 @@ class TestGreeksMixin:
         hedge_ratio = portfolio.hedge_ratio()
         assert isinstance(hedge_ratio, float)
 
-    def test_hedge_ratio_no_underlying(self):
+    def test_hedge_ratio_no_underlying(self) -> None:
         """Test hedge_ratio with no underlying position."""
         portfolio = OptionPortfolio(underlying_quantity=0.0, spot_price=100.0)
 
@@ -153,7 +153,7 @@ class TestGreeksMixin:
         hedge_ratio = portfolio.hedge_ratio()
         assert hedge_ratio == 0.0
 
-    def test_delta_adjustment_needed(self):
+    def test_delta_adjustment_needed(self) -> None:
         """Test delta_adjustment_needed calculation."""
         portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
 
@@ -168,7 +168,7 @@ class TestGreeksMixin:
         # Should be negative of net_delta
         assert adjustment == -portfolio.net_delta()
 
-    def test_greeks_empty_portfolio(self):
+    def test_greeks_empty_portfolio(self) -> None:
         """Test Greek calculations with empty portfolio."""
         portfolio = OptionPortfolio()
 
@@ -183,7 +183,7 @@ class TestGreeksMixin:
 class TestAllGreeksBatch:
     """Test batch Greek computation via all_greeks()."""
 
-    def test_all_greeks_single_position(self):
+    def test_all_greeks_single_position(self) -> None:
         """Test all_greeks with single position."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
 
@@ -212,7 +212,7 @@ class TestAllGreeksBatch:
         assert greeks["total_rho"] == portfolio.total_rho()
         assert greeks["net_delta"] == portfolio.net_delta()
 
-    def test_all_greeks_multiple_positions(self):
+    def test_all_greeks_multiple_positions(self) -> None:
         """Test all_greeks with multiple positions."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=50.0)
 
@@ -241,7 +241,7 @@ class TestAllGreeksBatch:
         # Net delta should include underlying
         assert greeks["net_delta"] == greeks["total_delta"] + 50.0
 
-    def test_all_greeks_empty_portfolio(self):
+    def test_all_greeks_empty_portfolio(self) -> None:
         """Test all_greeks with empty portfolio."""
         portfolio = OptionPortfolio(underlying_quantity=100.0)
 
@@ -254,7 +254,7 @@ class TestAllGreeksBatch:
         assert greeks["total_rho"] == 0.0
         assert greeks["net_delta"] == 100.0  # Only underlying
 
-    def test_summary_stats_uses_all_greeks(self):
+    def test_summary_stats_uses_all_greeks(self) -> None:
         """Test that summary_stats uses all_greeks for efficiency."""
         portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
 
