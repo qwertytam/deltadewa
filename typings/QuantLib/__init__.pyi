@@ -4,7 +4,7 @@ Minimal, hand-maintained typing stubs for the QuantLib symbols used in this
 project.
 """
 
-# ruff: noqa: N802, UP037
+# ruff: noqa: N802, UP037, ANN401
 # pylint: disable=unused-argument missing-class-docstring missing-function-docstring
 # pylint: disable=invalid-name
 from typing import Any
@@ -107,6 +107,8 @@ class SimpleQuote:
 
     def __init__(self, value: float) -> None: ...
     def setValue(self, value: float) -> None: ...
+    # @property
+    def value(self) -> float: ...
 
 class QuoteHandle:
     """Handle for a quote."""
