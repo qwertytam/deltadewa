@@ -59,9 +59,9 @@ class PositionAgingDisplay:
         df_positions = self.portfolio.to_dataframe()
         # Prefer a patched `datetime.now` (tests patch the module name);
         # fall back to the `dt` alias for normal runtime.
-        if hasattr(datetime, "now"):
+        if hasattr(datetime.datetime, "now"):
             tz = getattr(datetime, "UTC", datetime.UTC)
-            today = dt.now(tz=tz)
+            today = datetime.datetime.now(tz=tz)
         else:
             today = dt.now(tz=datetime.UTC)
 
@@ -73,13 +73,13 @@ class PositionAgingDisplay:
             )
 
             # vectorized days to expiry as integer days
-            df_positions["days_to_expiry"] = (df_positions["maturity"] - today).dt.days
+            df_positions["days_to_expiry"] = (
+                df_positions["maturity"] - today
+            ).dt.days
 
             df_positions["urgency"] = df_positions.sort_values(
                 "days_to_expiry",
-            )[
-                "days_to_expiry"
-            ].apply(_get_urgency_category)
+            )["days_to_expiry"].apply(_get_urgency_category)
 
             # Group and display
             _urgency_groups = df_positions.sort_values(
@@ -99,7 +99,10 @@ class PositionAgingDisplay:
                 ]
 
                 if len(positions_in_category) > 0:
-                    print(f"\n{category}:  {len(positions_in_category)} position(s)")
+                    print(
+                        f"\n{category}:  "
+                        f"{len(positions_in_category)} position(s)",
+                    )
                     self._reporter.divider()
 
                     for _, pos in positions_in_category.iterrows():
@@ -114,7 +117,8 @@ class PositionAgingDisplay:
                         theta = pos["position_theta"]
 
                         print(
-                            f"  {opt_type: <4} ${strike:>6.0f} x{qty:>4.0f}  |  "
+                            f"  {opt_type: <4} "
+                            f"${strike:>6.0f} x{qty:>4.0f}  |  "
                             f"Expires: {expiry_date} ({days_left}d)  |  "
                             f"Δ={delta: >7.1f}  θ=${theta:>6.2f}/day",
                         )
@@ -126,7 +130,10 @@ class PositionAgingDisplay:
                                 "Section 6 or close",
                             )
                         elif days_left < 14:
-                            print("       → PLAN:  Start evaluating roll opportunities")
+                            print(
+                                "       → PLAN:  Start evaluating roll"
+                                " opportunities",
+                            )
 
             print()
             self._reporter.divider()
@@ -141,9 +148,13 @@ class PositionAgingDisplay:
                 & (df_positions["days_to_expiry"] < 21)
             ]["position_theta"].sum()
 
-            print(f"  • Urgent positions (<7d): Burning ${abs(urgent_theta):.2f}/day")
             print(
-                f"  • Near-term positions (7-21d): Burning ${abs(soon_theta):.2f}/day",
+                f"  • Urgent positions (<7d): Burning $"
+                f"{abs(urgent_theta):.2f}/day",
+            )
+            print(
+                f"  • Near-term positions (7-21d): Burning $"
+                f"{abs(soon_theta):.2f}/day",
             )
             print("  • Recommendation: Focus rolls on urgent positions first")
             self._reporter.divider()

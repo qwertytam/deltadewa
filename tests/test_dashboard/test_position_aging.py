@@ -11,9 +11,7 @@ Focus areas:
 
 from __future__ import annotations
 
-from datetime import UTC as UTC  # pylint: disable=C0414
-from datetime import datetime as dt
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -102,7 +100,10 @@ class TestGetUrgencyCategory:
 
 
 class TestPositionAgingDisplayConstruction:
-    def test_constructs_with_portfolio_only(self, single_position_portfolio) -> None:
+    def test_constructs_with_portfolio_only(
+        self,
+        single_position_portfolio,
+    ) -> None:
         d = PositionAgingDisplay(single_position_portfolio)
         assert d is not None
 
@@ -121,13 +122,20 @@ class TestPositionAgingDisplayConstruction:
         d = PositionAgingDisplay(single_position_portfolio)
         assert d._reporter is not None
 
-    def test_custom_reporter_stored(self, single_position_portfolio, reporter) -> None:
+    def test_custom_reporter_stored(
+        self,
+        single_position_portfolio,
+        reporter,
+    ) -> None:
         d = PositionAgingDisplay(single_position_portfolio, reporter)
         assert d._reporter is reporter
 
 
 class TestPositionAgingDisplayMethod:
-    def test_display_does_not_raise_empty_portfolio(self, empty_portfolio) -> None:
+    def test_display_does_not_raise_empty_portfolio(
+        self,
+        empty_portfolio,
+    ) -> None:
         PositionAgingDisplay(empty_portfolio).display()
 
     def test_display_does_not_raise_single_position(
@@ -181,17 +189,21 @@ class TestPositionAgingDisplayMethod:
         d = PositionAgingDisplay(single_position_portfolio)
 
         # First call: "today" is now
-        fixed_t0 = dt.now(tz=UTC)
-        with patch("deltadewa.dashboard.position_aging.datetime") as mock_dt:
-            mock_dt.now.return_value = fixed_t0
+        fixed_t0 = datetime.now(tz=UTC)
+        with patch(
+            "deltadewa.dashboard.position_aging.datetime",
+        ) as mock_dt:
+            mock_dt.datetime.now.return_value = fixed_t0
             mock_dt.UTC = UTC
             d.display()
         out_t0 = capsys.readouterr().out
 
         # Second call: "today" is 10 days later → days-to-expiry should decrease
         fixed_t1 = fixed_t0 + timedelta(days=10)
-        with patch("deltadewa.dashboard.position_aging.datetime") as mock_dt:
-            mock_dt.now.return_value = fixed_t1
+        with patch(
+            "deltadewa.dashboard.position_aging.datetime",
+        ) as mock_dt:
+            mock_dt.datetime.now.return_value = fixed_t1
             mock_dt.UTC = UTC
             d.display()
         out_t1 = capsys.readouterr().out
