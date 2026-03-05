@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
 
 
+# TODO: Linter
 class RecommendationsMixin:
     """Mixin for hedge recommendations and risk concentration analysis.
 

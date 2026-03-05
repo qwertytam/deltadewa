@@ -4,6 +4,7 @@ This module provides a widget that displays key portfolio metrics and health
 indicators in a compact, always-visible format.
 """
 
+# TODO: Linter
 from typing import TYPE_CHECKING
 
 import ipywidgets as widgets  # type: ignore[import-untyped]

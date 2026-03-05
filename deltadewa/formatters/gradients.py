@@ -10,6 +10,7 @@ This module provides color gradient functions for financial data visualization:
 These functions are self-contained with no dependencies on other formatter submodules.
 """
 
+# TODO: Linter
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast

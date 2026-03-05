@@ -4,6 +4,7 @@ This module provides a centralized widget for managing market parameters
 and scenario assumptions across the deltadewa dashboard.
 """
 
+# TODO: Linter
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace

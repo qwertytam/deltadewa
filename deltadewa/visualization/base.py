@@ -1,5 +1,6 @@
 """Base class and final composition for option charts visualization."""
 
+# TODO: Linter
 import warnings
 
 import matplotlib.pyplot as plt

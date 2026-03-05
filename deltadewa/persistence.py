@@ -4,6 +4,7 @@ This module provides utilities for saving and loading portfolio state
 in multiple formats (JSON, CSV, YAML).
 """
 
+# TODO: Linter
 import datetime
 import json
 from datetime import datetime as dt
@@ -192,7 +193,9 @@ class PortfolioSerializer:
                     "rho": pos.option.rho(),
                 },
                 "price": pos.option.price(),
-                "position_value": pos.option.price() * pos.quantity * pos.contract_size,
+                "position_value": pos.option.price()
+                * pos.quantity
+                * pos.contract_size,
             }
             data["positions"].append(position_data)
 
@@ -264,7 +267,9 @@ class PortfolioSerializer:
                     "volatility": pos.option.volatility,
                     "custom_volatility": pos.custom_volatility,
                     "price": pos.option.price(),
-                    "value": pos.option.price() * pos.quantity * pos.contract_size,
+                    "value": pos.option.price()
+                    * pos.quantity
+                    * pos.contract_size,
                     "delta": pos.option.delta(),
                     "gamma": pos.option.gamma(),
                     "theta": pos.option.theta(),
@@ -288,7 +293,9 @@ class PortfolioSerializer:
                     "resulting_positions": entry["portfolio_snapshot"][
                         "total_positions"
                     ],
-                    "resulting_net_delta": entry["portfolio_snapshot"]["net_delta"],
+                    "resulting_net_delta": entry["portfolio_snapshot"][
+                        "net_delta"
+                    ],
                 }
                 for entry in changelog.get_all_portfolio_snapshots()
             ],
@@ -341,7 +348,9 @@ class PortfolioSerializer:
 
         output_path = self.export_dir / filename
         with open(output_path, "w", encoding="utf-8") as f:
-            yaml.dump(portfolio_data, f, default_flow_style=False, sort_keys=False)
+            yaml.dump(
+                portfolio_data, f, default_flow_style=False, sort_keys=False
+            )
 
         return Path(output_path)
 
@@ -383,7 +392,9 @@ class PortfolioSerializer:
 
         # Add positions (robust to variations in exported field names)
         for pos_data in data["positions"]:
-            maturity_str = pos_data.get("maturity_date") or pos_data.get("maturity")
+            maturity_str = pos_data.get("maturity_date") or pos_data.get(
+                "maturity"
+            )
             if maturity_str is None:
                 raise ValueError("Position entry missing maturity date")
             maturity = dt.fromisoformat(maturity_str)
@@ -431,7 +442,9 @@ class PortfolioSerializer:
 
         """
         if not YAML_AVAILABLE:
-            raise RuntimeError("⚠️  PyYAML not installed. Cannot import from YAML.")
+            raise RuntimeError(
+                "⚠️  PyYAML not installed. Cannot import from YAML."
+            )
 
         with open(filepath, encoding="utf-8") as f:
             config = yaml.safe_load(f)
@@ -478,7 +491,8 @@ class PortfolioSerializer:
                 quantity=pos_config["quantity"],
                 option_type=(
                     OptionType.CALL
-                    if pos_config["option_type"].upper() == OptionType.CALL.value
+                    if pos_config["option_type"].upper()
+                    == OptionType.CALL.value
                     else OptionType.PUT
                 ),
                 volatility=position_volatility,

@@ -1,5 +1,6 @@
 """Theta and carry analysis charts for option visualization."""
 
+# TODO: Linter
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt

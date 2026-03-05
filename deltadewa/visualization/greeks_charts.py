@@ -1,5 +1,6 @@
 """Greek visualization methods for option charts."""
 
+# TODO: Linter
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt

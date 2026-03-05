@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from deltadewa.reporting.audit import PortfolioLogger
 
 
+# TODO: Linter
 class ChangeLogDisplay:
     """Build and display change log, summary stats, and portfolio evolution."""
 

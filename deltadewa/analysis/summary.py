@@ -6,6 +6,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
+# TODO: Linter
 
 
 class SummaryMixin:

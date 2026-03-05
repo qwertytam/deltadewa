@@ -13,6 +13,7 @@ from deltadewa.reporting import ConsoleReporter
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
+# TODO: Linter
 
 
 class MonteCarloStalenessWidget:

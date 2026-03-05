@@ -10,6 +10,7 @@ sequence and producing the formatted tables so the notebook cell is
 reduced to a single ``display()`` call.
 """
 
+# TODO: Linter
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

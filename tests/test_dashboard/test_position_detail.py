@@ -1,5 +1,5 @@
 """Tests for deltadewa.dashboard.position_detail.PositionDetailDisplay.
-
+# TODO: Linter
 All tests in this module are unit tests — they do not call QuantLib pricing
 engines and run without a display environment (no IPython kernel required).
 display() calls are no-ops outside IPython; we verify behaviour by inspecting
@@ -15,7 +15,9 @@ import pandas as pd
 
 from deltadewa.constants import OptionType
 from deltadewa.dashboard.position_detail import (  # module-level private helper
-    PositionDetailDisplay, _fmt_enum_val)
+    PositionDetailDisplay,
+    _fmt_enum_val,
+)
 
 # ===========================================================================
 # _fmt_enum_val
@@ -57,11 +59,15 @@ class TestPositionDetailDisplayConstruction:
         display = PositionDetailDisplay(empty_portfolio)
         assert display is not None
 
-    def test_constructs_with_single_position(self, single_position_portfolio) -> None:
+    def test_constructs_with_single_position(
+        self, single_position_portfolio
+    ) -> None:
         display = PositionDetailDisplay(single_position_portfolio)
         assert display is not None
 
-    def test_portfolio_reference_stored(self, single_position_portfolio) -> None:
+    def test_portfolio_reference_stored(
+        self, single_position_portfolio
+    ) -> None:
         display = PositionDetailDisplay(single_position_portfolio)
         assert display._portfolio is single_position_portfolio
 
@@ -141,7 +147,9 @@ class TestPositionDetailDataFrame:
 
         pd.to_datetime(df["maturity"].iloc[0])
 
-    def test_option_type_column_present(self, single_position_portfolio) -> None:
+    def test_option_type_column_present(
+        self, single_position_portfolio
+    ) -> None:
         df = single_position_portfolio.to_dataframe()
         assert "option_type" in df.columns
 
@@ -151,4 +159,6 @@ class TestPositionDetailDataFrame:
         """Column logic should not fail when some positions have custom vol."""
         df = portfolio_with_custom_vol.to_dataframe()
         assert "custom_volatility" in df.columns
-        assert df["custom_volatility"].sum() == 1  # exactly one custom-vol position
+        assert (
+            df["custom_volatility"].sum() == 1
+        )  # exactly one custom-vol position

@@ -4,6 +4,7 @@ This module provides visual gauge indicators with configurable color gradients
 and value markers for displaying portfolio health metrics.
 """
 
+# TODO: Linter
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.colours import DEFAULT_PALETTE
@@ -393,7 +394,13 @@ class GaugeIndicator:
             self.actual = actual
 
         # Validate after update
-        if not (self.start <= self.min_val <= self.mid_val <= self.max_val <= self.end):
+        if not (
+            self.start
+            <= self.min_val
+            <= self.mid_val
+            <= self.max_val
+            <= self.end
+        ):
             raise ValueError(
                 f"Values must satisfy: start ({self.start}) <= min ({self.min_val}) "
                 f"<= mid ({self.mid_val}) <= max ({self.max_val}) <= end ({self.end})",

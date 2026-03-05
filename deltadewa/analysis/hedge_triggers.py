@@ -8,6 +8,7 @@ reads from ``portfolio`` and writes formatted output via ``reporter``, but
 never mutates any object it receives.
 """
 
+# TODO: Linter
 from __future__ import annotations
 
 import datetime

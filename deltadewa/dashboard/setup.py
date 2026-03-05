@@ -10,6 +10,7 @@ widget
 - ``print_portfolio_summary()``     — formatted portfolio summary block
 """
 
+# TODO: Linter
 from __future__ import annotations
 
 import datetime

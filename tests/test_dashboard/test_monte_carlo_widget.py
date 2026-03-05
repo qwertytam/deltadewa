@@ -5,6 +5,7 @@ The widget constructor and check_and_warn() method may create widgets
 internally; we only assert on the returned boolean and on state mutations.
 """
 
+# TODO: Linter
 # ruff: noqa: S101 D102 ANN001
 # pylint: disable=missing-function-docstring
 

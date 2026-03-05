@@ -3,6 +3,7 @@
 Provides interactive configuration widgets and default settings management.
 """
 
+# TODO: Linter
 import platform
 import subprocess
 from collections.abc import Callable

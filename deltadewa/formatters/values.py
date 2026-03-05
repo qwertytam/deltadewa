@@ -12,6 +12,7 @@ All formatters in this module are self-contained with no dependencies
 on other formatter submodules.
 """
 
+# TODO: Linter
 from __future__ import annotations
 
 from typing import Any, cast

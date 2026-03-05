@@ -4,6 +4,7 @@ Handles formatted output to stdout/stderr with support for headers,
 tables, status messages, and progress bars.
 """
 
+# TODO: Linter
 from typing import Any
 
 from IPython.display import clear_output

@@ -6,6 +6,7 @@ from deltadewa import constants as const
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
+# TODO: Linter
 
 
 class HealthMixin:
