@@ -1,7 +1,9 @@
 """Base class and final composition for option charts visualization."""
 
+from __future__ import annotations
+
 import warnings
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -15,18 +17,12 @@ from deltadewa.visualization.theta_charts import ThetaChartsMixin
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolioBase
 
-# TypeVar for base class
-PortfolioT = TypeVar("PortfolioT", bound="OptionPortfolioBase")
 
-
-class OptionChartsBase(Generic[PortfolioT]):
+class OptionChartsBase:
     """Base class with portfolio reference and style setup.
 
     This class provides the foundation for all charting utilities, managing
     the portfolio reference and matplotlib style configuration.
-
-    Type parameter:
-        PortfolioT: The portfolio type (OptionPortfolioBase or subclass)
 
     Attributes:
         portfolio: OptionPortfolio instance to visualize
@@ -36,7 +32,7 @@ class OptionChartsBase(Generic[PortfolioT]):
 
     def __init__(
         self,
-        portfolio: PortfolioT,
+        portfolio: OptionPortfolioBase,
         style: str = "seaborn-v0_8-darkgrid",
     ) -> None:
         """Initialize OptionChartsBase with a portfolio.
@@ -119,7 +115,7 @@ class OptionCharts(
     GreeksChartsMixin,
     ThetaChartsMixin,
     ScenarioChartsMixin,
-    OptionChartsBase[PortfolioT],  # Now explicitly generic
+    OptionChartsBase,
 ):
     """Comprehensive charting utilities for options portfolio analysis.
 
@@ -127,18 +123,12 @@ class OptionCharts(
     charts for options analysis including P&L diagrams, Greek distributions,
     risk decomposition, theta decay analysis, and scenario analysis.
 
-    The class is generic and works with OptionPortfolioBase and all subclasses
-    (e.g., OptionPortfolio).
-
     Composed from specialized mixins:
     - PnLChartsMixin: P&L diagram plotting methods
     - GreeksChartsMixin: Greek visualization methods
     - ThetaChartsMixin: Theta and carry analysis charts
     - ScenarioChartsMixin: Scenario analysis visualization
     - OptionChartsBase: Core portfolio reference and style setup
-
-    Type parameter:
-        PortfolioT: The portfolio type (default: OptionPortfolio)
 
     Attributes:
         portfolio: OptionPortfolio instance

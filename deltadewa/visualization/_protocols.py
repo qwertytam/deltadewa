@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
 
 import numpy as np
+import pandas as pd
 from matplotlib.axes import Axes
 
 if TYPE_CHECKING:
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 # Covariant TypeVar for portfolio types
 # Covariance allows subclasses (OptionPortfolio) to be used where the base
 # class (OptionPortfolioBase) is expected
-PortfolioT = TypeVar("PortfolioT", bound="OptionPortfolioBase", covariant=True)
+PortfolioT = TypeVar("PortfolioT", bound="OptionPortfolioBase")
 
 
 class _VisualizationProtocol(Protocol, Generic[PortfolioT]):
@@ -52,4 +53,46 @@ class _VisualizationProtocol(Protocol, Generic[PortfolioT]):
         analysis: dict,
         analysis_key: str,
         title: str,
+    ) -> None: ...
+
+    # ThetaChartsMixin
+    def _prepare_theta_data(
+        self,
+        df: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, dict]: ...
+
+    def _plot_theta_by_bucket(
+        self,
+        ax: Axes,
+        df_carry: pd.DataFrame,
+    ) -> None: ...
+
+    def _plot_theta_projection(
+        self,
+        ax: Axes,
+        theta_metrics: dict,
+        projection_days: int,
+    ) -> None: ...
+
+    def _plot_carry_efficiency(
+        self,
+        ax: Axes,
+        df_carry: pd.DataFrame,
+    ) -> None: ...
+
+    def _plot_theta_vs_contracts(
+        self,
+        ax: Axes,
+        df_carry: pd.DataFrame,
+    ) -> None: ...
+
+    # GreekChartsMixin
+    def _plot_greek_by_dimension(
+        self,
+        ax: Axes,
+        df: pd.DataFrame,
+        metric: str,
+        dimension: str,
+        title: str,
+        xlabel: str | None = None,
     ) -> None: ...

@@ -12,14 +12,17 @@ from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.values import format_currency_for_axis
 
 if TYPE_CHECKING:
-    pass
+    from deltadewa.visualization._protocols import _VisualizationProtocol
 
 
 class ScenarioChartsMixin:
     """Mixin providing scenario analysis visualization."""
 
+    if TYPE_CHECKING:
+        _self: "_VisualizationProtocol"
+
     def plot_scenario_analysis(
-        self,
+        self: "_VisualizationProtocol",
         scenario_df: pd.DataFrame,
         days_forward: int,
         valuation_date: dt,
