@@ -1,23 +1,32 @@
 """Base class and final composition for option charts visualization."""
 
 import warnings
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
-from deltadewa.portfolio.core import OptionPortfolioBase
 from deltadewa.visualization.greeks_charts import GreeksChartsMixin
 from deltadewa.visualization.pnl_charts import PnLChartsMixin
 from deltadewa.visualization.scenarios import ScenarioChartsMixin
 from deltadewa.visualization.theta_charts import ThetaChartsMixin
 
+if TYPE_CHECKING:
+    from deltadewa.portfolio.core import OptionPortfolioBase
 
-class OptionChartsBase:
+# TypeVar for base class
+PortfolioT = TypeVar("PortfolioT", bound="OptionPortfolioBase")
+
+
+class OptionChartsBase(Generic[PortfolioT]):
     """Base class with portfolio reference and style setup.
 
     This class provides the foundation for all charting utilities, managing
     the portfolio reference and matplotlib style configuration.
+
+    Type parameter:
+        PortfolioT: The portfolio type (OptionPortfolioBase or subclass)
 
     Attributes:
         portfolio: OptionPortfolio instance to visualize
@@ -27,7 +36,7 @@ class OptionChartsBase:
 
     def __init__(
         self,
-        portfolio: OptionPortfolioBase,
+        portfolio: PortfolioT,
         style: str = "seaborn-v0_8-darkgrid",
     ) -> None:
         """Initialize OptionChartsBase with a portfolio.
@@ -110,13 +119,16 @@ class OptionCharts(
     GreeksChartsMixin,
     ThetaChartsMixin,
     ScenarioChartsMixin,
-    OptionChartsBase,
+    OptionChartsBase[PortfolioT],  # Now explicitly generic
 ):
     """Comprehensive charting utilities for options portfolio analysis.
 
     This class provides methods to create standardized, publication-quality
     charts for options analysis including P&L diagrams, Greek distributions,
     risk decomposition, theta decay analysis, and scenario analysis.
+
+    The class is generic and works with OptionPortfolioBase and all subclasses
+    (e.g., OptionPortfolio).
 
     Composed from specialized mixins:
     - PnLChartsMixin: P&L diagram plotting methods
@@ -125,8 +137,13 @@ class OptionCharts(
     - ScenarioChartsMixin: Scenario analysis visualization
     - OptionChartsBase: Core portfolio reference and style setup
 
+    Type parameter:
+        PortfolioT: The portfolio type (default: OptionPortfolio)
+
     Attributes:
         portfolio: OptionPortfolio instance
         style: Matplotlib style to use (default: 'seaborn-v0_8-darkgrid')
 
     """
+
+    pass  # noqa: PIE790  pylint: disable=unnecessary-pass

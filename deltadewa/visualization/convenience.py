@@ -4,6 +4,8 @@ This module provides module-level convenience functions that wrap
 OptionCharts methods for easier use.
 """
 
+from typing import TYPE_CHECKING, overload
+
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.figure import Figure
@@ -13,8 +15,24 @@ from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.values import format_currency_for_axis
 from deltadewa.visualization.base import OptionCharts
 
+if TYPE_CHECKING:
+    from deltadewa.portfolio.core import OptionPortfolio, OptionPortfolioBase
+
 # ruff: noqa: ANN001 ANN003
-# TODO: Linter errors
+
+
+@overload
+def plot_pnl_diagram(
+    portfolio: "OptionPortfolio",
+    **kwargs,
+) -> Figure: ...
+
+
+@overload
+def plot_pnl_diagram(
+    portfolio: "OptionPortfolioBase",
+    **kwargs,
+) -> Figure: ...
 
 
 def plot_pnl_diagram(portfolio, **kwargs) -> Figure:
@@ -30,6 +48,20 @@ def plot_pnl_diagram(portfolio, **kwargs) -> Figure:
     """
     charts = OptionCharts(portfolio)
     return charts.plot_pnl_diagram(**kwargs)
+
+
+@overload
+def plot_pnl_distribution_with_metrics(
+    portfolio: "OptionPortfolio",
+    **kwargs,
+) -> Figure: ...
+
+
+@overload
+def plot_pnl_distribution_with_metrics(
+    portfolio: "OptionPortfolioBase",
+    **kwargs,
+) -> Figure: ...
 
 
 def plot_pnl_distribution_with_metrics(portfolio, **kwargs) -> Figure:
