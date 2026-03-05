@@ -10,7 +10,6 @@ from deltadewa.config import (
 )
 
 # ruff: noqa: S101 ANN001
-# TODO: Linter
 
 
 class TestCreateExportDirWidget:
@@ -95,7 +94,7 @@ class TestCreateExportDirWidget:
             if isinstance(w, widgets.Button):
                 buttons.append(w)
             if hasattr(w, "children"):
-                for child in w.children:
+                for child in w.children:  # type: ignore[attr-defined]
                     buttons.extend(find_buttons(child))
             return buttons
 

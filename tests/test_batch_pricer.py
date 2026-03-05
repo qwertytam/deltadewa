@@ -1,6 +1,5 @@
 """Tests for BatchPricer class."""
 
-# TODO: Linter
 import datetime
 import threading
 import warnings
@@ -800,16 +799,16 @@ class TestClosedFormAccuracyWarning:
         Clear the valuation module's __warningregistry__ before/after each test
         """
         if hasattr(_valuation_module, "__warningregistry__"):
-            _valuation_module.__warningregistry__.clear()
+            _valuation_module.__warningregistry__.clear()  # type: ignore[error]
         yield
         if hasattr(_valuation_module, "__warningregistry__"):
-            _valuation_module.__warningregistry__.clear()
+            _valuation_module.__warningregistry__.clear()  # type: ignore[error]
 
     @staticmethod
     def _clear_registry():  # noqa: ANN205
         """Clear inside a catch_warnings block to defeat deduplication."""
         if hasattr(_valuation_module, "__warningregistry__"):
-            _valuation_module.__warningregistry__.clear()
+            _valuation_module.__warningregistry__.clear()  # type: ignore[error]
 
     def _deep_itm_call_portfolio(self) -> OptionPortfolio:
         """Portfolio with a deep ITM call.
@@ -1253,10 +1252,10 @@ class TestBatchPricerThreading:
             # Clear the per-module registry inside the catch_warnings block
             # so prior-test deduplication entries don't suppress these warnings.
             if hasattr(_valuation_module, "__warningregistry__"):
-                _valuation_module.__warningregistry__.clear()
+                _valuation_module.__warningregistry__.clear()  # type: ignore[error]
 
             if hasattr(_batch_pricer_module, "__warningregistry__"):
-                _batch_pricer_module.__warningregistry__.clear()
+                _batch_pricer_module.__warningregistry__.clear()  # type: ignore[error]
             pricer.portfolio_values_at(
                 np.linspace(110.0, 130.0, 10),
                 dt.now(tz=datetime.UTC),

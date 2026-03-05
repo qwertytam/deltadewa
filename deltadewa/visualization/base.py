@@ -1,12 +1,12 @@
 """Base class and final composition for option charts visualization."""
 
-# TODO: Linter
 import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from deltadewa.portfolio.core import OptionPortfolioBase
 from deltadewa.visualization.greeks_charts import GreeksChartsMixin
 from deltadewa.visualization.pnl_charts import PnLChartsMixin
 from deltadewa.visualization.scenarios import ScenarioChartsMixin
@@ -25,7 +25,11 @@ class OptionChartsBase:
 
     """
 
-    def __init__(self, portfolio, style: str = "seaborn-v0_8-darkgrid") -> None:
+    def __init__(
+        self,
+        portfolio: OptionPortfolioBase,
+        style: str = "seaborn-v0_8-darkgrid",
+    ) -> None:
         """Initialize OptionChartsBase with a portfolio.
 
         Args:

@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
 
-# TODO: Linter
 class VolatilityProfileDisplay:
     """Build and display the portfolio volatility profile."""
 
@@ -58,14 +57,16 @@ class VolatilityProfileDisplay:
             if vol_stats["num_custom_vol"] > 0:
                 print("\n⚠️  Volatility Skew Detected")
                 print(
-                    "   Stress test analysis uses proportional volatility scaling to"
+                    "   Stress test analysis uses proportional"
+                    " volatility scaling to",
                 )
                 print(
                     "   maintain the relative volatility structure "
                     "(skew/smile) across positions.",
                 )
                 print(
-                    "   Each position's volatility is scaled by the same factor."
+                    "   Each position's volatility is scaled "
+                    "by the same factor.",
                 )
             else:
                 print("\n✓ Uniform Volatility")
@@ -75,7 +76,7 @@ class VolatilityProfileDisplay:
             for i, pos in enumerate(self._portfolio.positions):
                 custom_marker = " (custom)" if pos.custom_volatility else ""
                 print(
-                    f"  Position {i+1}: {pos.option.volatility:.2%}"
+                    f"  Position {i + 1}: {pos.option.volatility:.2%}"
                     f"{custom_marker} - {pos.option.option_type.upper()} "
                     f"${pos.option.strike_price:.2f}",
                 )

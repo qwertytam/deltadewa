@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
 
 
-# TODO: Linter
 class RecommendationsMixin:
     """Mixin for hedge recommendations and risk concentration analysis.
 
@@ -28,7 +27,7 @@ class RecommendationsMixin:
         include_option_alternatives: bool = True,
         max_alternatives: int = 10,
     ) -> dict:
-        """Generate specific hedge recommendations to achieve target hedge ratio.
+        """Generate hedge recommendations to achieve target hedge ratio.
 
         Args:
             target_hedge_ratio: Target hedge ratio (0-100, where 100 = fully

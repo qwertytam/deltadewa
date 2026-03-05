@@ -1,6 +1,5 @@
 """Carry and theta analysis mixin for portfolio analysis."""
 
-# TODO: Linter
 from typing import TYPE_CHECKING
 
 import pandas as pd

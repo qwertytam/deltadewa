@@ -1,6 +1,5 @@
 """Greek visualization methods for option charts."""
 
-# TODO: Linter
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -29,7 +28,8 @@ class GreeksChartsMixin:
         """Create stacked bar charts of Greeks by strike price.
 
         Args:
-            metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to plot (default: ['delta', 'gamma',
+            'vega'])
             figsize: Figure size tuple
 
         Returns:
@@ -66,7 +66,8 @@ class GreeksChartsMixin:
         """Create stacked bar charts of Greeks by maturity date.
 
         Args:
-            metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to plot (default: ['delta', 'gamma',
+            'vega'])
             figsize: Figure size tuple
 
         Returns:

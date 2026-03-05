@@ -1,6 +1,5 @@
 """Tests for deltadewa.portfolio.core module."""
 
-# TODO: Linter
 import unittest
 from datetime import UTC, datetime, timedelta
 
@@ -272,7 +271,7 @@ class TestOptionPortfolioBase:
 
     def test_summary_stats(self) -> None:
         """Test summary_stats returns all required fields."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolio()
 
         portfolio.add_position(
             strike_price=100.0,
@@ -297,7 +296,7 @@ class TestOptionPortfolioBase:
 
     def test_summary(self) -> None:
         """Test summary string generation."""
-        portfolio = OptionPortfolioBase(symbol="TEST")
+        portfolio = OptionPortfolio(symbol="TEST")
 
         portfolio.add_position(
             strike_price=100.0,

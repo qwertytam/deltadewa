@@ -7,10 +7,10 @@ This module provides color gradient functions for financial data visualization:
 - Unified financial gradient application
 - Matplotlib norm and colormap generation
 
-These functions are self-contained with no dependencies on other formatter submodules.
+These functions are self-contained with no dependencies on other formatter
+submodules.
 """
 
-# TODO: Linter
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
 
+# ruff: disable[ARG001]  # noqa: ERA001
 def create_heatmap_style(
     df: pd.DataFrame,
     cmap: str = "RdYlGn",
@@ -34,7 +35,9 @@ def create_heatmap_style(
     vmin: float | None = None,
     vmax: float | None = None,
 ) -> Styler:
-    """Create a heatmap-style DataFrame (for pivot tables, correlation matrices).
+    """Create a heatmap-style DataFrame.
+
+    Created for pivot tables, correlation matrices.
 
     Args:
         df: Input DataFrame
@@ -48,6 +51,7 @@ def create_heatmap_style(
         Styled DataFrame with heatmap coloring
 
     """
+    # ruff: enable[ARG001]  # noqa: ERA001
     styled = df.style.background_gradient(
         cmap=cmap,
         axis=None,
@@ -105,18 +109,18 @@ def apply_traffic_light_colors(
 
         if reverse:
             if val >= thresholds["green"]:
-                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
+                return f"background-color: {DEFAULT_PALETTE.negative_faded}"
             elif val >= thresholds["yellow"]:
-                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
+                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"
             else:
-                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
+                return f"background-color: {DEFAULT_PALETTE.positive_faded}"
         else:
             if val <= thresholds["red"]:
-                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
+                return f"background-color: {DEFAULT_PALETTE.negative_faded}"
             elif val <= thresholds["yellow"]:
-                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
+                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"
             else:
-                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
+                return f"background-color: {DEFAULT_PALETTE.positive_faded}"
 
     return styler.apply(
         lambda col: col.map(color_traffic_light),
@@ -194,7 +198,7 @@ def get_matplotlib_norm_and_cmap(
     center: float = 0.0,
     cmap_name: str = "RdYlGn",
 ) -> tuple:
-    """Get matplotlib Normalize and colormap for consistent financial visualization.
+    """Get matplotlib Normalize and colormap for consistent visualization.
 
     Args:
         values: Array of values to display

@@ -4,7 +4,7 @@ import datetime
 import warnings
 from datetime import datetime as dt
 
-import QuantLib as QtLib  # type: ignore[import-untyped]
+import QuantLib as QtLib
 
 from deltadewa import constants as const
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
@@ -12,7 +12,6 @@ from deltadewa.greeks_cache import GreeksCache
 from deltadewa.warnings import ClosedFormAccuracyWarning
 
 
-# TODO: Linter
 class OptionValuation:
     """Option pricing engine.
 
@@ -223,14 +222,14 @@ class OptionValuation:
             self.risk_free_rate_quote,
         )
         self.flat_ts = QtLib.YieldTermStructureHandle(
-            QtLib.FlatForward(  # type: ignore[assignment]
+            QtLib.FlatForward(
                 self.ql_valuation_date,
-                self.risk_free_rate_handle,  # type: ignore[arg-type]
+                self.risk_free_rate_handle,
                 day_count,
             ),
         )
         self.dividend_ts = QtLib.YieldTermStructureHandle(
-            QtLib.FlatForward(  # type: ignore[assignment]
+            QtLib.FlatForward(
                 self.ql_valuation_date,
                 self.dividend_yield,
                 day_count,
@@ -240,10 +239,10 @@ class OptionValuation:
         self.vol_quote = QtLib.SimpleQuote(self.volatility)
         self.vol_handle = QtLib.QuoteHandle(self.vol_quote)
         self.flat_vol_ts = QtLib.BlackVolTermStructureHandle(
-            QtLib.BlackConstantVol(  # type: ignore[assignment]
+            QtLib.BlackConstantVol(
                 self.ql_valuation_date,
                 calendar,
-                self.vol_handle,  # type: ignore[assignment]
+                self.vol_handle,
                 day_count,
             ),
         )
@@ -266,6 +265,7 @@ class OptionValuation:
 
         # 5. Exercise & Engine Selection
         # Use the ExerciseStyle enum to decide which engine to use.
+        exercise: QtLib.Exercise | None = None  # Placeholder for type checking
         if self.exercise_style == ExerciseStyle.EUROPEAN:
             # Fast Analytic Formula for European options
             exercise = QtLib.EuropeanExercise(self.ql_maturity_date)

@@ -1,6 +1,5 @@
 """P&L diagram plotting methods for option charts."""
 
-# TODO: Linter
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -408,17 +407,17 @@ class PnLChartsMixin:
                 fontweight="bold",
                 ha="right",
                 va="center",
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    facecolor=DEFAULT_PALETTE.white,
-                    edgecolor=DEFAULT_PALETTE.dark_background,
-                    alpha=0.8,
-                ),
-                arrowprops=dict(
-                    arrowstyle="<-",
-                    color=DEFAULT_PALETTE.dark_background,
-                    lw=1.5,
-                ),
+                bbox={
+                    "boxstyle": "round,pad=0.3",
+                    "facecolor": DEFAULT_PALETTE.white,
+                    "edgecolor": DEFAULT_PALETTE.dark_background,
+                    "alpha": 0.8,
+                },
+                arrowprops={
+                    "arrowstyle": "<-",
+                    "color": DEFAULT_PALETTE.dark_background,
+                    "lw": 1.5,
+                },
             )
 
         # Add profit/loss zones with fill_between
@@ -466,12 +465,12 @@ class PnLChartsMixin:
             fontsize=9,
             fontweight="bold",
             color=DEFAULT_PALETTE.black,
-            bbox=dict(
-                boxstyle="round,pad=0.3",
-                facecolor=DEFAULT_PALETTE.white,
-                edgecolor=DEFAULT_PALETTE.black,
-                alpha=0.8,
-            ),
+            bbox={
+                "boxstyle": "round,pad=0.3",
+                "facecolor": DEFAULT_PALETTE.white,
+                "edgecolor": DEFAULT_PALETTE.black,
+                "alpha": 0.8,
+            },
         )
 
         # Annotate break-even points
@@ -501,7 +500,7 @@ class PnLChartsMixin:
                     marker="D",
                     markersize=12,
                     markeredgewidth=2,
-                    markerfacecolor="yellow",
+                    markerfacecolor=DEFAULT_PALETTE.yellow,
                     markeredgecolor=DEFAULT_PALETTE.black,
                     zorder=5,
                 )
@@ -514,17 +513,17 @@ class PnLChartsMixin:
                     fontsize=10,
                     fontweight="bold",
                     ha="center",
-                    bbox=dict(
-                        boxstyle="round,pad=0.5",
-                        facecolor="yellow",
-                        alpha=0.7,
-                        edgecolor=DEFAULT_PALETTE.black,
-                    ),
-                    arrowprops=dict(
-                        arrowstyle="->",
-                        connectionstyle="arc3,rad=0",
-                        lw=1.5,
-                    ),
+                    bbox={
+                        "boxstyle": "round,pad=0.5",
+                        "facecolor": DEFAULT_PALETTE.yellow,
+                        "alpha": 0.7,
+                        "edgecolor": DEFAULT_PALETTE.black,
+                    },
+                    arrowprops={
+                        "arrowstyle": "->",
+                        "connectionstyle": "arc3,rad=0",
+                        "lw": 1.5,
+                    },
                 )
 
         # Annotate maximum loss
@@ -558,17 +557,17 @@ class PnLChartsMixin:
                     fontsize=10,
                     fontweight="bold",
                     ha="center",
-                    bbox=dict(
-                        boxstyle="round,pad=0.5",
-                        facecolor=DEFAULT_PALETTE.negative_faded,
-                        alpha=0.8,
-                        edgecolor=DEFAULT_PALETTE.negative,
-                    ),
-                    arrowprops=dict(
-                        arrowstyle="->",
-                        connectionstyle="arc3,rad=0",
-                        lw=1.5,
-                    ),
+                    bbox={
+                        "boxstyle": "round,pad=0.5",
+                        "facecolor": DEFAULT_PALETTE.negative_faded,
+                        "alpha": 0.8,
+                        "edgecolor": DEFAULT_PALETTE.negative,
+                    },
+                    arrowprops={
+                        "arrowstyle": "->",
+                        "connectionstyle": "arc3,rad=0",
+                        "lw": 1.5,
+                    },
                 )
             else:
                 # Max loss is outside visible range - show arrow at edge
@@ -593,18 +592,18 @@ class PnLChartsMixin:
                     fontsize=10,
                     fontweight="bold",
                     ha=ha,
-                    bbox=dict(
-                        boxstyle="round,pad=0.5",
-                        facecolor=DEFAULT_PALETTE.negative_faded,
-                        alpha=0.8,
-                        edgecolor=DEFAULT_PALETTE.negative,
-                    ),
-                    arrowprops=dict(
-                        arrowstyle=arrow_direction,
-                        connectionstyle="arc3,rad=0",
-                        lw=1.5,
-                        color=DEFAULT_PALETTE.negative,
-                    ),
+                    bbox={
+                        "boxstyle": "round,pad=0.5",
+                        "facecolor": DEFAULT_PALETTE.negative_faded,
+                        "alpha": 0.8,
+                        "edgecolor": DEFAULT_PALETTE.negative,
+                    },
+                    arrowprops={
+                        "arrowstyle": arrow_direction,
+                        "connectionstyle": "arc3,rad=0",
+                        "lw": 1.5,
+                        "color": DEFAULT_PALETTE.negative,
+                    },
                 )
 
         # Annotate maximum profit
@@ -635,15 +634,17 @@ class PnLChartsMixin:
                 fontsize=10,
                 fontweight="bold",
                 ha="center",
-                bbox=dict(
-                    boxstyle="round,pad=0.5",
-                    facecolor=DEFAULT_PALETTE.positive_faded,
-                    alpha=0.8,
-                    edgecolor=DEFAULT_PALETTE.positive,
-                ),
-                arrowprops=dict(
-                    arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
-                ),
+                bbox={
+                    "boxstyle": "round,pad=0.5",
+                    "facecolor": DEFAULT_PALETTE.positive_faded,
+                    "alpha": 0.8,
+                    "edgecolor": DEFAULT_PALETTE.positive,
+                },
+                arrowprops={
+                    "arrowstyle": "->",
+                    "connectionstyle": "arc3,rad=0",
+                    "lw": 1.5,
+                },
             )
 
         # Annotate expected value
@@ -674,22 +675,24 @@ class PnLChartsMixin:
                 fontsize=10,
                 fontweight="bold",
                 ha="center",
-                bbox=dict(
-                    boxstyle="round,pad=0.5",
-                    facecolor=DEFAULT_PALETTE.orange_faded,
-                    alpha=0.8,
-                    edgecolor="orange",
-                ),
-                arrowprops=dict(
-                    arrowstyle="->",
-                    connectionstyle="arc3,rad=0.2",
-                    lw=1.5,
-                ),
+                bbox={
+                    "boxstyle": "round,pad=0.5",
+                    "facecolor": DEFAULT_PALETTE.orange_faded,
+                    "alpha": 0.8,
+                    "edgecolor": "orange",
+                },
+                arrowprops={
+                    "arrowstyle": "->",
+                    "connectionstyle": "arc3,rad=0.2",
+                    "lw": 1.5,
+                },
             )
 
         # Format axes and labels
         ax.set_xlabel(
-            "Spot Price at Maturity ($)", fontsize=13, fontweight="bold"
+            "Spot Price at Maturity ($)",
+            fontsize=13,
+            fontweight="bold",
         )
         ax.set_ylabel("Profit / Loss ($)", fontsize=13, fontweight="bold")
         title_suffix = (
@@ -714,7 +717,7 @@ class PnLChartsMixin:
             x: float,
             pos: int | None = None,
         ) -> str:  # pylint: disable=unused-argument
-            """Format x-axis to show spot price and % change from current spot."""
+            """Format x-axis to show spot price and % change from spot."""
             return format_spot_with_pct_centralized(x, current_spot, pos)
 
         ax.xaxis.set_major_formatter(FuncFormatter(format_spot_with_pct))
@@ -787,11 +790,7 @@ class PnLChartsMixin:
         )
 
         # P&L curve
-        color = (
-            DEFAULT_PALETTE.dark_background
-            if analysis_key == "options"
-            else DEFAULT_PALETTE.dark_background
-        )
+        color = DEFAULT_PALETTE.dark_background
         label = "Options P&L" if analysis_key == "options" else "Total P&L"
         ax.plot(spot_range, pnl_values, linewidth=2.5, color=color, label=label)
 
@@ -809,7 +808,7 @@ class PnLChartsMixin:
                     "ko",
                     markersize=10,
                     markeredgewidth=2,
-                    markerfacecolor="yellow",
+                    markerfacecolor=DEFAULT_PALETTE.yellow,
                     label=f"Breakeven: ${be:.2f}" if i == 0 else "",
                 )
 
@@ -851,14 +850,18 @@ class PnLChartsMixin:
                 fontsize=11,
                 fontweight="bold",
                 color=DEFAULT_PALETTE.negative,
-                arrowprops=dict(
-                    arrowstyle="->", color=DEFAULT_PALETTE.negative, lw=2
-                ),
+                arrowprops={
+                    "arrowstyle": "->",
+                    "color": DEFAULT_PALETTE.negative,
+                    "lw": 2,
+                },
             )
 
         # Formatting
         ax.set_xlabel(
-            "Spot Price at Expiration ($)", fontsize=12, fontweight="bold"
+            "Spot Price at Expiration ($)",
+            fontsize=12,
+            fontweight="bold",
         )
         ax.set_ylabel("P&L ($)", fontsize=12, fontweight="bold")
         ax.set_title(title, fontsize=14, fontweight="bold")

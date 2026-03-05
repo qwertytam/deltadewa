@@ -4,7 +4,6 @@ This module provides a widget that displays key portfolio metrics and health
 indicators in a compact, always-visible format.
 """
 
-# TODO: Linter
 from typing import TYPE_CHECKING
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
@@ -189,18 +188,24 @@ class NetHedgeSummary:
             [
                 widgets.HTML(
                     f"""
-                    <div style="background-color:{DEFAULT_PALETTE.med_dark_background};"""
+                    <div style="background-color:"""
+                    f"""{DEFAULT_PALETTE.med_dark_background};"""
                     """ color:white; padding:10px; border-radius:5px 5px 0 0;">
                     <h3 style="margin:0;">Hedge Summary</h3>
                     </div>
                     """,
                 ),
                 widgets.HTML(
-                    "<h4 style='margin:10px 10px 5px 10px;'>Portfolio Value</h4>",
+                    """
+                    <h4 style='margin:10px 10px 5px 10px;'>"""
+                    """Portfolio Value</h4>",
+                    """,
                 ),
                 self.value_metrics_html,
                 widgets.HTML(
-                    "<h4 style='margin:10px 10px 5px 10px;'>Health Indicators</h4>",
+                    """
+                    <h4 style='margin:10px 10px 5px 10px;'>"""
+                    """Health Indicators</h4>""",
                 ),
                 self.health_indicators_r1_html,
                 self.health_indicators_r2_html,
@@ -345,11 +350,15 @@ class NetHedgeSummary:
                 expected_pnl = mc_results.get("expected_pnl", 0)
 
                 prob_profit = mc_results.get("prob_profit", 0)
-                prob_html += f"<p><strong>Probability of Profit:</strong> {prob_profit*100:.1f}%</p>"
-                prob_html += f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
+                prob_html += "<p><strong>Probability of Profit:"
+                prob_html += f"</strong> {prob_profit * 100:.1f}%</p>"
+                prob_html += "<p><strong>Expected Value:</strong> $"
+                prob_html += f"{expected_pnl:,.2f}</p>"
         else:
-            prob_html += "<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
-            prob_html += "<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
+            prob_html += "<p><strong>Probability of Profit:</strong>"
+            prob_html += " N/A (requires Monte Carlo)</p>"
+            prob_html += "<p><strong>Expected Value:</strong>"
+            prob_html += " N/A (requires Monte Carlo)</p>"
 
         max_loss_opt = analysis.get("max_loss_options", None)
         max_loss_total = analysis.get("max_loss_total", None)

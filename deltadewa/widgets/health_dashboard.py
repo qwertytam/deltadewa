@@ -4,7 +4,6 @@ This module provides visual gauge-based dashboard widgets for monitoring
 the health and effectiveness of equity hedges through key metrics.
 """
 
-# TODO: Linter
 import json
 from typing import Any
 
@@ -13,6 +12,7 @@ import yaml
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.colours import DEFAULT_PALETTE
+from deltadewa.portfolio.core import OptionPortfolio
 
 from .gauges import GaugeIndicator
 
@@ -47,7 +47,8 @@ class HedgeHealthMetric:
         unit: str = "%",
         invert_colors: bool = False,
         label_format: str = "{:.1f}",
-    ):
+    ) -> None:
+        """Initialize the HedgeHealthMetric."""
         self.name = name
         self.description = description
         self.start = start
@@ -94,12 +95,12 @@ class HedgeHealthDashboard:
 
     def __init__(
         self,
-        portfolio,
+        portfolio: OptionPortfolio,
         cumulative_carry_paid: float = 0.0,
         historical_vol_low: float = 0.15,
         historical_vol_high: float = 0.35,
         convexity_cliff_days: int = 180,
-    ):
+    ) -> None:
         """Initialize the Hedge Health Dashboard.
 
         Args:
@@ -212,7 +213,8 @@ class HedgeHealthDashboard:
         """Update configuration from a dictionary and refresh dashboard.
 
         Args:
-            config_data: dictionary containing 'parameters' and/or 'metrics' keys.
+            config_data: dictionary containing 'parameters' and/or 'metrics'
+            keys.
 
         """
         if "parameters" in config_data:
@@ -249,7 +251,9 @@ class HedgeHealthDashboard:
     # ==========================================================================
 
     def _configure_metrics(self) -> dict[str, HedgeHealthMetric]:
-        """Configure all seven health metrics with their gauge parameters using self.config values.
+        """Configure all seven health metrics with their gauge parameters using.
+
+        Will use self.config values.
 
         Returns:
             Dictionary of metric name -> HedgeHealthMetric configuration.
@@ -561,7 +565,8 @@ class HedgeHealthDashboard:
         dashboard_html = (
             f"""
         <div style="
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', """
+            f"""Roboto, sans-serif;
             border: 2px solid {DEFAULT_PALETTE.med_dark_background};
             border-radius: 8px;
             margin: 10px 0;
@@ -570,7 +575,8 @@ class HedgeHealthDashboard:
             <!-- Header -->
             <div style="
                 background: linear-gradient(135deg, """
-            f"""{DEFAULT_PALETTE.med_dark_background} 0%, {DEFAULT_PALETTE.dark_background} 100%);
+            f"""{DEFAULT_PALETTE.med_dark_background} 0%, """
+            f"""{DEFAULT_PALETTE.dark_background} 100%);
                 color: white;
                 padding: 15px 20px;
                 border-radius: 6px 6px 0 0;
@@ -579,8 +585,10 @@ class HedgeHealthDashboard:
                 align-items: center;
             ">
                 <div>
-                    <h3 style="margin: 0; font-size: 18px;">📊 Hedge Health Dashboard</h3>
-                    <p style="margin: 5px 0 0 0; font-size: 12px; opacity: 0.9;">
+                    <h3 style="margin: 0; font-size: 18px;">"""
+            f"""📊 Hedge Health Dashboard</h3>
+                    <p style="margin: 5px 0 0 0; font-size: 12px; """
+            f"""opacity: 0.9;">
                         Real-time portfolio health indicators
                     </p>
                 </div>
@@ -649,7 +657,8 @@ class HedgeHealthDashboard:
         """Get a dictionary summary of all metrics for programmatic access.
 
         Returns:
-            Dictionary with metric values and status, plus an 'overall_score' float.
+            Dictionary with metric values and status, plus an 'overall_score'
+            float.
 
         """
         self._metrics = self._configure_metrics()
@@ -698,7 +707,7 @@ class HedgeHealthDashboard:
         )
         output = widgets.Output()
 
-        def on_upload(change):
+        def on_upload(change) -> None:  # noqa: ANN001
             if not change["new"]:
                 return
 

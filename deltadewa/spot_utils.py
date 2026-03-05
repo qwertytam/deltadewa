@@ -1,8 +1,8 @@
 """Pure spot price utility functions with zero internal dependencies.
 
-This module contains pure mathematical utilities for spot price range generation.
-It exists as a leaf module to avoid circular dependencies between the portfolio
-and analysis layers:
+This module contains pure mathematical utilities for spot price range
+generation. It exists as a leaf module to avoid circular dependencies between
+the portfolio and analysis layers:
 
 - portfolio layer: data + computation (should not depend on analysis)
 - analysis layer: aggregation + interpretation (depends on portfolio)
@@ -12,7 +12,6 @@ By extracting these pure utilities here, portfolio.risk can use them without
 depending on the analysis layer.
 """
 
-# TODO: Linter
 import numpy as np
 
 
@@ -27,18 +26,21 @@ def generate_spot_range(
     """Generate a spot price range for analysis.
 
     This is the single source of truth for spot range generation across
-    the entire codebase. All consumers (portfolio/risk.py, visualization/pnl_charts.py,
-    analysis/risk_reward.py) should use this function.
+    the entire codebase. All consumers (portfolio/risk.py, visualization
+    pnl_charts.py, analysis/risk_reward.py) should use this function.
 
     Args:
         spot_price: Current spot price of the underlying asset
         spot_range: Existing spot range to use (returned as-is if provided)
-        spot_min_pct: Minimum spot price as percentage of current spot (default: 0%)
-        spot_max_pct: Maximum spot price as percentage of current spot (default: 200%)
+        spot_min_pct: Minimum spot price as percentage of current spot
+        (default: 0%)
+        spot_max_pct: Maximum spot price as percentage of current spot
+        (default: 200%)
         num_points: Number of points in the range (default: 250)
-        use_comprehensive_range: If True, creates a comprehensive range that includes
-            extreme scenarios (spot near $0, very high spot prices) with critical
-            points to ensure accurate max loss/profit detection (default: False)
+        use_comprehensive_range: If True, creates a comprehensive range that
+        includes extreme scenarios (spot near $0, very high spot prices) with
+        critical points to ensure accurate max loss/profit detection (default:
+        False)
 
     Returns:
         NumPy array of spot prices for analysis

@@ -490,22 +490,26 @@ class ExportControlsMixin:
         show_browser: bool = True,
         on_change_callback: Callable[[Path], None] | None = None,
     ) -> widgets.VBox:
-        """Create an export-directory selection widget and keep `self.export_dir` in sync.
+        """Create an export-directory selection widget.
+
+        Creates the widget and keep `self export_dir` in sync.
 
         Args:
             show_browser: Whether to show the "Open in Finder" button
-            on_change_callback: Optional callback invoked with the new Path when changed
+            on_change_callback: Optional callback invoked with the new Path
+            when changed
 
         Returns:
             VBox widget created by the shared config helper
 
         Notes:
-            This wraps `deltadewa.config.create_export_dir_widget` so the dashboard
-            can reuse the common UI while updating the PortfolioWidgets' `export_dir`.
+            This wraps `deltadewa.config.create_export_dir_widget` so the
+            dashboard can reuse the common UI while updating the
+            PortfolioWidgets' `export_dir`.
 
         """
 
-        def _on_change(export_dir: Path):
+        def _on_change(export_dir: Path) -> None:
             # keep internal export_dir Path in sync
             try:
                 self.export_dir = Path(export_dir)

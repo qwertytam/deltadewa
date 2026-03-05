@@ -1,6 +1,5 @@
 """Theta and carry analysis charts for option visualization."""
 
-# TODO: Linter
 from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
@@ -215,11 +214,11 @@ class ThetaChartsMixin:
                     xytext=(5, 5),
                     textcoords="offset points",
                     fontsize=9,
-                    bbox=dict(
-                        boxstyle="round,pad=0.3",
-                        facecolor="yellow",
-                        alpha=0.3,
-                    ),
+                    bbox={
+                        "boxstyle": "round,pad=0.3",
+                        "facecolor": DEFAULT_PALETTE.yellow,
+                        "alpha": 0.3,
+                    },
                 )
 
         ax.set_xlabel("Days Forward")
