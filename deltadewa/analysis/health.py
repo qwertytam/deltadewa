@@ -38,13 +38,16 @@ class HealthMixin:
         return (annual_theta / underlying_value) * 100
 
     def calculate_crash_convexity_pct(self, crash_pct: float = 0.80) -> float:
-        """Calculate crash convexity: Hedge P&L at crash spot as % of underlying.
+        """Calculate crash convexity.
+
+        Calculates Hedge P&L at crash spot as % of underlying.
 
         A positive value means the hedge is providing protection in a crash.
         A negative value means the portfolio loses money in a crash.
 
         Args:
-            crash_pct: Crash scenario as percentage of current spot (default: 0.80 for -20%)
+            crash_pct: Crash scenario as percentage of current spot (default:
+            0.80 for -20%)
 
         Returns:
             Hedge P&L at crash spot as percentage of underlying value.
@@ -60,12 +63,15 @@ class HealthMixin:
         # Calculate P&L at crash spot (include underlying to see net effect)
         crash_spot = current_spot * crash_pct
         hedge_pnl = self.portfolio.calculate_pnl_at_expiry(
-            crash_spot, include_underlying=True,
+            crash_spot,
+            include_underlying=True,
         )
 
         return (hedge_pnl / underlying_value) * 100
 
-    def calculate_vega_sufficiency_pct(self, vol_shock_points: float = 10.0) -> float:
+    def calculate_vega_sufficiency_pct(
+        self, vol_shock_points: float = 10.0
+    ) -> float:
         """Calculate vega sufficiency: Portfolio % impact per vol shock.
 
         Shows how much the portfolio value changes for a vol point increase.
@@ -110,7 +116,9 @@ class HealthMixin:
 
         return (net_delta / underlying_qty) * 100
 
-    def calculate_convexity_cliff_days(self, cliff_threshold_days: int = 180) -> int:
+    def calculate_convexity_cliff_days(
+        self, cliff_threshold_days: int = 180
+    ) -> int:
         """Calculate days until long puts enter high-gamma region.
 
         Returns the minimum days to maturity for long put positions.
@@ -174,7 +182,9 @@ class HealthMixin:
             return percentile
 
     def calculate_hedge_success_pct(
-        self, cumulative_carry_paid: float, crash_pct: float = 0.80,
+        self,
+        cumulative_carry_paid: float,
+        crash_pct: float = 0.80,
     ) -> float:
         """Calculate hedge success: Hedge P&L vs cumulative carry paid.
 
@@ -203,7 +213,8 @@ class HealthMixin:
         current_spot = self.portfolio.spot_price
         crash_spot = current_spot * crash_pct
         hedge_pnl = self.portfolio.calculate_pnl_at_expiry(
-            crash_spot, include_underlying=True,
+            crash_spot,
+            include_underlying=True,
         )
 
         # Compare crash protection to carry paid
@@ -286,7 +297,8 @@ class HealthMixin:
                 convexity_cliff_days,
             ),
             "vol_regime_percentile": self.calculate_vol_regime_percentile(
-                historical_vol_low, historical_vol_high,
+                historical_vol_low,
+                historical_vol_high,
             ),
             "hedge_success_pct": self.calculate_hedge_success_pct(
                 cumulative_carry_paid,

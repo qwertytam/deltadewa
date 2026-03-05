@@ -127,7 +127,9 @@ class RecommendationsMixin:
                         "delta_per_contract": float(per_contract_delta),
                         "contracts_needed": abs(contracts_needed),
                         "price": float(price),
-                        "cost": abs(contracts_needed) * price * 100,  # Per contract
+                        "cost": abs(contracts_needed)
+                        * price
+                        * 100,  # Per contract
                     },
                 )
 

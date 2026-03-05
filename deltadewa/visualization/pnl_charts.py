@@ -43,7 +43,8 @@ class PnLChartsMixin:
         1. Options-only P&L
         2. Total portfolio P&L (options + underlying)
 
-        Includes breakeven points, max loss/profit markers, and profit/loss zones.
+        Includes breakeven points, max loss/profit markers, and profit/loss
+        zones.
 
         Args:
             spot_range_pct: Percentage range around current spot (default: 40%)
@@ -88,7 +89,9 @@ class PnLChartsMixin:
 
         # Create figure
         nrows = (
-            2 if (show_underlying and self.portfolio.underlying_quantity != 0) else 1
+            2
+            if (show_underlying and self.portfolio.underlying_quantity != 0)
+            else 1
         )
         fig, axes = plt.subplots(nrows, 1, figsize=figsize)
         if nrows == 1:
@@ -126,7 +129,9 @@ class PnLChartsMixin:
         include_underlying: bool = True,
         show_probability_overlay: bool = False,
     ) -> Figure:
-        """Create P&L distribution chart with annotated key metrics and probability analysis.
+        """Create P&L distribution chart.
+
+        Charts created with annotated key metrics and probability analysis.
 
         Shows:
         - P&L curve at maturity
@@ -137,27 +142,32 @@ class PnLChartsMixin:
         - Current spot marker (vertical dashed line)
         - Profit/loss zones (green/red shading)
         - Probability density function (light blue background)
-        - 5th and 95th percentile levels (purple dotted lines - 90% confidence interval)
+        - 5th and 95th percentile levels (purple dotted lines - 90% confidence
+        interval)
         - X-axis shows both dollar values and % change from current spot
 
         Args:
             spot_range_pct: Percentage range around current spot (default: 100%)
             num_points: Resolution of P&L curve (default: 1000)
             figsize: Figure dimensions (default: (16, 8))
-            include_underlying: Include underlying position in P&L (default: True)
-            show_probability_overlay: Reserved for future use to toggle PDF overlay
-                (default: False). Currently, PDF overlay is always shown.
+            include_underlying: Include underlying position in P&L (default:
+            True)
+            show_probability_overlay: Reserved for future use to toggle PDF
+            overlay (default: False). Currently, PDF overlay is always shown.
 
         Returns:
-            Matplotlib Figure object with P&L distribution and probability overlay
+            Matplotlib Figure object with P&L distribution and probability
+            overlay
 
         """
-        # Note: show_probability_overlay parameter is reserved for future implementation
+        # Note: show_probability_overlay parameter is reserved for future
+        # implementation
         # Currently, PDF overlay is always displayed
         _ = show_probability_overlay
 
         # Generate spot price range
-        # Note: spot_range_pct is symmetric ± percentage (e.g., 100 means 0% to 200%)
+        # Note: spot_range_pct is symmetric ± percentage (e.g., 100 means 0% to
+        # 200%)
         # Convert to spot_min_pct and spot_max_pct for generate_spot_range
         current_spot = self.portfolio.spot_price
         spot_min_pct = 100 - spot_range_pct
@@ -195,7 +205,8 @@ class PnLChartsMixin:
         # Create figure and plot main P&L curve
         fig, ax = plt.subplots(1, 1, figsize=figsize)
 
-        # Set figure and axes backgrounds to transparent for better PDF visibility
+        # Set figure and axes backgrounds to transparent for better PDF
+        # visibility
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
 
@@ -223,7 +234,8 @@ class PnLChartsMixin:
         # Log-normal parameters
         mu = (
             np.log(current_spot)
-            + (risk_free_rate - dividend_yield - 0.5 * volatility**2) * time_to_maturity
+            + (risk_free_rate - dividend_yield - 0.5 * volatility**2)
+            * time_to_maturity
         )
         sigma = volatility * np.sqrt(time_to_maturity)
 
@@ -253,18 +265,23 @@ class PnLChartsMixin:
             zorder=1,
         )
 
-        # Calculate 5th and 95th percentile spot prices (90% confidence interval)
+        # Calculate 5th and 95th percentile spot prices (90% confidence
+        # interval)
         # Using analytical log-normal distribution (inverse CDF)
         # For log-normal with parameters mu and sigma:
-        # percentile_p = exp(mu + sigma * z_p) where z_p is the standard normal quantile
+        # percentile_p = exp(mu + sigma * z_p) where z_p is the standard normal
+        # quantile
         try:
-            z_5th = stats.norm.ppf(0.05)  # Standard normal quantile for 5th percentile
+            z_5th = stats.norm.ppf(
+                0.05,
+            )  # Standard normal quantile for 5th percentile
             z_95th = stats.norm.ppf(
                 0.95,
             )  # Standard normal quantile for 95th percentile
         except ImportError:
             # Fallback to approximation if scipy not available
-            # Using inverse error function approximation for standard normal quantiles
+            # Using inverse error function approximation for standard normal
+            # quantiles
             # z_0.05 ≈ -1.645, z_0.95 ≈ 1.645
             z_5th = -1.6449
             z_95th = 1.6449
@@ -277,8 +294,12 @@ class PnLChartsMixin:
         spot_range_max = spot_range.max()
 
         # Check if percentiles are within visible range
-        is_5th_in_range = spot_range_min <= spot_5th_percentile <= spot_range_max
-        is_95th_in_range = spot_range_min <= spot_95th_percentile <= spot_range_max
+        is_5th_in_range = (
+            spot_range_min <= spot_5th_percentile <= spot_range_max
+        )
+        is_95th_in_range = (
+            spot_range_min <= spot_95th_percentile <= spot_range_max
+        )
 
         # Add vertical dashed lines for percentiles only if in range
         if is_5th_in_range:
@@ -344,17 +365,17 @@ class PnLChartsMixin:
                 fontweight="bold",
                 ha="left",
                 va="center",
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    facecolor=DEFAULT_PALETTE.white,
-                    edgecolor=DEFAULT_PALETTE.dark_background,
-                    alpha=0.8,
-                ),
-                arrowprops=dict(
-                    arrowstyle="<-",
-                    color=DEFAULT_PALETTE.dark_background,
-                    lw=1.5,
-                ),
+                bbox={
+                    "boxstyle": "round,pad=0.3",
+                    "facecolor": DEFAULT_PALETTE.white,
+                    "edgecolor": DEFAULT_PALETTE.dark_background,
+                    "alpha": 0.8,
+                },
+                arrowprops={
+                    "arrowstyle": "<-",
+                    "color": DEFAULT_PALETTE.dark_background,
+                    "lw": 1.5,
+                },
             )
 
         if is_95th_in_range:
@@ -367,12 +388,12 @@ class PnLChartsMixin:
                 fontsize=9,
                 color=DEFAULT_PALETTE.dark_background,
                 fontweight="bold",
-                bbox=dict(
-                    boxstyle="round,pad=0.3",
-                    facecolor=DEFAULT_PALETTE.white,
-                    edgecolor=DEFAULT_PALETTE.dark_background,
-                    alpha=0.8,
-                ),
+                bbox={
+                    "boxstyle": "round,pad=0.3",
+                    "facecolor": DEFAULT_PALETTE.white,
+                    "edgecolor": DEFAULT_PALETTE.dark_background,
+                    "alpha": 0.8,
+                },
             )
         else:
             # 95th percentile is above visible range - show arrow on right edge
@@ -453,7 +474,9 @@ class PnLChartsMixin:
         )
 
         # Annotate break-even points
-        be_key = "breakeven_total" if include_underlying else "breakeven_options"
+        be_key = (
+            "breakeven_total" if include_underlying else "breakeven_options"
+        )
         if analysis.get(be_key):
             for i, be in enumerate(analysis[be_key]):
                 be_pnl = self.portfolio.calculate_pnl_at_expiry(
@@ -584,7 +607,9 @@ class PnLChartsMixin:
                 )
 
         # Annotate maximum profit
-        mp_key = "max_profit_total" if include_underlying else "max_profit_options"
+        mp_key = (
+            "max_profit_total" if include_underlying else "max_profit_options"
+        )
         max_profit_info = analysis[mp_key]
         if not max_profit_info["is_unlimited"]:
             mp_spot = max_profit_info["spot_at_max_profit"]
@@ -615,7 +640,9 @@ class PnLChartsMixin:
                     alpha=0.8,
                     edgecolor=DEFAULT_PALETTE.positive,
                 ),
-                arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5),
+                arrowprops=dict(
+                    arrowstyle="->", connectionstyle="arc3,rad=0", lw=1.5
+                ),
             )
 
         # Annotate expected value
@@ -660,10 +687,14 @@ class PnLChartsMixin:
             )
 
         # Format axes and labels
-        ax.set_xlabel("Spot Price at Maturity ($)", fontsize=13, fontweight="bold")
+        ax.set_xlabel(
+            "Spot Price at Maturity ($)", fontsize=13, fontweight="bold"
+        )
         ax.set_ylabel("Profit / Loss ($)", fontsize=13, fontweight="bold")
         title_suffix = (
-            " (Options + Underlying)" if include_underlying else " (Options Only)"
+            " (Options + Underlying)"
+            if include_underlying
+            else " (Options Only)"
         )
         ax.set_title(
             f"P&L Distribution with Key Metrics{title_suffix}",
@@ -819,11 +850,15 @@ class PnLChartsMixin:
                 fontsize=11,
                 fontweight="bold",
                 color=DEFAULT_PALETTE.negative,
-                arrowprops=dict(arrowstyle="->", color=DEFAULT_PALETTE.negative, lw=2),
+                arrowprops=dict(
+                    arrowstyle="->", color=DEFAULT_PALETTE.negative, lw=2
+                ),
             )
 
         # Formatting
-        ax.set_xlabel("Spot Price at Expiration ($)", fontsize=12, fontweight="bold")
+        ax.set_xlabel(
+            "Spot Price at Expiration ($)", fontsize=12, fontweight="bold"
+        )
         ax.set_ylabel("P&L ($)", fontsize=12, fontweight="bold")
         ax.set_title(title, fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)

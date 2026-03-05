@@ -240,7 +240,9 @@ class NetHedgeSummary:
                 stats["total_portfolio_value"],
             )
         )
-        self.value_metrics_html.value = f'<div style="padding:10px;">{value_html}</div>'
+        self.value_metrics_html.value = (
+            f'<div style="padding:10px;">{value_html}</div>'
+        )
 
         # Crash convexity
         current_spot = self.portfolio.spot_price
@@ -321,7 +323,9 @@ class NetHedgeSummary:
                 is_neutral=True,
             )
         )
-        self.vol_metrics_html.value = f'<div style="padding:10px;">{vol_html}</div>'
+        self.vol_metrics_html.value = (
+            f'<div style="padding:10px;">{vol_html}</div>'
+        )
 
         # Probabilistic stats (expandable)
         analyzer = PortfolioAnalyzer(self.portfolio)
@@ -333,19 +337,18 @@ class NetHedgeSummary:
         mc_results = self.portfolio.monte_carlo_results
         if mc_results is not None:
             sim_pnls = mc_results.get("simulated_pnls")
-            if isinstance(sim_pnls, (list, tuple, np.ndarray)) and len(sim_pnls) > 0:
+            if (
+                isinstance(sim_pnls, (list, tuple, np.ndarray))
+                and len(sim_pnls) > 0
+            ):
                 expected_pnl = mc_results.get("expected_pnl", 0)
 
                 prob_profit = mc_results.get("prob_profit", 0)
                 prob_html += f"<p><strong>Probability of Profit:</strong> {prob_profit*100:.1f}%</p>"
-                prob_html += (
-                    f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
-                )
+                prob_html += f"<p><strong>Expected Value:</strong> ${expected_pnl:,.2f}</p>"
         else:
             prob_html += "<p><strong>Probability of Profit:</strong> N/A (requires Monte Carlo)</p>"
-            prob_html += (
-                "<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
-            )
+            prob_html += "<p><strong>Expected Value:</strong> N/A (requires Monte Carlo)</p>"
 
         max_loss_opt = analysis.get("max_loss_options", None)
         max_loss_total = analysis.get("max_loss_total", None)
@@ -381,7 +384,9 @@ class NetHedgeSummary:
         if max_profit_total is None:
             max_profit_result += "N/A"
         elif not max_profit_total.get("is_unlimited", True):
-            max_profit_result += f"${-max_profit_total.get('max_profit', 0):,.2f}"
+            max_profit_result += (
+                f"${-max_profit_total.get('max_profit', 0):,.2f}"
+            )
         else:
             max_profit_result += "Unlimited"
         max_profit_result += "</p>"

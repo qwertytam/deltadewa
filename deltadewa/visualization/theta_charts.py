@@ -252,7 +252,10 @@ class ThetaChartsMixin:
         )
 
         bucket_summary["theta_pct"] = (
-            (bucket_summary["position_theta"] / bucket_summary["position_value"])
+            (
+                bucket_summary["position_theta"]
+                / bucket_summary["position_value"]
+            )
             * 100
             * const.DAYS_PER_YEAR
         )
@@ -262,7 +265,10 @@ class ThetaChartsMixin:
             [b for b in bucket_order if b in bucket_summary.index],
         )
 
-        if len(bucket_summary) > 0 and not bucket_summary["theta_pct"].isna().all():
+        if (
+            len(bucket_summary) > 0
+            and not bucket_summary["theta_pct"].isna().all()
+        ):
             colors = [
                 DEFAULT_PALETTE.positive if x > 0 else DEFAULT_PALETTE.negative
                 for x in bucket_summary["theta_pct"]

@@ -91,7 +91,9 @@ class PnLMixin:
         if len(self.positions) == 0:
             # Empty portfolio case
             if include_underlying and self.underlying_quantity != 0:
-                return self.underlying_quantity * (spot_scenarios - self.spot_price)
+                return self.underlying_quantity * (
+                    spot_scenarios - self.spot_price
+                )
             return np.zeros_like(spot_scenarios)
 
         # Pre-extract position data into arrays
@@ -99,7 +101,10 @@ class PnLMixin:
         quantities = np.array([pos.quantity for pos in self.positions])
         contract_sizes = np.array([pos.contract_size for pos in self.positions])
         is_call = np.array(
-            [pos.option.option_type == OptionType.CALL for pos in self.positions],
+            [
+                pos.option.option_type == OptionType.CALL
+                for pos in self.positions
+            ],
         )
 
         # Vectorized intrinsic value calculation using broadcasting
@@ -115,7 +120,9 @@ class PnLMixin:
 
         # Apply quantity and contract size
         position_values = (
-            intrinsic * quantities[np.newaxis, :] * contract_sizes[np.newaxis, :]
+            intrinsic
+            * quantities[np.newaxis, :]
+            * contract_sizes[np.newaxis, :]
         )
         total_option_value = position_values.sum(axis=1)
 

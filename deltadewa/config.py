@@ -79,14 +79,16 @@ def create_export_dir_widget(
 
     status_output = widgets.Output()
 
-    # Store current directory in widget metadata (public attribute to avoid protected access)
+    # Store current directory in widget metadata (public attribute to avoid
+    # protected access)
     widget_container = widgets.VBox()
     # store as a public attribute; use setattr to avoid static analyzer
     # complaints on unknown attributes
     widget_container.export_dir = Path(default_dir)
 
-    def on_browse_click(b):  # pylint: disable=unused-argument
+    def on_browse_click(b) -> None:  # pylint: disable=unused-argument
         """Handle browse button click using OS-native dialogs."""
+        _ = b
         try:
             path = None
             if platform.system() == "Darwin":
@@ -94,7 +96,10 @@ def create_export_dir_widget(
                 cmd = [
                     "osascript",
                     "-e",
-                    'POSIX path of (choose folder with prompt "Select Export Directory")',
+                    (
+                        'POSIX path of (choose folder with prompt "Select '
+                        'Export Directory")'
+                    ),
                 ]
                 result = subprocess.run(
                     cmd,
@@ -128,7 +133,8 @@ def create_export_dir_widget(
             with status_output:
                 print(f"⚠️  Browse failed: {e}")
 
-    def on_create_click(b):  # pylint: disable=unused-argument
+    def on_create_click(b) -> None:  # pylint: disable=unused-argument
+        _ = b
         with status_output:
             status_output.clear_output(wait=True)
 
@@ -162,7 +168,8 @@ def create_export_dir_widget(
 
                 if total > 0:
                     print(
-                        f"   Found:  {json_count} JSON, {yaml_count} YAML, {csv_count} CSV",
+                        f"   Found:  {json_count} JSON, {yaml_count} YAML, "
+                        f"{csv_count} CSV",
                     )
                 else:
                     print("   Directory is empty")
@@ -178,6 +185,7 @@ def create_export_dir_widget(
                 print(f"❌ Error:  {e!s}")
 
     def on_open_click(b):  # pylint: disable=unused-argument
+        _ = b
         try:
             if hasattr(widget_container, "export_dir"):
                 export_dir = widget_container.export_dir
@@ -199,7 +207,9 @@ def create_export_dir_widget(
     browse_button.on_click(on_browse_click)
 
     # Assemble widget
-    action_buttons = [create_button, open_button] if show_browser else [create_button]
+    action_buttons = (
+        [create_button, open_button] if show_browser else [create_button]
+    )
 
     input_row = widgets.HBox(
         [custom_path_input, browse_button],
@@ -209,7 +219,10 @@ def create_export_dir_widget(
     widget_container.children = [
         widgets.HTML("<h4>📁 Export Directory Configuration</h4>"),
         widgets.HTML(
-            "<p style='color: #666;'>Choose where to save portfolio exports</p>",
+            (
+                "<p style='color: #666;'>"
+                "Choose where to save portfolio exports</p>"
+            ),
         ),
         input_row,
         widgets.HBox(action_buttons),

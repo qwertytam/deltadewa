@@ -26,7 +26,9 @@ class ScenarioChartsMixin:
         current_spot: float,
         figsize: tuple[int, int] = (14, 10),
     ) -> Figure:
-        """Plot P&L and delta profiles for a scenario analysis at a forward date.
+        """Plot P&L and delta profiles.
+
+        Plots for a scenario analysis at a forward date.
 
         Args:
             scenario_df: DataFrame with columns: spot_price, portfolio_pnl,

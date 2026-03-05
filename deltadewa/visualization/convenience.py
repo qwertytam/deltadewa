@@ -183,7 +183,9 @@ def plot_greeks_consolidated(
             for b, value in zip(bars, values, strict=False):
                 if value != 0:
                     label_x = value + (
-                        0.05 * max(abs(v) for v in values) * (1 if value > 0 else -1)
+                        0.05
+                        * max(abs(v) for v in values)
+                        * (1 if value > 0 else -1)
                     )
                     ax.text(
                         label_x,
@@ -311,7 +313,9 @@ def plot_greeks_consolidated(
     ).dt.strftime("%Y-%m-%d")
 
     # Group by maturity and sum position values
-    maturity_values = df_sorted.groupby("maturity_label")["position_value"].sum()
+    maturity_values = df_sorted.groupby("maturity_label")[
+        "position_value"
+    ].sum()
     maturity_values = maturity_values.reindex(
         maturity_values.abs().nlargest(top_n).index,
     )

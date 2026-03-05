@@ -123,7 +123,9 @@ class OptionValuation:
             warnings.warn(msg, ClosedFormAccuracyWarning, stacklevel=2)
 
     def _closed_form_accuracy_message(self) -> str | None:
-        """Return a warning message string if this option is in a low-accuracy
+        """Return a warning message string.
+
+        Returns if this option is in a low-accuracy
         regime, or ``None`` if no warning is needed.
 
         Separated from ``_check_closed_form_accuracy`` so that worker threads
@@ -216,7 +218,9 @@ class OptionValuation:
 
         # Risk-free rate as a live SimpleQuote so rho bumps don't rebuild
         self.risk_free_rate_quote = QtLib.SimpleQuote(self.risk_free_rate)
-        self.risk_free_rate_handle = QtLib.QuoteHandle(self.risk_free_rate_quote)
+        self.risk_free_rate_handle = QtLib.QuoteHandle(
+            self.risk_free_rate_quote,
+        )
         self.flat_ts = QtLib.YieldTermStructureHandle(
             QtLib.FlatForward(  # type: ignore[assignment]
                 self.ql_valuation_date,
@@ -265,7 +269,9 @@ class OptionValuation:
             # Fast Analytic Formula for European options
             exercise = QtLib.EuropeanExercise(self.ql_maturity_date)
             self.option = QtLib.VanillaOption(payoff, exercise)
-            self.option.setPricingEngine(QtLib.AnalyticEuropeanEngine(bsm_process))
+            self.option.setPricingEngine(
+                QtLib.AnalyticEuropeanEngine(bsm_process),
+            )
         elif self.use_closed_form:
             exercise = QtLib.AmericanExercise(
                 self.ql_valuation_date,
@@ -415,9 +421,12 @@ class OptionValuation:
             # If theta not available, compute numerically
             # Move evaluation date forward by 1 day
             current_date = QtLib.Settings.instance().evaluationDate
-            QtLib.Settings.instance().evaluationDate = current_date + QtLib.Period(
-                1,
-                QtLib.Days,
+            QtLib.Settings.instance().evaluationDate = (
+                current_date
+                + QtLib.Period(
+                    1,
+                    QtLib.Days,
+                )
             )
             price_tomorrow = self.option.NPV()
             QtLib.Settings.instance().evaluationDate = current_date

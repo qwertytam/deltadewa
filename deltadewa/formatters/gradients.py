@@ -104,30 +104,18 @@ def apply_traffic_light_colors(
 
         if reverse:
             if val >= thresholds["green"]:
-                return (
-                    f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
-                )
+                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
             elif val >= thresholds["yellow"]:
-                return (
-                    f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
-                )
+                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
             else:
-                return (
-                    f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
-                )
+                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
         else:
             if val <= thresholds["red"]:
-                return (
-                    f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
-                )
+                return f"background-color: {DEFAULT_PALETTE.negative_faded}"  # light red
             elif val <= thresholds["yellow"]:
-                return (
-                    f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
-                )
+                return f"background-color: {DEFAULT_PALETTE.yellow_faded}"  # light yellow
             else:
-                return (
-                    f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
-                )
+                return f"background-color: {DEFAULT_PALETTE.positive_faded}"  # light green
 
     return styler.apply(
         lambda col: col.map(color_traffic_light),

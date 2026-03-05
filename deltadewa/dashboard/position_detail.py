@@ -56,7 +56,9 @@ class PositionDetailDisplay:
                 )
 
             if "exercise_style" in display_df.columns:
-                display_df["exercise_style"] = display_df["exercise_style"].apply(
+                display_df["exercise_style"] = display_df[
+                    "exercise_style"
+                ].apply(
                     _fmt_enum_val,
                 )
 
@@ -175,7 +177,10 @@ class PositionDetailDisplay:
                     {
                         "selector": "th",
                         "props": [
-                            ("background-color", DEFAULT_PALETTE.dark_background),
+                            (
+                                "background-color",
+                                DEFAULT_PALETTE.dark_background,
+                            ),
                             ("color", DEFAULT_PALETTE.white),
                             ("padding", "8px"),
                             ("text-align", "center"),
@@ -189,7 +194,10 @@ class PositionDetailDisplay:
                     # Ensure Maturity column doesn't wrap
                     {
                         "selector": "td:nth-child(5)",
-                        "props": [("min-width", "80px"), ("white-space", "nowrap")],
+                        "props": [
+                            ("min-width", "80px"),
+                            ("white-space", "nowrap"),
+                        ],
                     },
                 ],
             )

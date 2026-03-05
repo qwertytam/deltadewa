@@ -29,7 +29,10 @@ from deltadewa.widgets.base import InteractiveOutput
 from deltadewa.widgets.convenience import link_portfolio_to_assumptions
 from deltadewa.widgets.export_controls import ExportControlsMixin
 from deltadewa.widgets.gauges import GaugeIndicator
-from deltadewa.widgets.health_dashboard import HedgeHealthDashboard, HedgeHealthMetric
+from deltadewa.widgets.health_dashboard import (
+    HedgeHealthDashboard,
+    HedgeHealthMetric,
+)
 from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
 from deltadewa.widgets.summary import NetHedgeSummary

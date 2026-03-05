@@ -79,7 +79,9 @@ class CarryDisplay:
         df_carry = analyzer.add_maturity_buckets(self._portfolio.to_dataframe())
 
         self._reporter.header("Theta Decay & Carry Analysis")
-        print("\n💡 For options portfolios: Theta = Carry (same economic effect)")
+        print(
+            "\n💡 For options portfolios: Theta = Carry (same economic effect)"
+        )
 
         self._display_summary_table(analyzer)
         self._display_carry_status(carry_metrics)
@@ -172,7 +174,11 @@ class CarryDisplay:
                     "daily_theta": theta,
                     "num_contracts": bucket_positions["quantity"].abs().sum(),
                     "pct_of_total": (
-                        (abs(theta) / abs(carry_metrics["total_theta_daily"]) * 100)
+                        (
+                            abs(theta)
+                            / abs(carry_metrics["total_theta_daily"])
+                            * 100
+                        )
                         if carry_metrics["total_theta_daily"] != 0
                         else 0
                     ),

@@ -206,7 +206,9 @@ def get_volatility_stats(portfolio: "OptionPortfolio") -> dict:
         return {}
 
     volatilities = [pos.option.volatility for pos in portfolio.positions]
-    custom_vol_count = sum(1 for pos in portfolio.positions if pos.custom_volatility)
+    custom_vol_count = sum(
+        1 for pos in portfolio.positions if pos.custom_volatility
+    )
 
     return {
         "avg_volatility": calculate_portfolio_avg_volatility(portfolio),

@@ -154,7 +154,9 @@ def evaluate_hedge_triggers(
     )
 
     days_to_nearest_expiry = (
-        min((pos.option.maturity_date - now).days for pos in portfolio.positions)
+        min(
+            (pos.option.maturity_date - now).days for pos in portfolio.positions
+        )
         if portfolio.positions
         else 999
     )
@@ -170,7 +172,9 @@ def evaluate_hedge_triggers(
 
     portfolio_value = abs(stats["underlying_quantity"] * portfolio.spot_price)
     theta_cost_pct = (
-        (theta_annual_cost / portfolio_value * 100) if portfolio_value > 0 else 0.0
+        (theta_annual_cost / portfolio_value * 100)
+        if portfolio_value > 0
+        else 0.0
     )
 
     total_gamma = abs(stats["total_gamma"])
@@ -281,7 +285,10 @@ def _print_expiry_trigger(
 
         # Per-position details inside the soon-but-not-urgent window
         df_positions = portfolio.to_dataframe()
-        if not df_positions.empty and "days_to_expiry" not in df_positions.columns:
+        if (
+            not df_positions.empty
+            and "days_to_expiry" not in df_positions.columns
+        ):
             df_positions["days_to_expiry"] = df_positions["maturity"].apply(
                 lambda x: (
                     __import__("pandas").to_datetime(x)
@@ -417,7 +424,10 @@ def _build_action_list(
         )
 
     # Important but not urgent
-    if days_to_nearest_expiry <= t.expiry_soon_days and not near_expiry_positions:
+    if (
+        days_to_nearest_expiry <= t.expiry_soon_days
+        and not near_expiry_positions
+    ):
         actions.append(
             (
                 "🟡 SOON",
@@ -458,7 +468,9 @@ def _print_action_summary(
 ) -> None:
     reporter.header("📌 RECOMMENDED ACTIONS (Priority Order)")
     if not actions:
-        reporter.success(" No immediate actions required - portfolio is well-managed")
+        reporter.success(
+            " No immediate actions required - portfolio is well-managed"
+        )
         print("\n  Continue monitoring:")
         print("    • Delta drift (rebalance if >10%)")
         print("    • Approaching expirations (roll before <7 days)")

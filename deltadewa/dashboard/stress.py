@@ -133,7 +133,9 @@ class StressDashboard:
 
         original_spot: float = self.global_assumptions.spot_price.value
         original_date: datetime = portfolio.valuation_date
-        max_maturity = max(pos.option.maturity_date for pos in portfolio.positions)
+        max_maturity = max(
+            pos.option.maturity_date for pos in portfolio.positions
+        )
         days_to_max_maturity = (max_maturity - original_date).days
 
         # --- widgets ---
@@ -205,11 +207,14 @@ class StressDashboard:
 
         header = widgets.HTML(
             f"""
-            <div style="background-color:{DEFAULT_PALETTE.med_dark_background};
-                        color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
+            <div style="background-color:"""
+            f"""{DEFAULT_PALETTE.med_dark_background};color:white; """
+            f"""padding:10px; border-radius:5px; """
+            f"""margin-bottom:10px;">
                 <h3 style="margin:0;">📅 Time vs Price Analysis</h3>
                 <p style="margin:5px 0 0 0; font-size:14px;">
-                    See how portfolio metrics evolve across spot prices and time (theta decay)
+                    See how portfolio metrics evolve across spot prices and"""
+            f""" time (theta decay)
                 </p>
             </div>
             """,
@@ -285,7 +290,9 @@ class StressDashboard:
         vol_scenarios = np.linspace(vol_min, vol_max, grid_resolution)
 
         if portfolio.positions:
-            max_maturity = max(pos.option.maturity_date for pos in portfolio.positions)
+            max_maturity = max(
+                pos.option.maturity_date for pos in portfolio.positions
+            )
             max_days = (max_maturity - portfolio.valuation_date).days
         else:
             max_days = 90
@@ -394,7 +401,8 @@ class StressDashboard:
             ">
                 <h3 style="margin: 0;">Interactive Stress Test Heatmap</h3>
                 <p style="margin: 5px 0 0 0; font-size: 14px;">
-                    Analyse portfolio behaviour across spot price and volatility scenarios
+                    Analyse portfolio behaviour across spot price and """
+            f"""volatility scenarios
                 </p>
             </div>
             """,
@@ -522,11 +530,13 @@ class StressDashboard:
             if var_95 >= 0:
                 print(f"   → 95% of outcomes are BETTER than ${var_95:,.2f}")
                 print(
-                    "   → Only 5% of scenarios result in less than ${var_95:,.2f}",
+                    "   → Only 5% of scenarios result in less than $"
+                    f"{var_95:,.2f}",
                 )
             else:
                 print(
-                    "   → 5% of scenarios result in worse than {var_95:,.2f} loss",
+                    "   → 5% of scenarios result in worse than $"
+                    f"{var_95:,.2f} loss",
                 )
 
             print(f"   99% VaR (1st percentile): ${var_99:>10,.2f}")
@@ -539,20 +549,25 @@ class StressDashboard:
             if theoretical_max_loss is not None:
                 print("\n🔴 Theoretical Maximum Loss:")
                 print(
-                    "   Max possible loss:        ${theoretical_max_loss:>10,.2f}",
+                    "   Max possible loss:        $"
+                    f"{theoretical_max_loss:>10,.2f}",
                 )
                 print(
-                    "   → If all short options go fully ITM (spot → $0 for puts)",
+                    "   → If all short options go fully ITM "
+                    "(spot → $0 for puts)",
                 )
                 if abs(max_loss) < abs(theoretical_max_loss) * 0.1:
                     self.reporter.warning(
-                        f"     WARNING: Monte Carlo worst case (${max_loss:,.2f}) is much",
+                        f"     WARNING: Monte Carlo worst case ($"
+                        f"{max_loss:,.2f}) is much",
                     )
                     print(
-                        f"      better than theoretical max (${theoretical_max_loss:,.2f})",
+                        f"      better than theoretical max ($"
+                        f"{theoretical_max_loss:,.2f})",
                     )
                     print(
-                        "      → Consider running simulations with extreme scenarios",
+                        "      → Consider running simulations with extreme "
+                        "scenarios",
                     )
 
             print("\n📊 Percentile Breakdown:")
@@ -596,10 +611,12 @@ class StressDashboard:
             if abs(expected_pnl - median_pnl) > std_pnl:
                 self.reporter.warning("WARNING: Large skew detected")
                 print(
-                    f"   Mean: ${expected_pnl:,.2f}, Median: ${median_pnl:,.2f}",
+                    f"   Mean: ${expected_pnl:,.2f}, Median: $"
+                    f"{median_pnl:,.2f}",
                 )
                 print(
-                    "   → Distribution is highly asymmetric (typical for options)",
+                    "   → Distribution is highly asymmetric "
+                    "(typical for options)",
                 )
 
         except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -624,7 +641,10 @@ class StressDashboard:
         original_date: datetime,
         days_to_max_maturity: int,
     ) -> None:
-        """Render (or re-render) the Time vs Price styled table inside *output_widget*."""
+        """Render (or re-render) the Time vs Price styled table.
+
+        Render inside *output_widget*.
+        """
 
         def _spot_formatter(x: float) -> str:
             try:
@@ -678,7 +698,11 @@ class StressDashboard:
                         return str(d)
                     future_date = original_date + timedelta(days=di)
                     date_str = future_date.strftime("%Y-%m-%d")
-                    return f"Today\n{date_str}" if di == 0 else f"T+{di}\n{date_str}"
+                    return (
+                        f"Today\n{date_str}"
+                        if di == 0
+                        else f"T+{di}\n{date_str}"
+                    )
 
                 def _row_label(s) -> str:  # noqa: ANN001
                     try:
@@ -691,7 +715,9 @@ class StressDashboard:
                     sign = "+" if pct > 0 else ""
                     return f"${_spot_formatter(si)}\n({sign}{pct:.0%})"
 
-                pivot_df.columns = pd.Index([_col_label(d) for d in pivot_df.columns])
+                pivot_df.columns = pd.Index(
+                    [_col_label(d) for d in pivot_df.columns],
+                )
                 pivot_df.index = pd.Index(
                     [_row_label(s) for s in pivot_df.index],
                 )
@@ -717,7 +743,8 @@ class StressDashboard:
                 config = _METRIC_CONFIG.get(metric_type, _METRIC_CONFIG["pnl"])
                 styled = styled.format(config["fmt"])
                 styled = styled.set_caption(
-                    f"<strong>Time vs Price Analysis - {config['title']}</strong>",
+                    f"<strong>Time vs Price Analysis - "
+                    f"{config['title']}</strong>",
                 )
                 styled = styled.set_table_styles(
                     [
@@ -756,11 +783,13 @@ class StressDashboard:
 
                 # ---- summary stats ----
                 spot_range_str = (
-                    f"${_spot_formatter(spot_min)} to ${_spot_formatter(spot_max)} "
+                    f"${_spot_formatter(spot_min)} to $"
+                    f"{_spot_formatter(spot_max)} "
                     f"(±{spot_range_pct:.0%})"
                 )
                 time_range_str = (
-                    f"{time_days[0]} to {time_days[-1]} days ({len(time_days)} points)"
+                    f"{time_days[0]} to {time_days[-1]} days "
+                    f"({len(time_days)} points)"
                 )
 
                 today_col = next(
@@ -816,7 +845,10 @@ class StressDashboard:
         vol_shock_pct: float,
         baseline_value: float,
     ) -> None:
-        """Render (or re-render) the Spot x Volatility matplotlib heatmap inside *output_widget*."""
+        """Render (or re-render) the Spot x Volatility matplotlib heatmap.
+
+        Render inside *output_widget*.
+        """
         with output_widget:
             output_widget.clear_output(wait=True)
 
@@ -837,7 +869,8 @@ class StressDashboard:
 
                 if self.portfolio.positions:
                     earliest_expiry = min(
-                        pos.option.maturity_date for pos in self.portfolio.positions
+                        pos.option.maturity_date
+                        for pos in self.portfolio.positions
                     )
                     if valuation_date > earliest_expiry:
                         print(
@@ -924,7 +957,11 @@ class StressDashboard:
                     vmin_, vmax_ = np.nanmin(result_matrix), np.nanmax(
                         result_matrix,
                     )
-                    if np.isfinite(vmin_) and np.isfinite(vmax_) and vmin_ != vmax_:
+                    if (
+                        np.isfinite(vmin_)
+                        and np.isfinite(vmax_)
+                        and vmin_ != vmax_
+                    ):
                         ticks = np.linspace(vmin_, vmax_, 6)
                         cbar.set_ticks(ticks.tolist())
                         cbar.set_ticklabels(
@@ -982,19 +1019,24 @@ class StressDashboard:
                 )
                 if metric_type == "pnl":
                     subtitle = (
-                        "\n(Relative to current market: showing change from baseline)"
+                        "\n(Relative to current market: "
+                        "showing change from baseline)"
                     )
                 elif metric_type == "value":
-                    subtitle = "\n(Absolute values: showing total portfolio value)"
+                    subtitle = (
+                        "\n(Absolute values: showing total portfolio value)"
+                    )
                 else:
                     subtitle = (
-                        "\n(Absolute values: showing metric at each scenario point)"
+                        "\n(Absolute values: showing metric at "
+                        "each scenario point)"
                     )
 
                 ax.set_xlabel("Spot Price", fontsize=12)
                 ax.set_ylabel("Volatility", fontsize=12)
                 ax.set_title(
-                    f"Stress Test Heatmap: {_METRIC_LABELS.get(metric_type, 'Value')}"
+                    f"Stress Test Heatmap: "
+                    f"{_METRIC_LABELS.get(metric_type, 'Value')}"
                     f"{title_suffix}{subtitle}",
                     fontsize=14,
                     fontweight="bold",
@@ -1012,14 +1054,17 @@ class StressDashboard:
                 current_value = result_matrix[current_vol_idx, current_spot_idx]
 
                 self.reporter.header(
-                    f"Stress Test Summary - {_METRIC_LABELS.get(metric_type, 'Value')}",
+                    f"Stress Test Summary - "
+                    f"{_METRIC_LABELS.get(metric_type, 'Value')}",
                 )
                 print(f"Valuation Date: {date_str} (T+{days_forward})")
                 print(
-                    f"Current Market: Spot=${original_spot:.2f}, Vol={avg_vol:.2%}",
+                    f"Current Market: Spot=$"
+                    f"{original_spot:.2f}, Vol={avg_vol:.2%}",
                 )
                 print(
-                    f"Stress Range:   Spot ±{spot_shock_pct:.0%}, Vol ±{vol_shock_pct:.0%}",
+                    f"Stress Range:   Spot ±"
+                    f"{spot_shock_pct:.0%}, Vol ±{vol_shock_pct:.0%}",
                 )
                 print(f"Grid Resolution: {grid_resolution}x{grid_resolution}")
                 print("\nMetric Statistics:")
@@ -1029,14 +1074,16 @@ class StressDashboard:
                     print(f"  Maximum:  ${result_matrix.max():,.0f}")
                     print(f"  Current:  ${current_value:,.0f}")
                     print(
-                        f"  Range:    ${result_matrix.max() - result_matrix.min():,.0f}",
+                        f"  Range:    $"
+                        f"{result_matrix.max() - result_matrix.min():,.0f}",
                     )
                 else:
                     print(f"  Minimum:  {result_matrix.min():,.2f}")
                     print(f"  Maximum:  {result_matrix.max():,.2f}")
                     print(f"  Current:  {current_value:,.2f}")
                     print(
-                        f"  Range:    {result_matrix.max() - result_matrix.min():,.2f}",
+                        f"  Range:    "
+                        f"{result_matrix.max() - result_matrix.min():,.2f}",
                     )
                 self.reporter.divider()
 
@@ -1053,7 +1100,10 @@ class StressDashboard:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_status_widget(status_type: str, **kwargs) -> widgets.HTML:  # noqa: ANN003
+    def _make_status_widget(
+        status_type: str,
+        **kwargs,  # noqa: ANN003
+    ) -> widgets.HTML:
         """Return a styled HTML status indicator widget."""
         styles = {
             "calculating": {
@@ -1082,19 +1132,22 @@ class StressDashboard:
             grid_size = kwargs.get("grid_size", "?")
             message = (
                 f"<strong>{style['icon']} {style['title']}</strong><br/>"
-                f"Computing {metric.upper()} across {grid_size}x{grid_size} scenario grid..."
+                f"Computing {metric.upper()} across "
+                f"{grid_size}x{grid_size} scenario grid..."
             )
         elif status_type == "complete":
             elapsed = kwargs.get("elapsed_time", 0)
             grid_size = kwargs.get("grid_size", "?")
             message = (
                 f"<strong>{style['icon']} {style['title']}</strong><br/>"
-                f"Generated {grid_size}x{grid_size} heatmap in {elapsed:.2f} seconds"
+                f"Generated {grid_size}x{grid_size} heatmap "
+                f"in {elapsed:.2f} seconds"
             )
         else:
             error_msg = kwargs.get("error_msg", "Unknown error")
             message = (
-                f"<strong>{style['icon']} {style['title']}</strong><br/>{error_msg}"
+                f"<strong>{style['icon']} "
+                f"{style['title']}</strong><br/>{error_msg}"
             )
 
         return widgets.HTML(
@@ -1158,7 +1211,9 @@ class StressDashboard:
         ax2.patch.set_alpha(0.0)
 
         # ---- LEFT: PDF histogram ----
-        n_bins = 30 if is_concentrated else min(50, max(20, len(pnls_clean) // 100))
+        n_bins = (
+            30 if is_concentrated else min(50, max(20, len(pnls_clean) // 100))
+        )
         bin_edges = np.linspace(min_pnl, max_pnl, n_bins + 1)
         bin_edges[-1] += 1e-10
         counts, bin_edges = np.histogram(pnls_clean, bins=bin_edges)
@@ -1172,7 +1227,8 @@ class StressDashboard:
         bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
 
         colors = [
-            DEFAULT_PALETTE.negative if bc < 0 else "steelblue" for bc in bin_centers
+            DEFAULT_PALETTE.negative if bc < 0 else "steelblue"
+            for bc in bin_centers
         ]
         ax1.bar(
             bin_centers,
@@ -1248,7 +1304,10 @@ class StressDashboard:
         yint_, _ = ax1.get_ylim()
         xint_, _ = ax1.get_xlim()
         title = (
-            "Monte Carlo P&L Distribution\n(Concentrated - Typical for Short Options)"
+            (
+                "Monte Carlo P&L Distribution\n(Concentrated"
+                " - Typical for Short Options)"
+            )
             if is_concentrated
             else "Monte Carlo P&L Distribution"
         )
@@ -1264,11 +1323,12 @@ class StressDashboard:
             ax1.text(
                 0.02,
                 0.98,
-                f"Most Common: ${most_common_pnl[0]:,.2f}\n({concentration_pct:.1f}% of scenarios)",
+                f"Most Common: ${most_common_pnl[0]:,.2f}\n"
+                f"({concentration_pct:.1f}% of scenarios)",
                 transform=ax1.transAxes,
                 fontsize=10,
                 verticalalignment="top",
-                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.7),
+                bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.7},
             )
 
         # ---- RIGHT: CDF ----
@@ -1319,7 +1379,9 @@ class StressDashboard:
         )
 
         idx_exp = np.searchsorted(sorted_pnls, expected_pnl)
-        cdf_at_exp = idx_exp / len(sorted_pnls) if idx_exp < len(sorted_pnls) else 1.0
+        cdf_at_exp = (
+            idx_exp / len(sorted_pnls) if idx_exp < len(sorted_pnls) else 1.0
+        )
         ax2.axvline(
             expected_pnl,
             color=DEFAULT_PALETTE.medium_background,

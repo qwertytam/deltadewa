@@ -318,7 +318,8 @@ class ScenariosMixin:
 
         # Store original position vols
         original_position_vols = {
-            i: pos.option.volatility for i, pos in enumerate(self.portfolio.positions)
+            i: pos.option.volatility
+            for i, pos in enumerate(self.portfolio.positions)
         }
 
         # Initialize BatchPricer for Non-Greek calculations if applicable
@@ -351,7 +352,9 @@ class ScenariosMixin:
                     underlying_pnl = (
                         spot - original_spot
                     ) * self.portfolio.underlying_quantity
-                    metric_value = (current_value - baseline_value) + underlying_pnl
+                    metric_value = (
+                        current_value - baseline_value
+                    ) + underlying_pnl
                 elif metric == "value":
                     metric_value = self.portfolio.total_value()
                 elif metric == "delta":

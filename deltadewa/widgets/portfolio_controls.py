@@ -220,7 +220,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             """Update dropdown with current positions."""
             if self.portfolio.positions:
                 position_selector.options = [
-                    get_position_display_string(pos) for pos in self.portfolio.positions
+                    get_position_display_string(pos)
+                    for pos in self.portfolio.positions
                 ]
                 position_selector.disabled = False
             else:
@@ -229,10 +230,15 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         def on_position_selected(change):  # pylint: disable=unused-argument
             """Load selected position data into input fields."""
-            if position_selector.value and position_selector.value != "No positions":
+            if (
+                position_selector.value
+                and position_selector.value != "No positions"
+            ):
                 # Find the matching position
                 for pos in self.portfolio.positions:
-                    if position_selector.value == get_position_display_string(pos):
+                    if position_selector.value == get_position_display_string(
+                        pos
+                    ):
                         quantity_input.value = pos.quantity
                         strike_input.value = pos.option.strike_price
                         option_type_selector.value = (
@@ -243,7 +249,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                         expiry_input.value = pos.option.maturity_date.date()
                         exercise_style_selector.value = (
                             ExerciseStyle.AMERICAN.value.capitalize()
-                            if pos.option.exercise_style == ExerciseStyle.AMERICAN
+                            if pos.option.exercise_style
+                            == ExerciseStyle.AMERICAN
                             else ExerciseStyle.EUROPEAN.value.capitalize()
                         )
                         volatility_input.value = pos.option.volatility
@@ -296,11 +303,17 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         def on_remove_clicked(b):  # pylint: disable=unused-argument
             """Remove selected position."""
-            if position_selector.value and position_selector.value != "No positions":
+            if (
+                position_selector.value
+                and position_selector.value != "No positions"
+            ):
                 try:
                     # Find the matching position index
                     for i, pos in enumerate(self.portfolio.positions):
-                        if position_selector.value == get_position_display_string(pos):
+                        if (
+                            position_selector.value
+                            == get_position_display_string(pos)
+                        ):
                             self.portfolio.remove_position(i)
                             status_label.value = (
                                 f"✓ Removed position {position_selector.value}"
@@ -318,11 +331,17 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
         def on_update_clicked(b):  # pylint: disable=unused-argument
             """Update selected position."""
-            if position_selector.value and position_selector.value != "No positions":
+            if (
+                position_selector.value
+                and position_selector.value != "No positions"
+            ):
                 try:
                     # Find the matching position index
                     for i, pos in enumerate(self.portfolio.positions):
-                        if position_selector.value == get_position_display_string(pos):
+                        if (
+                            position_selector.value
+                            == get_position_display_string(pos)
+                        ):
                             # Determine volatility parameter
                             position_volatility = (
                                 None
@@ -466,13 +485,11 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             SelectionSlider widget with date options
 
         """
-        if max_days is None:
-            # Use last option expiry
-            if self.portfolio.positions:
-                max_maturity = max(
-                    pos.option.maturity_date for pos in self.portfolio.positions
-                )
-                max_days = (max_maturity - self.portfolio.valuation_date).days
+        if max_days is None and self.portfolio.positions:
+            max_maturity = max(
+                pos.option.maturity_date for pos in self.portfolio.positions
+            )
+            max_days = (max_maturity - self.portfolio.valuation_date).days
 
         if max_days is None:
             max_days = 90  # Default fallback
@@ -643,7 +660,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     # Roll Analysis Widgets
     # ==========================================================================
 
-    def create_roll_controls(self, default_days_forward: int = 30) -> dict[str, Any]:
+    def create_roll_controls(
+        self, default_days_forward: int = 30
+    ) -> dict[str, Any]:
         """Create complete roll analysis control panel.
 
         Args:
@@ -685,7 +704,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         new_maturity = widgets.DatePicker(
-            value=dt.now(tz=datetime.UTC).date() + timedelta(days=default_days_forward),
+            value=dt.now(tz=datetime.UTC).date()
+            + timedelta(days=default_days_forward),
             description="New Maturity:",
             style={"description_width": "150px"},
             layout=widgets.Layout(width="400px"),
@@ -774,7 +794,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     # ==========================================================================
 
     @staticmethod
-    def create_section_header(title: str, subtitle: str | None = None) -> widgets.HTML:
+    def create_section_header(
+        title: str, subtitle: str | None = None
+    ) -> widgets.HTML:
         """Create formatted section header.
 
         Args:

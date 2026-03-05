@@ -28,7 +28,10 @@ class ChangeLogDisplay:
         self._reporter.header("📜 SESSION CHANGE LOG")
         print()
 
-        if not self._changelog or self._changelog.get_number_of_snapshots() == 0:
+        if (
+            not self._changelog
+            or self._changelog.get_number_of_snapshots() == 0
+        ):
             self._reporter.warning("No changes recorded in this session.")
             print("\n💡 Changes are tracked when you:")
             print("  • Add/update/remove positions in Section 2")
@@ -42,7 +45,9 @@ class ChangeLogDisplay:
             print()
 
             # Display changes in chronological order
-            print(f"{'Time':<20} {'Action':<15} {'Description':<45} {'Δ Impact':<15}")
+            print(
+                f"{'Time':<20} {'Action':<15} {'Description':<45} {'Δ Impact':<15}"
+            )
             self._reporter.divider()
 
             for entry in self._changelog.get_all_portfolio_snapshots():
@@ -98,12 +103,12 @@ class ChangeLogDisplay:
 
             # Portfolio evolution
             if self._changelog.get_number_of_snapshots() > 0:
-                first_snapshot = self._changelog.get_all_portfolio_snapshots()[0][
-                    "portfolio_snapshot"
-                ]
-                last_snapshot = self._changelog.get_all_portfolio_snapshots()[-1][
-                    "portfolio_snapshot"
-                ]
+                first_snapshot = self._changelog.get_all_portfolio_snapshots()[
+                    0
+                ]["portfolio_snapshot"]
+                last_snapshot = self._changelog.get_all_portfolio_snapshots()[
+                    -1
+                ]["portfolio_snapshot"]
 
                 print("\n📈 PORTFOLIO EVOLUTION:")
                 print(

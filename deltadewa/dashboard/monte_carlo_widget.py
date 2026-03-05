@@ -84,7 +84,9 @@ class MonteCarloStalenessWidget:
                 stale_reason = "timestamp parsing error"
 
         if is_stale:
-            last_modified = getattr(self.portfolio, "monte_carlo_last_modified", None)
+            last_modified = getattr(
+                self.portfolio, "monte_carlo_last_modified", None
+            )
             if last_modified:
                 last_modified_str = last_modified.strftime("%H:%M:%S")
             else:
@@ -142,7 +144,9 @@ class MonteCarloStalenessWidget:
                             include_underlying=self._include_underlying,
                         )
                         self.portfolio.monte_carlo_stale = False
-                        self.portfolio.monte_carlo_timestamp = dt.now(tz=datetime.UTC)
+                        self.portfolio.monte_carlo_timestamp = dt.now(
+                            tz=datetime.UTC
+                        )
                         self._reporter.success(
                             f"✓ Monte Carlo re-run complete! "
                             f"{mc_results['num_simulations']:,} scenarios",
@@ -151,7 +155,9 @@ class MonteCarloStalenessWidget:
                         b.description = "✓ Complete - Refresh Results"
                         b.button_style = "success"
                     except Exception as e:  # pylint: disable=broad-except
-                        self._reporter.error(f"Error re-running Monte Carlo: {e}")
+                        self._reporter.error(
+                            f"Error re-running Monte Carlo: {e}"
+                        )
                         b.description = "❌ Error - Try Again"
                         b.button_style = "danger"
                         b.disabled = False

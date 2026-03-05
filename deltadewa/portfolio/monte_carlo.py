@@ -21,7 +21,9 @@ class MonteCarloMixin:
     # `OptionPortfolioBase` provides a property for this name at runtime.
     monte_carlo_results: dict[str, float | int | np.ndarray] | None
 
-    def _calculate_theoretical_max_loss(self: "_PortfolioProtocol") -> float | None:
+    def _calculate_theoretical_max_loss(
+        self: "_PortfolioProtocol",
+    ) -> float | None:
         """Calculate theoretical max loss based on position structure."""
         if not hasattr(self, "positions") or not self.positions:
             return None
@@ -32,7 +34,9 @@ class MonteCarloMixin:
                 if pos.option.option_type == const.OptionType.PUT:
                     # Short put max loss = strike * quantity
                     loss = (
-                        pos.option.strike_price * abs(pos.quantity) * pos.contract_size
+                        pos.option.strike_price
+                        * abs(pos.quantity)
+                        * pos.contract_size
                     )
                     max_loss_theoretical += loss
                 else:
@@ -120,7 +124,9 @@ class MonteCarloMixin:
         min_time_horizon = 1
         if days_to_expiry is None:
             if len(self.positions) > 0:
-                min_maturity = min(pos.option.maturity_date for pos in self.positions)
+                min_maturity = min(
+                    pos.option.maturity_date for pos in self.positions
+                )
                 days_to_expiry = max(
                     min_time_horizon,
                     (min_maturity - self.valuation_date).days,

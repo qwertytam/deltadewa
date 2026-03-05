@@ -156,7 +156,9 @@ class BatchPricer:
                 intrinsic = np.maximum(0, spots - position.option.strike_price)
             else:
                 intrinsic = np.maximum(0, position.option.strike_price - spots)
-            portfolio_values += intrinsic * position.quantity * position.contract_size
+            portfolio_values += (
+                intrinsic * position.quantity * position.contract_size
+            )
 
         if not live:
             return portfolio_values
@@ -265,20 +267,25 @@ class BatchPricer:
             if position.option.option_type == OptionType.CALL:
                 if "price" in result:
                     result["price"] += (
-                        np.maximum(0, spots - position.option.strike_price) * mult
+                        np.maximum(0, spots - position.option.strike_price)
+                        * mult
                     )
                 if "delta" in result:
-                    result["delta"] += (spots > position.option.strike_price).astype(
+                    result["delta"] += (
+                        spots > position.option.strike_price
+                    ).astype(
                         float,
                     ) * mult
             else:
                 if "price" in result:
                     result["price"] += (
-                        np.maximum(0, position.option.strike_price - spots) * mult
+                        np.maximum(0, position.option.strike_price - spots)
+                        * mult
                     )
                 if "delta" in result:
                     result["delta"] += (
-                        -(spots < position.option.strike_price).astype(float) * mult
+                        -(spots < position.option.strike_price).astype(float)
+                        * mult
                     )
             # gamma / vega / theta / rho are zero at expiry — arrays already
             # zero
@@ -409,7 +416,9 @@ class BatchPricer:
         to an array of per-contract values of length len(spots).
         """
         n = len(spots)
-        arrays: dict[str, np.ndarray] = {name: np.empty(n) for name in greek_names}
+        arrays: dict[str, np.ndarray] = {
+            name: np.empty(n) for name in greek_names
+        }
         arrays["price"] = np.empty(n)
 
         for i, spot in enumerate(spots):

@@ -287,7 +287,9 @@ def setup_dashboard(
 
     print_portfolio_summary(portfolio, _reporter)
 
-    global_assumptions, assumptions_link_cb = build_global_assumptions(portfolio)
+    global_assumptions, assumptions_link_cb = build_global_assumptions(
+        portfolio
+    )
 
     _export_dir = Path(export_dir) if export_dir else Path.cwd() / "exports"
 

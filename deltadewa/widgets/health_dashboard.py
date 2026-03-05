@@ -706,7 +706,9 @@ class HedgeHealthDashboard:
                 try:
                     uploaded_file = change["new"][0]
                     try:
-                        content = uploaded_file["content"].tobytes().decode("utf-8")
+                        content = (
+                            uploaded_file["content"].tobytes().decode("utf-8")
+                        )
                     except UnicodeDecodeError:
                         print("❌ Error: File must be UTF-8 encoded")
                         return

@@ -63,7 +63,10 @@ class HeatmapControlsMixin:
             style={"description_width": "150px"},
         )
 
-        metric_selector = self.create_metric_selector(metrics=metrics, default="pnl")
+        metric_selector = self.create_metric_selector(
+            metrics=metrics,
+            default="pnl",
+        )
 
         date_selector = self.create_date_selector()
 

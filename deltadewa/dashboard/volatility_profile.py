@@ -56,12 +56,16 @@ class VolatilityProfileDisplay:
 
             if vol_stats["num_custom_vol"] > 0:
                 print("\n⚠️  Volatility Skew Detected")
-                print("   Stress test analysis uses proportional volatility scaling to")
+                print(
+                    "   Stress test analysis uses proportional volatility scaling to"
+                )
                 print(
                     "   maintain the relative volatility structure "
                     "(skew/smile) across positions.",
                 )
-                print("   Each position's volatility is scaled by the same factor.")
+                print(
+                    "   Each position's volatility is scaled by the same factor."
+                )
             else:
                 print("\n✓ Uniform Volatility")
                 print("  All positions use the portfolio default volatility.")

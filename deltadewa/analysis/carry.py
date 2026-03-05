@@ -60,7 +60,9 @@ class CarryMixin:
         )
 
         # Theta by type
-        theta_by_type = df.groupby("option_type")["position_theta"].sum().to_dict()
+        theta_by_type = (
+            df.groupby("option_type")["position_theta"].sum().to_dict()
+        )
 
         # Covered call analysis (short calls - earning premium)
         short_calls = df[
@@ -105,10 +107,16 @@ class CarryMixin:
 
         # Carry efficiency by bucket (annualized theta / position value)
         bucket_summary = df.groupby("maturity_bucket").agg(
-            {"position_theta": "sum", "position_value": lambda x: x.abs().sum()},
+            {
+                "position_theta": "sum",
+                "position_value": lambda x: x.abs().sum(),
+            },
         )
         bucket_summary["carry_efficiency_pct"] = (
-            (bucket_summary["position_theta"] / bucket_summary["position_value"])
+            (
+                bucket_summary["position_theta"]
+                / bucket_summary["position_value"]
+            )
             * 100
             * const.DAYS_PER_YEAR
         )
@@ -117,7 +125,8 @@ class CarryMixin:
         return {
             "total_theta_daily": total_theta_daily,
             "total_theta_weekly": total_theta_daily * const.DAYS_PER_WEEK,
-            "total_theta_monthly": total_theta_daily * const.CALENDAR_DAYS_PER_MONTH,
+            "total_theta_monthly": total_theta_daily
+            * const.CALENDAR_DAYS_PER_MONTH,
             "total_theta_annual": total_theta_daily * const.DAYS_PER_YEAR,
             "theta_by_bucket": theta_by_bucket,
             "theta_by_type": theta_by_type,
@@ -178,10 +187,12 @@ class CarryMixin:
                     "category": "Income",
                     "source": "Short Calls",
                     "daily": carry_metrics["covered_call_theta"],
-                    "weekly": carry_metrics["covered_call_theta"] * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["covered_call_theta"]
+                    * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["covered_call_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["covered_call_theta"] * const.DAYS_PER_YEAR,
+                    "annual": carry_metrics["covered_call_theta"]
+                    * const.DAYS_PER_YEAR,
                 },
             )
 
@@ -191,10 +202,12 @@ class CarryMixin:
                     "category": "Income",
                     "source": "Short Puts",
                     "daily": carry_metrics["short_put_theta"],
-                    "weekly": carry_metrics["short_put_theta"] * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["short_put_theta"]
+                    * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["short_put_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["short_put_theta"] * const.DAYS_PER_YEAR,
+                    "annual": carry_metrics["short_put_theta"]
+                    * const.DAYS_PER_YEAR,
                 },
             )
 
@@ -205,10 +218,12 @@ class CarryMixin:
                     "category": "Cost",
                     "source": "Long Puts (Hedge)",
                     "daily": carry_metrics["hedge_put_theta"],
-                    "weekly": carry_metrics["hedge_put_theta"] * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["hedge_put_theta"]
+                    * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["hedge_put_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["hedge_put_theta"] * const.DAYS_PER_YEAR,
+                    "annual": carry_metrics["hedge_put_theta"]
+                    * const.DAYS_PER_YEAR,
                 },
             )
 
@@ -218,10 +233,12 @@ class CarryMixin:
                     "category": "Cost",
                     "source": "Long Calls",
                     "daily": carry_metrics["long_call_theta"],
-                    "weekly": carry_metrics["long_call_theta"] * const.DAYS_PER_WEEK,
+                    "weekly": carry_metrics["long_call_theta"]
+                    * const.DAYS_PER_WEEK,
                     "monthly": carry_metrics["long_call_theta"]
                     * const.CALENDAR_DAYS_PER_MONTH,
-                    "annual": carry_metrics["long_call_theta"] * const.DAYS_PER_YEAR,
+                    "annual": carry_metrics["long_call_theta"]
+                    * const.DAYS_PER_YEAR,
                 },
             )
 

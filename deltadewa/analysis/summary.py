@@ -148,7 +148,9 @@ class SummaryMixin:
 
         # Vega insights
         if abs(stats["total_vega"]) > 100:
-            direction = "benefits from" if stats["total_vega"] > 0 else "hurt by"
+            direction = (
+                "benefits from" if stats["total_vega"] > 0 else "hurt by"
+            )
             insights.append(
                 f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f})"  # noqa: RUF001
                 f" - portfolio {direction} volatility increases",
@@ -243,7 +245,9 @@ class SummaryMixin:
                 portfolio_value = self.portfolio.total_portfolio_value()
                 loss_line = f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}"
                 if portfolio_value > 0:
-                    loss_pct = (-max_loss_total["max_loss"] / portfolio_value) * 100
+                    loss_pct = (
+                        -max_loss_total["max_loss"] / portfolio_value
+                    ) * 100
                     loss_line += f" ({loss_pct:.1f}% of portfolio value)"
                 lines.append(loss_line)
                 lines.append(
@@ -259,7 +263,9 @@ class SummaryMixin:
                     lines.append("  Max Profit: UNLIMITED")
                 lines.append("    └─ Profit increases with spot price")
             else:
-                profit_line = f"  Max Profit: ${max_profit_total['max_profit']:,.2f}"
+                profit_line = (
+                    f"  Max Profit: ${max_profit_total['max_profit']:,.2f}"
+                )
                 if portfolio_value > 0:
                     profit_pct = (
                         max_profit_total["max_profit"] / portfolio_value
@@ -296,7 +302,9 @@ class SummaryMixin:
             and max_loss_opts["max_loss"] < 0
         ):
             # Standard risk/reward ratio: profit potential to loss potential
-            rr_ratio = max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
+            rr_ratio = (
+                max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
+            )
             lines.append(
                 f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)",
             )

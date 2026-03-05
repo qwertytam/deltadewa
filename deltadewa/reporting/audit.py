@@ -123,7 +123,9 @@ class PortfolioLogger:
 
         """
         snapshots = [
-            entry for entry in self.changelog if entry["portfolio_snapshot"] is not None
+            entry
+            for entry in self.changelog
+            if entry["portfolio_snapshot"] is not None
         ]
         if sort:
             snapshots.sort(key=lambda x: x[key])
@@ -140,7 +142,9 @@ class PortfolioLogger:
     def get_number_of_snapshots(self) -> int:
         """Get the number of portfolio snapshots in the changelog."""
         return sum(
-            1 for entry in self.changelog if entry["portfolio_snapshot"] is not None
+            1
+            for entry in self.changelog
+            if entry["portfolio_snapshot"] is not None
         )
 
     def get_number_of_snapshots_by_action(

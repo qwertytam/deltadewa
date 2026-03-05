@@ -11,8 +11,9 @@ from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
-from deltadewa.config import \
-    create_export_dir_widget as _create_export_dir_widget
+from deltadewa.config import (
+    create_export_dir_widget as _create_export_dir_widget,
+)
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.audit import PortfolioLogger
@@ -90,7 +91,9 @@ class ExportControlsMixin:
     # Import/Export Widgets
     # ==========================================================================
 
-    def create_export_controls(self, default_format: str = "JSON") -> dict[str, Any]:
+    def create_export_controls(
+        self, default_format: str = "JSON"
+    ) -> dict[str, Any]:
         """Create export format selection and execution controls.
 
         Args:
@@ -228,9 +231,15 @@ class ExportControlsMixin:
                     self.portfolio.positions = imported_portfolio.positions
                     self.portfolio.spot_price = imported_portfolio.spot_price
                     self.portfolio.volatility = imported_portfolio.volatility
-                    self.portfolio.risk_free_rate = imported_portfolio.risk_free_rate
-                    self.portfolio.dividend_yield = imported_portfolio.dividend_yield
-                    self.portfolio.valuation_date = imported_portfolio.valuation_date
+                    self.portfolio.risk_free_rate = (
+                        imported_portfolio.risk_free_rate
+                    )
+                    self.portfolio.dividend_yield = (
+                        imported_portfolio.dividend_yield
+                    )
+                    self.portfolio.valuation_date = (
+                        imported_portfolio.valuation_date
+                    )
                     self.portfolio.underlying_quantity = (
                         imported_portfolio.underlying_quantity
                     )
@@ -267,12 +276,14 @@ class ExportControlsMixin:
                     # Load into a temporary portfolio to inspect content
                     print(f"Loading portfolio from {filepath}...")
 
-                    preview_portfolio = self.serializer.import_portfolio(str(filepath))[
-                        "portfolio"
-                    ]
+                    preview_portfolio = self.serializer.import_portfolio(
+                        str(filepath)
+                    )["portfolio"]
 
                     if not isinstance(preview_portfolio, OptionPortfolio):
-                        print(f"✗ Invalid portfolio file: {type(preview_portfolio)}")
+                        print(
+                            f"✗ Invalid portfolio file: {type(preview_portfolio)}"
+                        )
                         return
 
                     # Extract summary details
@@ -285,7 +296,9 @@ class ExportControlsMixin:
                     print(
                         f"Risk-Free Rate:      {preview_portfolio.risk_free_rate:.2%}",
                     )
-                    print(f"Spot Price:          {preview_portfolio.spot_price:.2f}")
+                    print(
+                        f"Spot Price:          {preview_portfolio.spot_price:.2f}"
+                    )
                     print(
                         f"Underlying Quantity: {preview_portfolio.underlying_quantity:.0f}",
                     )
@@ -370,7 +383,9 @@ class ExportControlsMixin:
         export_output = widgets.Output()
 
         # Warning label for unconfigured directory
-        warning_label = widgets.HTML(value="", layout=widgets.Layout(display="none"))
+        warning_label = widgets.HTML(
+            value="", layout=widgets.Layout(display="none")
+        )
 
         # Register UI elements for state updates
         if not hasattr(self, "_export_ui_map"):
@@ -399,14 +414,18 @@ class ExportControlsMixin:
                 except (ValueError, AttributeError):
                     print(
                         "✗ Error: Export directory is not set. "
-                         "Please configure it in the Setup section.",
+                        "Please configure it in the Setup section.",
                     )
                     return
 
                 try:
                     filename = export_controls["filename_input"].value
-                    file_format = export_controls["format_selector"].value.lower()
-                    inc_timestamp = export_controls["inc_timestamp_checkbox"].value
+                    file_format = export_controls[
+                        "format_selector"
+                    ].value.lower()
+                    inc_timestamp = export_controls[
+                        "inc_timestamp_checkbox"
+                    ].value
 
                     ts = ""
                     if inc_timestamp:
@@ -420,15 +439,21 @@ class ExportControlsMixin:
 
                     if file_format == "json":
                         self.serializer.export_to_json(
-                            self.portfolio, self.portfolio_changelog, filename,
+                            self.portfolio,
+                            self.portfolio_changelog,
+                            filename,
                         )
                     elif file_format == "csv":
                         self.serializer.export_to_csv(
-                            self.portfolio, self.portfolio_changelog, filename,
+                            self.portfolio,
+                            self.portfolio_changelog,
+                            filename,
                         )
                     elif file_format == "yaml":
                         self.serializer.export_to_yaml(
-                            self.portfolio, self.portfolio_changelog, filename,
+                            self.portfolio,
+                            self.portfolio_changelog,
+                            filename,
                         )
                     else:
                         print(f"✗ Unknown format: {file_format}")
@@ -515,8 +540,11 @@ class ExportControlsMixin:
         so dashboards can simply call this method and `display(...)` the result.
         """
         widget = self.create_export_dir_widget(
-            show_browser=show_browser, on_change_callback=on_change_callback,
+            show_browser=show_browser,
+            on_change_callback=on_change_callback,
         )
 
         header = widgets.HTML("<h3>Export Directory</h3>")
-        return widgets.VBox([header, widget], layout=widgets.Layout(margin="8px 0"))
+        return widgets.VBox(
+            [header, widget], layout=widgets.Layout(margin="8px 0")
+        )

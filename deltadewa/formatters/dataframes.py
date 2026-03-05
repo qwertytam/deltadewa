@@ -56,7 +56,8 @@ def prepare_dataframe_display(
     Args:
         df: Input DataFrame
         title_case: Convert column names to title case
-        start_index: Starting index number (1-based by default) or None to preserve original index
+        start_index: Starting index number (1-based by default) or None to
+        preserve original index
         index_name: Optional name for the index
         sort_by: Optional list of columns to sort by
 
@@ -85,7 +86,8 @@ def prepare_dataframe_display(
     # Sort by specified columns
     if sort_by:
         sort_by_display = [
-            col.replace("_", " ").title() if title_case else col for col in sort_by
+            col.replace("_", " ").title() if title_case else col
+            for col in sort_by
         ]
         df_display = df_display.sort_values(by=sort_by_display)
 
@@ -108,7 +110,8 @@ def apply_gradient_style(
         cmap: Colormap name (default: 'RdYlGn' for red-yellow-green)
         vmin: Minimum value for color scale
         vmax: Maximum value for color scale
-        axis: Axis along which to apply gradient (one of 'index', 'columns', 0, 1, or None)
+        axis: Axis along which to apply gradient (one of 'index', 'columns', 0,
+        1, or None)
 
     Returns:
         Styler with gradient applied
@@ -134,8 +137,9 @@ def apply_format_dict(
 
     Args:
         styler: Pandas Styler object
-        format_dict: Mapping of column names to format strings or callables compatible with
-                     pandas.Styler.format (values: str | Callable[[object], str] | None)
+        format_dict: Mapping of column names to format strings or callables
+        compatible with pandas.Styler.format (values: str | Callable[[object],
+        str] | None)
 
     Returns:
         Styler with formatting applied
@@ -214,7 +218,9 @@ def format_portfolio_dataframe(
 
     # Apply gradient if column exists
     gradient_col_display = (
-        gradient_column.replace("_", " ").title() if title_case else gradient_column
+        gradient_column.replace("_", " ").title()
+        if title_case
+        else gradient_column
     )
     if gradient_col_display in df_display.columns:
         styled = apply_gradient_style(styled, gradient_col_display, cmap=cmap)
@@ -375,9 +381,9 @@ def create_diverging_style(
 ) -> Styler:
     """Create DataFrame style with diverging colormap and consistent formatting.
 
-    This function creates a styled DataFrame with a diverging color scale centered
-    at zero (negative=red, zero=white, positive=green) and consistent currency
-    formatting across all tables.
+    This function creates a styled DataFrame with a diverging color scale
+    centered at zero (negative=red, zero=white, positive=green) and consistent
+    currency formatting across all tables.
 
     Args:
         df: DataFrame to style
@@ -401,7 +407,9 @@ def create_diverging_style(
         )
         value_columns = [c.replace("_", " ").title() for c in value_columns]
         if currency_columns:
-            currency_columns = [c.replace("_", " ").title() for c in currency_columns]
+            currency_columns = [
+                c.replace("_", " ").title() for c in currency_columns
+            ]
 
     if currency_columns is None:
         currency_columns = value_columns
