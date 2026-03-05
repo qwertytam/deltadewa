@@ -14,6 +14,7 @@ from deltadewa.formatters.values import format_currency_for_axis
 from deltadewa.visualization.base import OptionCharts
 
 # ruff: noqa: ANN001 ANN003
+# TODO: Linter errors
 
 
 def plot_pnl_diagram(portfolio, **kwargs) -> Figure:

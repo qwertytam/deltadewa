@@ -19,6 +19,7 @@ from deltadewa.visualization.convenience import (
 matplotlib.use("Agg")  # Use non-interactive backend
 
 # ruff: noqa: S101
+# TODO: Linter error
 
 
 class TestIntegration:
