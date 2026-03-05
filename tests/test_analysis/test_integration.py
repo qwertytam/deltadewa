@@ -8,6 +8,9 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
+# ruff: noqa: S101
+# pylint: disable=protected-access
+
 
 class TestPortfolioAnalyzerIntegration:
     """Integration tests for full PortfolioAnalyzer with all mixins."""
@@ -200,7 +203,9 @@ class TestPortfolioAnalyzerIntegration:
                     strike_price=float(strike),
                     maturity_date=datetime.now(tz=UTC) + timedelta(days=days),
                     quantity=(-1) ** (i + j),  # Mix of long/short
-                    option_type=(OptionType.CALL if i % 2 == 0 else OptionType.PUT),
+                    option_type=(
+                        OptionType.CALL if i % 2 == 0 else OptionType.PUT
+                    ),
                 )
 
         analyzer = PortfolioAnalyzer(portfolio)

@@ -1,8 +1,8 @@
 """Tests for deltadewa.dashboard.monte_carlo_widget.MonteCarloStalenessWidget.
 
 Strategy: test the staleness-detection logic without rendering any ipywidgets.
-The widget constructor and check_and_warn() method may create widgets internally;
-we only assert on the returned boolean and on state mutations.
+The widget constructor and check_and_warn() method may create widgets
+internally; we only assert on the returned boolean and on state mutations.
 """
 
 # ruff: noqa: S101 D102 ANN001
@@ -11,15 +11,12 @@ we only assert on the returned boolean and on state mutations.
 from __future__ import annotations
 
 import datetime
-from datetime import timedelta, timezone
-from unittest.mock import MagicMock, patch
-
-import pytest
+from datetime import timedelta
 
 from deltadewa.dashboard.monte_carlo_widget import MonteCarloStalenessWidget
 from deltadewa.reporting.console import ConsoleReporter
 
-UTC = timezone.utc
+UTC = datetime.UTC
 
 # Threshold in hours used by the staleness check (mirror whatever constant the
 # implementation uses; adjust if the implementation chooses a different value).
@@ -41,7 +38,9 @@ def _widget(portfolio, num_sims=1000, include_underlying=True, reporter=None):
 
 
 class TestMonteCarloStalenessWidgetConstruction:
-    def test_constructs_with_minimal_args(self, single_position_portfolio) -> None:
+    def test_constructs_with_minimal_args(
+        self, single_position_portfolio
+    ) -> None:
         w = _widget(single_position_portfolio)
         assert w is not None
 
@@ -52,7 +51,9 @@ class TestMonteCarloStalenessWidgetConstruction:
         assert w._reporter is not None
         assert isinstance(w._reporter, ConsoleReporter)
 
-    def test_custom_reporter_stored(self, single_position_portfolio, reporter) -> None:
+    def test_custom_reporter_stored(
+        self, single_position_portfolio, reporter
+    ) -> None:
         w = _widget(single_position_portfolio, reporter=reporter)
         assert w._reporter is reporter
 
@@ -79,7 +80,9 @@ class TestMonteCarloStalenessDetection:
         is_stale = w.check_and_warn()
         assert is_stale is True
 
-    def test_fresh_timestamp_is_not_stale(self, single_position_portfolio) -> None:
+    def test_fresh_timestamp_is_not_stale(
+        self, single_position_portfolio
+    ) -> None:
         """Results computed moments ago should not be stale."""
         single_position_portfolio._monte_carlo_results = {
             "timestamp": datetime.datetime.now(tz=UTC),
@@ -104,7 +107,9 @@ class TestMonteCarloStalenessDetection:
         is_stale = w.check_and_warn()
         assert is_stale is True
 
-    def test_missing_timestamp_key_is_stale(self, single_position_portfolio) -> None:
+    def test_missing_timestamp_key_is_stale(
+        self, single_position_portfolio
+    ) -> None:
         """Results dict without a 'timestamp' key must be treated as stale."""
         single_position_portfolio._monte_carlo_results = {
             "simulated_pnls": [0.0] * 100,
@@ -115,7 +120,9 @@ class TestMonteCarloStalenessDetection:
         is_stale = w.check_and_warn()
         assert is_stale is True
 
-    def test_portfolio_stale_flag_is_stale(self, single_position_portfolio) -> None:
+    def test_portfolio_stale_flag_is_stale(
+        self, single_position_portfolio
+    ) -> None:
         """portfolio.monte_carlo_stale == True should also trigger staleness."""
         single_position_portfolio._monte_carlo_results = {
             "timestamp": datetime.datetime.now(tz=UTC),
@@ -134,7 +141,9 @@ class TestMonteCarloStalenessDetection:
         # Should not raise even with no positions and no MC results
         w.check_and_warn()
 
-    def test_check_and_warn_returns_bool(self, single_position_portfolio) -> None:
+    def test_check_and_warn_returns_bool(
+        self, single_position_portfolio
+    ) -> None:
         w = _widget(single_position_portfolio)
         result = w.check_and_warn()
         assert isinstance(result, bool)

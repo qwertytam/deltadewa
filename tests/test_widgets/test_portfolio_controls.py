@@ -6,14 +6,14 @@ import pytest
 
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
 
-# ruff: noqa: S101
+# ruff: noqa: S101 ANN001
 
 
 class TestPortfolioWidgets:
     """Test cases for PortfolioWidgets class."""
 
     @pytest.fixture
-    def mock_portfolio(self) -> None:
+    def mock_portfolio(self) -> Mock:
         """Create a mock portfolio for testing."""
         portfolio = Mock()
         portfolio.spot_price = 100.0
@@ -27,7 +27,7 @@ class TestPortfolioWidgets:
         return portfolio
 
     @pytest.fixture
-    def mock_serializer(self) -> None:
+    def mock_serializer(self) -> Mock:
         """Create a mock serializer for testing."""
         serializer = Mock()
         serializer.serialize = Mock(return_value="serialized_data")
@@ -35,7 +35,7 @@ class TestPortfolioWidgets:
         return serializer
 
     @pytest.fixture
-    def mock_changelog(self) -> None:
+    def mock_changelog(self) -> Mock:
         """Create a mock changelog for testing."""
         changelog = Mock()
         changelog.log = Mock()
@@ -46,7 +46,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test PortfolioWidgets can be instantiated."""
         widgets = PortfolioWidgets(
             mock_portfolio,
@@ -62,7 +62,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test create_position_editor method."""
         widgets = PortfolioWidgets(
             mock_portfolio,
@@ -78,7 +78,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test create_market_params_controls method."""
         widgets = PortfolioWidgets(
             mock_portfolio,
@@ -96,7 +96,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test create_transaction_cost_controls method."""
         widgets = PortfolioWidgets(
             mock_portfolio,
@@ -111,7 +111,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test create_roll_controls method."""
         widgets = PortfolioWidgets(
             mock_portfolio,
@@ -126,7 +126,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test create_export_controls method."""
         widgets = PortfolioWidgets(
             mock_portfolio,
@@ -141,7 +141,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test create_import_controls method."""
         widgets = PortfolioWidgets(
             mock_portfolio,
@@ -156,7 +156,7 @@ class TestPortfolioWidgets:
         mock_portfolio,
         mock_serializer,
         mock_changelog,
-    ):
+    ) -> None:
         """Test all expected attributes exist."""
         widgets = PortfolioWidgets(
             mock_portfolio,

@@ -7,6 +7,8 @@ import numpy as np
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
+# ruff: noqa: S101
+
 
 class TestRiskMixin:
     """Test cases for RiskMixin."""
@@ -186,7 +188,10 @@ class TestRiskMixin:
         assert isinstance(result, bool)
 
     def test_vectorized_risk_methods_numerical_equivalence(self) -> None:
-        """Test that vectorized risk methods produce identical results to scalar approach."""
+        """Test that vectorized risk methods.
+
+        Tests that the methods produce identical results to scalar approach.
+        """
         portfolio = OptionPortfolio(spot_price=100.0)
 
         # Create a complex multi-leg position (iron condor)
@@ -239,7 +244,8 @@ class TestRiskMixin:
         assert isinstance(breakeven_vec, list)
         assert all(isinstance(x, float) for x in breakeven_vec)
 
-        # Verify vectorized gives same results by comparing PnL at a few key spots
+        # Verify vectorized gives same results by comparing PnL at a few key
+        # spots
         test_spots = np.array([80.0, 90.0, 95.0, 100.0, 105.0, 110.0, 120.0])
         pnl_vectorized = portfolio.vectorized_pnl_at_expiry(
             test_spots,
@@ -255,4 +261,7 @@ class TestRiskMixin:
                 pnl_vectorized[i],
                 pnl_scalar,
                 rtol=1e-10,
-            ), f"Mismatch at spot={spot}: vectorized={pnl_vectorized[i]}, scalar={pnl_scalar}"
+            ), (
+                f"Mismatch at spot={spot}: "
+                f"vectorized={pnl_vectorized[i]}, scalar={pnl_scalar}"
+            )

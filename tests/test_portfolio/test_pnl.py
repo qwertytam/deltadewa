@@ -7,6 +7,8 @@ import numpy as np
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
+# ruff: noqa: S101
+
 
 class TestPnLMixin:
     """Test cases for PnLMixin."""
@@ -144,7 +146,8 @@ class TestPnLMixin:
 
         net_debit = portfolio.calculate_net_debit()
         # Credit spread should have negative net debit (we receive money)
-        # Note: This depends on pricing, but typically credit spreads are net negative
+        # Note: This depends on pricing, but typically credit spreads are net
+        # negative
         assert isinstance(net_debit, float)
 
     def test_vectorized_pnl_at_expiry(self) -> None:

@@ -65,7 +65,11 @@ class TestGlobalAssumptions:
         assert assumptions.get_days_forward() == 45
 
     def test_time_horizon_days_property(self) -> None:
-        """Test time_horizon_days property returns object with value attribute."""
+        """Test time_horizon_days property returns object with value attribute.
+
+        This is important for backward compatibility with code that expects an
+        object with a .value attribute.
+        """
         assumptions = GlobalAssumptions()
         time_horizon = assumptions.time_horizon_days
         assert hasattr(time_horizon, "value")

@@ -70,8 +70,8 @@ class TestGaugeIndicator:
         # But let's check if valid inputs don't crash.
         gauge = GaugeIndicator(actual=50.0, start=0, end=100)
 
-        # This will trigger bounds check during update if specific params are touched,
-        # but pure actual update doesn't trigger start/end/min/mid/max
+        # This will trigger bounds check during update if specific params are
+        # touched, but pure actual update doesn't trigger start/end/min/mid/max
         # consistency check if only actual changes?
         # Re-reading update(): it checks "if not (start <= min <= mid <= max <=
         # end)".

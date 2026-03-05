@@ -7,6 +7,8 @@ import numpy as np
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
+# ruff: noqa: S101
+
 
 class TestMonteCarloMixin:
     """Test cases for MonteCarloMixin."""
@@ -206,8 +208,9 @@ class TestMonteCarloMixin:
 
         assert "prob_profit" in result
         assert "simulated_pnls" in result
-        # With symmetric GBM and risk-free drift, probability should be around 0.5
-        # Using larger sample size (10k) and tighter bounds for better validation
+        # With symmetric GBM and risk-free drift, probability should be around
+        # 0.5. Using larger sample size (10k) and tighter bounds for better
+        # validation
         assert 0.45 <= result["prob_profit"] <= 0.55
 
     def test_single_position_portfolio(self) -> None:

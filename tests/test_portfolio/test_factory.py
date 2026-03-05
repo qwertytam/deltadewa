@@ -2,8 +2,12 @@
 
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.portfolio.factory import (create_demo_portfolio,
-                                         create_empty_portfolio)
+from deltadewa.portfolio.factory import (
+    create_demo_portfolio,
+    create_empty_portfolio,
+)
+
+# ruff: noqa: S101
 
 
 class TestFactoryFunctions:

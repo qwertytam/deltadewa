@@ -7,15 +7,18 @@ Key areas:
 - Multi-position output contains per-position info
 """
 
-# ruff: noqa: S101 D102 ANN001
-# pylint: disable=missing-function-docstring
+# ruff: noqa: S101 D101 D102 ANN001
+# pylint: disable=missing-function-docstring, missing-class-docstring
 
 from __future__ import annotations
 
-import pytest
+import datetime
+from datetime import timedelta, timezone
 
 from deltadewa.analysis.volatility import get_volatility_stats
+from deltadewa.constants import OptionType
 from deltadewa.dashboard.volatility_profile import VolatilityProfileDisplay
+from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.console import ConsoleReporter
 
 # ===========================================================================
@@ -24,7 +27,9 @@ from deltadewa.reporting.console import ConsoleReporter
 
 
 class TestVolatilityProfileDisplayConstruction:
-    def test_constructs_with_portfolio_only(self, single_position_portfolio) -> None:
+    def test_constructs_with_portfolio_only(
+        self, single_position_portfolio
+    ) -> None:
         d = VolatilityProfileDisplay(single_position_portfolio)
         assert d is not None
 
@@ -41,7 +46,9 @@ class TestVolatilityProfileDisplayConstruction:
         assert d._reporter is not None
         assert isinstance(d._reporter, ConsoleReporter)
 
-    def test_custom_reporter_stored(self, single_position_portfolio, reporter) -> None:
+    def test_custom_reporter_stored(
+        self, single_position_portfolio, reporter
+    ) -> None:
         d = VolatilityProfileDisplay(single_position_portfolio, reporter)
         assert d._reporter is reporter
 
@@ -52,7 +59,9 @@ class TestVolatilityProfileDisplayConstruction:
 
 
 class TestVolatilityProfileDisplay:
-    def test_display_does_not_raise_empty_portfolio(self, empty_portfolio) -> None:
+    def test_display_does_not_raise_empty_portfolio(
+        self, empty_portfolio
+    ) -> None:
         VolatilityProfileDisplay(empty_portfolio).display()
 
     def test_display_does_not_raise_single_position(
@@ -69,12 +78,16 @@ class TestVolatilityProfileDisplay:
         self, single_position_portfolio
     ) -> None:
         vol_stats = get_volatility_stats(single_position_portfolio)
-        VolatilityProfileDisplay(single_position_portfolio).display(vol_stats=vol_stats)
+        VolatilityProfileDisplay(single_position_portfolio).display(
+            vol_stats=vol_stats
+        )
 
     def test_display_without_stats_does_not_raise(
         self, single_position_portfolio
     ) -> None:
-        VolatilityProfileDisplay(single_position_portfolio).display(vol_stats=None)
+        VolatilityProfileDisplay(single_position_portfolio).display(
+            vol_stats=None
+        )
 
 
 # ===========================================================================
@@ -92,7 +105,9 @@ class TestVolatilityProfileOutput:
         # 20% could appear as "20" or "0.20" or "20.00%"
         assert "20" in out
 
-    def test_empty_portfolio_outputs_message(self, empty_portfolio, capsys) -> None:
+    def test_empty_portfolio_outputs_message(
+        self, empty_portfolio, capsys
+    ) -> None:
         VolatilityProfileDisplay(empty_portfolio).display()
         out = capsys.readouterr().out
         assert len(out) > 0
@@ -104,16 +119,11 @@ class TestVolatilityProfileOutput:
         VolatilityProfileDisplay(multi_position_portfolio).display()
         multi_out = capsys.readouterr().out
 
-        import datetime
-        from datetime import timedelta, timezone
-
-        from deltadewa.constants import OptionType
-        from deltadewa.portfolio.core import OptionPortfolio
-
         single = OptionPortfolio(spot_price=100.0, volatility=0.20)
         single.add_position(
             strike_price=100.0,
-            maturity_date=datetime.datetime.now(tz=timezone.utc) + timedelta(days=45),
+            maturity_date=datetime.datetime.now(tz=timezone.utc)
+            + timedelta(days=45),
             quantity=1,
             option_type=OptionType.CALL,
         )

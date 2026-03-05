@@ -78,7 +78,8 @@ class TestOptionChartsBase:
         label = charts._get_expiry_label()
 
         expected = (
-            f"{maturity1.strftime('%Y-%m-%d')} → {maturity2.strftime('%Y-%m-%d')}"
+            f"{maturity1.strftime('%Y-%m-%d')} → "
+            f"{maturity2.strftime('%Y-%m-%d')}"
         )
         assert label == expected
 

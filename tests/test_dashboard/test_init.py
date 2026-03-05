@@ -6,8 +6,8 @@ Verifies:
 - Importing the package does not trigger expensive side effects
 """
 
-# ruff: noqa: S101 D102 ANN001
-# pylint: disable=missing-function-docstring
+# ruff: noqa: S101 D101 D102 ANN001
+# pylint: disable=missing-function-docstring, import-outside-toplevel, unused-import, missing-class-docstring
 
 from __future__ import annotations
 
@@ -37,7 +37,9 @@ class TestDashboardPackageImports:
         import deltadewa.dashboard as dashboard
 
         cls = getattr(dashboard, class_name, None)
-        assert cls is not None, f"deltadewa.dashboard.{class_name} is not accessible"
+        assert (
+            cls is not None
+        ), f"deltadewa.dashboard.{class_name} is not accessible"
 
     def test_carry_display_importable(self) -> None:
         from deltadewa.dashboard import CarryDisplay  # noqa: F401
@@ -72,7 +74,7 @@ class TestDashboardDunderAll:
             "PositionAgingDisplay",
             "PositionDetailDisplay",
             "VolatilityProfileDisplay",
-        ]
+        ],
     )
 
     def test_all_expected_names_in_dunder_all(self) -> None:
@@ -125,7 +127,8 @@ class TestDashboardImportSideEffects:
 
         assert elapsed < 3.0, (
             f"deltadewa.dashboard import took {elapsed:.2f}s — "
-            "check for side effects (QuantLib, widget renders, filesystem access)"
+            "check for side effects (QuantLib, widget renders, "
+            "filesystem access)"
         )
 
     def test_import_does_not_write_to_stdout(self, capsys) -> None:

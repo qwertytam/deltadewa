@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio, OptionPortfolioBase
 
+# ruff: noqa: S101
+
 
 class TestOptionPortfolioBase:
     """Test cases for OptionPortfolioBase class."""
@@ -89,7 +91,7 @@ class TestOptionPortfolioBase:
 
         try:
             portfolio.remove_position(0)
-            assert False, "Should raise IndexError"
+            raise AssertionError(False, "Should raise IndexError")
         except IndexError:
             pass
 
@@ -110,7 +112,9 @@ class TestOptionPortfolioBase:
         assert portfolio.symbol == "TEST"
 
     def test_update_position_exercise_style_synced(self) -> None:
-        """Regression test: updating exercise_style must sync both
+        """Regression test.
+
+        Testing: updating exercise_style must sync both
         OptionPosition.exercise_style and OptionPosition.option.exercise_style.
         Previously, update_position only updated the OptionValuation attribute,
         leaving the OptionPosition attribute stale. This caused the position
@@ -135,7 +139,8 @@ class TestOptionPortfolioBase:
         portfolio.update_position(0, exercise_style=ExerciseStyle.EUROPEAN)
 
         pos = portfolio.positions[0]
-        # Both OptionPosition and OptionValuation attributes must reflect the change
+        # Both OptionPosition and OptionValuation attributes must reflect the
+        # change
         assert (
             pos.option.exercise_style == ExerciseStyle.EUROPEAN
         ), "OptionValuation.exercise_style not updated"
@@ -154,9 +159,10 @@ class TestOptionPortfolioBase:
         assert (
             pos.exercise_style == ExerciseStyle.EUROPEAN
         ), "exercise_style reverted after update_market_conditions"
-        assert (
-            pos.option.exercise_style == ExerciseStyle.EUROPEAN
-        ), "OptionValuation.exercise_style reverted after update_market_conditions"
+        assert pos.option.exercise_style == ExerciseStyle.EUROPEAN, (
+            "OptionValuation.exercise_style reverted after "
+            "update_market_conditions"
+        )
 
     def test_clear_positions(self) -> None:
         """Test clearing all positions."""
@@ -434,16 +440,20 @@ class TestPortfolioCore(unittest.TestCase):
     """Test cases for core portfolio functionality."""
 
     def setUp(self) -> None:
+        """Set up a basic portfolio for testing."""
         # Initialize with explicit Symbol
         self.portfolio = OptionPortfolio(symbol="TSLA", spot_price=200.0)
 
     def test_portfolio_symbol_storage(self) -> None:
-        """Test that symbol is stored at portfolio level"""
+        """Test that symbol is stored at portfolio level."""
         pf = OptionPortfolio(symbol="TSLA")
         self.assertEqual(pf.get_symbol(), "TSLA")
 
     def test_add_position_defaults(self) -> None:
-        """Test adding position uses defaults and works without position-level symbol"""
+        """Test adding position uses defaults and works.
+
+        Test that it works without position-level symbol.
+        """
         self.portfolio.add_position(
             strike_price=210,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
@@ -459,7 +469,7 @@ class TestPortfolioCore(unittest.TestCase):
         self.assertEqual(pos.exercise_style, ExerciseStyle.AMERICAN)
 
     def test_european_position_pricing(self) -> None:
-        """Test that a portfolio can hold and price European options"""
+        """Test that a portfolio can hold and price European options."""
         self.portfolio.add_position(
             strike_price=210,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
@@ -476,7 +486,7 @@ class TestPortfolioCore(unittest.TestCase):
         )
 
     def test_mixed_styles(self) -> None:
-        """Portfolio should handle both styles simultaneously"""
+        """Portfolio should handle both styles simultaneously."""
         # Long American Call
         self.portfolio.add_position(
             strike_price=200,

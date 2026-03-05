@@ -8,6 +8,8 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
+# ruff: noqa: S101
+
 
 class TestRiskRewardMixin:
     """Test cases for RiskRewardMixin."""
@@ -232,7 +234,10 @@ class TestRiskRewardMixin:
         try:
             analyzer.print_risk_reward_summary()
         except Exception as e:  # pylint: disable=broad-exception-caught
-            assert False, f"print_risk_reward_summary raised {e}"
+            raise AssertionError(
+                False,
+                f"print_risk_reward_summary raised {e}",
+            ) from e
 
     def test_risk_reward_analysis_with_spot_range(self) -> None:
         """Test risk_reward_analysis with custom spot_range."""

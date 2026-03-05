@@ -6,8 +6,10 @@ import ipywidgets as widgets  # type: ignore[import-untyped]
 import pytest
 
 from deltadewa.portfolio.core import OptionPortfolio
-from deltadewa.widgets.health_dashboard import (HedgeHealthDashboard,
-                                                HedgeHealthMetric)
+from deltadewa.widgets.health_dashboard import (
+    HedgeHealthDashboard,
+    HedgeHealthMetric,
+)
 
 # ruff: noqa: S101
 
@@ -121,13 +123,17 @@ class TestHedgeHealthDashboard:
     def test_initialization(self, mock_portfolio: OptionPortfolio) -> None:
         """Test HedgeHealthDashboard can be instantiated."""
         # Note: Init only takes portfolio, other args are optional scalars.
-        # It creates its OWN analyzer internally: self.analyzer = PortfolioAnalyzer(portfolio)
+        # It creates its OWN
+        # analyzer internally: self.analyzer = PortfolioAnalyzer(portfolio)
         dashboard = HedgeHealthDashboard(mock_portfolio)
         assert dashboard is not None
         assert dashboard.portfolio == mock_portfolio
         assert hasattr(dashboard, "analyzer")
 
-    def test_initialization_with_metrics(self, mock_portfolio: OptionPortfolio) -> None:
+    def test_initialization_with_metrics(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
         """Test HedgeHealthDashboard initialization."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         # Just check it runs
@@ -181,7 +187,10 @@ class TestHedgeHealthDashboard:
         widget = dashboard.display()
         assert widget is not None
 
-    def test_config_initialization(self, mock_portfolio: OptionPortfolio) -> None:
+    def test_config_initialization(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
         """Test that config is initialized with defaults."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         assert hasattr(dashboard, "config")
@@ -238,7 +247,10 @@ class TestHedgeHealthDashboard:
             assert "max_val" in config["metrics"][metric]
             assert "invert_colors" in config["metrics"][metric]
 
-    def test_load_config_parameters(self, mock_portfolio: OptionPortfolio) -> None:
+    def test_load_config_parameters(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
         """Test loading configuration with parameter updates."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
 
@@ -313,7 +325,10 @@ class TestHedgeHealthDashboard:
         assert dashboard.config["metrics"]["vol_regime"]["min_val"] == 20
         assert dashboard.config["metrics"]["vol_regime"]["max_val"] == 80
 
-    def test_display_config_loader(self, mock_portfolio: OptionPortfolio) -> None:
+    def test_display_config_loader(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
         """Test that display_config_loader returns a widget."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
         loader_widget = dashboard.display_config_loader()

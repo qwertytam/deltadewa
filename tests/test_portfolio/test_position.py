@@ -6,6 +6,8 @@ from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
 
+# ruff: noqa: S101
+
 
 class TestOptionPosition:
     """Test cases for OptionPosition class."""

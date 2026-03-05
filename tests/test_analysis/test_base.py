@@ -3,6 +3,8 @@
 from deltadewa.analysis.base import PortfolioAnalyzer, PortfolioAnalyzerBase
 from deltadewa.portfolio.core import OptionPortfolio
 
+# ruff: noqa: S101
+
 
 class TestPortfolioAnalyzerBase:
     """Test cases for PortfolioAnalyzerBase class."""

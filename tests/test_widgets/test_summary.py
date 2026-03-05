@@ -14,7 +14,7 @@ class TestNetHedgeSummary:
     """Test cases for NetHedgeSummary class."""
 
     @pytest.fixture
-    def mock_portfolio(self) -> None:
+    def mock_portfolio(self) -> Mock:
         """Create a mock portfolio for testing."""
         portfolio = Mock()
         portfolio.spot_price = 100.0
@@ -86,31 +86,31 @@ class TestNetHedgeSummary:
 
         return portfolio
 
-    def test_initialization(self, mock_portfolio) -> None:
+    def test_initialization(self, mock_portfolio: Mock) -> None:
         """Test NetHedgeSummary can be instantiated."""
         summary = NetHedgeSummary(mock_portfolio)
         assert summary is not None
         assert summary.portfolio == mock_portfolio
 
-    def test_attributes_exist(self, mock_portfolio) -> None:
+    def test_attributes_exist(self, mock_portfolio: Mock) -> None:
         """Test all expected attributes are created."""
         summary = NetHedgeSummary(mock_portfolio)
         # Should have widget attributes
         assert hasattr(summary, "widget")
         assert summary.widget is not None
 
-    def test_update_method_exists(self, mock_portfolio) -> None:
+    def test_update_method_exists(self, mock_portfolio: Mock) -> None:
         """Test update method can be called."""
         summary = NetHedgeSummary(mock_portfolio)
         summary.update()
 
-    def test_display_returns_widget(self, mock_portfolio) -> None:
+    def test_display_returns_widget(self, mock_portfolio: Mock) -> None:
         """Test display method returns a widget."""
         summary = NetHedgeSummary(mock_portfolio)
         widget = summary.display()
         assert widget is not None
 
-    def test_widget_attribute(self, mock_portfolio) -> None:
+    def test_widget_attribute(self, mock_portfolio: Mock) -> None:
         """Test widget attribute is a widget with children."""
         summary = NetHedgeSummary(mock_portfolio)
         assert hasattr(summary.widget, "children")

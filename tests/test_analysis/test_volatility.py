@@ -2,12 +2,16 @@
 
 from datetime import UTC, datetime, timedelta
 
-from deltadewa.analysis.volatility import (apply_proportional_volatility_shift,
-                                           calculate_portfolio_avg_volatility,
-                                           get_volatility_stats,
-                                           restore_volatilities)
+from deltadewa.analysis.volatility import (
+    apply_proportional_volatility_shift,
+    calculate_portfolio_avg_volatility,
+    get_volatility_stats,
+    restore_volatilities,
+)
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
+
+# ruff: noqa: S101
 
 
 class TestCalculatePortfolioAvgVolatility:
@@ -123,7 +127,8 @@ class TestCalculatePortfolioAvgVolatility:
 
         avg_vol = calculate_portfolio_avg_volatility(portfolio)
 
-        # Should return a reasonable value (either position vol or portfolio vol)
+        # Should return a reasonable value (either position vol or portfolio
+        # vol)
         assert 0.20 <= avg_vol <= 0.35
 
 
@@ -242,7 +247,9 @@ class TestApplyProportionalVolatilityShift:
         )
 
         # Position should now be at or near target (scaled from 0.01 to 0.30)
-        assert portfolio.positions[0].option.volatility > 0.20  # Should be scaled up
+        assert (
+            portfolio.positions[0].option.volatility > 0.20
+        )  # Should be scaled up
         assert original_vols[0] == 0.01
 
     def test_returns_original_volatilities_dict(self) -> None:
@@ -319,8 +326,14 @@ class TestRestoreVolatilities:
         restore_volatilities(portfolio, original_vols)
 
         # Verify restored
-        assert abs(portfolio.positions[0].option.volatility - original_vol_0) < 0.001
-        assert abs(portfolio.positions[1].option.volatility - original_vol_1) < 0.001
+        assert (
+            abs(portfolio.positions[0].option.volatility - original_vol_0)
+            < 0.001
+        )
+        assert (
+            abs(portfolio.positions[1].option.volatility - original_vol_1)
+            < 0.001
+        )
 
     def test_partial_restore_missing_indices(self) -> None:
         """Test restore handles missing position indices gracefully."""

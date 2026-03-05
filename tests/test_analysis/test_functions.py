@@ -5,16 +5,22 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.cache import (ScenarioGridCache,
-                                      create_scenario_cache_key,
-                                      create_spot_vol_cache_key,
-                                      get_portfolio_state_hash)
-from deltadewa.analysis.functions import (classify_maturity_bucket,
-                                          quick_carry_analysis,
-                                          quick_risk_concentration)
+from deltadewa.analysis.cache import (
+    ScenarioGridCache,
+    create_scenario_cache_key,
+    create_spot_vol_cache_key,
+    get_portfolio_state_hash,
+)
+from deltadewa.analysis.functions import (
+    classify_maturity_bucket,
+    quick_carry_analysis,
+    quick_risk_concentration,
+)
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.spot_utils import generate_spot_range
+
+# ruff: noqa: S101
 
 
 class TestGenerateSpotRange:
@@ -133,15 +139,18 @@ class TestGenerateSpotRange:
     def test_near_zero_floor_logic(self) -> None:
         """Test that near-zero floor logic correctly handles edge cases.
 
-        The near-zero floor (0.01) is used as the minimum for the linspace calculation,
-        but critical points derived from spot_price may be smaller than 0.01.
+        The near-zero floor (0.01) is used as the minimum for the linspace
+        calculation, but critical points derived from spot_price may be smaller
+        than 0.01.
+
         The final range includes both linspace values and critical points.
         """
         # Test with very small spot price
         spot_price = 0.001
         result = generate_spot_range(spot_price, use_comprehensive_range=True)
 
-        # The near-zero used for linspace should be max(0.01, 0.001 * 0.0001) = 0.01
+        # The near-zero used for linspace should be max(0.01, 0.001 * 0.0001) =
+        # 0.01
         # But critical points based on spot_price can be smaller
         # So result[0] will be min(critical_points) = spot_price * 0.1 = 0.0001
         assert result[0] == 0.0001
@@ -159,7 +168,10 @@ class TestGenerateSpotRange:
         assert result[0] == 1.0
 
     def test_standalone_produces_same_results_as_riskmixin(self) -> None:
-        """Test standalone function produces identical results to RiskMixin._get_spot_range()."""
+        """Test standalone function produces identical results to RiskMixin.
+
+        _get_spot_range().
+        """
         # Create a portfolio with RiskMixin
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
