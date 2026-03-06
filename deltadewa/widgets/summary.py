@@ -198,8 +198,7 @@ class NetHedgeSummary:
                 widgets.HTML(
                     """
                     <h4 style='margin:10px 10px 5px 10px;'>"""
-                    """Portfolio Value</h4>",
-                    """,
+                    """Portfolio Value</h4>""",
                 ),
                 self.value_metrics_html,
                 widgets.HTML(
