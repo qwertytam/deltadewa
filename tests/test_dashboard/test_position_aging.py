@@ -12,7 +12,6 @@ Focus areas:
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 
@@ -190,22 +189,12 @@ class TestPositionAgingDisplayMethod:
 
         # First call: "today" is now
         fixed_t0 = datetime.now(tz=UTC)
-        with patch(
-            "deltadewa.dashboard.position_aging.datetime",
-        ) as mock_dt:
-            mock_dt.datetime.now.return_value = fixed_t0
-            mock_dt.UTC = UTC
-            d.display()
+        d.display(today=fixed_t0)
         out_t0 = capsys.readouterr().out
 
         # Second call: "today" is 10 days later → days-to-expiry should decrease
         fixed_t1 = fixed_t0 + timedelta(days=10)
-        with patch(
-            "deltadewa.dashboard.position_aging.datetime",
-        ) as mock_dt:
-            mock_dt.datetime.now.return_value = fixed_t1
-            mock_dt.UTC = UTC
-            d.display()
+        d.display(today=fixed_t1)
         out_t1 = capsys.readouterr().out
 
         # Both outputs should be non-empty and differ

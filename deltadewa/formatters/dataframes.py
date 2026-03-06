@@ -11,7 +11,7 @@ This module provides consistent styling and formatting functions for DataFrames:
 All functions work with pandas DataFrames and Styler objects.
 """
 
-# TODO: Linter
+# TODO: Linter errors
 from __future__ import annotations
 
 import warnings

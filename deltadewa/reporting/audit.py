@@ -335,10 +335,11 @@ class PortfolioChangeTracker:
     @staticmethod
     def _describe_last_added(portfolio: OptionPortfolio) -> str:
         """Build a human-readable description of last added position."""
-        # TODO: this is a bit hacky since it relies on the assumption that the
+        # This is a bit hacky since it relies on the assumption that the
         # last position in the list is the one just added, but it works for our
         # current use case and keeps the logger decoupled from the portfolio
         # internals.
+        # https://github.com/qwertytam/deltadewa/issues/71
 
         if not portfolio.positions:
             return "Added position"

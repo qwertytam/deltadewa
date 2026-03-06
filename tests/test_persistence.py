@@ -20,7 +20,7 @@ from deltadewa.persistence import (
 from deltadewa.reporting.audit import PortfolioLogger
 
 # ruff: noqa: S101 ANN001
-# TODO: Linter errors
+
 # ========== Fixtures ==========
 
 
@@ -420,6 +420,7 @@ class TestYamlRoundtrip:
         )
 
         # Import
+        assert output_path is not None
         result = serializer.import_from_yaml(output_path)
         imported_params = result["market_params"]
 
@@ -455,6 +456,7 @@ class TestYamlRoundtrip:
         )
 
         # Import
+        assert output_path is not None
         result = serializer.import_from_yaml(output_path)
         imported_portfolio = result["portfolio"]
 
@@ -627,6 +629,7 @@ class TestUniversalImport:
         )
 
         # Import using universal function
+        assert yaml_path is not None
         result = serializer.import_portfolio(yaml_path)
 
         assert "portfolio" in result

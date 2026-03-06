@@ -7,7 +7,7 @@ options_dashboard.ipynb, providing three main capabilities:
   - Risk / Reward summary from Monte Carlo results (display_risk_reward_summary)
 """
 
-# TODO: Linter
+# TODO: Linter errors, too many lines
 from __future__ import annotations
 
 import time
@@ -305,7 +305,7 @@ class StressDashboard:
             PortfolioWidgets as _PfW,  # local import to avoid hard dep
         )
 
-        _pw_stub = _PfW.__new__(_PfW)
+        _pw_stub = _PfW.__new__(_PfW)  # noqa: RUF052
         _pw_stub.portfolio = portfolio
 
         # date selector via PortfolioWidgets helper
@@ -1388,7 +1388,7 @@ class StressDashboard:
             color=DEFAULT_PALETTE.medium_background,
             linestyle="--",
             linewidth=1.5,
-            label=f"Expected (~{cdf_at_exp*100:.0f}th %ile)",
+            label=f"Expected (~{cdf_at_exp * 100:.0f}th %ile)",
             alpha=0.7,
             zorder=8,
         )
