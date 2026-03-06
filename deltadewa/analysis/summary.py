@@ -185,7 +185,8 @@ class SummaryMixin:
         net_debit = analysis["net_debit"]
         if net_debit > 0:
             lines.append(
-                f"  Net Debit: ${net_debit:,.2f} (capital required to implement)",
+                f"  Net Debit: ${net_debit:,.2f} "
+                f"(capital required to implement)",
             )
         else:
             lines.append(f"  Net Credit: ${-net_debit:,.2f} (capital received)")
@@ -251,7 +252,8 @@ class SummaryMixin:
                     loss_line += f" ({loss_pct:.1f}% of portfolio value)"
                 lines.append(loss_line)
                 lines.append(
-                    f"    └─ Occurs at spot price: ${max_loss_total['spot_at_max_loss']:.2f}",
+                    f"    └─ Occurs at spot price: $"
+                    f"{max_loss_total['spot_at_max_loss']:.2f}",
                 )
 
             if max_profit_total["is_unlimited"]:
@@ -273,7 +275,8 @@ class SummaryMixin:
                     profit_line += f" ({profit_pct:.1f}% of portfolio value)"
                 lines.append(profit_line)
                 lines.append(
-                    f"    └─ Occurs at spot price: ${max_profit_total['spot_at_max_profit']:.2f}",
+                    f"    └─ Occurs at spot price: $"
+                    f"{max_profit_total['spot_at_max_profit']:.2f}",
                 )
 
             if analysis["breakeven_total"]:
@@ -288,9 +291,10 @@ class SummaryMixin:
         # Probability Analysis
         lines.append("PROBABILITY ANALYSIS:")
         prob = analysis["prob_profit"]
-        lines.append(f"  Chance of Profit: {prob*100:.1f}%")
+        lines.append(f"  Chance of Profit: {prob * 100:.1f}%")
         lines.append(
-            f"  Expected Value: ${analysis['expected_pnl']:,.2f} (probabilistic weighted average)",
+            f"  Expected Value: ${analysis['expected_pnl']:,.2f} "
+            f"(probabilistic weighted average)",
         )
         lines.append("")
 

@@ -85,7 +85,9 @@ class MonteCarloStalenessWidget:
 
         if is_stale:
             last_modified = getattr(
-                self.portfolio, "monte_carlo_last_modified", None
+                self.portfolio,
+                "monte_carlo_last_modified",
+                None,
             )
             if last_modified:
                 last_modified_str = last_modified.strftime("%H:%M:%S")
@@ -111,9 +113,12 @@ class MonteCarloStalenessWidget:
                         </strong><br>
                         Last modified: {last_modified_str} ({stale_reason})
                     </p>
-                    <p style="margin: 10px 0 0 0; font-size: 13px; opacity: 0.95;">
-                        → Results below may not reflect your current portfolio<br>
-                        → Re-run the Monte Carlo cell in MODE 0 or click the button
+                    <p style="margin: 10px 0 0 0; """
+                f"""font-size: 13px; opacity: 0.95;">
+                        → Results below may not reflect your current """
+                f"""portfolio<br>
+                        → Re-run the Monte Carlo cell in MODE 0 or """
+                f"""click the button
                         below
                     </p>
                 </div>
@@ -136,7 +141,8 @@ class MonteCarloStalenessWidget:
                     b.disabled = True
                     try:
                         print(
-                            f"Re-running Monte Carlo with {self._num_simulations:,}"
+                            f"Re-running Monte Carlo with "
+                            f"{self._num_simulations:,}"
                             f" simulations...",
                         )
                         mc_results = self.portfolio.run_monte_carlo_simulation(
@@ -145,7 +151,7 @@ class MonteCarloStalenessWidget:
                         )
                         self.portfolio.monte_carlo_stale = False
                         self.portfolio.monte_carlo_timestamp = dt.now(
-                            tz=datetime.UTC
+                            tz=datetime.UTC,
                         )
                         self._reporter.success(
                             f"✓ Monte Carlo re-run complete! "
@@ -156,7 +162,7 @@ class MonteCarloStalenessWidget:
                         b.button_style = "success"
                     except Exception as e:  # pylint: disable=broad-except
                         self._reporter.error(
-                            f"Error re-running Monte Carlo: {e}"
+                            f"Error re-running Monte Carlo: {e}",
                         )
                         b.description = "❌ Error - Try Again"
                         b.button_style = "danger"

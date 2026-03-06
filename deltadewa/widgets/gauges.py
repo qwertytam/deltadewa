@@ -10,11 +10,11 @@ from deltadewa.colours import DEFAULT_PALETTE
 
 
 class GaugeIndicator:
-    """A visual gauge indicator bar with configurable color gradient and value marker.
+    """A visual indicator bar with configurable color gradient and value marker.
 
-    The gauge displays a horizontal or vertical bar with a color gradient transitioning
-    through three key points (min, mid, max) between start and end values. An arrow
-    or chevron marker indicates the actual value position.
+    The gauge displays a horizontal or vertical bar with a color gradient
+    transitioning through three key points (min, mid, max) between start and
+    end values. An arrow or chevron marker indicates the actual value position.
 
     Color Gradient Logic:
         - From start to min: Full low_color
@@ -40,8 +40,10 @@ class GaugeIndicator:
         mid_color: Color for values at mid_val (default: yellow)
         high_color: Color for values at/above max_val (default: green)
         orientation: 'horizontal' or 'vertical'
-        width: Width of the gauge in pixels (for horizontal) or bar width (for vertical)
-        height: Height of the gauge in pixels (for vertical) or bar height (for horizontal)
+        width: Width of the gauge in pixels (for horizontal) or bar width (for
+        vertical)
+        height: Height of the gauge in pixels (for vertical) or bar height (for
+        horizontal)
         show_actual_label: Whether to display the actual value label
         show_minmidmax_labels: Whether to display min/mid/max value labels
         show_startend_labels: Whether to display start/end value labels
@@ -69,7 +71,7 @@ class GaugeIndicator:
         show_startend_labels: bool = True,
         label_format: str = "{:.1f}",
         title: str | None = None,
-    ):
+    ) -> None:
         """Initialize the GaugeIndicator.
 
         Args:
@@ -133,10 +135,8 @@ class GaugeIndicator:
         max_pct = self._value_to_percent(self.max_val)
 
         # Build gradient stops
-        if self.orientation == "horizontal":
-            direction = "to right"
-        else:
-            direction = "to top"  # Vertical: bottom is start, top is end
+        # Vertical: bottom is start, top is end
+        direction = "to right" if self.orientation == "horizontal" else "to top"
 
         gradient = (
             f"linear-gradient({direction}, "
@@ -183,7 +183,8 @@ class GaugeIndicator:
                 f"z-index: 2; "
             )
         else:
-            # Vertical: chevron pointing right, positioned to the left of the bar
+            # Vertical: chevron pointing right, positioned to the left of the
+            # bar
             marker_style = (
                 f"position: absolute; "
                 f"bottom: {actual_pct}%; "
@@ -245,14 +246,17 @@ class GaugeIndicator:
                     pct = self._value_to_percent(val)
                     # Tick mark
                     labels_html += (
-                        f'<div style="position:absolute; left:{pct}%; bottom:-10px; '
+                        f'<div style="position:absolute; left:{pct}%; '
+                        f"bottom:-10px; "
                         f"transform:translateX(-50%); width:1px; height:8px; "
                         f'background:#666;"></div>'
                     )
                     # Label
                     labels_html += (
-                        f'<div style="position:absolute; left:{pct}%; bottom:-30px; '
-                        f'transform:translateX(-50%); font-size:10px; color:#666;">'
+                        f'<div style="position:absolute; left:{pct}%;'
+                        f" bottom:-30px; "
+                        f"transform:translateX(-50%); font-size:10px;"
+                        f' color:#666;">'
                         f"{self.label_format.format(val)}</div>"
                     )
         else:
@@ -270,7 +274,7 @@ class GaugeIndicator:
                 )
 
             if self.show_minmidmax_labels:
-                for val, label in [
+                for val, _ in [
                     (self.min_val, "min"),
                     (self.mid_val, "mid"),
                     (self.max_val, "max"),
@@ -278,14 +282,17 @@ class GaugeIndicator:
                     pct = self._value_to_percent(val)
                     # Tick mark
                     labels_html += (
-                        f'<div style="position:absolute; bottom:{pct}%; right:-8px; '
+                        f'<div style="position:absolute; bottom:{pct}%;'
+                        f" right:-8px; "
                         f"transform:translateY(50%); width:8px; height:1px; "
                         f'background:#666;"></div>'
                     )
                     # Label
                     labels_html += (
-                        f'<div style="position:absolute; bottom:{pct}%; right:-35px; '
-                        f'transform:translateY(50%); font-size:10px; color:#666;">'
+                        f'<div style="position:absolute; bottom:{pct}%;'
+                        f" right:-35px; "
+                        f"transform:translateY(50%); font-size:10px;"
+                        f' color:#666;">'
                         f"{self.label_format.format(val)}</div>"
                     )
 
@@ -393,10 +400,18 @@ class GaugeIndicator:
             self.actual = actual
 
         # Validate after update
-        if not (self.start <= self.min_val <= self.mid_val <= self.max_val <= self.end):
+        if not (
+            self.start
+            <= self.min_val
+            <= self.mid_val
+            <= self.max_val
+            <= self.end
+        ):
             raise ValueError(
-                f"Values must satisfy: start ({self.start}) <= min ({self.min_val}) "
-                f"<= mid ({self.mid_val}) <= max ({self.max_val}) <= end ({self.end})",
+                f"Values must satisfy: start ({self.start})"
+                f" <= min ({self.min_val}) "
+                f"<= mid ({self.mid_val}) <= max ({self.max_val})"
+                f" <= end ({self.end})",
             )
 
         if self._widget is not None:

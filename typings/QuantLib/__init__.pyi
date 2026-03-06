@@ -5,8 +5,7 @@ project.
 """
 
 # ruff: noqa: N802, UP037, ANN401
-# pylint: disable=unused-argument missing-class-docstring missing-function-docstring
-# pylint: disable=invalid-name
+# pylint: disable=unused-argument missing-class-docstring missing-function-docstring, invalid-name
 from typing import Any
 
 # Settings
@@ -74,12 +73,15 @@ class PlainVanillaPayoff:
 
     def __init__(self, option_type: int, strike: float) -> None: ...
 
-class EuropeanExercise:
+class Exercise:
+    """Base class for exercise styles."""
+
+class EuropeanExercise(Exercise):
     """European exercise style."""
 
     def __init__(self, end: Date) -> None: ...
 
-class AmericanExercise:
+class AmericanExercise(Exercise):
     """American exercise style."""
 
     def __init__(self, start: Date, end: Date) -> None: ...
@@ -117,8 +119,8 @@ class QuoteHandle:
 
 # Term structures
 
-class BlackVolTermStructureHandle: ...
-class YieldTermStructureHandle: ...
+class BlackVolTermStructureHandle(Any): ...
+class YieldTermStructureHandle(Any): ...
 
 def FlatForward(
     date: Date,
@@ -135,7 +137,7 @@ class BlackConstantVol:
         self,
         date: Date,
         calendar: Any,
-        vol: float,
+        vol: float | QuoteHandle,
         daycounter: DayCounter,
     ) -> None: ...
 

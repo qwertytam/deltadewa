@@ -13,6 +13,8 @@ from typing import Any
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.persistence import PortfolioLogger, PortfolioSerializer
+from deltadewa.portfolio.core import OptionPortfolio, OptionPosition
 from deltadewa.widgets.export_controls import ExportControlsMixin
 from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
 
@@ -30,7 +32,12 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     """
 
-    def __init__(self, portfolio, serializer, portfolio_changelog):
+    def __init__(
+        self,
+        portfolio: OptionPortfolio,
+        serializer: PortfolioSerializer,
+        portfolio_changelog: PortfolioLogger,
+    ) -> None:
         """Initialize widget factory.
 
         Args:
@@ -72,12 +79,18 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         else:
             if include_index:
                 options = [
-                    f"{i}: {p['option_type'].value.capitalize()} {p['strike']} @ {p['expiry']}"
+                    (
+                        f"{i}: {p['option_type'].value.capitalize()}"
+                        f" {p['strike']} @ {p['expiry']}"
+                    )
                     for i, p in enumerate(positions)
                 ]
             else:
                 options = [
-                    f"{p['option_type'].value.capitalize()} {p['strike']} @ {p['expiry']}"
+                    (
+                        f"{p['option_type'].value.capitalize()} "
+                        f"{p['strike']} @ {p['expiry']}"
+                    )
                     for p in positions
                 ]
             disabled = False
@@ -176,7 +189,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         # Link checkbox to volatility input disabled state
-        def on_checkbox_change(change):
+        def on_checkbox_change(change: dict[str, Any]) -> None:
             volatility_input.disabled = change["new"]
             if change["new"]:
                 volatility_input.value = self.portfolio.volatility
@@ -207,7 +220,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         output = widgets.Output()
 
         # Helper functions
-        def get_position_display_string(pos):
+        def get_position_display_string(pos: OptionPosition) -> str:
             """Generate consistent display string for a position."""
             result = f"{pos.quantity}x "
             result += f"{pos.option.option_type.value.capitalize()} @"
@@ -216,7 +229,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             result += f"{pos.option.exercise_style.capitalize()}"
             return result
 
-        def refresh_position_list():
+        def refresh_position_list() -> None:
             """Update dropdown with current positions."""
             if self.portfolio.positions:
                 position_selector.options = [
@@ -228,8 +241,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 position_selector.options = ["No positions"]
                 position_selector.disabled = True
 
-        def on_position_selected(change):  # pylint: disable=unused-argument
+        def on_position_selected(change: dict[str, Any]) -> None:
             """Load selected position data into input fields."""
+            _ = change
             if (
                 position_selector.value
                 and position_selector.value != "No positions"
@@ -237,7 +251,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 # Find the matching position
                 for pos in self.portfolio.positions:
                     if position_selector.value == get_position_display_string(
-                        pos
+                        pos,
                     ):
                         quantity_input.value = pos.quantity
                         strike_input.value = pos.option.strike_price
@@ -257,8 +271,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                         use_default_vol.value = not pos.custom_volatility
                         break
 
-        def on_add_clicked(b):  # pylint: disable=unused-argument
+        def on_add_clicked(b: widgets.Button) -> None:
             """Add a new position."""
+            _ = b
             try:
                 # Determine volatility parameter
                 position_volatility = (
@@ -301,8 +316,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             except Exception as e:  # pylint: disable=broad-except
                 status_label.value = f"✗ Error: {e!s}"
 
-        def on_remove_clicked(b):  # pylint: disable=unused-argument
+        def on_remove_clicked(b: widgets.Button) -> None:
             """Remove selected position."""
+            _ = b
             if (
                 position_selector.value
                 and position_selector.value != "No positions"
@@ -329,8 +345,9 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
                 except Exception as e:  # pylint: disable=broad-except
                     status_label.value = f"✗ Error: {e!s}"
 
-        def on_update_clicked(b):  # pylint: disable=unused-argument
+        def on_update_clicked(b: widgets.Button) -> None:
             """Update selected position."""
+            _ = b
             if (
                 position_selector.value
                 and position_selector.value != "No positions"
@@ -502,10 +519,11 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         if max_days not in date_range_days and max_days > 0:
             date_range_days.append(max_days)
 
+        val_date = self.portfolio.valuation_date
         date_options = [
             (
                 f"Day {d}: "
-                f"{(self.portfolio.valuation_date + timedelta(days=d)).strftime('%Y-%m-%d')}",
+                f"{(val_date + timedelta(days=d)).strftime('%Y-%m-%d')}",
                 d,
             )
             for d in date_range_days
@@ -661,7 +679,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     # ==========================================================================
 
     def create_roll_controls(
-        self, default_days_forward: int = 30
+        self,
+        default_days_forward: int = 30,
     ) -> dict[str, Any]:
         """Create complete roll analysis control panel.
 
@@ -675,8 +694,12 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         position_selector = widgets.Dropdown(
             options=["Select Position..."]
             + [
-                f"{i}: {p.option.option_type.upper()} K={p.option.strike_price} "
-                f"Exp={p.option.maturity_date.strftime('%Y-%m-%d')} Qty={p.quantity}"
+                (
+                    f"{i}: {p.option.option_type.upper()} "
+                    f"K={p.option.strike_price} "
+                    f"Exp={p.option.maturity_date.strftime('%Y-%m-%d')}"
+                    f" Qty={p.quantity}"
+                )
                 for i, p in enumerate(self.portfolio.positions)
             ],
             value="Select Position...",
@@ -779,7 +802,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             [
                 widgets.HTML("<h3>Interactive Market Scenario Dashboard</h3>"),
                 widgets.HTML(
-                    "<p>Adjust market parameters to see real-time portfolio impact</p>",
+                    "<p>Adjust market parameters "
+                    "to see real-time portfolio impact</p>",
                 ),
                 market_controls["spot"],
                 market_controls["vol"],
@@ -795,7 +819,8 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
 
     @staticmethod
     def create_section_header(
-        title: str, subtitle: str | None = None
+        title: str,
+        subtitle: str | None = None,
     ) -> widgets.HTML:
         """Create formatted section header.
 

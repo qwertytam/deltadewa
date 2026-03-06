@@ -70,6 +70,7 @@ class GreeksCache:
         """
         with self._lock:
             result = {}
+            # pylint: disable=consider-using-dict-items
             for name in self._compute_funcs:
                 if name in self._dirty or name not in self._cache:
                     self._cache[name] = self._compute_funcs[name]()

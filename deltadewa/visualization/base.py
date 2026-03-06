@@ -1,6 +1,9 @@
 """Base class and final composition for option charts visualization."""
 
+from __future__ import annotations
+
 import warnings
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,6 +13,9 @@ from deltadewa.visualization.greeks_charts import GreeksChartsMixin
 from deltadewa.visualization.pnl_charts import PnLChartsMixin
 from deltadewa.visualization.scenarios import ScenarioChartsMixin
 from deltadewa.visualization.theta_charts import ThetaChartsMixin
+
+if TYPE_CHECKING:
+    from deltadewa.portfolio.core import OptionPortfolioBase
 
 
 class OptionChartsBase:
@@ -24,7 +30,11 @@ class OptionChartsBase:
 
     """
 
-    def __init__(self, portfolio, style: str = "seaborn-v0_8-darkgrid") -> None:
+    def __init__(
+        self,
+        portfolio: OptionPortfolioBase,
+        style: str = "seaborn-v0_8-darkgrid",
+    ) -> None:
         """Initialize OptionChartsBase with a portfolio.
 
         Args:
@@ -125,3 +135,5 @@ class OptionCharts(
         style: Matplotlib style to use (default: 'seaborn-v0_8-darkgrid')
 
     """
+
+    pass  # noqa: PIE790  pylint: disable=unnecessary-pass

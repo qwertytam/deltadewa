@@ -9,12 +9,13 @@ import json
 from datetime import datetime as dt
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 from deltadewa import OptionPortfolio
 from deltadewa.constants import OptionType
-from deltadewa.reporting import ConsoleReporter
+from deltadewa.reporting import ConsoleReporter, PortfolioLogger
 
 try:
     import yaml
@@ -51,7 +52,8 @@ def load_config_yaml(
 
         if "market_parameters" not in config or "positions" not in config:
             raise ValueError(
-                "YAML must contain 'market_parameters' and 'positions' sections",
+                "YAML must contain 'market_parameters' and"
+                " 'positions' sections",
             )
 
         required_params = [
@@ -73,11 +75,12 @@ def load_config_yaml(
 class PortfolioSerializer:
     """Handle portfolio export/import in multiple formats."""
 
-    def __init__(self, export_dir: str | Path):
+    def __init__(self, export_dir: str | Path) -> None:
         """Initialize the serializer.
 
         Args:
-            export_dir: Directory path for exports (str or Path). If None, must be set later.
+            export_dir: Directory path for exports (str or Path). If None, must
+            be set later.
 
         """
         self.export_dir = Path(export_dir)
@@ -89,7 +92,7 @@ class PortfolioSerializer:
 
     # ========== Helper Functions ==========
 
-    def list_available_files(self):
+    def list_available_files(self) -> dict[str, list[Path]]:
         """List all available portfolio files in the export directory.
 
         Returns:
@@ -126,7 +129,7 @@ class PortfolioSerializer:
         self.export_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def detect_file_format(filepath):
+    def detect_file_format(filepath: str | Path) -> str | None:
         """Detect portfolio file format from extension.
 
         Args:
@@ -146,8 +149,14 @@ class PortfolioSerializer:
 
     # ========== Export Functions ==========
 
-    def _build_export_data(self, portfolio, changelog) -> dict:
-        """Build a comprehensive data structure representing the portfolio state,
+    def _build_export_data(
+        self,
+        portfolio: OptionPortfolio,
+        changelog: PortfolioLogger,
+    ) -> dict[str, Any]:
+        """Build a comprehensive data structure.
+
+        Build a comprehensive data structure representing the portfolio state,
         including market parameters, positions, and risk metrics.
 
         Args:
@@ -157,7 +166,7 @@ class PortfolioSerializer:
             dict with complete portfolio data for export
 
         """
-        data = {
+        data: dict[str, Any] = {
             "metadata": {
                 "exported_at": dt.now(tz=datetime.UTC).isoformat(),
                 "version": "1.0",
@@ -192,7 +201,9 @@ class PortfolioSerializer:
                     "rho": pos.option.rho(),
                 },
                 "price": pos.option.price(),
-                "position_value": pos.option.price() * pos.quantity * pos.contract_size,
+                "position_value": pos.option.price()
+                * pos.quantity
+                * pos.contract_size,
             }
             data["positions"].append(position_data)
 
@@ -212,9 +223,9 @@ class PortfolioSerializer:
 
     def export_to_json(
         self,
-        portfolio,
-        changelog,
-        filename="portfolio_book.json",
+        portfolio: OptionPortfolio,
+        changelog: PortfolioLogger,
+        filename: str = "portfolio_book.json",
     ) -> Path:
         """Export complete portfolio state to JSON format.
 
@@ -231,12 +242,17 @@ class PortfolioSerializer:
 
         # Save to file
         output_path = self.export_dir / filename
-        with open(output_path, "w", encoding="utf-8") as f:
+        with Path.open(output_path, "w", encoding="utf-8") as f:
             json.dump(portfolio_data, f, indent=2)
 
         return Path(output_path)
 
-    def export_to_csv(self, portfolio, changelog, filename="portfolio.csv"):
+    def export_to_csv(
+        self,
+        portfolio: OptionPortfolio,
+        changelog: PortfolioLogger,
+        filename: str = "portfolio.csv",
+    ) -> dict[str, Path]:
         """Export portfolio to CSV files (positions and risk).
 
         Args:
@@ -264,7 +280,9 @@ class PortfolioSerializer:
                     "volatility": pos.option.volatility,
                     "custom_volatility": pos.custom_volatility,
                     "price": pos.option.price(),
-                    "value": pos.option.price() * pos.quantity * pos.contract_size,
+                    "value": pos.option.price()
+                    * pos.quantity
+                    * pos.contract_size,
                     "delta": pos.option.delta(),
                     "gamma": pos.option.gamma(),
                     "theta": pos.option.theta(),
@@ -288,7 +306,9 @@ class PortfolioSerializer:
                     "resulting_positions": entry["portfolio_snapshot"][
                         "total_positions"
                     ],
-                    "resulting_net_delta": entry["portfolio_snapshot"]["net_delta"],
+                    "resulting_net_delta": entry["portfolio_snapshot"][
+                        "net_delta"
+                    ],
                 }
                 for entry in changelog.get_all_portfolio_snapshots()
             ],
@@ -315,14 +335,15 @@ class PortfolioSerializer:
 
     def export_to_yaml(
         self,
-        portfolio,
-        changelog,
-        filename="portfolio_export.yaml",
+        portfolio: OptionPortfolio,
+        changelog: PortfolioLogger,
+        filename: str = "portfolio_export.yaml",
     ) -> Path | None:
-        """Export portfolio configuration to YAML format (useful for edits/versioning).
+        """Export portfolio configuration to YAML format.
 
-        The saved structure contains 'market_parameters' and a list of 'positions' with
-        option_type, strike_price, maturity_date (ISO YYYY-MM-DD), quantity and symbol.
+        The saved structure contains 'market_parameters' and a list of
+        'positions' with option_type, strike_price, maturity_date (ISO
+        YYYY-MM-DD), quantity and symbol.
 
         Args:
             portfolio: OptionPortfolio instance
@@ -340,14 +361,23 @@ class PortfolioSerializer:
         portfolio_data = self._build_export_data(portfolio, changelog)
 
         output_path = self.export_dir / filename
-        with open(output_path, "w", encoding="utf-8") as f:
-            yaml.dump(portfolio_data, f, default_flow_style=False, sort_keys=False)
+        with Path.open(output_path, "w", encoding="utf-8") as f:
+            yaml.dump(
+                portfolio_data,
+                f,
+                default_flow_style=False,
+                sort_keys=False,
+            )
 
         return Path(output_path)
 
     # ========== Import Functions ==========
 
-    def import_from_json(self, filepath, create_portfolio=True) -> dict:
+    def import_from_json(
+        self,
+        filepath: str | Path,
+        create_portfolio: bool = True,
+    ) -> dict:
         """Import portfolio from JSON file.
 
         Args:
@@ -355,10 +385,11 @@ class PortfolioSerializer:
             create_portfolio: if True, creates and returns portfolio object
 
         Returns:
-            dict with portfolio data (and 'portfolio' key if create_portfolio=True)
+            dict with portfolio data (and 'portfolio' key if
+            create_portfolio=True)
 
         """
-        with open(filepath, encoding="utf-8") as f:
+        with Path.open(Path(filepath), encoding="utf-8") as f:
             data = json.load(f)
 
         if not create_portfolio:
@@ -383,7 +414,9 @@ class PortfolioSerializer:
 
         # Add positions (robust to variations in exported field names)
         for pos_data in data["positions"]:
-            maturity_str = pos_data.get("maturity_date") or pos_data.get("maturity")
+            maturity_str = pos_data.get("maturity_date") or pos_data.get(
+                "maturity",
+            )
             if maturity_str is None:
                 raise ValueError("Position entry missing maturity date")
             maturity = dt.fromisoformat(maturity_str)
@@ -420,7 +453,7 @@ class PortfolioSerializer:
             "metadata": data.get("metadata", {}),
         }
 
-    def import_from_yaml(self, filepath) -> dict:
+    def import_from_yaml(self, filepath: str | Path) -> dict:
         """Import portfolio from YAML configuration file.
 
         Args:
@@ -431,9 +464,11 @@ class PortfolioSerializer:
 
         """
         if not YAML_AVAILABLE:
-            raise RuntimeError("⚠️  PyYAML not installed. Cannot import from YAML.")
+            raise RuntimeError(
+                "⚠️  PyYAML not installed. Cannot import from YAML.",
+            )
 
-        with open(filepath, encoding="utf-8") as f:
+        with Path.open(Path(filepath), encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         # Extract market parameters
@@ -478,7 +513,8 @@ class PortfolioSerializer:
                 quantity=pos_config["quantity"],
                 option_type=(
                     OptionType.CALL
-                    if pos_config["option_type"].upper() == OptionType.CALL.value
+                    if pos_config["option_type"].upper()
+                    == OptionType.CALL.value
                     else OptionType.PUT
                 ),
                 volatility=position_volatility,
@@ -490,7 +526,7 @@ class PortfolioSerializer:
             "metadata": {"source": "yaml", "filepath": str(filepath)},
         }
 
-    def import_portfolio(self, filepath) -> dict:
+    def import_portfolio(self, filepath: str | Path) -> dict:
         """Universal import function - auto-detects file format.
 
         Args:

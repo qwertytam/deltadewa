@@ -47,9 +47,17 @@ class PositionAgingDisplay:
         self.portfolio = portfolio
         self._reporter = reporter or ConsoleReporter()
 
-    def display(self) -> None:
-        """Print the expiration calendar and aging insights."""
+    def display(self, today: dt | None = None) -> None:
+        """Print the expiration calendar and aging insights.
+
+        Args:
+            today: Override the current date for testing (defaults to today).
+
+        """
         # Position Aging & Expiration Calendar
+
+        if today is None:
+            today = dt.now(tz=datetime.UTC)
 
         print()
         self._reporter.header("📅 POSITION AGING & EXPIRATION CALENDAR")
@@ -57,13 +65,6 @@ class PositionAgingDisplay:
 
         # Group positions by expiration urgency
         df_positions = self.portfolio.to_dataframe()
-        # Prefer a patched `datetime.now` (tests patch the module name);
-        # fall back to the `dt` alias for normal runtime.
-        if hasattr(datetime.datetime, "now"):
-            tz = getattr(datetime, "UTC", datetime.UTC)
-            today = datetime.datetime.now(tz=tz)
-        else:
-            today = dt.now(tz=datetime.UTC)
 
         if not df_positions.empty:
             # Add days to expiry

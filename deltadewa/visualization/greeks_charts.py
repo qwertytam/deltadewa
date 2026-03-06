@@ -11,24 +11,25 @@ from matplotlib.figure import Figure
 from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
-    from deltadewa.portfolio.core import OptionPortfolioBase
+    from deltadewa.visualization._protocols import _VisualizationProtocol
 
 
 class GreeksChartsMixin:
     """Mixin providing Greek visualization methods."""
 
     if TYPE_CHECKING:
-        portfolio: "OptionPortfolioBase"
+        _self: "_VisualizationProtocol"
 
     def plot_greeks_by_strike(
-        self,
+        self: "_VisualizationProtocol",
         metrics: list[str] | None = None,
         figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
         """Create stacked bar charts of Greeks by strike price.
 
         Args:
-            metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to plot (default: ['delta', 'gamma',
+            'vega'])
             figsize: Figure size tuple
 
         Returns:
@@ -58,14 +59,15 @@ class GreeksChartsMixin:
         return fig
 
     def plot_greeks_by_maturity(
-        self,
+        self: "_VisualizationProtocol",
         metrics: list[str] | None = None,
         figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
         """Create stacked bar charts of Greeks by maturity date.
 
         Args:
-            metrics: list of Greeks to plot (default: ['delta', 'gamma', 'vega'])
+            metrics: list of Greeks to plot (default: ['delta', 'gamma',
+            'vega'])
             figsize: Figure size tuple
 
         Returns:
@@ -99,7 +101,7 @@ class GreeksChartsMixin:
         return fig
 
     def _plot_greek_by_dimension(
-        self,
+        self: "_VisualizationProtocol",
         ax: Axes,
         df: pd.DataFrame,
         metric: str,

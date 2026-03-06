@@ -4,18 +4,44 @@ Provides interactive configuration widgets and default settings management.
 """
 
 import platform
-import subprocess
+import shutil
+import subprocess  # noqa: S404
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
+
+
+class ExportDirVBox(widgets.VBox):
+    """Custom VBox to hold export directory configuration and metadata."""
+
+    # ruff: disable[ANN401]  # noqa: ERA001
+    def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:
+        """Initialize ExportDirVBox with export_dir metadata."""
+        super().__init__(*args, **kwargs)
+        self.export_dir: Path = export_dir
+
+    def __copy__(self, **kwargs: Any) -> "ExportDirVBox":
+        """Create a copy of the widget while preserving export_dir."""
+        new_widget = super().__copy__(**kwargs)
+        new_widget.export_dir = self.export_dir
+        return new_widget
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> "ExportDirVBox":
+        """Create a deepcopy of the widget while preserving export_dir."""
+        new_widget = super().__deepcopy__(memo)
+        new_widget.export_dir = self.export_dir
+        return new_widget
+
+    # ruff: enable[ANN401]  # noqa: ERA001
 
 
 def create_export_dir_widget(
     default_dir: str = "exports",
     on_change_callback: Callable | None = None,
     show_browser: bool = True,
-) -> widgets.VBox:
+) -> ExportDirVBox:
     """Create interactive export directory configuration widget.
 
     Args:
@@ -81,12 +107,9 @@ def create_export_dir_widget(
 
     # Store current directory in widget metadata (public attribute to avoid
     # protected access)
-    widget_container = widgets.VBox()
-    # store as a public attribute; use setattr to avoid static analyzer
-    # complaints on unknown attributes
-    widget_container.export_dir = Path(default_dir)
+    widget_container = ExportDirVBox(export_dir=Path(default_dir))
 
-    def on_browse_click(b) -> None:  # pylint: disable=unused-argument
+    def on_browse_click(b: widgets.Button) -> None:
         """Handle browse button click using OS-native dialogs."""
         _ = b
         try:
@@ -101,7 +124,7 @@ def create_export_dir_widget(
                         'Export Directory")'
                     ),
                 ]
-                result = subprocess.run(
+                result = subprocess.run(  # noqa: S603
                     cmd,
                     capture_output=True,
                     text=True,
@@ -116,8 +139,13 @@ def create_export_dir_widget(
                     "$f.ShowDialog() | Out-Null; "
                     "$f.SelectedPath"
                 )
-                result = subprocess.run(
-                    ["powershell", "-Command", ps_script],
+                pwsh = shutil.which("pwsh") or shutil.which("powershell")
+                if not pwsh:
+                    raise RuntimeError(
+                        "PowerShell not found on PATH",
+                    )
+                result = subprocess.run(  # noqa: S603
+                    [pwsh, "-Command", ps_script],
                     capture_output=True,
                     text=True,
                     check=True,
@@ -133,7 +161,7 @@ def create_export_dir_widget(
             with status_output:
                 print(f"⚠️  Browse failed: {e}")
 
-    def on_create_click(b) -> None:  # pylint: disable=unused-argument
+    def on_create_click(b: widgets.Button) -> None:
         _ = b
         with status_output:
             status_output.clear_output(wait=True)
@@ -184,7 +212,7 @@ def create_export_dir_widget(
                 create_button.button_style = "danger"
                 print(f"❌ Error:  {e!s}")
 
-    def on_open_click(b):  # pylint: disable=unused-argument
+    def on_open_click(b: widgets.Button) -> None:
         _ = b
         try:
             if hasattr(widget_container, "export_dir"):
@@ -192,12 +220,15 @@ def create_export_dir_widget(
             else:
                 export_dir = Path.cwd()
 
+            # ruff : disable[S603, S607]  # noqa: ERA001
+            # We trust the export_dir value since it was created by our own code
             if platform.system() == "Darwin":
                 subprocess.run(["open", str(export_dir)], check=False)
             elif platform.system() == "Windows":
                 subprocess.run(["explorer", str(export_dir)], check=False)
             else:
                 subprocess.run(["xdg-open", str(export_dir)], check=False)
+            # ruff : enable[S603, S607]  # noqa: ERA001
         except Exception as e:  # pylint: disable=broad-exception-caught
             with status_output:
                 print(f"⚠️  Could not open:  {e}")
@@ -237,7 +268,7 @@ def create_export_dir_widget(
     return widget_container
 
 
-def get_export_dir_from_widget(widget: widgets.VBox) -> Path:
+def get_export_dir_from_widget(widget: ExportDirVBox) -> Path:
     """Extract export directory Path from configuration widget.
 
     Args:

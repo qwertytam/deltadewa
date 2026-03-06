@@ -46,7 +46,8 @@ class ChangeLogDisplay:
 
             # Display changes in chronological order
             print(
-                f"{'Time':<20} {'Action':<15} {'Description':<45} {'Δ Impact':<15}"
+                f"{'Time':<20} {'Action':<15} "
+                f"{'Description':<45} {'Δ Impact':<15}",
             )
             self._reporter.divider()
 
@@ -120,7 +121,8 @@ class ChangeLogDisplay:
                     f"{last_snapshot['net_delta']:.1f}",
                 )
                 print(
-                    f"  Portfolio Value: ${first_snapshot['portfolio_value']: ,.2f}"
+                    f"  Portfolio Value: "
+                    f"${first_snapshot['portfolio_value']: ,.2f}"
                     f" → ${last_snapshot['portfolio_value']:,.2f}",
                 )
 

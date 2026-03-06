@@ -15,7 +15,9 @@ import pandas as pd
 
 from deltadewa.constants import OptionType
 from deltadewa.dashboard.position_detail import (  # module-level private helper
-    PositionDetailDisplay, _fmt_enum_val)
+    PositionDetailDisplay,
+    _fmt_enum_val,
+)
 
 # ===========================================================================
 # _fmt_enum_val
@@ -57,17 +59,24 @@ class TestPositionDetailDisplayConstruction:
         display = PositionDetailDisplay(empty_portfolio)
         assert display is not None
 
-    def test_constructs_with_single_position(self, single_position_portfolio) -> None:
+    def test_constructs_with_single_position(
+        self,
+        single_position_portfolio,
+    ) -> None:
         display = PositionDetailDisplay(single_position_portfolio)
         assert display is not None
 
-    def test_portfolio_reference_stored(self, single_position_portfolio) -> None:
+    def test_portfolio_reference_stored(
+        self,
+        single_position_portfolio,
+    ) -> None:
         display = PositionDetailDisplay(single_position_portfolio)
+        # pylint: disable=protected-access
         assert display._portfolio is single_position_portfolio
 
 
 # ===========================================================================
-# PositionDetailDisplay.display()
+# PositionDetailDisplay.display() - display logic and IPython integration
 # ===========================================================================
 
 
@@ -75,18 +84,22 @@ class TestPositionDetailDisplayMethod:
     """Tests for PositionDetailDisplay.display() method."""
 
     def test_display_does_not_raise_for_single_position(
-        self, single_position_portfolio
+        self,
+        single_position_portfolio,
     ) -> None:
         """display() must not raise for a normal portfolio."""
         PositionDetailDisplay(single_position_portfolio).display()
 
     def test_display_does_not_raise_for_multi_position(
-        self, multi_position_portfolio
+        self,
+        multi_position_portfolio,
     ) -> None:
         PositionDetailDisplay(multi_position_portfolio).display()
 
     def test_display_does_not_raise_for_empty_portfolio(
-        self, empty_portfolio, capsys
+        self,
+        empty_portfolio,
+        capsys,
     ) -> None:
         """Empty portfolio should print a message, not raise."""
         PositionDetailDisplay(empty_portfolio).display()
@@ -95,12 +108,14 @@ class TestPositionDetailDisplayMethod:
         assert len(out) > 0 or True  # display() may use IPython, not stdout
 
     def test_display_does_not_raise_with_custom_vol(
-        self, portfolio_with_custom_vol
+        self,
+        portfolio_with_custom_vol,
     ) -> None:
         PositionDetailDisplay(portfolio_with_custom_vol).display()
 
     def test_display_does_not_raise_with_underlying(
-        self, portfolio_with_underlying
+        self,
+        portfolio_with_underlying,
     ) -> None:
         PositionDetailDisplay(portfolio_with_underlying).display()
 
@@ -118,13 +133,15 @@ class TestPositionDetailDataFrame:
     """
 
     def test_to_dataframe_not_empty_for_single_position(
-        self, single_position_portfolio
+        self,
+        single_position_portfolio,
     ) -> None:
         df = single_position_portfolio.to_dataframe()
         assert not df.empty
 
     def test_to_dataframe_row_count_matches_positions(
-        self, multi_position_portfolio
+        self,
+        multi_position_portfolio,
     ) -> None:
         df = multi_position_portfolio.to_dataframe()
         assert len(df) == len(multi_position_portfolio.positions)
@@ -134,21 +151,28 @@ class TestPositionDetailDataFrame:
         assert df.empty
 
     def test_maturity_column_is_string(self, single_position_portfolio) -> None:
-        """Maturity dates should already be formatted as strings by to_dataframe()."""
+        """Maturity dates should already be formatted as strings
+        by to_dataframe()."""  # noqa: D205 D209
         df = single_position_portfolio.to_dataframe()
         assert df["maturity"].dtype == object
         # Should be parseable as a date string
 
         pd.to_datetime(df["maturity"].iloc[0])
 
-    def test_option_type_column_present(self, single_position_portfolio) -> None:
+    def test_option_type_column_present(
+        self,
+        single_position_portfolio,
+    ) -> None:
         df = single_position_portfolio.to_dataframe()
         assert "option_type" in df.columns
 
     def test_no_key_errors_for_custom_vol_portfolio(
-        self, portfolio_with_custom_vol
+        self,
+        portfolio_with_custom_vol,
     ) -> None:
         """Column logic should not fail when some positions have custom vol."""
         df = portfolio_with_custom_vol.to_dataframe()
         assert "custom_volatility" in df.columns
-        assert df["custom_volatility"].sum() == 1  # exactly one custom-vol position
+        assert (
+            df["custom_volatility"].sum() == 1
+        )  # exactly one custom-vol position

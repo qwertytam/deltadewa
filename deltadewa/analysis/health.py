@@ -70,7 +70,8 @@ class HealthMixin:
         return (hedge_pnl / underlying_value) * 100
 
     def calculate_vega_sufficiency_pct(
-        self, vol_shock_points: float = 10.0
+        self,
+        vol_shock_points: float = 10.0,
     ) -> float:
         """Calculate vega sufficiency: Portfolio % impact per vol shock.
 
@@ -117,7 +118,8 @@ class HealthMixin:
         return (net_delta / underlying_qty) * 100
 
     def calculate_convexity_cliff_days(
-        self, cliff_threshold_days: int = 180
+        self,
+        cliff_threshold_days: int = 180,
     ) -> int:
         """Calculate days until long puts enter high-gamma region.
 
@@ -125,7 +127,8 @@ class HealthMixin:
         Lower values mean convexity is about to decay rapidly.
 
         Args:
-            cliff_threshold_days: Days threshold for high-gamma region (default: 180)
+            cliff_threshold_days: Days threshold for high-gamma region
+            (default: 180)
 
         Returns:
             Days until nearest long put enters high-gamma region.
@@ -193,7 +196,8 @@ class HealthMixin:
 
         Args:
             cumulative_carry_paid: Total carry paid for the hedge
-            crash_pct: Crash scenario as percentage of current spot (default: 0.80 for -20%)
+            crash_pct: Crash scenario as percentage of current spot
+            (default: 0.80 for -20%)
 
         Returns:
             Ratio of hedge P&L to carry paid as percentage.
@@ -206,8 +210,9 @@ class HealthMixin:
         # Get current hedge P&L (options value change from initial)
         # This is a simplified measure - actual hedge P&L would need
         # historical tracking
-        # stats = self.portfolio.summary_stats()
-        # current_option_value = stats["total_value"]
+        # https://github.com/qwertytam/deltadewa/issues/70
+        # stats = self.portfolio.summary_stats()  # noqa: ERA001
+        # current_option_value = stats["total_value"]  # noqa: ERA001
 
         # For now, use crash protection value as a proxy for hedge value
         current_spot = self.portfolio.spot_price
@@ -240,7 +245,8 @@ class HealthMixin:
         for (
             _key,
             metric,
-        ) in metrics.items():
+            # pylint: disable=consider-using-dict-items
+        ) in metrics.items():  # noqa: PERF102
             # Normalize metric to 0-100 score
             # For non-inverted metrics: min_val=0, max_val=100
             # For inverted metrics: min_val=100, max_val=0
@@ -275,7 +281,8 @@ class HealthMixin:
             cumulative_carry_paid: Total carry paid for the hedge (default: 0.0)
             historical_vol_low: Historical low volatility (default: 0.15)
             historical_vol_high: Historical high volatility (default: 0.35)
-            convexity_cliff_days: Days threshold for high-gamma region (default: 180)
+            convexity_cliff_days: Days threshold for high-gamma region
+            (default: 180)
 
         Returns:
             Dictionary containing all calculated health metrics:

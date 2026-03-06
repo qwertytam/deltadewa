@@ -110,7 +110,7 @@ class ConsoleReporter:
             message: Informational message text
             prefix: Prefix symbol (default: 'ℹ️')
 
-        """
+        """  # noqa: RUF002
         print(f"{prefix}  {message}")
 
     def table_row(
@@ -121,7 +121,8 @@ class ConsoleReporter:
     ) -> None:
         """Print a formatted table row."""
         row = separator.join(
-            f" {col!s:<{w-2}} " for col, w in zip(columns, widths, strict=False)
+            f" {col!s:<{w - 2}} "
+            for col, w in zip(columns, widths, strict=False)
         )
         print(row)
 

@@ -18,13 +18,14 @@ from typing import Any, cast
 
 import pandas as pd
 
+FUNC_FORMATTER: Any = None  # pylint: disable=invalid-name
 try:
-    # pylint: disable=ungrouped-imports
-    from matplotlib.ticker import FuncFormatter
+    from matplotlib.ticker import FuncFormatter as _FuncFormatter
 
+    FUNC_FORMATTER = _FuncFormatter  # pylint: disable=invalid-name
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
-    FuncFormatter = None
+    FUNC_FORMATTER = None  # pylint: disable=invalid-name
     MATPLOTLIB_AVAILABLE = False
 
 
@@ -70,11 +71,11 @@ def format_currency(
     if abs_val < 10_000:
         return f"{sign}${abs_val:,.{precision}f}"
     elif abs_val < 1_000_000:
-        return f"{sign}${abs_val/1_000:.{precision}f}K"
+        return f"{sign}${abs_val / 1_000:.{precision}f}K"
     elif abs_val < 1_000_000_000:
-        return f"{sign}${abs_val/1_000_000:.{precision}f}M"
+        return f"{sign}${abs_val / 1_000_000:.{precision}f}M"
     else:
-        return f"{sign}${abs_val/1_000_000_000:.{precision}f}B"
+        return f"{sign}${abs_val / 1_000_000_000:.{precision}f}B"
 
 
 def format_currency_for_axis(x: float, pos: int | None = None) -> str:
@@ -97,9 +98,9 @@ def format_currency_for_axis(x: float, pos: int | None = None) -> str:
     if abs(x) < 10_000:
         return f"${x:,.0f}"
     elif abs(x) < 10_000_000:
-        return f"${x/1_000:,.0f}k"
+        return f"${x / 1_000:,.0f}k"
     else:
-        return f"${x/1_000_000:,.1f}M"
+        return f"${x / 1_000_000:,.1f}M"
 
 
 def format_percentage(
@@ -146,7 +147,7 @@ def format_percentage_for_axis(x: float, pos: int | None = None) -> str:
 
     """
     _ = pos  # Unused parameter
-    return f"{x*100:.0f}%"
+    return f"{x * 100:.0f}%"
 
 
 def format_number(
@@ -345,15 +346,17 @@ def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
         FuncFormatter instance for matplotlib axes
 
     """
-    if FuncFormatter is None:
+    if FUNC_FORMATTER is None:
         raise ImportError("matplotlib is required for axis formatters")
 
     if compact:
-        return FuncFormatter(format_currency_for_axis)
+        return FUNC_FORMATTER(format_currency_for_axis)
     else:
-        return FuncFormatter(
+        # ruff: disable[ARG005]  # noqa: ERA001
+        return FUNC_FORMATTER(
             lambda x, pos: format_currency(x, compact=False, precision=0),
         )
+        # ruff: enable[ARG005]  # noqa: ERA001
 
 
 def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
@@ -366,15 +369,17 @@ def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
         FuncFormatter instance for matplotlib axes
 
     """
-    if FuncFormatter is None:
+    if FUNC_FORMATTER is None:
         raise ImportError("matplotlib is required for axis formatters")
 
     if from_decimal:
-        return FuncFormatter(format_percentage_for_axis)
+        return FUNC_FORMATTER(format_percentage_for_axis)
     else:
-        return FuncFormatter(
+        # ruff: disable[ARG005]  # noqa: ERA001
+        return FUNC_FORMATTER(
             lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),
         )
+        # ruff: enable[ARG005]  # noqa: ERA001
 
 
 def get_spot_price_axis_formatter(current_spot: float):  # noqa: ANN201
@@ -387,10 +392,10 @@ def get_spot_price_axis_formatter(current_spot: float):  # noqa: ANN201
         FuncFormatter instance for matplotlib axes
 
     """
-    if FuncFormatter is None:
+    if FUNC_FORMATTER is None:
         raise ImportError("matplotlib is required for axis formatters")
 
-    return FuncFormatter(
+    return FUNC_FORMATTER(
         lambda x, pos: format_spot_with_pct(x, current_spot, pos),
     )
 

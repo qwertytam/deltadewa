@@ -254,7 +254,8 @@ def _print_delta_trigger(
         )
         print("     → Hedge has drifted significantly!")
         print(
-            f"     → Adjust by {stats['delta_adjustment']:.0f} shares to rebalance",
+            f"     → Adjust by {stats['delta_adjustment']:.0f} "
+            f"shares to rebalance",
         )
         print(
             f"     → Or add/remove options with ~"
@@ -315,7 +316,8 @@ def _print_expiry_trigger(
             f"Burning ${abs(urgent_theta):.2f}/day",
         )
         print(
-            f"  • Near-term positions ({t.expiry_urgent_days}-{t.expiry_soon_days}d): "
+            f"  • Near-term positions ({t.expiry_urgent_days}-"
+            f"{t.expiry_soon_days}d): "
             f"Burning ${abs(soon_theta):.2f}/day",
         )
         print("  • Recommendation: Focus rolls on urgent positions first")
@@ -469,7 +471,7 @@ def _print_action_summary(
     reporter.header("📌 RECOMMENDED ACTIONS (Priority Order)")
     if not actions:
         reporter.success(
-            " No immediate actions required - portfolio is well-managed"
+            " No immediate actions required - portfolio is well-managed",
         )
         print("\n  Continue monitoring:")
         print("    • Delta drift (rebalance if >10%)")

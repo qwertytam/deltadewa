@@ -40,12 +40,12 @@ class ExportControlsMixin:
         return self.serializer.export_dir
 
     @export_dir.setter
-    def export_dir(self, value: Path | str):
+    def export_dir(self, value: Path | str) -> None:
         """Set the export directory and update UI."""
         self.serializer.update_export_dir(value)
         self._update_export_ui_state()
 
-    def _update_export_ui_state(self):
+    def _update_export_ui_state(self) -> None:
         """Update state of all registered export UI elements."""
         if not hasattr(self, "_export_ui_map"):
             return
@@ -57,8 +57,8 @@ class ExportControlsMixin:
             is_ready = False
 
         # Clean up and update widgets
-        # Using a copy list to remove dead references if we implemented weakrefs,
-        # but here we'll just check for errors
+        # Using a copy list to remove dead references if we implemented
+        # weakrefs, but here we'll just check for errors
         for widgets_dict in self._export_ui_map:
             btn = widgets_dict.get("button")
             warning = widgets_dict.get("warning")
@@ -74,15 +74,20 @@ class ExportControlsMixin:
             else:
                 if btn:
                     btn.button_style = "danger"
-                    # We don't disable it so they can see the error message if they click
+                    # We don't disable it so they can see the error message if
+                    # they click
                     btn.tooltip = "Export directory not set"
                 if warning:
                     warning.value = (
-                        "<div style='color: #d32f2f; background-color: #fde8e8; "
-                        "padding: 10px; border-radius: 4px; border: 1px solid #f8b4b4; "
+                        "<div style='color: #d32f2f; background-color:"
+                        " #fde8e8; "
+                        "padding: 10px; border-radius: 4px;"
+                        " border: 1px solid #f8b4b4; "
                         "margin-bottom: 10px;'>"
-                        "<strong>⚠️ Action Required:</strong> Export directory is not configured. "
-                        "Please use the 'Set Directory' button in the Setup section above."
+                        "<strong>⚠️ Action Required:</strong>"
+                        " Export directory is not configured. "
+                        "Please use the 'Set Directory' button"
+                        " in the Setup section above."
                         "</div>"
                     )
                     warning.layout.display = "block"
@@ -92,7 +97,8 @@ class ExportControlsMixin:
     # ==========================================================================
 
     def create_export_controls(
-        self, default_format: str = "JSON"
+        self,
+        default_format: str = "JSON",
     ) -> dict[str, Any]:
         """Create export format selection and execution controls.
 
@@ -203,7 +209,8 @@ class ExportControlsMixin:
         import_output = widgets.Output()
 
         # Import button handler
-        def on_import_clicked(b) -> None:  # pylint: disable=unused-argument
+        def on_import_clicked(b: widgets.Button) -> None:
+            _ = b
             with import_output:
                 import_output.clear_output()
                 try:
@@ -262,7 +269,8 @@ class ExportControlsMixin:
                     import_controls["import_button"].button_style = "danger"
 
         # Preview button handler
-        def on_preview_clicked(b):  # pylint: disable=unused-argument
+        def on_preview_clicked(b: widgets.Button) -> None:
+            _ = b
             with import_output:
                 import_output.clear_output()
                 try:
@@ -277,12 +285,13 @@ class ExportControlsMixin:
                     print(f"Loading portfolio from {filepath}...")
 
                     preview_portfolio = self.serializer.import_portfolio(
-                        str(filepath)
+                        str(filepath),
                     )["portfolio"]
 
                     if not isinstance(preview_portfolio, OptionPortfolio):
                         print(
-                            f"✗ Invalid portfolio file: {type(preview_portfolio)}"
+                            f"✗ Invalid portfolio file: "
+                            f"{type(preview_portfolio)}",
                         )
                         return
 
@@ -294,13 +303,16 @@ class ExportControlsMixin:
                     print("-" * 50)
                     print(f"Symbol:              {symbol}")
                     print(
-                        f"Risk-Free Rate:      {preview_portfolio.risk_free_rate:.2%}",
+                        f"Risk-Free Rate:      "
+                        f"{preview_portfolio.risk_free_rate:.2%}",
                     )
                     print(
-                        f"Spot Price:          {preview_portfolio.spot_price:.2f}"
+                        f"Spot Price:          "
+                        f"{preview_portfolio.spot_price:.2f}",
                     )
                     print(
-                        f"Underlying Quantity: {preview_portfolio.underlying_quantity:.0f}",
+                        f"Underlying Quantity: "
+                        f"{preview_portfolio.underlying_quantity:.0f}",
                     )
                     print(f"Number of Positions: {positions_count}")
                     print("-" * 50)
@@ -311,7 +323,7 @@ class ExportControlsMixin:
                     import_controls["preview_button"].button_style = "danger"
 
         # File upload handler
-        def on_file_upload(change):
+        def on_file_upload(change: dict[str, Any]) -> None:
             if not change["new"]:
                 return
 
@@ -341,7 +353,6 @@ class ExportControlsMixin:
                     # Clear widget to allow re-uploading same file
                     # Note: clearing might trigger another event with empty
                     # value, hence the check at start
-                    # import_controls["file_select"].value.clear()
 
                 except Exception as e:  # pylint: disable=broad-except
                     print(f"✗ Selection failed: {e}")
@@ -384,7 +395,8 @@ class ExportControlsMixin:
 
         # Warning label for unconfigured directory
         warning_label = widgets.HTML(
-            value="", layout=widgets.Layout(display="none")
+            value="",
+            layout=widgets.Layout(display="none"),
         )
 
         # Register UI elements for state updates
@@ -402,7 +414,8 @@ class ExportControlsMixin:
         self._update_export_ui_state()
 
         # Export button handler
-        def on_export_clicked(b):  # pylint: disable=unused-argument
+        def on_export_clicked(b: widgets.Button) -> None:
+            _ = b
             with export_output:
                 export_output.clear_output()
 
@@ -489,22 +502,26 @@ class ExportControlsMixin:
         show_browser: bool = True,
         on_change_callback: Callable[[Path], None] | None = None,
     ) -> widgets.VBox:
-        """Create an export-directory selection widget and keep `self.export_dir` in sync.
+        """Create an export-directory selection widget.
+
+        Creates the widget and keep `self export_dir` in sync.
 
         Args:
             show_browser: Whether to show the "Open in Finder" button
-            on_change_callback: Optional callback invoked with the new Path when changed
+            on_change_callback: Optional callback invoked with the new Path
+            when changed
 
         Returns:
             VBox widget created by the shared config helper
 
         Notes:
-            This wraps `deltadewa.config.create_export_dir_widget` so the dashboard
-            can reuse the common UI while updating the PortfolioWidgets' `export_dir`.
+            This wraps `deltadewa.config.create_export_dir_widget` so the
+            dashboard can reuse the common UI while updating the
+            PortfolioWidgets' `export_dir`.
 
         """
 
-        def _on_change(export_dir: Path):
+        def _on_change(export_dir: Path) -> None:
             # keep internal export_dir Path in sync
             try:
                 self.export_dir = Path(export_dir)
@@ -522,7 +539,8 @@ class ExportControlsMixin:
         except ValueError:
             current_dir = str(Path.cwd() / "exports")
 
-        # Use the existing config helper to build the UI; pass current export_dir
+        # Use the existing config helper to build the UI; pass current
+        # export_dir
         return _create_export_dir_widget(
             default_dir=current_dir,
             on_change_callback=_on_change,
@@ -534,7 +552,9 @@ class ExportControlsMixin:
         show_browser: bool = True,
         on_change_callback: Callable[[Path], None] | None = None,
     ) -> widgets.VBox:
-        """Convenience display wrapper for the export-directory widget.
+        """Display the export-directory selection widget with header.
+
+        Convenience display wrapper for the export-directory widget.
 
         Returns a small VBox containing a header and the export-dir selector
         so dashboards can simply call this method and `display(...)` the result.
@@ -546,5 +566,6 @@ class ExportControlsMixin:
 
         header = widgets.HTML("<h3>Export Directory</h3>")
         return widgets.VBox(
-            [header, widget], layout=widgets.Layout(margin="8px 0")
+            [header, widget],
+            layout=widgets.Layout(margin="8px 0"),
         )

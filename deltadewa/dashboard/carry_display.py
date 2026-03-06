@@ -80,7 +80,7 @@ class CarryDisplay:
 
         self._reporter.header("Theta Decay & Carry Analysis")
         print(
-            "\n💡 For options portfolios: Theta = Carry (same economic effect)"
+            "\n💡 For options portfolios: Theta = Carry (same economic effect)",
         )
 
         self._display_summary_table(analyzer)

@@ -320,7 +320,8 @@ class GlobalAssumptions:
         to match the expected interface in the notebook.
 
         Returns:
-            Widget-like object with a 'value' attribute containing the days forward
+            Widget-like object with a 'value' attribute containing the days
+            forward
 
         """
         return SimpleNamespace(value=self.get_days_forward())
@@ -403,8 +404,10 @@ class GlobalAssumptions:
             [
                 widgets.HTML(
                     f"""
-                    <div style="background-color:{DEFAULT_PALETTE.med_dark_background}; """
-                    """color:white; padding:10px; border-radius:5px; margin-bottom:10px;">
+                    <div style="background-color:"""
+                    f"""{DEFAULT_PALETTE.med_dark_background}; """
+                    """color:white; padding:10px; border-radius:5px; """
+                    f"""margin-bottom:10px;">
                     <h3 style="margin:0;">Global Assumptions Panel</h3>
                     <p style="margin:5px 0 0 0; font-size:14px;">
                     Single source of truth for all market parameters</p>

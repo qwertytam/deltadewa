@@ -101,7 +101,7 @@ def initialize_portfolio(
         ``False`` if the default portfolio was loaded.
 
     """
-    _reporter = reporter or ConsoleReporter(width=100)
+    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
 
     portfolio_imported = False
     try:
@@ -157,7 +157,7 @@ def print_portfolio_summary(
         ``ConsoleReporter`` for output.
 
     """
-    _reporter = reporter or ConsoleReporter(width=100)
+    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
 
     vol_stats = get_volatility_stats(portfolio)
     portfolio.set_volatility(vol_stats["avg_volatility"])
@@ -275,7 +275,7 @@ def setup_dashboard(
         ``export_dir`` (Path).
 
     """
-    _reporter = reporter or ConsoleReporter(width=100)
+    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
 
     configure_display_defaults()
 
@@ -288,10 +288,12 @@ def setup_dashboard(
     print_portfolio_summary(portfolio, _reporter)
 
     global_assumptions, assumptions_link_cb = build_global_assumptions(
-        portfolio
+        portfolio,
     )
 
+    # ruff: disable[RUF052]  # noqa: ERA001
     _export_dir = Path(export_dir) if export_dir else Path.cwd() / "exports"
+    # ruff: enable[RUF052]  # noqa: ERA001
 
     return {
         "portfolio_imported": portfolio_imported,
