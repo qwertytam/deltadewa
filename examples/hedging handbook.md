@@ -663,6 +663,127 @@ Good crash hedges often rely heavily on vega.
 
 Long-dated options typically provide stronger vega.
 
+### Theta Carry
+
+Theta carry measures how much money the hedge costs to hold over time due to time decay. It is essentially the insurance premium paid to maintain protection.
+
+#### Algebraic framing of Theta Carry
+
+Theta:
+
+$\Theta = \frac{\partial V}{\partial T}$
+
+Theta carry is usually expressed relative to portfolio size:
+
+$\text{Theta Carry} = \frac{\Theta}{\text{Portfolio Value}}$
+
+*Example:*
+
+Portfolio:
+
+```text
+$10M
+```
+
+Hedge theta:
+
+```text
+-$2,500 per day
+```
+
+Annualized **CHECK DAY CONVENTION!!**:
+
+```text
+$2,500 × 252 ≈ $630k
+```
+
+Cost:
+
+```text
+6.3% per year
+```
+
+#### Portfolio Interpretation
+
+Good hedges try to balance:
+
+```text
+maximize crash convexity
+minimize theta carry
+```
+
+Typical institutional targets:
+
+```text
+1-3% annual carry
+```
+
+### Skew Beta
+
+#### Definition of Skew Beta
+
+Skew beta measures **how sensitive a hedge is to changes in the volatility skew**.
+
+Volatility skew describes how:
+
+```text
+OTM put volatility > ATM volatility
+```
+
+During market stress:
+
+```text
+skew steepens dramatically
+```
+
+Deep OTM puts become much more expensive.
+
+#### Algebraic Framing
+
+Let $\sigma(K)$ represent implied volatility at strike (K).
+
+Skew is approximately:
+
+$\frac{\partial \sigma}{\partial K}$
+
+Skew beta measures the hedge sensitivity to changes in that slope.
+
+Simplified:
+
+$\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
+
+*Example:*
+
+OTM puts:
+
+```text
+25% IV
+```
+
+During crisis:
+
+```text
+40% IV
+```
+
+ATM volatility may rise less:
+
+```text
+20% → 30%
+```
+
+OTM puts gain disproportionately.
+
+#### Portfolio Interpretation of Skew Beta
+
+High skew beta means:
+
+```text
+deep OTM hedges explode during crashes
+```
+
+Many tail-risk strategies rely heavily on skew beta.
+
 ## PART III — Volatility & the Vol Surface
 
 Options markets quote implied volatility instead of price.
@@ -898,7 +1019,7 @@ This captures realized volatility.
 
 ## Volatility Risk Premium
 
-It is essentially the **insurance premium paid to maintain protection**. Markets tend to price **implied volatility higher than realized volatility**.
+Markets tend to price **implied volatility higher than realized volatility**.
 
 Formally:
 
