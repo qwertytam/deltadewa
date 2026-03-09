@@ -1,6 +1,6 @@
 # An Options & Downside Hedging Handbook
 
-Updated: 2026-03-07
+Updated: 2026-03-09
 
 ---
 
@@ -56,8 +56,11 @@ Updated: 2026-03-07
 - [PART IX — Monetization \& Re-Risk Rules](#part-ix--monetization--re-risk-rules)
 - [PART X — Common Structural Mistakes](#part-x--common-structural-mistakes)
 - [PART XI — Educational Resources](#part-xi--educational-resources)
+  - [Books](#books)
+  - [Research Papers on Tail Hedging](#research-papers-on-tail-hedging)
+  - [Online Courses](#online-courses)
   - [Youtube](#youtube)
-  - [References](#references)
+  - [Best Websites for Data](#best-websites-for-data)
 
 ---
 
@@ -1395,8 +1398,6 @@ Worst time:
 during panic
 ```
 
-
-
 ## PART VIII — Designing a Tail Hedge Program
 
 ## PART IX — Monetization & Re-Risk Rules
@@ -1405,12 +1406,145 @@ during panic
 
 ## PART XI — Educational Resources
 
+### Books
+
+#### Trading Volatility – Colin Bennett
+
+Probably the best practitioner book.
+
+Topics:
+
+- volatility surface
+- skew
+- hedging
+- market maker thinking
+
+#### Volatility & Pricing – Sheldon Natenberg
+
+Industry classic.
+
+Covers:
+
+- Greeks
+- volatility trading
+- spreads
+- hedging strategies
+
+#### Dynamic Hedging – Nassim Taleb
+
+Advanced but essential.
+
+Focus:
+
+- tail risk
+- convexity
+- crash hedging
+
+#### Volatility Trading – Euan Sinclair
+
+Very practical.
+
+Covers:
+
+- volatility risk premium
+- option portfolio management
+
+### Research Papers on Tail Hedging
+
+#### Universa / Mark Spitznagel
+
+```text
+Safe Haven
+The Dao of Capital
+```
+
+Topics:
+
+- tail-risk hedging
+- convex payoff structures
+
+#### AQR
+
+Search for:
+
+```text
+AQR tail risk hedging paper
+```
+
+#### CBOE research
+
+Excellent data on:
+
+- skew
+- VIX
+- tail risk
+
+### Online Courses
+
+#### Option Alpha (free)
+
+Good fundamentals.
+
+#### CME Institute
+
+Free institutional-level content.
+
+#### Coursera
+
+Search:
+
+```text
+Options, Futures, and Derivatives
+```
+
 ### Youtube
 
-- [Hedging Against Market Crashes w/ Kris Sidial](https://www.youtube.com/watch?v=iVAM9vShYno&utm_source=chatgpt.com)
+- [Hedging Against Market Crashes w/ Kris Sidial](https://www.youtube.com/watch?v=iVAM9vShYno)
 
-### References
+#### Cem Karsan / Kai Volatility
 
-- [wiki-greeks]: https://en.wikipedia.org/wiki/Greeks_%28finance%29 "Wikipedia: Greeks (finance)"
-- [informaconnect]: https://informaconnect.com/assessing-risk-profile-of-quant-strategies-the-convexity-vs-skewness/ "Assessing risk-profile of quant strategies: the convexity vs ..."
-- [wiki-skew]: https://en.wikipedia.org/wiki/skew "Wikipedia: SKEW"
+Probably the **best volatility discussion online**.
+
+Topics:
+
+- dealer gamma
+- volatility regimes
+- crash dynamics
+
+#### SpotGamma
+
+Great for:
+
+- gamma positioning
+- options flows
+
+#### Cem Karsan interviews
+
+Excellent insights into:
+
+```text
+long-dated hedges
+volatility cycles
+tail risk
+```
+
+<!-- References -->
+[wiki-greeks]: https://en.wikipedia.org/wiki/Greeks_%28finance%29 "Wikipedia: Greeks (finance)"
+[informaconnect]: https://informaconnect.com/assessing-risk-profile-of-quant-strategies-the-convexity-vs-skewness/ "Assessing risk-profile of quant strategies: the convexity vs ..."
+[wiki-skew]: https://en.wikipedia.org/wiki/skew "Wikipedia: SKEW"
+
+### Best Websites for Data
+
+#### Volatility data
+
+```text
+spotgamma.com
+volatilityresearch.com
+```
+
+#### Academic volatility research
+
+```text
+SSRN
+arXiv
+```
