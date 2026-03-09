@@ -6,16 +6,48 @@ Updated: 2026-03-07
 
 ## Table of Contents
 
+- [Table of Contents](#table-of-contents)
+- [Preface](#preface)
 - [PART I — Options Fundamentals](#part-i--options-fundamentals)
+  - [The Basics](#the-basics)
+  - [Pricing \& Carry](#pricing--carry)
+  - [Moneyness](#moneyness)
+  - [Position Types](#position-types)
+  - [Exercise \& Settlement](#exercise--settlement)
 - [PART II — The Greeks](#part-ii--the-greeks)
-- [PART III — Volatility & the Vol Surface](#part-iii--volatility--the-vol-surface)
+  - [Delta (Δ)](#delta-δ)
+  - [Gamma (Γ)](#gamma-γ)
+  - [Vega (ν)](#vega-ν)
+  - [Theta (Θ)](#theta-θ)
+  - [Rho (ρ)](#rho-ρ)
+  - [Volatility of Volatility (Vol-of-Vol)](#volatility-of-volatility-vol-of-vol)
+  - [Vanna](#vanna)
+  - [Charm](#charm)
+  - [Vomma](#vomma)
+  - [Cash Convexity](#cash-convexity)
+  - [Vega Sufficiency](#vega-sufficiency)
+  - [Theta Carry](#theta-carry)
+  - [Skew Beta](#skew-beta)
+- [PART III — Volatility \& the Vol Surface](#part-iii--volatility--the-vol-surface)
+  - [Volatility Smile](#volatility-smile)
+  - [Volatility Skew](#volatility-skew)
+  - [Term Structure of Volatility](#term-structure-of-volatility)
+  - [Volatility Crush](#volatility-crush)
 - [PART IV — Trading Terminology](#part-iv--trading-terminology)
+  - [Convexity](#convexity)
+  - [Optionality](#optionality)
+  - [Pin Risk](#pin-risk)
+  - [Open Interest (OI)](#open-interest-oi)
+  - [Liquidity / Spread](#liquidity--spread)
+  - [Gamma Scalping](#gamma-scalping)
+  - [Volatility Risk Premium](#volatility-risk-premium)
 - [PART V — Portfolio Hedging Concepts](#part-v--portfolio-hedging-concepts)
 - [PART VII — Institutional Hedge Dashboards](#part-vii--institutional-hedge-dashboards)
 - [PART VIII — Designing a Tail Hedge Program](#part-viii--designing-a-tail-hedge-program)
-- [PART IX — Monetization & Re-Risk Rules](#part-ix--monetization--re-risk-rules)
+- [PART IX — Monetization \& Re-Risk Rules](#part-ix--monetization--re-risk-rules)
 - [PART X — Common Structural Mistakes](#part-x--common-structural-mistakes)
 - [PART XI — Educational Resources](#part-xi--educational-resources)
+  - [Youtube](#youtube)
 
 ---
 
@@ -911,11 +943,9 @@ Option prices drop sharply.
 
 ## PART IV — Trading Terminology
 
-### Terminology
-
 These terms describe **portfolio behaviour**, not individual option parameters.
 
-#### Convexity
+### Convexity
 
 Convexity means **the payoff accelerates as the underlying moves**.
 
@@ -943,7 +973,7 @@ Underlying drops:
 
 Put gains accelerate.
 
-#### Optionality
+### Optionality
 
 Optionality refers to **asymmetric payoff structures**.
 
@@ -961,7 +991,7 @@ Loss limited to premium, but upside potentially unlimited.
 
 *Example:* “Buying downside optionality.”
 
-#### Pin Risk
+### Pin Risk
 
 Pin risk occurs when the underlying closes **very close to a strike price at expiration**.
 
@@ -972,13 +1002,13 @@ stock = 100
 strike = 100
 ```
 
-#### Open Interest (OI)
+### Open Interest (OI)
 
 Number of outstanding contracts.
 
 *Example:* “High OI at 5000 strike.”
 
-#### Liquidity / Spread
+### Liquidity / Spread
 
 Liquidity measures **how easily options can be traded**.
 
@@ -1001,7 +1031,7 @@ Spread:
 0.20
 ```
 
-## Gamma Scalping
+### Gamma Scalping
 
 Gamma scalping is a trading strategy that profits from volatility.
 
@@ -1017,7 +1047,7 @@ sell high
 
 This captures realized volatility.
 
-## Volatility Risk Premium
+### Volatility Risk Premium
 
 Markets tend to price **implied volatility higher than realized volatility**.
 
