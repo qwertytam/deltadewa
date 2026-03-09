@@ -1,5 +1,3 @@
-<!-- markdownlint-disable MD051 -->
-
 # An Options & Downside Hedging Handbook
 
 Updated: 2026-03-07
@@ -12,6 +10,11 @@ Updated: 2026-03-07
 - [PART II — The Greeks](#part-ii--the-greeks)
 - [PART III — Volatility & the Vol Surface](#part-iii--volatility--the-vol-surface)
 - [PART IV — Trading Terminology](#part-iv--trading-terminology)
+- [PART V — Portfolio Hedging Concepts](#part-v--portfolio-hedging-concepts)
+- [PART VII — Institutional Hedge Dashboards](#part-vii--institutional-hedge-dashboards)
+- [PART VIII — Designing a Tail Hedge Program](#part-viii--designing-a-tail-hedge-program)
+- [PART IX — Monetization & Re-Risk Rules](#part-ix--monetization--re-risk-rules)
+- [PART X — Common Structural Mistakes](#part-x--common-structural-mistakes)
 - [PART XI — Educational Resources](#part-xi--educational-resources)
 
 ---
@@ -467,7 +470,7 @@ Rho matters most for:
 - Deep ITM calls
 - $\Gamma > 0$
 
-## Volatility of Volatility (Vol-of-Vol)
+### Volatility of Volatility (Vol-of-Vol)
 
 Vol-of-vol measures **how much implied volatility itself fluctuates**. Volatility of implied volatility.
 
@@ -519,6 +522,146 @@ $\text{Vomma} = \frac{\partial^2 V}{\partial \sigma^2}$
 #### Interpretation
 
 It captures convexity with respect to volatility.
+
+### Cash Convexity
+
+It captures **convexity with respect to volatility**. Crash convexity measures how much a hedging position gains if the underlying experiences a large downward move.
+
+It captures the **nonlinear payoff** from options during a market crash.
+
+In simple terms:
+> crash convexity = how much protection you get in a large drawdown.
+
+#### Algebraic framing
+
+- $P(S)$ = value of hedge
+- $S$ = underlying index level
+
+Crash convexity measures the **second-order payoff sensitivity** to large negative moves.
+
+A practical approximation:
+
+$\text{Crash Convexity} = \frac{P(S(1-\Delta)) - P(S)}{S}$
+
+where:
+
+- $\Delta$ = crash size (e.g., 20%)
+
+Another way to think about it is using **gamma exposure**:
+
+$\Gamma = \frac{\partial^2 V}{\partial S^2}$
+
+Large positive gamma → strong convex crash protection.
+
+*Example:*
+
+```text
+$10M long equity
+```
+
+```text
+long 18-month OTM puts
+```
+
+If market falls:
+
+| Market move | Portfolio loss | Hedge gain |
+| ----------- | -------------- | ---------- |
+| -5%         | -$500k         | +$40k      |
+| -20%        | -$2M           | +$600k     |
+| -35%        | -$3.5M         | +$1.8M     |
+
+The **accelerating gains** reflect crash convexity.
+
+#### Portfolio interpretation
+
+Crash convexity answers:
+
+> “How much does my hedge help during a real crisis?”
+
+Typical target institutional hedge:
+
+```text
+10–30% crash convexity
+```
+
+```text
+-20% market → hedge offsets 10–30% of loss
+```
+
+### Vega Sufficiency
+
+#### Definition
+
+Vega sufficiency measures whether a hedge has **enough volatility exposure** to benefit from the **volatility spike that usually accompanies a market crash**.
+
+In equity markets:
+
+```text
+market down → volatility up
+```
+
+So good hedges should benefit from both:
+
+1. price drop
+2. volatility spike
+
+Let:
+
+$\nu = \frac{\partial V}{\partial \sigma}$ be vega
+
+Define:
+
+$\text{Vega Sufficiency} = \frac{\text{Portfolio Vega}}{\text{Underlying Value}}$
+
+Some managers scale it relative to expected vol spike:
+
+$\text{Expected Vega Gain} = \nu \times \Delta \sigma$
+
+*Example:*
+
+Portfolio:
+
+```text
+$10M equities
+```
+
+Hedge:
+
+```text
+vega = $15,000 per 1 vol point
+```
+
+If volatility rises:
+
+```text
+20% → 40%
+```
+
+Change:
+
+```text
+Δσ = 20 vol points
+```
+
+Profit:
+
+```text
+$15,000 × 20 = $300,000
+```
+
+#### Portfolio Interpretation of Vega Sufficiency
+
+If vega is too small:
+
+```text
+price drop helps
+vol spike doesn't
+```
+
+Good crash hedges often rely heavily on vega.
+
+Long-dated options typically provide stronger vega.
 
 ## PART III — Volatility & the Vol Surface
 
@@ -780,6 +923,16 @@ Premium:
 ```
 
 Option sellers capture this on average.
+
+## PART V — Portfolio Hedging Concepts
+
+## PART VII — Institutional Hedge Dashboards
+
+## PART VIII — Designing a Tail Hedge Program
+
+## PART IX — Monetization & Re-Risk Rules
+
+## PART X — Common Structural Mistakes
 
 ## PART XI — Educational Resources
 
