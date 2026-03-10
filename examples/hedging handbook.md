@@ -24,11 +24,6 @@ Updated: 2026-03-09
   - [Vanna](#vanna)
   - [Charm](#charm)
   - [Vomma](#vomma)
-  - [Crash Convexity](#crash-convexity)
-  - [Vega Sufficiency](#vega-sufficiency)
-  - [Theta Carry (Insurance Cost)](#theta-carry-insurance-cost)
-  - [Skew Beta / Skew Exposure](#skew-beta--skew-exposure)
-  - [Volatility Regime](#volatility-regime)
 - [PART III — Volatility and the Vol Surface](#part-iii--volatility-and-the-vol-surface)
   - [Volatility Smile](#volatility-smile)
   - [Volatility Skew](#volatility-skew)
@@ -51,22 +46,22 @@ Updated: 2026-03-09
   - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
 - [PART VII — Institutional Hedge Dashboards](#part-vii--institutional-hedge-dashboards)
   - [Introduction](#introduction)
-  - [1. Net Delta Exposure](#1-net-delta-exposure)
-  - [2. Crash Convexity Score](#2-crash-convexity-score)
-  - [3. Vega Sufficiency Guage](#3-vega-sufficiency-guage)
-  - [4. Theta Carry (Insurance Cost)](#4-theta-carry-insurance-cost)
-  - [5. Carry vs. Convexity Chart](#5-carry-vs-convexity-chart)
-  - [5. Skew Exposure Meter](#5-skew-exposure-meter)
-  - [6. Gamma Liquidity Risk](#6-gamma-liquidity-risk)
-  - [7. Hedge Efficiency Ratio](#7-hedge-efficiency-ratio)
-  - [8. Volatility Regime Indicator](#8-volatility-regime-indicator)
-  - [2. Crash Scenario Table](#2-crash-scenario-table)
-  - [4. Forward Variance Level](#4-forward-variance-level)
+  - [1. Carry vs. Convexity Chart](#1-carry-vs-convexity-chart)
+  - [2. Crash Scenario Table \& Payoff Ratio](#2-crash-scenario-table--payoff-ratio)
+  - [3. Vega Sufficiency Gauge](#3-vega-sufficiency-gauge)
+  - [4. Skew Exposure Meter](#4-skew-exposure-meter)
+  - [5. Volatility Regime Indicator](#5-volatility-regime-indicator)
+  - [6. Hedge Efficiency Ratio](#6-hedge-efficiency-ratio)
+  - [7. Net Delta Exposure](#7-net-delta-exposure)
+  - [8. Theta Carry (Insurance Cost)](#8-theta-carry-insurance-cost)
+  - [9. Gamma Liquidity Risk](#9-gamma-liquidity-risk)
+  - [10. Forward Variance Level](#10-forward-variance-level)
 - [PART VIII — Designing a Tail Hedge Program](#part-viii--designing-a-tail-hedge-program)
   - [Strike Selection](#strike-selection)
   - [Maturity Selection](#maturity-selection)
   - [Rolling Rules](#rolling-rules)
 - [PART IX — Monetization \& Re-Risk Rules](#part-ix--monetization--re-risk-rules)
+  - [Monetizing crashes](#monetizing-crashes)
 - [PART X — Common Structural Mistakes](#part-x--common-structural-mistakes)
   - [Buying protection when volatility is already high](#buying-protection-when-volatility-is-already-high)
   - [Buying puts that are not far enough OTM](#buying-puts-that-are-not-far-enough-otm)
@@ -300,7 +295,7 @@ Greeks are derivatives of (V) with respect to these variables. ([Wikipedia][wiki
 
 Delta is the sensitivity of the option price to changes in the underlying price.
 
-*Example:* “A 0.30 delta call moves ~$0.30 per $1 move in underyling.”
+*Example:* “A 0.30 delta call moves ~$0.30 per $1 move in underlying.”
 
 If the stock rises **$1**, the option price increases **$0.30**.
 
@@ -329,7 +324,7 @@ Where $N(\cdot)$ is the standard normal cumulative distribution function.
 
 #### Practical interpretation
 
-- Approximate probability of finishing ITM (for short maturities)
+- Approximate probability of finishing ITM (for short maturities, with low interest regions, in the ATM region)
 - Effective exposure to the underlying
 
 Portfolio:
@@ -425,6 +420,8 @@ Option price increases:
 ```text
 $0.50
 ```
+
+Note: The definition above assumes 1 vol point = 1%. However, in many models it is per 0.01 change in $\sigma$
 
 #### Algebraic definition for Vega
 
@@ -536,7 +533,6 @@ Rho matters most for:
 
 - Long-dated options
 - Deep ITM calls
-- $\Gamma > 0$
 
 ### Volatility of Volatility (Vol-of-Vol)
 
@@ -544,11 +540,11 @@ Vol-of-vol measures **how much implied volatility itself fluctuates**. Volatilit
 
 *Example:* “VIX options trade vol-of-vol.”
 
-$\sigma_t$
+$\sigma_t$ represents implied volatility
 
-represents implied volatility, then vol-of-vol measures variability of:
+Vol-of-Vol is variance of changes in implied variability, or algebraiclly:
 
-$d\sigma_t$
+$\text{Var}(d\sigma_t)$
 
 VIX may move:
 
@@ -557,6 +553,8 @@ VIX may move:
 ```
 
 This reflects high vol-of-vol.
+
+Note: VIX options do not directly trade vol-of-vol; they trade volatility of variance expectations.
 
 ### Vanna
 
@@ -590,349 +588,6 @@ $\text{Vomma} = \frac{\partial^2 V}{\partial \sigma^2}$
 #### Interpretation
 
 It captures convexity with respect to volatility.
-
-### Crash Convexity
-
-It captures **convexity with respect to volatility**. Crash convexity measures how much a hedging position gains if the underlying experiences a large downward move.
-
-It captures the **nonlinear payoff** from options during a market crash.
-
-In simple terms:
-> crash convexity = how much protection you get in a large drawdown.
-
-#### Algebraic framing
-
-- $P(S)$ = value of hedge
-- $S$ = underlying index level
-
-Crash convexity measures the **second-order payoff sensitivity** to large negative moves.
-
-A practical approximation:
-
-$\text{Crash Convexity} = \frac{P(S(1-\Delta)) - P(S)}{S}$
-
-where:
-
-- $\Delta$ = crash size (e.g., 20%)
-
-Another way to think about it is using **gamma exposure**:
-
-$\Gamma = \frac{\partial^2 V}{\partial S^2}$
-
-Large positive gamma → strong convex crash protection.
-
-*Example:*
-
-```text
-$10M long equity
-```
-
-```text
-long 18-month OTM puts
-```
-
-If market falls:
-
-| Market move | Portfolio loss | Hedge gain |
-| ----------- | -------------- | ---------- |
-| -5%         | -$500k         | +$40k      |
-| -20%        | -$2M           | +$600k     |
-| -35%        | -$3.5M         | +$1.8M     |
-
-The **accelerating gains** reflect crash convexity.
-
-#### Portfolio interpretation
-
-Crash convexity answers:
-
-> “How much does my hedge help during a real crisis?”
-
-Typical target institutional hedge:
-
-```text
-10–30% crash convexity
-```
-
-```text
--20% market → hedge offsets 10–30% of loss
-```
-
-### Vega Sufficiency
-
-#### Definition
-
-Vega sufficiency measures whether a hedge has **enough volatility exposure** to benefit from the **volatility spike that usually accompanies a market crash**.
-
-In equity markets:
-
-```text
-market down → volatility up
-```
-
-So good hedges should benefit from both:
-
-1. price drop
-2. volatility spike
-
-Let:
-
-$\nu = \frac{\partial V}{\partial \sigma}$ be vega
-
-Define:
-
-$\text{Vega Sufficiency} = \frac{\text{Portfolio Vega}}{\text{Underlying Value}}$
-
-Some managers scale it relative to expected vol spike:
-
-$\text{Expected Vega Gain} = \nu \times \Delta \sigma$
-
-*Example:*
-
-Portfolio:
-
-```text
-$10M equities
-```
-
-Hedge:
-
-```text
-vega = $15,000 per 1 vol point
-```
-
-If volatility rises:
-
-```text
-20% → 40%
-```
-
-Change:
-
-```text
-Δσ = 20 vol points
-```
-
-Profit:
-
-```text
-$15,000 × 20 = $300,000
-```
-
-#### Portfolio Interpretation of Vega Sufficiency
-
-If vega is too small:
-
-```text
-price drop helps
-vol spike doesn't
-```
-
-Good crash hedges often rely heavily on vega.
-
-Long-dated options typically provide stronger vega.
-
-### Theta Carry (Insurance Cost)
-
-Theta carry measures how much money the hedge costs to hold over time due to time decay. It is essentially the insurance premium paid to maintain protection.
-
-#### Algebraic framing of Theta Carry
-
-Theta:
-
-$\Theta = \frac{\partial V}{\partial T}$
-
-Theta carry is usually expressed relative to portfolio size:
-
-$\text{Theta Carry} = \frac{-\Theta \times 252}{\text{Portfolio Value}}$ **CHECK DAY CONVENTION!!**
-
-*Example:*
-
-Portfolio:
-
-```text
-$10M
-```
-
-Hedge theta:
-
-```text
--$2,500 per day
-```
-
-Annualized **CHECK DAY CONVENTION!!**:
-
-```text
-$2,500 × 252 ≈ $630k
-```
-
-Cost:
-
-```text
-6.3% per year
-```
-
-#### Portfolio Interpretation
-
-Good hedges try to balance:
-
-```text
-maximize crash convexity
-minimize theta carry
-```
-
-Typical institutional targets:
-
-```text
-1-3% annual carry
-```
-
-### Skew Beta / Skew Exposure
-
-#### Definition of Skew Beta
-
-Skew beta measures **how sensitive a hedge is to changes in the volatility skew**. Skew reflects the higher implied volatility typically seen in OTM puts. ([Wikipedia][wiki-skew])
-
-Volatility skew describes how:
-
-```text
-OTM put volatility > ATM volatility
-```
-
-During market stress:
-
-```text
-skew steepens dramatically
-```
-
-Deep OTM puts become much more expensive.
-
-Equity markets have downside skew:
-
-```text
-OTM puts IV > ATM IV
-```
-
-In crashes, this steepens dramtically.
-
-#### Algebraic Framing
-
-Let $\sigma(K)$ represent implied volatility at strike (K).
-
-Skew is approximately:
-
-$\frac{\partial \sigma}{\partial K}$
-
-Most traders measure skew using 25-delta options:
-
-$\text{Skew} = \sigma_{25\Delta\ put} - \sigma_{ATM}$
-
-Skew beta measures the hedge sensitivity to changes in that slope.
-
-So a simplified hedge sensitivity metric:
-
-$\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
-
-*Example:*
-
-OTM puts:
-
-```text
-25% IV
-```
-
-During crisis:
-
-```text
-40% IV
-```
-
-ATM volatility may rise less:
-
-```text
-20% → 30%
-```
-
-OTM puts gain disproportionately.
-
-#### Portfolio Interpretation of Skew Beta
-
-Deep OTM puts have **high skew beta**. When markets panic:
-
-```text
-prices drop + skew steepens → OTM puts explode
-```
-
-Many tail-risk strategies rely heavily on skew beta, using far OTM strikes.
-
-### Volatility Regime
-
-#### Definition of Vol Regime
-
-Volatility regime refers to the **general level and behavior of volatility in the market environment**.
-
-Markets tend to alternate between:
-
-```text
-low-volatility regimes
-high-volatility regimes
-```
-
-#### Algebraic Framing of Vol Regime
-
-Often measured using:
-
-$\sigma_t$
-
-realized or implied volatility.
-
-Regime detection may use:
-
-```text
-moving averages
-GARCH models
-volatility percentiles
-```
-
-Example rule:
-
-```text
-Low vol regime: VIX < 15
-Normal regime: VIX 15–25
-High vol regime: VIX > 25
-```
-
-*Example:*
-
-| Period     | Regime    | VIX |
-| ---------- | --------- | --- |
-| 2017       | ultra low | 10  |
-| 2020 crash | extreme   | 80  |
-| 2022       | elevated  | 30  |
-
-#### Portfolio Interpretation of Vol Regime
-
-Volatility regimes influence:
-
-```text
-option prices
-skew
-carry cost
-hedging effectiveness
-```
-
-In low-vol regimes:
-
-```text
-options cheap
-good time to buy hedges
-```
-
-In high-vol regimes:
-
-```text
-options expensive
-carry high
-```
 
 ## PART III — Volatility and the Vol Surface
 
@@ -991,9 +646,7 @@ Markets assign higher probability to **extreme outcomes** than predicted by Blac
 
 ### Volatility Skew
 
-In equity markets, volatility usually **increases for lower strikes**.
-
-OTM puts more expensive than calls.
+In equity markets, volatility usually **increases for lower strikes**. This is put or downside skew. OTM puts are more expensive than calls.
 
 ```text
 OTM puts > ATM > OTM calls
@@ -1071,7 +724,7 @@ Convexity means **the payoff accelerates as the underlying moves**.
 
 Mathematically:
 
-$\Gamma > 0$
+$\Gamma + \text{Vega} + \text{Skew Exposure}$
 
 Example payoff:
 
@@ -1208,13 +861,6 @@ It is to provide:
 liquidity during crises
 ```
 
-Meaning:
-
-```text
-small losses tolerated
-large crashes offset
-```
-
 This liquidity lets investors:
 
 ```text
@@ -1225,13 +871,13 @@ avoid forced selling
 
 For a hedged equity portfolio, key metrics to track are:
 
-| Metric                                                 | What it answers                        |
-| ------------------------------------------------------ | -------------------------------------- |
-| [Crash convexity](#crash-convexity)                    | How much protection in a crash         |
-| [Vega sufficiency](#vega-sufficiency)                  | Do we benefit from vol spikes          |
-| [Theta carry](#theta-carry-insurance-cost)             | Cost of holding hedge                  |
-| [Skew Beta / Skew Exposure](#skew-beta--skew-exposure) | Sensitivity to downside skew           |
-| [Volatility regime](#volatility-regime)                | Whether options are expensive or cheap |
+| Metric                                              | What it answers                        |
+| --------------------------------------------------- | -------------------------------------- |
+| [Crash convexity](#1-carry-vs-convexity-chart)      | How much protection in a crash         |
+| [Vega sufficiency](#3-vega-sufficiency-gauge)       | Do we benefit from vol spikes          |
+| [Theta carry](#1-carry-vs-convexity-chart)          | Cost of holding hedge                  |
+| [Skew Beta / Skew Exposure](#4-skew-exposure-meter) | Sensitivity to downside skew           |
+| [Volatility regime](#5-volatility-regime-indicator) | Whether options are expensive or cheap |
 
 Professional hedge design is essentially optimizing:
 
@@ -1432,7 +1078,7 @@ Portfolio value: $10M
 
 Carry cost:             2.1% / year
 Crash convexity:        28% @ -25% SPX
-Carry/convexity ratio:  7.5
+Convexity/carry ratio:  7.5
 Vega exposure:          $18k / vol point
 Skew exposure:          High
 Skew percentile:        22%  (cheap)
@@ -1461,114 +1107,7 @@ dealer gamma positive
 
 Investors instinct is to hedge **after markets fall**, but that is when hedges are **most expensive**.
 
-### 1. Net Delta Exposure
-
-Delta represents the first derivative of option value with respect to the underlying price. ([Wikipedia][wiki-greeks])
-
-$\Delta = \frac{\partial V}{\partial S}$
-
-**Net Delta** measures directional exposure of the entire portfolio to the underlying.
-
-#### Portfolio Metric
-
-$\text{Net Delta} = \sum_i \Delta_i \times N_i$
-
-Where:
-
-- $N_i$ = number of contracts
-
-*Example:*
-
-```text
-Equities: $10M
-Put hedge delta: -0.20
-```
-
-Effective exposure:
-
-```text
-$10M × (1 − 0.20) = $8M
-```
-
-#### Interpretation of Net Delta
-
-| Value | Meaning        |
-| ----- | -------------- |
-| 1.0   | fully exposed  |
-| 0.8   | 20% hedge      |
-| 0.0   | market neutral |
-
-### 2. Crash Convexity Score
-
-Measures how much the hedge pays during a large market decline. Convex strategies benefit from extreme moves in the benchmark index. ([Informa Connect][informaconnect])
-
-#### Metric
-
-$\text{Crash Convexity} = \frac{V_{crash} - V_{today}}{Portfolio\ Value}$
-
-Where:
-
-- $V_{crash} = V(S \times (1 - x))$
-
-Typical $x$:
-
-```text
-20% or 30%
-```
-
-*Example:*
-
-Portfolio:
-
-```text
-Equity = $10M
-```
-
-Simulated crash:
-
-```text
-SPX −25%
-```
-
-Hedge payoff:
-
-```text
-+$2M
-```
-
-Crash convexity:
-
-```text
-2M / 10M = 20%
-```
-
-### 3. Vega Sufficiency Guage
-
-Measures whether the hedge has **enough volatility exposure** to benefit from a volatility spike Vega measures sensitivity of option value to volatility changes. ([Wikipedia][wiki-greeks])
-
-*Note:* Initial list as #3
-
-#### Portfolio Metric Definition
-
-See: [Vega Sufficiency](#vega-sufficiency)
-
-#### Dashboard Display
-
-```text
-VEGA SUFFICIENCY
-
-Low <-----|-----> High
-          ^
-        current
-```
-
-### 4. Theta Carry (Insurance Cost)
-
-See [Theta Carry (Insurance Cost)](#theta-carry-insurance-cost)
-
-### 5. Carry vs. Convexity Chart
-
-*Note:* Initial list as #1
+### 1. Carry vs. Convexity Chart
 
 This is the **core trade-off in tail hedging**. It determines **whether the hedge economics are attractive**.
 
@@ -1582,17 +1121,22 @@ minimize carry
 - **Carry (Theta)** = cost of holding the hedge
 - **Convexity** = payoff in large crashes
 
+Crash convexity measures how much the hedge pays during a large market decline. Convex strategies benefit from extreme moves in the benchmark index. ([Informa Connect][informaconnect])
+
 #### Metrics
 
 Annual carry:
 
-$\text{Carry} = \frac{-\Theta_{daily} \times 252}{Portfolio}$ **CHECK DAY CONVENTION**
+<!-- TODO: **CHECK DAY CONVENTION!!** -->
+$\text{Carry} = \frac{-\Theta_{daily} \times 252}{Portfolio}$
 
 Crash convexity:
 
-$\text{Convexity} = \frac{V(S(1-x)) - V(S)}{Portfolio}$
+$\text{Crash Convexity} = \frac{V_{x} - V_{today}}{Portfolio\ Value}$
 
-Where $x$ = crash size.
+Where $x$ = crash size e.g., -25%.
+
+- $V_{crash} = V(S \times (1 - x))$
 
 Example:
 
@@ -1601,10 +1145,16 @@ Example:
 | Today    | $200k       |
 | SPX −25% | $2.2M       |
 
-Convexity:
+Portfolio size:
 
 ```text
-2.2M / 10M = 22%
+Equity = $10M
+```
+
+Hedge payoff:
+
+```text
+2.0M / 10M = 20%
 ```
 
 #### Ratio
@@ -1649,19 +1199,282 @@ Convexity
 
 Best hedges sit **top-left**.
 
-### 5. Skew Exposure Meter
+### 2. Crash Scenario Table & Payoff Ratio
 
-See [Skew Beta / Skew Exposure](#skew-beta--skew-exposure)
+The table simulates portfolio performance under market crashes.
 
-*Note:* Initial list as #4
+#### Table Structure
 
-Remember, equity markets exhibit volatility skew, meaning:
+| SPX Move | Portfolio P&L | Hedge P&L | Net P&L |
+| -------- | ------------- | --------- | ------- |
+| -5%      | -$500k        | +$30k     | -$470k  |
+| -10%     | -$1M          | +$120k    | -$880k  |
+| -20%     | -$2M          | +$650k    | -$1.35M |
+| -35%     | -$3.5M        | +$2M      | -$1.5M  |
+
+#### Key Insight
+
+Options produce convex payoffs:
+
+- small moves → small protection
+- crashes → exponential hedge payoff
+
+This convex structure is the foundation of tail hedging. ([Gateway Investment Advisers][gateway])
+
+#### Payoff Ratio
+
+Measures how much a hedging position gains if the underlying experiences a large downward move. it measures convexity with respect to price moves. It captures the **nonlinear payoff** from options during a market crash.
+
+In simple terms:
+> how much protection you get in a large drawdown.
+
+Another way to think about it is using **gamma exposure**: Large positive gamma → strong convex crash protection.
+
+Also known as:
+
+- Tail hedge effectiveness
+- Downside hedge ratio
+
+#### Algebraic framing
+
+Masure the **second-order payoff sensitivity** to large negative moves.
+
+A practical approximation:
+
+$\Gamma = \frac{\partial^2 V}{\partial S^2}$
+
+where:
+
+- $\partial^2 V$ = is estimated for the crash size (e.g., 20%)
+
+*Example:*
+
+```text
+$10M long equity
+```
+
+```text
+long 18-month OTM puts
+```
+
+If market falls:
+
+| Market move | Portfolio loss | Hedge gain |
+| ----------- | -------------- | ---------- |
+| -5%         | -$500k         | +$40k      |
+| -20%        | -$2M           | +$600k     |
+| -35%        | -$3.5M         | +$1.8M     |
+
+The **accelerating gains** reflect crash convexity.
+
+#### Portfolio interpretation
+
+Answers:
+
+> “How much does my hedge help during a real crisis?”
+
+Typical target institutional hedge:
+
+```text
+10–30% crash convexity
+```
+
+```text
+-20% market → hedge offsets 10–30% of loss
+```
+
+### 3. Vega Sufficiency Gauge
+
+Measures whether the hedge has **enough volatility exposure** to benefit from rom the **volatility spike that usually accompanies a market crash**.
+
+#### Portfolio Metric Definition
+
+In equity markets:
+
+```text
+market down → volatility up
+```
+
+So good hedges should benefit from both:
+
+1. price drop
+2. volatility spike
+
+Let:
+
+$\nu = \frac{\partial V}{\partial \sigma}$ be vega
+
+Define:
+
+$\text{Vega Sufficiency} = \frac{\text{Portfolio Vega}}{\text{Underlying Value}}$
+
+Some managers scale it relative to expected vol spike:
+
+$\text{Expected Vega Gain} = \nu \times \Delta \sigma$
+
+Institutional programs usually normalize vega by:
+
+```text
+portfolio notional
+or
+1% market move
+```
+
+#### Common Metrics for Vega Sufficiency
+
+```text
+vega / portfolio value
+vega / delta
+vega / variance exposure
+```
+
+*Example:*
+
+Portfolio:
+
+```text
+$10M equities
+```
+
+Hedge:
+
+```text
+vega = $15,000 per 1 vol point
+```
+
+If volatility rises:
+
+```text
+20% → 40%
+```
+
+Change:
+
+```text
+Δσ = 20 vol points
+```
+
+Profit:
+
+```text
+$15,000 × 20 = $300,000
+```
+
+In March 2020, the SPX moved down ~34% and the IV moved up from ~16 to ~82.
+
+#### Portfolio Interpretation of Vega Sufficiency
+
+If vega is too small:
+
+```text
+price drop helps
+vol spike doesn't
+```
+
+Good crash hedges often rely heavily on vega.
+
+Long-dated options typically provide stronger vega.
+
+#### Dashboard Display
+
+```text
+VEGA SUFFICIENCY
+
+Low <-----|-----> High
+          ^
+        current
+```
+
+### 4. Skew Exposure Meter
+
+#### Definition of Skew Beta
+
+Skew beta measures **how sensitive a hedge is to changes in the volatility skew**. Skew reflects the higher implied volatility typically seen in OTM puts. ([Wikipedia][wiki-skew])
+
+Equity markets exhibit volatility skew, meaning:
 
 $\sigma_{OTM\ put} > \sigma_{ATM}$
 
 This reflects demand for crash protection.
 
 So we can also measure Skew Exposure, and also Skew Percentile. Skew Percentile measures how expensive **downside protection** is relative to history.
+
+Volatility skew describes how:
+
+```text
+OTM put volatility > ATM volatility
+```
+
+During market stress:
+
+```text
+skew steepens dramatically
+```
+
+Deep OTM puts become much more expensive.
+
+Equity markets have downside skew:
+
+```text
+OTM puts IV > ATM IV
+```
+
+In crashes, this steepens dramatically.
+
+#### Algebraic Framing
+
+Let $\sigma(K)$ represent implied volatility at strike (K).
+
+Skew is approximately:
+
+$\frac{\partial \sigma}{\partial K}$
+
+With traders in practice measure using:
+
+$\text{Skew} = \frac{\partial \sigma}{\partial log(K)}$
+
+or using delta-based metrics.
+
+Most traders measure skew using 25-delta options:
+
+$\text{Skew} = \sigma_{25\Delta\ put} - \sigma_{ATM}$
+
+Skew beta measures the hedge sensitivity to changes in that slope.
+
+So a simplified hedge sensitivity metric:
+
+$\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
+
+*Example:*
+
+OTM puts:
+
+```text
+25% IV
+```
+
+During crisis:
+
+```text
+prices drop + skew steepens → OTM puts explode
+>40% IV
+```
+
+ATM volatility may rise less:
+
+```text
+20% → 30%
+```
+
+OTM puts gain disproportionately. Many tail-risk strategies rely heavily on skew beta, using far OTM strikes.
+
+The gain in OTM put value is fully true because of:
+
+```text
+delta + vega + skew + convexity
+```
+
+Not only due to skew.
 
 #### Simple Skew Metric
 
@@ -1671,8 +1484,10 @@ $Skew = \sigma_{25\Delta put} - \sigma_{50\Delta}$
 
 Where:
 
-- $25\Delta put \approx$ ~10-15% OTM
-- $50\Delta put \approx$ ATM
+- $25\Delta_{put} \approx \sim10-15\% \text{ OTM}$
+- $40\Delta_{put} \approx \text{ATM}$
+
+Note: $50\Delta$ is only exactly for ATM for calls. For puts $~40\Delta \approx \text{ATM}$
 
 Example:
 
@@ -1715,119 +1530,66 @@ Typical logic:
 
 When skew is high, **deep OTM puts become extremely expensive**.
 
-### 6. Gamma Liquidity Risk
+### 5. Volatility Regime Indicator
 
-Gamma measures how much delta changes when the market moves. Dealer positioning can strongly influence short-term market dynamics
+Volatility regime refers to the **general level and behavior of volatility in the market environment**. Markets cycle between low-volatility and high-volatility environments.
 
-#### Concept
+#### Algebraic Framing of Vol Regime
 
-Market makers hedge option exposure.
+Often measured using:
 
-If dealers are ***long gamma***, they hedge by:
+$\sigma_t$
 
-```text
-selling rallies
-buying dips
-```
+realized or implied volatility.
 
-Result:
+Regime detection may use:
 
 ```text
-stable markets
-low realized volatility
+moving averages
+GARCH models
+volatility percentiles
 ```
 
-If they are **short gamma**, dealers hedge by:
+Example rule:
 
 ```text
-buying rallies
-selling dips
+Low vol regime: VIX < 15
+Normal regime: VIX 15–25
+High vol regime: VIX > 25
 ```
-
-Result:
-
-```text
-amplified volatility
-```
-
-#### Portfolio Metric Definition of Gamma Exposure
-
-$\text{Gamma Exposure} = \sum_i \Gamma_i N_i$
-
-Alternatively:
-
-$GEX = \sum (\Gamma \times OpenInterest)$
-
-Many sites publish estimates.
-
-#### Interpretation of Results
-
-High gamma means:
-
-```text
-large moves → big hedge gains
-```
-
-But also:
-
-```text
-requires rebalancing
-```
-
-| Dealer gamma | Market behavior       |
-| ------------ | --------------------- |
-| positive     | suppressed volatility |
-| negative     | unstable market       |
-
-#### Hedge Decision Rule on Results
-
-Tail funds tend to add hedges when:
-
-```text
-dealer gamma negative
-```
-
-Because this increases crash probability.
-
-### 7. Hedge Efficiency Ratio
-
-Measures how much downside risk the hedge offsets relative to cost.
-
-*Note:* Initial list as #6
-
-#### HER Metric
-
-$\text{Hedge Efficiency} = \frac{\text{Crash payoff}}{\text{Annual carry}}$
 
 *Example:*
 
-Crash payoff:
+| Period     | Regime    | VIX |
+| ---------- | --------- | --- |
+| 2017       | ultra low | 10  |
+| 2020 crash | extreme   | 80  |
+| 2022       | elevated  | 30  |
+
+#### Portfolio Interpretation of Vol Regime
+
+Volatility regimes influence:
 
 ```text
-$1.5M
+option prices
+skew
+carry cost
+hedging effectiveness
 ```
+
+In low-vol regimes:
 
 ```text
-$300k
+options cheap
+good time to buy hedges
 ```
 
-Efficiency:
+In high-vol regimes:
 
 ```text
-5
+options expensive
+carry high
 ```
-
-```text
-5× payoff relative to cost
-```
-
-### 8. Volatility Regime Indicator
-
-Markets cycle between low-volatility and high-volatility environments.
-
-See for more detail: [Volatility Regime](#volatility-regime)
-
-*Note:* Initial list as #5
 
 #### Dashboard Logic
 
@@ -1889,39 +1651,221 @@ Typical rule:
 
 | VIX   | Hedge action       |
 | ----- | ------------------ |
-| <15   | acctumulate        |
+| <15   | accumulate         |
 | 15-25 | maintain           |
 | >30   | reduce or monetize |
 
-### 2. Crash Scenario Table
+### 6. Hedge Efficiency Ratio
 
-This simulates portfolio performance under market crashes.
+Measures how much downside risk the hedge offsets relative to cost.
 
-*Note:* Initially #2 on dashboard list
+#### HER Metric
 
-#### Table Structure
+$\text{Hedge Efficiency} = \frac{\text{Crash payoff}}{\text{Annual carry}}$
 
-| SPX Move | Portfolio P&L | Hedge P&L | Net P&L |
-| -------- | ------------- | --------- | ------- |
-| -5%      | -$500k        | +$30k     | -$470k  |
-| -10%     | -$1M          | +$120k    | -$880k  |
-| -20%     | -$2M          | +$650k    | -$1.35M |
-| -35%     | -$3.5M        | +$2M      | -$1.5M  |
+or using percentage terms
 
-#### Key Insight
+$\text{Hedge Efficiency} = \frac{\text{Crash payoff \%}}{\text{Annual carry \%}}$
 
-Options produce convex payoffs:
+*Example:*
 
-- small moves → small protection
-- crashes → exponential hedge payoff
+Crash payoff:
 
-This convex structure is the foundation of tail hedging. ([Gateway Investment Advisers][gateway])
+```text
+$1.5M
+```
 
-### 4. Forward Variance Level
+```text
+$300k
+```
+
+Efficiency:
+
+```text
+5
+```
+
+```text
+5× payoff relative to cost
+```
+
+### 7. Net Delta Exposure
+
+Delta represents the first derivative of option value with respect to the underlying price. ([Wikipedia][wiki-greeks])
+
+$\Delta = \frac{\partial V}{\partial S}$
+
+**Net Delta** measures directional exposure of the entire portfolio to the underlying.
+
+#### Portfolio Metric
+
+$\text{Net Delta} = \sum_i \Delta_i \times N_i$
+
+Where:
+
+- $N_i$ = number of contracts
+
+*Example:*
+
+```text
+Equities: $10M
+Put hedge delta: -0.20
+```
+
+Effective exposure:
+
+```text
+$10M × (1 − 0.20) = $8M
+```
+
+#### Interpretation of Net Delta
+
+| Value | Meaning        |
+| ----- | -------------- |
+| 1.0   | fully exposed  |
+| 0.8   | 20% hedge      |
+| 0.0   | market neutral |
+
+### 8. Theta Carry (Insurance Cost)
+
+Theta carry measures how much money the hedge costs to hold over time due to time decay. It is essentially the insurance premium paid to maintain protection.
+
+#### Algebraic framing of Theta Carry
+
+Theta:
+
+$\Theta = \frac{\partial V}{\partial T}$
+
+Theta carry is usually expressed relative to portfolio size:
+
+<!-- TODO: **CHECK DAY CONVENTION!!** -->
+$\text{Theta Carry} = \frac{-\Theta \times 252}{\text{Portfolio Value}}$
+
+*Example:*
+
+Portfolio:
+
+```text
+$10M
+```
+
+Hedge theta:
+
+```text
+-$2,500 per day
+```
+
+<!-- TODO: **CHECK DAY CONVENTION!!** -->
+Annualized:
+
+```text
+$2,500 × 252 ≈ $630k
+```
+
+Cost:
+
+```text
+6.3% per year
+```
+
+#### Portfolio Interpretation
+
+Good hedges try to balance:
+
+```text
+maximize crash convexity
+minimize theta carry
+```
+
+Typical institutional targets:
+
+```text
+1-3% annual carry
+```
+
+### 9. Gamma Liquidity Risk
+
+Gamma measures how much delta changes when the market moves. Dealer positioning can strongly influence short-term market dynamics.
+
+Dealer gamma is mostly a **short-dated flow indicator**, not a structural tail-hedging signal.
+
+#### Concept
+
+Market makers hedge option exposure.
+
+If dealers are ***long gamma***, they hedge by:
+
+```text
+buy rallies
+sell dips
+```
+
+Result:
+
+```text
+stable markets
+low realized volatility
+```
+
+If they are **short gamma**, dealers hedge by:
+
+```text
+sell rallies
+buy dips
+```
+
+Result:
+
+```text
+amplified volatility
+```
+
+#### Portfolio Metric Definition of Gamma Exposure
+
+$\text{Gamma Exposure} = \sum_i \Gamma_i N_i$
+
+Alternatively:
+
+$GEX = \sum (\Gamma \times OpenInterest)$
+
+Many sites publish estimates.
+
+#### Interpretation of Results
+
+High gamma means:
+
+```text
+large moves → big hedge gains
+```
+
+But also:
+
+```text
+requires rebalancing
+```
+
+| Dealer gamma | Market behavior       |
+| ------------ | --------------------- |
+| positive     | suppressed volatility |
+| negative     | unstable market       |
+
+#### Hedge Decision Rule on Results
+
+Tail funds tend to add hedges when:
+
+```text
+dealer gamma negative
+```
+
+Because this increases crash probability.
+
+Note: Tail hedges depend more on vol regime + skew + term structure than Gamma liquidity risk.
+
+### 10. Forward Variance Level
 
 Forward variance measures **expected volatility in the future**. This is crucial for long-dated hedges.
 
-#### Concept
+#### Concept of Forward Variance
 
 Variance is volatility squared:
 
@@ -2007,11 +1951,13 @@ Long maturities provide:
 
 ```text
 high vega
-low theta
+low theta (on a relative basis)
 stable convexity
 ```
 
 This is why **LEAPS are common** in institutional programs.
+
+Long maturities have low theta on a relative or % basis, but the total premium paid may be larger.
 
 ### Rolling Rules
 
@@ -2026,7 +1972,7 @@ buy 18-month puts
 roll at 9–12 months
 ```
 
-This avoids the **theta acceleration zone**.
+This avoids rolling just before theta acceleration in the final weeks of option life.
 
 #### Rule 2 — strike rebalancing
 
@@ -2043,7 +1989,9 @@ sell old hedge
 buy new hedge closer to spot
 ```
 
-#### Rule 3 — monetizing crashes
+## PART IX — Monetization & Re-Risk Rules
+
+### Monetizing crashes
 
 If crash occurs:
 
@@ -2060,8 +2008,6 @@ re-establish later
 ```
 
 This is critical — otherwise hedges can **round-trip gains**.
-
-## PART IX — Monetization & Re-Risk Rules
 
 ## PART X — Common Structural Mistakes
 
@@ -2166,13 +2112,16 @@ Professional hedge programs **continuously manage maturity and strike**.
 
 Why?
 
-Option value decays roughly with:
+For ATM options, Theta roughly scales with:
 
-$\Theta \propto \frac{1}{\sqrt{T}}$
+$\Theta \propto \frac{1}{T}$
 
-As maturity shortens:
+As maturity shortens, this relationship no longer holds, with time decay accelerating dramatically.
 
 Tail funds typically **roll hedges before this decay phase**.
+Gamma scales approximately to:
+
+$\Gamma \propto \frac{1}{\sqrt{T}}$
 
 ## PART XI — Educational Resources
 
@@ -2221,8 +2170,6 @@ Very practical. Best modern practitioner book. Topics:
 ##### Tail Risk Hedging — Vineer Bhansali
 
 It explains how to design systematic crash protection and quantify hedge payoffs. ([Barnes & Noble][barnesnoble]) One of the most complete frameworks for portfolio hedging using derivatives.
-
-#### Volatility Trading — Euan Sinclair
 
 ### Research Papers on Tail Hedging
 
