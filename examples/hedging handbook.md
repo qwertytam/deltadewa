@@ -70,7 +70,7 @@ Updated: 2026-03-09
   - [11. Vega Term Exposure](#11-vega-term-exposure)
   - [12. Skew Convexity](#12-skew-convexity)
   - [13. Liquidity Risk](#13-liquidity-risk)
-  - [14. Hedge rebalance triggers](#14-hedge-rebalance-triggers)
+  - [14. Hedge Rebalance Triggers](#14-hedge-rebalance-triggers)
 - [PART VIII — Designing a Tail Hedge Program](#part-viii--designing-a-tail-hedge-program)
   - [Strike Selection](#strike-selection)
   - [Maturity Selection](#maturity-selection)
@@ -740,31 +740,37 @@ These terms describe **portfolio behaviour**, not individual option parameters.
 
 ### Convexity
 
-Convexity means **the payoff accelerates as the underlying moves**.
+Convexity describes non-linear payoff behavior where gains accelerate as the underlying moves further.
 
-*Example:* “Long puts add convexity to portfolio.”
+In options portfolios, convexity arises primarily from positive gamma, but crisis-period hedge performance also reflects volatility and skew dynamics.
 
-Mathematically:
-
-$\Gamma + \text{Vega} + \text{Skew Exposure}$
-
-Example payoff:
+In practice, hedge convexity comes from:
 
 ```text
-long put
+delta acceleration (gamma)
++ volatility expansion (vega)
++ skew steepening
 ```
 
-Losses are limited but gains accelerate during large moves.
+This combination causes option hedges to produce small gains in moderate selloffs but large gains in severe crashes.
 
-Underlying drops:
+Example payoff structure:
+
+| Market move | Hedge P&L     |
+| ----------- | ------------- |
+| −5%         | small gain    |
+| −15%        | moderate gain |
+| −30%        | large gain    |
+
+Convexity is what allows a hedge to:
 
 ```text
--5%
--10%
--20%
+offset deep drawdowns
+provide liquidity during crises
+fund portfolio rebalancing
 ```
 
-Put gains accelerate.
+For a tail-hedge program, convexity is evaluated using crash scenario analysis, not just the instantaneous gamma of the options.
 
 ### Optionality
 
@@ -1080,7 +1086,7 @@ Crash scenario:
 
 #### Definition of Crash Convexity
 
-Crash convexity measures how much a hedge accelerates in value as market losses deepen. It captures the non-linear payoff profile of options during large drawdowns.
+Crash convexity measures how much a hedge accelerates in value as market losses deepen. It captures the non-linear payoff profile of options during large drawdowns. Convex strategies benefit from extreme moves in the benchmark index.[Informa Connect][informaconnect]
 
 Crash convexity reflects the combined effect of:
 
@@ -1161,7 +1167,6 @@ $\Theta = \frac{\partial V}{\partial T}$
 
 Theta carry is usually expressed relative to portfolio size:
 
-<!-- TODO: **CHECK DAY CONVENTION!!** -->
 $\text{Theta Carry} = \frac{-\Theta \times 252}{\text{Portfolio Value}}$
 
 *Example:*
@@ -1178,7 +1183,6 @@ Hedge theta:
 -$2,500 per day
 ```
 
-<!-- TODO: **CHECK DAY CONVENTION!!** -->
 Annualized:
 
 ```text
@@ -1507,6 +1511,7 @@ Hedge profit = +$800k
 ```
 
 Result:
+
 ```text
 Crash Payoff Ratio = 800k / 2.5M = 32%
 ```
@@ -2085,23 +2090,131 @@ Sensitivity of the hedge to skew steepening, not just skew level.
 
 ### 13. Liquidity Risk
 
-Especially important for:
+#### Liquidity Risk Definition
+
+Liquidity risk measures how easily the hedge can be traded without large transaction costs or market impact.
+
+Tail hedges often use:
 
 ```text
 deep OTM strikes
-long-dated options
+long maturities
 ```
 
-<!--TODO: Fill out-->
+which may have thin liquidity.
 
-### 14. Hedge rebalance triggers
+#### Liquidity Risk Metrics
 
-Institutional programs often track:
+Common liquidity indicators:
+
+##### Bid-ask spread
 
 ```text
-time-to-roll
-strike drift
-convexity decay
+Spread % = (Ask − Bid) / Mid
+```
+
+##### Market depth
+
+Contracts available near the mid price.
+
+##### Open interest
+
+```text
+OI per strike
+```
+
+##### Trading volume
+
+```text
+Average daily volume.
+```
+
+#### Liquidity Risk Interpretation
+
+Warning signs:
+
+```text
+wide bid-ask spreads
+low open interest
+thin order books
+```
+
+Liquidity risk matters most when:
+
+```text
+monetizing hedges during crashes
+rolling positions
+scaling hedge size
+```
+
+### 14. Hedge Rebalance Triggers
+
+#### Trigger Definition
+
+Hedge rebalance triggers define when the hedge program adjusts positions.
+
+Tail hedges are rarely static; they require systematic rebalancing rules.
+
+#### Typical Trigger Types
+
+##### 1. Time-based roll
+
+Example:
+
+```text
+buy 18-month puts
+roll when maturity < 9 months
+```
+
+Avoids entering the high theta decay zone.
+
+##### 2. Strike drift trigger
+
+If the market rallies:
+
+```text
+puts become very deep OTM
+```
+
+Example rule:
+
+```text
+if strike distance > 45% OTM
+roll hedge closer to spot
+```
+
+##### 3. Crash monetization
+
+If hedge value exceeds a threshold:
+
+```text
+hedge profit > 3× cost
+```
+
+Example action:
+
+```text
+sell part of hedge
+lock gains
+re-establish later
+```
+
+##### 4. Convexity threshold
+
+If crash convexity falls below target:
+
+```text
+increase hedge size
+```
+
+#### Trigger Interpretation
+
+Rebalance rules ensure the hedge:
+
+```text
+maintains target convexity
+controls carry cost
+preserves liquidity
 ```
 
 ## PART VIII — Designing a Tail Hedge Program
