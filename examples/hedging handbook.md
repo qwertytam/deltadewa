@@ -42,11 +42,13 @@ Updated: 2026-03-09
   - [Liquidity / Spread](#liquidity--spread)
   - [Gamma Scalping](#gamma-scalping)
   - [Volatility Risk Premium](#volatility-risk-premium)
-- [PART V — Portfolio Hedging Concepts](#part-v--portfolio-hedging-concepts)
+- [PART V — Portfolio Tail Hedging Concepts](#part-v--portfolio-tail-hedging-concepts)
   - [Structure 1 — Long OTM Puts (Pure Tail Hedge)](#structure-1--long-otm-puts-pure-tail-hedge)
   - [Structure 2 — Put Spread Tail Hedge](#structure-2--put-spread-tail-hedge)
   - [Structure 3 — Option Carry + Tail Hedge](#structure-3--option-carry--tail-hedge)
   - [Structure 4 — Volatility Instrument Hedge](#structure-4--volatility-instrument-hedge)
+  - [Structure Selection](#structure-selection)
+  - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
 - [PART VII — Institutional Hedge Dashboards](#part-vii--institutional-hedge-dashboards)
   - [Introduction](#introduction)
   - [1. Net Delta Exposure](#1-net-delta-exposure)
@@ -823,10 +825,6 @@ Most traders measure skew using 25-delta options:
 
 $\text{Skew} = \sigma_{25\Delta\ put} - \sigma_{ATM}$
 
-Alternatively:
-
-$Skew = \sigma_{25\Delta put} - \sigma_{50\Delta}$
-
 Skew beta measures the hedge sensitivity to changes in that slope.
 
 So a simplified hedge sensitivity metric:
@@ -1194,17 +1192,45 @@ Premium:
 
 Option sellers capture this on average.
 
-## PART V — Portfolio Hedging Concepts
+## PART V — Portfolio Tail Hedging Concepts
 
-For a hedged equity portfolio:
+The goal of tail hedging is **not to offset small drawdowns**.
 
-| Metric                                                  | What it answers                        |
-| ------------------------------------------------------- | -------------------------------------- |
-| [Crash convexity](#crash-convexity)                     | How much protection in a crash         |
-| [Vega sufficiency](#vega-sufficiency)                   | Do we benefit from vol spikes          |
-| [Theta carry](#theta-carry-insurance-cost)              | Cost of holding hedge                  |
-| [[Skew Beta / Skew Exposure](#skew-beta--skew-exposure) | Sensitivity to downside skew           |
-| [Volatility regime](#volatility-regime)                 | Whether options are expensive or cheap |
+```text
+small losses tolerated
+large crashes offset
+```
+
+It is to provide:
+
+```text
+liquidity during crises
+```
+
+Meaning:
+
+```text
+small losses tolerated
+large crashes offset
+```
+
+This liquidity lets investors:
+
+```text
+rebalance
+buy assets cheaply
+avoid forced selling
+```
+
+For a hedged equity portfolio, key metrics to track are:
+
+| Metric                                                 | What it answers                        |
+| ------------------------------------------------------ | -------------------------------------- |
+| [Crash convexity](#crash-convexity)                    | How much protection in a crash         |
+| [Vega sufficiency](#vega-sufficiency)                  | Do we benefit from vol spikes          |
+| [Theta carry](#theta-carry-insurance-cost)             | Cost of holding hedge                  |
+| [Skew Beta / Skew Exposure](#skew-beta--skew-exposure) | Sensitivity to downside skew           |
+| [Volatility regime](#volatility-regime)                | Whether options are expensive or cheap |
 
 Professional hedge design is essentially optimizing:
 
@@ -1329,6 +1355,55 @@ VIX 20 → 70
 ```
 
 These strategies require **more active management**.
+
+### Structure Selection
+
+For simplicity, Structure 1 is usually a good fit for many investors.
+
+Typical improvements to be considered are
+
+- strike layering:
+
+Example:
+
+```text
+20% OTM
+30% OTM
+40% OTM
+```
+
+- roll annually
+- tracking convexity vs. carry
+
+### A Typical Institutional Hedge Example
+
+Portfolio:
+
+```text
+$10M equity
+```
+
+Hedge allocation:
+
+```text
+1.5-2.5% per year
+```
+
+Put portfolio
+
+| Strike | Weight | Maturity  |
+| ------ | ------ | --------- |
+| 4000   | 40%    | 18 months |
+| 3500   | 40%    | 18 months |
+| 3000   | 20%    | 18 months |
+
+Crash scenario:
+
+| Market move | Hedge payoff |
+| ----------- | ------------ |
+| -10%        | small        |
+| -20%        | moderate     |
+| -40%        | very large   |
 
 ## PART VII — Institutional Hedge Dashboards
 
@@ -1472,7 +1547,7 @@ See [Theta Carry (Insurance Cost)](#theta-carry-insurance-cost)
 
 *Note:* Initial list as #1
 
-This is the **core trade-off in tail hedging**.
+This is the **core trade-off in tail hedging**. It determines **whether the hedge economics are attractive**.
 
 ```text
 maximize convexity
@@ -1495,6 +1570,39 @@ Crash convexity:
 $\text{Convexity} = \frac{V(S(1-x)) - V(S)}{Portfolio}$
 
 Where $x$ = crash size.
+
+Example:
+
+| Scenario | Hedge value |
+| -------- | ----------- |
+| Today    | $200k       |
+| SPX −25% | $2.2M       |
+
+Convexity:
+
+```text
+2.2M / 10M = 22%
+```
+
+#### Ratio
+
+$\text{Carry-Convexity Ratio} = \frac{\text{Convexity}}{\text{Carry}}$
+
+So, say annual carry is `3%`, then the ratio is:
+
+```text
+22% / 3% = 7.3
+```
+
+#### Interpretation of the Ratio
+
+| Ratio | Meaning    |
+| ----- | ---------- |
+| <3    | poor hedge |
+| 3–6   | acceptable |
+| >6    | attractive |
+
+Tail funds prefer **high convexity relative to cost**.
 
 Typical values:
 
@@ -1523,6 +1631,66 @@ Best hedges sit **top-left**.
 See [Skew Beta / Skew Exposure](#skew-beta--skew-exposure)
 
 *Note:* Initial list as #4
+
+Remember, equity markets exhibit volatility skew, meaning:
+
+$\sigma_{OTM\ put} > \sigma_{ATM}$
+
+This reflects demand for crash protection.
+
+So we can also measure Skew Exposure, and also Skew Percentile. Skew Percentile measures how expensive **downside protection** is relative to history.
+
+#### Simple Skew Metric
+
+Most traders measure skew using 25-delta options:
+
+$Skew = \sigma_{25\Delta put} - \sigma_{50\Delta}$
+
+Where:
+
+- $25\Delta put \approx$ ~10-15% OTM
+- $50\Delta put \approx$ ATM
+
+Example:
+
+| Strike  | IV  |
+| ------- | --- |
+| ATM     | 20% |
+| 25Δ put | 27% |
+
+Skew
+
+```text
+27 − 20 = 7 vol points
+```
+
+#### Percentile calculation
+
+Funds usually track:
+
+```python
+Skew percentile = current skew vs last 5–10 years
+```
+
+Example:
+
+| Percentile | Meaning          |
+| ---------- | ---------------- |
+| 10%        | cheap protection |
+| 50%        | normal           |
+| 90%        | panic pricing    |
+
+#### Hedge decision rule
+
+Typical logic:
+
+| Skew Percentile | Action          |
+| --------------- | --------------- |
+| <30%            | add tail hedges |
+| 30-70%          | neutral         |
+| >70%            | avoid buying    |
+
+When skew is high, **deep OTM puts become extremely expensive**.
 
 ### 6. Gamma Liquidity Risk
 
@@ -1602,6 +1770,53 @@ Recommendation: accumulate hedges
 ```
 
 Low-volatility environments are often the best time to buy protection.
+
+##### VIX Level
+
+Most common regime indicator.
+
+Example ranges:
+
+| VIX   | Regime   |
+| ----- | -------- |
+| <15   | low vol  |
+| 15–25 | normal   |
+| >25   | stressed |
+| >40   | crisis   |
+
+##### Realized vs implied volatility
+
+Another useful signal:
+
+$VRP = IV - RV$
+
+Where:
+
+- $IV$ = implied volatility
+- $RV$ = realized volatility
+
+| Metric | Value |
+| ------ | ----- |
+| IV     | 22%   |
+| RV     | 16%   |
+
+Volatility risk premium
+
+```text
+6%
+```
+
+#### Hedge decision rule for VIX
+
+Volatility funds prefer to **buy protection when volatility is cheap**.
+
+Typical rule:
+
+| VIX   | Hedge action       |
+| ----- | ------------------ |
+| <15   | acctumulate        |
+| 15-25 | maintain           |
+| >30   | reduce or monetize |
 
 ### 2. Crash Scenario Table
 
