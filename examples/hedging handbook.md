@@ -61,6 +61,7 @@ Updated: 2026-03-09
   - [7. Hedge Efficiency Ratio](#7-hedge-efficiency-ratio)
   - [8. Volatility Regime Indicator](#8-volatility-regime-indicator)
   - [2. Crash Scenario Table](#2-crash-scenario-table)
+  - [4. Forward Variance Level](#4-forward-variance-level)
 - [PART VIII — Designing a Tail Hedge Program](#part-viii--designing-a-tail-hedge-program)
   - [Strike Selection](#strike-selection)
   - [Maturity Selection](#maturity-selection)
@@ -1429,14 +1430,36 @@ TAIL HEDGE DASHBOARD
 
 Portfolio value: $10M
 
-Carry cost:        2.1% / year
-Crash convexity:   28% @ -25% SPX
-Vega exposure:     $18k / vol point
-Skew exposure:     High
-Vol regime:        Low (VIX 14)
-
-Hedge efficiency:  6.3x
+Carry cost:             2.1% / year
+Crash convexity:        28% @ -25% SPX
+Carry/convexity ratio:  7.5
+Vega exposure:          $18k / vol point
+Skew exposure:          High
+Skew percentile:        22%  (cheap)
+Vol regime:             Low (VIX 14)
+Forward variance:       cheap
+Dealer gamma:           negative
+Hedge efficiency:       6.3x
 ```
+
+Conclusion:
+
+```text
+increase hedge allocation
+```
+
+#### Key Driver of the Dashboard
+
+The **best opportunities to buy crash protection** typically occur when:
+
+```text
+market calm
+volatility low
+skew moderate
+dealer gamma positive
+```
+
+Investors instinct is to hedge **after markets fall**, but that is when hedges are **most expensive**.
 
 ### 1. Net Delta Exposure
 
@@ -1694,13 +1717,50 @@ When skew is high, **deep OTM puts become extremely expensive**.
 
 ### 6. Gamma Liquidity Risk
 
-Gamma measures how much delta changes when the market moves.
+Gamma measures how much delta changes when the market moves. Dealer positioning can strongly influence short-term market dynamics
+
+#### Concept
+
+Market makers hedge option exposure.
+
+If dealers are ***long gamma***, they hedge by:
+
+```text
+selling rallies
+buying dips
+```
+
+Result:
+
+```text
+stable markets
+low realized volatility
+```
+
+If they are **short gamma**, dealers hedge by:
+
+```text
+buying rallies
+selling dips
+```
+
+Result:
+
+```text
+amplified volatility
+```
 
 #### Portfolio Metric Definition of Gamma Exposure
 
 $\text{Gamma Exposure} = \sum_i \Gamma_i N_i$
 
-#### Interpretation of Gamma Exposure
+Alternatively:
+
+$GEX = \sum (\Gamma \times OpenInterest)$
+
+Many sites publish estimates.
+
+#### Interpretation of Results
 
 High gamma means:
 
@@ -1713,6 +1773,21 @@ But also:
 ```text
 requires rebalancing
 ```
+
+| Dealer gamma | Market behavior       |
+| ------------ | --------------------- |
+| positive     | suppressed volatility |
+| negative     | unstable market       |
+
+#### Hedge Decision Rule on Results
+
+Tail funds tend to add hedges when:
+
+```text
+dealer gamma negative
+```
+
+Because this increases crash probability.
 
 ### 7. Hedge Efficiency Ratio
 
@@ -1841,6 +1916,53 @@ Options produce convex payoffs:
 - crashes → exponential hedge payoff
 
 This convex structure is the foundation of tail hedging. ([Gateway Investment Advisers][gateway])
+
+### 4. Forward Variance Level
+
+Forward variance measures **expected volatility in the future**. This is crucial for long-dated hedges.
+
+#### Concept
+
+Variance is volatility squared:
+
+$Variance = \sigma^2$
+
+Forward variance is implied volatility for a **future time window**.
+
+| Option  | IV  |
+| ------- | --- |
+| 6-month | 22% |
+| 2-year  | 19% |
+
+This implies **lower expected volatility long term**.
+
+#### Approximation
+
+You can estimate forward variance between maturities.
+
+Example:
+
+$\sigma_{fwd}^2 = \frac{T_2\sigma_2^2 - T_1\sigma_1^2}{T_2 - T_1}$
+
+#### Interpretation of Forward Variance Level
+
+If long-dated volatility is unusually cheap:
+
+```text
+forward variance low
+```
+
+Long-dated puts become attractive.
+
+#### Hedge Decision Rule
+
+Tail funds often prefer buying:
+
+```text
+cheap long-dated vol
+```
+
+Because crashes often **inflate long-dated volatility suddenly**.
 
 ## PART VIII — Designing a Tail Hedge Program
 
