@@ -26,7 +26,7 @@ Updated: 2026-03-09
   - [Vomma](#vomma)
 - [PART III — Volatility and the Vol Surface](#part-iii--volatility-and-the-vol-surface)
   - [Volatility Smile](#volatility-smile)
-  - [Volatility Skew](#volatility-skew)
+  - [Volatility Skew / Skew Exposure / Skew Beta](#volatility-skew--skew-exposure--skew-beta)
   - [Term Structure of Volatility](#term-structure-of-volatility)
   - [Volatility Crush](#volatility-crush)
 - [PART IV — Trading Terminology](#part-iv--trading-terminology)
@@ -45,14 +45,14 @@ Updated: 2026-03-09
   - [Structure Selection](#structure-selection)
   - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
 - [PART VI — Tail-Hedging Metrics](#part-vi--tail-hedging-metrics)
+  - [Net Delta](#net-delta)
   - [Crash Convexity](#crash-convexity)
+  - [Crash Payoff Ratio / Tail Hedge Effectiveness](#crash-payoff-ratio--tail-hedge-effectiveness)
   - [Theta Carry / Insurance Cost](#theta-carry--insurance-cost)
   - [Vega Sufficiency](#vega-sufficiency)
+  - [Hedge Efficiency Ratio](#hedge-efficiency-ratio)
   - [Skew Exposure / Beta](#skew-exposure--beta)
   - [Volatility Regime](#volatility-regime)
-  - [Crash Payoff Ratio / Tail Hedge Effectiveness](#crash-payoff-ratio--tail-hedge-effectiveness)
-  - [Hedge Efficiency Ratio](#hedge-efficiency-ratio)
-  - [Net Delta](#net-delta)
   - [Gamma Liquidity Risk](#gamma-liquidity-risk)
   - [Forward Variance Level](#forward-variance-level)
 - [PART VII — Institutional Hedge Dashboards](#part-vii--institutional-hedge-dashboards)
@@ -255,11 +255,15 @@ Buy call + put same strike.
 
 *Example:* “Bet on big move either direction.”
 
+Note: This is more of a volatility strategy rather than downside hedging.
+
 #### Strangle
 
 OTM call + OTM put.
 
 *Example:* “Cheaper volatility bet.”
+
+Note: This is more of a volatility strategy rather than downside hedging.
 
 ### Exercise & Settlement
 
@@ -339,7 +343,7 @@ Where $N(\cdot)$ is the standard normal cumulative distribution function.
 
 #### Practical interpretation
 
-- Approximate probability of finishing ITM (for short maturities, with low interest regions, in the ATM region)
+- Approximate probability of finishing ITM (for short maturities, with low interest rate environments, in the ATM region)
 - Effective exposure to the underlying
 
 Portfolio:
@@ -564,7 +568,7 @@ Vol-of-vol measures **how much implied volatility itself fluctuates**. Volatilit
 
 $\sigma_t$ represents implied volatility
 
-Vol-of-Vol is variance of changes in implied variability, or algebraiclly:
+Vol-of-Vol is variance of changes in implied volatility, or algebraically:
 
 $\text{Var}(d\sigma_t)$
 
@@ -666,13 +670,15 @@ vol
 
 Markets assign higher probability to **extreme outcomes** than predicted by Black-Scholes.
 
-### Volatility Skew
+### Volatility Skew / Skew Exposure / Skew Beta
 
-In equity markets, volatility usually **increases for lower strikes**. This is put or downside skew. OTM puts are more expensive than calls.
+In equity markets, volatility usually **increases for lower strikes**. This is put or downside skew. OTM puts are more expensive than calls. This skew reflects the higher implied volatility typically seen in OTM puts.([Wikipedia][wiki-skew])
 
 ```text
 OTM puts > ATM > OTM calls
 ```
+
+This reflects demand for crash protection.
 
 Graph:
 
@@ -686,9 +692,60 @@ vol
  +------ strike
 ```
 
-#### Interpretation of Volatility Skew
+#### Algebraic Framing
 
-Investors pay more for **downside protection**.
+Let $\sigma(K)$ represent implied volatility at strike (K).
+
+Skew is approximately:
+
+$\frac{\partial \sigma}{\partial K}$
+
+Traders in practice measure skew using:
+
+$\text{Skew} = \frac{\partial \sigma}{\partial log(K)}$
+
+or using delta-based metrics.
+
+Most traders measure skew using 25-delta options:
+
+$\text{Skew} = \sigma_{25\Delta\ put} - \sigma_{ATM}$
+
+Skew beta measures the hedge sensitivity to changes in that slope.
+
+So a simplified hedge sensitivity metric:
+
+$\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
+
+*Example:*
+
+OTM puts:
+
+```text
+25% IV
+```
+
+During crisis:
+
+```text
+prices drop + skew steepens → OTM puts explode
+>40% IV
+```
+
+ATM volatility may rise less:
+
+```text
+20% → 30%
+```
+
+OTM puts gain disproportionately. Many tail-risk strategies rely heavily on skew beta, using far OTM strikes.
+
+The gain in OTM put value is fully true because of:
+
+```text
+delta + vega + skew + convexity
+```
+
+Not only due to skew.
 
 ### Term Structure of Volatility
 
@@ -801,6 +858,8 @@ stock = 100
 strike = 100
 ```
 
+Note: This is relevant mainly to short options or expiry trading. Not important for long-dated tail hedges.
+
 ### Open Interest (OI)
 
 Number of outstanding contracts.
@@ -845,6 +904,8 @@ sell high
 ```
 
 This captures realized volatility.
+
+Note: This is more relevant to market making or volatility trading, not portfolio hedging.
 
 ### Volatility Risk Premium
 
@@ -1082,6 +1143,43 @@ Crash scenario:
 
 ## PART VI — Tail-Hedging Metrics
 
+### Net Delta
+
+Delta represents the first derivative of option value with respect to the underlying price. ([Wikipedia][wiki-greeks])
+
+$\Delta = \frac{\partial V}{\partial S}$
+
+**Net Delta** measures directional exposure of the entire portfolio to the underlying.
+
+#### Portfolio Metric
+
+$\text{Net Delta} = \sum_i \Delta_i \times N_i$
+
+Where:
+
+- $N_i$ = number of contracts
+
+*Example:*
+
+```text
+Equities: $10M
+Put hedge delta: -0.20
+```
+
+Effective exposure:
+
+```text
+$10M × (1 − 0.20) = $8M
+```
+
+#### Interpretation of Net Delta
+
+| Value | Meaning        |
+| ----- | -------------- |
+| 1.0   | fully exposed  |
+| 0.8   | 20% hedge      |
+| 0.0   | market neutral |
+
 ### Crash Convexity
 
 #### Definition of Crash Convexity
@@ -1155,6 +1253,61 @@ deeper OTM strikes
 higher carry cost
 ```
 
+### Crash Payoff Ratio / Tail Hedge Effectiveness
+
+#### Definition of Crash Payoff Ratio
+
+Crash payoff ratio measures how much of the portfolio loss is offset by the hedge during a crash. This metric evaluates hedge effectiveness, not convexity.
+
+It answers:
+> If markets crash, how much of the loss does the hedge absorb?
+
+#### Crash Payoff Ratio Metric
+
+Let:
+
+$Portfolio \ Loss$ = portfolio decline under crash scenario
+
+$Hedge\ Gain$ = hedge profit under same scenario
+
+Define:
+
+$\text{Crash Payoff Ratio} = \frac{Hedge\ Gain}{Portfolio\ Loss}$
+
+Example:
+
+```text
+Portfolio = $10M
+SPX −25%
+Portfolio loss = −$2.5M
+Hedge profit = +$800k
+```
+
+Result:
+
+```text
+Crash Payoff Ratio = 800k / 2.5M = 32%
+```
+
+#### Interpretation of Crash Payoff Ratio
+
+Typical ranges:
+
+| Ratio  | Meaning               |
+| ------ | --------------------- |
+| <10%   | hedge ineffective     |
+| 10–25% | partial protection    |
+| 25–40% | strong hedge          |
+| >40%   | very aggressive hedge |
+
+Most long-equity hedge programs aim for:
+
+```text
+20–35% loss offset at −25% market decline
+```
+
+This provides liquidity to rebalance portfolios during crises.
+
 ### Theta Carry / Insurance Cost
 
 Theta carry measures how much money the hedge costs to hold over time due to time decay. It is essentially the insurance premium paid to maintain protection.
@@ -1212,7 +1365,7 @@ Typical institutional targets:
 
 ### Vega Sufficiency
 
-Measures whether the hedge has **enough volatility exposure** to benefit from the **volatility spike that usually accompanies a market crash**.
+Vega sufficiency measures whether the hedge has **enough volatility exposure** to benefit from the **volatility spike that usually accompanies a market crash**.
 
 In equity markets:
 
@@ -1250,7 +1403,7 @@ or
 #### Common Metrics for Vega Sufficiency
 
 ```text
-vega / portfolio value
+portfolio vega / portfolio value
 vega / delta
 vega / variance exposure
 ```
@@ -1302,96 +1455,36 @@ Good crash hedges often rely heavily on vega.
 
 Long-dated options typically provide stronger vega.
 
-### Skew Exposure / Beta
+### Hedge Efficiency Ratio
 
-#### Definition of Skew Beta
+Measures how much downside risk the hedge offsets relative to cost.
 
-Skew beta measures **how sensitive a hedge is to changes in the volatility skew**. Skew reflects the higher implied volatility typically seen in OTM puts. ([Wikipedia][wiki-skew])
+#### HER Metric
 
-Equity markets exhibit volatility skew, meaning:
+$\text{Hedge Efficiency} = \frac{\text{Crash payoff}}{\text{Annual carry}}$
 
-$\sigma_{OTM\ put} > \sigma_{ATM}$
+or using percentage terms
 
-This reflects demand for crash protection.
-
-So we can also measure Skew Exposure, and also Skew Percentile. Skew Percentile measures how expensive **downside protection** is relative to history.
-
-Volatility skew describes how:
-
-```text
-OTM put volatility > ATM volatility
-```
-
-During market stress:
-
-```text
-skew steepens dramatically
-```
-
-Deep OTM puts become much more expensive.
-
-Equity markets have downside skew:
-
-```text
-OTM puts IV > ATM IV
-```
-
-In crashes, this steepens dramatically.
-
-#### Algebraic Framing
-
-Let $\sigma(K)$ represent implied volatility at strike (K).
-
-Skew is approximately:
-
-$\frac{\partial \sigma}{\partial K}$
-
-With traders in practice measure using:
-
-$\text{Skew} = \frac{\partial \sigma}{\partial log(K)}$
-
-or using delta-based metrics.
-
-Most traders measure skew using 25-delta options:
-
-$\text{Skew} = \sigma_{25\Delta\ put} - \sigma_{ATM}$
-
-Skew beta measures the hedge sensitivity to changes in that slope.
-
-So a simplified hedge sensitivity metric:
-
-$\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
+$\text{Hedge Efficiency} = \frac{\text{Crash payoff \%}}{\text{Annual carry \%}}$
 
 *Example:*
 
-OTM puts:
+For:
 
 ```text
-25% IV
+Crash payoff = $1.5M
+Annual Carry = $300k
 ```
 
-During crisis:
+Result:
 
 ```text
-prices drop + skew steepens → OTM puts explode
->40% IV
+Efficiency = 1.5M / 300k = 5x payoff relative to cost
 ```
 
-ATM volatility may rise less:
+### Skew Exposure / Beta
 
-```text
-20% → 30%
-```
-
-OTM puts gain disproportionately. Many tail-risk strategies rely heavily on skew beta, using far OTM strikes.
-
-The gain in OTM put value is fully true because of:
-
-```text
-delta + vega + skew + convexity
-```
-
-Not only due to skew.
+See [Volatility Skew / Skew Exposure / Skew Beta](#volatility-skew--skew-exposure--skew-beta) for definition details.
 
 #### Simple Skew Metric
 
@@ -1480,132 +1573,6 @@ options expensive
 carry high
 ```
 
-### Crash Payoff Ratio / Tail Hedge Effectiveness
-
-#### Definition of Crash Payoff Ratio
-
-Crash payoff ratio measures how much of the portfolio loss is offset by the hedge during a crash. This metric evaluates hedge effectiveness, not convexity.
-
-It answers:
-> If markets crash, how much of the loss does the hedge absorb?
-
-#### Crash Payoff Ratio Metric
-
-Let:
-
-$Portfolio \ Loss$ = portfolio decline under crash scenario
-
-$Hedge\ Gain$ = hedge profit under same scenario
-
-Define:
-
-$\text{Crash Payoff Ratio} = \frac{Hedge\ Gain}{Portfolio\ Loss}$
-
-Example:
-
-```text
-Portfolio = $10M
-SPX −25%
-Portfolio loss = −$2.5M
-Hedge profit = +$800k
-```
-
-Result:
-
-```text
-Crash Payoff Ratio = 800k / 2.5M = 32%
-```
-
-#### Interpretation of Crash Payoff Ratio
-
-Typical ranges:
-
-| Ratio  | Meaning               |
-| ------ | --------------------- |
-| <10%   | hedge ineffective     |
-| 10–25% | partial protection    |
-| 25–40% | strong hedge          |
-| >40%   | very aggressive hedge |
-
-Most long-equity hedge programs aim for:
-
-```text
-20–35% loss offset at −25% market decline
-```
-
-This provides liquidity to rebalance portfolios during crises.
-
-### Hedge Efficiency Ratio
-
-Measures how much downside risk the hedge offsets relative to cost.
-
-#### HER Metric
-
-$\text{Hedge Efficiency} = \frac{\text{Crash payoff}}{\text{Annual carry}}$
-
-or using percentage terms
-
-$\text{Hedge Efficiency} = \frac{\text{Crash payoff \%}}{\text{Annual carry \%}}$
-
-*Example:*
-
-Crash payoff:
-
-```text
-$1.5M
-```
-
-```text
-$300k
-```
-
-Efficiency:
-
-```text
-5
-```
-
-```text
-5× payoff relative to cost
-```
-
-### Net Delta
-
-Delta represents the first derivative of option value with respect to the underlying price. ([Wikipedia][wiki-greeks])
-
-$\Delta = \frac{\partial V}{\partial S}$
-
-**Net Delta** measures directional exposure of the entire portfolio to the underlying.
-
-#### Portfolio Metric
-
-$\text{Net Delta} = \sum_i \Delta_i \times N_i$
-
-Where:
-
-- $N_i$ = number of contracts
-
-*Example:*
-
-```text
-Equities: $10M
-Put hedge delta: -0.20
-```
-
-Effective exposure:
-
-```text
-$10M × (1 − 0.20) = $8M
-```
-
-#### Interpretation of Net Delta
-
-| Value | Meaning        |
-| ----- | -------------- |
-| 1.0   | fully exposed  |
-| 0.8   | 20% hedge      |
-| 0.0   | market neutral |
-
 ### Gamma Liquidity Risk
 
 Gamma measures how much delta changes when the market moves. Dealer positioning can strongly influence short-term market dynamics.
@@ -1674,7 +1641,7 @@ requires rebalancing
 
 #### Hedge Decision Rule on Results
 
-Tail funds look at dealer gamma usually as a secondary or tactical overlay, not a core allocation trigger. If they are looking at it, they would tend to add hedges when:
+Tail funds look at dealer gamma usually as a secondary or tactical overlay, not a core allocation trigger. If they consider it, they may add hedges when:
 
 ```text
 dealer gamma negative
@@ -2084,9 +2051,45 @@ because crisis volatility often lifts long-dated implied volatility as well.
 
 ### 12. Skew Convexity
 
-Sensitivity of the hedge to skew steepening, not just skew level.
+#### Skew Convexity Definition
 
-<!--TODO: Fill out-->
+Skew convexity measures how much the hedge benefits when downside skew steepens during market stress. It is distinct from skew level. Skew level tells you how expensive downside protection is today; skew convexity tells you how much the hedge may gain if downside skew becomes even steeper in a selloff.
+
+It answers:
+
+> How much additional hedge value comes from crisis-driven steepening of put skew, beyond the move in spot and the change in overall volatility level?
+
+#### Skew Convexity Metric
+
+A practical way to measure skew convexity is by repricing the hedge under a skew-steepening scenario while holding spot and ATM volatility assumptions explicit.
+
+Let:
+
+$V_{base} = \text{current hedge value}$
+
+$V_{skew-up} = \text{hedge value after a skew-steepening shock}$
+
+$Skew = \sigma_{25\Delta\ put} − \sigma_{ATM}$
+
+Define a simple scenario metric as:
+
+$\text{Skew Convexity} = \frac{V_{skew-up} − V_{base}}{\text{Portfolio Value}}$
+
+You can also define sensitivity form as:
+
+$\text{Skew Sensitivity} = \frac{\partial V} {\partial Skew}$
+
+*Example:*
+
+If ATM volatility rises from 20% to 26% and 25Δ put volatility rises from 27% to 38%, deep OTM puts may gain disproportionately versus a hedge concentrated closer to ATM. The difference between those repriced hedge values reflects skew convexity.
+
+#### Skew Convexity Interpretation
+
+High skew convexity means the hedge is positioned to benefit strongly from panic repricing in downside puts. This is usually associated with deeper OTM strikes and longer-dated crash insurance structures. Low skew convexity means the hedge depends more on delta and ATM vega than on crisis steepening of downside skew.
+
+#### Skew Convexity Practical Use
+
+Tail-hedge programs monitor skew convexity because some hedges look adequate in flat-vol or parallel-vol scenarios but underperform in real crises if they do not own enough downside skew. It is particularly important when comparing ATM or slightly OTM hedges versus deeper OTM crash structures.
 
 ### 13. Liquidity Risk
 
@@ -2298,6 +2301,10 @@ sell old hedge
 buy new hedge closer to spot
 ```
 
+#### Rule 3 — crash monetization
+
+See [Monetizing crashes](#monetizing-crashes) for detail.
+
 ## PART IX — Monetization & Re-Risk Rules
 
 ### Monetizing crashes
@@ -2409,7 +2416,7 @@ price drop
 
 ### Holding hedges passively instead of rolling them
 
-Retail investor often:
+Retail investors often:
 
 ```text
 buy 2-year puts
