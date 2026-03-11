@@ -35,14 +35,7 @@ Updated: 2026-03-11
   - [Liquidity / Spread](#liquidity--spread)
   - [Gamma Scalping](#gamma-scalping)
   - [Volatility Risk Premium](#volatility-risk-premium)
-- [PART V — Portfolio Tail Hedging Concepts](#part-v--portfolio-tail-hedging-concepts)
-  - [Structure 1 — Long OTM Puts (Pure Tail Hedge)](#structure-1--long-otm-puts-pure-tail-hedge)
-  - [Structure 2 — Put Spread Tail Hedge](#structure-2--put-spread-tail-hedge)
-  - [Structure 3 — Option Carry + Tail Hedge](#structure-3--option-carry--tail-hedge)
-  - [Structure 4 — Volatility Instrument Hedge](#structure-4--volatility-instrument-hedge)
-  - [Structure Selection](#structure-selection)
-  - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
-- [PART VI — Tail-Hedging Metrics](#part-vi--tail-hedging-metrics)
+- [PART V — Tail-Hedging Metrics](#part-v--tail-hedging-metrics)
   - [Net Delta](#net-delta)
   - [Crash Convexity](#crash-convexity)
   - [Crash Payoff Ratio / Tail Hedge Effectiveness](#crash-payoff-ratio--tail-hedge-effectiveness)
@@ -53,7 +46,27 @@ Updated: 2026-03-11
   - [Volatility Regime](#volatility-regime)
   - [Gamma Liquidity Risk](#gamma-liquidity-risk)
   - [Forward Variance Level](#forward-variance-level)
-- [PART VII — Institutional Hedge Dashboards](#part-vii--institutional-hedge-dashboards)
+- [PART VI — Portfolio Tail Hedging Concepts \& Structures](#part-vi--portfolio-tail-hedging-concepts--structures)
+  - [Structure 1 — Long OTM Puts (Pure Tail Hedge)](#structure-1--long-otm-puts-pure-tail-hedge)
+  - [Structure 2 — Put Spread Tail Hedge](#structure-2--put-spread-tail-hedge)
+  - [Structure 3 — Option Carry + Tail Hedge](#structure-3--option-carry--tail-hedge)
+  - [Structure 4 — Volatility Instrument Hedge](#structure-4--volatility-instrument-hedge)
+  - [Structure Selection](#structure-selection)
+  - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
+- [PART VII — Designing a Tail Hedge Program](#part-vii--designing-a-tail-hedge-program)
+  - [Strike Selection](#strike-selection)
+  - [Maturity Selection](#maturity-selection)
+  - [Rolling Rules](#rolling-rules)
+  - [Numerical Example](#numerical-example)
+  - [Evaluating and Testing Tail Hedge Strategies](#evaluating-and-testing-tail-hedge-strategies)
+  - [Typical Hedge Program Targets](#typical-hedge-program-targets)
+- [PART VIII — Monetization \& Re-Risk Rules](#part-viii--monetization--re-risk-rules)
+  - [Monetizing crashes](#monetizing-crashes)
+- [PART IX — Common Structural Mistakes](#part-ix--common-structural-mistakes)
+  - [Buying protection when volatility is already high](#buying-protection-when-volatility-is-already-high)
+  - [Buying puts that are not far enough OTM](#buying-puts-that-are-not-far-enough-otm)
+  - [Holding hedges passively instead of rolling them](#holding-hedges-passively-instead-of-rolling-them)
+- [PART X — Institutional Hedge Dashboards](#part-x--institutional-hedge-dashboards)
   - [Introduction](#introduction)
   - [1. Carry vs. Convexity Chart](#1-carry-vs-convexity-chart)
   - [2. Crash Scenario Table \& Payoff Ratio](#2-crash-scenario-table--payoff-ratio)
@@ -69,18 +82,6 @@ Updated: 2026-03-11
   - [12. Skew Convexity](#12-skew-convexity)
   - [13. Liquidity Risk](#13-liquidity-risk)
   - [14. Hedge Rebalance Triggers](#14-hedge-rebalance-triggers)
-- [PART VIII — Designing a Tail Hedge Program](#part-viii--designing-a-tail-hedge-program)
-  - [Strike Selection](#strike-selection)
-  - [Maturity Selection](#maturity-selection)
-  - [Rolling Rules](#rolling-rules)
-  - [Numerical Example](#numerical-example)
-  - [Evaluating and Testing Tail Hedge Strategies](#evaluating-and-testing-tail-hedge-strategies)
-- [PART IX — Monetization \& Re-Risk Rules](#part-ix--monetization--re-risk-rules)
-  - [Monetizing crashes](#monetizing-crashes)
-- [PART X — Common Structural Mistakes](#part-x--common-structural-mistakes)
-  - [Buying protection when volatility is already high](#buying-protection-when-volatility-is-already-high)
-  - [Buying puts that are not far enough OTM](#buying-puts-that-are-not-far-enough-otm)
-  - [Holding hedges passively instead of rolling them](#holding-hedges-passively-instead-of-rolling-them)
 - [PART XI — Educational Resources](#part-xi--educational-resources)
   - [Books](#books)
   - [Research Papers on Tail Hedging](#research-papers-on-tail-hedging)
@@ -349,7 +350,8 @@ Where $N(\cdot)$ is the standard normal cumulative distribution function.
 
 #### Practical interpretation
 
-- Approximate probability of finishing ITM (for short maturities, with low interest rate environments, in the ATM region)
+- Delta is sometimes interpreted as the risk-neutral probability of finishing ITM,
+but this approximation is most accurate for short-dated ATM options.
 - Effective exposure to the underlying
 
 Portfolio:
@@ -714,46 +716,7 @@ $\text{Skew} = \frac{\partial \sigma}{\partial log(K)}$
 
 or using delta-based metrics.
 
-Most traders measure skew using 25-delta options:
-
-$\text{Skew} = \sigma_{25\Delta\ put} - \sigma_{ATM}$
-
-Skew beta measures the hedge sensitivity to changes in that slope.
-
-So a simplified hedge sensitivity metric:
-
-$\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
-
-*Example:*
-
-OTM puts:
-
-```text
-25% IV
-```
-
-During crisis:
-
-```text
-prices drop + skew steepens → OTM puts explode
->40% IV
-```
-
-ATM volatility may rise less:
-
-```text
-20% → 30%
-```
-
-OTM puts gain disproportionately. Many tail-risk strategies rely heavily on skew beta, using far OTM strikes.
-
-The gain in OTM put value is fully true because of:
-
-```text
-delta + vega + skew + convexity
-```
-
-Not only due to skew.
+See [Skew Exposure / Beta](#skew-exposure--beta) for further details on metric implementation.
 
 ### Term Structure of Volatility
 
@@ -819,6 +782,9 @@ delta acceleration (gamma)
 
 This combination causes option hedges to produce small gains in moderate selloffs but large gains in severe crashes.
 
+Convexity answers the question:
+> How much does my hedge improve as the market moves from a correction into a crisis?
+
 Example payoff structure:
 
 | Market move | Hedge P&L     |
@@ -836,6 +802,8 @@ fund portfolio rebalancing
 ```
 
 For a tail-hedge program, convexity is evaluated using crash scenario analysis, not just the instantaneous gamma of the options.
+
+See [Crash Convexity](#crash-convexity) and [Crash Convexity Metric](#crash-convexity-metric) for further details.
 
 ### Optionality
 
@@ -943,213 +911,7 @@ Premium:
 
 Option sellers capture this on average.
 
-## PART V — Portfolio Tail Hedging Concepts
-
-The goal of tail hedging is **not to offset small drawdowns**.
-
-```text
-small losses tolerated
-large crashes offset
-```
-
-It is to provide:
-
-```text
-liquidity during crises
-```
-
-This liquidity lets investors:
-
-```text
-rebalance
-buy assets cheaply
-avoid forced selling
-```
-
-For a hedged equity portfolio, key metrics to track are:
-
-| Metric                                       | What it answers                        |
-| -------------------------------------------- | -------------------------------------- |
-| [Crash Convexity](#crash-convexity)          | How much protection in a crash         |
-| [Vega Sufficiency](#vega-sufficiency)        | Do we benefit from vol spikes          |
-| [Theta Carry](#theta-carry--insurance-cost)  | Cost of holding hedge                  |
-| [Skew Exposure / Beta](#skew-exposure--beta) | Sensitivity to downside skew           |
-| [Volatility Regime](#volatility-regime)      | Whether options are expensive or cheap |
-
-Professional hedge design is essentially optimizing:
-
-```text
-maximize crash convexity
-maximize vega sufficiency
-maximize skew beta
-minimize theta carry
-```
-
-given the current volatility regime.
-
-Volatility funds tend to use four broad architectures.
-
-### Structure 1 — Long OTM Puts (Pure Tail Hedge)
-
-This is the **simplest design**.
-
-Structure:
-
-```text
-long deep OTM puts
-long maturities
-rolled systematically
-```
-
-Example:
-
-```text
-SPX = 5000
-Buy 3500 puts
-18 months maturity
-```
-
-#### Characteristics
-
-| Feature      | Value    |
-| ------------ | -------- |
-| Crash payoff | huge     |
-| Carry cost   | moderate |
-| Complexity   | low      |
-
-#### Typical users
-
-```text
-Universities
-many institutional tail funds
-```
-
-### Structure 2 — Put Spread Tail Hedge
-
-Structure
-
-```text
-buy deep OTM put
-sell further OTM put
-```
-
-Example:
-
-```text
-buy 3500 put
-sell 2500 put
-```
-
-#### Purpose
-
-Reduce cost. Carry becomes:
-
-```text
-1–2% instead of 3–5%
-```
-
-Trade-off:
-
-```text
-cap extreme crash payoff
-```
-
-### Structure 3 — Option Carry + Tail Hedge
-
-Some funds combine:
-
-```text
-short volatility income
-+
-long crash hedge
-```
-
-Example:
-
-```text
-sell short-dated options
-buy long-dated puts
-```
-
-This attempts to **finance the hedge with volatility risk premium**.
-
-Risks:
-
-```text
-timing mismatch
-```
-
-### Structure 4 — Volatility Instrument Hedge
-
-Instead of SPX puts, funds may use:
-
-```text
-VIX futures
-VIX options
-variance swaps
-```
-
-Reason: Volatility spikes faster than price drops.
-
-Example:
-
-```text
-SPX -20%
-VIX 20 → 70
-```
-
-These strategies require **more active management**.
-
-### Structure Selection
-
-For simplicity, Structure 1 is usually a good fit for many investors.
-
-Typical improvements to be considered are
-
-- strike layering:
-
-Example:
-
-```text
-20% OTM
-30% OTM
-40% OTM
-```
-
-- roll annually
-- tracking convexity vs. carry
-
-### A Typical Institutional Hedge Example
-
-Portfolio:
-
-```text
-$10M equity
-```
-
-Hedge allocation:
-
-```text
-1.5-2.5% per year
-```
-
-Put portfolio
-
-| Strike | Weight | Maturity  |
-| ------ | ------ | --------- |
-| 4000   | 40%    | 18 months |
-| 3500   | 40%    | 18 months |
-| 3000   | 20%    | 18 months |
-
-Crash scenario:
-
-| Market move | Hedge payoff |
-| ----------- | ------------ |
-| -10%        | small        |
-| -20%        | moderate     |
-| -40%        | very large   |
-
-## PART VI — Tail-Hedging Metrics
+## PART V — Tail-Hedging Metrics
 
 ### Net Delta
 
@@ -1194,17 +956,7 @@ $10M × (1 − 0.20) = $8M
 
 Crash convexity measures how much a hedge accelerates in value as market losses deepen. It captures the non-linear payoff profile of options during large drawdowns. Convex strategies benefit from extreme moves in the benchmark index.[Informa Connect][informaconnect]
 
-Crash convexity reflects the combined effect of:
-
-```text
-delta acceleration
-+ gamma
-+ volatility expansion (vega)
-+ skew steepening
-```
-
-It answers the question:
-> How much does my hedge improve as the market moves from a correction into a crisis?
+See [Convexity](#convexity) for further details.
 
 #### Crash Convexity Metric
 
@@ -1394,18 +1146,17 @@ $\nu = \frac{\partial V}{\partial \sigma}$ be vega
 
 Define:
 
-$\text{Vega Sufficiency} = \frac{\text{Portfolio Vega}}{\text{Underlying Value}}$
+$\text{Vega Sufficiency} = \frac{\text{Portfolio Vega}}{\text{Portfolio Value}}$
 
 Some managers scale it relative to expected vol spike:
 
 $\text{Expected Vega Gain} = \nu \times \Delta \sigma$
 
-Institutional programs usually normalize vega by:
+Institutional programs usually normalize vega to portfolio **notional**, not underlying value. Alternatives to above definition of vega sufficiency include:
 
 ```text
-portfolio notional
-or
-1% market move
+vega / 1% underlying move
+vega / expected variance shock
 ```
 
 #### Common Metrics for Vega Sufficiency
@@ -1520,6 +1271,45 @@ Skew
 27 − 20 = 7 vol points
 ```
 
+#### Skew Beta
+
+Skew beta measures the hedge sensitivity to changes in that slope.
+
+So a simplified hedge sensitivity metric:
+
+$\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
+
+*Example:*
+
+OTM puts:
+
+```text
+25% IV
+```
+
+During crisis:
+
+```text
+prices drop + skew steepens → OTM puts explode
+>40% IV
+```
+
+ATM volatility may rise less:
+
+```text
+20% → 30%
+```
+
+OTM puts gain disproportionately. Many tail-risk strategies rely heavily on skew beta, using far OTM strikes.
+
+The gain in OTM put value is fully true because of:
+
+```text
+delta + vega + skew + convexity
+```
+
+Not only due to skew.
+
 ### Volatility Regime
 
 Volatility regime refers to the **general level and behavior of volatility in the market environment**. Markets cycle between low-volatility and high-volatility environments.
@@ -1622,9 +1412,13 @@ amplified volatility
 
 $\text{Gamma Exposure} = \sum_i \Gamma_i N_i$
 
-Alternatively:
+Simplisitically:
 
 $GEX = \sum (\Gamma \times OpenInterest)$
+
+More typically:
+
+$GEX \approx Gamma × OI × contract size × underlying²$
 
 Many sites publish estimates.
 
@@ -1704,9 +1498,805 @@ Tail funds often prefer buying:
 cheap long-dated vol
 ```
 
-Because crashes often **inflate long-dated volatility suddenly**.
+Because crashes inflate short-dated volatility sharply and usually
+reprice long-dated volatility higher as well..
 
-## PART VII — Institutional Hedge Dashboards
+## PART VI — Portfolio Tail Hedging Concepts & Structures
+
+The goal of tail hedging is **not to eliminate volatility or offset small drawdowns**. The goal is to create **liquidity during crises.***
+
+The investor is looking to:
+
+```text
+tolerate small losses
+offset large crashes
+```
+
+During a crash, the hedge produces cash that can be used to:
+
+```text
+provide liquidity during crises
+```
+
+This liquidity lets investors:
+
+```text
+rebalance
+buy equities cheaply
+avoid forced selling
+```
+
+This is why many institutional investors treat tail hedges as a **strategic portfolio allocation**, not a tactical trade.
+
+For a hedged equity portfolio, key metrics to track are:
+
+| Metric                                       | What it answers                        |
+| -------------------------------------------- | -------------------------------------- |
+| [Crash Convexity](#crash-convexity)          | How much protection in a crash         |
+| [Vega Sufficiency](#vega-sufficiency)        | Do we benefit from vol spikes          |
+| [Theta Carry](#theta-carry--insurance-cost)  | Cost of holding hedge                  |
+| [Skew Exposure / Beta](#skew-exposure--beta) | Sensitivity to downside skew           |
+| [Volatility Regime](#volatility-regime)      | Whether options are expensive or cheap |
+
+Professional hedge design is essentially optimizing:
+
+```text
+maximize crash convexity
+maximize vega sufficiency
+maximize skew beta
+minimize theta carry
+```
+
+given the current volatility regime.
+
+Volatility funds tend to use four broad architectures.
+
+### Structure 1 — Long OTM Puts (Pure Tail Hedge)
+
+This is the **simplest design**.
+
+Structure:
+
+```text
+long deep OTM puts
+long maturities
+rolled systematically
+```
+
+Example:
+
+```text
+SPX = 5000
+Buy 3500 puts
+18 months maturity
+```
+
+#### Characteristics
+
+| Feature      | Value    |
+| ------------ | -------- |
+| Crash payoff | huge     |
+| Carry cost   | moderate |
+| Complexity   | low      |
+
+#### Typical users
+
+```text
+Universities
+many institutional tail funds
+```
+
+### Structure 2 — Put Spread Tail Hedge
+
+Structure
+
+```text
+buy deep OTM put
+sell further OTM put
+```
+
+Example:
+
+```text
+buy 3500 put
+sell 2500 put
+```
+
+#### Purpose
+
+Reduce cost. Carry becomes:
+
+```text
+1–2% instead of 3–5%
+```
+
+Trade-off:
+
+```text
+cap extreme crash payoff
+```
+
+### Structure 3 — Option Carry + Tail Hedge
+
+Some funds combine:
+
+```text
+short volatility income
++
+long crash hedge
+```
+
+Example:
+
+```text
+sell short-dated options
+buy long-dated puts
+```
+
+This attempts to **finance the hedge with volatility risk premium**.
+
+Risks:
+
+```text
+timing mismatch
+```
+
+### Structure 4 — Volatility Instrument Hedge
+
+Instead of SPX puts, funds may use:
+
+```text
+VIX futures
+VIX options
+variance swaps
+```
+
+Reason: Volatility spikes faster than price drops.
+
+Example:
+
+```text
+SPX -20%
+VIX 20 → 70
+```
+
+These strategies require **more active management**.
+
+### Structure Selection
+
+For simplicity, Structure 1 is usually a good fit for many investors.
+
+Typical improvements to be considered are
+
+- strike layering:
+
+Example:
+
+```text
+20% OTM
+30% OTM
+40% OTM
+```
+
+- roll annually
+- tracking convexity vs. carry
+
+### A Typical Institutional Hedge Example
+
+Portfolio:
+
+```text
+$10M equity
+```
+
+Hedge allocation:
+
+```text
+1.5-2.5% per year
+```
+
+Put portfolio
+
+| Strike | Weight | Maturity  |
+| ------ | ------ | --------- |
+| 4000   | 40%    | 18 months |
+| 3500   | 40%    | 18 months |
+| 3000   | 20%    | 18 months |
+
+Crash scenario:
+
+| Market move | Hedge payoff |
+| ----------- | ------------ |
+| -10%        | small        |
+| -20%        | moderate     |
+| -40%        | very large   |
+
+## PART VII — Designing a Tail Hedge Program
+
+A typical tail hedge fund uses three design layers of strike, maturity and roll.
+
+### Strike Selection
+
+The **“smile ladder” (multi-strike hedge)** is one of the most important design choices in a long-term tail-hedging program. Almost every professional tail-hedge fund uses **multiple strikes instead of a single deep OTM put**, because it dramatically improves the **convexity-to-carry trade-off** and stabilizes the hedge across different crash sizes.
+
+#### Why a Single-Strike Hedge Is Inefficient
+
+Suppose the market is:
+
+```text
+SPX = 5000
+```
+
+You buy a single deep OTM put:
+
+```text
+Strike = 3500  (30% OTM)
+```
+
+##### Payoff behavior
+
+| SPX move | Put payoff     |
+| -------- | -------------- |
+| -10%     | almost nothing |
+| -20%     | small          |
+| -30%     | large          |
+| -40%     | very large     |
+
+The problem:
+
+- hedge only activates in very large crashes
+- moderate drawdowns remain largely unprotected
+
+You end up with **“gap risk” between protection layers**.
+
+#### The Smile Ladder Concept
+
+Instead of one strike, funds build **layers of protection across multiple strikes**.
+
+Example ladder:
+
+| Strike | Distance OTM |
+| ------ | ------------ |
+| 4000   | 20%          |
+| 3500   | 30%          |
+| 3000   | 40%          |
+
+Each strike responds to **different crash severities**.
+
+##### How the payoff changes
+
+| SPX move | 20% put  | 30% put | 40% put  |
+| -------- | -------- | ------- | -------- |
+| -10%     | small    | 0       | 0        |
+| -20%     | moderate | small   | 0        |
+| -30%     | large    | large   | moderate |
+| -40%     | huge     | huge    | huge     |
+
+Now the hedge works **across the entire crash spectrum**.
+
+#### Why Funds Use Multiple Strikes
+
+There are three reasons.
+
+##### 1. Smoother hedge payoff
+
+A ladder creates a **continuous convex payoff curve**.
+
+Instead of:
+
+```text
+flat → explosive
+```
+
+You get:
+
+```text
+small gain → medium gain → large gain
+```
+
+##### 2. Better skew exposure
+
+OTM skew increases as strike decreases. Example typical SPX skew:
+
+| Strike  | IV  |
+| ------- | --- |
+| ATM     | 20% |
+| 20% OTM | 25% |
+| 30% OTM | 28% |
+| 40% OTM | 32% |
+
+Deep strikes benefit **most from skew expansion during crashes**.
+
+##### 3. Better carry efficiency
+
+Different strikes have different theta.
+
+*Example:*
+
+| Strike  | Annual carry |
+| ------- | ------------ |
+| 20% OTM | high         |
+| 30% OTM | medium       |
+| 40% OTM | low          |
+
+Blending them reduces overall carry cost.
+
+#### Selecting Strikes
+
+Most tail-hedge funds allocate across **three to five strikes using 20–40% OTM puts****.
+
+Typical example:
+
+```text
+SPX = 5000
+```
+
+| Strike         | Allocation |
+| -------------- | ---------- |
+| 4000 (20% OTM) | 40%        |
+| 3500 (30% OTM) | 35%        |
+| 3000 (40% OTM) | 25%        |
+
+Why this weighting works:
+
+- nearer strikes protect **moderate corrections**
+- deeper strikes capture **crisis convexity**
+- lower carry cost
+- stronger skew beta
+- massive convex payoff in crashes
+
+### Maturity Selection
+
+Tail hedges usually use **long-dated options**.
+
+Typical maturities:
+
+| Maturity    | Purpose                     |
+| ----------- | --------------------------- |
+| 6-12 months | tactical hedging            |
+| ~18 months  | common institutional choice |
+| ~24 months  | strong vega exposure        |
+
+Most funds choose 18–24 months to provide:
+
+```text
+high vega
+low theta (on a relative basis)
+stable convexity
+```
+
+This is why **LEAPS are common** in institutional programs.
+
+See [LEAPS](#leaps) for further details.
+
+Note: Long maturities have low theta on a relative or % basis, but the total premium paid may be larger.
+
+#### Maturity / Time Ladder
+
+Instead of a **single maturity**, some funds use a **time ladder as well**.
+
+| Maturity  | Allocation |
+| --------- | ---------- |
+| 12 months | 30%        |
+| 18 months | 40%        |
+| 24 months | 30%        |
+
+This smooths **roll risk**.
+
+### Rolling Rules
+
+Most programs roll on **time or moneyness triggers**. Hedge programs rarely hold options to expiry.
+
+#### Rule 1 — time-based roll
+
+Rolling early preserves **convexity per dollar of cost**.
+
+Typical roll rule:
+
+```text
+buy 18-month puts
+roll after 9–12 months
+```
+
+This avoids rolling just before theta acceleration in the final weeks of option life. As time decreases, decay increases rapidly.
+
+#### Rule 2 — strike rebalancing
+
+If market rallies:
+
+```text
+puts become deeper OTM
+```
+
+Funds may:
+
+```text
+sell old hedge
+buy new hedge closer to spot
+```
+
+#### Rule 3 — crash monetization
+
+See [Monetizing crashes](#monetizing-crashes) for detail.
+
+### Numerical Example
+
+Suppose:
+
+```text
+Equity portfolio = $10M
+Annual hedge budget = 2%
+```
+
+So hedge budget is:
+
+```text
+$200k per year
+```
+
+#### Smile Ladder Structure
+
+Assume:
+
+```text
+SPX = 5000
+```
+
+Allocate hedge capital:
+
+| Strike | Allocation | Maturity  |
+| ------ | ---------- | --------- |
+| 4000   | 40%        | 18 months |
+| 3500   | 35%        | 18 months |
+| 3000   | 25%        | 18 months |
+
+#### Crash Scenario Simulation
+
+| SPX move | Hedge payoff |
+| -------- | ------------ |
+| -10%     | small        |
+| -20%     | $400k        |
+| -30%     | $1.3M        |
+| -40%     | $3M+         |
+
+The hedge doesn't eliminate losses, but it **dramatically reduces drawdown**.
+
+### Evaluating and Testing Tail Hedge Strategies
+
+You can use three lenses at once to evaluate a long-dated downside hedge program.
+
+#### 1. Anchor to public strategy indexes
+
+Cboe’s **PPUT** index holds the S&P 500 and buys a **monthly 5% OTM SPX put**, while **PPUT3M** buys **10% OTM quarterly-cycle SPX puts**. Those are useful “expensive / less expensive” public reference points for protective-put style hedging. ([CBOE][cobe-pp-indices])
+
+#### 2. Bottom-up price your intended hedge today
+
+Use the live SPX option surface and price the exact ladder you want: strikes, maturities, roll dates, and sizing. For USD discounting, use a Treasury or SOFR-style term structure rather than a flat hand-waved rate. The VIX methodology and Cboe volatility materials are useful references for how the market thinks about implied variance and term structure. ([CBOE][cboe-vix-maths])
+
+#### 3. Historical simulation
+
+Replay your roll rules through history using SPX returns plus a proxy for long-vol pricing. This is the most informative estimate because hedge cost depends heavily on the volatility regime and skew when you initiate and roll. Cboe’s protective-put and options-based benchmark materials are good sanity checks for what protective strategies have looked like historically. ([CBOE][cobe-pp-indices])
+
+#### Metrics to Track During Testing
+
+Estimate these four quantities:
+
+$\text{Annual Carry Budget} = \frac{\text{Premiums Paid} - \text{Monetization Gains Before Crash}}{\text{Portfolio Value}}$
+
+$\text{Crash Payoff Ratio}_{x%} = \frac{\text{Hedge MTM after }x%\text{ drop}}{\text{Portfolio Value}}$
+
+$\text{Net Crisis Offset}_{x%} = \frac{\text{Hedge Gain}}{\text{Equity Loss at }x%\text{ drop}}$
+
+$\text{Carry-to-Convexity} = \frac{\text{Crash Payoff Ratio}_{25%}}{\text{Annual Carry Budget}}$
+
+Those four metrics tell you, respectively:
+
+- what it costs in normal years,
+- what it might be worth in a crash,
+- how much of the equity drawdown it offsets, and
+- whether the trade-off is attractive
+
+#### Practical First Pass Estimate
+
+For a **systematic long-dated OTM put program** on a broad equity portfolio, a reasonable first-pass expectation is usually:
+
+- **lean / deep OTM ladder**: roughly **1%–2% per year**
+- **balanced ladder**: roughly **2%–4% per year**
+- **richer / closer-to-spot protection**: roughly **4%+ per year**
+
+That is a heuristic, not a law. The cost depends mainly on moneyness, tenor, roll frequency, and whether you monetize into spikes. Public Cboe protective-put indexes are a useful reminder that nearer-strike, frequent-roll protection is meaningfully costlier than deeper-OTM tail structures. ([CBOE][cobe-pp-indices])
+
+#### Suggested Starting Point
+
+Suggest to start with a smile ladder similar to this:
+
+- 18-month tenor target
+- roll when remaining maturity falls to 9–12 months
+- strikes at about **20% / 30% / 40% OTM**
+- size so total premium spend equals your annual hedge budget
+
+Then estimate annual cost as:
+
+$\text{Annualized Cost Today} \approx \frac{\text{Total Premium Outlay}}{\text{Portfolio Value}} \times \frac{12}{\text{Months Until Roll}}$
+
+Example:
+
+$\text{Portfolio} = \$10M$
+
+$\text{Planned Roll Interval} = 12 \text{ months}$
+
+$\text{Premium Outlay for Ladder} = \$225k$
+
+$\text{Estimated Annual Cost} = \$225k / \$10M = 2.25\%$
+
+That is your **starting carry estimate before monetization gains**.
+
+#### Including Monetization in the Estimate
+
+Pure premium spend overstates long-run cost if you plan to harvest gains in stress.
+
+Define a monetization rule such as:
+
+- sell 25% of hedge if VIX doubles
+- sell another 25% if SPX falls 15%
+- reset ladder after volatility normalizes
+
+Then your realized long-run cost becomes:
+
+$\text{Net Annual Cost} = \frac{\text{Premiums Paid} - \text{Crisis Monetization Gains} + \text{Roll Slippage}}{\text{Portfolio Value}}$
+
+This distinction matters a lot. Tail-hedge funds are usually not just “buy and bleed”; they often **buy systematically and harvest opportunistically**.
+
+#### Historical Backtesting Methodology
+
+Run this monthly across as long a history as your data supports:
+
+1. Start with portfolio value (P_t).
+2. On each roll date, buy your target ladder.
+3. Use the option market or a proxy surface to mark the hedge.
+4. Apply your monetization rules.
+5. Record:
+   1. gross premium paid
+   2. net carry
+   3. hedge MTM in drawdowns
+   4. offset ratio in the worst months
+
+Your outputs should be:
+
+- average annual carry
+- median annual carry
+- 90th percentile annual carry
+- payoff at SPX down 10%, 20%, 30%, 40%
+- worst “bleed year”
+- best “crisis monetization year”
+
+That gives you the answer you actually need: not “what does it cost,” but “what does it cost across regimes?”
+
+#### Public data you can use
+
+For a clean public-data version:
+
+- **SPX / S&P 500 history** for underlying path and drawdowns. S&P describes the index and methodology for the benchmark. ([S&P Global][spglobal])
+- **VIX history** as a public proxy for the implied-volatility regime. Cboe provides historical VIX data and methodology. ([cboe.com][cboe-vix-historical])
+- **Treasury yields** for discounting and carry assumptions. FRED is a practical public source for Treasury curve points. ([CBOE][hist-put-writing])
+- **PPUT / PPUT3M methodology** for public benchmark protective-put structures you can compare against. ([CBOE][cobe-pp-indices])
+
+#### Usable Approximation in absence of Full Historical Option Chains
+
+Use a regime-based mapping:
+
+$\text{Estimated Premium Rate} = f(\text{Tenor}, \text{Moneyness}, \text{VIX Regime}, \text{Skew Regime})$
+
+For example, bucket history into:
+
+- VIX < 15
+- 15 ≤ VIX < 20
+- 20 ≤ VIX < 30
+- VIX ≥ 30
+
+Then assign a rough premium multiple by strike depth:
+
+- 20% OTM = 1.0x
+- 30% OTM = 0.5x–0.7x
+- 40% OTM = 0.2x–0.4x
+
+The precise numbers should come from current market quotes or a chain dataset, but this regime approach is often good enough to decide whether your budget should be 1.5%, 2.5%, or 4%.
+
+#### Starting Recommendations
+
+For the goal of **economic downside protection with long-dated OTM puts while keeping carry under control**, you can start by testing three candidate programs:
+
+##### Program A: Lean Tail
+
+- 20% / 30% / 40% OTM
+- weights 25 / 45 / 30
+- 18 months, roll at 9 months
+
+##### Program B: Balanced
+
+- 15% / 25% / 35% OTM
+- weights 35 / 40 / 25
+- 18 months, roll at 12 months
+
+##### Program C: Richer
+
+- 10% / 20% / 30% OTM
+- weights 40 / 35 / 25
+- 12–18 months, roll at 9 months
+
+Then compare:
+
+$\text{Annual Carry},\ \text{Crash Payoff} * {20\%},\ \text{Crash Payoff} * {30\%},\ \text{Offset Ratio},\ \text{Carry-to-Convexity}$
+
+#### A good sanity-check benchmark
+
+If your backtest shows:
+
+- annual carry below ~1% with huge crash protection, you are probably overestimating monetization or underestimating option cost
+- annual carry above ~5% for a strategic program, you are probably too close to the money or rolling too often
+- poor payoff until catastrophic crashes, you are probably too concentrated in the deepest strike
+
+That kind of sanity check is where comparing to public protective-put benchmarks like PPUT and PPUT3M helps. ([CBOE][cobe-pp-indices])
+
+#### Suggested Recording Structure for the Evaluation and Testing
+
+Build a table like this for each candidate structure:
+
+| Structure | Annual carry | Net annual carry | Payoff @ -20% | Payoff @ -30% | Offset ratio @ -30% | Carry/ convexity |
+| --------- | -----------: | ---------------: | ------------: | ------------: | ------------------: | ---------------: |
+| Lean tail |              |                  |               |               |                     |                  |
+| Balanced  |              |                  |               |               |                     |                  |
+| Richer    |              |                  |               |               |                     |                  |
+
+Once you populate that, the decision usually becomes obvious.
+
+### Typical Hedge Program Targets
+
+#### Typical institutional targets
+
+Carry budget:        1–3% per year
+Crash convexity:     10–25% @ -25% SPX
+Offset ratio:        20–35%
+Vega exposure:       $1–3k per $1M portfolio
+Skew exposure:       positive
+Roll interval:       9–12 months
+
+## PART VIII — Monetization & Re-Risk Rules
+
+### Monetizing crashes
+
+If crash occurs:
+
+```text
+puts explode in value
+```
+
+Funds typically:
+
+```text
+sell part of hedge
+lock in gains
+re-establish later
+```
+
+This is critical — otherwise hedges can **round-trip gains**.
+
+## PART IX — Common Structural Mistakes
+
+The biggest mistake retail hedgers make is:
+
+```text
+buying protection too late
+```
+
+Professional programs instead:
+
+```text
+1. buy protection systematically
+2. roll hedges regularly
+3. monetize gains during crashes
+```
+
+This **systematic approach** is what turns tail hedging from an expensive insurance policy into a **long-term portfolio stabilizer**.
+
+### Buying protection when volatility is already high
+
+Most investors buy puts after markets start falling, when fear is high and options are expensive.
+
+#### Why this is a problem
+
+When implied volatility $\sigma$ is high:
+
+- option premiums are inflated
+- skew is already steep
+- carry cost explodes
+
+Example:
+
+| Market state | 1-yr 30% OTM put IV |
+| ------------ | ------------------- |
+| Calm market  | 18%                 |
+| Correction   | 30%                 |
+| Crash        | 60%                 |
+
+Buying during stress locks in terrible carry.
+
+#### Professional approach
+
+Tail funds prefer to buy when:
+
+```text
+VIX < ~15–18
+skew moderate
+```
+
+Low-vol regimes historically provide the best hedge economics.
+
+### Buying puts that are not far enough OTM
+
+Investors often buy ATM or slightly OTM puts.
+
+Example:
+
+```text
+SPX = 5000
+Put strike = 4700
+```
+
+These options have:
+
+- high theta
+- moderate convexity
+- weaker skew exposure
+
+#### Why funds avoid this
+
+```text
+deep OTM puts reprice dramatically
+```
+
+Example (March 2020):
+
+| Strike      | Price change |
+| ----------- | ------------ |
+| ATM put     | ~5×          |
+| 30% OTM put | ~30×         |
+
+Deep OTM options benefit from:
+
+```text
+price drop
++ volatility spike
++ skew steepening
+```
+
+### Holding hedges passively instead of rolling them
+
+Retail investors often:
+
+```text
+buy 2-year puts
+wait
+watch them decay
+```
+
+Professional hedge programs **continuously manage maturity and strike**.
+
+Why?
+
+For ATM options, Theta roughly scales with:
+
+$\Theta \propto \frac{1}{T}$
+
+As maturity shortens, this relationship no longer holds, with time decay accelerating dramatically.
+
+Tail funds typically **roll hedges before this decay phase**.
+
+Gamma scales approximately to:
+
+$\Gamma \propto \frac{1}{\sqrt{T}}$
+
+## PART X — Institutional Hedge Dashboards
 
 ### Introduction
 
@@ -1854,13 +2444,13 @@ Low <-----|-----> High
 
 ### 4. Skew Exposure Meter
 
-See [Skew Exposure / Beta](#skew-exposure--beta) for details.
+See [Volatility Skew / Skew Exposure / Skew Beta](#volatility-skew--skew-exposure--skew-beta) and [Skew Exposure / Beta](#skew-exposure--beta) and for details.
 
 #### Percentile calculation
 
 Funds usually track:
 
-```python
+```text
 Skew percentile = current skew vs last 5–10 years
 ```
 
@@ -2227,592 +2817,6 @@ maintains target convexity
 controls carry cost
 preserves liquidity
 ```
-
-## PART VIII — Designing a Tail Hedge Program
-
-The goal of tail hedging is **not to eliminate volatility**. The goal is create **liquidity during crises.***
-
-During a crash, the hedge produces cash that can be used to:
-
-```text
-rebalance
-buy equities cheaply
-avoid forced selling
-```
-
-This is why many institutional investors treat tail hedges as a **strategic portfolio allocation**, not a tactical trade.
-
-A typical tail hedge fund uses three design layers of strike, maturity and roll.
-
-### Strike Selection
-
-The **“smile ladder” (multi-strike hedge)** is one of the most important design choices in a long-term tail-hedging program. Almost every professional tail-hedge fund uses **multiple strikes instead of a single deep OTM put**, because it dramatically improves the **convexity-to-carry trade-off** and stabilizes the hedge across different crash sizes.
-
-#### Why a Single-Strike Hedge Is Inefficient
-
-Suppose the market is:
-
-```text
-SPX = 5000
-```
-
-You buy a single deep OTM put:
-
-```text
-Strike = 3500  (30% OTM)
-```
-
-##### Payoff behavior
-
-| SPX move | Put payoff     |
-| -------- | -------------- |
-| -10%     | almost nothing |
-| -20%     | small          |
-| -30%     | large          |
-| -40%     | very large     |
-
-The problem:
-
-- hedge only activates in very large crashes
-- moderate drawdowns remain largely unprotected
-
-You end up with **“gap risk” between protection layers**.
-
-#### The Smile Ladder Concept
-
-Instead of one strike, funds build **layers of protection across multiple strikes**.
-
-Example ladder:
-
-| Strike | Distance OTM |
-| ------ | ------------ |
-| 4000   | 20%          |
-| 3500   | 30%          |
-| 3000   | 40%          |
-
-Each strike responds to **different crash severities**.
-
-##### How the payoff changes
-
-| SPX move | 20% put  | 30% put | 40% put  |
-| -------- | -------- | ------- | -------- |
-| -10%     | small    | 0       | 0        |
-| -20%     | moderate | small   | 0        |
-| -30%     | large    | large   | moderate |
-| -40%     | huge     | huge    | huge     |
-
-Now the hedge works **across the entire crash spectrum**.
-
-#### Why Funds Use Multiple Strikes
-
-There are three reasons.
-
-##### 1. Smoother hedge payoff
-
-A ladder creates a **continuous convex payoff curve**.
-
-Instead of:
-
-```text
-flat → explosive
-```
-
-You get:
-
-```text
-small gain → medium gain → large gain
-```
-
-##### 2. Better skew exposure
-
-OTM skew increases as strike decreases. Example typical SPX skew:
-
-| Strike  | IV  |
-| ------- | --- |
-| ATM     | 20% |
-| 20% OTM | 25% |
-| 30% OTM | 28% |
-| 40% OTM | 32% |
-
-Deep strikes benefit **most from skew expansion during crashes**.
-
-##### 3. Better carry efficiency
-
-Different strikes have different theta.
-
-*Example:*
-
-| Strike  | Annual carry |
-| ------- | ------------ |
-| 20% OTM | high         |
-| 30% OTM | medium       |
-| 40% OTM | low          |
-
-Blending them reduces overall carry cost.
-
-#### Selecting Strikes
-
-Most tail-hedge funds allocate across **three to five strikes using 20–40% OTM puts****.
-
-Typical example:
-
-```text
-SPX = 5000
-```
-
-| Strike         | Allocation |
-| -------------- | ---------- |
-| 4000 (20% OTM) | 40%        |
-| 3500 (30% OTM) | 35%        |
-| 3000 (40% OTM) | 25%        |
-
-Why this weighting works:
-
-- nearer strikes protect **moderate corrections**
-- deeper strikes capture **crisis convexity**
-- lower carry cost
-- stronger skew beta
-- massive convex payoff in crashes
-
-### Maturity Selection
-
-Tail hedges usually use **long-dated options**.
-
-Typical maturities:
-
-| Maturity    | Purpose                     |
-| ----------- | --------------------------- |
-| 6-12 months | tactical hedging            |
-| ~18 months  | common institutional choice |
-| ~24 months  | strong vega exposure        |
-
-Most funds choose 18–24 months to provide:
-
-```text
-high vega
-low theta (on a relative basis)
-stable convexity
-```
-
-This is why **LEAPS are common** in institutional programs.
-
-See [LEAPS](#leaps) for further details.
-
-Note: Long maturities have low theta on a relative or % basis, but the total premium paid may be larger.
-
-#### Maturity / Time Ladder
-
-Instead of a **single maturity ladder**, some funds use a **time ladder as well**.
-
-| Maturity  | Allocation |
-| --------- | ---------- |
-| 12 months | 30%        |
-| 18 months | 40%        |
-| 24 months | 30%        |
-
-This smooths **roll risk**.
-
-### Rolling Rules
-
-Most programs roll on **time or moneyness triggers**. Hedge programs rarely hold options to expiry.
-
-#### Rule 1 — time-based roll
-
-Rolling early preserves **convexity per dollar of cost**.
-
-Typical roll rule::
-
-```text
-buy 18-month puts
-roll after 9–12 months
-```
-
-This avoids rolling just before theta acceleration in the final weeks of option life. As time decreases, decay increases rapidly.
-
-#### Rule 2 — strike rebalancing
-
-If market rallies:
-
-```text
-puts become deeper OTM
-```
-
-Funds may:
-
-```text
-sell old hedge
-buy new hedge closer to spot
-```
-
-#### Rule 3 — crash monetization
-
-See [Monetizing crashes](#monetizing-crashes) for detail.
-
-### Numerical Example
-
-Suppose:
-
-```text
-Equity portfolio = $10M
-Annual hedge budget = 2%
-```
-
-So hedge budget is:
-
-```text
-$200k per year
-```
-
-#### Smile Ladder Structure
-
-Assume:
-
-```text
-SPX = 5000
-```
-
-Allocate hedge capital:
-
-| Strike | Allocation | Maturity  |
-| ------ | ---------- | --------- |
-| 4000   | 40%        | 18 months |
-| 3500   | 35%        | 18 months |
-| 3000   | 25%        | 18 months |
-
-#### Crash Scenario Simulation
-
-| SPX move | Hedge payoff |
-| -------- | ------------ |
-| -10%     | small        |
-| -20%     | $400k        |
-| -30%     | $1.3M        |
-| -40%     | $3M+         |
-
-The hedge doesn't eliminate losses, but it **dramatically reduces drawdown**.
-
-### Evaluating and Testing Tail Hedge Strategies
-
-You can use three lenses at once to evaluate long-dated downside hedge program.
-
-#### 1. Anchor to public strategy indexes
-
-Cboe’s **PPUT** index holds the S&P 500 and buys a **monthly 5% OTM SPX put**, while **PPUT3M** buys **10% OTM quarterly-cycle SPX puts**. Those are useful “expensive / less expensive” public reference points for protective-put style hedging. ([CBOE][cobe-pp-indices])
-
-#### 2. Bottom-up price your intended hedge today
-
-Use the live SPX option surface and price the exact ladder you want: strikes, maturities, roll dates, and sizing. For USD discounting, use a Treasury or SOFR-style term structure rather than a flat hand-waved rate. The VIX methodology and Cboe volatility materials are useful references for how the market thinks about implied variance and term structure. ([CBOE][cboe-vix-maths])
-
-#### 3. Historical simulation
-
-Replay your roll rules through history using SPX returns plus a proxy for long-vol pricing. This is the most informative estimate because hedge cost depends heavily on the volatility regime and skew when you initiate and roll. Cboe’s protective-put and options-based benchmark materials are good sanity checks for what protective strategies have looked like historically. ([CBOE][cobe-pp-indices])
-
-#### Metrics to Track During Testing
-
-Estimate these four quantities:
-
-$\text{Annual Carry Budget} = \frac{\text{Premiums Paid} - \text{Monetization Gains Before Crash}}{\text{Portfolio Value}}$
-
-$\text{Crash Payoff Ratio}_{x%} = \frac{\text{Hedge MTM after }x%\text{ drop}}{\text{Portfolio Value}}$
-
-$\text{Net Crisis Offset}_{x%} = \frac{\text{Hedge Gain}}{\text{Equity Loss at }x%\text{ drop}}$
-
-$\text{Carry-to-Convexity} = \frac{\text{Crash Payoff Ratio}_{25%}}{\text{Annual Carry Budget}}$
-
-Those four metrics tell you, respectively:
-
-- what it costs in normal years,
-- what it might be worth in a crash,
-- how much of the equity drawdown it offsets, and
-- whether the trade-off is attractive
-
-#### Practical First Pass Estimate
-
-For a **systematic long-dated OTM put program** on a broad equity portfolio, a reasonable first-pass expectation is usually:
-
-- **lean / deep OTM ladder**: roughly **1%–2% per year**
-- **balanced ladder**: roughly **2%–4% per year**
-- **richer / closer-to-spot protection**: roughly **4%+ per year**
-
-That is a heuristic, not a law. The cost depends mainly on moneyness, tenor, roll frequency, and whether you monetize into spikes. Public Cboe protective-put indexes are a useful reminder that nearer-strike, frequent-roll protection is meaningfully costlier than deeper-OTM tail structures. ([CBOE][cobe-pp-indices])
-
-#### Suggested Starting Point
-
-Suggest to start with a smile ladder similar to this:
-
-- 18-month tenor target
-- roll when remaining maturity falls to 9–12 months
-- strikes at about **20% / 30% / 40% OTM**
-- size so total premium spend equals your annual hedge budget
-
-Then estimate annual cost as:
-
-$\text{Annualized Cost Today} \approx \frac{\text{Total Premium Outlay}}{\text{Portfolio Value}} \times \frac{12}{\text{Months Until Roll}}$
-
-Example:
-
-$\text{Portfolio} = \$10M$
-
-$\text{Planned Roll Interval} = 12 \text{ months}$
-
-$\text{Premium Outlay for Ladder} = \$225k$
-
-$\text{Estimated Annual Cost} = \$225k / \$10M = 2.25\%$
-
-That is your **starting carry estimate before monetization gains**.
-
-#### Including Monetization in the Estimate
-
-Pure premium spend overstates long-run cost if you plan to harvest gains in stress.
-
-Define a monetization rule such as:
-
-- sell 25% of hedge if VIX doubles
-- sell another 25% if SPX falls 15%
-- reset ladder after volatility normalizes
-
-Then your realized long-run cost becomes:
-
-$\text{Net Annual Cost} = \frac{\text{Premiums Paid} - \text{Crisis Monetization Gains} + \text{Roll Slippage}}{\text{Portfolio Value}}$
-
-This distinction matters a lot. Tail-hedge funds are usually not just “buy and bleed”; they often **buy systematically and harvest opportunistically**.
-
-#### Historical Backtesting Methodology
-
-Run this monthly across as long a history as your data supports:
-
-1. Start with portfolio value (P_t).
-2. On each roll date, buy your target ladder.
-3. Use the option market or a proxy surface to mark the hedge.
-4. Apply your monetization rules.
-5. Record:
-   1. gross premium paid
-   2. net carry
-   3. hedge MTM in drawdowns
-   4. offset ratio in the worst months
-
-Your outputs should be:
-
-- average annual carry
-- median annual carry
-- 90th percentile annual carry
-- payoff at SPX down 10%, 20%, 30%, 40%
-- worst “bleed year”
-- best “crisis monetization year”
-
-That gives you the answer you actually need: not “what does it cost,” but “what does it cost across regimes?”
-
-#### Public data you can use
-
-For a clean public-data version:
-
-- **SPX / S&P 500 history** for underlying path and drawdowns. S&P describes the index and methodology for the benchmark. ([S&P Global][spglobal])
-- **VIX history** as a public proxy for the implied-volatility regime. Cboe provides historical VIX data and methodology. ([cboe.com][cboe-vix-historical])
-- **Treasury yields** for discounting and carry assumptions. FRED is a practical public source for Treasury curve points. ([CBOE][hist-put-writing])
-- **PPUT / PPUT3M methodology** for public benchmark protective-put structures you can compare against. ([CBOE][cobe-pp-indices])
-
-#### Usable Approximation in absence of Full Historical Option Chains
-
-Use a regime-based mapping:
-
-$\text{Estimated Premium Rate} = f(\text{Tenor}, \text{Moneyness}, \text{VIX Regime}, \text{Skew Regime})$
-
-For example, bucket history into:
-
-- VIX < 15
-- 15 ≤ VIX < 20
-- 20 ≤ VIX < 30
-- VIX ≥ 30
-
-Then assign a rough premium multiple by strike depth:
-
-- 20% OTM = 1.0x
-- 30% OTM = 0.5x–0.7x
-- 40% OTM = 0.2x–0.4x
-
-The precise numbers should come from current market quotes or a chain dataset, but this regime approach is often good enough to decide whether your budget should be 1.5%, 2.5%, or 4%.
-
-#### Starting Recommendations
-
-For the goal of **economic downside protection with long-dated OTM puts while keeping carry under control**, you can start by testing three candidate programs:
-
-##### Program A: Lean Tail
-
-- 20% / 30% / 40% OTM
-- weights 25 / 45 / 30
-- 18 months, roll at 9 months
-
-##### Program B: Balanced
-
-- 15% / 25% / 35% OTM
-- weights 35 / 40 / 25
-- 18 months, roll at 12 months
-
-##### Program C: Richer
-
-- 10% / 20% / 30% OTM
-- weights 40 / 35 / 25
-- 12–18 months, roll at 9 months
-
-Then compare:
-
-$\text{Annual Carry},\ \text{Crash Payoff} * {20\%},\ \text{Crash Payoff} * {30\%},\ \text{Offset Ratio},\ \text{Carry-to-Convexity}$
-
-#### A good sanity-check benchmark
-
-If your backtest shows:
-
-- annual carry below ~1% with huge crash protection, you are probably overestimating monetization or underestimating option cost
-- annual carry above ~5% for a strategic program, you are probably too close to the money or rolling too often
-- poor payoff until catastrophic crashes, you are probably too concentrated in the deepest strike
-
-That kind of sanity check is where comparing to public protective-put benchmarks like PPUT and PPUT3M helps. ([CBOE][cobe-pp-indices])
-
-#### Suggested Recording Structure for the Evaluation and Testing
-
-Build a table like this for each candidate structure:
-
-| Structure | Annual carry | Net annual carry | Payoff @ -20% | Payoff @ -30% | Offset ratio @ -30% | Carry/ convexity |
-| --------- | -----------: | ---------------: | ------------: | ------------: | ------------------: | ---------------: |
-| Lean tail |              |                  |               |               |                     |                  |
-| Balanced  |              |                  |               |               |                     |                  |
-| Richer    |              |                  |               |               |                     |                  |
-
-Once you populate that, the decision usually becomes obvious.
-
-## PART IX — Monetization & Re-Risk Rules
-
-### Monetizing crashes
-
-If crash occurs:
-
-```text
-puts explode in value
-```
-
-Funds typically:
-
-```text
-sell part of hedge
-lock in gains
-re-establish later
-```
-
-This is critical — otherwise hedges can **round-trip gains**.
-
-## PART X — Common Structural Mistakes
-
-The biggest mistake retail hedgers make is:
-
-```text
-buying protection too late
-```
-
-Professional programs instead:
-
-```text
-1. buy protection systematically
-2. roll hedges regularly
-3. monetize gains during crashes
-```
-
-This **systematic approach** is what turns tail hedging from an expensive insurance policy into a **long-term portfolio stabilizer**.
-
-### Buying protection when volatility is already high
-
-Most investors buy puts after markets start falling, when fear is high and options are expensive.
-
-#### Why this is a problem
-
-When implied volatility $\sigma$ is high:
-
-- option premiums are inflated
-- skew is already steep
-- carry cost explodes
-
-Example:
-
-| Market state | 1-yr 30% OTM put IV |
-| ------------ | ------------------- |
-| Calm market  | 18%                 |
-| Correction   | 30%                 |
-| Crash        | 60%                 |
-
-Buying during stress locks in terrible carry.
-
-#### Professional approach
-
-Tail funds prefer to buy when:
-
-```text
-VIX < ~15–18
-skew moderate
-```
-
-Low-vol regimes historically provide the best hedge economics.
-
-### Buying puts that are not far enough OTM
-
-Investors often buy ATM or slightly OTM puts.
-
-Example:
-
-```text
-SPX = 5000
-Put strike = 4700
-```
-
-These options have:
-
-- high theta
-- moderate convexity
-- weaker skew exposure
-
-#### Why funds avoid this
-
-```text
-deep OTM puts reprice dramatically
-```
-
-Example (March 2020):
-
-| Strike      | Price change |
-| ----------- | ------------ |
-| ATM put     | ~5×          |
-| 30% OTM put | ~30×         |
-
-Deep OTM options benefit from:
-
-```text
-price drop
-+ volatility spike
-+ skew steepening
-```
-
-### Holding hedges passively instead of rolling them
-
-Retail investors often:
-
-```text
-buy 2-year puts
-wait
-watch them decay
-```
-
-Professional hedge programs **continuously manage maturity and strike**.
-
-Why?
-
-For ATM options, Theta roughly scales with:
-
-$\Theta \propto \frac{1}{T}$
-
-As maturity shortens, this relationship no longer holds, with time decay accelerating dramatically.
-
-Tail funds typically **roll hedges before this decay phase**.
-
-Gamma scales approximately to:
-
-$\Gamma \propto \frac{1}{\sqrt{T}}$
 
 ## PART XI — Educational Resources
 
