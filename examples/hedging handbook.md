@@ -75,6 +75,8 @@ Updated: 2026-03-09
   - [Strike Selection](#strike-selection)
   - [Maturity Selection](#maturity-selection)
   - [Rolling Rules](#rolling-rules)
+  - [Numerical Example](#numerical-example)
+  - [Crash scenario simulation](#crash-scenario-simulation)
 - [PART IX — Monetization \& Re-Risk Rules](#part-ix--monetization--re-risk-rules)
   - [Monetizing crashes](#monetizing-crashes)
 - [PART X — Common Structural Mistakes](#part-x--common-structural-mistakes)
@@ -128,6 +130,8 @@ Price at which exercise occurs.
 Date the option expires.
 
 *Example:* “I prefer LEAPS with 1–2 year maturity.”
+
+See [LEAPS](#leaps) for further details.
 
 #### Premium
 
@@ -290,6 +294,10 @@ Short option exercised against you.
 No shares exchanged — only cash difference.
 
 *Example:* SPX options are cash settled.
+
+#### LEAPS
+
+Long-term equity anticipation securities (LEAPS) are options contracts with expiration dates extending beyond one year, often up to three years. These contracts allow investors to gain exposure to long-term price movements in the underlying asset, similar to standard options but with extended expiration periods. [Investopedia][investopedia-leaps]
 
 ## PART II — The Greeks
 
@@ -523,6 +531,8 @@ Time decay **accelerates** as expiration approaches.
 Rho measures sensitivity of the option price to interest rates.
 
 *Example:* “LEAPS calls have meaningful rho.”
+
+See [LEAPS](#leaps) for further details.
 
 If:
 
@@ -2222,44 +2232,163 @@ preserves liquidity
 
 ## PART VIII — Designing a Tail Hedge Program
 
+The goal of tail hedging is **not to eliminate volatility**. The goal is create **liquidity during crises.***
+
+During a crash, the hedge produces cash that can be used to:
+
+```text
+rebalance
+buy equities cheaply
+avoid forced selling
+```
+
+This is why many institutional investors treat tail hedges as a **strategic portfolio allocation**, not a tactical trade.
+
 A typical tail hedge fund uses three design layers of strike, maturity and roll.
 
 ### Strike Selection
 
-Most funds target **20–40% OTM puts**.
+The **“smile ladder” (multi-strike hedge)** is one of the most important design choices in a long-term tail-hedging program. Almost every professional tail-hedge fund uses **multiple strikes instead of a single deep OTM put**, because it dramatically improves the **convexity-to-carry trade-off** and stabilizes the hedge across different crash sizes.
 
-Example:
+#### Why a Single-Strike Hedge Is Inefficient
+
+Suppose the market is:
 
 ```text
 SPX = 5000
 ```
 
-Typical strikes:
+You buy a single deep OTM put:
 
-| Strike | Distance |
-| ------ | -------- |
-| 4000   | 20% OTM  |
-| 3500   | 30% OTM  |
-| 3000   | 40% OTM  |
+```text
+Strike = 3500  (30% OTM)
+```
 
-Rationale:
+##### Payoff behavior
 
+| SPX move | Put payoff     |
+| -------- | -------------- |
+| -10%     | almost nothing |
+| -20%     | small          |
+| -30%     | large          |
+| -40%     | very large     |
+
+The problem:
+
+- hedge only activates in very large crashes
+- moderate drawdowns remain largely unprotected
+
+You end up with **“gap risk” between protection layers**.
+
+#### The Smile Ladder Concept
+
+Instead of one strike, funds build **layers of protection across multiple strikes**.
+
+Example ladder:
+
+| Strike | Distance OTM |
+| ------ | ------------ |
+| 4000   | 20%          |
+| 3500   | 30%          |
+| 3000   | 40%          |
+
+Each strike responds to **different crash severities**.
+
+##### How the payoff changes
+
+| SPX move | 20% put  | 30% put | 40% put  |
+| -------- | -------- | ------- | -------- |
+| -10%     | small    | 0       | 0        |
+| -20%     | moderate | small   | 0        |
+| -30%     | large    | large   | moderate |
+| -40%     | huge     | huge    | huge     |
+
+Now the hedge works **across the entire crash spectrum**.
+
+#### Why Funds Use Multiple Strikes
+
+There are three reasons.
+
+##### 1. Smoother hedge payoff
+
+A ladder creates a **continuous convex payoff curve**.
+
+Instead of:
+
+```text
+flat → explosive
+```
+
+You get:
+
+```text
+small gain → medium gain → large gain
+```
+
+##### 2. Better skew exposure
+
+OTM skew increases as strike decreases. Example typical SPX skew:
+
+| Strike  | IV  |
+| ------- | --- |
+| ATM     | 20% |
+| 20% OTM | 25% |
+| 30% OTM | 28% |
+| 40% OTM | 32% |
+
+Deep strikes benefit **most from skew expansion during crashes**.
+
+##### 3. Better carry efficiency
+
+Different strikes have different theta.
+
+*Example:*
+
+| Strike  | Annual carry |
+| ------- | ------------ |
+| 20% OTM | high         |
+| 30% OTM | medium       |
+| 40% OTM | low          |
+
+Blending them reduces overall carry cost.
+
+#### Selecting Strikes
+
+Most tail-hedge funds allocate across **three to five strikes using 20–40% OTM puts****.
+
+Typical example:
+
+```text
+SPX = 5000
+```
+
+| Strike         | Allocation |
+| -------------- | ---------- |
+| 4000 (20% OTM) | 40%        |
+| 3500 (30% OTM) | 35%        |
+| 3000 (40% OTM) | 25%        |
+
+Why this weighting works:
+
+- nearer strikes protect **moderate corrections**
+- deeper strikes capture **crisis convexity**
 - lower carry cost
 - stronger skew beta
 - massive convex payoff in crashes
 
 ### Maturity Selection
 
-Tail funds prefer **long-dated options**.
+Tail hedges usually use **long-dated options**.
 
 Typical maturities:
 
-| Maturity     | Reason            |
-| ------------ | ----------------- |
-| 6–12 months  | tactical hedging  |
-| 12–24 months | strategic hedging |
+| Maturity    | Purpose                     |
+| ----------- | --------------------------- |
+| 6-12 months | tactical hedging            |
+| ~18 months  | common institutional choice |
+| ~24 months  | strong vega exposure        |
 
-Long maturities provide:
+Most funds choose 18–24 months to provide:
 
 ```text
 high vega
@@ -2269,22 +2398,38 @@ stable convexity
 
 This is why **LEAPS are common** in institutional programs.
 
-Long maturities have low theta on a relative or % basis, but the total premium paid may be larger.
+See [LEAPS](#leaps) for further details.
+
+Note: Long maturities have low theta on a relative or % basis, but the total premium paid may be larger.
+
+#### Maturity / Time Ladder
+
+Instead of a **single maturity ladder**, some funds use a **time ladder as well**.
+
+| Maturity  | Allocation |
+| --------- | ---------- |
+| 12 months | 30%        |
+| 18 months | 40%        |
+| 24 months | 30%        |
+
+This smooths **roll risk**.
 
 ### Rolling Rules
 
-Most programs roll on **time or moneyness triggers**.
+Most programs roll on **time or moneyness triggers**. Hedge programs rarely hold options to expiry.
 
 #### Rule 1 — time-based roll
 
-Example:
+Rolling early preserves **convexity per dollar of cost**.
+
+Typical roll rule::
 
 ```text
 buy 18-month puts
-roll at 9–12 months
+roll after 9–12 months
 ```
 
-This avoids rolling just before theta acceleration in the final weeks of option life.
+This avoids rolling just before theta acceleration in the final weeks of option life. As time decreases, decay increases rapidly.
 
 #### Rule 2 — strike rebalancing
 
@@ -2304,6 +2449,48 @@ buy new hedge closer to spot
 #### Rule 3 — crash monetization
 
 See [Monetizing crashes](#monetizing-crashes) for detail.
+
+### Numerical Example
+
+Suppose:
+
+```text
+Equity portfolio = $10M
+Annual hedge budget = 2%
+```
+
+So hedge budget is:
+
+```text
+$200k per year
+```
+
+#### Smile Ladder Structure
+
+Assume:
+
+```text
+SPX = 5000
+```
+
+Allocate hedge capital:
+
+| Strike | Allocation | Maturity  |
+| ------ | ---------- | --------- |
+| 4000   | 40%        | 18 months |
+| 3500   | 35%        | 18 months |
+| 3000   | 25%        | 18 months |
+
+### Crash scenario simulation
+
+| SPX move | Hedge payoff |
+| -------- | ------------ |
+| -10%     | small        |
+| -20%     | $400k        |
+| -30%     | $1.3M        |
+| -40%     | $3M+         |
+
+The hedge doesn't eliminate losses, but it **dramatically reduces drawdown**.
 
 ## PART IX — Monetization & Re-Risk Rules
 
@@ -2617,3 +2804,4 @@ arXiv
 [barnesnoble]: https://www.barnesandnoble.com/w/tail-risk-hedging-vineer-bhansali/1117029721 "Tail Risk Hedging: Creating Robust Portfolios for Volatile ..."
 [mutinyfund]: https://mutinyfund.com/best-tail-hedging-books/ "The Best Tail Hedging Books for Beginners"
 [alpha-arch]: https://alphaarchitect.com/strategies-to-mitigate-tail-risk/ "Strategies to Mitigate Tail Risk -"
+[investopedia-leaps]: https://www.investopedia.com/terms/l/leaps.asp "LEAPS: How Long-Term Equity Anticipation Securities Options Work"
