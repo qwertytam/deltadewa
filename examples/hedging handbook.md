@@ -1,8 +1,6 @@
 # An Options & Downside Hedging Handbook
 
-Updated: 2026-03-09
-
----
+Updated: 2026-03-11
 
 ## Table of Contents
 
@@ -76,7 +74,7 @@ Updated: 2026-03-09
   - [Maturity Selection](#maturity-selection)
   - [Rolling Rules](#rolling-rules)
   - [Numerical Example](#numerical-example)
-  - [Crash scenario simulation](#crash-scenario-simulation)
+  - [Evaluating and Testing Tail Hedge Strategies](#evaluating-and-testing-tail-hedge-strategies)
 - [PART IX — Monetization \& Re-Risk Rules](#part-ix--monetization--re-risk-rules)
   - [Monetizing crashes](#monetizing-crashes)
 - [PART X — Common Structural Mistakes](#part-x--common-structural-mistakes)
@@ -2481,7 +2479,7 @@ Allocate hedge capital:
 | 3500   | 35%        | 18 months |
 | 3000   | 25%        | 18 months |
 
-### Crash scenario simulation
+#### Crash Scenario Simulation
 
 | SPX move | Hedge payoff |
 | -------- | ------------ |
@@ -2491,6 +2489,195 @@ Allocate hedge capital:
 | -40%     | $3M+         |
 
 The hedge doesn't eliminate losses, but it **dramatically reduces drawdown**.
+
+### Evaluating and Testing Tail Hedge Strategies
+
+You can use three lenses at once to evaluate long-dated downside hedge program.
+
+#### 1. Anchor to public strategy indexes
+
+Cboe’s **PPUT** index holds the S&P 500 and buys a **monthly 5% OTM SPX put**, while **PPUT3M** buys **10% OTM quarterly-cycle SPX puts**. Those are useful “expensive / less expensive” public reference points for protective-put style hedging. ([CBOE][cobe-pp-indices])
+
+#### 2. Bottom-up price your intended hedge today
+
+Use the live SPX option surface and price the exact ladder you want: strikes, maturities, roll dates, and sizing. For USD discounting, use a Treasury or SOFR-style term structure rather than a flat hand-waved rate. The VIX methodology and Cboe volatility materials are useful references for how the market thinks about implied variance and term structure. ([CBOE][cboe-vix-maths])
+
+#### 3. Historical simulation
+
+Replay your roll rules through history using SPX returns plus a proxy for long-vol pricing. This is the most informative estimate because hedge cost depends heavily on the volatility regime and skew when you initiate and roll. Cboe’s protective-put and options-based benchmark materials are good sanity checks for what protective strategies have looked like historically. ([CBOE][cobe-pp-indices])
+
+#### Metrics to Track During Testing
+
+Estimate these four quantities:
+
+$\text{Annual Carry Budget} = \frac{\text{Premiums Paid} - \text{Monetization Gains Before Crash}}{\text{Portfolio Value}}$
+
+$\text{Crash Payoff Ratio}_{x%} = \frac{\text{Hedge MTM after }x%\text{ drop}}{\text{Portfolio Value}}$
+
+$\text{Net Crisis Offset}_{x%} = \frac{\text{Hedge Gain}}{\text{Equity Loss at }x%\text{ drop}}$
+
+$\text{Carry-to-Convexity} = \frac{\text{Crash Payoff Ratio}_{25%}}{\text{Annual Carry Budget}}$
+
+Those four metrics tell you, respectively:
+
+- what it costs in normal years,
+- what it might be worth in a crash,
+- how much of the equity drawdown it offsets, and
+- whether the trade-off is attractive
+
+#### Practical First Pass Estimate
+
+For a **systematic long-dated OTM put program** on a broad equity portfolio, a reasonable first-pass expectation is usually:
+
+- **lean / deep OTM ladder**: roughly **1%–2% per year**
+- **balanced ladder**: roughly **2%–4% per year**
+- **richer / closer-to-spot protection**: roughly **4%+ per year**
+
+That is a heuristic, not a law. The cost depends mainly on moneyness, tenor, roll frequency, and whether you monetize into spikes. Public Cboe protective-put indexes are a useful reminder that nearer-strike, frequent-roll protection is meaningfully costlier than deeper-OTM tail structures. ([CBOE][cobe-pp-indices])
+
+#### Suggested Starting Point
+
+Suggest to start with a smile ladder similar to this:
+
+- 18-month tenor target
+- roll when remaining maturity falls to 9–12 months
+- strikes at about **20% / 30% / 40% OTM**
+- size so total premium spend equals your annual hedge budget
+
+Then estimate annual cost as:
+
+$\text{Annualized Cost Today} \approx \frac{\text{Total Premium Outlay}}{\text{Portfolio Value}} \times \frac{12}{\text{Months Until Roll}}$
+
+Example:
+
+$\text{Portfolio} = \$10M$
+
+$\text{Planned Roll Interval} = 12 \text{ months}$
+
+$\text{Premium Outlay for Ladder} = \$225k$
+
+$\text{Estimated Annual Cost} = \$225k / \$10M = 2.25\%$
+
+That is your **starting carry estimate before monetization gains**.
+
+#### Including Monetization in the Estimate
+
+Pure premium spend overstates long-run cost if you plan to harvest gains in stress.
+
+Define a monetization rule such as:
+
+- sell 25% of hedge if VIX doubles
+- sell another 25% if SPX falls 15%
+- reset ladder after volatility normalizes
+
+Then your realized long-run cost becomes:
+
+$\text{Net Annual Cost} = \frac{\text{Premiums Paid} - \text{Crisis Monetization Gains} + \text{Roll Slippage}}{\text{Portfolio Value}}$
+
+This distinction matters a lot. Tail-hedge funds are usually not just “buy and bleed”; they often **buy systematically and harvest opportunistically**.
+
+#### Historical Backtesting Methodology
+
+Run this monthly across as long a history as your data supports:
+
+1. Start with portfolio value (P_t).
+2. On each roll date, buy your target ladder.
+3. Use the option market or a proxy surface to mark the hedge.
+4. Apply your monetization rules.
+5. Record:
+   1. gross premium paid
+   2. net carry
+   3. hedge MTM in drawdowns
+   4. offset ratio in the worst months
+
+Your outputs should be:
+
+- average annual carry
+- median annual carry
+- 90th percentile annual carry
+- payoff at SPX down 10%, 20%, 30%, 40%
+- worst “bleed year”
+- best “crisis monetization year”
+
+That gives you the answer you actually need: not “what does it cost,” but “what does it cost across regimes?”
+
+#### Public data you can use
+
+For a clean public-data version:
+
+- **SPX / S&P 500 history** for underlying path and drawdowns. S&P describes the index and methodology for the benchmark. ([S&P Global][spglobal])
+- **VIX history** as a public proxy for the implied-volatility regime. Cboe provides historical VIX data and methodology. ([cboe.com][cboe-vix-historical])
+- **Treasury yields** for discounting and carry assumptions. FRED is a practical public source for Treasury curve points. ([CBOE][hist-put-writing])
+- **PPUT / PPUT3M methodology** for public benchmark protective-put structures you can compare against. ([CBOE][cobe-pp-indices])
+
+#### Usable Approximation in absence of Full Historical Option Chains
+
+Use a regime-based mapping:
+
+$\text{Estimated Premium Rate} = f(\text{Tenor}, \text{Moneyness}, \text{VIX Regime}, \text{Skew Regime})$
+
+For example, bucket history into:
+
+- VIX < 15
+- 15 ≤ VIX < 20
+- 20 ≤ VIX < 30
+- VIX ≥ 30
+
+Then assign a rough premium multiple by strike depth:
+
+- 20% OTM = 1.0x
+- 30% OTM = 0.5x–0.7x
+- 40% OTM = 0.2x–0.4x
+
+The precise numbers should come from current market quotes or a chain dataset, but this regime approach is often good enough to decide whether your budget should be 1.5%, 2.5%, or 4%.
+
+#### Starting Recommendations
+
+For the goal of **economic downside protection with long-dated OTM puts while keeping carry under control**, you can start by testing three candidate programs:
+
+##### Program A: Lean Tail
+
+- 20% / 30% / 40% OTM
+- weights 25 / 45 / 30
+- 18 months, roll at 9 months
+
+##### Program B: Balanced
+
+- 15% / 25% / 35% OTM
+- weights 35 / 40 / 25
+- 18 months, roll at 12 months
+
+##### Program C: Richer
+
+- 10% / 20% / 30% OTM
+- weights 40 / 35 / 25
+- 12–18 months, roll at 9 months
+
+Then compare:
+
+$\text{Annual Carry},\ \text{Crash Payoff} * {20\%},\ \text{Crash Payoff} * {30\%},\ \text{Offset Ratio},\ \text{Carry-to-Convexity}$
+
+#### A good sanity-check benchmark
+
+If your backtest shows:
+
+- annual carry below ~1% with huge crash protection, you are probably overestimating monetization or underestimating option cost
+- annual carry above ~5% for a strategic program, you are probably too close to the money or rolling too often
+- poor payoff until catastrophic crashes, you are probably too concentrated in the deepest strike
+
+That kind of sanity check is where comparing to public protective-put benchmarks like PPUT and PPUT3M helps. ([CBOE][cobe-pp-indices])
+
+#### Suggested Recording Structure for the Evaluation and Testing
+
+Build a table like this for each candidate structure:
+
+| Structure | Annual carry | Net annual carry | Payoff @ -20% | Payoff @ -30% | Offset ratio @ -30% | Carry/ convexity |
+| --------- | -----------: | ---------------: | ------------: | ------------: | ------------------: | ---------------: |
+| Lean tail |              |                  |               |               |                     |                  |
+| Balanced  |              |                  |               |               |                     |                  |
+| Richer    |              |                  |               |               |                     |                  |
+
+Once you populate that, the decision usually becomes obvious.
 
 ## PART IX — Monetization & Re-Risk Rules
 
@@ -2805,3 +2992,8 @@ arXiv
 [mutinyfund]: https://mutinyfund.com/best-tail-hedging-books/ "The Best Tail Hedging Books for Beginners"
 [alpha-arch]: https://alphaarchitect.com/strategies-to-mitigate-tail-risk/ "Strategies to Mitigate Tail Risk -"
 [investopedia-leaps]: https://www.investopedia.com/terms/l/leaps.asp "LEAPS: How Long-Term Equity Anticipation Securities Options Work"
+[cobe-pp-indices]: https://cdn.cboe.com/api/global/us_indices/governance/Cboe_SP_500_Put_Protection_Indices_Methodology.pdf "Cboe S&P 500 Put Protection Indices"
+[cboe-vix-maths]: https://cdn.cboe.com/resources/indices/Cboe_Volatility_Index_Mathematics_Methodology.pdf "Cboe Volatility Index Mathematics Methodology"
+[spglobal]: https://www.spglobal.com/spdji/en/indices/equity/sp-500/ "S&P 500® | S&P Dow Jones Indices"
+[cboe-vix-historical]: https://www.cboe.com/en/tradable-products/vix/vix-historical-data/ "Historical Price Data for VIX Index"
+[hist-put-writing]: https://cdn.cboe.com/resources/education/research_publications/PutWriteCBOE19_v14_by_Prof_Oleg_Bondarenko_as_of_June_14.pdf "historical performance of put-writing strategies"
