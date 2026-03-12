@@ -23,17 +23,16 @@ Updated: 2026-03-11
   - [Charm](#charm)
   - [Vomma](#vomma)
 - [PART III — Volatility and the Vol Surface](#part-iii--volatility-and-the-vol-surface)
+  - [Summary Relationship Between Volatility, Skew and Convexity](#summary-relationship-between-volatility-skew-and-convexity)
   - [Volatility Smile](#volatility-smile)
-  - [Volatility Skew / Skew Exposure / Skew Beta](#volatility-skew--skew-exposure--skew-beta)
+  - [Volatility Skew](#volatility-skew)
   - [Term Structure of Volatility](#term-structure-of-volatility)
   - [Volatility Crush](#volatility-crush)
 - [PART IV — Trading Terminology](#part-iv--trading-terminology)
   - [Convexity](#convexity)
   - [Optionality](#optionality)
-  - [Pin Risk](#pin-risk)
   - [Open Interest (OI)](#open-interest-oi)
   - [Liquidity / Spread](#liquidity--spread)
-  - [Gamma Scalping](#gamma-scalping)
   - [Volatility Risk Premium](#volatility-risk-premium)
 - [PART V — Tail-Hedging Metrics](#part-v--tail-hedging-metrics)
   - [Net Delta](#net-delta)
@@ -71,7 +70,7 @@ Updated: 2026-03-11
   - [1. Carry vs. Convexity Chart](#1-carry-vs-convexity-chart)
   - [2. Crash Scenario Table \& Payoff Ratio](#2-crash-scenario-table--payoff-ratio)
   - [3. Vega Sufficiency Gauge](#3-vega-sufficiency-gauge)
-  - [4. Skew Exposure Meter](#4-skew-exposure-meter)
+  - [4. Skew Convexity](#4-skew-convexity)
   - [5. Volatility Regime Indicator](#5-volatility-regime-indicator)
   - [6. Hedge Efficiency Ratio](#6-hedge-efficiency-ratio)
   - [7. Net Delta Exposure](#7-net-delta-exposure)
@@ -79,15 +78,16 @@ Updated: 2026-03-11
   - [9. Forward Variance Level](#9-forward-variance-level)
   - [10. Delta Drift](#10-delta-drift)
   - [11. Vega Term Exposure](#11-vega-term-exposure)
-  - [12. Skew Convexity](#12-skew-convexity)
-  - [13. Liquidity Risk](#13-liquidity-risk)
-  - [14. Hedge Rebalance Triggers](#14-hedge-rebalance-triggers)
+  - [12. Liquidity Risk](#12-liquidity-risk)
+  - [13. Hedge Rebalance Triggers](#13-hedge-rebalance-triggers)
 - [PART XI — Educational Resources](#part-xi--educational-resources)
   - [Books](#books)
   - [Research Papers on Tail Hedging](#research-papers-on-tail-hedging)
   - [Online Courses](#online-courses)
   - [Youtube](#youtube)
   - [Best Websites for Data](#best-websites-for-data)
+- [APPENDICIES](#appendicies)
+  - [Additional Terminology](#additional-terminology)
 
 ---
 
@@ -222,12 +222,6 @@ You sold optionality.
 
 *Example:* “Covered calls harvest premium.”
 
-#### Covered Call
-
-Short call against long stock.
-
-*Example:* “Generate income while holding shares.”
-
 #### Protective Put
 
 Long stock + long put.
@@ -251,22 +245,6 @@ Same expiry, different strikes.
 Same strike, different expiries.
 
 *Example:* Sell front-month, buy longer-dated.
-
-#### Straddle
-
-Buy call + put same strike.
-
-*Example:* “Bet on big move either direction.”
-
-Note: This is more of a volatility strategy rather than downside hedging.
-
-#### Strangle
-
-OTM call + OTM put.
-
-*Example:* “Cheaper volatility bet.”
-
-Note: This is more of a volatility strategy rather than downside hedging.
 
 ### Exercise & Settlement
 
@@ -654,6 +632,18 @@ volatility
         maturity
 ```
 
+### Summary Relationship Between Volatility, Skew and Convexity
+
+| Concept                                      | What it answers                                               |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| [Volatility skew](#volatility-skew)          | What is the slope of the volatility surface today?            |
+| [Skew percentile](#skew-percentile)          | Is crash protection cheap or expensive historically?          |
+| [Convexity](#convexity)                      | How quickly does hedge payoff accelerate in a crash?          |
+| [Skew Exposure / Beta](#skew-exposure--beta) | How sensitive is the hedge to changes in skew?                |
+| [Skew convexity](#4-skew-convexity)          | How much additional payoff comes from crisis skew steepening? |
+
+Note: Convexity is driven by gamma, vega and skew repricing together.
+
 ### Volatility Smile
 
 A volatility smile occurs when implied volatility increases for both:
@@ -680,9 +670,18 @@ vol
 
 Markets assign higher probability to **extreme outcomes** than predicted by Black-Scholes.
 
-### Volatility Skew / Skew Exposure / Skew Beta
+### Volatility Skew
 
-In equity markets, volatility usually **increases for lower strikes**. This is put or downside skew. OTM puts are more expensive than calls. This skew reflects the higher implied volatility typically seen in OTM puts.([Wikipedia][wiki-skew])
+#### Definition of Volatility Skew
+
+In equity options markets, implied volatility varies across strikes.
+This variation is called **volatility skew**.
+
+Instead of all strikes having the same volatility (as assumed in Black-Scholes), the market typically prices **lower strikes with higher implied volatility** than higher strikes.
+
+This produces the characteristic **downward-sloping skew curve**.
+
+Example structure:
 
 ```text
 OTM puts > ATM > OTM calls
@@ -690,7 +689,7 @@ OTM puts > ATM > OTM calls
 
 This reflects demand for crash protection.
 
-Graph:
+Graphically:
 
 ```text
 vol
@@ -702,21 +701,109 @@ vol
  +------ strike
 ```
 
-#### Algebraic Framing
+Where:
 
-Let $\sigma(K)$ represent implied volatility at strike (K).
+- lower strikes correspond to **downside protection**
+- higher strikes correspond to **upside optionality**
 
-Skew is approximately:
+#### Why Skew Exists
 
-$\frac{\partial \sigma}{\partial K}$
+In equity markets, investors have strong demand for **downside protection**, particularly from:
 
-Traders in practice measure skew using:
+- asset managers
+- pension funds
+- structured-product hedging
+- portfolio insurance strategies
 
-$\text{Skew} = \frac{\partial \sigma}{\partial log(K)}$
+This persistent demand pushes up the price of OTM puts relative to other options, resulting in higher implied volatility for lower strikes.
 
-or using delta-based metrics.
+As a result:
 
-See [Skew Exposure / Beta](#skew-exposure--beta) for further details on metric implementation.
+```text
+OTM puts become structurally expensive relative to ATM options.
+```
+
+#### Practical Skew Metrics
+
+Traders rarely measure skew using raw strike derivatives.
+Instead they use **delta-based metrics**, which are more stable across maturities.
+
+A common definition is:
+
+$Skew = \sigma_{25\Delta\ put} - \sigma_{ATM}$
+
+Where:
+
+- $25\Delta_{put} \approx \sim10-15\% \text{ OTM}$
+- $40\Delta_{put} \approx \text{ATM}$
+
+Note: $50\Delta$ is only exactly for ATM for calls. For puts $~40\Delta \approx \text{ATM}$
+
+Example:
+
+| Strike  | IV  |
+| ------- | --- |
+| ATM     | 20% |
+| 25Δ put | 27% |
+
+Result:
+
+```text
+Skew = 27 − 20 = 7 vol points
+```
+
+#### Interpretation of Volatility Skew
+
+Skew represents the *market price of crash protection*.
+
+When skew is:
+
+Low
+→ downside protection relatively cheap.
+
+High
+→ investors already paying large premiums for crash insurance.
+
+Because skew varies through time, tail-hedge programs often track **skew percentiles** relative to historical ranges when deciding when to add or reduce protection.
+
+#### Skew Percentile
+
+Because skew varies over time, institutional desks often evaluate skew relative to history.
+
+$\text{Skew Percentile}=\text{rank of current skew vs historical distribution}$
+
+Example:
+
+| Percentile | Interpretation                    |
+| ---------- | --------------------------------- |
+| <20%       | protection historically cheap     |
+| 20–70%     | normal                            |
+| >80%       | protection historically expensive |
+
+Typical hedge dashboards display:
+
+```text
+Skew percentile (5–10y): 22%
+Interpretation: protection cheap
+```
+
+#### Why this matters for tail hedging
+
+Skew represents the **price of crash insurance**.
+
+When skew percentile is low:
+
+```text
+downside protection relatively cheap
+```
+
+When skew percentile is high:
+
+```text
+deep OTM puts expensive
+```
+
+Institutional hedge programs often **increase hedge allocations when skew percentile is low**, especially if volatility levels are also subdued.
 
 ### Term Structure of Volatility
 
@@ -768,22 +855,23 @@ These terms describe **portfolio behaviour**, not individual option parameters.
 
 ### Convexity
 
-Convexity describes non-linear payoff behavior where gains accelerate as the underlying moves further.
+#### Convexity Definition
 
-In options portfolios, convexity arises primarily from positive gamma, but crisis-period hedge performance also reflects volatility and skew dynamics.
+Convexity describes **non-linear payoff behavior** where gains accelerate as the underlying moves further.
 
-In practice, hedge convexity comes from:
+In linear instruments such as equities or futures:
 
 ```text
-delta acceleration (gamma)
-+ volatility expansion (vega)
-+ skew steepening
+P&L moves proportionally with price.
 ```
 
-This combination causes option hedges to produce small gains in moderate selloffs but large gains in severe crashes.
+In options portfolios:
 
-Convexity answers the question:
-> How much does my hedge improve as the market moves from a correction into a crisis?
+```text
+P&L can accelerate as the underlying moves further.
+```
+
+This non-linear payoff structure is called convexity.
 
 Example payoff structure:
 
@@ -793,17 +881,49 @@ Example payoff structure:
 | −15%        | moderate gain |
 | −30%        | large gain    |
 
-Convexity is what allows a hedge to:
+#### Sources of Convexity
+
+In options portfolios, convexity arises primarily from **gamma**, which causes delta exposure to increase as the underlying moves.
+
+However, during market crises additional effects amplify the payoff of tail hedges:
 
 ```text
-offset deep drawdowns
-provide liquidity during crises
-fund portfolio rebalancing
+delta acceleration (gamma)
++ volatility expansion (vega)
++ skew steepening
 ```
 
-For a tail-hedge program, convexity is evaluated using crash scenario analysis, not just the instantaneous gamma of the options.
+Because of these interacting effects, the performance of crash hedges is not determined by gamma alone.
 
-See [Crash Convexity](#crash-convexity) and [Crash Convexity Metric](#crash-convexity-metric) for further details.
+Skew contributes to convexity, but convexity is **not the same thing as skew**.
+
+#### Convexity vs skew
+
+| Concept   | Meaning                                   |
+| --------- | ----------------------------------------- |
+| Convexity | accelerating hedge payoff as market falls |
+| Skew      | relative price of downside options        |
+| Skew beta | hedge sensitivity to skew changes         |
+
+#### Convexity in Tail Hedging
+
+For a tail-hedge program, convexity is what allows the hedge to:
+
+```text
+produce modest gains in moderate selloffs
+but very large gains in severe crashes
+```
+
+This property makes convex hedges valuable because they can:
+
+```text
+offset deep portfolio drawdowns
+provide liquidity during crises
+fund rebalancing into cheap assets
+```
+
+In practice, convexity is not measured using instantaneous gamma.
+Instead, hedge programs evaluate **crash convexity** using scenario analysis, which estimates hedge performance under large market declines.
 
 ### Optionality
 
@@ -822,19 +942,6 @@ buying a call
 Loss limited to premium, but upside potentially unlimited.
 
 *Example:* “Buying downside optionality.”
-
-### Pin Risk
-
-Pin risk occurs when the underlying closes **very close to a strike price at expiration**.
-
-*Example:* “Avoid pin risk into expiration.”
-
-```text
-stock = 100
-strike = 100
-```
-
-Note: This is relevant mainly to short options or expiry trading. Not important for long-dated tail hedges.
 
 ### Open Interest (OI)
 
@@ -864,24 +971,6 @@ Spread:
 ```text
 0.20
 ```
-
-### Gamma Scalping
-
-Gamma scalping is a trading strategy that profits from volatility.
-
-1. buy options (long gamma)
-2. hedge delta dynamically
-
-When price moves:
-
-```text
-buy low
-sell high
-```
-
-This captures realized volatility.
-
-Note: This is more relevant to market making or volatility trading, not portfolio hedging.
 
 ### Volatility Risk Premium
 
@@ -1243,72 +1332,90 @@ Efficiency = 1.5M / 300k = 5x payoff relative to cost
 
 ### Skew Exposure / Beta
 
-See [Volatility Skew / Skew Exposure / Skew Beta](#volatility-skew--skew-exposure--skew-beta) for definition details.
+See [Volatility Skew](#volatility-skew) the definition of skew.
 
-#### Simple Skew Metric
+While skew describes the **shape of the volatility surface**, tail hedges also differ in how sensitive they are to changes in that surface.
 
-Most traders measure skew using 25-delta options:
+This sensitivity is called **skew exposure or skew beta**.
 
-$Skew = \sigma_{25\Delta put} - \sigma_{50\Delta}$
+#### Definition of Skew Exposure / Beta
 
-Where:
+Skew beta measures how much the hedge value changes when downside skew steepens.
 
-- $25\Delta_{put} \approx \sim10-15\% \text{ OTM}$
-- $40\Delta_{put} \approx \text{ATM}$
-
-Note: $50\Delta$ is only exactly for ATM for calls. For puts $~40\Delta \approx \text{ATM}$
-
-Example:
-
-| Strike  | IV  |
-| ------- | --- |
-| ATM     | 20% |
-| 25Δ put | 27% |
-
-Skew
-
-```text
-27 − 20 = 7 vol points
-```
-
-#### Skew Beta
-
-Skew beta measures the hedge sensitivity to changes in that slope.
-
-So a simplified hedge sensitivity metric:
+Formally:
 
 $\text{Skew Beta} = \frac{\partial V}{\partial \text{Skew}}$
 
-*Example:*
+Where:
 
-OTM puts:
+- $V$ = hedge value
+- $Skew$ = difference between OTM put volatility and ATM volatility
 
-```text
-25% IV
-```
+#### Why Skew Beta Matters
 
-During crisis:
-
-```text
-prices drop + skew steepens → OTM puts explode
->40% IV
-```
-
-ATM volatility may rise less:
+During equity market crises, several things usually happen simultaneously:
 
 ```text
-20% → 30%
+equity prices fall
+implied volatility rises
+downside skew steepens
 ```
 
-OTM puts gain disproportionately. Many tail-risk strategies rely heavily on skew beta, using far OTM strikes.
+Lower strikes often experience **larger volatility increases** than ATM options.
 
-The gain in OTM put value is fully true because of:
+Example:
+
+| Option type | Before crisis | During crisis |
+| ----------- | ------------- | ------------- |
+| ATM vol     | 20%           | 30%           |
+| 25Δ put vol | 27%           | 38%           |
+
+Because deeper OTM options experience larger volatility increases, hedges that hold those strikes benefit more.
+
+#### Skew Beta Across Hedge Structures
+
+Hedges have higher skew exposure when they hold:
 
 ```text
-delta + vega + skew + convexity
+deeper OTM strikes
+longer maturities
+more tail-focused structures
 ```
 
-Not only due to skew.
+Different hedges have different skew exposure:
+
+| Structure            | Skew beta |
+| -------------------- | --------- |
+| ATM puts             | low       |
+| moderately OTM puts  | moderate  |
+| deep OTM tail hedges | high      |
+
+Tail-hedge programs often deliberately include **deep OTM strikes** because they provide strong skew beta during crises.
+
+However, these options may produce little protection during moderate drawdowns.
+
+As a result, many programs combine multiple strikes to balance:
+
+```text
+delta protection
+vega exposure
+skew beta
+carry cost
+```
+
+#### Important distinction
+
+Skew exposure should **not be confused with skew level**.
+
+A hedge may have strong skew beta even when skew is expensive.
+
+Similarly:
+
+```text
+cheap skew does not guarantee strong skew exposure
+```
+
+Those are two different dimensions.
 
 ### Volatility Regime
 
@@ -1412,11 +1519,11 @@ amplified volatility
 
 $\text{Gamma Exposure} = \sum_i \Gamma_i N_i$
 
-Simplisitically:
+Simplified dashboard approximation:
 
 $GEX = \sum (\Gamma \times OpenInterest)$
 
-More typically:
+because dealer gamma models normally include:
 
 $GEX \approx Gamma × OI × contract size × underlying²$
 
@@ -1499,11 +1606,11 @@ cheap long-dated vol
 ```
 
 Because crashes inflate short-dated volatility sharply and usually
-reprice long-dated volatility higher as well..
+reprice long-dated volatility higher as well.
 
 ## PART VI — Portfolio Tail Hedging Concepts & Structures
 
-The goal of tail hedging is **not to eliminate volatility or offset small drawdowns**. The goal is to create **liquidity during crises.***
+The goal of tail hedging is **not to eliminate volatility or offset small drawdowns**. The goal is to create **liquidity during crises**.
 
 The investor is looking to:
 
@@ -1512,13 +1619,7 @@ tolerate small losses
 offset large crashes
 ```
 
-During a crash, the hedge produces cash that can be used to:
-
-```text
-provide liquidity during crises
-```
-
-This liquidity lets investors:
+During a crash, the hedge produces cash (liquidity) that can be used by investors to:
 
 ```text
 rebalance
@@ -1717,7 +1818,7 @@ A typical tail hedge fund uses three design layers of strike, maturity and roll.
 
 ### Strike Selection
 
-The **“smile ladder” (multi-strike hedge)** is one of the most important design choices in a long-term tail-hedging program. Almost every professional tail-hedge fund uses **multiple strikes instead of a single deep OTM put**, because it dramatically improves the **convexity-to-carry trade-off** and stabilizes the hedge across different crash sizes.
+The **“strike ladder” (multi-strike hedge) across downside skew** is one of the most important design choices in a long-term tail-hedging program. Almost every professional tail-hedge fund uses **multiple strikes instead of a single deep OTM put**, because it dramatically improves the **convexity-to-carry trade-off** and stabilizes the hedge across different crash sizes.
 
 #### Why a Single-Strike Hedge Is Inefficient
 
@@ -1823,7 +1924,7 @@ Blending them reduces overall carry cost.
 
 #### Selecting Strikes
 
-Most tail-hedge funds allocate across **three to five strikes using 20–40% OTM puts****.
+Most tail-hedge funds allocate across **three to five strikes using 20–40% OTM puts**.
 
 Typical example:
 
@@ -2346,7 +2447,6 @@ The **best opportunities to buy crash protection** typically occur when:
 market calm
 volatility low
 skew moderate
-dealer gamma positive
 ```
 
 Investors instinct is to hedge **after markets fall**, but that is when hedges are **most expensive**.
@@ -2442,9 +2542,84 @@ Low <-----|-----> High
         current
 ```
 
-### 4. Skew Exposure Meter
+### 4. Skew Convexity
 
-See [Volatility Skew / Skew Exposure / Skew Beta](#volatility-skew--skew-exposure--skew-beta) and [Skew Exposure / Beta](#skew-exposure--beta) and for details.
+#### Skew Convexity Definition
+
+Skew convexity measures how much the hedge benefits from **crisis-driven steepening of downside skew**.
+
+It answers:
+
+> How much additional hedge value comes from crisis-driven steepening of put skew, beyond the move in spot and the change in overall volatility level?
+
+Skew convexity:
+
+- Is distinct from **skew level**; skew level tells you how expensive downside protection is today
+- Is also distince from **skew beta** which measures sensitivity to small changes in skew.
+- Skew convexity tells you how much the hedge may gain if **downside skew becomes even steeper** in a selloff.
+- Skew convexity measures the **total hedge payoff from skew repricing during extreme market stress**.
+
+#### Concept of Skew Convexity
+
+In a market crash:
+
+1. The underlying price falls.
+2. Implied volatility rises.
+3. Downside skew steepens sharply.
+
+Because deeper OTM options often see **larger volatility increases**, their value can increase dramatically relative to nearer strikes. Skew convexity captures this additional payoff.
+
+#### Scenario-Based Metric
+
+A practical way to measure skew convexity is through a skew shock scenario. This can be done by repricing the hedge under a skew-steepening scenario while holding spot and ATM volatility assumptions explicit.
+
+Let:
+
+$\text{Vbase}=\text{current hedge value}$
+
+$V_\text{skew−up}=\text{hedge value after a skew steepening scenario}$
+
+Define:
+
+$\text{Skew Convexity}=\frac{V_\text{skew\ up}−V_\text{base}}{Portfolio Value}$
+
+$\text{skew\ up}$ can also be called $\text{skew\ shock}$
+
+Example scenario:
+
+```text
+ATM volatility:      20% → 26%
+25Δ put volatility:  27% → 38%
+```
+
+Deep OTM hedges may gain far more than near-ATM hedges under this scenario. The difference between those repriced hedge values reflects skew convexity.
+
+#### Interpretation of Skew Convexity
+
+High skew convexity indicates the hedge is positioned to benefit strongly from panic repricing of crash insurance.
+
+This typically occurs when the hedge:
+
+```text
+owns deep OTM strikes
+owns long-dated options
+has strong skew beta
+```
+
+Low skew convexity indicates the hedge relies mainly on:
+
+```text
+delta exposure
+ATM volatility moves
+```
+
+rather than crisis skew repricing.
+
+#### Skew Convexity Practical Use
+
+Some hedge structures appear effective when modeled with **parallel volatility shifts** but perform poorly in real crises if they lack skew exposure. It is particularly important when comparing ATM or slightly OTM hedges versus deeper OTM crash structures.
+
+Monitoring skew convexity helps investors understand whether the hedge will benefit from the **full volatility surface repricing** that usually occurs during market crashes.
 
 #### Percentile calculation
 
@@ -2647,49 +2822,7 @@ long-dated vega exposure
 
 because crisis volatility often lifts long-dated implied volatility as well.
 
-### 12. Skew Convexity
-
-#### Skew Convexity Definition
-
-Skew convexity measures how much the hedge benefits when downside skew steepens during market stress. It is distinct from skew level. Skew level tells you how expensive downside protection is today; skew convexity tells you how much the hedge may gain if downside skew becomes even steeper in a selloff.
-
-It answers:
-
-> How much additional hedge value comes from crisis-driven steepening of put skew, beyond the move in spot and the change in overall volatility level?
-
-#### Skew Convexity Metric
-
-A practical way to measure skew convexity is by repricing the hedge under a skew-steepening scenario while holding spot and ATM volatility assumptions explicit.
-
-Let:
-
-$V_{base} = \text{current hedge value}$
-
-$V_{skew-up} = \text{hedge value after a skew-steepening shock}$
-
-$Skew = \sigma_{25\Delta\ put} − \sigma_{ATM}$
-
-Define a simple scenario metric as:
-
-$\text{Skew Convexity} = \frac{V_{skew-up} − V_{base}}{\text{Portfolio Value}}$
-
-You can also define sensitivity form as:
-
-$\text{Skew Sensitivity} = \frac{\partial V} {\partial Skew}$
-
-*Example:*
-
-If ATM volatility rises from 20% to 26% and 25Δ put volatility rises from 27% to 38%, deep OTM puts may gain disproportionately versus a hedge concentrated closer to ATM. The difference between those repriced hedge values reflects skew convexity.
-
-#### Skew Convexity Interpretation
-
-High skew convexity means the hedge is positioned to benefit strongly from panic repricing in downside puts. This is usually associated with deeper OTM strikes and longer-dated crash insurance structures. Low skew convexity means the hedge depends more on delta and ATM vega than on crisis steepening of downside skew.
-
-#### Skew Convexity Practical Use
-
-Tail-hedge programs monitor skew convexity because some hedges look adequate in flat-vol or parallel-vol scenarios but underperform in real crises if they do not own enough downside skew. It is particularly important when comparing ATM or slightly OTM hedges versus deeper OTM crash structures.
-
-### 13. Liquidity Risk
+### 12. Liquidity Risk
 
 #### Liquidity Risk Definition
 
@@ -2748,7 +2881,7 @@ rolling positions
 scaling hedge size
 ```
 
-### 14. Hedge Rebalance Triggers
+### 13. Hedge Rebalance Triggers
 
 #### Trigger Definition
 
@@ -2986,10 +3119,66 @@ SSRN
 arXiv
 ```
 
+## APPENDICIES
+
+### Additional Terminology
+
+#### Covered Call
+
+Short call against long stock.
+
+*Example:* “Generate income while holding shares.”
+
+#### Straddle
+
+Buy call + put same strike.
+
+*Example:* “Bet on big move either direction.”
+
+Note: This is more of a volatility strategy rather than downside hedging.
+
+#### Strangle
+
+OTM call + OTM put.
+
+*Example:* “Cheaper volatility bet.”
+
+Note: This is more of a volatility strategy rather than downside hedging.
+
+#### Pin Risk
+
+Pin risk occurs when the underlying closes **very close to a strike price at expiration**.
+
+*Example:* “Avoid pin risk into expiration.”
+
+```text
+stock = 100
+strike = 100
+```
+
+Note: This is relevant mainly to short options or expiry trading. Not important for long-dated tail hedges.
+
+#### Gamma Scalping
+
+Gamma scalping is a trading strategy that profits from volatility.
+
+1. buy options (long gamma)
+2. hedge delta dynamically
+
+When price moves:
+
+```text
+buy low
+sell high
+```
+
+This captures realized volatility.
+
+Note: This is more relevant to market making or volatility trading, not portfolio hedging.
+
 <!-- References -->
 [wiki-greeks]: https://en.wikipedia.org/wiki/Greeks_%28finance%29 "Wikipedia: Greeks (finance)"
 [informaconnect]: https://informaconnect.com/assessing-risk-profile-of-quant-strategies-the-convexity-vs-skewness/ "Assessing risk-profile of quant strategies: the convexity vs ..."
-[wiki-skew]: https://en.wikipedia.org/wiki/skew "Wikipedia: SKEW"
 [gateway]: https://www.gia.com/wp-content/uploads/2022/03/Convexity-A-Powerful-and-Customizable-Approach-to-Tail-Risk-Hedging.pdf "A Powerful and Customizable Approach to Tail Risk Hedging"
 [resonanzcapital]: https://resonanzcapital.com/insights/strategic-tail-risk-hedging-building-antifragility-into-institutional-portfolios "Strategic Tail-Risk Hedging: Building Antifragility into ..."
 [barnesnoble]: https://www.barnesandnoble.com/w/tail-risk-hedging-vineer-bhansali/1117029721 "Tail Risk Hedging: Creating Robust Portfolios for Volatile ..."
