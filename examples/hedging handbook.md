@@ -60,7 +60,6 @@ Updated: 2026-03-11
   - [Typical Monetization Triggers](#typical-monetization-triggers)
   - [Volatility Spike](#volatility-spike)
   - [Re-Risking Rules](#re-risking-rules)
-  - [Three Typical Monetization Triggers](#three-typical-monetization-triggers)
   - [Why Monetization Matters](#why-monetization-matters)
 - [PART VIII — Common Structural Mistakes](#part-viii--common-structural-mistakes)
   - [Buying protection when volatility is already high](#buying-protection-when-volatility-is-already-high)
@@ -859,7 +858,7 @@ Option prices drop sharply.
 
 ## PART IV — Tail-Hedging Concepts and Structures
 
-The goal of tail hedging is **not to eliminate volatility or offset small drawdowns**. The goal is to create **liquidity during crises**. This liquidity allows the investor to rebalance (e.g., but up heavily sold equities) and avoid forced selling.
+The goal of tail hedging is **not to eliminate volatility or offset small drawdowns**. The goal is to create **liquidity during crises**. This liquidity allows the investor to rebalance (e.g., buy up heavily sold equities) and avoid forced selling.
 
 The investor is looking to:
 
@@ -2308,7 +2307,19 @@ Therefore most institutional programs follow **systematic monetization rules**.
 Example rule:
 
 ```text
-If VIX doubles from entry level → sell 25–40% of hedge
+VIX doubles from entry level
+```
+
+or
+
+```text
+VIX > 40
+```
+
+Action:
+
+```text
+sell 20–40% of hedge
 ```
 
 Reason:
@@ -2339,6 +2350,8 @@ If hedge MTM > 5% portfolio value
 
 This prevents hedge gains from round-tripping.
 
+Institutional programs often monetize hedges when any of **three conditions occur**:
+
 ### Re-Risking Rules
 
 After monetization, programs usually **re-establish protection once volatility normalizes**.
@@ -2359,49 +2372,6 @@ Example:
 rebuild 50% of hedge first
 add remaining when volatility stabilizes
 ```
-
-### Three Typical Monetization Triggers
-
-Institutional programs often monetize hedges when any of **three conditions occur**:
-
-#### Volatility shock
-
-Example rule:
-
-```text
-VIX doubles from entry level
-```
-
-or
-
-```text
-VIX > 40
-```
-
-Action:
-
-```text
-sell 20–40% of hedge
-```
-
-#### Market drawdown trigger
-
-Example:
-
-```text
-SPX −15% → sell 25%
-SPX −25% → sell additional 25%
-```
-
-#### Hedge value threshold
-
-Example:
-
-```text
-Hedge MTM > 5% of portfolio
-```
-
-This locks in liquidity before volatility collapses.
 
 ### Why Monetization Matters
 
