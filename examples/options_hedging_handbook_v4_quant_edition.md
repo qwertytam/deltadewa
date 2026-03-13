@@ -848,3 +848,305 @@ Professional hedge programs often follow this cycle:
 
 This process allows tail hedges to function as **liquidity providers during crises**.
 
+
+
+---
+<a id="part-xxvi-portfolio-sizing"></a>
+# PART XXVI — Portfolio Hedge Sizing Frameworks
+
+A key decision in any hedge program is **how much protection to buy relative to the portfolio size**.
+
+Professional investors typically think about hedge sizing using:
+
+```
+portfolio volatility
+drawdown tolerance
+hedge convexity
+carry budget
+```
+
+---
+
+## Drawdown Protection Model
+
+Let:
+
+```
+P = portfolio value
+H = hedge payoff
+D = market drawdown
+```
+
+The net portfolio loss becomes:
+
+```
+Net Loss = P × D − H
+```
+
+Example:
+
+```
+Portfolio = $10M
+Market drawdown = −25%
+Equity loss = −$2.5M
+Hedge payoff = $1.5M
+Net loss = −$1.0M
+```
+
+The hedge reduced the drawdown from **25% to 10%**.
+
+---
+
+## Hedge Notional Guidelines
+
+Institutional programs often target:
+
+| Hedge Notional | Description        |
+| -------------- | ------------------ |
+| 25–50%         | partial protection |
+| 50–75%         | moderate hedge     |
+| 75–100%        | strong protection  |
+
+Many tail-risk funds operate around:
+
+```
+60–80% notional protection
+```
+
+because convexity amplifies hedge payoff in extreme scenarios.
+
+---
+
+<a id="part-xxvii-optimal-hedge-budget"></a>
+# PART XXVII — Optimal Hedge Budget
+
+Hedges are typically funded through an **annual carry budget**.
+
+Most institutional hedge programs target:
+
+```
+1–3% annual portfolio cost
+```
+
+Example:
+
+```
+Portfolio value = $10M
+Annual hedge budget = 2%
+Hedge budget = $200k per year
+```
+
+This budget must cover:
+
+```
+option premiums
+rolling costs
+transaction costs
+```
+
+---
+
+## Carry vs Convexity Optimization
+
+The hedge designer must balance:
+
+```
+minimize carry cost
+maximize crash payoff
+```
+
+This is often visualized as:
+
+```
+Convexity
+   ^
+   |
+   |      optimal zone
+   |
+   |
+   +------------------> Carry cost
+```
+
+Deep OTM long-dated options often sit near the **efficient frontier** of this tradeoff.
+
+---
+
+<a id="part-xxviii-tax-considerations"></a>
+# PART XXVIII — Tax Considerations for Hedging Instruments
+
+Different derivatives instruments have different tax treatments.
+
+---
+
+## SPX Index Options
+
+Characteristics:
+
+```
+European style
+cash settled
+Section 1256 treatment
+```
+
+Tax treatment in the United States:
+
+```
+60% long-term capital gains
+40% short-term capital gains
+mark-to-market annually
+```
+
+---
+
+## SPY Options
+
+Characteristics:
+
+```
+American style
+physically settled
+```
+
+Tax treatment:
+
+```
+standard capital gains
+holding period dependent
+```
+
+---
+
+## Futures and Futures Options
+
+Index futures and options on futures also typically fall under:
+
+```
+Section 1256 taxation
+```
+
+Advantages:
+
+```
+favorable tax treatment
+high liquidity
+low spreads
+```
+
+---
+
+<a id="part-xxix-historical-crash-analysis"></a>
+# PART XXIX — Historical Crash Analysis
+
+Understanding past market crashes helps calibrate hedge programs.
+
+Below are several major historical events.
+
+---
+
+## 1987 Crash
+
+```
+SPX decline ≈ −34%
+single day collapse
+volatility explosion
+```
+
+Deep OTM puts produced extremely large payoffs.
+
+---
+
+## 2008 Global Financial Crisis
+
+```
+SPX decline ≈ −57%
+volatility (VIX) > 80
+extended drawdown
+```
+
+Long-dated put hedges performed strongly.
+
+---
+
+## 2020 COVID Crash
+
+```
+SPX decline ≈ −34%
+fastest bear market in history
+VIX ≈ 85
+```
+
+Short-dated options increased in value dramatically.
+
+---
+
+## 2022 Bear Market
+
+```
+SPX decline ≈ −25%
+volatility moderately elevated
+slower decline
+```
+
+This type of environment can be challenging for hedges due to **volatility decay**.
+
+---
+
+<a id="part-xxx-drawdown-reduction"></a>
+# PART XXX — Portfolio Drawdown Reduction Modeling
+
+A key goal of tail hedging is **reducing portfolio drawdowns**.
+
+---
+
+## Maximum Drawdown Formula
+
+Maximum drawdown:
+
+```
+MDD = (Peak − Trough) / Peak
+```
+
+Example:
+
+```
+Portfolio peak = $10M
+Portfolio trough = $7M
+Drawdown = 30%
+```
+
+---
+
+## Hedged Portfolio Example
+
+Without hedge:
+
+```
+drawdown = 30%
+```
+
+With hedge:
+
+```
+equity loss = −30%
+hedge payoff = +15%
+net drawdown = −15%
+```
+
+The hedge cut the drawdown **in half**.
+
+---
+
+## Compound Return Improvement
+
+Reducing drawdowns improves long-term growth because the portfolio needs smaller recoveries.
+
+Example:
+
+| Drawdown | Required recovery |
+| -------- | ----------------- |
+| −10%     | +11%              |
+| −20%     | +25%              |
+| −50%     | +100%             |
+
+Tail hedging can therefore improve **compound portfolio returns** even if hedges lose money individually.
+
