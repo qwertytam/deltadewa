@@ -16,7 +16,6 @@
   - [1. Long Deep OTM Puts (Pure Tail Hedge)](#1-long-deep-otm-puts-pure-tail-hedge)
   - [2. Put Spread Hedge](#2-put-spread-hedge)
   - [3. Put + VIX Convexity Overlay](#3-put--vix-convexity-overlay)
-  - [4. Dynamic Volatility Overlay](#4-dynamic-volatility-overlay)
 - [PART XVII — Strike Selection Models](#part-xvii--strike-selection-models)
   - [Expected Crash Distribution](#expected-crash-distribution)
 - [PART XVIII — Rolling Frameworks](#part-xviii--rolling-frameworks)
@@ -223,33 +222,6 @@ No short options
 No financing leg
 ```
 
-Advantages:
-
-```text
-maximum convexity
-maximum crash payoff
-strong skew exposure
-```
-
-Disadvantages:
-
-```text
-high carry cost
-theta decay
-```
-
-Typical strikes:
-
-```text
-20–40% OTM
-```
-
-Typical maturity:
-
-```text
-12–24 months
-```
-
 ---
 
 ### 2. Put Spread Hedge
@@ -305,27 +277,6 @@ Disadvantages:
 ```text
 basis risk
 more complex management
-```
-
----
-
-### 4. Dynamic Volatility Overlay
-
-Structure:
-
-```text
-systematic option buying
-systematic monetization
-dynamic equity re‑risking
-```
-
-Used by many tail‑risk funds.
-
-Advantages:
-
-```text
-lower long‑term cost
-more active management
 ```
 
 ---

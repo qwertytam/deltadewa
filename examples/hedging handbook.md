@@ -34,6 +34,7 @@ Updated: 2026-03-13
   - [Structure 2 — Put Spread Tail Hedge](#structure-2--put-spread-tail-hedge)
   - [Structure 3 — Option Carry + Tail Hedge](#structure-3--option-carry--tail-hedge)
   - [Structure 4 — Volatility Instrument Hedge](#structure-4--volatility-instrument-hedge)
+  - [Structure 5 - Dynamic Volatility Overlay](#structure-5---dynamic-volatility-overlay)
   - [Structure Selection](#structure-selection)
   - [Instrument Choice: SPX, XSP, and SPY Options](#instrument-choice-spx-xsp-and-spy-options)
   - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
@@ -581,6 +582,9 @@ Interpretation:
 
 - When vol rises
 - Delta of options changes
+- Dealers must rebalance hedges
+
+This can create large flows in the underlying market.
 
 ### Charm
 
@@ -1014,6 +1018,33 @@ Buy 3500 puts
 18 months maturity
 ```
 
+Advantages:
+
+```text
+maximum convexity
+maximum crash payoff
+strong skew exposure
+```
+
+Disadvantages:
+
+```text
+high carry cost
+theta decay
+```
+
+Typical strikes:
+
+```text
+20–40% OTM
+```
+
+Typical maturity:
+
+```text
+12–24 months
+```
+
 #### Characteristics
 
 | Feature      | Value    |
@@ -1104,6 +1135,25 @@ VIX 20 → 70
 ```
 
 These strategies require **more active management**.
+
+### Structure 5 - Dynamic Volatility Overlay
+
+Structure:
+
+```text
+systematic option buying
+systematic monetization
+dynamic equity re‑risking
+```
+
+Used by many tail‑risk funds.
+
+Advantages:
+
+```text
+lower long‑term cost
+more active management
+```
 
 ### Structure Selection
 
