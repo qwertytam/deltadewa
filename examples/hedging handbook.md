@@ -56,7 +56,6 @@ Updated: 2026-03-14
   - [Vega Sufficiency](#vega-sufficiency)
   - [Hedge Efficiency Ratio](#hedge-efficiency-ratio)
   - [Skew Exposure / Beta](#skew-exposure--beta)
-  - [Skew Convexity](#skew-convexity)
   - [Volatility Regime](#volatility-regime)
   - [Gamma Liquidity Risk](#gamma-liquidity-risk)
   - [Forward Variance Level](#forward-variance-level)
@@ -74,7 +73,7 @@ Updated: 2026-03-14
   - [Historical Crash Analysis](#historical-crash-analysis)
 - [PART VIII — Monetization and Re-Risk Rules](#part-viii--monetization-and-re-risk-rules)
   - [Monetization Philosophy](#monetization-philosophy)
-  - [The Tail Hedge Cycle aka Why Monetization Matters](#the-tail-hedge-cycle-aka-why-monetization-matters)
+  - [The Tail Hedge Cycle and Why Monetization Matters](#the-tail-hedge-cycle-and-why-monetization-matters)
   - [Typical Monetization Triggers](#typical-monetization-triggers)
   - [Re-Risking Rules](#re-risking-rules)
   - [Scenario-Based Re-Risk Playbook](#scenario-based-re-risk-playbook)
@@ -347,7 +346,6 @@ Where $N(\cdot)$ is the standard normal cumulative distribution function.
 #### Practical interpretation
 
 - Delta is sometimes interpreted as the risk-neutral probability of finishing ITM, but this approximation is most accurate for short-dated ATM options
-- This interpretation is only approximate and works best for short-dated ATM options.
 - Properly, Delta corresponds to $N(d_1)$ while the true risk-neutral probability is $N(d_2)$
 - Effective exposure to the underlying
 
@@ -548,7 +546,8 @@ rates increase by 1%
 Option value increases:
 
 ```text
-$0.20
+For a call +$0.20
+For a put -$0.20
 ```
 
 #### Algebraic definition Rho
@@ -611,13 +610,20 @@ Charm measures how delta changes as time passes.
 
 $\text{Charm} = \frac{\partial^2 V}{\partial S\ \partial t}$
 
+Where:
+
+- $\tau = T - t$
+- $\tau$ is time to expiry, decreasing
+- $T$ total maturity
+- $t$ calendar time, moving forward
+
 Interpretation:
 
 Even if price does not move:
 
 - Delta drifts over time.
 
-In practice, charm is what causes put deltas to drift toward zero as expiration approaches even without price movement — creating the need for rolling that [PART VI](#part-vi--designing-a-tail-hedge-program) discusses.
+In practice, charm is what causes put deltas to drift toward zero as expiration approaches even without price movement — creating the need for rolling that [PART VII](#part-vii--designing-a-tail-hedge-program) discusses.
 
 ### Vomma
 
@@ -662,13 +668,13 @@ volatility
 
 ### Summary Relationship Between Volatility, Skew and Convexity
 
-| Concept                                      | What it answers                                               |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| [Volatility skew](#volatility-skew)          | What is the slope of the volatility surface today?            |
-| [Skew percentile](#skew-percentile)          | Is crash protection cheap or expensive historically?          |
-| [Convexity](#convexity)                      | How quickly does hedge payoff accelerate in a crash?          |
-| [Skew Exposure / Beta](#skew-exposure--beta) | How sensitive is the hedge to changes in skew?                |
-| [Skew convexity](#skew-convexity)            | How much additional payoff comes from crisis skew steepening? |
+| Concept                                                             | What it answers                                               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Volatility skew](#volatility-skew)                                 | What is the slope of the volatility surface today?            |
+| [Skew percentile](#skew-percentile)                                 | Is crash protection cheap or expensive historically?          |
+| [Convexity](#convexity)                                             | How quickly does hedge payoff accelerate in a crash?          |
+| [Skew Exposure / Beta](#skew-exposure--beta)                        | How sensitive is the hedge to changes in skew?                |
+| [Skew convexity](#skew-convexity-crisis-amplification-of-skew-beta) | How much additional payoff comes from crisis skew steepening? |
 
 Note: Convexity is driven by gamma, vega and skew repricing together.
 
@@ -692,7 +698,7 @@ vol
  +--------- strike
 ```
 
-*Example:* FX markets have a volatility smile.”
+*Example:* "FX markets have a volatility smile.”
 
 #### Interpretation of Volatility Smile
 
@@ -1242,7 +1248,6 @@ Even if the trade is ultimately profitable, short options can require additional
 
 The [Volatility Risk Premium](#volatility-risk-premium) that funds the hedge can compress or reverse, making the income side unreliable in certain regimes.
 
-
 ### Structure 4 — Volatility Instrument Hedge
 
 Instead of SPX puts, funds may use:
@@ -1264,7 +1269,7 @@ VIX 20 → 70
 
 These strategies require **more active management**.
 
-Note: Variance swaps are traded OTC and typically require ISDA master agreements, limiting their access only larger, more sophisticated institutions.
+Note: Variance swaps are traded OTC and typically require ISDA master agreements, limiting their access to only larger, more sophisticated institutions.
 
 ### Structure 5 - Dynamic Volatility Overlay
 
@@ -1447,7 +1452,7 @@ See [Example tail hedge payoff structure](#example-tail-hedge-payoff-structure)
 
 ## PART VI — Tail-Hedging Metrics
 
-Note, the follow three metrics partially overlap:
+Note, the following three metrics partially overlap:
 
 - Crash Convexity measures the absolute payoff of the hedge.
 - Crash Payoff Ratio measures how much portfolio loss is offset.
@@ -1923,58 +1928,47 @@ cheap skew does not guarantee strong skew exposure
 
 Those are two different dimensions.
 
-### Skew Convexity
+#### Skew Convexity (Crisis Amplification of Skew Beta)
 
-Most institutional hedge dashboards do not explicitly track skew convexity.
+Skew convexity measures how much additional value a hedge gains when **downside skew steepens sharply during a crisis** — beyond what can be explained by the spot price falling or overall implied volatility rising.
 
-They track:
+In a typical equity market crash, three effects occur simultaneously:
 
-- skew level
-- skew percentile
-- strike exposure
+| Effect          | What drives it                  | Captured by               |
+| --------------- | ------------------------------- | ------------------------- |
+| Price decline   | Spot falls                      | Delta (all put hedges)    |
+| Vol spike       | Overall IV rises                | Vega (long options)       |
+| Skew steepening | OTM puts rerate relative to ATM | Skew convexity (deep OTM) |
 
-The skew convexity concept is mostly implicit in deep strike exposure.
+Deep OTM puts experience disproportionately larger volatility increases than ATM puts during a panic. A hedge concentrated in those strikes benefits from all three effects. A hedge positioned closer to ATM captures mainly the first two.
 
-#### Skew Convexity Definition
+##### Key distinctions
 
-Skew convexity measures how much the hedge benefits from **crisis-driven steepening of downside skew**.
+These three concepts are often confused:
 
-It answers:
+- Skew level — how expensive downside puts are today
+- Skew beta — how sensitive the hedge is to small changes in skew
+- Skew convexity — the additional, non-linear payoff produced by crisis-driven skew steepening
 
-> How much additional hedge value comes from crisis-driven steepening of put skew, beyond the move in spot and the change in overall volatility level?
+##### What this means for hedge design
 
-Skew convexity:
+Skew convexity is an implicit property of the hedge structure, not typically tracked as a standalone dashboard metric. Programs that hold deep OTM strikes (30–40% OTM) with long maturities naturally have high skew convexity. Programs positioned nearer ATM have less, and may underperform their modelled payoffs in a genuine panic precisely because the model assumed parallel volatility shifts rather than the steep skew repricing that actually occurs.
 
-- Is distinct from **skew level**; skew level tells you how expensive downside protection is today
-- Is also distinct from **skew beta** which measures sensitivity to small changes in skew.
-- Skew convexity tells you how much the hedge may gain if **downside skew becomes even steeper** in a selloff.
-- Skew convexity measures the **incremental hedge payoff produced by non-parallel changes in the volatility surface during market stress**.
+The practical takeaway: **owning deep strikes is the primary mechanism for capturing skew convexity** — the crash scenario table will reflect it automatically if the ladder is structured correctly.
 
-#### Concept of Skew Convexity
+##### Skew Convexity as a Metric
 
-In a market crash:
+In practice, many institutional dashboards do not track skew convexity explicitly. Instead they monitor:
 
-1. The underlying price falls.
-2. Implied volatility rises.
-3. Downside skew steepens sharply.
+- skew level or skew percentile
+- strike distribution of the hedge
+- skew exposure (skew beta)
 
-Because deeper OTM options often see **larger volatility increases**, their value can increase dramatically relative to nearer strikes. Skew convexity captures this additional payoff.
+These implicitly determine skew convexity.
 
-#### Scenario-Based Metric
+##### Skew Convexity in Planning Scenarios
 
-A practical way to measure skew convexity is through a skew shock scenario. This can be done by repricing the hedge under a skew-steepening scenario while holding spot and ATM volatility assumptions explicit.
-
-Let:
-
-$\text{Vbase}=\text{current hedge value}$
-
-$V_\text{skew−up}=\text{hedge value after a skew steepening scenario}$
-
-Define:
-
-$\text{Skew Convexity}=\frac{V_\text{skew\ up}−V_\text{base}}{Portfolio Value}$
-
-$\text{skew\ up}$ can also be called $\text{skew\ shock}$
+A practical way to evaluate skew convexity is through surface shock scenarios.
 
 Example scenario:
 
@@ -1983,28 +1977,7 @@ ATM volatility:      20% → 26%
 25Δ put volatility:  27% → 38%
 ```
 
-Deep OTM hedges may gain far more than near-ATM hedges under this scenario. The difference between those repriced hedge values reflects skew convexity.
-
-#### Interpretation of Skew Convexity
-
-High skew convexity indicates the hedge is positioned to benefit strongly from panic repricing of crash insurance.
-
-This typically occurs when the hedge:
-
-```text
-owns deep OTM strikes
-owns long-dated options
-has strong skew beta
-```
-
-Low skew convexity indicates the hedge relies mainly on:
-
-```text
-delta exposure
-ATM volatility moves
-```
-
-rather than crisis skew repricing.
+The increase in hedge value produced specifically by the larger volatility change in lower strikes represents skew convexity.
 
 ### Volatility Regime
 
@@ -2891,9 +2864,9 @@ Roll interval:       9–12 months
 Strike ladder:
 
 ```text
-35% allocation → 80% strike puts
-40% allocation → 70% strike puts
-25% allocation → 60% strike puts
+35% allocation → 20% OTM strike puts
+40% allocation → 30% OTM strike puts
+25% allocation → 40% OTM strike puts
 ```
 
 Tenor ladder:
@@ -3028,7 +3001,7 @@ However, if hedges are not actively managed, gains may disappear when markets re
 
 Therefore most institutional programs follow **systematic monetization rules**.
 
-### The Tail Hedge Cycle aka Why Monetization Matters
+### The Tail Hedge Cycle and Why Monetization Matters
 
 Professional hedge programs often follow this cycle:
 
@@ -3553,7 +3526,7 @@ Typical rule:
 | ----- | ------------------ |
 | <15   | accumulate         |
 | 15-25 | maintain           |
-| >30   | reduce or monetize |
+| >25   | reduce or monetize |
 
 #### 7. Skew Percentile Gauge
 
@@ -4082,12 +4055,16 @@ Variables:
 | w.r.t.                | 1st derivative                                       | 2nd                                                                                                                                    | 3rd                                                                                                                                          |
 | --------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Underlying price: $S$ | $\Delta = \frac{\partial V}{\partial S}$             | $\Gamma = \frac{\partial \Delta}{\partial S} = \frac{\partial^2 V}{\partial S^2}$                                                      | $Speed = \frac{\partial \Gamma}{\partial S} = \frac{\partial^3 V}{\partial S^3}$                                                             |
-| Price and Volatility  |                                                      | $Vanna = \frac{\partial \Delta}{\partial \sigma} = \frac{\partial V}{\partial S} = \frac{\partial^2 V}{\partial S\ \partial \sigma}$   | $Zomma = \frac{\partial \Gamma}{\partial \sigma} = \frac {\partial Vanna}{\partial S} = \frac {\partial^3 V}{\partial S^2\ \partial \sigma}$ |
+| Price and Volatility  |                                                      | $Vanna = \frac{\partial \Delta}{\partial \sigma} = \frac{\partial \nu}{\partial S} = \frac{\partial^2 V}{\partial S\ \partial \sigma}$ | $Zomma = \frac{\partial \Gamma}{\partial \sigma} = \frac {\partial Vanna}{\partial S} = \frac {\partial^3 V}{\partial S^2\ \partial \sigma}$ |
 | Volatility: $\sigma$  | Vega: $\nu = \frac{\partial V}{\partial \sigma}$     | $\text{Vomma}={\frac {\partial \nu}{\partial \sigma }} = \frac {\partial ^{2}V}{\partial \sigma ^{2}}$                                 | $Ultima = \frac{\partial Vomma}{\partial \sigma} = \frac{\partial^3 V}{\partial \sigma^3}$                                                   |
 | Volatility and Time   |                                                      | $Veta = \frac{\partial \nu}{\partial \tau} = \frac{\partial^2 V}{\partial \sigma\ \partial \tau}$                                      |                                                                                                                                              |
 | Time: $t$             | $\Theta = -\frac{\partial V}{\partial t}$            | $Charm = -\frac{\partial \Delta}{\partial \tau} = \frac{\partial \Theta}{\partial S} = \frac{\partial^2 V}{\partial \tau\ \partial S}$ | $Parmicharma = -\frac{\partial charm}{\partial \tau} = \frac {\partial^3 V}{\partial \tau^2\ \partial S}$                                    |
 | Interest rate: $r$    | $\rho = \frac{\partial V}{\partial r}$               | $Vera = \frac{\partial \rho}{\partial \sigma} = \frac{\partial^2 V}{\partial \sigma\ \partial r}$                                      |                                                                                                                                              |
 | Dividend yield: $q$   | $\epsilon\ or\ \psi = \frac{\partial V}{\partial q}$ |                                                                                                                                        |                                                                                                                                              |
+
+Notes:
+
+- See [Charm](#charm) for differences between $t$ and $\tau$
 
 ### A3 Tax Considerations for Hedging Instruments
 
