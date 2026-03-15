@@ -31,7 +31,12 @@ Updated: 2026-03-14
   - [Volatility Skew](#volatility-skew)
   - [Volatility Term Structure](#volatility-term-structure)
   - [Volatility Crush](#volatility-crush)
-- [PART IV — Tail-Hedging Concepts and Structures](#part-iv--tail-hedging-concepts-and-structures)
+- [PART IV — Trading Terminology](#part-iv--trading-terminology)
+  - [Optionality](#optionality)
+  - [Open Interest (OI)](#open-interest-oi)
+  - [Liquidity Risk / Spread](#liquidity-risk--spread)
+  - [Volatility Risk Premium](#volatility-risk-premium)
+- [PART V — Tail-Hedging Concepts and Structures](#part-v--tail-hedging-concepts-and-structures)
   - [Convexity](#convexity)
   - [Structure 1 — Long OTM Puts (Pure Tail Hedge)](#structure-1--long-otm-puts-pure-tail-hedge)
   - [Structure 2 — Put Spread Tail Hedge](#structure-2--put-spread-tail-hedge)
@@ -42,7 +47,7 @@ Updated: 2026-03-14
   - [Structure Selection](#structure-selection)
   - [Instrument Choice: SPX, XSP, and SPY Options](#instrument-choice-spx-xsp-and-spy-options)
   - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
-- [PART V — Tail-Hedging Metrics](#part-v--tail-hedging-metrics)
+- [PART VI — Tail-Hedging Metrics](#part-vi--tail-hedging-metrics)
   - [Net Delta](#net-delta)
   - [Crash Convexity](#crash-convexity)
   - [Crash Payoff Ratio / Tail Hedge Effectiveness](#crash-payoff-ratio--tail-hedge-effectiveness)
@@ -55,7 +60,7 @@ Updated: 2026-03-14
   - [Volatility Regime](#volatility-regime)
   - [Gamma Liquidity Risk](#gamma-liquidity-risk)
   - [Forward Variance Level](#forward-variance-level)
-- [PART VI — Designing a Tail-Hedge Program](#part-vi--designing-a-tail-hedge-program)
+- [PART VII — Designing a Tail-Hedge Program](#part-vii--designing-a-tail-hedge-program)
   - [Program Constraints and Governance](#program-constraints-and-governance)
   - [Beta-adjusted hedge sizing](#beta-adjusted-hedge-sizing)
   - [Strike Selection](#strike-selection)
@@ -67,21 +72,16 @@ Updated: 2026-03-14
   - [Typical Hedge Program Targets](#typical-hedge-program-targets)
   - [Portfolio Hedge Sizing Framework](#portfolio-hedge-sizing-framework)
   - [Historical Crash Analysis](#historical-crash-analysis)
-- [PART VII — Monetization and Re-Risk Rules](#part-vii--monetization-and-re-risk-rules)
+- [PART VIII — Monetization and Re-Risk Rules](#part-viii--monetization-and-re-risk-rules)
   - [Monetization Philosophy](#monetization-philosophy)
-  - [The Tail Hedge Cycle aka Why Montetization Matters](#the-tail-hedge-cycle-aka-why-montetization-matters)
+  - [The Tail Hedge Cycle aka Why Monetization Matters](#the-tail-hedge-cycle-aka-why-monetization-matters)
   - [Typical Monetization Triggers](#typical-monetization-triggers)
   - [Re-Risking Rules](#re-risking-rules)
   - [Scenario-Based Re-Risk Playbook](#scenario-based-re-risk-playbook)
-- [PART VIII — Common Structural Mistakes](#part-viii--common-structural-mistakes)
+- [PART IX — Common Structural Mistakes](#part-ix--common-structural-mistakes)
   - [Buying protection when volatility is already high](#buying-protection-when-volatility-is-already-high)
   - [Buying puts that are not far enough OTM](#buying-puts-that-are-not-far-enough-otm)
   - [Holding hedges passively instead of rolling them](#holding-hedges-passively-instead-of-rolling-them)
-- [PART IX — Trading Terminology](#part-ix--trading-terminology)
-  - [Optionality](#optionality)
-  - [Open Interest (OI)](#open-interest-oi)
-  - [Liquidity Risk / Spread](#liquidity-risk--spread)
-  - [Volatility Risk Premium](#volatility-risk-premium)
 - [PART X — Institutional Hedge Dashboards](#part-x--institutional-hedge-dashboards)
   - [Introduction](#introduction)
   - [Tail Hedge Decision Matrix](#tail-hedge-decision-matrix)
@@ -347,6 +347,7 @@ Where $N(\cdot)$ is the standard normal cumulative distribution function.
 #### Practical interpretation
 
 - Delta is sometimes interpreted as the risk-neutral probability of finishing ITM, but this approximation is most accurate for short-dated ATM options
+- This interpretation is only approximate and works best for short-dated ATM options.
 - Properly, Delta corresponds to $N(d_1)$ while the true risk-neutral probability is $N(d_2)$
 - Effective exposure to the underlying
 
@@ -444,7 +445,7 @@ Option price increases:
 $0.50
 ```
 
-Note: The definition above assumes 1 vol point = 1%. However, in many models it is per 0.01 change in $\sigma$
+Note: In many option models vega is defined per unit volatility change ($\Delta\sigma = 1.00$). Traders typically quote vega per 1 volatility point ($\Delta\sigma = 0.01$).
 
 #### Algebraic definition for Vega
 
@@ -510,6 +511,10 @@ assuming other inputs remain constant.
 where $t$ is calendar time.
 
 $\text{Annual Carry} = \frac{-\Theta_{daily} \times 252}{Portfolio}$
+
+##### Theta Day Convention
+
+Theta is usually annualized using 252 trading days in equity options markets. Some trading desks do quote using calendar year i.e., 365 days.
 
 #### Practical interpretation of Theta
 
@@ -853,7 +858,7 @@ $\sigma = \sigma(T)$
 2-year vol = 20%
 ```
 
-This is **downward sloping** in normal markets.
+This is typically **downward sloping** in normal markets.
 
 During crises the volatility term structure often inverts,
 with short-dated volatility trading far above long-dated volatility.
@@ -902,7 +907,78 @@ Other relevant events can include:
 - non-farm payrolls
 - resolution of geopolitical events
 
-## PART IV — Tail-Hedging Concepts and Structures
+## PART IV — Trading Terminology
+
+These terms describe **portfolio behaviour**, not individual option parameters.
+
+### Optionality
+
+Optionality refers to **asymmetric payoff structures**.
+
+Definition:
+
+> limited downside, unlimited or large upside.
+
+Example:
+
+```text
+buying a call
+```
+
+Loss limited to premium, but upside potentially unlimited.
+
+*Example:* “Buying downside optionality.”
+
+### Open Interest (OI)
+
+Number of outstanding contracts.
+
+*Example:* “High OI at 5000 strike.”
+
+### Liquidity Risk / Spread
+
+Liquidity measures **how easily options can be traded** without large transaction costs or market impact.
+
+*Example:* “Wide spreads make hedging expensive.”
+
+Tail hedges often use:
+
+```text
+deep OTM strikes
+long maturities
+```
+
+which may have thin liquidity.
+
+### Volatility Risk Premium
+
+Markets tend to price **implied volatility higher than realized volatility**.
+
+Formally:
+
+$VRP = IV - RV$
+
+Where:
+
+- $IV$ = implied volatility
+- $RV$ = realized volatility
+
+*Example:*
+
+```text
+IV = 22%
+RV = 18%
+```
+
+Premium:
+
+```text
+4%
+```
+
+Option sellers capture this on average.
+
+## PART V — Tail-Hedging Concepts and Structures
 
 The goal of tail hedging is **not to eliminate volatility or offset small drawdowns**. The goal is to create **liquidity during crises**. This liquidity allows the investor to rebalance by buying heavily sold equities and avoid forced selling.
 
@@ -944,7 +1020,7 @@ minimize theta carry
 
 given the current volatility regime.
 
-Volatility funds tend to use four broad architectures.
+Volatility funds tend to use six broad architectures.
 
 ### Convexity
 
@@ -1164,7 +1240,7 @@ Even if the trade is ultimately profitable, short options can require additional
 
 #### Volatility Carry Reversal
 
-The [Volaility Risk Premium](#volatility-risk-premium) that funds the hedge can compress or reverse, making the income side unreliable in certain regimes.
+The [Volatility Risk Premium](#volatility-risk-premium) that funds the hedge can compress or reverse, making the income side unreliable in certain regimes.
 
 
 ### Structure 4 — Volatility Instrument Hedge
@@ -1212,6 +1288,22 @@ more active management
 ### Structure 6 - The collar strategy
 
 The collar (long equity + long OTM put + short OTM call) is one of the most commonly used downside protection strategies at family offices and private wealth desks. It addresses the carry problem directly by funding the put with the call premium.
+
+#### Typical strike positioning
+
+For example, buy a 5–10% OTM put and sell a 5–10% OTM call on the same notional. The "zero-cost collar" approximates zero net premium.
+
+#### The upside trade-off
+
+The short call caps participation in rallies beyond the call strike — the investor should understand this explicitly.
+
+#### Tax interaction
+
+Selling a call against a long equity position can create a "constructive sale" or affect the holding period of the underlying shares under certain conditions. This is material for a family office and at minimum deserves consulting tax counsel.
+
+#### Roll complexity
+
+Unlike a simple long put, the collar has two legs to roll, and the relative cost of each leg changes across volatility regimes.
 
 ### Structure Selection
 
@@ -1353,7 +1445,7 @@ Crash scenario:
 
 See [Example tail hedge payoff structure](#example-tail-hedge-payoff-structure)
 
-## PART V — Tail-Hedging Metrics
+## PART VI — Tail-Hedging Metrics
 
 Note, the follow three metrics partially overlap:
 
@@ -1596,17 +1688,13 @@ Hedge theta:
 -$2,500 per day
 ```
 
-Annualized:
+Annualized cost:
 
 ```text
--$2,500 × 252 ≈ -$630k
+-$2,500 × 252 ≈ -$630k → 6.3% of portfolio
 ```
 
-Cost:
-
-```text
-$6430k / $10M = 6.3% per year
-```
+Note: See [Theta Day Convention](#theta-day-convention)
 
 #### Portfolio Interpretation
 
@@ -1699,7 +1787,7 @@ Profit:
 $15,000 × 20 = $300,000
 ```
 
-In March 2020, the SPX moved down ~34% and the IV moved up from ~12-14 to ~82-85.
+In March 2020, the SPX moved down ~34% and the VIX moved up from ~12-14 to ~82-85.
 
 #### Portfolio Interpretation of Vega Sufficiency
 
@@ -1788,7 +1876,7 @@ Example:
 | ATM vol     | 20%           | 30%           |
 | 25Δ put vol | 27%           | 38%           |
 
-Because deeper OTM options experience larger volatility increases, hedges that hold those strikes benefit more.
+Because deeper OTM options experience larger volatility increases, hedges that hold those strikes benefit more. Deep OTM options typically have higher skew beta than ATM options.
 
 #### Skew Beta Across Hedge Structures
 
@@ -1944,7 +2032,7 @@ Example rule:
 Low vol regime: VIX < 15
 Normal regime: VIX 15–25
 High vol regime: VIX > 25
-Cris vol regime: VIX > 40
+Crisis vol regime: VIX > 40
 ```
 
 *Example:*
@@ -2091,6 +2179,9 @@ $\sigma_{fwd}^2 = \frac{T_2\sigma_2^2 - T_1\sigma_1^2}{T_2 - T_1}$
 
 #### Interpretation of Forward Variance Level
 
+Forward variance estimates the market's expectation of volatility
+during a future time window rather than over the entire option maturity.
+
 If long-dated volatility is unusually cheap:
 
 ```text
@@ -2110,7 +2201,7 @@ cheap long-dated vol
 Because crashes inflate short-dated volatility sharply and usually
 reprice long-dated volatility higher as well.
 
-## PART VI — Designing a Tail-Hedge Program
+## PART VII — Designing a Tail-Hedge Program
 
 A typical tail hedge fund uses three design layers of strike, maturity and roll.
 
@@ -2196,6 +2287,12 @@ A long-only equity portfolio with a mix of holdings rarely has a beta of exactly
 Standard institutional practice is to Beta adjust the hedge sizing as follows:
 
 $\text{Hedge Notional} = \text{Portfolio Value} \times \beta_{portfolio/SPX}$
+
+$N_{contracts​}=\frac{\text{Hedge Notional​}}{SPX \times \text{Contract Multiplier}}$
+
+where:
+
+- $\text{Contract Multiplier}$ is typically 100
 
 ### Strike Selection
 
@@ -2331,7 +2428,7 @@ Why this weighting works:
 
 ### Delta-Based Strike Selection
 
-Delta-based strikes adapt better to changing vol regimes than fixed moneyness alone. This is how many professional options desks actually think about strike selection
+Delta-based strikes adapt better to changing vol regimes than fixed moneyness alone. This is how many professional options desks actually think about and quote strike selection.
 
 Common rule:
 
@@ -2392,6 +2489,8 @@ This smooths **roll risk**.
 ### Rolling Rules
 
 Most programs roll on **time or moneyness triggers**. Hedge programs rarely hold options to expiry.
+
+Most institutional programs use time-based rolling as the primary rule.
 
 #### Rule 1 — Time-Based Roll
 
@@ -2917,9 +3016,9 @@ volatility moderately elevated
 slower decline
 ```
 
-This type of environment, (e.g., slow bear markets), can be challenging for hedges due to **volatility decay**.
+This type of environment, (e.g., slow bear markets), can be challenging for hedges due to **volatility decay**. Slow bear markets with declining volatility are particularly challenging for long-dated put hedges.
 
-## PART VII — Monetization and Re-Risk Rules
+## PART VIII — Monetization and Re-Risk Rules
 
 ### Monetization Philosophy
 
@@ -2929,7 +3028,7 @@ However, if hedges are not actively managed, gains may disappear when markets re
 
 Therefore most institutional programs follow **systematic monetization rules**.
 
-### The Tail Hedge Cycle aka Why Montetization Matters
+### The Tail Hedge Cycle aka Why Monetization Matters
 
 Professional hedge programs often follow this cycle:
 
@@ -3004,7 +3103,7 @@ Example framework:
 
 | Condition             | Action              |
 | --------------------- | ------------------- |
-| VIX < 18              | rebuild hedge       |
+| VIX < 15              | rebuild hedge       |
 | Skew percentile < 40% | rebuild hedge       |
 | Market stabilizes     | reset strike ladder |
 
@@ -3067,7 +3166,7 @@ After a crash stabilizes and volatility declines, the hedge program is typically
 
 See [Re-Risking Rules](#re-risking-rules) for further details.
 
-## PART VIII — Common Structural Mistakes
+## PART IX — Common Structural Mistakes
 
 The biggest mistake retail hedgers make is:
 
@@ -3182,77 +3281,6 @@ As maturity shortens, this relationship no longer holds, with time decay acceler
 
 Tail funds typically **roll hedges before this decay phase**.
 
-## PART IX — Trading Terminology
-
-These terms describe **portfolio behaviour**, not individual option parameters.
-
-### Optionality
-
-Optionality refers to **asymmetric payoff structures**.
-
-Definition:
-
-> limited downside, unlimited or large upside.
-
-Example:
-
-```text
-buying a call
-```
-
-Loss limited to premium, but upside potentially unlimited.
-
-*Example:* “Buying downside optionality.”
-
-### Open Interest (OI)
-
-Number of outstanding contracts.
-
-*Example:* “High OI at 5000 strike.”
-
-### Liquidity Risk / Spread
-
-Liquidity measures **how easily options can be traded** without large transaction costs or market impact.
-
-*Example:* “Wide spreads make hedging expensive.”
-
-Tail hedges often use:
-
-```text
-deep OTM strikes
-long maturities
-```
-
-which may have thin liquidity.
-
-### Volatility Risk Premium
-
-Markets tend to price **implied volatility higher than realized volatility**.
-
-Formally:
-
-$VRP = IV - RV$
-
-Where:
-
-- $IV$ = implied volatility
-- $RV$ = realized volatility
-
-*Example:*
-
-```text
-IV = 22%
-RV = 18%
-```
-
-Premium:
-
-```text
-4%
-```
-
-Option sellers capture this on average.
-
 ## PART X — Institutional Hedge Dashboards
 
 ### Introduction
@@ -3261,7 +3289,11 @@ These are the kinds of metrics volatility funds and institutional portfolio hedg
 
 These metrics help investors maintain **constant protection while controlling cost**, since tail-risk hedging aims to cushion severe drawdowns while preserving long-term portfolio growth. ([resonanzcapital.com][resonanzcapital])
 
-#### Initial List of Six
+#### Metric Prioritization
+
+There are many possible metrics to include. The full list below is prioritized by *Tier*.
+
+An alternative take is this list of six:
 
 1. Carry vs Convexity
 2. Crash Scenario Table
@@ -3523,7 +3555,7 @@ Typical rule:
 | 15-25 | maintain           |
 | >30   | reduce or monetize |
 
-#### 7. Skew Percentile Guage
+#### 7. Skew Percentile Gauge
 
 See [Skew Percentile](#skew-percentile) for details.
 
@@ -3837,8 +3869,6 @@ Very practical. Best modern practitioner book. Topics:
 
 It explains how to design systematic crash protection and quantify hedge payoffs. ([Barnes & Noble][barnesnoble]) One of the most complete frameworks for portfolio hedging using derivatives.
 
-### Research Papers on Tail Hedging
-
 #### Universa / Mark Spitznagel
 
 ```text
@@ -3850,6 +3880,8 @@ Topics:
 
 - tail-risk hedging
 - convex payoff structures
+
+### Research Papers on Tail Hedging
 
 #### AQR
 
@@ -4047,16 +4079,15 @@ Variables:
 
 #### Greeks Summary
 
-| Name  | Symbol   | Formula                                               | Interpretation            |
-| ----- | -------- | ----------------------------------------------------- | ------------------------- |
-| Delta | $\Delta$ | $-\frac{\partial V}{\partial S}$                      | price sensitivity         |
-| Gamma | $\Gamma$ | $\frac{\partial^2 V}{\partial S^2}$                   | convexity                 |
-| Vega  | $V$      | $\frac{\partial V}{\partial \sigma}$                  | volatility sensitivity    |
-| Theta | $\Theta$ | $\frac{\partial V}{\partial t}$                       | time decay                |
-| Rho   | $\Rho$   | $\frac{\partial V}{\partial r}$                       | interest‑rate sensitivity |
-| Vanna | $Vanna$  | $\frac{\partial^2 V}{\partial S\ \partial \sigma}$    | [...]                     |
-| Charm | $Charm$  | $\frac{\partial^2 V}{\partial \tau\ \partial \sigma}$ | [...]                     |
-| Vomma | $Vomma$  | $\frac{\partial^2 V}{\partial \sigma^2}$              | [...]                     |
+| w.r.t.                | 1st derivative                                       | 2nd                                                                                                                                    | 3rd                                                                                                                                          |
+| --------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Underlying price: $S$ | $\Delta = \frac{\partial V}{\partial S}$             | $\Gamma = \frac{\partial \Delta}{\partial S} = \frac{\partial^2 V}{\partial S^2}$                                                      | $Speed = \frac{\partial \Gamma}{\partial S} = \frac{\partial^3 V}{\partial S^3}$                                                             |
+| Price and Volatility  |                                                      | $Vanna = \frac{\partial \Delta}{\partial \sigma} = \frac{\partial V}{\partial S} = \frac{\partial^2 V}{\partial S\ \partial \sigma}$   | $Zomma = \frac{\partial \Gamma}{\partial \sigma} = \frac {\partial Vanna}{\partial S} = \frac {\partial^3 V}{\partial S^2\ \partial \sigma}$ |
+| Volatility: $\sigma$  | Vega: $\nu = \frac{\partial V}{\partial \sigma}$     | $\text{Vomma}={\frac {\partial \nu}{\partial \sigma }} = \frac {\partial ^{2}V}{\partial \sigma ^{2}}$                                 | $Ultima = \frac{\partial Vomma}{\partial \sigma} = \frac{\partial^3 V}{\partial \sigma^3}$                                                   |
+| Volatility and Time   |                                                      | $Veta = \frac{\partial \nu}{\partial \tau} = \frac{\partial^2 V}{\partial \sigma\ \partial \tau}$                                      |                                                                                                                                              |
+| Time: $t$             | $\Theta = -\frac{\partial V}{\partial t}$            | $Charm = -\frac{\partial \Delta}{\partial \tau} = \frac{\partial \Theta}{\partial S} = \frac{\partial^2 V}{\partial \tau\ \partial S}$ | $Parmicharma = -\frac{\partial charm}{\partial \tau} = \frac {\partial^3 V}{\partial \tau^2\ \partial S}$                                    |
+| Interest rate: $r$    | $\rho = \frac{\partial V}{\partial r}$               | $Vera = \frac{\partial \rho}{\partial \sigma} = \frac{\partial^2 V}{\partial \sigma\ \partial r}$                                      |                                                                                                                                              |
+| Dividend yield: $q$   | $\epsilon\ or\ \psi = \frac{\partial V}{\partial q}$ |                                                                                                                                        |                                                                                                                                              |
 
 ### A3 Tax Considerations for Hedging Instruments
 
