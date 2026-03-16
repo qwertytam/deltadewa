@@ -43,7 +43,7 @@ Updated: 2026-03-14
   - [Structure 3 — Option Carry + Tail Hedge](#structure-3--option-carry--tail-hedge)
   - [Structure 4 — Volatility Instrument Hedge](#structure-4--volatility-instrument-hedge)
   - [Structure 5 - Dynamic Volatility Overlay](#structure-5---dynamic-volatility-overlay)
-  - [Structure 6 - The collar strategy](#structure-6---the-collar-strategy)
+  - [Structure 6 - Collar Strategy](#structure-6---collar-strategy)
   - [Structure Selection](#structure-selection)
   - [Instrument Choice: SPX, XSP, and SPY Options](#instrument-choice-spx-xsp-and-spy-options)
   - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
@@ -103,13 +103,15 @@ Updated: 2026-03-14
 
 ## Preface
 
-This handbook is a practical reference for the design, implementation, and ongoing management of a systematic downside hedging program for a long-only equity portfolio. It is written for a investment professional evaluating tail-risk protection for the first time — and assumes familiarity with basic investment concepts but no prior options trading experience.
+This handbook is a practical reference for the design, implementation, and ongoing management of a systematic downside hedging program for a long-only equity portfolio. It is written for an investment professional evaluating tail-risk protection for the first time — and assumes familiarity with basic investment concepts but no prior options trading experience.
 
 The document covers options fundamentals, the Greeks, volatility surface dynamics, hedge structures, sizing and rolling frameworks, monetization rules, and operational governance. It is structured to be read sequentially on first pass and used as a reference thereafter.
 
 ### Philosophy
 
 The typical goal of a hedge program is not to eliminate volatility or offset every drawdown. It is to provide meaningful liquidity during severe market dislocations — crashes of 20% or more — while keeping the cost of that protection manageable in normal market conditions. Hedges are treated as a strategic portfolio allocation, not a tactical trade, and are most valuable when accumulated systematically during calm markets rather than reactively during stress.
+
+A well-designed tail hedge will typically lose money in most market environments. Its value lies in reducing extreme drawdowns and providing liquidity during rare crises.
 
 ### Scope and assumptions
 
@@ -504,7 +506,7 @@ assuming other inputs remain constant.
 
 #### Algebraic definition Theta
 
-\$\Theta = -\frac{\partial V}{\partial t}$
+$\Theta = -\frac{\partial V}{\partial t}$
 
 where $t$ is calendar time.
 
@@ -806,10 +808,6 @@ Because skew varies through time, tail-hedge programs often track **skew percent
 
 #### Skew Percentile
 
-Some hedge structures appear effective when modeled with **parallel volatility shifts** but perform poorly in real crises if they lack skew exposure. It is particularly important when comparing ATM or slightly OTM hedges versus deeper OTM crash structures.
-
-Monitoring skew convexity helps investors understand whether the hedge will benefit from the **full volatility surface repricing** that usually occurs during market crashes.
-
 Because skew varies over time, institutional desks often evaluate skew relative to history.
 
 $\text{Skew Percentile}=\text{rank of current skew vs historical distribution}$
@@ -820,6 +818,7 @@ Example:
 | ---------- | --------------------------------- |
 | <20%       | protection historically cheap     |
 | 20–70%     | normal                            |
+| 70–80%     | moderately expensive              |
 | >80%       | protection historically expensive |
 | >90%       | panic pricing                     |
 
@@ -988,13 +987,6 @@ Option sellers capture this on average.
 
 The goal of tail hedging is **not to eliminate volatility or offset small drawdowns**. The goal is to create **liquidity during crises**. This liquidity allows the investor to rebalance by buying heavily sold equities and avoid forced selling.
 
-The investor is looking to:
-
-```text
-tolerate small losses
-offset large crashes
-```
-
 During a crash, the hedge produces cash (liquidity) that can be used by investors to:
 
 ```text
@@ -1048,7 +1040,7 @@ P&L can accelerate as the underlying moves further.
 
 This non-linear payoff structure is called convexity.
 
-Convexity in tail hedging is primarily a portfolio-level concept, not just instantaneous gamma. It reflects the combined effects of gamma, vega, and skew repricing during large market moves.
+Convexity in tail hedging is primarily a portfolio-level concept, not just instantaneous gamma. It reflects the combined effects of gamma, vega, and skew repricing during large market moves. Convex strategies benefit from extreme moves in the benchmark index.[Informa Connect][informaconnect]
 
 ##### Example tail hedge payoff structure
 
@@ -1290,7 +1282,7 @@ lower long‑term cost
 more active management
 ```
 
-### Structure 6 - The collar strategy
+### Structure 6 - Collar Strategy
 
 The collar (long equity + long OTM put + short OTM call) is one of the most commonly used downside protection strategies at family offices and private wealth desks. It addresses the carry problem directly by funding the put with the call premium.
 
@@ -1497,15 +1489,13 @@ $10M × (1 − 0.20) = $8M
 
 ### Crash Convexity
 
-#### Definition of Crash Convexity
-
-Crash convexity measures how much a hedge accelerates in value as market losses deepen. It captures the non-linear payoff profile of options during large drawdowns. Convex strategies benefit from extreme moves in the benchmark index.[Informa Connect][informaconnect]
-
-See [Convexity](#convexity) for further details.
+See [Convexity](#convexity) for additional detail on convexity.
 
 #### Crash Convexity Metric
 
 Crash convexity is typically evaluated using scenario analysis.
+
+Note, there is no single universally standardised formula - see [Why There Is No Single Standard](#why-there-is-no-single-standard) for further detail.
 
 Let:
 
@@ -1520,6 +1510,16 @@ $\text{Crash Convexity}_x = \frac{V_{crash} − V_{today}}{Portfolio}$
 Where:
 
 $x$ = is the assumed market decline (e.g. 20%, 30%, 40%)
+
+This is a scenario P&L ratio — it measures how much the hedge gains as a percentage of the portfolio under a given crash assumption. Other names include:
+
+```text
+Crisis Payout
+or
+Criss Hedge Gain (% of portfolio)
+```
+
+It is simple, intuitive, and the most widely used formulation among institutional desks and family offices.
 
 Example:
 
@@ -1557,6 +1557,70 @@ more vega exposure
 deeper OTM strikes
 higher carry cost
 ```
+
+#### Why There Is No Single Standard
+
+Unlike delta or vega, crash convexity is not a derivative of the pricing function. It is a scenario output, not a closed-form greek. The number you get depends on three modelling choices:
+
+##### 1. The crash scenario itself
+
+Most programs run multiple: typically −15%, −20%, −25%, −30%, and sometimes −40% to capture both moderate corrections and severe crashes. Reporting a single number without specifying the scenario is incomplete.
+
+##### 2. How you reprice the hedge
+
+This is where firms differ most. Options include:
+
+###### Full surface reprice
+
+Shift spot down by x% and simultaneously apply a historically-calibrated vol surface shift (including skew steepening). This is the most realistic and preferred by sophisticated programs.
+
+###### Delta-only approximation
+
+$\Delta V \approx \Delta_{hedge} \times \Delta S$
+
+Fast but significantly understates convexity because it ignores vega and skew.
+
+###### Delta + vega approximation
+
+$\Delta V \approx \Delta_{hedge} \times \Delta S + \nu \times \Delta\sigma$
+
+Better, but still assumes parallel vol shifts rather than skew steepening.
+
+##### Whether you include or exclude the initial premium paid
+
+Some firms report gross hedge P&L; others report net of carry cost paid to date. These produce materially different numbers.
+
+#### A Slightly More Complete Version
+
+For programs that want to make the vol assumption explicit:
+
+$\text{Crash Convexity}_x = \frac{\Delta_{hedge} \cdot \Delta S + \nu \cdot \Delta\sigma(x) + \text{Skew Adjustment}(x)}{P}$
+
+Where $\Delta\sigma(x)$ is the assumed vol spike at crash level $x$, and the skew adjustment captures non-parallel surface repricing for deep OTM strikes. In practice, few firms compute this analytically — they use a scenario engine to reprice the full position instead.
+
+#### What Family Offices and Institutional Investors Actually Use
+
+##### Family offices and smaller programs
+
+Typically use the simple scenario ratio with one or two spot shocks (often −20% and −30%), repriced using either a flat vol bump or a vol lookup table calibrated to historical regimes. The goal is a number they can monitor monthly and compare against their carry cost.
+
+##### Institutional tail funds (Universa, Ambrus, LongTail Alpha etc.)
+
+Run full surface shock scenarios with explicit skew steepening assumptions, typically computing crash convexity across a grid of spot × vol scenarios. They will often report a convexity profile — a curve rather than a single number — to show how the hedge responds across different crash severities.
+
+##### The most important practical point
+
+Is that crash convexity is only meaningful when specified with its scenario assumptions. A number quoted as "28% crash convexity" is incomplete without knowing whether that is at −20% or −30% SPX, and whether it assumes a historical vol spike or a flat parallel shift. The handbook's existing formula is correct — it just needs the scenario to always be stated alongside the result.
+
+#### Example Convexity Profile / Multi-Scenario Table
+
+| Scenario (SPX move) | Vol assumption | Hedge gain | Crash Convexity |
+| ------------------- | -------------- | ---------- | --------------- |
+| −15%                | +8 vol pts     | $180       | k1.8%           |
+| −20%                | +15 vol pts    | $500k      | 5.0%            |
+| −25%                | +25 vol pts    | $1.05M     | 10.5%           |
+| −30%                | +35 vol pts    | $2.1M      | 21.0%           |
+| −40%                | +50 vol pts    | $4.8M      | 48.0%           |
 
 ### Crash Payoff Ratio / Tail Hedge Effectiveness
 
@@ -1718,7 +1782,7 @@ Typical institutional targets:
 
 ### Vega Sufficiency
 
-Vega sufficiency measures whether the hedge has **enough volatility exposure** to benefit from the **volatility spike that usually accompanies a market crash**.
+Vega sufficiency measures whether the hedge has **enough volatility exposure** to benefit from the **volatility spike that usually accompanies a market crash**. Vega sufficiency is typically **scenario based**, not a static ratio.
 
 In equity markets:
 
@@ -1789,10 +1853,11 @@ Change:
 Profit:
 
 ```text
+Expected vega gain = vega x Δvol
 $15,000 × 20 = $300,000
 ```
 
-In March 2020, the SPX moved down ~34% and the VIX moved up from ~12-14 to ~82-85.
+For example, in March 2020, the SPX moved down ~34% and the VIX moved up from ~12-14 to ~82-85.
 
 #### Portfolio Interpretation of Vega Sufficiency
 
@@ -1942,6 +2007,10 @@ In a typical equity market crash, three effects occur simultaneously:
 
 Deep OTM puts experience disproportionately larger volatility increases than ATM puts during a panic. A hedge concentrated in those strikes benefits from all three effects. A hedge positioned closer to ATM captures mainly the first two.
 
+Some hedge structures appear effective when modeled with **parallel volatility shifts** but perform poorly in real crises if they lack skew exposure. It is particularly important when comparing ATM or slightly OTM hedges versus deeper OTM crash structures.
+
+Monitoring skew convexity helps investors understand whether the hedge will benefit from the **full volatility surface repricing** that usually occurs during market crashes.
+
 ##### Key distinctions
 
 These three concepts are often confused:
@@ -2088,23 +2157,13 @@ $GEX = \sum (\Gamma \times OpenInterest)$
 
 because dealer gamma models normally include:
 
-$GEX \approx Gamma × OI × contract size × underlying²$
+$GEX \approx Gamma \times OI \times contract size \times spot^2 \times 0.01$
 
 Many sites publish estimates.
 
 #### Interpretation of Results
 
-High gamma means:
-
-```text
-large moves → big hedge gains
-```
-
-But also:
-
-```text
-requires rebalancing
-```
+High gamma means hedge delta increases rapidly as markets fall. Combined with vega expansion, this produces convex payoff behavior. Under this scenario, rebalancing is typically required.
 
 | Dealer gamma | Market behavior       |
 | ------------ | --------------------- |
@@ -2121,7 +2180,7 @@ dealer gamma negative
 
 Because this increases crash probability.
 
-Note: Tail hedges depend more on vol regime + skew + term structure than Gamma liquidity risk.
+Note: Tail hedge allocation decisions depend primarily on volatility regime, skew levels, and the volatility term structure than Gamma liquidity risk.
 
 ### Forward Variance Level
 
@@ -2461,6 +2520,8 @@ This smooths **roll risk**.
 
 ### Rolling Rules
 
+Option carry is not determined by theta alone. Rolling long-dated options through the volatility term structure and skew curve can generate additional costs or benefits depending on the shape of the surface. This effect is sometimes referred to as volatility roll yield.
+
 Most programs roll on **time or moneyness triggers**. Hedge programs rarely hold options to expiry.
 
 Most institutional programs use time-based rolling as the primary rule.
@@ -2533,7 +2594,7 @@ If VIX > 25 → monetize some part of hedge
 If VIX > 40 → look to liquidate hedge in full
 ```
 
-This helps control carry cost.
+This rule helps control the long-term carry cost of the hedge program.
 
 ### Numerical Example
 
@@ -2902,7 +2963,7 @@ D = market drawdown
 The net portfolio loss becomes:
 
 ```text
-Net Loss = P × D − H
+Net Loss = (P × D) + H
 ```
 
 Example:
@@ -3436,7 +3497,7 @@ See [Crash Convexity](#crash-convexity) and [Theta Carry](#theta-carry--insuranc
 
 $\text{Carry-Convexity Ratio} = \frac{\text{Convexity}}{\text{Carry}}$
 
-So, say annual carry is `3%`, then the ratio is:
+If crash convexity at −25% SPX is 22% and annual carry is 3%, then the ratio is:
 
 ```text
 22% / 3% = 7.3
@@ -3522,11 +3583,12 @@ Volatility funds prefer to **buy protection when volatility is cheap**.
 
 Typical rule:
 
-| VIX   | Hedge action       |
-| ----- | ------------------ |
-| <15   | accumulate         |
-| 15-25 | maintain           |
-| >25   | reduce or monetize |
+| VIX   | Hedge action                |
+| ----- | --------------------------- |
+| <15   | accumulate                  |
+| 15-25 | maintain                    |
+| 25-40 | partial reduction           |
+| >40   | more aggresive monetization |
 
 #### 7. Skew Percentile Gauge
 
@@ -3809,7 +3871,7 @@ Topics:
 - hedging
 - market maker thinking
 
-#### Volatility & Pricing – Sheldon Natenberg
+#### Option Volatility and Pricing – Sheldon Natenberg
 
 Industry classic covering:
 
