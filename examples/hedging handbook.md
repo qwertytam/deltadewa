@@ -1217,12 +1217,14 @@ This attempts to **finance the hedge with volatility risk premium**.
 
 Risks:
 
-```text
-timing mismatch
-mis-timed short gamma risk
-margin/collateral pressure in a crisis
-volatility carry reversal
-```
+- [timing mismatch](#timing-mismatch)
+- [mis-timed short gamma risk](#short-gamma-risk)
+- [margin/collateral pressure in a crisis](#margincollateral-pressure)
+- [volatility carry reversal](#volatility-carry-reversal)
+
+#### Timing Mismatch
+
+The hedge's income and protection components can be out of sync during a volatility spike, causing a timing mismatch.
 
 #### Short Gamma Risk
 
@@ -2801,9 +2803,9 @@ Those three metrics tell you, respectively:
 
 - what it costs in normal years,
 - what it might be worth in a crash,
-- how much of the equity drawdown it offsets
+- if the cost-to-protection trade-off is attractive
 
-#### Advanced Testing Metrics:  VaR, CVaR and Tail Loss Reduction
+##### Advanced Testing Metrics:  VaR, CVaR and Tail Loss Reduction
 
 Traditional hedge evaluation often focuses on:
 
@@ -2813,11 +2815,11 @@ Traditional hedge evaluation often focuses on:
 
 While these metrics are useful, institutional investors increasingly evaluate hedging strategies using **portfolio tail-risk metrics**.
 
-Three commonly used measures are **Value-at-Risk (CVaR), Conditional Value-at-Risk (CVaR), and Tail Loss Reduction**.
+Three commonly used measures are **Value-at-Risk (VaR), Conditional Value-at-Risk (CVaR), and Tail Loss Reduction**.
 
-#### Value-at-Risk (VaR)
+##### Value-at-Risk (VaR)
 
-Value-at-Risk measures the **maximum expected loss** at a given confidence level over a given holding period.
+Value-at-Risk measures the **loss threshold that will not be exceeded** at a given confidence level over a given holding period.
 
 Formally:
 
@@ -2833,7 +2835,7 @@ Interpretation: there is a 95% probability that the portfolio will not lose more
 
 VaR is widely reported by risk systems and is a standard regulatory metric for banks and funds. It is easy to communicate to boards and investment committees.
 
-##### Why VaR is Insufficient for Tail Hedge Evaluation
+###### Why VaR is Insufficient for Tail Hedge Evaluation
 
 VaR has a critical structural limitation for tail-hedging purposes: **it says nothing about the magnitude of losses beyond the threshold**.
 
@@ -2848,7 +2850,7 @@ The VaR is the same. The tail outcome is radically different. A hedging program 
 
 This is why **VaR alone is a misleading** metric for evaluating tail-hedge effectiveness, and why institutional programs use CVaR instead.
 
-#### Conditional Value-at-Risk (CVaR)
+##### Conditional Value-at-Risk (CVaR)
 
 CVaR (also called Expected Shortfall)  measures the **expected loss in the worst tail outcomes** of a return distribution[^artzner].
 
@@ -2862,28 +2864,7 @@ CVaR(95%) = average loss of the worst 5% of outcomes = $900k
 
 Unlike VaR, CVaR captures the full severity of tail events. It is sensitive to both the probability and the magnitude of extreme losses, which is precisely what a tail hedge is designed to reduce.
 
-##### Comparing Unhedged vs. Hedged Portfolios
-
-When evaluating a hedge strategy, investors compare:
-
-```text
-CVaR (unhedged portfolio)
-vs
-CVaR (hedged portfolio)
-```
-
-Example:
-
-| Metric   | Unhedged | Hedged | Reduction |
-| -------- | -------- | ------ | --------- |
-| 95% VaR  | $350k    | $340k  | 3%        |
-| 95% CVaR | $1.5M    | $650k  | 57%       |
-
-The VaR improvement appears negligible. The CVaR improvement is substantial — this is the correct way to read the hedge's contribution.
-
-A successful tail hedge should **meaningfully reduce portfolio CVaR** even if it introduces a modest carry cost during normal market environments.
-
-#### Tail Loss Reduction
+##### Tail Loss Reduction
 
 Tail Loss Reduction measures how much a hedge reduces extreme portfolio losses.
 
@@ -2909,9 +2890,30 @@ Tail Loss Reduction = 12 percentage points
 
 This metric captures the **total impact of the hedge on portfolio drawdowns**, rather than evaluating the hedge in isolation.
 
+###### Comparing Unhedged vs. Hedged Portfolios
+
+When evaluating a hedge strategy, investors compare:
+
+```text
+CVaR (unhedged portfolio)
+vs
+CVaR (hedged portfolio)
+```
+
+Example:
+
+| Metric   | Unhedged | Hedged | Reduction |
+| -------- | -------- | ------ | --------- |
+| 95% VaR  | $350k    | $340k  | 3%        |
+| 95% CVaR | $1.5M    | $650k  | 57%       |
+
+The VaR improvement appears negligible. The CVaR improvement is substantial — this is the correct way to read the hedge's contribution.
+
+A successful tail hedge should **meaningfully reduce portfolio CVaR** even if it introduces a modest carry cost during normal market environments.
+
 #### Why These Metrics Matter
 
-Tail hedges should not be evaluated solely on **stand-alone option P&L**.
+Tail hedges should **not** be evaluated solely on **stand-alone option P&L**.
 
 Instead, they should be judged on their ability to:
 
@@ -2921,7 +2923,7 @@ Instead, they should be judged on their ability to:
 
 Because of this, many institutional hedge programs measure performance primarily in terms of **portfolio tail-risk reduction** rather than hedge profit alone.
 
-#### Practical note for the smaller institutional investors / family offices
+#### Investment Committee Reporting
 
 For a long-only portfolio, computing CVaR precisely requires either a historical simulation or a Monte Carlo model with realistic vol surface dynamics. As a practical starting point, the crash scenario table (see [Crash Scenario Table](#2-crash-scenario-table--payoff-ratio)) provides the inputs needed to estimate CVaR reduction: the hedge payoffs across scenarios can be used to directly compute expected shortfall if combined with historical or assumed return probabilities for each scenario.
 
@@ -2931,9 +2933,9 @@ The key governance implication: if the investment committee or board uses VaR as
 
 For a **systematic long-dated OTM put program** on a broad equity portfolio, a reasonable first-pass expectation is usually:
 
-- **lean / deep OTM ladder**: roughly **1%–2% per year**
-- **balanced ladder**: roughly **2%-3% per year**
-- **richer / closer-to-spot protection**: roughly **4%+ per year**
+- **lean / deep OTM ladder**: **~1%–2% per year**
+- **balanced ladder**: **~2%-3% per year**
+- **richer / closer-to-spot protection**: more than **~3%+ per year**
 
 That is a heuristic, not a law. The cost depends mainly on moneyness, tenor, roll frequency, and whether you monetize into spikes. Public Cboe protective-put indexes are a useful reminder that nearer-strike, frequent-roll protection is meaningfully costlier than deeper-OTM tail structures[^cobe-pp-indices].
 
@@ -4094,7 +4096,7 @@ Very practical. Best modern practitioner book. Topics:
 
 #### Tail Risk Hedging — Vineer Bhansali
 
-It explains how to design systematic crash protection and quantify hedge payoffs[^barnesnoble]. One of the most complete frameworks for portfolio hedging using derivatives.
+It explains how to design systematic crash protection and quantify hedge payoffs[^bhansali]. One of the most complete frameworks for portfolio hedging using derivatives.
 
 #### Universa / Mark Spitznagel
 
@@ -4433,10 +4435,7 @@ Discusses the cost-per-payoff framing in a format accessible to allocators.
 [^resonanzcapital]: Strategic Tail-Risk Hedging: Building Antifragility into ...
 <https://resonanzcapital.com/insights/strategic-tail-risk-hedging-building-antifragility-into-institutional-portfolios>
 
-[^barnesnoble]: Tail Risk Hedging: Creating Robust Portfolios for Volatile ...
-<https://www.barnesandnoble.com/w/tail-risk-hedging-vineer-bhansali/1117029721>
-
-[^mutinyfund]: The Best Tail Hedging Books for Beginners
+\[^mutinyfund]: The Best Tail Hedging Books for Beginners
 <https://mutinyfund.com/best-tail-hedging-books/>
 
 [^alpha-arch]: Strategies to Mitigate Tail Risk -
