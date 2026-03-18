@@ -553,7 +553,7 @@ For a call +$0.20 → long calls have positive rho, increasing in value when int
 For a put -$0.20 → long puts have negative rho, decreasing in value when interest rates rise
 ```
 
-Note: During equity crises, interest rates often fall due to monetary policy responses, leading to long-date put hedges increasing in value.
+Note: During equity crises, interest rates often fall due to monetary policy responses, leading to long-dated put hedges increasing in value.
 
 #### Algebraic definition Rho
 
@@ -1074,21 +1074,13 @@ convexity budget rather than a fixed notional allocation.
 The convexity budget specifies the expected hedge payoff
 under defined crash scenarios (for example a −20% equity shock).
 
-Example:
-
-```text
-Target crash convexity:
-+5% portfolio return during a −20% market decline
-```
-
-Hedge structures are then sized so that scenario testing
-produces the required payoff.
-
 This approach ensures the hedge program is calibrated
 to the portfolio’s true downside risk rather than
 arbitrary premium spending.
 
-#### Convexity in Tail Hedging
+For how convexity targets are used to size hedge programs, see [Convexity Budget and Premium Budget](#convexity-budget-and-premium-budget) in PART VII.
+
+#### Practical Value of Convexity
 
 For a tail-hedge program, convexity is what allows the hedge to:
 
@@ -2204,7 +2196,7 @@ dealer gamma negative
 
 Because this increases crash probability.
 
-Note: Tail hedge allocation decisions depend primarily on volatility regime, skew levels, and the volatility term structure than Gamma liquidity risk.
+Note: Tail hedge allocation decisions are driven primarily by volatility regime, skew levels, and the volatility term structure rather than by Gamma liquidity risk.
 
 ### Forward Variance Level
 
@@ -2258,10 +2250,11 @@ Because crashes inflate short-dated volatility sharply and usually pull long-dat
 
 ## PART VII — Designing a Tail-Hedge Program
 
-Designing a systematic tail-hedge program involves decisions across six dimensions:
+Designing a systematic tail-hedge program involves decisions across seven dimensions:
 
 - governance and constraints,
 - sizing,
+- convexity and premium budgeting,
 - strike selection,
 - maturity selection,
 - rolling rules, and
@@ -2370,7 +2363,7 @@ The premium budget defines the acceptable annual cost of maintaining the hedge p
 Typical institutional ranges:
 
 ```text
-0.5% – 2.0% of portfolio value per year
+0.5% – 3.0% of portfolio value per year
 ```
 
 #### Convexity Target
@@ -2801,7 +2794,7 @@ Estimate these three quantities:
 
 Notes:
 
-- See [Crash Payoff Ratio Metric](#crash-payoff-ratio-metric) in [PART VI](#part-vi--tail-hedging-metrics) for details on the calcualtion for item 2. above
+- See [Crash Payoff Ratio Metric](#crash-payoff-ratio-metric) in [PART VI](#part-vi--tail-hedging-metrics) for details on the calculation for item 2. above
 - $\text{Carry-to-Convexity}$ measures crash protection per unit of annual cost.
 
 Those three metrics tell you, respectively:
@@ -2820,7 +2813,7 @@ Traditional hedge evaluation often focuses on:
 
 While these metrics are useful, institutional investors increasingly evaluate hedging strategies using **portfolio tail-risk metrics**.
 
-Three commonly used measures are  **Conditional Value-at-Risk (CVaR), and **Tail Loss Reduction**.**
+Three commonly used measures are **Value-at-Risk (CVaR), Conditional Value-at-Risk (CVaR), and Tail Loss Reduction**.
 
 #### Value-at-Risk (VaR)
 
@@ -2828,12 +2821,12 @@ Value-at-Risk measures the **maximum expected loss** at a given confidence level
 
 Formally:
 
-$\text{VaR}_\alpha = \text{loss level not exceeded with probability}\ \alpha$
+$\text{VaR}_\alpha = \text{is the loss threshold such that losses exceed it with probability}\ (1-\alpha)$
 
 Example:
 
 ```text
-text95% VaR (1-month) = $350k
+95% VaR (1-month) = $350k
 ```
 
 Interpretation: there is a 95% probability that the portfolio will not lose more than $350k in a given month. Equivalently, in the worst 5% of months, losses will exceed this threshold.
@@ -2890,12 +2883,6 @@ The VaR improvement appears negligible. The CVaR improvement is substantial — 
 
 A successful tail hedge should **meaningfully reduce portfolio CVaR** even if it introduces a modest carry cost during normal market environments.
 
-##### Practical note for the smaller institutional investors / family offices
-
-For a long-only portfolio, computing CVaR precisely requires either a historical simulation or a Monte Carlo model with realistic vol surface dynamics. As a practical starting point, the crash scenario table (see [Crash Scenario Table](#2-crash-scenario-table--payoff-ratio)) provides the inputs needed to estimate CVaR reduction: the hedge payoffs across scenarios can be used to directly compute expected shortfall if combined with historical or assumed return probabilities for each scenario.
-
-The key governance implication: if the investment committee or board uses VaR as a portfolio risk reporting standard, it should be supplemented with CVaR for any mandate that includes a tail-hedge program, because VaR will systematically understate the hedge's contribution.
-
 #### Tail Loss Reduction
 
 Tail Loss Reduction measures how much a hedge reduces extreme portfolio losses.
@@ -2934,12 +2921,18 @@ Instead, they should be judged on their ability to:
 
 Because of this, many institutional hedge programs measure performance primarily in terms of **portfolio tail-risk reduction** rather than hedge profit alone.
 
+#### Practical note for the smaller institutional investors / family offices
+
+For a long-only portfolio, computing CVaR precisely requires either a historical simulation or a Monte Carlo model with realistic vol surface dynamics. As a practical starting point, the crash scenario table (see [Crash Scenario Table](#2-crash-scenario-table--payoff-ratio)) provides the inputs needed to estimate CVaR reduction: the hedge payoffs across scenarios can be used to directly compute expected shortfall if combined with historical or assumed return probabilities for each scenario.
+
+The key governance implication: if the investment committee or board uses VaR as a portfolio risk reporting standard, it should be supplemented with CVaR for any mandate that includes a tail-hedge program, because VaR will systematically understate the hedge's contribution.
+
 #### Practical First Pass Estimate
 
 For a **systematic long-dated OTM put program** on a broad equity portfolio, a reasonable first-pass expectation is usually:
 
 - **lean / deep OTM ladder**: roughly **1%–2% per year**
-- **balanced ladder**: roughly **2%–4% per year**
+- **balanced ladder**: roughly **2%-3% per year**
 - **richer / closer-to-spot protection**: roughly **4%+ per year**
 
 That is a heuristic, not a law. The cost depends mainly on moneyness, tenor, roll frequency, and whether you monetize into spikes. Public Cboe protective-put indexes are a useful reminder that nearer-strike, frequent-roll protection is meaningfully costlier than deeper-OTM tail structures[^cobe-pp-indices].
@@ -4338,12 +4331,12 @@ Notes:
 | --------------- | ------------- | -------------------------------------------------- | --------------------------- |
 | ~+0.80 to +1.00 | Deep ITM call | Moves nearly dollar-for-dollar *with* the stock    | \$150 call on a \$195 stock |
 | ~+0.50          | ATM call      | Gains ~\$0.50 for each \$1 stock increase          | \$195 call on a \$195 stock |
-| ~+0.05 to +0.20 | OTM call      | Low sensitivity; small change of finishing ITM     | \$230 call on a \$195 stock |
+| ~+0.05 to +0.20 | OTM call      | Low sensitivity; small chance of finishing ITM     | \$230 call on a \$195 stock |
 | ~-0.05 to -0.20 | OTM put       | *~As above~*                                       | \$160 put on a \$195 stock  |
 | ~-0.50          | ATM put       | Loses ~\$0.50 for each \$1 stock increase          | \$195 put on a \$195 stock  |
 | ~-0.80 to -1.00 | Deep ITM put  | Moves nearly dollar-for-dollar *against* the stock | \$240 put on a \$195 stock  |
 
-Note: Delta is a continuous value - these ranges are guidelines, not fixed buckets. See discussions on [the Greeks](#part-ii--the-greeks) for a fuller explanation on driver's of moneyness.
+Note: Delta is a continuous value - these ranges are guidelines, not fixed buckets. See discussions on [the Greeks](#part-ii--the-greeks) for a fuller explanation on drivers of moneyness.
 
 ### A3 Tax Considerations for Hedging Instruments
 
@@ -4470,7 +4463,7 @@ Discusses the cost-per-payoff framing in a format accessible to allocators.
 [^fred]: Board of Governors of the Federal Reserve System (US).
 "Market Yield on U.S. Treasury Securities at Constant Maturity"
 (DGS series). Retrieved from FRED, Federal Reserve Bank of St. Louis.
-https://fred.stlouisfed.org/series/DGS10
+<https://fred.stlouisfed.org/series/DGS10>
 
 [^artzner]: Artzner et al. (1999), "Coherent Measures of Risk," Mathematical Finance, 9(3), pp. 203–228.
 This is the academic foundation for CVaR/Expected Shortfall over VaR
