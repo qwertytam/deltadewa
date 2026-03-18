@@ -775,7 +775,7 @@ $Skew = \sigma_{25\Delta\ put} - \sigma_{ATM}$
 
 Where:
 
-- $25\Delta_{put} \approx \sim10-15\% \text{ OTM}$
+- $25\Delta_{put} \approx 10-15\% \text{ OTM}$
 
 In practice traders often approximate ATM volatility using the 50Δ call
 or the 40–50Δ put depending on convention.
@@ -1273,10 +1273,15 @@ dynamic equity re‑risking
 
 Used by many tail‑risk funds.
 
-Advantages:
+Advantage:
 
 ```text
 lower long‑term cost
+```
+
+Disadvantage:
+
+```text
 more active management
 ```
 
@@ -1504,8 +1509,8 @@ Note, there is no single universally standardised formula - see [Why There Is No
 
 Let:
 
-$V_today$ = current hedge value
-$V_crash$ = hedge value after a simulated crash
+$V_{today}$ = current hedge value
+$V_{crash}$ = hedge value after a simulated crash
 $Portfolio$ = portfolio value
 
 Define:
@@ -1514,7 +1519,7 @@ $\text{Crash Convexity}_x = \frac{V_{crash} − V_{today}}{Portfolio}$
 
 Where:
 
-$x$ = is the assumed market decline (e.g. 20%, 30%, 40%)
+$x$ is the assumed market decline (e.g. 20%, 30%, 40%)
 
 This is a scenario P&L ratio — it measures how much the hedge gains as a percentage of the portfolio under a given crash assumption. Other names include:
 
@@ -1607,15 +1612,15 @@ Where $\Delta\sigma(x)$ is the assumed vol spike at crash level $x$, and the ske
 
 ##### Family offices and smaller programs
 
-Typically use the simple scenario ratio with one or two spot shocks (often −20% and −30%), repriced using either a flat vol bump or a vol lookup table calibrated to historical regimes. The goal is a number they can monitor monthly and compare against their carry cost.
+Family offices and smaller programs typically use the simple scenario ratio with one or two spot shocks (often −20% and −30%), repriced using either a flat vol bump or a vol lookup table calibrated to historical regimes. The goal is a number they can monitor monthly and compare against their carry cost.
 
 ##### Institutional tail funds (Universa, Ambrus, LongTail Alpha etc.)
 
-Run full surface shock scenarios with explicit skew steepening assumptions, typically computing crash convexity across a grid of spot × vol scenarios. They will often report a convexity profile — a curve rather than a single number — to show how the hedge responds across different crash severities.
+Institutional tail funds run full surface shock scenarios with explicit skew steepening assumptions, typically computing crash convexity across a grid of spot × vol scenarios. They will often report a convexity profile — a curve rather than a single number — to show how the hedge responds across different crash severities.
 
-##### The most important practical point
+##### Important practical point
 
-Is that crash convexity is only meaningful when specified with its scenario assumptions. A number quoted as "28% crash convexity" is incomplete without knowing whether that is at −20% or −30% SPX, and whether it assumes a historical vol spike or a flat parallel shift. The handbook's existing formula is correct — it just needs the scenario to always be stated alongside the result.
+The most important practical point is that crash convexity is only meaningful when specified with its scenario assumptions. A number quoted as "28% crash convexity" is incomplete without knowing whether that is at −20% or −30% SPX, and whether it assumes a historical vol spike or a flat parallel shift. The handbook's existing formula is correct — it just needs the scenario to always be stated alongside the result.
 
 #### Example Convexity Profile / Multi-Scenario Table
 
@@ -1691,6 +1696,16 @@ The ratio is only meaningful when stated alongside its explicit scenario assumpt
 ### Portfolio Drawdown Reduction Modeling
 
 A key goal of tail hedging is **reducing portfolio drawdowns**.
+
+A tail hedging program should be judged on its ability to:
+
+- reduce extreme drawdowns
+- stabilize portfolio returns
+- improve long-term compounding
+
+Because of this, many institutional hedge programs measure performance primarily in terms of **portfolio tail-risk reduction** rather than hedge profit alone.
+
+The primary quantitative tool for measuring drawdown is maximum drawdown.
 
 #### Maximum Drawdown Formula
 
@@ -2362,10 +2377,11 @@ Institutional tail hedge programs typically operate under two constraints:
 
 The premium budget defines the acceptable annual cost of maintaining the hedge program.
 
-Typical institutional ranges:
+Most institutional tail hedge programs target:
 
 ```text
-0.5% – 3.0% of portfolio value per year
+1 to 3%
+richer close-to-the-money programs may reach ~4%
 ```
 
 #### Convexity Target
@@ -2720,7 +2736,7 @@ See [Monetizing crashes](#typical-monetization-triggers) for detail.
 Example rule:
 
 ```text
-Roll if option delta exceeds 0.60
+Roll if the absolute value of option delta exceeds 0.60
 ```
 
 This prevents hedges from turning into **deep ITM positions**.
@@ -2817,13 +2833,17 @@ While these metrics are useful, institutional investors increasingly evaluate he
 
 Three commonly used measures are **Value-at-Risk (VaR), Conditional Value-at-Risk (CVaR), and Tail Loss Reduction**.
 
-##### Value-at-Risk (VaR)
+###### Value-at-Risk (VaR)
 
-Value-at-Risk measures the **loss threshold that will not be exceeded** at a given confidence level over a given holding period.
+Value-at-Risk measures the loss threshold exceeded only with probability (1−α) at a given confidence level.
 
 Formally:
 
-$\text{VaR}_\alpha = \text{is the loss threshold such that losses exceed it with probability}\ (1-\alpha)$
+$\text{VaR}_\alpha\ \text{is the loss threshold such that losses exceed it with probability}\ (1-\alpha)$
+
+Algebraically:
+
+$P(\text{Loss} > \text{VaR}_\alpha) = 1 - \alpha$
 
 Example:
 
@@ -2850,7 +2870,7 @@ The VaR is the same. The tail outcome is radically different. A hedging program 
 
 This is why **VaR alone is a misleading** metric for evaluating tail-hedge effectiveness, and why institutional programs use CVaR instead.
 
-##### Conditional Value-at-Risk (CVaR)
+###### Conditional Value-at-Risk (CVaR)
 
 CVaR (also called Expected Shortfall)  measures the **expected loss in the worst tail outcomes** of a return distribution[^artzner].
 
@@ -2864,7 +2884,28 @@ CVaR(95%) = average loss of the worst 5% of outcomes = $900k
 
 Unlike VaR, CVaR captures the full severity of tail events. It is sensitive to both the probability and the magnitude of extreme losses, which is precisely what a tail hedge is designed to reduce.
 
-##### Tail Loss Reduction
+###### Comparing Unhedged vs. Hedged Portfolios
+
+When evaluating a hedge strategy, investors compare:
+
+```text
+CVaR (unhedged portfolio)
+vs
+CVaR (hedged portfolio)
+```
+
+Example:
+
+| Metric   | Unhedged | Hedged | Reduction |
+| -------- | -------- | ------ | --------- |
+| 95% VaR  | $350k    | $340k  | 3%        |
+| 95% CVaR | $1.5M    | $650k  | 57%       |
+
+The VaR improvement appears negligible. The CVaR improvement is substantial — this is the correct way to read the hedge's contribution.
+
+A successful tail hedge should **meaningfully reduce portfolio CVaR** even if it introduces a modest carry cost during normal market environments.
+
+###### Tail Loss Reduction
 
 Tail Loss Reduction measures how much a hedge reduces extreme portfolio losses.
 
@@ -2890,38 +2931,9 @@ Tail Loss Reduction = 12 percentage points
 
 This metric captures the **total impact of the hedge on portfolio drawdowns**, rather than evaluating the hedge in isolation.
 
-###### Comparing Unhedged vs. Hedged Portfolios
-
-When evaluating a hedge strategy, investors compare:
-
-```text
-CVaR (unhedged portfolio)
-vs
-CVaR (hedged portfolio)
-```
-
-Example:
-
-| Metric   | Unhedged | Hedged | Reduction |
-| -------- | -------- | ------ | --------- |
-| 95% VaR  | $350k    | $340k  | 3%        |
-| 95% CVaR | $1.5M    | $650k  | 57%       |
-
-The VaR improvement appears negligible. The CVaR improvement is substantial — this is the correct way to read the hedge's contribution.
-
-A successful tail hedge should **meaningfully reduce portfolio CVaR** even if it introduces a modest carry cost during normal market environments.
-
 #### Why These Metrics Matter
 
-Tail hedges should **not** be evaluated solely on **stand-alone option P&L**.
-
-Instead, they should be judged on their ability to:
-
-- reduce extreme drawdowns
-- stabilize portfolio returns
-- improve long-term compounding
-
-Because of this, many institutional hedge programs measure performance primarily in terms of **portfolio tail-risk reduction** rather than hedge profit alone.
+Tail hedges should **not** be evaluated solely on **stand-alone option P&L**. See [Portfolio Drawdown Reduction Modeling](#portfolio-drawdown-reduction-modeling) for further discussion on this point.
 
 #### Investment Committee Reporting
 
@@ -2935,7 +2947,7 @@ For a **systematic long-dated OTM put program** on a broad equity portfolio, a r
 
 - **lean / deep OTM ladder**: **~1%–2% per year**
 - **balanced ladder**: **~2%-3% per year**
-- **richer / closer-to-spot protection**: more than **~3%+ per year**
+- **richer / closer-to-spot protection**: more than **~3% per year**
 
 That is a heuristic, not a law. The cost depends mainly on moneyness, tenor, roll frequency, and whether you monetize into spikes. Public Cboe protective-put indexes are a useful reminder that nearer-strike, frequent-roll protection is meaningfully costlier than deeper-OTM tail structures[^cobe-pp-indices].
 
@@ -3392,7 +3404,7 @@ See [Re-Risking Rules](#re-risking-rules) for further details.
 
 ## PART IX — Common Structural Mistakes
 
-The biggest mistake retail hedgers make is:
+The most common mistake in tail hedge programs is:
 
 ```text
 buying protection too late
@@ -3565,7 +3577,7 @@ volatility low
 skew moderate
 ```
 
-Investors instinct is to hedge **after markets fall**, but that is when hedges are **most expensive**.
+Investor's instinct is to hedge **after markets fall**, but that is when hedges are **most expensive**.
 
 ### Tail Hedge Decision Matrix
 
@@ -4435,7 +4447,7 @@ Discusses the cost-per-payoff framing in a format accessible to allocators.
 [^resonanzcapital]: Strategic Tail-Risk Hedging: Building Antifragility into ...
 <https://resonanzcapital.com/insights/strategic-tail-risk-hedging-building-antifragility-into-institutional-portfolios>
 
-\[^mutinyfund]: The Best Tail Hedging Books for Beginners
+[^mutinyfund]: The Best Tail Hedging Books for Beginners
 <https://mutinyfund.com/best-tail-hedging-books/>
 
 [^alpha-arch]: Strategies to Mitigate Tail Risk -
