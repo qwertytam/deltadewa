@@ -2377,12 +2377,7 @@ Institutional tail hedge programs typically operate under two constraints:
 
 The premium budget defines the acceptable annual cost of maintaining the hedge program.
 
-Most institutional tail hedge programs target:
-
-```text
-1 to 3%
-richer close-to-the-money programs may reach ~4%
-```
+Most institutional tail hedge programs target a premium budget in the range of 1% to 3%, with richer close-to-the-money programs reaching ~4%.
 
 #### Convexity Target
 
@@ -2836,10 +2831,6 @@ Three commonly used measures are **Value-at-Risk (VaR), Conditional Value-at-Ris
 ###### Value-at-Risk (VaR)
 
 Value-at-Risk measures the loss threshold exceeded only with probability (1−α) at a given confidence level.
-
-Formally:
-
-$\text{VaR}_\alpha\ \text{is the loss threshold such that losses exceed it with probability}\ (1-\alpha)$
 
 Algebraically:
 
@@ -3493,7 +3484,7 @@ price drop
 
 ### Holding hedges passively instead of rolling them
 
-Retail investors often:
+A common error by investors is to:
 
 ```text
 buy 2-year puts
@@ -3503,7 +3494,7 @@ watch them decay
 
 Professional hedge programs **continuously manage maturity and strike**.
 
-Why?
+Why? Because time decay accelerates dramatically as options approach expiry.
 
 For ATM options, Theta and Gamma roughly scale with:
 
@@ -4346,7 +4337,7 @@ Notes:
 | ~+0.80 to +1.00 | Deep ITM call | Moves nearly dollar-for-dollar *with* the stock    | \$150 call on a \$195 stock |
 | ~+0.50          | ATM call      | Gains ~\$0.50 for each \$1 stock increase          | \$195 call on a \$195 stock |
 | ~+0.05 to +0.20 | OTM call      | Low sensitivity; small chance of finishing ITM     | \$230 call on a \$195 stock |
-| ~-0.05 to -0.20 | OTM put       | *~As above~*                                       | \$160 put on a \$195 stock  |
+| ~-0.05 to -0.20 | OTM put       | Low sensitivity; small chance of finishing ITM     | \$160 put on a \$195 stock  |
 | ~-0.50          | ATM put       | Loses ~\$0.50 for each \$1 stock increase          | \$195 put on a \$195 stock  |
 | ~-0.80 to -1.00 | Deep ITM put  | Moves nearly dollar-for-dollar *against* the stock | \$240 put on a \$195 stock  |
 
