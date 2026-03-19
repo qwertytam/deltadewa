@@ -1018,7 +1018,7 @@ Convexity in tail hedging is primarily a portfolio-level concept rather than a l
 
 Convex strategies benefit from extreme moves in the benchmark index[^informaconnect].
 
-##### Example tail hedge payoff structure
+##### Example Tail Hedge Payoff Structure
 
 | Market move | Hedge P&L     |
 | ----------- | ------------- |
@@ -1574,7 +1574,7 @@ Most programs run multiple: typically −15%, −20%, −25%, −30%, and someti
 
 This is where firms differ most. Options include:
 
-###### Full surface reprice
+###### Full Surface Reprice
 
 Shift spot down by x% and simultaneously apply a historically-calibrated vol surface shift (including skew steepening). This is the most realistic and preferred by sophisticated programs.
 
@@ -1590,7 +1590,7 @@ $\Delta V \approx \Delta_{hedge} \times \Delta S + \nu \times \Delta\sigma$
 
 Better, but still assumes parallel vol shifts rather than skew steepening.
 
-##### Whether to include or exclude the initial premium paid
+##### Whether to Include or Exclude the Initial Premium Paid
 
 Some firms report gross hedge P&L; others report net of carry cost paid to date. These produce materially different numbers.
 
@@ -1604,15 +1604,15 @@ Where $\Delta\sigma(x)$ is the assumed vol spike at crash level $x$, and the ske
 
 #### What Family Offices and Institutional Investors Actually Use
 
-##### Family offices and smaller programs
+##### Family Offices and Smaller Programs
 
 Family offices and smaller programs typically use the simple scenario ratio with one or two spot shocks (often −20% and −30%), repriced using either a flat vol bump or a vol lookup table calibrated to historical regimes. The goal is a number they can monitor monthly and compare against their carry cost.
 
-##### Institutional tail funds (Universa, Ambrus, LongTail Alpha etc.)
+##### Institutional Tail Funds (Universa, Ambrus, LongTail Alpha etc.)
 
 Institutional tail funds run full surface shock scenarios with explicit skew steepening assumptions, typically computing crash convexity across a grid of spot × vol scenarios. They will often report a convexity profile — a curve rather than a single number — to show how the hedge responds across different crash severities.
 
-##### Important practical point
+##### Important Practical Point
 
 The most important practical point is that crash convexity is only meaningful when specified with its scenario assumptions. A number quoted as "28% crash convexity" is incomplete without knowing whether that is at −20% or −30% SPX, and whether it assumes a historical vol spike or a flat parallel shift.
 
@@ -2044,7 +2044,7 @@ These three concepts are often confused:
 - Skew beta — how sensitive the hedge is to small changes in skew
 - Skew convexity — the additional, non-linear payoff produced by crisis-driven skew steepening
 
-##### What this means for hedge design
+##### What This Means for Hedge Design
 
 Skew convexity is an implicit property of the hedge structure, not typically tracked as a standalone dashboard metric. Programs that hold deep OTM strikes (30 to 40% OTM) with long maturities naturally have high skew convexity. Programs positioned nearer ATM have less, and may underperform their modelled payoffs in a genuine panic precisely because the model assumed parallel volatility shifts rather than the steep skew repricing that actually occurs.
 
@@ -2449,7 +2449,7 @@ Why this weighting works:
 - stronger skew beta
 - massive convex payoff in crashes
 
-##### How the payoff changes
+##### How the Payoff Changes
 
 | SPX move | 20% put  | 30% put | 40% put  |
 | -------- | -------- | ------- | -------- |
@@ -3736,11 +3736,11 @@ Example ranges:
 | 25 to 40 | stressed |
 | > 40     | crisis   |
 
-###### Realized vs implied volatility
+###### Realized versus Implied Volatility
 
 See [Volatility Risk Premium](#volatility-risk-premium)
 
-##### Hedge decision rule for VIX
+##### Hedge Decision Rule for Vix
 
 Volatility funds prefer to **buy protection when volatility is cheap**.
 
@@ -3765,7 +3765,7 @@ LOW <----|-----[x]---------|------> HIGH
                40%                      
 ```
 
-##### Hedge decision rule for Skew Percentile
+##### Hedge Decision Rule for Skew Percentile
 
 Typical logic:
 
