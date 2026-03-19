@@ -43,8 +43,8 @@ Updated: 2026-03-18
   - [Structure 2 — Put Spread Tail Hedge](#structure-2--put-spread-tail-hedge)
   - [Structure 3 — Option Carry + Tail Hedge](#structure-3--option-carry--tail-hedge)
   - [Structure 4 — Volatility Instrument Hedge](#structure-4--volatility-instrument-hedge)
-  - [Structure 5 - Dynamic Volatility Overlay](#structure-5---dynamic-volatility-overlay)
-  - [Structure 6 - Collar Strategy](#structure-6---collar-strategy)
+  - [Structure 5 — Dynamic Volatility Overlay](#structure-5--dynamic-volatility-overlay)
+  - [Structure 6 — Collar Strategy](#structure-6--collar-strategy)
   - [Structure Selection](#structure-selection)
   - [Instrument Choice: SPX, XSP, and SPY Options](#instrument-choice-spx-xsp-and-spy-options)
   - [A Typical Institutional Hedge Example](#a-typical-institutional-hedge-example)
@@ -103,8 +103,6 @@ Updated: 2026-03-18
   - [A2 Mathematical Formula](#a2-mathematical-formula)
   - [A3 Tax Considerations for Hedging Instruments](#a3-tax-considerations-for-hedging-instruments)
 - [FOOTNOTES](#footnotes)
-
----
 
 ## Preface
 
@@ -321,7 +319,7 @@ Greeks are derivatives of (V) with respect to these variables[^wiki-greeks]. The
 
 Delta is the sensitivity of the option price to changes in the underlying price.
 
-*Example:* “A 0.30 delta call moves ~$0.30 per $1 move in underlying.”
+*Example:* “A 0.30 delta call moves ~\$0.30 per \$1 move in underlying.”
 
 If the stock rises **$1**, the option price increases **$0.30**.
 
@@ -775,17 +773,17 @@ $Skew = \sigma_{25\Delta\ put} - \sigma_{ATM}$
 
 Where:
 
-- $25\Delta_{put} \approx 10-15\% \text{ OTM}$
+- $25\Delta_{put} \approx 10 — 15\% \text{ OTM}$
 
-In practice traders often approximate ATM volatility using the 50Δ call
-or the 40–50Δ put depending on convention.
+In practice traders often approximate ATM volatility using the 50$\Delta$ call
+or the 40–50$\Delta$ put depending on convention.
 
 Example:
 
-| Strike  | IV  |
-| ------- | --- |
-| ATM     | 20% |
-| 25Δ put | 27% |
+| Strike         | IV  |
+| -------------- | --- |
+| ATM            | 20% |
+| 25$\Delta$ put | 27% |
 
 Result:
 
@@ -817,11 +815,11 @@ Example:
 
 | Percentile | Interpretation                    |
 | ---------- | --------------------------------- |
-| <20%       | protection historically cheap     |
+| < 20%      | protection historically cheap     |
 | 20–70%     | normal                            |
 | 70–80%     | moderately expensive              |
-| >80%       | protection historically expensive |
-| >90%       | panic pricing                     |
+| > 80%      | protection historically expensive |
+| > 90%      | panic pricing                     |
 
 Typical hedge dashboards display:
 
@@ -830,7 +828,7 @@ Skew percentile (Last 5–10 years): 22%
 Interpretation: protection cheap
 ```
 
-Most institutional dashboards measure skew using a 25Δ risk reversal (25Δ put IV minus 25Δ call IV) or the difference between the 25Δ put and ATM volatility.
+Most institutional dashboards measure skew using a 25$\Delta$ risk reversal (25$\Delta$ put IV minus 25$\Delta$ call IV) or the difference between the 25$\Delta$ put and ATM volatility.
 
 ### Volatility Term Structure
 
@@ -1261,7 +1259,7 @@ These strategies require **more active management**.
 
 Note: Variance swaps are traded OTC and typically require ISDA master agreements, limiting their access to only larger, more sophisticated institutions.
 
-### Structure 5 - Dynamic Volatility Overlay
+### Structure 5 — Dynamic Volatility Overlay
 
 Structure:
 
@@ -1285,7 +1283,7 @@ Disadvantage:
 more active management
 ```
 
-### Structure 6 - Collar Strategy
+### Structure 6 — Collar Strategy
 
 The collar (long equity + long OTM put + short OTM call) is one of the most commonly used downside protection strategies at family offices and private wealth desks. It addresses the carry problem directly by funding the put with the call premium.
 
@@ -1361,8 +1359,6 @@ Because there is no physical delivery of shares, SPX options avoid complications
 
 As a result, **most institutional tail-hedge funds implement crash protection using SPX options.**
 
----
-
 #### XSP Options (Mini SPX)
 
 XSP options track the same S&P 500 index but at **1/10 the size of SPX**.
@@ -1380,8 +1376,6 @@ Advantages:
 - Maintains the **same structural advantages as SPX**
 
 XSP is often used by investors who want index-style hedging but require **more granular hedge sizing**.
-
----
 
 #### SPY Options (ETF Options)
 
@@ -1407,8 +1401,6 @@ Despite these limitations, SPY options are extremely liquid and may be preferred
 
 However, because of the assignment risk and operational complexity, **SPY is usually not the first choice for systematic tail-hedging programs.**
 
----
-
 #### Practical Rule of Thumb
 
 Typical preference hierarchy for institutional hedging:
@@ -1430,7 +1422,7 @@ $10M equity
 Hedge allocation:
 
 ```text
-1.5-2.5% per year
+1.5 — 2.5% per year
 ```
 
 See [example strike ladder](#the-strike-ladder-concept).
@@ -1474,7 +1466,7 @@ Put hedge delta: -0.20
 Net delta:
 
 ```text
-1.0 - 0.20 = 0.80
+1.0 — 0.20 = 0.80
 ```
 
 Dollar effective exposure:
@@ -1510,7 +1502,9 @@ Note, there is no single universally standardised formula - see [Why There Is No
 Let:
 
 $V_{today}$ = current hedge value
+
 $V_{crash}$ = hedge value after a simulated crash
+
 $Portfolio$ = portfolio value
 
 Define:
@@ -1549,10 +1543,10 @@ Typical institutional ranges:
 
 | Crash Convexity | Interpretation             |
 | --------------- | -------------------------- |
-| <5%             | weak crash protection      |
+| < 5%            | weak crash protection      |
 | 5–15%           | moderate hedge             |
 | 15–30%          | strong tail hedge          |
-| >30%            | very aggressive protection |
+| > 30%           | very aggressive protection |
 
 Most institutional programs target:
 
@@ -1676,10 +1670,10 @@ Typical ranges:
 
 | Ratio  | Meaning                   |
 | ------ | ------------------------- |
-| <10%   | hedge largely ineffective |
+| < 10%  | hedge largely ineffective |
 | 10–25% | partial protection        |
 | 25–40% | strong tail hedge         |
-| >40%   | very aggressive hedge     |
+| > 40%  | very aggressive hedge     |
 
 Most long-equity hedge programs aim for:
 
@@ -1888,7 +1882,7 @@ Expected vega gain = vega x Δvol
 $15,000 × 20 = $300,000
 ```
 
-For example, in March 2020, the SPX moved down ~34% and the VIX moved up from ~12-14 to ~82-85.
+For example, in March 2020, the SPX moved down ~34% and the VIX moved up from ~12 to 14, to ~82 to 85.
 
 #### Portfolio Interpretation of Vega Sufficiency
 
@@ -1972,10 +1966,10 @@ Lower strikes often experience **larger volatility increases** than ATM options.
 
 Example:
 
-| Option type | Before crisis | During crisis |
-| ----------- | ------------- | ------------- |
-| ATM vol     | 20%           | 30%           |
-| 25Δ put vol | 27%           | 38%           |
+| Option type        | Before crisis | During crisis |
+| ------------------ | ------------- | ------------- |
+| ATM vol            | 20%           | 30%           |
+| 25$\Delta$ put vol | 27%           | 38%           |
 
 Because deeper OTM options experience larger volatility increases, hedges that hold those strikes benefit more. Deep OTM options typically have higher skew beta than ATM options.
 
@@ -2306,8 +2300,6 @@ These restrictions may prevent the use of certain strategies such as:
 
 As a result, many institutional investors implement tail hedges **using only long index puts**.
 
----
-
 #### Margin and Leverage Limits
 
 Some portfolios face strict constraints on:
@@ -2324,8 +2316,6 @@ These constraints affect:
 
 For example, if short options are prohibited, the program cannot use **put spreads or collars** to reduce carry cost.
 
----
-
 #### Liquidity and Execution Constraints
 
 Operational considerations also matter.
@@ -2337,8 +2327,6 @@ Questions include:
 - Are spreads acceptable during volatile markets?
 
 Because crash periods often involve **extreme liquidity deterioration**, the hedge program should prioritize instruments with **deep and reliable liquidity.**
-
----
 
 #### Governance and Rebalancing Authority
 
@@ -2537,11 +2525,11 @@ choose strikes by delta rather than price distance
 
 Example:
 
-| Delta   | Approx Strike |
-| ------- | ------------- |
-| 25Δ put | ~10% OTM      |
-| 10Δ put | ~20% OTM      |
-| 5Δ put  | ~30% OTM      |
+| Delta          | Approx Strike |
+| -------------- | ------------- |
+| 25$\Delta$ put | ~10% OTM      |
+| 10$\Delta$ put | ~20% OTM      |
+| 5$\Delta$ put  | ~30% OTM      |
 
 Deep OTM puts provide **maximum skew beta**.
 
@@ -2553,11 +2541,11 @@ Tail hedges usually use **long-dated options**.
 
 Typical maturities:
 
-| Maturity    | Purpose                     |
-| ----------- | --------------------------- |
-| 6-12 months | tactical hedging            |
-| ~18 months  | common institutional choice |
-| ~24 months  | strong vega exposure        |
+| Maturity      | Purpose                     |
+| ------------- | --------------------------- |
+| 6 — 12 months | tactical hedging            |
+| ~18 months    | common institutional choice |
+| ~24 months    | strong vega exposure        |
 
 Most funds choose 18–24 months to provide:
 
@@ -3161,8 +3149,6 @@ Net loss = −$1.0M
 
 The hedge reduced the drawdown from **25% to 10%**.
 
----
-
 #### Hedge Notional Guidelines
 
 Institutional programs often target:
@@ -3187,8 +3173,6 @@ Understanding past market crashes helps calibrate hedge programs.
 
 Below are several major historical events.
 
----
-
 #### 1987 Crash
 
 ```text
@@ -3198,8 +3182,6 @@ volatility explosion
 ```
 
 Deep OTM puts produced extremely large payoffs.
-
----
 
 #### 2008 Global Financial Crisis
 
@@ -3211,8 +3193,6 @@ extended drawdown
 
 Long-dated put hedges performed strongly.
 
----
-
 #### 2020 COVID Crash
 
 ```text
@@ -3222,8 +3202,6 @@ VIX ≈ 85
 ```
 
 Short-dated options increased in value dramatically.
-
----
 
 #### 2022 Bear Market
 
@@ -3354,8 +3332,6 @@ The second step is **re-risking the portfolio** once markets have fallen and ass
 
 Institutional investors therefore often define a **scenario-based re-risk framework** in advance.
 
----
-
 #### Example Crisis Playbook
 
 | Market Move   | Typical Hedge Action    | Typical Portfolio Action               |
@@ -3371,8 +3347,6 @@ The exact thresholds vary by program, but the principle remains the same:
 crash → hedge gains → realized liquidity → reinvest into risk assets
 ```
 
----
-
 #### Why Re-Risking Matters
 
 Crises often follow a common pattern:
@@ -3384,8 +3358,6 @@ market crash → volatility spike → policy response → rebound
 If hedge gains are not redeployed during the crisis, investors may miss the opportunity to **buy assets at deeply discounted prices**.
 
 Therefore, the value of a tail hedge often comes not only from offsetting losses but also from **enabling opportunistic rebalancing.**
-
----
 
 #### Gradual Re-Entry into Protection
 
@@ -3704,9 +3676,9 @@ If crash convexity at −25% SPX is 22% and annual carry is 3%, then the ratio i
 
 | Ratio | Meaning    |
 | ----- | ---------- |
-| <3    | poor hedge |
+| < 3   | poor hedge |
 | 3–6   | acceptable |
-| >6    | attractive |
+| > 6   | attractive |
 
 Tail funds prefer **high convexity relative to cost**.
 
@@ -3765,10 +3737,10 @@ Example ranges:
 
 | VIX   | Regime   |
 | ----- | -------- |
-| <15   | low vol  |
+| < 15  | low vol  |
 | 15–25 | normal   |
-| >25   | stressed |
-| >40   | crisis   |
+| > 25  | stressed |
+| > 40  | crisis   |
 
 ###### Realized vs implied volatility
 
@@ -3780,12 +3752,12 @@ Volatility funds prefer to **buy protection when volatility is cheap**.
 
 Typical rule:
 
-| VIX   | Hedge action                 |
-| ----- | ---------------------------- |
-| <15   | accumulate                   |
-| 15-25 | maintain                     |
-| 25-40 | partial reduction            |
-| >40   | more aggressive monetization |
+| VIX     | Hedge action                 |
+| ------- | ---------------------------- |
+| < 15    | accumulate                   |
+| 15 — 25 | maintain                     |
+| 25 — 40 | partial reduction            |
+| > 40    | more aggressive monetization |
 
 #### 7. Skew Percentile Gauge
 
@@ -3805,9 +3777,9 @@ Typical logic:
 
 | Skew Percentile | Action                                          |
 | --------------- | ----------------------------------------------- |
-| <30%            | add tail hedges in "*normal*" market conditions |
-| 30-70%          | neutral                                         |
-| >70%            | avoid buying                                    |
+| < 30%           | add tail hedges in "*normal*" market conditions |
+| 30 — 70%        | neutral                                         |
+| > 70%           | avoid buying                                    |
 
 When skew is high, **deep OTM puts become extremely expensive**.
 
@@ -3939,7 +3911,7 @@ OI per strike
 ###### Trading volume
 
 ```text
-Average daily volume.
+Average daily volume
 ```
 
 ##### Liquidity Risk Interpretation
@@ -4326,7 +4298,7 @@ Notes:
 | -------- | -------- | ---------------- |
 | $\Delta$ | -1 to +1 | Underlying Price |
 | $\Gamma$ | 0 to +1  | Delta            |
-| $\Theta$ | <0       | Time             |
+| $\Theta$ | < 0      | Time             |
 | $\nu$    | Varies   | Volatility       |
 | $\rho$   | Varies   | Interest Rate    |
 
