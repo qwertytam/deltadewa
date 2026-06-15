@@ -1268,14 +1268,14 @@ Note: Variance swaps are traded OTC and typically require ISDA master agreements
 
 #### Comparing VIX Derivatives to SPX Puts
 
-| Dimension | SPX Puts | VIX Futures / Options |
-| --------- | --------- | --------------------- |
-| What they protect | Portfolio dollar losses | Volatility spikes |
-| Payoff mechanism | Delta + vega + skew | Pure vol exposure |
-| Basis risk | Low (for SPX portfolios) | High — vol can spike without proportional drawdown |
-| Roll cost | Low in low-vol regimes | Persistent contango in VIX futures generates roll cost |
-| Active management needed | Moderate | High |
-| Liquidity in a crash | Deep | Can thin out significantly |
+| Dimension                | SPX Puts                 | VIX Futures / Options                                  |
+| ------------------------ | ------------------------ | ------------------------------------------------------ |
+| What they protect        | Portfolio dollar losses  | Volatility spikes                                      |
+| Payoff mechanism         | Delta + vega + skew      | Pure vol exposure                                      |
+| Basis risk               | Low (for SPX portfolios) | High — vol can spike without proportional drawdown     |
+| Roll cost                | Low in low-vol regimes   | Persistent contango in VIX futures generates roll cost |
+| Active management needed | Moderate                 | High                                                   |
+| Liquidity in a crash     | Deep                     | Can thin out significantly                             |
 
 VIX instruments can be effective when the primary concern is a sharp, rapid volatility spike rather than a sustained drawdown. They can outperform SPX puts in very fast crashes but underperform in slow-grinding bear markets where volatility rises only moderately (e.g., 2022).
 
@@ -1342,13 +1342,13 @@ The upside cap of a collar can have a substantial compounding effect that is oft
 
 Illustrative five-year example with an 8% OTM call cap:
 
-| Year | Market Return | Uncollared Portfolio | Collared Portfolio |
-| ---- | ------------- | -------------------- | ------------------ |
-| 1    | +20%          | +20%                 | +8%                |
-| 2    | +15%          | +15%                 | +8%                |
+| Year | Market Return | Uncollared Portfolio | Collared Portfolio         |
+| ---- | ------------- | -------------------- | -------------------------- |
+| 1    | +20%          | +20%                 | +8%                        |
+| 2    | +15%          | +15%                 | +8%                        |
 | 3    | −25%          | −25%                 | −15% (put softens decline) |
-| 4    | +18%          | +18%                 | +8%                |
-| 5    | +12%          | +12%                 | +8%                |
+| 4    | +18%          | +18%                 | +8%                        |
+| 5    | +12%          | +12%                 | +8%                        |
 
 Over five years, the uncollared portfolio grows approximately 27% cumulatively; the collared portfolio grows approximately 16% — despite having meaningfully lower drawdown in year 3.
 
@@ -1375,13 +1375,13 @@ Example:
 
 ### Structure Comparison Table
 
-| Structure | Annual Cost | Protection Level | Upside Cap | Best Use Case |
-| --------- | ----------- | ---------------- | ---------- | ------------- |
-| Long OTM puts | High | Full convexity, no cap | None | Core tail protection program |
-| Put spread | Medium | Capped at spread width | None | Cost-constrained tail hedge |
-| Collar | Low / zero | Limited — put provides floor | Yes | Concentrated position risk reduction |
-| VIX derivatives | Medium | Vol-spike exposure | None | Rapid crash volatility hedge |
-| Dynamic overlay | Lower long-run cost | Moderate | None | Active programs willing to monetize frequently |
+| Structure       | Annual Cost         | Protection Level             | Upside Cap | Best Use Case                                  |
+| --------------- | ------------------- | ---------------------------- | ---------- | ---------------------------------------------- |
+| Long OTM puts   | High                | Full convexity, no cap       | None       | Core tail protection program                   |
+| Put spread      | Medium              | Capped at spread width       | None       | Cost-constrained tail hedge                    |
+| Collar          | Low / zero          | Limited — put provides floor | Yes        | Concentrated position risk reduction           |
+| VIX derivatives | Medium              | Vol-spike exposure           | None       | Rapid crash volatility hedge                   |
+| Dynamic overlay | Lower long-run cost | Moderate                     | None       | Active programs willing to monetize frequently |
 
 Key trade-offs:
 
@@ -2426,17 +2426,17 @@ The hedge program should be explicitly documented in the Investment Policy State
 
 Minimum IPS provisions for a hedge program:
 
-| Parameter | Example |
-| --------- | ------- |
-| Annual premium budget | 1–2% of AUM |
-| Approved instruments | Listed SPX / XSP puts only |
-| Strike range | 15–40% OTM |
-| Maturity range | 12–24 months |
-| Roll trigger | Maturity < 9 months remaining |
-| Monetization authority | CIO or Investment Committee |
-| Monetization triggers | VIX > 40, SPX down > 15%, or hedge MTM > 5% of portfolio |
-| Re-risk criteria | VIX < 15, skew percentile < 30% |
-| Review frequency | Quarterly |
+| Parameter              | Example                                                  |
+| ---------------------- | -------------------------------------------------------- |
+| Annual premium budget  | 1–2% of AUM                                              |
+| Approved instruments   | Listed SPX / XSP puts only                               |
+| Strike range           | 15–40% OTM                                               |
+| Maturity range         | 12–24 months                                             |
+| Roll trigger           | Maturity < 9 months remaining                            |
+| Monetization authority | CIO or Investment Committee                              |
+| Monetization triggers  | VIX > 40, SPX down > 15%, or hedge MTM > 5% of portfolio |
+| Re-risk criteria       | VIX < 15, skew percentile < 30%                          |
+| Review frequency       | Quarterly                                                |
 
 Embedding these parameters in the IPS removes discretion from the decision framework during a crisis and ensures that governance does not become a bottleneck at the worst possible moment.
 
@@ -2464,12 +2464,12 @@ where:
 
 A portfolio holds the following positions:
 
-| Position | Value | Beta vs SPX |
-| -------- | ----- | ----------- |
-| Large-cap US equities | $6M | 1.05 |
-| Mid-cap US equities | $2M | 1.15 |
-| International equities | $2M | 0.70 |
-| **Total** | **$10M** | |
+| Position               | Value    | Beta vs SPX |
+| ---------------------- | -------- | ----------- |
+| Large-cap US equities  | $6M      | 1.05        |
+| Mid-cap US equities    | $2M      | 1.15        |
+| International equities | $2M      | 0.70        |
+| **Total**              | **$10M** |             |
 
 Weighted portfolio beta:
 
@@ -2493,12 +2493,12 @@ Basis risk is the risk that the hedge does not move in lockstep with the actual 
 
 #### Sources of Basis Risk
 
-| Source | Description |
-| ------ | ----------- |
-| Sector concentration | A portfolio heavy in technology or energy may diverge from broad SPX during a sector-specific sell-off |
-| Single-stock exposure | Concentrated positions in individual names are not hedged by an index put |
-| International holdings | Non-US equities may correlate differently with SPX across regimes |
-| Small-cap tilt | Small-cap portfolios typically fall further than large-cap in crises and may recover differently |
+| Source                 | Description                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| Sector concentration   | A portfolio heavy in technology or energy may diverge from broad SPX during a sector-specific sell-off |
+| Single-stock exposure  | Concentrated positions in individual names are not hedged by an index put                              |
+| International holdings | Non-US equities may correlate differently with SPX across regimes                                      |
+| Small-cap tilt         | Small-cap portfolios typically fall further than large-cap in crises and may recover differently       |
 
 #### When Basis Risk Is Low
 
@@ -3286,11 +3286,11 @@ maintain 12 to 24 month maturity
 
 While the parameters above represent institutional tail fund practice, family office survey data suggests that in practice many family offices hedge at lower premium budgets.
 
-| Program Type | Typical Annual Premium |
-| ------------ | ---------------------- |
-| Family office (cost-sensitive) | 0.5–1.5% of AUM |
-| Institutional tail program (deep OTM) | 1.5–2.5% |
-| Institutional (richer / closer-to-money) | 3–5%+ |
+| Program Type                             | Typical Annual Premium |
+| ---------------------------------------- | ---------------------- |
+| Family office (cost-sensitive)           | 0.5–1.5% of AUM        |
+| Institutional tail program (deep OTM)    | 1.5–2.5%               |
+| Institutional (richer / closer-to-money) | 3–5%+                  |
 
 Many family offices consider 1% per year a practical ceiling given performance sensitivity to carry. The 1–3% range in this handbook represents a defensible institutional target, but programs should be calibrated to what the investor and their stakeholders will sustain across a multi-year bull market without abandoning the program.
 
@@ -3298,12 +3298,12 @@ Many family offices consider 1% per year a practical ceiling given performance s
 
 Strike selection and hedge sizing do not need to be static. A regime-sensitive approach:
 
-| Vol Regime | Skew Percentile | Recommended Adjustment |
-| ---------- | --------------- | ---------------------- |
-| VIX < 15 | < 30% | Increase allocation; consider slightly closer-to-money strikes |
-| VIX < 15 | > 50% | Buy standard deep OTM; avoid chasing expensive skew |
-| VIX 15–25 | < 40% | Maintain program as designed |
-| VIX > 25 | > 70% | Reduce new purchases; wait for vol to normalize |
+| Vol Regime | Skew Percentile | Recommended Adjustment                                         |
+| ---------- | --------------- | -------------------------------------------------------------- |
+| VIX < 15   | < 30%           | Increase allocation; consider slightly closer-to-money strikes |
+| VIX < 15   | > 50%           | Buy standard deep OTM; avoid chasing expensive skew            |
+| VIX 15–25  | < 40%           | Maintain program as designed                                   |
+| VIX > 25   | > 70%           | Reduce new purchases; wait for vol to normalize                |
 
 This is consistent with the [Tail Hedge Decision Matrix](#tail-hedge-decision-matrix) in PART X.
 
@@ -3577,6 +3577,7 @@ When hedge value rises to
 One of the most difficult real-time decisions in a crisis is whether to lock in hedge gains or allow convexity to continue working.
 
 The key tension:
+
 - **Take profits too early** → miss the largest payoffs if the crash accelerates further
 - **Hold too long** → allow gains to reverse in a sharp recovery
 
@@ -3705,11 +3706,11 @@ Historical simulations of systematic put-buying programs (including Cboe's PPUT 
 
 Illustrative comparison:
 
-| Scenario | 10-Year Annualized Return (approximate) |
-| -------- | --------------------------------------- |
-| S&P 500 unhedged | ~10% (long-run historical average) |
-| Hedged portfolio — 1.5% annual premium | ~8.5% |
-| Hedged portfolio — 3% annual premium | ~7% |
+| Scenario                               | 10-Year Annualized Return (approximate) |
+| -------------------------------------- | --------------------------------------- |
+| S&P 500 unhedged                       | ~10% (long-run historical average)      |
+| Hedged portfolio — 1.5% annual premium | ~8.5%                                   |
+| Hedged portfolio — 3% annual premium   | ~7%                                     |
 
 The hedged portfolio experiences materially lower drawdowns in crisis years. The trade-off is lower average returns in exchange for reduced severity in the worst outcomes.
 
@@ -3852,13 +3853,13 @@ The key mitigant is to ensure the collar leaves meaningful upside exposure — a
 
 #### Instrument Tax Comparison
 
-| Instrument | Tax Treatment | Mark-to-Market at Year-End |
-| ---------- | ------------- | -------------------------- |
-| SPX puts | 60% LT / 40% ST (Section 1256) | Yes |
-| XSP puts | Same as SPX | Yes |
-| SPY puts | Standard capital gains (holding period dependent) | No |
-| VIX options | Section 1256 | Yes |
-| Single-stock puts | Standard capital gains | No |
+| Instrument        | Tax Treatment                                     | Mark-to-Market at Year-End |
+| ----------------- | ------------------------------------------------- | -------------------------- |
+| SPX puts          | 60% LT / 40% ST (Section 1256)                    | Yes                        |
+| XSP puts          | Same as SPX                                       | Yes                        |
+| SPY puts          | Standard capital gains (holding period dependent) | No                         |
+| VIX options       | Section 1256                                      | Yes                        |
+| Single-stock puts | Standard capital gains                            | No                         |
 
 See [A3 Tax Considerations](#a3-tax-considerations-for-hedging-instruments) for the full appendix treatment.
 
@@ -4009,28 +4010,28 @@ The matrix above can be converted into sequential decision rules:
 
 **Step 1 — Check VIX level:**
 
-| VIX Level | Initial Guidance |
-| --------- | ---------------- |
-| VIX > 40 | Stop — monetize existing hedges; do not buy new protection |
+| VIX Level | Initial Guidance                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ |
+| VIX > 40  | Stop — monetize existing hedges; do not buy new protection                                                               |
 | VIX 25–40 | Caution — avoid new purchases unless a roll is urgently required; if roll required, reduce size and consider put spreads |
-| VIX 15–25 | Proceed to Step 2 |
-| VIX < 15 | Proceed to Step 2 with increased urgency to accumulate |
+| VIX 15–25 | Proceed to Step 2                                                                                                        |
+| VIX < 15  | Proceed to Step 2 with increased urgency to accumulate                                                                   |
 
 **Step 2 — Check skew percentile (if VIX ≤ 25):**
 
-| Skew Percentile | Guidance |
-| --------------- | -------- |
-| > 70% | Buy selectively or defer — deep OTM puts are expensive relative to history |
-| 30–70% | Maintain program; normal accumulation pace |
-| < 30% | Accumulate more aggressively — protection is historically cheap |
+| Skew Percentile | Guidance                                                                   |
+| --------------- | -------------------------------------------------------------------------- |
+| > 70%           | Buy selectively or defer — deep OTM puts are expensive relative to history |
+| 30–70%          | Maintain program; normal accumulation pace                                 |
+| < 30%           | Accumulate more aggressively — protection is historically cheap            |
 
 **Step 3 — Check term structure:**
 
-| Term Structure Shape | Guidance |
-| -------------------- | -------- |
-| Inverted (crisis) | Roll costs are lower; consider rolling sooner if positions need refreshing |
-| Flat | Normal conditions; proceed as planned |
-| Steeply upward sloping | Roll costs are higher; consider reducing roll frequency or size |
+| Term Structure Shape   | Guidance                                                                   |
+| ---------------------- | -------------------------------------------------------------------------- |
+| Inverted (crisis)      | Roll costs are lower; consider rolling sooner if positions need refreshing |
+| Flat                   | Normal conditions; proceed as planned                                      |
+| Steeply upward sloping | Roll costs are higher; consider reducing roll frequency or size            |
 
 Explicit rules derived from this tree:
 
@@ -4817,14 +4818,14 @@ low spreads
 
 #### Summary Comparison Table
 
-| Instrument | Tax Treatment | Section 1256? | Mark-to-Market at Year-End | Holding Period |
-| ---------- | ------------- | ------------- | -------------------------- | -------------- |
-| SPX puts | 60% LT / 40% ST | Yes | Yes | N/A (1256 rules override) |
-| XSP puts | 60% LT / 40% ST | Yes | Yes | N/A |
-| SPY puts | Standard capital gains | No | No | Based on actual holding period |
-| VIX options | 60% LT / 40% ST | Yes | Yes | N/A |
-| Single-stock puts | Standard capital gains | No | No | Based on actual holding period |
-| E-mini S&P 500 futures options | 60% LT / 40% ST | Yes | Yes | N/A |
+| Instrument                     | Tax Treatment          | Section 1256? | Mark-to-Market at Year-End | Holding Period                 |
+| ------------------------------ | ---------------------- | ------------- | -------------------------- | ------------------------------ |
+| SPX puts                       | 60% LT / 40% ST        | Yes           | Yes                        | N/A (1256 rules override)      |
+| XSP puts                       | 60% LT / 40% ST        | Yes           | Yes                        | N/A                            |
+| SPY puts                       | Standard capital gains | No            | No                         | Based on actual holding period |
+| VIX options                    | 60% LT / 40% ST        | Yes           | Yes                        | N/A                            |
+| Single-stock puts              | Standard capital gains | No            | No                         | Based on actual holding period |
+| E-mini S&P 500 futures options | 60% LT / 40% ST        | Yes           | Yes                        | N/A                            |
 
 #### Additional Tax Considerations
 
