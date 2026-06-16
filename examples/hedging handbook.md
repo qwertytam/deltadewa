@@ -74,6 +74,7 @@ Updated: 2026-03-19
   - [Rolling Rules](#rolling-rules)
   - [Numerical Example](#numerical-example)
   - [Evaluating and Testing Tail Hedge Strategies](#evaluating-and-testing-tail-hedge-strategies)
+  - [Quarterly Hedge Program Reporting Format](#quarterly-hedge-program-reporting-format)
   - [Typical Hedge Program Targets](#typical-hedge-program-targets)
   - [Portfolio Hedge Sizing Framework](#portfolio-hedge-sizing-framework)
   - [Historical Crash Analysis](#historical-crash-analysis)
@@ -1456,6 +1457,8 @@ Advantages:
 
 XSP is often used by investors who want index-style hedging but require **more granular hedge sizing**.
 
+Note: While XSP tracks the same underlying as SPX, its options market is smaller. Bid-ask spreads and open interest in XSP can be thinner than in SPX, particularly for deep OTM and long-dated strikes. Investors should check OI and recent volume at target strikes before committing to XSP for large notional trades, and should use limit orders to avoid paying inflated spreads.
+
 #### SPY Options (ETF Options)
 
 SPY options are based on the **SPDR S&P 500 ETF** rather than the index.
@@ -2551,6 +2554,14 @@ Mitigation options:
 
 The correct approach depends on portfolio composition and available budget. For highly concentrated portfolios, the basis mismatch should be explicitly acknowledged in the IPS.
 
+#### Correlation Regime Shifts Within the Portfolio
+
+A related but distinct source of basis risk is the breakdown of within-portfolio correlations during non-systemic drawdowns. The standard tail-hedging assumption is that in a severe crash, equity correlations converge toward 1.0 — all positions fall together, and the SPX put hedges the aggregate loss effectively. This holds in systemic crises (2008, 2020).
+
+However, in factor-driven or sector-specific drawdowns, correlations can diverge sharply. In 2022, for example, the S&P 500 fell approximately 25%, but within the index, energy stocks gained roughly 60% while technology stocks fell roughly 33%. A portfolio concentrated in technology experienced a drawdown materially worse than 25%, while an SPX put was sized and calibrated to the broad index decline.
+
+This means basis risk is not solely a function of portfolio beta — it also depends on which sectors or factors drive any given drawdown. Investors with significant sector tilts should recognize that their realized hedge effectiveness in a factor-driven sell-off may be lower than scenario analysis against broad SPX suggests.
+
 ### Convexity Budget and Premium Budget
 
 Institutional tail hedge programs typically operate under two constraints:
@@ -2563,6 +2574,8 @@ Institutional tail hedge programs typically operate under two constraints:
 The premium budget defines the acceptable annual cost of maintaining the hedge program.
 
 Most institutional tail hedge programs target a premium budget in the range of 1% to 3%, with richer close-to-the-money programs reaching ~4%.
+
+Note on cash management: premium is typically paid in advance when options are purchased. The portion of the annual hedge budget not yet deployed — for example, budget reserved for future quarterly rolls — should be held in short-duration, high-quality instruments (money market funds or short-term Treasuries) rather than left idle. At current yields, a 1–2% carry budget held in short-term Treasuries for several months before deployment generates income that partially offsets the net theta cost of the program. This is a small but real benefit that improves the program's effective economics.
 
 #### Convexity Target
 
@@ -2922,6 +2935,8 @@ predictable carry
 
 This avoids rolling just before theta acceleration in the final weeks of option life. As time decreases, decay increases rapidly.
 
+Note on the gamma-theta trade-off: the standard time-based roll rule is designed for puts that are still deep OTM. However, if the market has declined modestly during the holding period and the puts have moved closer to the money, the position accumulates favorable gamma — meaning the hedge is becoming more responsive to further declines. In this specific case, rolling mechanically at the 9-month trigger may sacrifice a valuable gamma position. Investors may reasonably choose to delay the roll by several weeks if (a) the time trigger is not yet urgent and (b) the put has moved meaningfully nearer to the money. The key check is whether crash convexity at current spot still meets the IPS target; if it does, the hold decision has a logical basis.
+
 #### Rule 2 — strike rebalancing
 
 If market rallies:
@@ -3001,6 +3016,34 @@ The primary metric to monitor is whether **crash convexity at the current spot**
 - **Convert to a collar** — if premium budget is fully spent, selling an OTM call at the new higher market level can fund a higher-strike protective put at minimal net cost, though upside participation is capped.
 
 Note that rolling up after a rally realizes the carry loss on the original position and resets the hedge at a higher premium. The total carry cost should be recomputed including the realized loss and new premium before deciding whether the roll is within budget.
+
+#### Cost of a Roll-Up: Worked Example
+
+Rolling up after a 15% market rally involves selling puts that have lost most of their value and buying new puts at a higher strike that are more expensive. The combined cost often exceeds the original premium paid:
+
+```text
+Original hedge (SPX = 5,000):
+  Strike: 4,000 put (20% OTM)
+  Premium paid: ~$15,000 per contract
+
+After a 15% rally (SPX = 5,750):
+  Current value of 4,000 put: ~$2,000 per contract (most value has decayed and delta collapsed)
+
+New hedge (to restore 20% OTM protection):
+  Strike: 4,600 put (20% OTM from 5,750)
+  Premium: ~$18,000 per contract
+
+Net cost of the roll-up:
+  Realized loss on original: $15,000 − $2,000 = $13,000
+  New premium: $18,000
+  Total cost: ~$31,000 per contract
+```
+
+This effectively doubles the carry cost relative to the original hedge entry. Before executing, the investor should confirm this total cost is within the IPS carry budget. If it is not, a partial roll-up (rolling only the nearest-to-money tranche of the ladder) or switching to a put spread for the new position can reduce the cash outlay.
+
+#### Entry Conditions After a Rally
+
+A practical benefit that partially offsets the higher roll-up cost: a market that has rallied 15% is typically accompanied by lower VIX and, often, lower skew percentile. This means the **conditions for re-establishing protection may be favorable** — precisely the market environment the [Entry Timing Decision Tree](#entry-timing-decision-tree) identifies as ideal for accumulating hedges. Investors should check VIX and skew percentile before executing the roll-up. If VIX has fallen below 15 and skew is below the 30th percentile, the cost of the new position may be lower per unit of crash convexity than the original entry, partially compensating for the realized loss on the old hedge.
 
 ### Numerical Example
 
@@ -3184,6 +3227,39 @@ Tail hedges should **not** be evaluated solely on **stand-alone option P&L**. Se
 For a long-only portfolio, computing CVaR precisely requires either a historical simulation or a Monte Carlo model with realistic vol surface dynamics. As a practical starting point, the crash scenario table (see [Crash Scenario Table](#2-crash-scenario-table--payoff-ratio)) provides the inputs needed to estimate CVaR reduction: the hedge payoffs across scenarios can be used to directly compute expected shortfall if combined with historical or assumed return probabilities for each scenario.
 
 The key governance implication: if the investment committee or board uses VaR as a portfolio risk reporting standard, it should be supplemented with CVaR for any mandate that includes a tail-hedge program, because VaR will systematically understate the hedge's contribution.
+
+#### Quarterly Hedge Program Reporting Format
+
+Presenting hedge costs clearly to stakeholders is as important as designing the program correctly. A simple quarterly report format that separates hedge costs from portfolio performance prevents the program from appearing as unexplained performance drag.
+
+Suggested template:
+
+```text
+QUARTERLY HEDGE PROGRAM REPORT
+
+Portfolio value:                $10.2M
+Hedge premium spent YTD:        $48k  (0.47% annualized)
+Crash convexity at −25% SPX:   18.2% (target: 15–25%)
+Carry-to-convexity ratio:       8.4x  (target: >6)
+Skew percentile:                24%   (protection cheap)
+Roll status:                    Next roll due Aug 2026
+Program status:                 WITHIN PARAMETERS
+
+Portfolio return YTD (ex-hedge cost):   +7.2%
+Portfolio return YTD (incl. hedge cost): +6.7%
+Hedge cost this quarter:                −$12k (0.12%)
+
+Note: Hedge cost is a designed feature, not a performance deficit.
+In a −25% market decline, the hedge is expected to generate +$1.8M,
+reducing the portfolio drawdown from approximately −25% to approximately −7%.
+```
+
+Key principles for the reporting format:
+
+- Always show equity return both before and after hedge cost, so stakeholders see the drag explicitly rather than having it hidden in blended returns.
+- Show the carry-to-convexity ratio alongside the cost — this frames cost in terms of what it buys, not as a pure loss.
+- Include a program status line (Within Parameters / Review Required / Action Required) to give a clear signal without requiring stakeholders to interpret raw numbers.
+- The bottom note restating the hedge's scenario value reinforces the insurance framing at every reporting period.
 
 #### Practical First Pass Estimate
 
@@ -3764,6 +3840,7 @@ When a tail event is underway and hedge gains are material, execution becomes an
 - **Stage re-entry into equities** over days or weeks rather than committing all liquidity in a single session. Markets during a crash are volatile; average into positions rather than attempting to time the trough.
 - **Use the crisis playbook** (see [Scenario-Based Re-Risk Playbook](#scenario-based-re-risk-playbook)) to determine the equity re-entry cadence based on the magnitude of the decline.
 - **Accept imperfect pricing.** The goal is to deploy at materially cheaper levels than pre-crisis, not to buy exactly at the bottom.
+- **For portfolios with alternative investment commitments:** coordinate monetized hedge proceeds with outstanding capital call obligations before committing to equity redeployment. A market crash that triggers hedge monetization may simultaneously trigger capital calls from private equity or other illiquid fund commitments. If the hedge proceeds are the primary source of liquidity for both equity rebalancing and capital call fulfilment, the available rebalancing capital may be materially less than the crisis playbook assumes. Reserving a portion of monetized proceeds for near-term capital call obligations should be part of the pre-crisis liquidity planning.
 
 #### Managing Operational Bottlenecks
 
