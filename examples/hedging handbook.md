@@ -122,6 +122,8 @@ The document covers options fundamentals, the Greeks, volatility surface dynamic
 
 The typical goal of a hedge program is **not** to eliminate volatility or offset every drawdown. A well-designed tail hedge will typically lose money in most market environments. The goal is to provide meaningful liquidity during severe market dislocations — crashes of 20% or more — while keeping the cost of that protection manageable in normal market conditions. Hedges are treated as a strategic portfolio allocation, not a tactical trade, and are most valuable when accumulated systematically during calm markets rather than reactively during stress.
 
+Not every investment program requires hedging. The decision to implement hedging should be made deliberately rather than assumed. For example, if the invesment program has a very long-time horizon, no leverage, no liquidity needs, and a strong behavioural constitution, then the correct answer may be that the carry cost of a systematic heding program is not justified by the marginal utility of crash protection.
+
 ### Scope and Assumptions
 
 The framework assumes a diversified long-only U.S. equity portfolio with broad S&P 500 exposure and a portfolio beta near 1.0. The primary hedging instruments discussed are exchange-listed SPX and XSP index put options. Where other instruments are referenced — VIX derivatives, variance swaps, volatility overlays — their suitability for a given mandate will depend on legal, operational, and governance constraints specific to the investor.
@@ -2486,6 +2488,8 @@ Minimum IPS provisions for a hedge program:
 
 Embedding these parameters in the IPS removes discretion from the decision framework during a crisis and ensures that governance does not become a bottleneck at the worst possible moment.
 
+In addition to quarterly operational reviews, conduct a comprehensive annual review of the hedge program parameters themselves - including premium budget, strike range, maturity range, and monetization triggers - to ensure they remain aligned with the family's current risk tolerance, portfolio composition, and financial circumstances.
+
 #### Position Documentation and Counterparty Risk
 
 Each option position should be documented with the underlying instrument and exchange, strike, maturity, notional, number of contracts, entry date, premium paid, and current mark-to-market.
@@ -3271,8 +3275,9 @@ Suggested template:
 QUARTERLY HEDGE PROGRAM REPORT
 
 Portfolio value:                $10.2M
+Portfolio beta vs. SPX:         0.95  (no resizing required)
 Hedge premium spent YTD:        $48k  (0.47% annualized)
-Crash convexity at −25% SPX:   18.2% (target: 15–25%)
+Crash convexity at −25% SPX:    18.2% (target: 15–25%)
 Carry-to-convexity ratio:       8.4x  (target: >6)
 Skew percentile:                24%   (protection cheap)
 Roll status:                    Next roll due Aug 2026
@@ -4274,7 +4279,7 @@ The table simulates portfolio performance under market crashes.
 | SPX Move | Portfolio P&L | Hedge P&L | Net P&L |
 | -------- | ------------- | --------- | ------- |
 | +20%     | +$2.0M        | -$45k     | +$1.95M |
-| +10%     | +$1.0         | -$30k     | +$970k  |
+| +10%     | +$1.0M        | -$30k     | +$970k  |
 | -5%      | -$500k        | +$30k     | -$470k  |
 | -10%     | -$1M          | +$120k    | -$880k  |
 | -20%     | -$2M          | +$650k    | -$1.35M |
