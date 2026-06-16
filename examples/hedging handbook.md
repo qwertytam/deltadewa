@@ -68,13 +68,11 @@ Updated: 2026-03-19
   - [Convexity Budget and Premium Budget](#convexity-budget-and-premium-budget)
   - [Strike Selection](#strike-selection)
   - [Delta-Based Strike Selection](#delta-based-strike-selection)
-  - [Delta Sweet Spot: Balancing Cost and Coverage](#delta-sweet-spot-balancing-cost-and-coverage)
   - [Maturity Selection](#maturity-selection)
   - [Volatility Roll Yield](#volatility-roll-yield)
   - [Rolling Rules](#rolling-rules)
   - [Numerical Example](#numerical-example)
   - [Evaluating and Testing Tail Hedge Strategies](#evaluating-and-testing-tail-hedge-strategies)
-  - [Quarterly Hedge Program Reporting Format](#quarterly-hedge-program-reporting-format)
   - [Typical Hedge Program Targets](#typical-hedge-program-targets)
   - [Portfolio Hedge Sizing Framework](#portfolio-hedge-sizing-framework)
   - [Historical Crash Analysis](#historical-crash-analysis)
@@ -1457,7 +1455,7 @@ Advantages:
 
 XSP is often used by investors who want index-style hedging but require **more granular hedge sizing**.
 
-Note: While XSP tracks the same underlying as SPX, its options market is smaller. Bid-ask spreads and open interest in XSP can be thinner than in SPX, particularly for deep OTM and long-dated strikes. Investors should check OI and recent volume at target strikes before committing to XSP for large notional trades, and should use limit orders to avoid paying inflated spreads.
+Note: While XSP tracks the same underlying as SPX, its options market is smaller. Bid-ask spreads and open interest in XSP can be thinner than in SPX, particularly for deep OTM and long-dated strikes. Investors should check OI and recent volume at target strikes before committing to XSP for large notional trades, and should use limit orders to avoid paying inflated spreads. Using XSP requires execution patience to avoid paying a 10% spread premium.
 
 #### SPY Options (ETF Options)
 
@@ -2458,7 +2456,7 @@ Embedding these parameters in the IPS removes discretion from the decision frame
 
 Each option position should be documented with the underlying instrument and exchange, strike, maturity, notional, number of contracts, entry date, premium paid, and current mark-to-market.
 
-For programs using a single prime broker, counterparty concentration risk should be considered. During a 2008-style liquidity crisis, broker operational capacity can become constrained. Where program size warrants it, distributing positions across two prime brokers reduces single-point-of-failure risk in execution, margining, and position access.
+For programs using a single prime broker, counterparty concentration risk should be considered. During a 2008-style liquidity crisis, broker operational capacity can become constrained. Where program size warrants it, distributing positions across two prime brokers reduces single-point-of-failure risk in execution, margining, and position access. For smaller programs, it is typically practical to only use *one* highly rated institutional broker, with a secondary cash/custody account elsewhere for emergency liquidity.
 
 ### Beta-Adjusted Hedge Sizing
 
@@ -2507,20 +2505,20 @@ For investors using XSP for finer granularity, the 200 XSP contracts computed ab
 
 Strike allocations (consistent with [the typical tail hedge structure](#typical-tail-hedge-structure)):
 
-| Strike | Allocation % | XSP Contracts | Notional |
-| ------ | ------------ | ------------- | -------- |
-| 20% OTM | 35% | 70 | $3.5M |
-| 30% OTM | 40% | 80 | $4.0M |
-| 40% OTM | 25% | 50 | $2.5M |
+| Strike  | Allocation % | XSP Contracts | Notional |
+| ------- | ------------ | ------------- | -------- |
+| 20% OTM | 35%          | 70            | $3.5M    |
+| 30% OTM | 40%          | 80            | $4.0M    |
+| 40% OTM | 25%          | 50            | $2.5M    |
 
 Split across two maturity buckets (e.g., 12 months and 18 months, weighted 40% / 60%):
 
-| Strike | 12-month XSP | 18-month XSP |
-| ------ | ------------ | ------------ |
-| 20% OTM | 28 | 42 |
-| 30% OTM | 32 | 48 |
-| 40% OTM | 20 | 30 |
-| **Total** | **80** | **120** |
+| Strike    | 12-month XSP | 18-month XSP |
+| --------- | ------------ | ------------ |
+| 20% OTM   | 28           | 42           |
+| 30% OTM   | 32           | 48           |
+| 40% OTM   | 20           | 30           |
+| **Total** | **80**       | **120**      |
 
 This structure gives 200 XSP contracts total distributed across six positions, each sized to approximately $400k–$700k notional — fine enough granularity to adjust individual legs without large step changes in exposure.
 
@@ -2749,12 +2747,12 @@ Note that this delta-to-moneyness mapping table is highly regime-dependent. At V
 
 For a single protective put, a delta of approximately 0.30 often represents a practical balance between coverage and cost — particularly for shorter-dated hedges (3 to 12 months) or investors new to protective puts.
 
-| Delta range | Characteristic | Trade-off |
-| ----------- | -------------- | --------- |
-| > 0.40 | High coverage, immediate response | Expensive; option behaves increasingly like a stock replacement |
-| ~0.30 | Balanced cost and protection | Good gamma exposure; activates meaningfully in moderate corrections |
-| 0.10–0.15 | Deep OTM, high skew beta | Lower carry; only activates in larger moves — appropriate for pure tail programs |
-| < 0.10 | Very deep OTM | Minimal protection in moderate drawdowns; optimized for catastrophic scenarios |
+| Delta range | Characteristic                    | Trade-off                                                                        |
+| ----------- | --------------------------------- | -------------------------------------------------------------------------------- |
+| > 0.40      | High coverage, immediate response | Expensive; option behaves increasingly like a stock replacement                  |
+| ~0.30       | Balanced cost and protection      | Good gamma exposure; activates meaningfully in moderate corrections              |
+| 0.10–0.15   | Deep OTM, high skew beta          | Lower carry; only activates in larger moves — appropriate for pure tail programs |
+| < 0.10      | Very deep OTM                     | Minimal protection in moderate drawdowns; optimized for catastrophic scenarios   |
 
 For **systematic long-dated tail programs**, the typical emphasis is on the 0.05 to 0.15 delta range — lower delta, lower carry, maximum crash convexity. The 0.30 delta level is more appropriate for tactical near-term hedges where coverage of moderate corrections is a priority.
 
@@ -2937,62 +2935,9 @@ This avoids rolling just before theta acceleration in the final weeks of option 
 
 Note on the gamma-theta trade-off: the standard time-based roll rule is designed for puts that are still deep OTM. However, if the market has declined modestly during the holding period and the puts have moved closer to the money, the position accumulates favorable gamma — meaning the hedge is becoming more responsive to further declines. In this specific case, rolling mechanically at the 9-month trigger may sacrifice a valuable gamma position. Investors may reasonably choose to delay the roll by several weeks if (a) the time trigger is not yet urgent and (b) the put has moved meaningfully nearer to the money. The key check is whether crash convexity at current spot still meets the IPS target; if it does, the hold decision has a logical basis.
 
-#### Rule 2 — strike rebalancing
+#### Rule 2 — Market Rally Rebalance Trigger
 
-If market rallies:
-
-```text
-puts become deeper OTM
-```
-
-Funds may:
-
-```text
-sell old hedge
-buy new hedge closer to spot
-```
-
-Rebalancing should be gradual to avoid excessive trading costs.
-
-#### Rule 3 — crash monetization
-
-See [Monetizing crashes](#typical-monetization-triggers) for detail.
-
-#### Alternative Rule — Delta-Based Rolling
-
-Example rule:
-
-```text
-Roll if the absolute value of option delta exceeds 0.60
-```
-
-This prevents hedges from turning into **deep ITM positions**.
-
-#### Alternative Rule — Volatility-Regime Rolling
-
-Example rule:
-
-```text
-If VIX < 15 → increase hedge exposure
-If VIX 15 to 25 → no action
-If VIX 25 to 40 → monetize some part of hedge
-If VIX > 40 → look to liquidate hedge in full
-```
-
-This rule helps control the long-term carry cost of the hedge program.
-
-#### What to Do When Skew Is Expensive
-
-Rolling hedges when skew is elevated (skew percentile above 70%) can significantly increase effective carry cost. Several approaches can mitigate this:
-
-1. **Delay the roll** by several weeks if the roll is not urgently required by time or moneyness triggers. Skew often reverts after volatility spikes, and waiting for a quieter period can reduce the cost of the new hedge materially.
-2. **Reduce size at the roll** — buy a smaller position than the full target at expensive skew, then supplement when skew normalizes. This leaves the program temporarily underhedged but reduces carry cost.
-3. **Use a put spread for the new position** — when skew is expensive, selling a further OTM put partially offsets the inflated premium at the cost of capping the payoff in an extreme crash.
-4. **Roll only part of the position** — if the program has a time ladder across multiple maturities, only roll the tranches that must be rolled and defer the rest.
-
-The guiding principle: a systematic program does not need to roll mechanically on a fixed calendar date. A range of several weeks on either side of the target roll date is acceptable and can save meaningful premium cost when markets are stressed.
-
-#### Rule 5 — Market Rally Rebalance Trigger
+See [Hedge Rebalance Triggers](#11-hedge-rebalance-triggers) in Part X for how this trigger integrates with the dashboard monitoring framework.
 
 When the market rallies significantly after a hedge is established, several effects compound against the existing position:
 
@@ -3002,12 +2947,12 @@ When the market rallies significantly after a hedge is established, several effe
 
 The primary metric to monitor is whether **crash convexity at the current spot** still meets the program's IPS target. If it does not, that is the action trigger — regardless of time remaining or calendar roll rules.
 
-| Market Rally from Hedge Entry | Recommended Action |
-| ----------------------------- | ------------------ |
-| +5 to +10% | Monitor — recompute crash convexity at current spot |
-| +10 to +15% | Review trigger — if convexity target is no longer met, consider rolling strikes up |
-| +15 to +20% | Action trigger — strikes are likely too deep OTM; roll the ladder closer to current spot |
-| > +20% | Urgent rebalance — original strikes may provide negligible protection; close and re-establish |
+| Market Rally from Hedge Entry | Recommended Action                                                                            |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| +5 to +10%                    | Monitor — recompute crash convexity at current spot                                           |
+| +10 to +15%                   | Review trigger — if convexity target is no longer met, consider rolling strikes up            |
+| +15 to +20%                   | Action trigger — strikes are likely too deep OTM; roll the ladder closer to current spot      |
+| > +20%                        | Urgent rebalance — original strikes may provide negligible protection; close and re-establish |
 
 **Response options when the trigger is reached:**
 
@@ -3017,7 +2962,9 @@ The primary metric to monitor is whether **crash convexity at the current spot**
 
 Note that rolling up after a rally realizes the carry loss on the original position and resets the hedge at a higher premium. The total carry cost should be recomputed including the realized loss and new premium before deciding whether the roll is within budget.
 
-#### Cost of a Roll-Up: Worked Example
+Rebalancing should be gradual to avoid excessive trading costs.
+
+##### Cost of a Roll-Up: Worked Example
 
 Rolling up after a 15% market rally involves selling puts that have lost most of their value and buying new puts at a higher strike that are more expensive. The combined cost often exceeds the original premium paid:
 
@@ -3041,9 +2988,49 @@ Net cost of the roll-up:
 
 This effectively doubles the carry cost relative to the original hedge entry. Before executing, the investor should confirm this total cost is within the IPS carry budget. If it is not, a partial roll-up (rolling only the nearest-to-money tranche of the ladder) or switching to a put spread for the new position can reduce the cash outlay.
 
-#### Entry Conditions After a Rally
+##### Entry Conditions After a Rally
 
 A practical benefit that partially offsets the higher roll-up cost: a market that has rallied 15% is typically accompanied by lower VIX and, often, lower skew percentile. This means the **conditions for re-establishing protection may be favorable** — precisely the market environment the [Entry Timing Decision Tree](#entry-timing-decision-tree) identifies as ideal for accumulating hedges. Investors should check VIX and skew percentile before executing the roll-up. If VIX has fallen below 15 and skew is below the 30th percentile, the cost of the new position may be lower per unit of crash convexity than the original entry, partially compensating for the realized loss on the old hedge.
+
+#### Rule 3 — Crash Monetization
+
+See [Monetizing crashes](#typical-monetization-triggers) for detail.
+
+#### Alternative Rules
+
+##### Delta-Based Rolling
+
+Example rule:
+
+```text
+Roll if the absolute value of option delta exceeds 0.60
+```
+
+This prevents hedges from turning into **deep ITM positions**.
+
+##### Volatility-Regime Rolling
+
+Example rule:
+
+```text
+If VIX < 15 → increase hedge exposure
+If VIX 15 to 25 → no action
+If VIX 25 to 40 → monetize some part of hedge
+If VIX > 40 → look to liquidate hedge in full
+```
+
+This rule helps control the long-term carry cost of the hedge program.
+
+##### What to Do When Skew Is Expensive
+
+Rolling hedges when skew is elevated (skew percentile above 70%) can significantly increase effective carry cost. Several approaches can mitigate this:
+
+1. **Delay the roll** by several weeks if the roll is not urgently required by time or moneyness triggers. Skew often reverts after volatility spikes, and waiting for a quieter period can reduce the cost of the new hedge materially.
+2. **Reduce size at the roll** — buy a smaller position than the full target at expensive skew, then supplement when skew normalizes. This leaves the program temporarily underhedged but reduces carry cost.
+3. **Use a put spread for the new position** — when skew is expensive, selling a further OTM put partially offsets the inflated premium at the cost of capping the payoff in an extreme crash.
+4. **Roll only part of the position** — if the program has a time ladder across multiple maturities, only roll the tranches that must be rolled and defer the rest.
+
+The guiding principle: a systematic program does not need to roll mechanically on a fixed calendar date. A range of several weeks on either side of the target roll date is acceptable and can save meaningful premium cost when markets are stressed.
 
 ### Numerical Example
 
@@ -4226,6 +4213,8 @@ The table simulates portfolio performance under market crashes.
 
 | SPX Move | Portfolio P&L | Hedge P&L | Net P&L |
 | -------- | ------------- | --------- | ------- |
+| +20%     | +$2.0M        | -$45k     | +$1.95M |
+| +10%     | +$1.0         | -$30k     | +$970k  |
 | -5%      | -$500k        | +$30k     | -$470k  |
 | -10%     | -$1M          | +$120k    | -$880k  |
 | -20%     | -$2M          | +$650k    | -$1.35M |
@@ -4411,6 +4400,8 @@ See [Skew Exposure / Beta](#skew-exposure--beta) for details.
 See [Net Delta](#net-delta) for details.
 
 #### 11. Hedge Rebalance Triggers
+
+See [Market Rally Rebalance Triggers for the detailed action framework](#rule-2--market-rally-rebalance-trigger)
 
 ##### Trigger Definition
 
