@@ -9,6 +9,7 @@ Updated: 2026-03-19
   - [Philosophy](#philosophy)
   - [Scope and Assumptions](#scope-and-assumptions)
   - [Important Limitations](#important-limitations)
+- [Quick Start — Five Key Decisions](#quick-start--five-key-decisions)
 - [PART I — Options Fundamentals](#part-i--options-fundamentals)
   - [The Basics](#the-basics)
   - [Pricing \& Carry](#pricing--carry)
@@ -128,6 +129,39 @@ The framework assumes a diversified long-only U.S. equity portfolio with broad S
 ### Important Limitations
 
 This handbook is an educational and operational reference. It is not investment advice, and no strategy described herein should be implemented without independent analysis, legal review of the investment mandate, and consultation with qualified derivatives professionals. Tax sections are for general orientation only and do not constitute tax advice; specific treatment should be confirmed with qualified counsel.
+
+## Quick Start — Five Key Decisions
+
+For a reader who needs to orient quickly before diving into the full document:
+
+```text
+1. SET YOUR ANNUAL PREMIUM BUDGET
+   Typically 1–2% of AUM for family offices.
+   Document it in the IPS before placing the first trade.
+
+2. CHOOSE YOUR STRIKE LADDER
+   Start with 20% / 30% / 40% OTM puts.
+   Weight more toward the middle strike (e.g., 35% / 40% / 25%).
+
+3. SET MATURITY AND ROLL TIMING
+   Buy 18-month puts.
+   Roll when 9–12 months remain — before theta accelerates.
+
+4. DEFINE MONETIZATION TRIGGERS IN ADVANCE
+   VIX > 40, or SPX down > 15%, or hedge MTM > 5% of portfolio.
+   Pre-authorize in the IPS so decisions are not made under stress.
+
+5. DOCUMENT EVERYTHING
+   IPS must specify: budget, instruments, strikes, maturities,
+   roll rules, monetization triggers, and governance authority.
+```
+
+Navigation:
+
+- Full program design → [PART VII — Designing a Tail-Hedge Program](#part-vii--designing-a-tail-hedge-program)
+- Monitoring dashboard → [PART X — Institutional Hedge Dashboards](#part-x--institutional-hedge-dashboards)
+- What to do in a crisis → [PART VIII — Monetization and Re-Risk Rules](#part-viii--monetization-and-re-risk-rules)
+- Tax and governance → [A3 Tax Considerations](#a3-tax-considerations-for-hedging-instruments) and [Program Constraints and Governance](#program-constraints-and-governance)
 
 ## PART I — Options Fundamentals
 
@@ -2472,6 +2506,8 @@ where:
 
 - $\text{Contract Multiplier}$ is typically 100
 
+Note: Portfolio beta should be recalculated at least annually, or whenever significant portfolio changes occur — for example, when positions representing more than 10% of portfolio value are added or removed. Beta drift of 0.10 or more warrants resizing the hedge at the next scheduled roll to avoid persistent over- or under-hedging. A portfolio that shifts toward more defensive names over time (beta drifts from 1.00 to 0.85) with an unchanged hedge notional is overhedged by approximately 18%, paying unnecessary carry for protection that exceeds the actual market exposure.
+
 #### Worked Example — Multi-Position Portfolio
 
 A portfolio holds the following positions:
@@ -2988,6 +3024,16 @@ Net cost of the roll-up:
 
 This effectively doubles the carry cost relative to the original hedge entry. Before executing, the investor should confirm this total cost is within the IPS carry budget. If it is not, a partial roll-up (rolling only the nearest-to-money tranche of the ladder) or switching to a put spread for the new position can reduce the cash outlay.
 
+##### IPS Exception Clause for Roll-Up Budget Overruns
+
+A strict 1–2% annual premium cap can be breached mid-year by a single roll-up after a large equity rally. The IPS should include an explicit exception clause to handle this, so the decision is governed rather than improvised under time pressure.
+
+Suggested IPS language:
+
+> *In the event that a market rally of 15% or more triggers a required re-strike of the hedge ladder, the investment committee is authorized to fund the roll-up cost from one of the following sources, in order of preference: (1) realized equity gains generated during the same rally period; (2) a temporary increase in the annual hedge budget not to exceed an additional 1% of AUM in the calendar year; (3) use of a put spread structure for the new position to reduce net premium outlay. Any exception must be documented and reviewed at the next quarterly hedge program report.*
+
+The key principle: the family office has generated meaningful equity profits in a 15%+ rally. Funding the roll-up from a small portion of those profits is economically coherent — it is the cost of resetting protection on a more valuable portfolio, not an unrelated expense.
+
 ##### Entry Conditions After a Rally
 
 A practical benefit that partially offsets the higher roll-up cost: a market that has rallied 15% is typically accompanied by lower VIX and, often, lower skew percentile. This means the **conditions for re-establishing protection may be favorable** — precisely the market environment the [Entry Timing Decision Tree](#entry-timing-decision-tree) identifies as ideal for accumulating hedges. Investors should check VIX and skew percentile before executing the roll-up. If VIX has fallen below 15 and skew is below the 30th percentile, the cost of the new position may be lower per unit of crash convexity than the original entry, partially compensating for the realized loss on the old hedge.
@@ -3247,6 +3293,16 @@ Key principles for the reporting format:
 - Show the carry-to-convexity ratio alongside the cost — this frames cost in terms of what it buys, not as a pure loss.
 - Include a program status line (Within Parameters / Review Required / Action Required) to give a clear signal without requiring stakeholders to interpret raw numbers.
 - The bottom note restating the hedge's scenario value reinforces the insurance framing at every reporting period.
+
+Note on reporting in quarters when hedge positions are monetized: show the monetization gain as a **separate line** rather than netting it against the carry cost. For example:
+
+```text
+Hedge premium spent YTD:        $48k  (0.47% annualized)
+Hedge monetization gain YTD:    +$620k
+Net hedge programme P&L YTD:    +$572k
+```
+
+Netting monetization gains against carry costs obscures both the cost of protection in normal years and the value of the payoff in crisis years — making it impossible for stakeholders to understand either number in isolation. Showing them separately preserves the insurance framing: the carry is the premium paid, the monetization gain is the insurance claim received.
 
 #### Practical First Pass Estimate
 
@@ -3597,6 +3653,8 @@ slower decline
 ```
 
 This type of environment, (e.g., slow bear markets), can be challenging for hedges due to **volatility decay**. Slow bear markets with declining volatility are particularly challenging for long-dated put hedges.
+
+The mechanism is counterintuitive: in a slow-grinding −25% decline, the put gains value from delta as the market falls but simultaneously loses value from two sources — ongoing theta decay as time passes, and vega compression as volatility fails to spike. If the decline takes 12 months rather than 12 days, the cumulative theta absorbed by the position can exceed the delta gains. The net result can be a hedge that is worth less at −25% in a slow decline than at −20% in a fast crash, because the fast crash delivers the vega spike that the slow decline does not. This is why the 2022 experience disappointed many hedgers despite a significant market decline: the absence of a volatility event was itself a source of hedge underperformance.
 
 ### Implementation Checklist
 
@@ -3991,6 +4049,8 @@ SPX and XSP index options are classified as Section 1256 contracts. This means:
 - All gains and losses receive **60/40 treatment** — 60% long-term capital gain, 40% short-term capital gain
 
 This is generally favorable for a systematic put-buying program, as even short holding periods receive partial long-term capital gains treatment. However, it also means the tax cost of a hedge gain cannot be deferred beyond the tax year in which it accrues.
+
+In practice, the automatic year-end loss recognition under Section 1256 provides a **tax benefit in most years** of a systematic put-buying program. Puts decay over time, producing unrealized losses that are recognized at year-end without requiring the position to be closed. This generates 60/40 capital losses that can offset gains elsewhere in the portfolio — automatically, without any selling. Unlike standard equity tax-loss harvesting, there is no need to sell and repurchase: the mark-to-market does it without disrupting the hedge. This reframes the Section 1256 mark-to-market from a neutral accounting rule to a modest tax efficiency that partially offsets the carry cost of the program in most years.
 
 #### Wash Sale Considerations When Rolling
 
