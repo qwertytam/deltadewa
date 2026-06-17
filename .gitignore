@@ -24,6 +24,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Personal, un-shared Claude Code context
+CLAUDE.local.md
+
 # Distribution / packaging
 .Python
 build/
