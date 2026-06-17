@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from deltadewa.analysis.volatility import get_volatility_stats
+from deltadewa.marketdata import MarketDataError, MarketDataProvider
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.factory import create_default_portfolio
 from deltadewa.reporting import ConsoleReporter
@@ -183,11 +184,38 @@ def print_portfolio_summary(
 # ---------------------------------------------------------------------------
 
 
+def _seed_market_values(
+    portfolio: OptionPortfolio,
+    market_data: MarketDataProvider | None,
+    reporter: ConsoleReporter,
+) -> tuple[float, float]:
+    """Return ``(spot_price, volatility)`` seed values for GlobalAssumptions.
+
+    Falls back to the portfolio's current values when *market_data* is
+    ``None``, or when the provider raises ``MarketDataError``.
+    """
+    spot_price = portfolio.spot_price
+    volatility = portfolio.volatility
+    if market_data is None:
+        return spot_price, volatility
+
+    try:
+        spot_price = market_data.get_spot(portfolio.get_symbol())
+        volatility = market_data.get_vix() / 100
+    except MarketDataError as exc:
+        reporter.warning(
+            f"market_data unavailable, using portfolio values: {exc}",
+        )
+    return spot_price, volatility
+
+
 def build_global_assumptions(
     portfolio: OptionPortfolio,
     *,
     spot_range_pct: float = 30.0,
     vol_range: tuple[float, float] = (0.05, 1.00),
+    market_data: MarketDataProvider | None = None,
+    reporter: ConsoleReporter | None = None,
 ) -> tuple[GlobalAssumptions, Callable[..., None]]:
     """Construct and wire a ``GlobalAssumptions`` widget to *portfolio*.
 
@@ -202,6 +230,15 @@ def build_global_assumptions(
         Passed through to ``GlobalAssumptions`` (slider ± range).
     vol_range:
         ``(min_vol, max_vol)`` for the volatility slider.
+    market_data:
+        Optional ``MarketDataProvider`` used to seed ``spot_price`` and
+        ``volatility`` (derived from VIX) instead of the portfolio's current
+        values. When ``None`` (default), behaviour is unchanged from before
+        this parameter existed. Provider failures are caught and logged via
+        *reporter*, falling back to the portfolio's values.
+    reporter:
+        ``ConsoleReporter`` used to report ``market_data`` failures. A
+        default one is created when ``None`` is supplied.
 
     Returns
     -------
@@ -213,9 +250,17 @@ def build_global_assumptions(
         they need to unregister the callback later.
 
     """
+    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
+
+    spot_price, volatility = _seed_market_values(
+        portfolio,
+        market_data,
+        _reporter,
+    )
+
     global_assumptions = GlobalAssumptions(
-        spot_price=portfolio.spot_price,
-        volatility=portfolio.volatility,
+        spot_price=spot_price,
+        volatility=volatility,
         risk_free_rate=portfolio.risk_free_rate,
         dividend_yield=portfolio.dividend_yield,
         valuation_date=portfolio.valuation_date,
@@ -243,6 +288,7 @@ def setup_dashboard(
     *,
     globals_dict: dict | None = None,
     export_dir: str | Path | None = None,
+    market_data: MarketDataProvider | None = None,
 ) -> dict:
     """Run the full MODE 0 setup sequence and return a context dict.
 
@@ -251,7 +297,7 @@ def setup_dashboard(
     1. ``configure_display_defaults()``
     2. ``initialize_portfolio(portfolio, reporter, globals_dict=globals_dict)``
     3. ``print_portfolio_summary(portfolio, reporter)``
-    4. ``build_global_assumptions(portfolio)``
+    4. ``build_global_assumptions(portfolio, market_data=market_data)``
 
     Parameters
     ----------
@@ -264,6 +310,10 @@ def setup_dashboard(
     export_dir:
         Optional override for the export directory path (default:
         ``./exports``).
+    market_data:
+        Optional ``MarketDataProvider`` used to seed ``GlobalAssumptions``.
+        See ``build_global_assumptions`` for behaviour. Defaults to
+        ``None``, leaving today's behaviour unchanged.
 
     Returns
     -------
@@ -289,6 +339,8 @@ def setup_dashboard(
 
     global_assumptions, assumptions_link_cb = build_global_assumptions(
         portfolio,
+        market_data=market_data,
+        reporter=_reporter,
     )
 
     # ruff: disable[RUF052]  # noqa: ERA001
