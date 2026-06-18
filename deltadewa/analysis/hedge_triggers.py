@@ -70,7 +70,7 @@ class HedgeTriggerThresholds:
     gamma_moderate: float = 30.0
 
     @classmethod
-    def from_ips_config(cls, ips: IpsConfig) -> HedgeTriggerThresholds:
+    def from_ips(cls, ips: IpsConfig) -> HedgeTriggerThresholds:
         """Build thresholds from an ``IpsConfig``.
 
         Fields the IPS schema does not define (``expiry_urgent_days``,

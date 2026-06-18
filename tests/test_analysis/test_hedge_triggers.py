@@ -11,13 +11,13 @@ EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "examples" / "ips.yaml"
 
 
 class TestHedgeTriggerThresholdsFromIpsConfig:
-    """Tests for HedgeTriggerThresholds.from_ips_config."""
+    """Tests for HedgeTriggerThresholds.from_ips."""
 
     def test_maps_shared_fields(self) -> None:
         """Test that fields present in IpsConfig are mapped across."""
         ips = load_ips_config(EXAMPLE_IPS_YAML)
 
-        thresholds = HedgeTriggerThresholds.from_ips_config(ips)
+        thresholds = HedgeTriggerThresholds.from_ips(ips)
 
         assert (
             thresholds.delta_drift_warn_pct == ips.triggers.delta_drift_warn_pct
@@ -36,7 +36,7 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
         ips = load_ips_config(EXAMPLE_IPS_YAML)
         defaults = HedgeTriggerThresholds()
 
-        thresholds = HedgeTriggerThresholds.from_ips_config(ips)
+        thresholds = HedgeTriggerThresholds.from_ips(ips)
 
         assert thresholds.expiry_urgent_days == defaults.expiry_urgent_days
         assert thresholds.expiry_soon_days == defaults.expiry_soon_days
