@@ -399,6 +399,50 @@ class TestOptionPortfolioBase:
         assert "OptionPortfolio" in repr_str
 
 
+class TestDefaultExerciseStyle:
+    """Test cases for OptionPortfolioBase.default_exercise_style."""
+
+    def test_defaults_to_american(self) -> None:
+        """Test that default_exercise_style defaults to AMERICAN."""
+        portfolio = OptionPortfolioBase()
+
+        assert portfolio.default_exercise_style == ExerciseStyle.AMERICAN
+
+    def test_add_position_uses_default_exercise_style(self) -> None:
+        """Test that omitting exercise_style uses the portfolio default."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+
+        assert portfolio.positions[0].exercise_style == ExerciseStyle.EUROPEAN
+        assert portfolio.positions[0].option.exercise_style == (
+            ExerciseStyle.EUROPEAN
+        )
+
+    def test_explicit_exercise_style_overrides_default(self) -> None:
+        """Test that an explicit exercise_style still overrides the default."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+            exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        assert portfolio.positions[0].exercise_style == ExerciseStyle.AMERICAN
+
+
 class TestOptionPortfolio:
     """Test cases for composed OptionPortfolio class."""
 

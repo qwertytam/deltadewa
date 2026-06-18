@@ -37,6 +37,7 @@ class OptionPortfolioBase:
         dividend_yield: float = 0.0,
         valuation_date: dt | None = None,
         symbol: str = "UNKNOWN",
+        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ) -> None:
         """Initialize option portfolio.
 
@@ -48,6 +49,8 @@ class OptionPortfolioBase:
             dividend_yield: Dividend yield
             valuation_date: Valuation date for all options (defaults to now)
             symbol: Underlying symbol or identifier for display/export
+            default_exercise_style: Exercise style used by add_position()
+            when its own exercise_style argument is omitted
 
         """
         self.positions: list[OptionPosition] = []
@@ -58,6 +61,7 @@ class OptionPortfolioBase:
         self.dividend_yield = dividend_yield
         self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
         self.symbol = symbol
+        self.default_exercise_style = default_exercise_style
         self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
@@ -73,7 +77,7 @@ class OptionPortfolioBase:
         option_type: OptionType = OptionType.CALL,
         contract_size: int = 100,
         volatility: float | None = None,
-        exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        exercise_style: ExerciseStyle | None = None,
     ) -> None:
         """Add an option position to the portfolio.
 
@@ -86,6 +90,7 @@ class OptionPortfolioBase:
             volatility: Optional position-specific volatility (uses portfolio
             default if None)
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
+            (uses self.default_exercise_style if None)
 
         """
         # Use position-specific volatility or portfolio default
@@ -95,6 +100,9 @@ class OptionPortfolioBase:
             option_volatility = self.volatility
 
         custom_volatility = volatility is not None
+
+        if exercise_style is None:
+            exercise_style = self.default_exercise_style
 
         option = OptionValuation(
             spot_price=self.spot_price,
