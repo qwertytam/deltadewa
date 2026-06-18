@@ -1,14 +1,52 @@
 """Tests for deltadewa.dashboard.setup."""
 
+import datetime
 from unittest.mock import MagicMock
 
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.dashboard.setup import build_global_assumptions, setup_dashboard
+from deltadewa.ips_config import (
+    IpsBudget,
+    IpsConfig,
+    IpsConvexity,
+    IpsDrawdown,
+    IpsMonetization,
+    IpsPricing,
+    IpsProgram,
+    IpsTriggers,
+)
 from deltadewa.marketdata import StaticProvider
 from deltadewa.portfolio.core import OptionPortfolio
 
 # ruff: noqa: S101
 
 # pylint: disable=redefined-outer-name
+
+
+def _make_ips_config(
+    instrument: str,
+    exercise_style: ExerciseStyle,
+) -> IpsConfig:
+    return IpsConfig(
+        program=IpsProgram(name="test program", instrument=instrument),
+        pricing=IpsPricing(exercise_style=exercise_style),
+        budget=IpsBudget(annual_carry_pct=2.0),
+        convexity=IpsConvexity(
+            crash_scenario_pct=-25.0,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+        ),
+        drawdown=IpsDrawdown(max_tolerance_pct=20.0),
+        triggers=IpsTriggers(
+            delta_drift_warn_pct=5.0,
+            delta_drift_action_pct=10.0,
+            theta_cost_acceptable_pct=2.0,
+            roll_time_months=9.0,
+            rally_rebalance_pct=15.0,
+            strike_drift_max_otm_pct=45.0,
+        ),
+        monetization=IpsMonetization(schedule=()),
+    )
 
 
 class TestBuildGlobalAssumptions:
@@ -86,3 +124,63 @@ class TestSetupDashboard:
         global_assumptions = context["global_assumptions"]
         assert global_assumptions.spot_price.value == 250.0
         assert global_assumptions.volatility.value == 0.18
+
+
+class TestSetupDashboardIpsConfig:
+    """Tests for ips_config-driven default_exercise_style wiring."""
+
+    def test_matching_instrument_sets_default_exercise_style(self) -> None:
+        """Test that a matching symbol seeds default_exercise_style."""
+        portfolio = OptionPortfolio(spot_price=5000.0, symbol="SPX")
+        ips = _make_ips_config("SPX", ExerciseStyle.EUROPEAN)
+        globals_dict = {"portfolio": _with_position(portfolio)}
+
+        setup_dashboard(
+            portfolio,
+            globals_dict=globals_dict,
+            ips_config=ips,
+        )
+        portfolio.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.datetime.now(tz=datetime.UTC)
+            + datetime.timedelta(days=90),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        assert portfolio.default_exercise_style == ExerciseStyle.EUROPEAN
+        assert portfolio.positions[-1].exercise_style == ExerciseStyle.EUROPEAN
+
+    def test_non_matching_instrument_leaves_default_american(self) -> None:
+        """Test that a non-matching symbol leaves the AMERICAN default."""
+        portfolio = OptionPortfolio(spot_price=400.0, symbol="SPY")
+        ips = _make_ips_config("SPX", ExerciseStyle.EUROPEAN)
+        globals_dict = {"portfolio": _with_position(portfolio)}
+
+        setup_dashboard(
+            portfolio,
+            globals_dict=globals_dict,
+            ips_config=ips,
+        )
+        portfolio.add_position(
+            strike_price=380.0,
+            maturity_date=datetime.datetime.now(tz=datetime.UTC)
+            + datetime.timedelta(days=90),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        assert portfolio.default_exercise_style == ExerciseStyle.AMERICAN
+        assert portfolio.positions[-1].exercise_style == ExerciseStyle.AMERICAN
+
+
+def _with_position(portfolio: OptionPortfolio) -> OptionPortfolio:
+    """Add a position so initialize_portfolio treats it as already imported."""
+    portfolio.add_position(
+        strike_price=portfolio.spot_price,
+        maturity_date=datetime.datetime.now(tz=datetime.UTC)
+        + datetime.timedelta(days=30),
+        quantity=1,
+        option_type=OptionType.CALL,
+    )
+    return portfolio

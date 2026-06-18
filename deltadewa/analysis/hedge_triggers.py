@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 import deltadewa.constants as const
 
 if TYPE_CHECKING:
+    from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.reporting import ConsoleReporter
 
@@ -67,6 +68,20 @@ class HedgeTriggerThresholds:
     theta_cost_acceptable_pct: float = 2.0
     gamma_low: float = 10.0
     gamma_moderate: float = 30.0
+
+    @classmethod
+    def from_ips_config(cls, ips: IpsConfig) -> HedgeTriggerThresholds:
+        """Build thresholds from an ``IpsConfig``.
+
+        Fields the IPS schema does not define (``expiry_urgent_days``,
+        ``expiry_soon_days``, ``theta_cost_excellent_pct``, ``gamma_low``,
+        ``gamma_moderate``) keep this dataclass's literal defaults.
+        """
+        return cls(
+            delta_drift_warn_pct=ips.triggers.delta_drift_warn_pct,
+            delta_drift_action_pct=ips.triggers.delta_drift_action_pct,
+            theta_cost_acceptable_pct=ips.triggers.theta_cost_acceptable_pct,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from deltadewa.analysis.volatility import get_volatility_stats
+from deltadewa.ips_config import IpsConfig
 from deltadewa.marketdata import MarketDataError, MarketDataProvider
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.factory import create_default_portfolio
@@ -289,6 +290,7 @@ def setup_dashboard(
     globals_dict: dict | None = None,
     export_dir: str | Path | None = None,
     market_data: MarketDataProvider | None = None,
+    ips_config: IpsConfig | None = None,
 ) -> dict:
     """Run the full MODE 0 setup sequence and return a context dict.
 
@@ -314,6 +316,13 @@ def setup_dashboard(
         Optional ``MarketDataProvider`` used to seed ``GlobalAssumptions``.
         See ``build_global_assumptions`` for behaviour. Defaults to
         ``None``, leaving today's behaviour unchanged.
+    ips_config:
+        Optional ``IpsConfig`` (see ``deltadewa.ips_config``). When
+        ``portfolio.get_symbol()`` matches ``ips_config.program.instrument``,
+        ``portfolio.default_exercise_style`` is set from
+        ``ips_config.pricing.exercise_style`` so future ``add_position()``
+        calls without an explicit ``exercise_style`` use it. Non-matching
+        symbols are left untouched (defaulting to ``ExerciseStyle.AMERICAN``).
 
     Returns
     -------
@@ -334,6 +343,12 @@ def setup_dashboard(
         _reporter,
         globals_dict=globals_dict,
     )
+
+    if (
+        ips_config is not None
+        and portfolio.get_symbol() == ips_config.program.instrument
+    ):
+        portfolio.default_exercise_style = ips_config.pricing.exercise_style
 
     print_portfolio_summary(portfolio, _reporter)
 
