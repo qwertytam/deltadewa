@@ -140,7 +140,7 @@ def start_session(
     )
 
     hedge_thresholds = (
-        HedgeTriggerThresholds.from_ips(ips_config)
+        HedgeTriggerThresholds.from_ips(ips_config.triggers)
         if ips_config is not None
         else HedgeTriggerThresholds()
     )

@@ -17,7 +17,7 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
         """Test that fields present in IpsConfig are mapped across."""
         ips = load_ips_config(EXAMPLE_IPS_YAML)
 
-        thresholds = HedgeTriggerThresholds.from_ips(ips)
+        thresholds = HedgeTriggerThresholds.from_ips(ips.triggers)
 
         assert (
             thresholds.delta_drift_warn_pct == ips.triggers.delta_drift_warn_pct
@@ -36,7 +36,7 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
         ips = load_ips_config(EXAMPLE_IPS_YAML)
         defaults = HedgeTriggerThresholds()
 
-        thresholds = HedgeTriggerThresholds.from_ips(ips)
+        thresholds = HedgeTriggerThresholds.from_ips(ips.triggers)
 
         assert thresholds.expiry_urgent_days == defaults.expiry_urgent_days
         assert thresholds.expiry_soon_days == defaults.expiry_soon_days
@@ -46,3 +46,21 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
         )
         assert thresholds.gamma_low == defaults.gamma_low
         assert thresholds.gamma_moderate == defaults.gamma_moderate
+
+    def test_from_ips_maps_triggers_section_directly(self) -> None:
+        """Test from_ips accepts an IpsTriggers section directly."""
+        ips = load_ips_config(EXAMPLE_IPS_YAML)
+
+        thresholds = HedgeTriggerThresholds.from_ips(ips.triggers)
+
+        assert (
+            thresholds.delta_drift_warn_pct == ips.triggers.delta_drift_warn_pct
+        )
+        assert (
+            thresholds.delta_drift_action_pct
+            == ips.triggers.delta_drift_action_pct
+        )
+        assert (
+            thresholds.theta_cost_acceptable_pct
+            == ips.triggers.theta_cost_acceptable_pct
+        )
