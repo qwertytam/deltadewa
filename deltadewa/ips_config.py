@@ -75,6 +75,8 @@ class IpsTriggers:
     roll_time_months: float
     rally_rebalance_pct: float
     strike_drift_max_otm_pct: float
+    roll_review_buffer: float = 1.5
+    strike_drift_review_fraction: float = 0.75
 
 
 @dataclass(frozen=True)
@@ -227,7 +229,29 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             f"triggers.roll_time_months must be > 0, got "
             f"{fields['roll_time_months']}",
         )
-    return IpsTriggers(**fields)
+
+    roll_review_buffer = section.get("roll_review_buffer", 1.5)
+    if roll_review_buffer <= 1.0:
+        raise IpsConfigError(
+            "triggers.roll_review_buffer must be > 1.0, got "
+            f"{roll_review_buffer}",
+        )
+
+    strike_drift_review_fraction = section.get(
+        "strike_drift_review_fraction",
+        0.75,
+    )
+    if not (0 < strike_drift_review_fraction < 1):
+        raise IpsConfigError(
+            "triggers.strike_drift_review_fraction must be in (0, 1), got "
+            f"{strike_drift_review_fraction}",
+        )
+
+    return IpsTriggers(
+        **fields,
+        roll_review_buffer=roll_review_buffer,
+        strike_drift_review_fraction=strike_drift_review_fraction,
+    )
 
 
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:

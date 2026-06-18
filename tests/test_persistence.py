@@ -275,6 +275,72 @@ class TestJsonRoundtrip:
             0
         ].option.volatility == pytest.approx(0.5)
 
+    def test_json_roundtrip_preserves_entry_spot_and_date(
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
+        """Export/import preserves each position's entry_spot/entry_date."""
+        serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
+
+        output_path = serializer.export_to_json(
+            sample_portfolio,
+            changelog,
+            "test.json",
+        )
+
+        result = serializer.import_from_json(output_path, create_portfolio=True)
+        imported_portfolio = result["portfolio"]
+
+        for orig_pos, imported_pos in zip(
+            sample_portfolio.positions,
+            imported_portfolio.positions,
+            strict=False,
+        ):
+            assert orig_pos.entry_spot is not None
+            assert imported_pos.entry_spot == pytest.approx(orig_pos.entry_spot)
+            assert imported_pos.entry_date == orig_pos.entry_date
+
+    def test_json_import_legacy_file_defaults_entry_to_none(
+        self,
+        tmp_path,
+    ) -> None:
+        """Position dicts without entry_spot/entry_date import as None."""
+        legacy_data = {
+            "metadata": {"exported_at": "2020-01-01T00:00:00+00:00"},
+            "market_parameters": {
+                "spot_price": 100.0,
+                "volatility": 0.2,
+                "risk_free_rate": 0.05,
+                "dividend_yield": 0.0,
+                "underlying_quantity": 0.0,
+                "symbol": "TEST",
+            },
+            "positions": [
+                {
+                    "option_type": "CALL",
+                    "strike_price": 100.0,
+                    "maturity_date": "2030-01-01T00:00:00+00:00",
+                    "quantity": 1,
+                    "contract_size": 100,
+                    "volatility": 0.2,
+                    "custom_volatility": False,
+                },
+            ],
+            "risk_metrics": {},
+        }
+        legacy_path = tmp_path / "legacy.json"
+        legacy_path.write_text(json.dumps(legacy_data))
+
+        serializer = PortfolioSerializer(tmp_path)
+        result = serializer.import_from_json(legacy_path, create_portfolio=True)
+        imported_portfolio = result["portfolio"]
+
+        assert len(imported_portfolio.positions) == 1
+        assert imported_portfolio.positions[0].entry_spot is None
+        assert imported_portfolio.positions[0].entry_date is None
+
     def test_import_from_json_without_portfolio_creation(
         self,
         tmp_path,

@@ -204,6 +204,10 @@ class PortfolioSerializer:
                 "position_value": pos.option.price()
                 * pos.quantity
                 * pos.contract_size,
+                "entry_spot": pos.entry_spot,
+                "entry_date": (
+                    pos.entry_date.isoformat() if pos.entry_date else None
+                ),
             }
             data["positions"].append(position_data)
 
@@ -447,6 +451,16 @@ class PortfolioSerializer:
                 volatility=position_volatility,
             )
 
+            # Set entry tracking directly (not via add_position's kwargs)
+            # so files predating this feature correctly default to None
+            # instead of being back-filled with the import-time spot/date.
+            new_position = imported_portfolio.positions[-1]
+            new_position.entry_spot = pos_data.get("entry_spot")
+            raw_entry_date = pos_data.get("entry_date")
+            new_position.entry_date = (
+                dt.fromisoformat(raw_entry_date) if raw_entry_date else None
+            )
+
         return {
             "portfolio": imported_portfolio,
             "market_params": market_params,
@@ -518,6 +532,15 @@ class PortfolioSerializer:
                     else OptionType.PUT
                 ),
                 volatility=position_volatility,
+            )
+
+            # See import_from_json for why this is set directly rather than
+            # passed as an add_position kwarg.
+            new_position = imported_portfolio.positions[-1]
+            new_position.entry_spot = pos_config.get("entry_spot")
+            raw_entry_date = pos_config.get("entry_date")
+            new_position.entry_date = (
+                dt.fromisoformat(raw_entry_date) if raw_entry_date else None
             )
 
         return {

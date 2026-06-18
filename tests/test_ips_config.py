@@ -169,3 +169,63 @@ class TestLoadIpsConfig:
 
         with pytest.raises(IpsConfigError, match="sell_pct"):
             load_ips_config(path)
+
+    def test_review_buffers_default_when_omitted(self, tmp_path: Path) -> None:
+        """Test that omitted REVIEW buffer fields fall back to defaults."""
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+
+        ips = load_ips_config(path)
+
+        assert ips.triggers.roll_review_buffer == 1.5
+        assert ips.triggers.strike_drift_review_fraction == 0.75
+
+    def test_review_buffers_round_trip_when_set(self, tmp_path: Path) -> None:
+        """Test that explicit REVIEW buffer values are loaded as given."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "roll_review_buffer": 2.0,
+                "strike_drift_review_fraction": 0.5,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        ips = load_ips_config(path)
+
+        assert ips.triggers.roll_review_buffer == 2.0
+        assert ips.triggers.strike_drift_review_fraction == 0.5
+
+    def test_roll_review_buffer_must_exceed_one(self, tmp_path: Path) -> None:
+        """Test that roll_review_buffer <= 1.0 raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "roll_review_buffer": 1.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="roll_review_buffer"):
+            load_ips_config(path)
+
+    def test_strike_drift_review_fraction_must_be_in_unit_interval(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test that strike_drift_review_fraction outside (0, 1) raises."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "strike_drift_review_fraction": 1.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(
+            IpsConfigError,
+            match="strike_drift_review_fraction",
+        ):
+            load_ips_config(path)

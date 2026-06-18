@@ -1,5 +1,7 @@
 """Option position representation."""
 
+from datetime import datetime as dt
+
 from deltadewa.constants import ExerciseStyle
 from deltadewa.valuation import OptionValuation
 
@@ -14,6 +16,8 @@ class OptionPosition:
         contract_size: int = 100,
         custom_volatility: bool = False,
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        entry_spot: float | None = None,
+        entry_date: dt | None = None,
     ) -> None:
         """Initialize an option position.
 
@@ -25,6 +29,9 @@ class OptionPosition:
             contract (e.g. 100)
             custom_volatility: Whether this position uses custom volatility
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
+            entry_spot: Spot price when this position was entered, or None
+            if unknown (e.g. imported from a file predating entry tracking)
+            entry_date: Date this position was entered, or None if unknown
 
         """
         self.option = option
@@ -32,6 +39,8 @@ class OptionPosition:
         self.contract_size = contract_size
         self.custom_volatility = custom_volatility
         self.exercise_style = exercise_style
+        self.entry_spot = entry_spot
+        self.entry_date = entry_date
 
     def position_value(self) -> float:
         """Calculate the total value of the position.
@@ -90,4 +99,6 @@ class OptionPosition:
             "contract_size": self.contract_size,
             "volatility": self.option.volatility,
             "custom_volatility": self.custom_volatility,
+            "entry_spot": self.entry_spot,
+            "entry_date": self.entry_date,
         }
