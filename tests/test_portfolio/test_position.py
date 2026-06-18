@@ -30,6 +30,30 @@ class TestOptionPosition:
         assert position.quantity == 1
         assert position.contract_size == 100
         assert position.custom_volatility is False
+        assert position.entry_spot is None
+        assert position.entry_date is None
+
+    def test_entry_spot_and_date_stored_when_given(self) -> None:
+        """Test entry_spot/entry_date are stored verbatim when provided."""
+        option = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.CALL,
+        )
+        entry_date = datetime.now(tz=UTC)
+        position = OptionPosition(
+            option=option,
+            quantity=1,
+            entry_spot=95.0,
+            entry_date=entry_date,
+        )
+
+        assert position.entry_spot == 95.0
+        assert position.entry_date == entry_date
 
     def test_position_value(self) -> None:
         """Test position_value calculation."""
@@ -131,6 +155,8 @@ class TestOptionPosition:
         assert "position_delta" in pos_dict
         assert pos_dict["volatility"] == 0.25
         assert pos_dict["custom_volatility"] is False
+        assert pos_dict["entry_spot"] is None
+        assert pos_dict["entry_date"] is None
 
     def test_custom_volatility_flag(self) -> None:
         """Test custom_volatility flag."""

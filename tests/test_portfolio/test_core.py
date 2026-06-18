@@ -62,6 +62,39 @@ class TestOptionPortfolioBase:
         assert portfolio.positions[0].custom_volatility is True
         assert portfolio.positions[0].option.volatility == 0.3
 
+    def test_add_position_auto_captures_entry_spot_and_date(self) -> None:
+        """Test add_position captures current spot/date as entry by default."""
+        valuation_date = datetime.now(tz=UTC)
+        portfolio = OptionPortfolioBase(
+            spot_price=123.0,
+            valuation_date=valuation_date,
+        )
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=valuation_date + timedelta(days=30),
+            quantity=1,
+        )
+
+        assert portfolio.positions[0].entry_spot == 123.0
+        assert portfolio.positions[0].entry_date == valuation_date
+
+    def test_add_position_explicit_entry_spot_and_date_override(self) -> None:
+        """Test explicit entry_spot/entry_date override the portfolio's."""
+        portfolio = OptionPortfolioBase(spot_price=123.0)
+        entry_date = datetime.now(tz=UTC) - timedelta(days=10)
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            entry_spot=110.0,
+            entry_date=entry_date,
+        )
+
+        assert portfolio.positions[0].entry_spot == 110.0
+        assert portfolio.positions[0].entry_date == entry_date
+
     def test_remove_position(self) -> None:
         """Test removing a position."""
         portfolio = OptionPortfolioBase(symbol="TEST")

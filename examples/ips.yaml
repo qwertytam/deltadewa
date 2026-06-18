@@ -33,6 +33,9 @@ triggers:
   roll_time_months: 9.0          # roll when maturity below this
   rally_rebalance_pct: 15.0      # market rally that forces a re-strike review
   strike_drift_max_otm_pct: 45.0
+  roll_review_buffer: 1.5        # REVIEW fires within roll_time_months * this
+  strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
+                                       # of strike_drift_max_otm_pct
 
 monetization:
   schedule:                      # hedge-gain -> fraction to sell

@@ -78,6 +78,8 @@ class OptionPortfolioBase:
         contract_size: int = 100,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
+        entry_spot: float | None = None,
+        entry_date: dt | None = None,
     ) -> None:
         """Add an option position to the portfolio.
 
@@ -91,6 +93,8 @@ class OptionPortfolioBase:
             default if None)
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
             (uses self.default_exercise_style if None)
+            entry_spot: Spot price at entry (uses self.spot_price if None)
+            entry_date: Date of entry (uses self.valuation_date if None)
 
         """
         # Use position-specific volatility or portfolio default
@@ -103,6 +107,11 @@ class OptionPortfolioBase:
 
         if exercise_style is None:
             exercise_style = self.default_exercise_style
+
+        if entry_spot is None:
+            entry_spot = self.spot_price
+        if entry_date is None:
+            entry_date = self.valuation_date
 
         option = OptionValuation(
             spot_price=self.spot_price,
@@ -122,6 +131,8 @@ class OptionPortfolioBase:
             contract_size=contract_size,
             custom_volatility=custom_volatility,
             exercise_style=exercise_style,
+            entry_spot=entry_spot,
+            entry_date=entry_date,
         )
         self.positions.append(position)
 
