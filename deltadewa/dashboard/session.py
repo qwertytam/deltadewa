@@ -1,9 +1,9 @@
-"""Single-call bootstrap for a full MODE 0 dashboard session.
+"""Single-call bootstrap for a dashboard session.
 
-Bundles portfolio creation, the change-log/serializer/widgets trio, market
-data provider selection, IPS policy loading, ``GlobalAssumptions``, and
-hedge-trigger thresholds into one ``start_session()`` call — replacing the
-manual sequence of setup cells that previously lived in the notebook.
+Bundles the objects previously created ad hoc across several notebook
+setup cells — reporter, changelog, portfolio, serializer, market data
+provider, IPS policy, and ``GlobalAssumptions`` — into one
+``start_session()`` call.
 """
 
 from __future__ import annotations
@@ -14,17 +14,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from deltadewa import create_empty_portfolio
-from deltadewa.analysis.hedge_triggers import HedgeTriggerThresholds
 from deltadewa.dashboard.setup import setup_dashboard
 from deltadewa.ips_config import IpsConfigError, load_ips_config
 from deltadewa.marketdata import (
-    MarketDataError,
+    CboeFredProvider,
     MarketDataProvider,
     StaticProvider,
 )
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.reporting import ConsoleReporter, PortfolioLogger
-from deltadewa.widgets import PortfolioWidgets
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -33,130 +31,104 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.widgets.assumptions import GlobalAssumptions
 
-_DEFAULT_IPS_CONFIG_PATH = Path("examples/ips.yaml")
-
 
 @dataclass
 class SessionContext:
     """Bundled state returned by ``start_session()`` for one session."""
 
     portfolio: OptionPortfolio
-    reporter: ConsoleReporter
+    ips_config: IpsConfig | None
+    market_data: MarketDataProvider
     global_assumptions: GlobalAssumptions
     assumptions_link_cb: Callable[..., None]
-    portfolio_imported: bool
+    reporter: ConsoleReporter
+    changelog: PortfolioLogger
+    serializer: PortfolioSerializer
     today: dt
     export_dir: Path
-    portfolio_changelog: PortfolioLogger
-    portfolio_serializer: PortfolioSerializer
-    portfolio_widgets: PortfolioWidgets
-    market_data: MarketDataProvider
-    ips_config: IpsConfig | None
-    hedge_thresholds: HedgeTriggerThresholds
-
-    def current_spot(self) -> float:
-        """Resolve the current spot price for Roll Status and similar uses.
-
-        Tries ``market_data`` first, falling back to ``global_assumptions``
-        when the provider has no price for this portfolio's symbol.
-        """
-        try:
-            return self.market_data.get_spot(self.portfolio.get_symbol())
-        except MarketDataError:
-            return self.global_assumptions.spot_price.value
+    portfolio_imported: bool
+    role: str
 
 
 def start_session(
-    portfolio: OptionPortfolio | None = None,
     *,
-    reporter: ConsoleReporter | None = None,
-    globals_dict: dict | None = None,
-    export_dir: str | Path | None = None,
-    market_data: MarketDataProvider | None = None,
-    ips_config_path: Path | None = None,
-    changelog_name: str = "changelog",
+    role: str = "combined",
+    globals_dict: dict,
+    ips_path: Path = Path("examples/ips.yaml"),
+    use_live_market_data: bool = False,
+    export_dir: Path | None = None,
 ) -> SessionContext:
-    """Bootstrap a full MODE 0 dashboard session in one call.
+    """Bootstrap a dashboard session in one call.
 
-    Replaces the manual sequence of ``create_empty_portfolio()``,
-    ``PortfolioLogger``, ``PortfolioSerializer``, ``PortfolioWidgets``,
-    ``setup_dashboard(...)``, and ``HedgeTriggerThresholds`` derivation that
-    previously lived across several notebook cells.
+    Owns the objects currently created ad hoc in the notebook's setup
+    cells: the reporter and changelog, the portfolio and serializer, the
+    market data provider, and the IPS policy — then wires them all through
+    ``setup_dashboard``.
 
     Args:
-        portfolio: Existing portfolio to bootstrap into (e.g. set up by an
-            earlier cell). A fresh empty one is created via
-            ``create_empty_portfolio()`` if omitted.
-        reporter: Shared ``ConsoleReporter``; a default one is created if
-            ``None``.
-        globals_dict: Pass ``globals()`` from the calling notebook cell
-            (forwarded to ``setup_dashboard``'s import-detection).
+        role: Stored on the returned context for later use. No
+            role-conditional behaviour exists yet — that lands separately.
+        globals_dict: Pass ``globals()`` from the calling notebook cell.
+            If it already contains a ``portfolio`` (e.g. set up by an
+            earlier cell), that object is reused; otherwise a fresh empty
+            one is created via ``create_empty_portfolio()``.
+        ips_path: Path to the hedge program policy file. If missing or
+            invalid, ``ips_config`` is ``None`` and the session still
+            starts — this never raises.
+        use_live_market_data: If ``True``, use ``CboeFredProvider()`` (live
+            CBOE/FRED data). Defaults to ``False``, which seeds a
+            ``StaticProvider`` from the portfolio's current values — no
+            network calls in the default path.
         export_dir: Export directory override (default ``./exports``).
-        market_data: ``MarketDataProvider`` for seeding ``GlobalAssumptions``
-            and Roll Status's current spot. Defaults to a no-network
-            ``StaticProvider()`` — never makes HTTP calls. Pass a
-            ``CboeFredProvider()`` instance for live CBOE/FRED data.
-        ips_config_path: Path to the hedge program policy file. Defaults to
-            ``examples/ips.yaml``. If missing or invalid, ``ips_config`` is
-            ``None`` and ``hedge_thresholds`` falls back to
-            ``HedgeTriggerThresholds()`` defaults — this never raises.
-        changelog_name: Name passed to ``PortfolioLogger``.
 
     Returns:
         A fully wired ``SessionContext``.
 
     """
-    portfolio = portfolio or create_empty_portfolio()
-    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
-    _export_dir = (  # noqa: RUF052
-        Path(export_dir) if export_dir else Path.cwd() / "exports"
-    )
+    reporter = ConsoleReporter(width=100)
+    changelog = PortfolioLogger(name="changelog")
 
-    portfolio_changelog = PortfolioLogger(name=changelog_name)
-    portfolio_serializer = PortfolioSerializer(export_dir=str(_export_dir))
-    portfolio_widgets = PortfolioWidgets(
-        portfolio,
-        portfolio_serializer,
-        portfolio_changelog,
+    portfolio = globals_dict.get("portfolio") or create_empty_portfolio()
+    resolved_export_dir = (
+        export_dir if export_dir is not None else Path.cwd() / "exports"
     )
-
-    _market_data = market_data or StaticProvider()  # noqa: RUF052
+    serializer = PortfolioSerializer(export_dir=str(resolved_export_dir))
 
     try:
-        ips_config = load_ips_config(
-            ips_config_path or _DEFAULT_IPS_CONFIG_PATH,
-        )
+        ips_config = load_ips_config(ips_path)
     except IpsConfigError as exc:
-        _reporter.warning(f"ips.yaml unavailable, continuing without it: {exc}")
+        reporter.warning(f"ips.yaml unavailable, continuing without it: {exc}")
         ips_config = None
+
+    market_data: MarketDataProvider
+    if use_live_market_data:
+        market_data = CboeFredProvider()
+    else:
+        market_data = StaticProvider(
+            spot_prices={portfolio.get_symbol(): portfolio.spot_price},
+            vix=portfolio.volatility * 100,
+        )
 
     ctx = setup_dashboard(
         portfolio,
-        reporter=_reporter,
+        reporter=reporter,
         globals_dict=globals_dict,
-        export_dir=_export_dir,
-        market_data=_market_data,
+        export_dir=resolved_export_dir,
+        market_data=market_data,
         ips_config=ips_config,
-    )
-
-    hedge_thresholds = (
-        HedgeTriggerThresholds.from_ips(ips_config.triggers)
-        if ips_config is not None
-        else HedgeTriggerThresholds()
     )
 
     return SessionContext(
         portfolio=portfolio,
-        reporter=_reporter,
+        ips_config=ips_config,
+        market_data=market_data,
         global_assumptions=ctx["global_assumptions"],
         assumptions_link_cb=ctx["assumptions_link_cb"],
-        portfolio_imported=ctx["portfolio_imported"],
+        reporter=reporter,
+        changelog=changelog,
+        serializer=serializer,
         today=ctx["today"],
         export_dir=ctx["export_dir"],
-        portfolio_changelog=portfolio_changelog,
-        portfolio_serializer=portfolio_serializer,
-        portfolio_widgets=portfolio_widgets,
-        market_data=_market_data,
-        ips_config=ips_config,
-        hedge_thresholds=hedge_thresholds,
+        portfolio_imported=ctx["portfolio_imported"],
+        role=role,
     )
