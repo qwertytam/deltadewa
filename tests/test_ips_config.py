@@ -1,6 +1,7 @@
 """Tests for deltadewa.ips_config."""
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -12,7 +13,7 @@ from deltadewa.ips_config import IpsConfigError, load_ips_config
 
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "examples" / "ips.yaml"
 
-_VALID_CONFIG = {
+_VALID_CONFIG: dict[str, Any] = {
     "program": {"name": "SPX tail hedge", "instrument": "SPX"},
     "pricing": {"exercise_style": "EUROPEAN", "american_use_closed_form": True},
     "budget": {"annual_carry_pct": 2.0},

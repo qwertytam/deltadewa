@@ -128,6 +128,8 @@ class TestComputeMoneynessDrift:
 
         drift = compute_moneyness_drift(position, current_spot=95.0)
 
+        assert drift.entry_otm_pct is not None
+        assert drift.drift_pct is not None
         assert drift.entry_otm_pct == pytest.approx(10.0)
         assert drift.current_otm_pct == pytest.approx((95 - 90) / 95 * 100)
         assert drift.drift_pct == pytest.approx(
@@ -377,6 +379,7 @@ class TestEvaluateRollStatus:
 
         records = evaluate_roll_status(portfolio, ips, current_spot=140.0)
 
+        assert records[0].moneyness.drift_pct is not None
         assert records[0].moneyness.drift_pct > 0
         assert records[0].verdict == RollVerdict.ROLL
 
@@ -410,6 +413,7 @@ class TestEvaluateRollStatus:
 
         records = evaluate_roll_status(portfolio, ips, current_spot=95.0)
 
+        assert records[0].moneyness.drift_pct is not None
         assert records[0].moneyness.drift_pct < 0
         assert records[0].verdict == RollVerdict.MONITOR
 
@@ -438,6 +442,7 @@ class TestEvaluateRollStatus:
 
         records = evaluate_roll_status(portfolio, ips, current_spot=105.0)
 
+        assert records[0].moneyness.drift_pct is not None
         assert records[0].moneyness.drift_pct < 0
         assert records[0].verdict == RollVerdict.ROLL
 

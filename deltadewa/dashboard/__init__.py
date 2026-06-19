@@ -6,6 +6,7 @@ from deltadewa.dashboard.monte_carlo_widget import MonteCarloStalenessWidget
 from deltadewa.dashboard.position_aging import PositionAgingDisplay
 from deltadewa.dashboard.position_detail import PositionDetailDisplay
 from deltadewa.dashboard.roll_status import RollStatusDisplay
+from deltadewa.dashboard.session import SessionContext, start_session
 from deltadewa.dashboard.setup import setup_dashboard
 from deltadewa.dashboard.stress import StressDashboard
 from deltadewa.dashboard.volatility_profile import VolatilityProfileDisplay
@@ -17,7 +18,9 @@ __all__ = [
     "PositionAgingDisplay",
     "PositionDetailDisplay",
     "RollStatusDisplay",
+    "SessionContext",
     "StressDashboard",
     "VolatilityProfileDisplay",
     "setup_dashboard",
+    "start_session",
 ]

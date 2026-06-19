@@ -7,7 +7,6 @@ options_dashboard.ipynb, providing three main capabilities:
   - Risk / Reward summary from Monte Carlo results (display_risk_reward_summary)
 """
 
-# TODO: Linter errors, too many lines
 from __future__ import annotations
 
 import time
@@ -800,7 +799,10 @@ class StressDashboard:
                 min_val = pivot_df.min().min()
                 max_val = pivot_df.max().max()
                 current_val = (
-                    pivot_df.loc[current_spot_label, today_col]
+                    cast(
+                        "float",
+                        pivot_df.loc[current_spot_label, today_col],
+                    )
                     if current_spot_label in pivot_df.index
                     else None
                 )
@@ -1183,7 +1185,7 @@ class StressDashboard:
         cvar_95: float,
         max_loss: float,
         is_concentrated: bool,
-        most_common_pnl: float,
+        most_common_pnl: tuple[float, int] | None,
         concentration_pct: float,
     ) -> None:
         """Render the side-by-side PDF histogram and CDF charts."""
