@@ -1,4 +1,4 @@
-"""Example script demonstrating the deltadewa American options portfolio management.
+"""Example script demonstrating deltadewa American options portfolio management.
 
 This script creates a sample portfolio and demonstrates key functionality.
 """
@@ -9,8 +9,8 @@ from deltadewa import OptionPortfolio
 from deltadewa.constants import OptionType
 
 
-def main():
-    """Main execution function for the example script."""
+def main() -> None:
+    """Run the example portfolio walkthrough."""
     print("=" * 70)
     print("DELTADEWA - American Options Portfolio Management Example")
     print("=" * 70)
@@ -25,9 +25,9 @@ def main():
 
     print("Market Parameters:")
     print(f"  Spot Price: ${spot_price}")
-    print(f"  Volatility: {volatility*100}%")
-    print(f"  Risk-Free Rate: {risk_free_rate*100}%")
-    print(f"  Dividend Yield: {dividend_yield*100}%")
+    print(f"  Volatility: {volatility * 100}%")
+    print(f"  Risk-Free Rate: {risk_free_rate * 100}%")
+    print(f"  Dividend Yield: {dividend_yield * 100}%")
     print(f"  Notional Position: {underlying_quantity:,.0f} shares")
     print()
 
@@ -47,9 +47,9 @@ def main():
     maturity_60d = today + timedelta(days=60)
     maturity_90d = today + timedelta(days=90)
 
-    # Long puts for downside protection
-    # Optional: Add volatility parameter to specify position-specific volatility
-    # Example: portfolio.add_position(95, maturity_30d, 5, OptionType.PUT, volatility=0.30)
+    # Long puts for downside protection. Pass volatility=<float> to
+    # add_position() for a position-specific volatility instead of the
+    # portfolio default.
     portfolio.add_position(95, maturity_30d, 5, OptionType.PUT)
     portfolio.add_position(95, maturity_60d, 5, OptionType.PUT)
     portfolio.add_position(100, maturity_90d, 10, OptionType.PUT)
@@ -110,11 +110,13 @@ def main():
 
     if stats["delta_adjustment"] > 0:
         print(
-            f"→ Consider BUYING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality",
+            f"→ Consider BUYING {abs(stats['delta_adjustment']):.0f} shares "
+            "for delta neutrality",
         )
     elif stats["delta_adjustment"] < 0:
         print(
-            f"→ Consider SELLING {abs(stats['delta_adjustment']):.0f} shares for delta neutrality",
+            f"→ Consider SELLING {abs(stats['delta_adjustment']):.0f} shares "
+            "for delta neutrality",
         )
     else:
         print("✓ Portfolio is delta neutral")
@@ -157,7 +159,8 @@ def main():
     print()
     print("=" * 70)
     print(
-        "For full interactive analysis, run: jupyter lab options_dashboard.ipynb",
+        "For full interactive analysis, run: jupyter lab "
+        "options_dashboard.ipynb",
     )
     print("=" * 70)
 

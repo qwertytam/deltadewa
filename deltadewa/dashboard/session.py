@@ -4,6 +4,21 @@ Bundles the objects previously created ad hoc across several notebook
 setup cells — reporter, changelog, portfolio, serializer, market data
 provider, IPS policy, and ``GlobalAssumptions`` — into one
 ``start_session()`` call.
+
+Market data defaults to fully offline: ``start_session()`` (i.e.
+``use_live_market_data=False``, the default) seeds a ``StaticProvider``
+from the portfolio's own current values and never makes an HTTP call. To
+use live data instead, flip the one flag::
+
+    ctx = start_session(globals_dict=globals(), use_live_market_data=True)
+
+This switches to ``CboeFredProvider``, which pulls from CBOE's public CSV
+endpoints and FRED. Two caveats apply to that live path:
+
+- The data is delayed/end-of-day, not real-time — don't rely on it for
+  intraday decisions.
+- CBOE/FRED feeds carry their own redistribution restrictions; check the
+  source's terms before redistributing pulled data outside this session.
 """
 
 from __future__ import annotations
@@ -76,9 +91,10 @@ def start_session(
             invalid, ``ips_config`` is ``None`` and the session still
             starts — this never raises.
         use_live_market_data: If ``True``, use ``CboeFredProvider()`` (live
-            CBOE/FRED data). Defaults to ``False``, which seeds a
-            ``StaticProvider`` from the portfolio's current values — no
-            network calls in the default path.
+            CBOE/FRED data — delayed/end-of-day, and subject to the
+            source's redistribution restrictions). Defaults to ``False``,
+            which seeds a ``StaticProvider`` from the portfolio's current
+            values — no network calls in the default path.
         export_dir: Export directory override (default ``./exports``).
 
     Returns:

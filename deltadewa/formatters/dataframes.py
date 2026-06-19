@@ -11,7 +11,6 @@ This module provides consistent styling and formatting functions for DataFrames:
 All functions work with pandas DataFrames and Styler objects.
 """
 
-# TODO: Linter errors
 from __future__ import annotations
 
 import warnings
@@ -451,7 +450,7 @@ def create_diverging_style(
     if format_dict:
         styler = styler.format(
             cast(
-                Mapping[Any, str | Callable[[object], str] | None],
+                "dict[Any, str | Callable[[object], str] | None]",
                 format_dict,
             ),
             na_rep="-",

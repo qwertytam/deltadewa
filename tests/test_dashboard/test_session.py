@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.dashboard import session as session_module
 from deltadewa.dashboard.session import SessionContext, start_session
 from deltadewa.marketdata import StaticProvider
 from deltadewa.portfolio.core import OptionPortfolio
@@ -77,3 +79,34 @@ class TestStartSession:
         assert ctx.market_data.get_spot(ctx.portfolio.get_symbol()) == (
             ctx.portfolio.spot_price
         )
+
+    def test_default_path_never_constructs_cboe_fred_provider(self) -> None:
+        """Test use_live_market_data=False never touches the live transport.
+
+        Patches CboeFredProvider itself (the only thing in this module that
+        can make an HTTP call) and asserts it's never constructed — i.e. no
+        HTTP is attempted — when the default offline path is used.
+
+        Patches the module object directly (rather than by string path) so
+        this stays correct even if another test reloads
+        ``deltadewa.dashboard.session`` elsewhere in the same process.
+        """
+        with patch.object(
+            session_module,
+            "CboeFredProvider",
+        ) as mock_cboe_fred_provider:
+            ctx = start_session(globals_dict={}, use_live_market_data=False)
+
+        mock_cboe_fred_provider.assert_not_called()
+        assert isinstance(ctx.market_data, StaticProvider)
+
+    def test_live_market_data_flag_constructs_cboe_fred_provider(self) -> None:
+        """Test use_live_market_data=True does construct the live provider."""
+        with patch.object(
+            session_module,
+            "CboeFredProvider",
+        ) as mock_cboe_fred_provider:
+            ctx = start_session(globals_dict={}, use_live_market_data=True)
+
+        mock_cboe_fred_provider.assert_called_once_with()
+        assert ctx.market_data is mock_cboe_fred_provider.return_value
