@@ -160,7 +160,7 @@ def main() -> None:
     print("=" * 70)
     print(
         "For full interactive analysis, run: jupyter lab "
-        "options_dashboard.ipynb",
+        "monitor_dashboard.ipynb",
     )
     print("=" * 70)
 

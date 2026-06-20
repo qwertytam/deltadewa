@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from deltadewa import create_empty_portfolio
 from deltadewa.widgets.summary import NetHedgeSummary
 
 # ruff: noqa: S101
@@ -114,3 +115,15 @@ class TestNetHedgeSummary:
         """Test widget attribute is a widget with children."""
         summary = NetHedgeSummary(mock_portfolio)
         assert hasattr(summary.widget, "children")
+
+    def test_update_does_not_raise_for_empty_portfolio(self) -> None:
+        """Test update() handles a zero-position portfolio gracefully.
+
+        get_volatility_stats() returns {} when there are no positions;
+        update() must not index "avg_volatility" unconditionally.
+        """
+        portfolio = create_empty_portfolio()
+
+        summary = NetHedgeSummary(portfolio)
+
+        assert "0.00%" in summary.vol_metrics_html.value

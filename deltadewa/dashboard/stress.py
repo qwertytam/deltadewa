@@ -1,7 +1,9 @@
 """Stress Dashboard module for the deltadewa options management dashboard.
 
-This module encapsulates the STRESS mode (Mode 3) logic from
-options_dashboard.ipynb, providing three main capabilities:
+This module encapsulates the stress-testing logic used by both
+monitor_dashboard.ipynb (a single current-structure snapshot) and
+hedge_design.ipynb (the full stress workbench), providing three main
+capabilities:
   - Time vs Price heatmap  (create_time_heatmap)
   - Spot vs Volatility heatmap  (create_spot_vol_heatmap)
   - Risk / Reward summary from Monte Carlo results (display_risk_reward_summary)

@@ -1,7 +1,7 @@
 """Carry / Theta-decay display module for the deltadewa options dashboard.
 
 Encapsulates the ~100-line Theta Decay & Carry Analysis section of
-``options_dashboard.ipynb`` (MODE 2 cells) into a single callable class.
+``monitor_dashboard.ipynb`` into a single callable class.
 
 The class is deliberately thin: it delegates all computation to
 ``PortfolioAnalyzer`` (``CarryMixin``) and all table styling to

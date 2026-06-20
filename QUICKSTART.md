@@ -93,81 +93,43 @@ scenario_df = analyzer.scenario_grid(
 # View results
 print(scenario_df[['spot_price', 'value']])
 ```
-```
 
-### Example 4: Interactive Dashboard (New 3-Mode Layout)
+### Example 4: Interactive Dashboards
 
-The dashboard is now organized into 3 intuitive modes for a streamlined workflow:
+The dashboard is split into two notebooks, each for a different audience
+and workflow. See `README.md`'s Dashboard Organization section for the
+full panel list.
 
-```bash
-jupyter lab options_dashboard.ipynb
-```
-
-#### **Workflow: BUILD → EXPLAIN → STRESS**
-
-#### Step 1: BUILD Mode 🏗️
-
-1. **Set Global Assumptions**:
-   - Configure spot price, volatility, interest rates
-   - Select time horizon (T+0, T+7, T+30, T+60, T+90, custom)
-   - Define scenario grid parameters
-
-2. **Build Your Portfolio**:
-   - Use the position editor to add/update/remove positions
-   - Import existing portfolios from JSON/YAML
-   - View portfolio summary table
-
-3. **Monitor KPIs**:
-   - Net Hedge Summary shows real-time Greeks
-   - Crash convexity indicators (-10%, -20%, -30%)
-   - Updates automatically when portfolio changes
-
-#### Step 2: EXPLAIN Mode 📊
-
-1. **Consolidated Greeks View**:
-   - See net portfolio Greeks in one table
-   - View top 5 contributors for each Greek
-   - Expand detailed breakdowns as needed
-
-2. **P&L Analysis**:
-   - Options-only P&L diagram
-   - Total portfolio P&L (with underlying)
-   - Identify breakeven points and max loss/profit
-
-3. **Position Breakdown**:
-   - Charts by type, strike, maturity
-   - Cashflow tracking
-   - Aging analysis
-
-#### Step 3: STRESS Mode ⚡
-
-1. **Run Scenario Grids**:
-   - Interactive spot vs volatility heatmaps
-   - Time vs price P&L evolution
-   - Automatic caching for speed
-
-2. **Monte Carlo Analysis**:
-   - Value at Risk (VaR)
-   - Conditional VaR (CVaR)
-   - Probability distributions
-
-3. **3D Visualization**:
-   - Optional 3D P&L surfaces
-   - Interactive Plotly charts
-
-**Key Features:**
-
-- ✅ Single GlobalAssumptions panel (no duplicate sliders)
-- ✅ Always-visible Net Hedge Summary
-- ✅ Automatic caching for performance
-- ✅ Clear mode separation with visual headers
-- ✅ Consolidated Greeks (80/20 view)
-
-Or use the classic notebook:
+#### Monitor & Report — `monitor_dashboard.ipynb`
 
 ```bash
-jupyter notebook options_dashboard.ipynb
+jupyter lab monitor_dashboard.ipynb
 ```
+
+Read-mostly view of the current book, for routine checks and IC/board
+reporting. Starts **empty** — load a portfolio via the import widget.
+
+1. **Load a portfolio**: import via JSON/YAML
+2. **Review health**: Net Hedge Summary, Hedge Health, Roll Status,
+   Hedge Decision Triggers
+3. **Review detail**: Cost of Carry, Position Aging, Position Detail,
+   Consolidated Greeks
+4. **Stress snapshot**: a single current-structure spot x vol heatmap
+
+#### Design & Roll — `hedge_design.ipynb`
+
+```bash
+jupyter lab hedge_design.ipynb
+```
+
+Workbench mode: load a book and design changes to it.
+
+1. **Build/edit**: Position Editor, editable scenario assumptions
+2. **Plan a roll**: candidate roll-up costs via `analysis.roll_status`
+3. **Stress-test**: eager Monte Carlo run, time x price / spot x vol
+   heatmaps, Risk/Reward summary, Volatility Profile
+4. *(stubbed, future work)* Sizing workbench, strike ladder builder,
+   monetization planner
 
 ## Common Use Cases
 
@@ -245,8 +207,8 @@ print(f"Annual time decay: ${annual_theta:.2f}")
 
 - **Hedge Ratio**: % of notional position hedged by options
   - 100% = fully hedged
-  - <100% = under-hedged
-  - >100% = over-hedged
+  - &lt;100% = under-hedged
+  - &gt;100% = over-hedged
 
 ## Tips
 
@@ -260,4 +222,4 @@ print(f"Annual time decay: ${annual_theta:.2f}")
 
 - See `example.py` for a complete working example
 - See `README.md` for detailed documentation
-- See `options_dashboard.ipynb` for interactive analysis
+- See `monitor_dashboard.ipynb` / `hedge_design.ipynb` for interactive analysis

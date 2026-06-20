@@ -100,6 +100,12 @@ class TestStartSession:
         mock_cboe_fred_provider.assert_not_called()
         assert isinstance(ctx.market_data, StaticProvider)
 
+    def test_auto_load_default_false_starts_empty(self) -> None:
+        """Test auto_load_default=False skips the demo-portfolio fallback."""
+        ctx = start_session(globals_dict={}, auto_load_default=False)
+
+        assert len(ctx.portfolio.positions) == 0
+
     def test_live_market_data_flag_constructs_cboe_fred_provider(self) -> None:
         """Test use_live_market_data=True does construct the live provider."""
         with patch.object(
