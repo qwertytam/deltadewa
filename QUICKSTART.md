@@ -93,7 +93,6 @@ scenario_df = analyzer.scenario_grid(
 # View results
 print(scenario_df[['spot_price', 'value']])
 ```
-```
 
 ### Example 4: Interactive Dashboards
 
@@ -208,8 +207,8 @@ print(f"Annual time decay: ${annual_theta:.2f}")
 
 - **Hedge Ratio**: % of notional position hedged by options
   - 100% = fully hedged
-  - <100% = under-hedged
-  - >100% = over-hedged
+  - &lt;100% = under-hedged
+  - &gt;100% = over-hedged
 
 ## Tips
 
