@@ -319,7 +319,7 @@ class NetHedgeSummary:
             )
             + self._format_pct(
                 "Vega-W.Avg Vol",
-                vol_stats["avg_volatility"],
+                vol_stats.get("avg_volatility", 0.0),
                 is_neutral=True,
             )
             + self._format_greek(

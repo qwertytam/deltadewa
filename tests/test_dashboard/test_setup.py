@@ -4,7 +4,12 @@ import datetime
 from unittest.mock import MagicMock
 
 from deltadewa.constants import ExerciseStyle, OptionType
-from deltadewa.dashboard.setup import build_global_assumptions, setup_dashboard
+from deltadewa.dashboard.setup import (
+    build_global_assumptions,
+    initialize_portfolio,
+    print_portfolio_summary,
+    setup_dashboard,
+)
 from deltadewa.ips_config import (
     IpsBudget,
     IpsConfig,
@@ -124,6 +129,67 @@ class TestSetupDashboard:
         global_assumptions = context["global_assumptions"]
         assert global_assumptions.spot_price.value == 250.0
         assert global_assumptions.volatility.value == 0.18
+
+    def test_auto_load_default_false_leaves_portfolio_empty(
+        self,
+        empty_portfolio: OptionPortfolio,
+    ) -> None:
+        """Test auto_load_default=False skips the demo-portfolio fallback."""
+        context = setup_dashboard(
+            empty_portfolio,
+            globals_dict={},
+            auto_load_default=False,
+        )
+
+        assert context["portfolio_imported"] is False
+        assert len(empty_portfolio.positions) == 0
+
+
+class TestInitializePortfolio:
+    """Tests for initialize_portfolio."""
+
+    def test_auto_load_default_false_does_not_load_demo(
+        self,
+        empty_portfolio: OptionPortfolio,
+    ) -> None:
+        """Test that no demo portfolio is loaded when disabled."""
+        imported = initialize_portfolio(
+            empty_portfolio,
+            globals_dict={},
+            auto_load_default=False,
+        )
+
+        assert imported is False
+        assert len(empty_portfolio.positions) == 0
+
+    def test_auto_load_default_true_loads_demo(
+        self,
+        empty_portfolio: OptionPortfolio,
+    ) -> None:
+        """Test the unchanged default behaviour still loads the demo."""
+        imported = initialize_portfolio(empty_portfolio, globals_dict={})
+
+        assert imported is False
+        assert len(empty_portfolio.positions) > 0
+
+
+class TestPrintPortfolioSummary:
+    """Tests for print_portfolio_summary."""
+
+    def test_does_not_raise_for_empty_portfolio(
+        self,
+        empty_portfolio: OptionPortfolio,
+    ) -> None:
+        """Test the summary survives a zero-position portfolio.
+
+        get_volatility_stats() returns {} with no positions; the function
+        must not index "avg_volatility" unconditionally.
+        """
+        volatility_before = empty_portfolio.volatility
+
+        print_portfolio_summary(empty_portfolio)
+
+        assert empty_portfolio.volatility == volatility_before
 
 
 class TestSetupDashboardIpsConfig:

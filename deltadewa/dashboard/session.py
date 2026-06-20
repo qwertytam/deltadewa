@@ -72,6 +72,7 @@ def start_session(
     ips_path: Path = Path("examples/ips.yaml"),
     use_live_market_data: bool = False,
     export_dir: Path | None = None,
+    auto_load_default: bool = True,
 ) -> SessionContext:
     """Bootstrap a dashboard session in one call.
 
@@ -96,6 +97,10 @@ def start_session(
             which seeds a ``StaticProvider`` from the portfolio's current
             values — no network calls in the default path.
         export_dir: Export directory override (default ``./exports``).
+        auto_load_default: When ``True`` (default), ``setup_dashboard``
+            falls back to a demo portfolio if nothing was imported via
+            ``globals_dict``. Pass ``False`` for sessions that must start
+            empty until the caller imports a portfolio explicitly.
 
     Returns:
         A fully wired ``SessionContext``.
@@ -132,6 +137,7 @@ def start_session(
         export_dir=resolved_export_dir,
         market_data=market_data,
         ips_config=ips_config,
+        auto_load_default=auto_load_default,
     )
 
     return SessionContext(

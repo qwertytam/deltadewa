@@ -68,6 +68,7 @@ def initialize_portfolio(
     reporter: ConsoleReporter | None = None,
     *,
     globals_dict: dict | None = None,
+    auto_load_default: bool = True,
 ) -> bool:
     """Detect an already-imported portfolio, or load the default.
 
@@ -79,9 +80,12 @@ def initialize_portfolio(
     1. Check whether ``globals_dict`` (pass ``globals()`` from the notebook)
        contains a live ``portfolio`` object with at least one position.
     2. If yes → log success and return ``True`` (portfolio unchanged).
-    3. If no  → copy the default portfolio's fields *in-place* into
-       ``portfolio`` so that all existing widget/widget-callback references
-       to the object remain valid, then return ``False``.
+    3. If no and ``auto_load_default`` is ``True`` → copy the default
+       portfolio's fields *in-place* into ``portfolio`` so that all existing
+       widget/widget-callback references to the object remain valid, then
+       return ``False``.
+    4. If no and ``auto_load_default`` is ``False`` → leave ``portfolio``
+       untouched (empty) and return ``False``.
 
     Parameters
     ----------
@@ -95,12 +99,17 @@ def initialize_portfolio(
         Pass ``globals()`` from the notebook cell so that the function can
         inspect the notebook's own namespace.  When ``None`` the check is
         skipped and the default portfolio is always loaded.
+    auto_load_default:
+        When ``True`` (default), fall back to ``create_default_portfolio()``
+        if no imported portfolio is detected — unchanged prior behaviour.
+        When ``False``, no fallback is loaded and ``portfolio`` is left
+        empty, for sessions that require an explicit import.
 
     Returns
     -------
     bool
         ``True`` if an imported portfolio was detected and used,
-        ``False`` if the default portfolio was loaded.
+        ``False`` if the default portfolio was loaded or skipped.
 
     """
     _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
@@ -121,6 +130,10 @@ def initialize_portfolio(
             "Imported portfolio detected; using imported portfolio.",
         )
         return True
+
+    if not auto_load_default:
+        _reporter.info("No portfolio imported; starting empty.")
+        return False
 
     # Load default and copy fields in-place so widget references stay valid
     _reporter.warning("No portfolio imported; loading default portfolio.")
@@ -162,7 +175,9 @@ def print_portfolio_summary(
     _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
 
     vol_stats = get_volatility_stats(portfolio)
-    portfolio.set_volatility(vol_stats["avg_volatility"])
+    portfolio.set_volatility(
+        vol_stats.get("avg_volatility", portfolio.volatility),
+    )
     vol_stats = get_volatility_stats(portfolio)  # re-read after update
 
     summary = (
@@ -291,6 +306,7 @@ def setup_dashboard(
     export_dir: str | Path | None = None,
     market_data: MarketDataProvider | None = None,
     ips_config: IpsConfig | None = None,
+    auto_load_default: bool = True,
 ) -> dict:
     """Run the full MODE 0 setup sequence and return a context dict.
 
@@ -323,6 +339,10 @@ def setup_dashboard(
         ``ips_config.pricing.exercise_style`` so future ``add_position()``
         calls without an explicit ``exercise_style`` use it. Non-matching
         symbols are left untouched (defaulting to ``ExerciseStyle.AMERICAN``).
+    auto_load_default:
+        Forwarded to ``initialize_portfolio``. When ``False``, no default
+        demo portfolio is loaded if nothing was imported — the session
+        starts with an empty portfolio instead.
 
     Returns
     -------
@@ -342,6 +362,7 @@ def setup_dashboard(
         portfolio,
         _reporter,
         globals_dict=globals_dict,
+        auto_load_default=auto_load_default,
     )
 
     if (
