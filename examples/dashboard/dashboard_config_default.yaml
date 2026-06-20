@@ -1,0 +1,75 @@
+# Default Hedge Health Dashboard Configuration
+# This file shows the default configuration values used by the dashboard.
+# Modify these values to customize threshold behavior for your use case.
+
+parameters:
+  # Volatility regime percentiles (historical IV thresholds)
+  historical_vol_low: 0.15    # 25th percentile (low vol = cheap hedges)
+  historical_vol_high: 0.35   # 75th percentile (high vol = expensive hedges)
+  
+  # Convexity cliff threshold (days)
+  convexity_cliff_days: 180   # Alert when puts enter high-gamma region within this many days
+
+metrics:
+  # 1. Net Carry (Theta) - Annualized theta as % of underlying
+  net_carry:
+    start: -10.0              # Gauge start value
+    end: 10.0                 # Gauge end value
+    min_val: -5.0             # Red zone begins (paying heavy carry)
+    mid_val: 0.0              # Neutral point
+    max_val: 2.0              # Green zone begins (earning carry)
+    invert_colors: false      # Normal coloring: negative=red, positive=green
+
+  # 2. Crash Convexity - Hedge P&L at -20% spot as % of underlying
+  crash_convexity:
+    start: -30.0
+    end: 30.0
+    min_val: -10.0            # Red: losing money in crash
+    mid_val: 0.0              # Neutral: breakeven
+    max_val: 10.0             # Green: hedge working well
+    invert_colors: false
+
+  # 3. Vega Exposure - Portfolio % change per +10 vol shock
+  vega_sufficiency:
+    start: -50.0
+    end: 50.0
+    min_val: -20.0            # High negative vega exposure
+    mid_val: 0.0              # Low vega exposure
+    max_val: 20.0             # High positive vega exposure
+    invert_colors: false
+
+  # 4. Delta Drift - Net hedge delta as % of equity delta
+  delta_drift:
+    start: -50.0
+    end: 50.0
+    min_val: -20.0            # Under-hedged
+    mid_val: 0.0              # Perfectly hedged
+    max_val: 20.0             # Over-hedged
+    invert_colors: false
+
+  # 5. Time to Convexity Cliff - Days until puts enter high-gamma region
+  convexity_cliff:
+    start: 0
+    end: 365
+    min_val: 30               # Red: imminent cliff (<30 days)
+    mid_val: 90               # Yellow: approaching
+    max_val: 180              # Green: plenty of time
+    invert_colors: false
+
+  # 6. Volatility Regime - Current IV percentile (0=cheap, 100=expensive)
+  vol_regime:
+    start: 0
+    end: 100
+    min_val: 25               # Green: cheap hedges (<25th percentile)
+    mid_val: 50               # Yellow: median
+    max_val: 75               # Red: expensive hedges (>75th percentile)
+    invert_colors: true       # Inverted: low=green, high=red
+
+  # 7. Hedge Success - Hedge P&L vs cumulative carry paid
+  hedge_success:
+    start: -200
+    end: 200
+    min_val: -100             # Red: hedge underperforming
+    mid_val: 0                # Yellow: breakeven
+    max_val: 100              # Green: hedge outperforming
+    invert_colors: false

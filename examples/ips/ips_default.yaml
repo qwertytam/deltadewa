@@ -1,0 +1,44 @@
+# ips.yaml — hedge program policy (the "what we're allowed/aiming to do")
+#
+# This is the source of truth for hedge program thresholds AND the
+# pricing-engine default exercise style. Unlike dashboard_config_*.yaml
+# (presentation-only gauge ranges), changing this file changes program
+# behaviour: see deltadewa/ips_config.py for the loader and
+# deltadewa/analysis/hedge_triggers.py / deltadewa/dashboard/setup.py for
+# consumers.
+
+program:
+  name: "SPX tail hedge — personal"
+  instrument: SPX            # underlying
+
+pricing:
+  exercise_style: EUROPEAN   # SPX/XSP = EUROPEAN (cash-settled); SPY/stocks = AMERICAN
+  american_use_closed_form: true   # only relevant when exercise_style = AMERICAN
+
+budget:
+  annual_carry_pct: 2.0      # premium budget, % of portfolio / yr
+
+convexity:
+  crash_scenario_pct: -25.0
+  target_min_pct: 15.0
+  target_max_pct: 25.0
+
+drawdown:
+  max_tolerance_pct: 20.0
+
+triggers:
+  delta_drift_warn_pct: 5.0
+  delta_drift_action_pct: 10.0
+  theta_cost_acceptable_pct: 2.0
+  roll_time_months: 9.0          # roll when maturity below this
+  rally_rebalance_pct: 15.0      # market rally that forces a re-strike review
+  strike_drift_max_otm_pct: 45.0
+  roll_review_buffer: 1.5        # REVIEW fires within roll_time_months * this
+  strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
+                                       # of strike_drift_max_otm_pct
+
+monetization:
+  schedule:                      # hedge-gain -> fraction to sell
+    - {gain_pct: 100, sell_pct: 25}
+    - {gain_pct: 200, sell_pct: 25}
+    - {gain_pct: 400, sell_pct: 25}
