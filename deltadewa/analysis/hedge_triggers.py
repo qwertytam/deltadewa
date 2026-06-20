@@ -1,7 +1,7 @@
 """Hedge decision triggers for the deltadewa options dashboard.
 
 Encapsulates the ~80-line "Hedge Decision Triggers" section of
-``options_dashboard.ipynb`` (MODE 2) into a single importable function.
+``monitor_dashboard.ipynb`` into a single importable function.
 
 The module is intentionally side-effect-free: ``evaluate_hedge_triggers``
 reads from ``portfolio`` and writes formatted output via ``reporter``, but

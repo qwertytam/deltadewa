@@ -5,9 +5,13 @@ Project memory for Claude Code. Read this before making changes.
 ## What this is
 
 `deltadewa` is an options hedging dashboard for a single-name **SPX** tail-hedge
-program. Pricing is done with **QuantLib**; the UI is a Jupyter notebook
-(`options_dashboard.ipynb`) built from `ipywidgets`, `matplotlib`, and `plotly`.
-The notebook is a thin orchestration layer — all real logic lives in the package.
+program. Pricing is done with **QuantLib**; the UI is two Jupyter notebooks —
+`monitor_dashboard.ipynb` (read-mostly book review, for routine checks and
+IC/board reporting) and `hedge_design.ipynb` (the workbench: position editor,
+roll planning, stress testing) — built from `ipywidgets`, `matplotlib`, and
+`plotly`. Both call `start_session(role=..., globals_dict=globals())` from
+`deltadewa.dashboard`. Notebooks are a thin orchestration layer — all real
+logic lives in the package.
 
 ## Environment & commands
 
@@ -84,10 +88,15 @@ with a test — not in a widget or a notebook cell.
 
 ## Work in progress
 
-Active foundation work (see `docs/deltadewa_implementation_plan.md` if present):
-a `marketdata/` provider interface (free CBOE/FRED backend), an `ips.yaml` program
-config, and a Roll Status panel — built in that order, then the notebook is split
-into a Monitor dashboard and a Hedge-Design dashboard.
+The foundation work is done: a `marketdata/` provider interface (free
+CBOE/FRED backend), an `ips.yaml` program config, a Roll Status panel, and
+the notebook split into `monitor_dashboard.ipynb` and `hedge_design.ipynb`.
+
+Next up, all currently stubbed as clearly-marked placeholder cells in
+`hedge_design.ipynb` (see `examples/hedging handbook.md` for the cited
+sections): a sizing workbench, a strike ladder builder, and a monetization
+planner. Each is its own `analysis/`-layer module with tests — UI-free,
+per the architecture rule above.
 
 ## Workflow expectations
 

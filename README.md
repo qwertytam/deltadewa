@@ -84,74 +84,47 @@ git config filter.nbstripout-commit.required true
 
 ### Dashboard Organization
 
-The `options_dashboard.ipynb` is organized into **3 intuitive modes** for streamlined workflow:
+The dashboard is split into two notebooks, each with its own audience and
+purpose. Both call `start_session(role=..., globals_dict=globals())` from
+`deltadewa.dashboard` and share the same underlying package — only the
+panels and setup differ.
 
-#### 🏗️ **Mode 1: BUILD (Portfolio Construction)**
+#### 📋 `monitor_dashboard.ipynb` — Monitor & Report
 
-- **Global Assumptions Panel**: Single source of truth for market parameters
-  - Spot price, volatility, interest rates, dividend yield
-  - Time horizon selector (T+0, T+7, T+30, T+60, T+90, custom)
-  - Scenario grid parameters for stress testing
-- **Net Hedge Summary**: Always-visible KPI header showing:
-  - Core Greeks: Delta, Gamma, Vega, Theta
-  - Portfolio cost and current value
-  - Crash convexity indicators (-10%, -20%, -30% scenarios)
-  - Expandable probabilistic statistics
-- **Position Editor**: Interactive widget to add/update/remove positions
-- **Import/Export**: Load/save portfolios in JSON or YAML format
-- **Portfolio Summary**: Detailed position breakdown tables
+Read-mostly view of the current book, for routine checks and IC/board
+reporting. Starts **empty** — load a portfolio explicitly via the import
+widget. No position editor.
 
-#### 📊 **Mode 2: EXPLAIN (At-a-Glance Hedge Behavior)**
+- Net Hedge Summary, Hedge Health, Roll Status, Hedge Decision Triggers
+- Cost of Carry, Position Aging, Position Detail
+- Consolidated Greeks view
+- A single current-structure stress snapshot (spot x vol heatmap)
+- Session Change Log and export
 
-- **Consolidated Greeks View**: 80/20 optimized display
-  - Net portfolio Greeks in a single table
-  - Top 5 contributors bar charts for each Greek
-  - Greeks sensitivity heatmap
-  - Expandable detailed breakdowns (on-demand)
-- **P&L Diagrams**:
-  - Options-only P&L at expiration
-  - Total portfolio P&L (options + underlying)
-  - Breakeven points, max loss/profit markers
-- **Position Breakdown Charts**:
-  - By option type (calls vs puts)
-  - By strike price
-  - By maturity date
-- **Cashflow Tracking**: Premium paid/received analysis
-- **Aging Analysis**: Position maturity profile
+#### 🛠️ `hedge_design.ipynb` — Design & Roll
 
-#### ⚡ **Mode 3: STRESS (Scenario Analysis)**
+Workbench mode: load a book and design changes to it.
 
-- **Interactive Heatmaps**: 2D scenario grids with caching
-  - Spot vs volatility heatmaps
-  - Time vs price P&L evolution
-  - Greeks sensitivity surfaces
-- **Monte Carlo Analysis**: Risk/reward metrics
-  - Value at Risk (VaR)
-  - Conditional VaR (CVaR)
-  - Probability distributions
-- **3D Visualization**: Optional 3D P&L surfaces (Plotly)
-- **Performance Optimization**: Automatic scenario caching for speed
-
-### Key Improvements
-
-- **No Duplicate Controls**: Single GlobalAssumptions instance replaces scattered sliders
-- **Reactive Updates**: Net Hedge Summary auto-updates on portfolio changes
-- **Efficient Calculations**: ScenarioGridCache optimizes expensive computations
-- **Clear Navigation**: Visual mode headers with gradient styling
-- **Streamlined**: Consolidated Greeks view replaces 5 separate sections
+- Position Editor, editable scenario assumptions
+- Roll planner (candidate roll-up costs via `analysis.roll_status`)
+- Sizing workbench, strike ladder builder, monetization planner — stubbed,
+  future work
+- Eager Monte Carlo run, full stress tooling (time x price / spot x vol
+  heatmaps), Risk/Reward summary, Volatility Profile
+- Session Change Log and export
 
 ### Launch Jupyter Dashboard
 
-Start the interactive dashboard:
+Start the Monitor dashboard (read-only book review):
 
 ```bash
-jupyter lab options_dashboard.ipynb
+jupyter lab monitor_dashboard.ipynb
 ```
 
-Or use the classic notebook interface:
+Start the Hedge Design dashboard (construction + stress testing):
 
 ```bash
-jupyter notebook options_dashboard.ipynb
+jupyter lab hedge_design.ipynb
 ```
 
 ### Quick Start Example
@@ -345,7 +318,8 @@ deltadewa/
 │   ├── __init__.py
 │   ├── american_option.py    # American option pricing
 │   └── portfolio.py           # Portfolio management
-├── options_dashboard.ipynb    # Main Jupyter dashboard
+├── monitor_dashboard.ipynb    # Monitor & Report dashboard
+├── hedge_design.ipynb         # Design & Roll dashboard
 ├── pyproject.toml            # Poetry dependencies
 └── README.md                 # This file
 ```

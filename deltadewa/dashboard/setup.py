@@ -1,7 +1,8 @@
 """Dashboard setup and initialisation utilities.
 
 This module encapsulates the boilerplate that previously lived in the first
-few cells of options_dashboard.ipynb:
+few cells of the dashboard notebook, shared by both monitor_dashboard.ipynb
+and hedge_design.ipynb via ``start_session()``:
 
 - ``configure_display_defaults()``  — pandas / matplotlib environment setup
 - ``initialize_portfolio()``        — detect-imported-or-load-default logic
