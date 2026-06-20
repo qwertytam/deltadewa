@@ -11,7 +11,7 @@ from deltadewa.ips_config import IpsConfigError, load_ips_config
 
 # ruff: noqa: S101
 
-EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "examples" / "ips.yaml"
+EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.yaml"
 
 _VALID_CONFIG: dict[str, Any] = {
     "program": {"name": "SPX tail hedge", "instrument": "SPX"},
@@ -54,7 +54,7 @@ class TestLoadIpsConfig:
     """Tests for load_ips_config."""
 
     def test_loads_example_ips_yaml(self) -> None:
-        """Test that the shipped examples/ips.yaml loads successfully."""
+        """Test that the shipped config/ips.yaml loads successfully."""
         ips = load_ips_config(EXAMPLE_IPS_YAML)
 
         assert ips.program.instrument == "SPX"

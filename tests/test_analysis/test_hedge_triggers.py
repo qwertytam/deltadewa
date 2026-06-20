@@ -7,7 +7,7 @@ from deltadewa.ips_config import load_ips_config
 
 # ruff: noqa: S101
 
-EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "examples" / "ips.yaml"
+EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
 
 
 class TestHedgeTriggerThresholdsFromIpsConfig:
