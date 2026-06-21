@@ -102,12 +102,3 @@ sufficiency, delta drift, etc.).
 
 Presets live in `examples/dashboard/`. See
 [dashboard-config-guide.md](dashboard-config-guide.md) for the schema.
-
-## Known issue
-
-`deltadewa/persistence.py` defines a `load_config_yaml()` function that
-looks like it should auto-load a portfolio config, but nothing calls it —
-not `start_session`, not `setup_dashboard`, not either notebook. The only
-references are in its own tests (`tests/test_persistence.py`). It's dead
-code left over from an earlier design; flagging here as a candidate for
-removal rather than documenting it as a real feature.

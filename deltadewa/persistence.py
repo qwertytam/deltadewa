@@ -25,53 +25,6 @@ except ImportError:
     YAML_AVAILABLE = False
 
 
-def load_config_yaml(
-    filepath: Path = Path("portfolio_config_example.yaml"),
-) -> dict | None:
-    """Load portfolio configuration from YAML file.
-
-    Returns dict with 'market_parameters' and 'positions', or None if not
-    available.
-
-    """
-    if not YAML_AVAILABLE:
-        return None
-
-    if not filepath.exists():
-        return None
-
-    reporter = ConsoleReporter(width=100)
-
-    try:
-        with Path.open(filepath, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-
-        # Validate structure
-        if not isinstance(config, dict):
-            raise ValueError("YAML root must be a mapping/object")
-
-        if "market_parameters" not in config or "positions" not in config:
-            raise ValueError(
-                "YAML must contain 'market_parameters' and"
-                " 'positions' sections",
-            )
-
-        required_params = [
-            "spot_price",
-            "volatility",
-            "risk_free_rate",
-            "dividend_yield",
-        ]
-        for param in required_params:
-            if param not in config["market_parameters"]:
-                raise ValueError(f"Missing required market parameter: {param}")
-
-        return config
-    except Exception as e:  # pylint: disable=broad-except
-        reporter.warning(f"Error loading YAML configuration: {e}")
-        return None
-
-
 class PortfolioSerializer:
     """Handle portfolio export/import in multiple formats."""
 
