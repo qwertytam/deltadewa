@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -116,3 +117,45 @@ class TestStartSession:
 
         mock_cboe_fred_provider.assert_called_once_with()
         assert ctx.market_data is mock_cboe_fred_provider.return_value
+
+    def test_loads_dashboard_config_when_present(self, tmp_path: Path) -> None:
+        """Test dashboard_path is loaded into ctx.dashboard_config."""
+        config_path = tmp_path / "dashboard.yaml"
+        config_path.write_text(
+            "parameters:\n  historical_vol_low: 0.42\n",
+        )
+
+        ctx = start_session(globals_dict={}, dashboard_path=config_path)
+
+        assert ctx.dashboard_config is not None
+        assert ctx.dashboard_config["parameters"]["historical_vol_low"] == 0.42
+
+    def test_dashboard_config_none_when_missing(self, tmp_path: Path) -> None:
+        """Test a missing dashboard_path falls back to None, no raise."""
+        ctx = start_session(
+            globals_dict={},
+            dashboard_path=tmp_path / "does_not_exist.yaml",
+        )
+
+        assert ctx.dashboard_config is None
+
+    def test_dashboard_config_none_when_malformed(self, tmp_path: Path) -> None:
+        """Test malformed YAML falls back to None, no raise."""
+        config_path = tmp_path / "dashboard.yaml"
+        config_path.write_text("parameters: [unterminated")
+
+        ctx = start_session(globals_dict={}, dashboard_path=config_path)
+
+        assert ctx.dashboard_config is None
+
+    def test_dashboard_config_none_when_root_not_a_mapping(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Test a non-mapping YAML root falls back to None, no raise."""
+        config_path = tmp_path / "dashboard.yaml"
+        config_path.write_text("- just\n- a\n- list\n")
+
+        ctx = start_session(globals_dict={}, dashboard_path=config_path)
+
+        assert ctx.dashboard_config is None

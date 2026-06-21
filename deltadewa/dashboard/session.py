@@ -23,10 +23,13 @@ endpoints and FRED. Two caveats apply to that live path:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime as dt
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import yaml
 
 from deltadewa import create_empty_portfolio
 from deltadewa.dashboard.setup import setup_dashboard
@@ -47,12 +50,50 @@ if TYPE_CHECKING:
     from deltadewa.widgets.assumptions import GlobalAssumptions
 
 
+def _load_dashboard_config(
+    path: Path,
+    reporter: ConsoleReporter,
+) -> dict[str, Any] | None:
+    """Load HedgeHealthDashboard presentation config, never raising.
+
+    Returns ``None`` (after a reporter warning) if the file is missing,
+    unreadable, malformed, or its root isn't a mapping. Supports YAML
+    (default) and JSON, dispatched by file suffix.
+    """
+    if not path.exists():
+        reporter.warning(f"dashboard.yaml not found at {path}, using defaults")
+        return None
+
+    try:
+        text = path.read_text(encoding="utf-8")
+        data = (
+            json.loads(text)
+            if path.suffix == ".json"
+            else yaml.safe_load(text)
+        )
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        reporter.warning(f"dashboard.yaml invalid ({exc}), using defaults")
+        return None
+    except json.JSONDecodeError as exc:
+        reporter.warning(f"dashboard.json invalid ({exc}), using defaults")
+        return None
+
+    if not isinstance(data, dict):
+        reporter.warning(
+            "dashboard.yaml root must be a mapping, using defaults",
+        )
+        return None
+
+    return data
+
+
 @dataclass
 class SessionContext:
     """Bundled state returned by ``start_session()`` for one session."""
 
     portfolio: OptionPortfolio
     ips_config: IpsConfig | None
+    dashboard_config: dict[str, Any] | None
     market_data: MarketDataProvider
     global_assumptions: GlobalAssumptions
     assumptions_link_cb: Callable[..., None]
@@ -70,6 +111,7 @@ def start_session(
     role: str = "combined",
     globals_dict: dict,
     ips_path: Path = Path("config/ips.yaml"),
+    dashboard_path: Path = Path("config/dashboard.yaml"),
     use_live_market_data: bool = False,
     export_dir: Path | None = None,
     auto_load_default: bool = True,
@@ -91,6 +133,9 @@ def start_session(
         ips_path: Path to the hedge program policy file. If missing or
             invalid, ``ips_config`` is ``None`` and the session still
             starts — this never raises.
+        dashboard_path: Path to the ``HedgeHealthDashboard`` presentation
+            config (gauge ranges). If missing or invalid, ``dashboard_config``
+            is ``None`` and the session still starts — this never raises.
         use_live_market_data: If ``True``, use ``CboeFredProvider()`` (live
             CBOE/FRED data — delayed/end-of-day, and subject to the
             source's redistribution restrictions). Defaults to ``False``,
@@ -121,6 +166,8 @@ def start_session(
         reporter.warning(f"ips.yaml unavailable, continuing without it: {exc}")
         ips_config = None
 
+    dashboard_config = _load_dashboard_config(dashboard_path, reporter)
+
     market_data: MarketDataProvider
     if use_live_market_data:
         market_data = CboeFredProvider()
@@ -143,6 +190,7 @@ def start_session(
     return SessionContext(
         portfolio=portfolio,
         ips_config=ips_config,
+        dashboard_config=dashboard_config,
         market_data=market_data,
         global_assumptions=ctx["global_assumptions"],
         assumptions_link_cb=ctx["assumptions_link_cb"],
