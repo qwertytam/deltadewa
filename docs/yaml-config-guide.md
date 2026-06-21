@@ -1,280 +1,113 @@
 # YAML Configuration Guide
 
-## Overview
+`deltadewa` uses YAML in two unrelated ways. Keeping them straight matters:
 
-The Options Dashboard now supports YAML-based configuration files for defining market parameters and portfolio positions. This makes it easier to:
+- **`config/`** — live files the app reads automatically at startup
+  (`config/ips.yaml`, `config/dashboard.yaml`). Edit these in place to
+  change behaviour.
+- **`examples/`** — sample files (`examples/portfolios/`, `examples/ips/`,
+  `examples/dashboard/`). Nothing reads these automatically. Portfolios
+  are loaded by importing the file through a widget; `ips`/`dashboard`
+  presets are loaded by copying them over the corresponding file in
+  `config/`.
 
-- Define different portfolio scenarios without modifying code
-- Version control your portfolio configurations
-- Share portfolio setups with colleagues
-- Quickly switch between different strategies
+## Portfolios
 
-## Quick Start
-
-### 1. Using Example Configurations
-
-Three example YAML configuration files are provided:
-
-- **`portfolio_config_example.yaml`** - Complete example with puts and calls
-- **`portfolio_config_collar.yaml`** - Protective collar strategy
-- **`portfolio_config_straddle.yaml`** - Long straddle strategy
-
-To use any of these:
-
-1. Copy the desired example to `portfolio_config.yaml`:
-
-   ```bash
-   cp portfolio_config_example.yaml portfolio_config.yaml
-   ```
-
-2. Run the notebook - it will automatically detect and load `portfolio_config.yaml`
-
-### 2. Creating Your Own Configuration
-
-Create a file named `portfolio_config.yaml` with this structure:
-
-```yaml
-market_parameters:
-  spot_price: 100.0          # Current price of underlying
-  volatility: 0.25           # 25% annual volatility
-  risk_free_rate: 0.05       # 5% annual rate
-  dividend_yield: 0.02       # 2% annual yield
-  underlying_quantity: 1000.0  # Underlying shares position
-  symbol: "SPY"              # Optional default symbol
-
-positions:
-  - option_type: "put"
-    strike_price: 95.0
-    maturity_days: 30        # Days from today
-    quantity: 5              # Positive = long, negative = short
-    symbol: "SPY"            # Optional override
-  
-  - option_type: "call"
-    strike_price: 105.0
-    maturity_date: "2026-01-18"  # Or use absolute date
-    quantity: -3             # Short 3 contracts
-```
-
-## YAML Configuration Reference
-
-### Market Parameters (Required)
-
-| Parameter | Type | Description |
-| ----------- | ------ | ------------- |
-| `spot_price` | float | Current price of underlying asset |
-| `volatility` | float | Annual volatility (e.g., 0.25 = 25%) |
-| `risk_free_rate` | float | Annual risk-free rate (e.g., 0.05 = 5%) |
-| `dividend_yield` | float | Annual dividend yield (e.g., 0.02 = 2%) |
-| `underlying_quantity` | float | Size of underlying position in shares (optional, default: 0) |
-| `symbol` | string | Default symbol for positions (optional, default: "UNKNOWN") |
-
-### Position Configuration
-
-Each position requires:
-
-| Field | Type | Description |
-| ------- | ------ | ------------- |
-| `option_type` | string | "call" or "put" (case insensitive) |
-| `strike_price` | float | Strike price of the option |
-| `quantity` | integer | Number of contracts (positive = long, negative = short) |
-| `symbol` | string | Underlying symbol (optional, inherits from market_parameters) |
-| `volatility` | float | Position-specific volatility (optional, inherits from market_parameters) |
-
-**Maturity Date** - Use ONE of these:
-
-- `maturity_days`: integer - Days from today (e.g., 30)
-- `maturity_date`: string - Absolute date in ISO format (e.g., "2026-01-18")
-
-**Volatility Configuration:**
-
-- If `volatility` is specified for a position, that specific value will be used
-- If `volatility` is omitted, the portfolio-level `market_parameters.volatility` will be used
-- This allows modeling positions with different implied volatilities (volatility skew/smile)
-- When a position has custom volatility, the `custom_volatility` flag is automatically set
-
-Example with mixed volatilities:
+A portfolio YAML file has two top-level sections:
 
 ```yaml
 market_parameters:
   spot_price: 100.0
-  volatility: 0.25  # Default 25% volatility
-  # ... other params ...
+  volatility: 0.20
+  risk_free_rate: 0.04
+  dividend_yield: 0.015
+  underlying_quantity: 5000.0    # optional, default 0.0
+  symbol: "SPY"                  # optional, default "UNKNOWN"
 
 positions:
   - option_type: "put"
     strike_price: 95.0
-    maturity_days: 30
-    quantity: 5
-    volatility: 0.30  # This put has higher volatility (30%)
-  
+    maturity_days: 30            # or: maturity_date: "2026-07-20"
+    quantity: 50                 # positive = long, negative = short
+
   - option_type: "call"
     strike_price: 105.0
     maturity_days: 30
-    quantity: -3
-    # No volatility specified - uses default 25%
+    quantity: -50
+    volatility: 0.18             # optional, overrides market_parameters
 ```
 
-### Volatility Analysis Behavior
+This is the actual shape `PortfolioSerializer.import_from_yaml()`
+(`deltadewa/persistence.py`) parses — see `examples/portfolios/spy_collar.yaml`
+for a complete worked example.
 
-When performing volatility sensitivity analysis (stress tests, scenario analysis, etc.), the dashboard uses **proportional volatility scaling** to maintain the relative volatility structure:
+**`market_parameters`**: `spot_price`, `volatility`, `risk_free_rate`, and
+`dividend_yield` are required. `underlying_quantity` and `symbol` are
+optional.
 
-**How it works:**
+**Each position** needs `option_type` ("call" or "put"), `strike_price`,
+`quantity`, and **either** `maturity_date` (an ISO date string) **or**
+`maturity_days` (an integer, relative to today) — not both, but either
+works. `volatility` is optional and overrides `market_parameters.volatility`
+for that position only.
 
-1. The system calculates a **vega-weighted average volatility** across all positions
-2. Volatility scenarios are defined as percentages of this average (e.g., ±50%)
-3. When testing a scenario, each position's volatility is scaled proportionally
-4. This preserves the volatility skew/smile structure across strikes
+Two more optional per-position fields, `entry_spot` and `entry_date`, record
+the spot price and date the position was opened. They round-trip through
+export/import but aren't required to author a file by hand. **None of the
+files under `examples/portfolios/` set them** — importing one leaves
+`entry_spot` as `None`, which means Roll Status's moneyness-drift column
+shows `n/a` for that tranche until you re-enter the position with a real
+`entry_spot` (or set it directly on the position after import).
 
-**Example:**
+Files you export from the dashboard also include `greeks`, `price`,
+`position_value`, `contract_size`, and a `metadata` block. These are
+written for inspection but ignored on import — they get recomputed fresh
+from the option's market parameters, so you don't need them in a
+hand-written file.
 
-If you have positions with volatilities [35%, 30%, 25%, 22%]:
+There's no per-position `symbol` override — every position uses
+`market_parameters.symbol`.
 
-- Vega-weighted average might be 28.3%
-- Testing +20% scenario (34% average):
-  - Positions scale to [42%, 36%, 30%, 26.4%]
-  - All scaled by the same factor (1.2×)
-  - Relative differences preserved
+### Loading a portfolio
 
-**Benefits:**
+Both `monitor_dashboard.ipynb` and `hedge_design.ipynb` have an **Import
+Portfolio** cell (a file-upload + filename-entry widget,
+`PortfolioWidgets.display_import()` in `deltadewa/widgets/export_controls.py`).
+This is the only way a portfolio YAML/JSON file gets into a session —
+nothing is auto-detected at startup. If you don't import anything, Monitor
+starts with an empty book and Design falls back to a small built-in demo
+portfolio.
 
-- **Realistic modeling** - Maintains market volatility structure
-- **Accurate vega** - Position sensitivities remain proportional
-- **Consistent analysis** - All positions shocked consistently
+## IPS policy (`config/ips.yaml`)
 
-**Displaying volatility profile:**
+`start_session()` (`deltadewa/dashboard/session.py`) loads
+`config/ips.yaml` by default (`ips_path` parameter). If the file is
+missing or fails validation, the session still starts — `ctx.ips_config`
+is `None` and a warning is logged; nothing raises.
 
-The notebook's volatility profile section shows:
+Presets live in `examples/ips/` (e.g. `ips_default.yaml`) — copy one over
+`config/ips.yaml` to use it. The schema (program identity, pricing style,
+budget, convexity targets, drawdown tolerance, roll/rally/monetization
+triggers) is defined and validated in `deltadewa/ips_config.py` — see that
+module for the authoritative field list and validation rules rather than a
+duplicate copy here.
 
-- Vega-weighted average volatility
-- Volatility range (min/max/std)
-- Which positions have custom volatility
-- Warning if volatility skew is detected
+## Dashboard config (`config/dashboard.yaml`)
 
-## Export and Import Features
+`start_session()` also loads `config/dashboard.yaml` by default
+(`dashboard_path` parameter), the same way: missing or invalid → a warning
+and `ctx.dashboard_config` is `None`, never a hard failure. This config
+feeds `HedgeHealthDashboard`'s gauge ranges (crash convexity, vega
+sufficiency, delta drift, etc.).
 
-### Exporting Portfolios
+Presets live in `examples/dashboard/`. See
+[dashboard-config-guide.md](dashboard-config-guide.md) for the schema.
 
-The notebook's Section 11 provides interactive widgets for exporting:
+## Known issue
 
-**Export Formats:**
-
-- **JSON** - Complete portfolio state with all greeks and metadata
-- **CSV** - Positions and risk metrics in spreadsheet format
-- **YAML** - Configuration format (easy to edit and version control)
-- **All Formats** - Export to all three formats at once
-
-**To Export:**
-
-1. Navigate to Section 11 in the notebook
-2. Select desired format
-3. Enter filename prefix
-4. Click "Export Portfolio"
-
-### Importing Portfolios
-
-The import widgets support:
-
-**Import Sources:**
-
-- **File Upload** - Upload JSON or YAML files directly in the browser
-- **Filename** - Load files from the exports directory
-
-**Import Options:**
-
-- **Preview** - View portfolio contents before importing
-- **Replace current portfolio** - Update the active `portfolio` variable (checkbox)
-
-**To Import:**
-
-1. Navigate to Section 11 in the notebook
-2. Choose JSON or YAML format
-3. Either upload a file or enter filename
-4. Click "Preview File" to inspect (optional)
-5. Check "Replace current portfolio" to update active portfolio
-6. Click "Import Portfolio"
-
-## Backward Compatibility
-
-If no `portfolio_config.yaml` file exists, the notebook will use the hardcoded default portfolio (puts and calls at various strikes and maturities). This ensures existing workflows continue to work.
-
-Status messages will indicate:
-
-- 📁 "MARKET PARAMETERS LOADED FROM YAML" - when YAML is found
-- 📝 "USING DEFAULT MARKET PARAMETERS" - when no YAML exists
-
-## Example: Switching Between Strategies
-
-```bash
-# Use protective collar
-cp portfolio_config_collar.yaml portfolio_config.yaml
-
-# Run notebook cells 1-6
-# Portfolio now has collar strategy
-
-# Switch to long straddle
-cp portfolio_config_straddle.yaml portfolio_config.yaml
-
-# Restart kernel and run cells 1-6
-# Portfolio now has straddle strategy
-```
-
-## Validation and Error Handling
-
-The YAML loader validates:
-
-- Required market parameters are present
-- YAML syntax is correct
-- Position structures are valid
-
-Error messages will indicate:
-
-- Missing required fields
-- Invalid YAML syntax
-- File not found
-- Other configuration errors
-
-## Tips and Best Practices
-
-1. **Version Control**: Keep your YAML configs in git for history tracking
-2. **Comments**: Use YAML comments (#) to document your strategy
-3. **Naming**: Use descriptive filenames (e.g., `portfolio_hedge_2024Q1.yaml`)
-4. **Validation**: Always use "Preview" when importing to verify correctness
-5. **Backup**: Export your current portfolio before importing a new one
-6. **Testing**: Test new configurations with small position sizes first
-
-## File Locations
-
-- Configuration files: Place `portfolio_config.yaml` in the notebook directory
-- Exports: Saved to `exports/` subdirectory (configurable in cell 1)
-- Examples: `portfolio_config_*.yaml` files included in repository
-
-## Troubleshooting
-
-### "No YAML config found" message
-
-- File must be named exactly `portfolio_config.yaml`
-- File must be in the same directory as the notebook
-- Check file permissions
-
-### "Missing required market parameter" error
-
-- Ensure all required parameters are present in `market_parameters` section
-- Check spelling of parameter names
-
-### Import fails with FileNotFoundError
-
-- Check that file exists in `exports/` directory
-- Verify filename matches exactly (case sensitive)
-- Try using the file upload widget instead
-
-### Positions not loading from YAML
-
-- Ensure each position has either `maturity_days` or `maturity_date`
-- Check that `option_type` is "call" or "put"
-- Verify `strike_price` and `quantity` are present
-
-## See Also
-
-- [QUICKSTART.md](QUICKSTART.md) - General dashboard usage
-- [README.md](README.md) - Project overview
-- Example configurations in repository root
+`deltadewa/persistence.py` defines a `load_config_yaml()` function that
+looks like it should auto-load a portfolio config, but nothing calls it —
+not `start_session`, not `setup_dashboard`, not either notebook. The only
+references are in its own tests (`tests/test_persistence.py`). It's dead
+code left over from an earlier design; flagging here as a candidate for
+removal rather than documenting it as a real feature.

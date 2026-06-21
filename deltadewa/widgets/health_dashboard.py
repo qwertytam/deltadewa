@@ -100,6 +100,7 @@ class HedgeHealthDashboard:
         historical_vol_low: float = 0.15,
         historical_vol_high: float = 0.35,
         convexity_cliff_days: int = 180,
+        config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the Hedge Health Dashboard.
 
@@ -109,6 +110,12 @@ class HedgeHealthDashboard:
             historical_vol_low: 25th percentile IV for vol regime assessment
             historical_vol_high: 75th percentile IV for vol regime assessment
             convexity_cliff_days: Days threshold for high-gamma convexity cliff
+            config: Optional presentation config (``parameters``/``metrics``
+                keys, see ``_get_default_config``) merged on top of the
+                built-in defaults via ``load_config``. Typically
+                ``SessionContext.dashboard_config`` from ``start_session``.
+                ``display_config_loader()`` remains available afterwards
+                for ad hoc overrides on top of this.
 
         """
         self.portfolio = portfolio
@@ -127,6 +134,9 @@ class HedgeHealthDashboard:
         self._widget = None
         self._metrics: dict[str, HedgeHealthMetric] = {}
         self._gauges: dict[str, GaugeIndicator] = {}
+
+        if config is not None:
+            self.load_config(config)
 
     def add_carry_paid(self, amount: float) -> None:
         """Add to cumulative carry paid (for tracking hedge success).

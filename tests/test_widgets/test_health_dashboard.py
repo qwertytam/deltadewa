@@ -215,6 +215,34 @@ class TestHedgeHealthDashboard:
         assert dashboard.config["parameters"]["historical_vol_high"] == 0.40
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 200
 
+    def test_config_param_applies_on_init(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """Test a passed config dict is merged via load_config on init."""
+        dashboard = HedgeHealthDashboard(
+            mock_portfolio,
+            config={
+                "parameters": {"historical_vol_low": 0.5},
+                "metrics": {"net_carry": {"max_val": 99.0}},
+            },
+        )
+
+        assert dashboard.config["parameters"]["historical_vol_low"] == 0.5
+        assert dashboard.config["metrics"]["net_carry"]["max_val"] == 99.0
+
+    def test_config_none_uses_defaults(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """Test omitting config (the default) leaves defaults untouched."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+
+        defaults = dashboard._get_default_config()  # pylint: disable=W0212
+        assert dashboard.config["parameters"]["historical_vol_low"] == (
+            defaults["parameters"]["historical_vol_low"]
+        )
+
     def test_get_default_config(self, mock_portfolio: OptionPortfolio) -> None:
         """Test that _get_default_config returns expected structure."""
         dashboard = HedgeHealthDashboard(mock_portfolio)
