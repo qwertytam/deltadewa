@@ -69,7 +69,7 @@ def start_session(
     *,
     role: str = "combined",
     globals_dict: dict,
-    ips_path: Path = Path("examples/ips.yaml"),
+    ips_path: Path = Path("config/ips.yaml"),
     use_live_market_data: bool = False,
     export_dir: Path | None = None,
     auto_load_default: bool = True,

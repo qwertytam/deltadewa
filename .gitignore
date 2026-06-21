@@ -25,6 +25,7 @@ __pycache__/
 *.so
 
 # Personal, un-shared Claude Code context
+.claude/
 CLAUDE.local.md
 
 # Distribution / packaging
