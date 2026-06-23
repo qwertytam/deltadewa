@@ -15,7 +15,7 @@ import pandas as pd
 
 from deltadewa import OptionPortfolio
 from deltadewa.constants import OptionType
-from deltadewa.reporting import ConsoleReporter, PortfolioLogger
+from deltadewa.reporting import PortfolioLogger
 
 try:
     import yaml
@@ -25,62 +25,21 @@ except ImportError:
     YAML_AVAILABLE = False
 
 
-def load_config_yaml(
-    filepath: Path = Path("portfolio_config_example.yaml"),
-) -> dict | None:
-    """Load portfolio configuration from YAML file.
-
-    Returns dict with 'market_parameters' and 'positions', or None if not
-    available.
-
-    """
-    if not YAML_AVAILABLE:
-        return None
-
-    if not filepath.exists():
-        return None
-
-    reporter = ConsoleReporter(width=100)
-
-    try:
-        with Path.open(filepath, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-
-        # Validate structure
-        if not isinstance(config, dict):
-            raise ValueError("YAML root must be a mapping/object")
-
-        if "market_parameters" not in config or "positions" not in config:
-            raise ValueError(
-                "YAML must contain 'market_parameters' and"
-                " 'positions' sections",
-            )
-
-        required_params = [
-            "spot_price",
-            "volatility",
-            "risk_free_rate",
-            "dividend_yield",
-        ]
-        for param in required_params:
-            if param not in config["market_parameters"]:
-                raise ValueError(f"Missing required market parameter: {param}")
-
-        return config
-    except Exception as e:  # pylint: disable=broad-except
-        reporter.warning(f"Error loading YAML configuration: {e}")
-        return None
-
-
 class PortfolioSerializer:
     """Handle portfolio export/import in multiple formats."""
 
-    def __init__(self, export_dir: str | Path) -> None:
+    def __init__(
+        self,
+        export_dir: str | Path,
+        examples_dir: str | Path | None = None,
+    ) -> None:
         """Initialize the serializer.
 
         Args:
             export_dir: Directory path for exports (str or Path). If None, must
             be set later.
+            examples_dir: Directory path for example portfolios (str or Path)
+            If None, must be set later.
 
         """
         self.export_dir = Path(export_dir)
@@ -90,28 +49,34 @@ class PortfolioSerializer:
             # If creation fails, keep the path but it won't exist
             print(f"Export directory creation failed. {e}")
 
+        self.examples_dir = (
+            Path(examples_dir) if examples_dir is not None else None
+        )
+        if self.examples_dir is not None:
+            self.examples_dir.mkdir(parents=True, exist_ok=True)
+
     # ========== Helper Functions ==========
 
-    def list_available_files(self) -> dict[str, list[Path]]:
-        """List all available portfolio files in the export directory.
+    def list_available_files(self, d: Path) -> dict[str, list[Path]]:
+        """List all available portfolio files in the given directory.
 
         Returns:
             dict with 'json' and 'yaml' keys containing lists of file paths
 
         """
         json_files = sorted(
-            self.export_dir.glob("*.json"),
+            d.glob("*.json"),
             key=lambda x: x.stat().st_mtime,
             reverse=True,
         )
         yaml_files = sorted(
-            self.export_dir.glob("*.yaml"),
+            d.glob("*.yaml"),
             key=lambda x: x.stat().st_mtime,
             reverse=True,
         )
         yaml_files.extend(
             sorted(
-                self.export_dir.glob("*.yml"),
+                d.glob("*.yml"),
                 key=lambda x: x.stat().st_mtime,
                 reverse=True,
             ),

@@ -78,6 +78,12 @@ nothing is auto-detected at startup. If you don't import anything, Monitor
 starts with an empty book and Design falls back to a small built-in demo
 portfolio.
 
+The filename field accepts a path, not just a bare name — e.g.
+`examples/portfolios/spy_collar.yaml` loads that example directly, relative
+to the notebook's working directory, without copying it into the export
+directory first. A bare name like `portfolio_book.json` still resolves
+against the export directory, as before.
+
 ## IPS policy (`config/ips.yaml`)
 
 `start_session()` (`deltadewa/dashboard/session.py`) loads
@@ -102,12 +108,3 @@ sufficiency, delta drift, etc.).
 
 Presets live in `examples/dashboard/`. See
 [dashboard-config-guide.md](dashboard-config-guide.md) for the schema.
-
-## Known issue
-
-`deltadewa/persistence.py` defines a `load_config_yaml()` function that
-looks like it should auto-load a portfolio config, but nothing calls it —
-not `start_session`, not `setup_dashboard`, not either notebook. The only
-references are in its own tests (`tests/test_persistence.py`). It's dead
-code left over from an earlier design; flagging here as a candidate for
-removal rather than documenting it as a real feature.

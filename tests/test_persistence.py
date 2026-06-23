@@ -15,7 +15,6 @@ from deltadewa.constants import OptionType
 from deltadewa.persistence import (
     YAML_AVAILABLE,
     PortfolioSerializer,
-    load_config_yaml,
 )
 from deltadewa.reporting.audit import PortfolioLogger
 
@@ -109,7 +108,7 @@ class TestPortfolioSerializer:
     def test_list_available_files_empty(self, tmp_path) -> None:
         """Test listing files in empty directory."""
         serializer = PortfolioSerializer(tmp_path / "empty")
-        files = serializer.list_available_files()
+        files = serializer.list_available_files(serializer.export_dir)
 
         assert "json" in files
         assert "yaml" in files
@@ -129,7 +128,7 @@ class TestPortfolioSerializer:
         (export_dir / "ignored.txt").write_text("")
 
         serializer = PortfolioSerializer(export_dir)
-        files = serializer.list_available_files()
+        files = serializer.list_available_files(export_dir)
 
         assert len(files["json"]) == 2
         assert len(files["yaml"]) == 2
@@ -711,104 +710,6 @@ class TestUniversalImport:
 
         with pytest.raises(ValueError, match="Unsupported file format"):
             serializer.import_portfolio(txt_path)
-
-
-# ========== load_config_yaml Tests ==========
-
-
-@pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
-class TestLoadConfigYaml:
-    """Test the standalone load_config_yaml function."""
-
-    def test_load_valid_config(self, tmp_path) -> None:
-        """Test loading a valid YAML config with all required fields."""
-        # Create valid YAML config
-        config = {
-            "market_parameters": {
-                "spot_price": 100.0,
-                "volatility": 0.3,
-                "risk_free_rate": 0.05,
-                "dividend_yield": 0.02,
-                "symbol": "TEST",
-            },
-            "positions": [
-                {
-                    "option_type": OptionType.CALL.value,
-                    "strike_price": 100.0,
-                    "maturity_date": "2024-12-31",
-                    "quantity": 1,
-                },
-            ],
-        }
-
-        yaml_path = tmp_path / "config.yaml"
-        with Path.open(yaml_path, "w", encoding="utf-8") as f:
-            yaml.dump(config, f)
-
-        result = load_config_yaml(yaml_path)
-
-        assert result is not None
-        assert "market_parameters" in result
-        assert "positions" in result
-        assert result["market_parameters"]["spot_price"] == 100.0
-
-    def test_load_missing_file_returns_none(self, tmp_path) -> None:
-        """Test that a missing file returns None."""
-        result = load_config_yaml(tmp_path / "nonexistent.yaml")
-        assert result is None
-
-    def test_load_missing_required_param_returns_none(self, tmp_path) -> None:
-        """Test that missing required market parameter returns None."""
-        # Create YAML with missing volatility
-        config = {
-            "market_parameters": {
-                "spot_price": 100.0,
-                # Missing volatility
-                "risk_free_rate": 0.05,
-                "dividend_yield": 0.02,
-            },
-            "positions": [],
-        }
-
-        yaml_path = tmp_path / "invalid.yaml"
-        with Path.open(yaml_path, "w", encoding="utf-8") as f:
-            yaml.dump(config, f)
-
-        result = load_config_yaml(yaml_path)
-        assert result is None
-
-    def test_load_invalid_structure_returns_none(self, tmp_path) -> None:
-        """Test that a non-dict YAML returns None."""
-        # Create YAML that's a list instead of dict
-        yaml_path = tmp_path / "invalid.yaml"
-        yaml_path.write_text("- item1\n- item2\n")
-
-        result = load_config_yaml(yaml_path)
-        assert result is None
-
-    def test_load_missing_sections_returns_none(self, tmp_path) -> None:
-        """Test that missing market_parameters.
-
-        Test that missing market parameters or positions section returns
-        None.
-        """
-        # Create YAML with missing positions section
-        config = {
-            "market_parameters": {
-                "spot_price": 100.0,
-                "volatility": 0.3,
-                "risk_free_rate": 0.05,
-                "dividend_yield": 0.02,
-            },
-            # Missing positions section
-        }
-
-        yaml_path = tmp_path / "incomplete.yaml"
-        with Path.open(yaml_path, "w", encoding="utf-8") as f:
-            yaml.dump(config, f)
-
-        result = load_config_yaml(yaml_path)
-        assert result is None
 
 
 # ========== Convenience Function Tests ==========
