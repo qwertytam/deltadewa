@@ -45,6 +45,33 @@ class ExportControlsMixin:
         self.serializer.update_export_dir(value)
         self._update_export_ui_state()
 
+    @property
+    def examples_dir(self) -> Path:
+        """Get the example directory for resolving import paths."""
+        if self.serializer.examples_dir is None:
+            raise ValueError("Examples directory is not set")
+        return self.serializer.examples_dir
+
+    def _resolve_import_path(self, filename: str) -> Path:
+        """Resolve a user-entered import filename to a concrete path.
+
+        Treats `filename` as a path first - absolute, or relative to the
+        current working directory. Only if that path doesn't exist does
+        it fall back to `examples_dir / filename`, so bare filenames
+        continue to resolve against the examples directory.
+
+        Args:
+            filename: path or bare filename entered by the user.
+
+        Returns:
+            Resolved path. May not exist; callers must check.
+
+        """
+        given_path = Path(filename)
+        if given_path.exists():
+            return given_path
+        return self.examples_dir / filename
+
     def _update_export_ui_state(self) -> None:
         """Update state of all registered export UI elements."""
         if not hasattr(self, "_export_ui_map"):
@@ -218,7 +245,7 @@ class ExportControlsMixin:
                     print(f"Attempting to import portfolio from {filename}...")
                     # Auto-detect format handled by import_portfolio
 
-                    filepath = self.export_dir / filename
+                    filepath = self._resolve_import_path(filename)
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
@@ -275,7 +302,7 @@ class ExportControlsMixin:
                 import_output.clear_output()
                 try:
                     filename = import_controls["filename_input"].value
-                    filepath = self.export_dir / filename
+                    filepath = self._resolve_import_path(filename)
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
@@ -345,7 +372,7 @@ class ExportControlsMixin:
 
                     # Construct potential path for display purposes (though
                     # FileUpload doesn't give full path)
-                    potential_path = self.export_dir / fname
+                    potential_path = self._resolve_import_path(fname)
                     print(f"✓ Selected file: {fname}")
                     print(f"Target path: {potential_path}")
                     import_controls["file_select"].button_style = "success"

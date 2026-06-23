@@ -67,9 +67,7 @@ def _load_dashboard_config(
     try:
         text = path.read_text(encoding="utf-8")
         data = (
-            json.loads(text)
-            if path.suffix == ".json"
-            else yaml.safe_load(text)
+            json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
         )
     except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
         reporter.warning(f"dashboard.yaml invalid ({exc}), using defaults")
@@ -115,6 +113,7 @@ def start_session(
     use_live_market_data: bool = False,
     export_dir: Path | None = None,
     auto_load_default: bool = True,
+    examples_dir: Path = Path("examples"),
 ) -> SessionContext:
     """Bootstrap a dashboard session in one call.
 
@@ -146,6 +145,7 @@ def start_session(
             falls back to a demo portfolio if nothing was imported via
             ``globals_dict``. Pass ``False`` for sessions that must start
             empty until the caller imports a portfolio explicitly.
+        examples_dir: Directory to load the default demo portfolio from, if
 
     Returns:
         A fully wired ``SessionContext``.
@@ -158,7 +158,13 @@ def start_session(
     resolved_export_dir = (
         export_dir if export_dir is not None else Path.cwd() / "exports"
     )
-    serializer = PortfolioSerializer(export_dir=str(resolved_export_dir))
+    resolved_examples_dir = (
+        examples_dir if examples_dir is not None else Path.cwd() / "examples"
+    )
+    serializer = PortfolioSerializer(
+        export_dir=str(resolved_export_dir),
+        examples_dir=str(resolved_examples_dir),
+    )
 
     try:
         ips_config = load_ips_config(ips_path)

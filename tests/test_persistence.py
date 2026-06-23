@@ -108,7 +108,7 @@ class TestPortfolioSerializer:
     def test_list_available_files_empty(self, tmp_path) -> None:
         """Test listing files in empty directory."""
         serializer = PortfolioSerializer(tmp_path / "empty")
-        files = serializer.list_available_files()
+        files = serializer.list_available_files(serializer.export_dir)
 
         assert "json" in files
         assert "yaml" in files
@@ -128,7 +128,7 @@ class TestPortfolioSerializer:
         (export_dir / "ignored.txt").write_text("")
 
         serializer = PortfolioSerializer(export_dir)
-        files = serializer.list_available_files()
+        files = serializer.list_available_files(export_dir)
 
         assert len(files["json"]) == 2
         assert len(files["yaml"]) == 2
