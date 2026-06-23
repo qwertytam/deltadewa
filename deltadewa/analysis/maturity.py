@@ -30,14 +30,13 @@ class MaturityMixin:
         """
         if days_to_expiry <= 7:
             return "0-7 days (Weekly)"
-        elif days_to_expiry <= 30:
+        if days_to_expiry <= 30:
             return "8-30 days (Monthly)"
-        elif days_to_expiry <= 60:
+        if days_to_expiry <= 60:
             return "31-60 days (2M)"
-        elif days_to_expiry <= 90:
+        if days_to_expiry <= 90:
             return "61-90 days (3M)"
-        else:
-            return "90+ days (Long-term)"
+        return "90+ days (Long-term)"
 
     def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add maturity bucket column to positions DataFrame.

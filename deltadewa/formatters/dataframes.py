@@ -545,8 +545,7 @@ def highlight_negative_values(
 
     if columns:
         return styler.apply(lambda col: col.map(highlight_neg), subset=columns)
-    else:
-        return styler.apply(lambda col: col.map(highlight_neg))
+    return styler.apply(lambda col: col.map(highlight_neg))
 
 
 def highlight_max_min(

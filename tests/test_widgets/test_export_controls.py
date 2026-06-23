@@ -70,7 +70,10 @@ class TestResolveImportPath:
 
         monkeypatch.chdir(tmp_path)
         pw = _make_widgets(
-            export_dir, examples_dir, mock_portfolio, mock_changelog
+            export_dir,
+            examples_dir,
+            mock_portfolio,
+            mock_changelog,
         )
 
         resolved = pw._resolve_import_path("outside/external.yaml")
@@ -87,7 +90,10 @@ class TestResolveImportPath:
         export_dir = tmp_path / "exports"
         examples_dir = tmp_path / "examples"
         pw = _make_widgets(
-            export_dir, examples_dir, mock_portfolio, mock_changelog
+            export_dir,
+            examples_dir,
+            mock_portfolio,
+            mock_changelog,
         )
 
         resolved = pw._resolve_import_path("missing.json")
@@ -109,7 +115,10 @@ class TestDisplayImportPathResolution:
         export_dir = tmp_path / "exports"
         examples_dir = tmp_path / "examples"
         pw = _make_widgets(
-            export_dir, examples_dir, mock_portfolio, mock_changelog
+            export_dir,
+            examples_dir,
+            mock_portfolio,
+            mock_changelog,
         )
         (examples_dir / "portfolio_book.yaml").write_text(PORTFOLIO_YAML)
 
@@ -142,7 +151,10 @@ class TestDisplayImportPathResolution:
         examples_dir = tmp_path / "examples"
         monkeypatch.chdir(tmp_path)
         pw = _make_widgets(
-            export_dir, examples_dir, mock_portfolio, mock_changelog
+            export_dir,
+            examples_dir,
+            mock_portfolio,
+            mock_changelog,
         )
 
         import_section = pw.display_import()
@@ -174,7 +186,10 @@ class TestDisplayImportPathResolution:
 
         monkeypatch.chdir(tmp_path)
         pw = _make_widgets(
-            export_dir, examples_dir, mock_portfolio, mock_changelog
+            export_dir,
+            examples_dir,
+            mock_portfolio,
+            mock_changelog,
         )
 
         import_section = pw.display_import()

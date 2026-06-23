@@ -64,12 +64,10 @@ class OptionChartsBase:
             )
             if len(maturities) == 1:
                 return maturities[0].strftime("%Y-%m-%d")
-            else:
-                result = (
-                    f"{maturities[0].strftime('%Y-%m-%d')} "
-                    f"→ {maturities[-1].strftime('%Y-%m-%d')}"
-                )
-                return result
+            return (
+                f"{maturities[0].strftime('%Y-%m-%d')} "
+                f"→ {maturities[-1].strftime('%Y-%m-%d')}"
+            )
         return "N/A"
 
     @staticmethod

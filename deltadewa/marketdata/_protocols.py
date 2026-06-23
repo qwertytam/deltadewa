@@ -16,20 +16,15 @@ class MarketDataProvider(Protocol):
 
     def get_spot(self, symbol: str) -> float:
         """Return the latest spot price for *symbol*."""
-        ...
 
     def get_vix(self) -> float:
         """Return the current VIX level."""
-        ...
 
     def get_vix_term_structure(self) -> dict[str, float]:
         """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name."""
-        ...
 
     def get_skew_index(self) -> float:
         """Return the current CBOE SKEW index level."""
-        ...
 
     def get_skew_percentile(self, lookback_days: int = 252) -> float:
         """Return the SKEW index's percentile rank over *lookback_days*."""
-        ...

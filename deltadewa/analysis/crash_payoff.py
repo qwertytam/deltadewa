@@ -89,8 +89,7 @@ def _net_protective_premium(portfolio: OptionPortfolio) -> float:
     return sum(
         pos.position_value()
         for pos in portfolio.positions
-        if pos.option.option_type == const.OptionType.PUT
-        and pos.quantity > 0
+        if pos.option.option_type == const.OptionType.PUT and pos.quantity > 0
     )
 
 

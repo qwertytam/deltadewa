@@ -107,10 +107,9 @@ class PortfolioSerializer:
         suffix = Path(filepath).suffix.lower()
         if suffix in [".yaml", ".yml"]:
             return "yaml"
-        elif suffix == ".json":
+        if suffix == ".json":
             return "json"
-        else:
-            return None
+        return None
 
     # ========== Export Functions ==========
 
@@ -528,7 +527,6 @@ class PortfolioSerializer:
 
         if file_format == "yaml":
             return self.import_from_yaml(filepath)
-        elif file_format == "json":
+        if file_format == "json":
             return self.import_from_json(filepath, create_portfolio=True)
-        else:
-            raise ValueError(f"Unsupported file format: {filepath}")
+        raise ValueError(f"Unsupported file format: {filepath}")

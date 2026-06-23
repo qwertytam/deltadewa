@@ -12,9 +12,13 @@ from deltadewa.marketdata import CboeFredProvider, MarketDataError
 
 _SPX_CSV = "DATE,OPEN,HIGH,LOW,CLOSE\n2026-06-15,4990,5010,4980,5000.0\n"
 _VIXCLS_CSV = "DATE,VIXCLS\n2026-06-15,16.5\n"
-_SKEW_CSV = "DATE,OPEN,HIGH,LOW,CLOSE\n" + "\n".join(
-    f"2026-{(i % 12) + 1:02d}-01,0,0,0,{120.0 + i}" for i in range(10)
-) + "\n"
+_SKEW_CSV = (
+    "DATE,OPEN,HIGH,LOW,CLOSE\n"
+    + "\n".join(
+        f"2026-{(i % 12) + 1:02d}-01,0,0,0,{120.0 + i}" for i in range(10)
+    )
+    + "\n"
+)
 
 
 def _mock_response(text: str) -> MagicMock:

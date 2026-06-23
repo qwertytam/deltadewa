@@ -25,11 +25,11 @@ _URGENCY_ORDER = [
 def _get_urgency_category(days: int) -> str:
     if days < 7:
         return _URGENCY_ORDER[0]
-    elif days < 14:
+    if days < 14:
         return _URGENCY_ORDER[1]
-    elif days < 21:
+    if days < 21:
         return _URGENCY_ORDER[2]
-    elif days < 45:
+    if days < 45:
         return _URGENCY_ORDER[3]
 
     return _URGENCY_ORDER[4]

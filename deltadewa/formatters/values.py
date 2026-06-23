@@ -70,12 +70,11 @@ def format_currency(
 
     if abs_val < 10_000:
         return f"{sign}${abs_val:,.{precision}f}"
-    elif abs_val < 1_000_000:
+    if abs_val < 1_000_000:
         return f"{sign}${abs_val / 1_000:.{precision}f}K"
-    elif abs_val < 1_000_000_000:
+    if abs_val < 1_000_000_000:
         return f"{sign}${abs_val / 1_000_000:.{precision}f}M"
-    else:
-        return f"{sign}${abs_val / 1_000_000_000:.{precision}f}B"
+    return f"{sign}${abs_val / 1_000_000_000:.{precision}f}B"
 
 
 def format_currency_for_axis(x: float, pos: int | None = None) -> str:
@@ -97,10 +96,9 @@ def format_currency_for_axis(x: float, pos: int | None = None) -> str:
     _ = pos  # Unused parameter
     if abs(x) < 10_000:
         return f"${x:,.0f}"
-    elif abs(x) < 10_000_000:
+    if abs(x) < 10_000_000:
         return f"${x / 1_000:,.0f}k"
-    else:
-        return f"${x / 1_000_000:,.1f}M"
+    return f"${x / 1_000_000:,.1f}M"
 
 
 def format_percentage(
@@ -185,8 +183,7 @@ def format_number(
 
     if thousands_sep:
         return f"{value:,.{decimals}f}"
-    else:
-        return f"{value:.{decimals}f}"
+    return f"{value:.{decimals}f}"
 
 
 def format_greek_value(
@@ -227,8 +224,7 @@ def format_greek_value(
 
     if compact and abs(value) >= 1000:
         return format_number(value, decimals=2, compact=True)
-    else:
-        return format_number(value, decimals=decimals, thousands_sep=True)
+    return format_number(value, decimals=decimals, thousands_sep=True)
 
 
 def format_number_auto_precision(value: float) -> str:
@@ -252,14 +248,13 @@ def format_number_auto_precision(value: float) -> str:
     abs_val = abs(value)
     if abs_val >= 1_000_000 or abs_val >= 10_000:
         return f"{value:,.0f}"
-    elif abs_val >= 100:
+    if abs_val >= 100:
         return f"{value:,.2f}"
-    elif abs_val >= 10:
+    if abs_val >= 10:
         return f"{value:.3f}"
-    elif abs_val >= 0.1:
+    if abs_val >= 0.1:
         return f"{value:.4f}"
-    else:
-        return f"{value:.6f}"
+    return f"{value:.6f}"
 
 
 def format_spot_with_pct(
@@ -351,12 +346,11 @@ def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
 
     if compact:
         return FUNC_FORMATTER(format_currency_for_axis)
-    else:
-        # ruff: disable[ARG005]  # noqa: ERA001
-        return FUNC_FORMATTER(
-            lambda x, pos: format_currency(x, compact=False, precision=0),
-        )
-        # ruff: enable[ARG005]  # noqa: ERA001
+    # ruff: disable[ARG005]  # noqa: ERA001
+    return FUNC_FORMATTER(
+        lambda x, pos: format_currency(x, compact=False, precision=0),
+    )
+    # ruff: enable[ARG005]  # noqa: ERA001
 
 
 def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
@@ -374,12 +368,11 @@ def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
 
     if from_decimal:
         return FUNC_FORMATTER(format_percentage_for_axis)
-    else:
-        # ruff: disable[ARG005]  # noqa: ERA001
-        return FUNC_FORMATTER(
-            lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),
-        )
-        # ruff: enable[ARG005]  # noqa: ERA001
+    # ruff: disable[ARG005]  # noqa: ERA001
+    return FUNC_FORMATTER(
+        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),
+    )
+    # ruff: enable[ARG005]  # noqa: ERA001
 
 
 def get_spot_price_axis_formatter(current_spot: float):  # noqa: ANN201

@@ -854,8 +854,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         """
         if layout == "horizontal":
             return widgets.HBox(buttons, layout=widgets.Layout(margin="5px"))
-        else:
-            return widgets.VBox(buttons, layout=widgets.Layout(margin="5px"))
+        return widgets.VBox(buttons, layout=widgets.Layout(margin="5px"))
 
     @staticmethod
     def create_two_column_layout(
