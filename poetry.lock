@@ -1016,6 +1016,21 @@ files = [
 ]
 
 [[package]]
+name = "ipyfilechooser"
+version = "0.6.0"
+description = "Python file chooser widget for use in Jupyter/IPython in conjunction with ipywidgets"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "ipyfilechooser-0.6.0-py3-none-any.whl", hash = "sha256:4555c24b30b819c91dc0ae5e6f7e4cf8f90e5cca531a9209a1fe4deee288d5c5"},
+    {file = "ipyfilechooser-0.6.0.tar.gz", hash = "sha256:41df9e4395a924f8e1b78e2804dbe5066dc3fdc233fb07fecfcdc2a0c9a7d8d3"},
+]
+
+[package.dependencies]
+ipywidgets = "*"
+
+[[package]]
 name = "ipykernel"
 version = "7.1.0"
 description = "IPython Kernel for Jupyter"
@@ -3867,4 +3882,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "08335e55239d2dacfdf5c9121c62ee2436a1395b0107fe67fd9bd34d139e4574"
+content-hash = "d29b455a9c53392d9d5b4526a7d868cd92925376b49edff27b6d6f0d5b1c1968"
