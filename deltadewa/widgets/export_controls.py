@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import ipywidgets as widgets  # type: ignore[import-untyped]
+from ipyfilechooser import FileChooser  # type: ignore[import-untyped]
 
 from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
@@ -44,33 +45,6 @@ class ExportControlsMixin:
         """Set the export directory and update UI."""
         self.serializer.update_export_dir(value)
         self._update_export_ui_state()
-
-    @property
-    def examples_dir(self) -> Path:
-        """Get the example directory for resolving import paths."""
-        if self.serializer.examples_dir is None:
-            raise ValueError("Examples directory is not set")
-        return self.serializer.examples_dir
-
-    def _resolve_import_path(self, filename: str) -> Path:
-        """Resolve a user-entered import filename to a concrete path.
-
-        Treats `filename` as a path first - absolute, or relative to the
-        current working directory. Only if that path doesn't exist does
-        it fall back to `examples_dir / filename`, so bare filenames
-        continue to resolve against the examples directory.
-
-        Args:
-            filename: path or bare filename entered by the user.
-
-        Returns:
-            Resolved path. May not exist; callers must check.
-
-        """
-        given_path = Path(filename)
-        if given_path.exists():
-            return given_path
-        return self.examples_dir / filename
 
     def _update_export_ui_state(self) -> None:
         """Update state of all registered export UI elements."""
@@ -176,22 +150,33 @@ class ExportControlsMixin:
     def create_import_controls(self) -> dict[str, Any]:
         """Create import file selection and preview controls.
 
+        The file chooser opens a native-style in-notebook browser; once a
+        file is selected, its full path is written into ``filename_input``
+        for Preview/Import to use directly.
+
         Returns:
             Dictionary with import-related widgets
 
         """
         filename_input = widgets.Text(
-            value="portfolio_book.json",
+            value="",
             description="Filename:",
             style={"description_width": "150px"},
-            layout=widgets.Layout(width="400px"),
+            layout=widgets.Layout(width="500px"),
         )
 
-        file_select = widgets.FileUpload(
-            accept=".json,.yaml,.yml",
-            button_style="danger",
-            multiple=False,
-            description="Select File:",
+        file_chooser = FileChooser(
+            path=str(Path.home()),
+            title="Select portfolio file",
+            select_desc="Select File",
+            filter_pattern=["*.json", "*.yaml", "*.yml"],
+        )
+
+        clear_button = widgets.Button(
+            description="Clear",
+            button_style="warning",
+            icon="times",
+            layout=widgets.Layout(width="100px"),
         )
 
         preview_button = widgets.Button(
@@ -210,7 +195,8 @@ class ExportControlsMixin:
 
         return {
             "filename_input": filename_input,
-            "file_select": file_select,
+            "file_chooser": file_chooser,
+            "clear_button": clear_button,
             "preview_button": preview_button,
             "import_button": import_button,
         }
@@ -220,6 +206,11 @@ class ExportControlsMixin:
         on_import_success: Callable | None = None,
     ) -> widgets.VBox:
         """Create and display import interface.
+
+        Workflow: click "Select File" on the file chooser to open an
+        in-notebook browser, pick a portfolio file — its full path appears
+        in the Filename box — then click Preview or Import Portfolio.
+        "Clear" resets the chooser and empties the Filename box.
 
         Args:
             on_import_success: Optional zero-argument callback invoked after a
@@ -242,10 +233,15 @@ class ExportControlsMixin:
                 import_output.clear_output()
                 try:
                     filename = import_controls["filename_input"].value
+                    if not filename:
+                        print(
+                            "✗ No file selected. Use 'Select File' first.",
+                        )
+                        return
                     print(f"Attempting to import portfolio from {filename}...")
                     # Auto-detect format handled by import_portfolio
 
-                    filepath = self._resolve_import_path(filename)
+                    filepath = Path(filename)
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
@@ -302,7 +298,12 @@ class ExportControlsMixin:
                 import_output.clear_output()
                 try:
                     filename = import_controls["filename_input"].value
-                    filepath = self._resolve_import_path(filename)
+                    if not filename:
+                        print(
+                            "✗ No file selected. Use 'Select File' first.",
+                        )
+                        return
+                    filepath = Path(filename)
 
                     if not filepath.exists():
                         print(f"✗ File not found: {filepath}")
@@ -349,50 +350,29 @@ class ExportControlsMixin:
                     print(f"✗ Preview failed: {e}")
                     import_controls["preview_button"].button_style = "danger"
 
-        # File upload handler
-        def on_file_upload(change: dict[str, Any]) -> None:
-            if not change["new"]:
-                return
+        # File chooser callback - fires when the user picks a file in the
+        # browser dialog, writing its full path into filename_input.
+        def on_file_chosen(chooser: FileChooser) -> None:
+            if chooser.selected:
+                import_controls["filename_input"].value = chooser.selected
 
+        # Clear button handler - resets the chooser and filename box.
+        def on_clear_clicked(b: widgets.Button) -> None:
+            _ = b
+            import_controls["file_chooser"].reset()
+            import_controls["filename_input"].value = ""
             with import_output:
                 import_output.clear_output()
-                try:
-                    uploaded = change["new"]
-                    # Handle both ipywidgets 7 and 8 formats
-                    if isinstance(uploaded, dict):
-                        # ipywidgets 7
-                        fname = next(iter(uploaded))
-                    else:
-                        # ipywidgets 8 (tuple of dicts)
-                        item = uploaded[0]
-                        fname = item["name"]
-
-                    # Do NOT write file to disk, just update filename input
-                    import_controls["filename_input"].value = fname
-
-                    # Construct potential path for display purposes (though
-                    # FileUpload doesn't give full path)
-                    potential_path = self._resolve_import_path(fname)
-                    print(f"✓ Selected file: {fname}")
-                    print(f"Target path: {potential_path}")
-                    import_controls["file_select"].button_style = "success"
-
-                    # Clear widget to allow re-uploading same file
-                    # Note: clearing might trigger another event with empty
-                    # value, hence the check at start
-
-                except Exception as e:  # pylint: disable=broad-except
-                    print(f"✗ Selection failed: {e}")
-                    import_controls["file_select"].button_style = "danger"
 
         # Connect button handlers
         import_controls["import_button"].on_click(on_import_clicked)
         import_controls["preview_button"].on_click(on_preview_clicked)
-        import_controls["file_select"].observe(on_file_upload, names="value")
+        import_controls["clear_button"].on_click(on_clear_clicked)
+        import_controls["file_chooser"].register_callback(on_file_chosen)
 
         action_buttons = widgets.HBox(
             [
-                import_controls["file_select"],
+                import_controls["clear_button"],
                 import_controls["preview_button"],
                 import_controls["import_button"],
             ],
@@ -402,6 +382,7 @@ class ExportControlsMixin:
         import_section = widgets.VBox(
             [
                 widgets.HTML("<h3>Import Portfolio</h3>"),
+                import_controls["file_chooser"],
                 import_controls["filename_input"],
                 action_buttons,
                 import_output,
