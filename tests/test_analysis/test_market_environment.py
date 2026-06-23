@@ -275,3 +275,21 @@ class TestAssessMarketEnvironment:
         assess_market_environment(provider, skew_lookback_days=504)
 
         assert provider.received_lookback_days == 504
+
+    def test_dashboard_config_overrides_skew_bands(self) -> None:
+        """dashboard_config parameters override the function's own defaults."""
+        # skew=0.40, default bands (0.30, 0.70): NORMAL -> verdict FAIR
+        provider = _StubProvider(
+            vix=18.0, term=_CALM_TERM, skew_percentile=0.40,
+        )
+        default_env = assess_market_environment(provider)
+        assert default_env.hedge_cost_verdict == HedgeCostVerdict.FAIR
+
+        # Raising skew_low_pctile to 45 -> 0.40 < 0.45 -> LOW -> CHEAP
+        config = {
+            "parameters": {"skew_low_pctile": 45, "skew_high_pctile": 75},
+        }
+        config_env = assess_market_environment(
+            provider, dashboard_config=config,
+        )
+        assert config_env.hedge_cost_verdict == HedgeCostVerdict.CHEAP

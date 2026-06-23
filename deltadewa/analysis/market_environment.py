@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.marketdata._errors import MarketDataError
 
@@ -237,6 +237,7 @@ def _hedge_cost_verdict(
 def assess_market_environment(
     provider: MarketDataProvider,
     *,
+    dashboard_config: dict[str, Any] | None = None,
     regime_bands: tuple[float, float] = (0.15, 0.35),
     skew_bands: tuple[float, float] = (0.30, 0.70),
     term_tolerance: float = 0.5,
@@ -251,6 +252,16 @@ def assess_market_environment(
 
     Args:
         provider: Source of VIX/SKEW market data.
+        dashboard_config: Optional dashboard config dict (as loaded by
+            ``session.py``). When present, the following keys under
+            ``parameters`` override the matching keyword args:
+
+            - ``skew_low_pctile`` (int, 0-100) → ``skew_bands[0]``
+            - ``skew_high_pctile`` (int, 0-100) → ``skew_bands[1]``
+            - ``term_contango_tolerance`` (float, VIX points) →
+              ``term_tolerance``
+
+            Missing keys fall back to the keyword-arg defaults below.
         regime_bands: (low, high) decimal VIX band for
             ``classify_vix_regime`` (default (0.15, 0.35)).
         skew_bands: (low, high) SKEW percentile band, as a 0-1 fraction
@@ -266,6 +277,14 @@ def assess_market_environment(
         ``data_quality=UNAVAILABLE`` on any provider failure.
 
     """
+    if dashboard_config is not None:
+        params: dict[str, Any] = dashboard_config.get("parameters", {})
+        low_raw = params.get("skew_low_pctile", skew_bands[0] * 100)
+        high_raw = params.get("skew_high_pctile", skew_bands[1] * 100)
+        skew_bands = (float(low_raw) / 100, float(high_raw) / 100)
+        term_tolerance = float(
+            params.get("term_contango_tolerance", term_tolerance),
+        )
     try:
         vix = provider.get_vix()
         term = provider.get_vix_term_structure()

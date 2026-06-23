@@ -10,6 +10,11 @@ parameters:
   # Shorter convexity cliff warning
   convexity_cliff_days: 120   # Alert only when within 4 months
 
+  # Market environment assessment — wider bands, more tolerant of noisy shape
+  skew_low_pctile: 20          # below = benign skew
+  skew_high_pctile: 80         # above = expensive/stressed skew
+  term_contango_tolerance: 1.0 # VIX points; smaller diffs read FLAT
+
 metrics:
   # Higher carry tolerance
   net_carry:

@@ -10,6 +10,11 @@ parameters:
   # Earlier warning for convexity cliff
   convexity_cliff_days: 240   # Alert when within 8 months (vs 6 months default)
 
+  # Market environment assessment — tighter bands, flags stressed skew sooner
+  skew_low_pctile: 30           # below = benign skew
+  skew_high_pctile: 70          # above = expensive/stressed skew
+  term_contango_tolerance: 0.25 # VIX points; smaller diffs read FLAT
+
 metrics:
   # Stricter carry tolerance
   net_carry:
