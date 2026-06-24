@@ -81,14 +81,13 @@ class ThetaChartsMixin:
         def classify_maturity(days: int) -> str:
             if days <= const.DAYS_PER_WEEK:
                 return "0-7 days"
-            elif days <= const.CALENDAR_DAYS_PER_MONTH:
+            if days <= const.CALENDAR_DAYS_PER_MONTH:
                 return "8-30 days"
-            elif days <= const.CALENDAR_DAYS_PER_MONTH * 2:
+            if days <= const.CALENDAR_DAYS_PER_MONTH * 2:
                 return "31-60 days"
-            elif days <= const.CALENDAR_DAYS_PER_MONTH * 3:
+            if days <= const.CALENDAR_DAYS_PER_MONTH * 3:
                 return "61-90 days"
-            else:
-                return "90+ days"
+            return "90+ days"
 
         df_carry["maturity_bucket"] = df_carry["days_to_expiry"].apply(
             classify_maturity,

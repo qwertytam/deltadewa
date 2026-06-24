@@ -84,10 +84,9 @@ class RiskMixin:
             # Check if profits are consistently increasing
             # Use np.diff to check if all differences are positive
             return bool(np.all(np.diff(high_end_pnls) > 0))
-        else:
-            # Check if losses are consistently increasing (P&L decreasing)
-            # Use np.diff to check if all differences are negative
-            return bool(np.all(np.diff(high_end_pnls) < 0))
+        # Check if losses are consistently increasing (P&L decreasing)
+        # Use np.diff to check if all differences are negative
+        return bool(np.all(np.diff(high_end_pnls) < 0))
 
     def calculate_max_loss_options(
         self: "_PortfolioProtocol",

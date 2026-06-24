@@ -15,9 +15,7 @@ import requests
 
 from deltadewa.marketdata._errors import MarketDataError
 
-_CBOE_HISTORY_URL = (
-    "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
-)
+_CBOE_HISTORY_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 _FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
 _VIX_TERM_STRUCTURE_SYMBOLS = {

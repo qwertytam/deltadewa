@@ -92,8 +92,8 @@ def generate_spot_range(
         # Combine and sort
         spot_range = np.unique(np.concatenate([critical_points, main_range]))
         return np.sort(spot_range)
-    else:
-        # Standard range
-        spot_min = max(0.01, spot_price * spot_min_pct / 100)
-        spot_max = spot_price * spot_max_pct / 100
-        return np.linspace(spot_min, spot_max, num_points)
+
+    # Standard range
+    spot_min = max(0.01, spot_price * spot_min_pct / 100)
+    spot_max = spot_price * spot_max_pct / 100
+    return np.linspace(spot_min, spot_max, num_points)

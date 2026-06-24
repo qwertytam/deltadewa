@@ -241,7 +241,7 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         "strike_drift_review_fraction",
         0.75,
     )
-    if not (0 < strike_drift_review_fraction < 1):
+    if not 0 < strike_drift_review_fraction < 1:
         raise IpsConfigError(
             "triggers.strike_drift_review_fraction must be in (0, 1), got "
             f"{strike_drift_review_fraction}",
@@ -273,7 +273,7 @@ def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
                 f"monetization.schedule[{i}].gain_pct must be > 0, got "
                 f"{gain_pct}",
             )
-        if not (0 < sell_pct <= 100):
+        if not 0 < sell_pct <= 100:
             raise IpsConfigError(
                 f"monetization.schedule[{i}].sell_pct must be in "
                 f"(0, 100], got {sell_pct}",

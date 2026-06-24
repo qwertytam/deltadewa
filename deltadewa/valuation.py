@@ -335,8 +335,7 @@ class OptionValuation:
         if self._is_expired_or_at_expiry():
             if self.option_type == OptionType.CALL:
                 return 1.0 if self.spot_price > self.strike_price else 0.0
-            else:
-                return -1.0 if self.spot_price < self.strike_price else 0.0
+            return -1.0 if self.spot_price < self.strike_price else 0.0
         try:
             return self.option.delta()
         except RuntimeError:
@@ -501,8 +500,7 @@ class OptionValuation:
         """Calculate intrinsic value of the option."""
         if self.option_type == OptionType.CALL:
             return max(0, self.spot_price - self.strike_price)
-        else:
-            return max(0, self.strike_price - self.spot_price)
+        return max(0, self.strike_price - self.spot_price)
 
     def time_value(self) -> float:
         """Calculate time value of the option."""

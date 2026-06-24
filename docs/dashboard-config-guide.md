@@ -28,6 +28,14 @@ metrics:
 | `historical_vol_low` | 25th-percentile IV — feeds the Volatility Regime metric's "cheap" end |
 | `historical_vol_high` | 75th-percentile IV — feeds the Volatility Regime metric's "expensive" end |
 | `convexity_cliff_days` | Days-to-maturity threshold for the Time to Convexity Cliff metric's high-gamma warning window |
+| `skew_low_pctile` | SKEW-index percentile (0-100) below which skew reads as benign — fed to `assess_market_environment` as `skew_bands[0]` |
+| `skew_high_pctile` | SKEW-index percentile (0-100) above which skew reads as stressed/expensive — fed to `assess_market_environment` as `skew_bands[1]` |
+| `term_contango_tolerance` | VIX-point gap below which front/3M differences are treated as noise (FLAT) rather than a real slope — fed to `assess_market_environment` as `term_tolerance` |
+
+The three `skew_*` / `term_*` keys configure `assess_market_environment`
+(`deltadewa/analysis/market_environment.py`) directly — they are
+calculation inputs, not display settings. Any key absent from the file
+falls back to the function's own hardcoded default.
 
 ### `metrics`
 
@@ -88,13 +96,20 @@ use it.
   from -10.0 to -15.0 (alerts later on a worse crash loss),
   `convexity_cliff_days` drops from 180 to 120 (shorter warning window),
   `vol_regime.max_val` rises from 75 to 80 (tolerates pricier vol before
-  flagging red). Pick this for active trading where you're comfortable
+  flagging red). For market environment: `skew_low_pctile` drops to 20
+  and `skew_high_pctile` rises to 80 (wider benign zone before flagging
+  stressed skew), `term_contango_tolerance` rises to 1.0 (requires a
+  larger front/3M gap before calling the curve CONTANGO or
+  BACKWARDATION). Pick this for active trading where you're comfortable
   riding closer to the edge before the dashboard flags it.
 - **`dashboard_config_conservative.yaml`** — every band tightens: e.g.
   `crash_convexity.min_val` tightens from -10.0 to -5.0 (alerts sooner),
   `convexity_cliff_days` rises from 180 to 240 (earlier warning),
   `vol_regime.max_val` drops from 75 to 70 (flags red sooner on expensive
-  vol). Pick this for risk-averse mandates where you want alerts to fire
+  vol). For market environment: `skew_low_pctile` rises to 30 and
+  `skew_high_pctile` drops to 70 (flags stressed skew sooner),
+  `term_contango_tolerance` drops to 0.25 (detects even small slopes as
+  real). Pick this for risk-averse mandates where you want alerts to fire
   earlier and hold the book to a higher bar.
 
 ## Tune your own

@@ -176,13 +176,11 @@ class HealthMixin:
 
         if current_vol <= historical_vol_low:
             return 0.0
-        elif current_vol >= historical_vol_high:
+        if current_vol >= historical_vol_high:
             return 100.0
-        else:
-            # Linear interpolation
-            vol_range = historical_vol_high - historical_vol_low
-            percentile = ((current_vol - historical_vol_low) / vol_range) * 100
-            return percentile
+        # Linear interpolation
+        vol_range = historical_vol_high - historical_vol_low
+        return ((current_vol - historical_vol_low) / vol_range) * 100
 
     def calculate_hedge_success_pct(
         self,
