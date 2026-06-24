@@ -5,6 +5,12 @@ hedge pay out if the underlying drops X%?" — distinct from
 ``HealthMixin.calculate_crash_convexity_pct``, which expresses crash P&L as
 a % of the protected book's notional rather than as a multiple of premium
 paid.
+
+A payoff ratio of 8.5x means the hedge returns 8.5x its cost in the defined
+crash; net-profit ratio = payoff_ratio - 1.  Gross payoff is computed from
+the intrinsic value of long put legs at the shocked spot under flat vol — a
+conservative, time-value-excluding estimate.  Full crash-mark repricing with
+a vol shock is a later refinement.
 """
 
 from __future__ import annotations
@@ -26,9 +32,9 @@ if TYPE_CHECKING:
 class PremiumBasis(StrEnum):
     """Which premium figure was used to compute payoff ratios."""
 
-    ENTRY = "ENTRY"
+    PAID = "paid"
     """entry_premium is populated on every long put — uses cost basis."""
-    CURRENT = "CURRENT"
+    MARK = "mark (approx)"
     """Fallback: current mark price (some/all positions lack entry_premium)."""
 
 
@@ -65,7 +71,8 @@ class CrashScenarioRow:
 
     Attributes:
         shock_pct: Signed shock percent for this row (e.g. -25.0).
-        hedge_pnl: Long-puts-only P&L in dollars at this shock.
+        hedge_pnl: Gross intrinsic payoff of long put legs at the shocked
+            spot (no cost basis subtracted).
         payoff_ratio: hedge_pnl as a multiple of premium paid.
         convexity_pct: Net-of-underlying crash P&L as % of book notional
             (``HealthMixin.calculate_crash_convexity_pct``).
@@ -86,29 +93,37 @@ def _shock_to_multiplier(shock_pct: float) -> float:
     return 1 + shock_pct / 100
 
 
-def _hedge_pnl_at_shock(
+def _gross_long_put_payoff(
     portfolio: OptionPortfolio,
     shock_pct: float,
 ) -> float:
-    """Long-puts-only P&L at a shocked spot.
+    """Gross intrinsic payoff of long put legs at a shocked spot.
 
-    Calls the same ``calculate_pnl_at_expiry`` engine
-    ``HealthMixin.calculate_crash_convexity_pct`` uses, but with
-    ``include_underlying=False`` so the result is the hedge legs' own
-    payoff, not netted against the protected book's loss.
+    Returns ``sum(max(0, strike - crash_spot) * qty * contract_size)``
+    over positions where ``option_type == PUT`` and ``quantity > 0``.
+    No cost basis is subtracted — this is the gross (numerator) figure
+    used in the payoff ratio.
+
+    Note: uses intrinsic-at-expiry under flat vol — a conservative,
+    time-value-excluding estimate; full crash-mark repricing with a vol
+    shock is a later refinement.
 
     Args:
         portfolio: Portfolio to evaluate.
         shock_pct: Signed shock percent (e.g. -25.0).
 
     Returns:
-        Long-puts P&L in dollars at the shocked spot.
+        Gross intrinsic payoff in dollars.
 
     """
     crash_spot = portfolio.spot_price * _shock_to_multiplier(shock_pct)
-    return portfolio.calculate_pnl_at_expiry(
-        crash_spot,
-        include_underlying=False,
+    return sum(
+        max(0.0, pos.option.strike_price - crash_spot)
+        * pos.quantity
+        * pos.contract_size
+        for pos in portfolio.positions
+        if pos.option.option_type == const.OptionType.PUT
+        and pos.quantity > 0
     )
 
 
@@ -134,17 +149,17 @@ def _premium_with_basis(
         if pos.option.option_type == const.OptionType.PUT and pos.quantity > 0
     ]
     if not long_puts:
-        return _net_protective_premium(portfolio), PremiumBasis.CURRENT
+        return _net_protective_premium(portfolio), PremiumBasis.MARK
     entry_premiums: list[float] = []
     for pos in long_puts:
         if pos.entry_premium is None:
-            return _net_protective_premium(portfolio), PremiumBasis.CURRENT
+            return _net_protective_premium(portfolio), PremiumBasis.MARK
         entry_premiums.append(pos.entry_premium)
     total = sum(
         ep * abs(pos.quantity) * pos.contract_size
         for ep, pos in zip(entry_premiums, long_puts, strict=True)
     )
-    return total, PremiumBasis.ENTRY
+    return total, PremiumBasis.PAID
 
 
 def _net_protective_premium(portfolio: OptionPortfolio) -> float:
@@ -171,26 +186,26 @@ def crash_payoff_ratio(
     crash_pct: float,
     premium: float | None = None,
 ) -> float:
-    """Hedge payoff at a crash shock, as a multiple of premium paid.
+    """Gross hedge payoff at a crash shock, as a multiple of premium paid.
 
     Args:
         portfolio: Portfolio to evaluate.
         crash_pct: Signed shock percent (e.g. -25.0 for a 25% decline).
             Converted internally to a spot multiplier (-25.0 -> 0.75).
-        premium: Net premium paid for the hedge. Defaults to
-            ``_net_protective_premium(portfolio)`` (the long puts) when
-            not supplied.
+        premium: Premium paid for the hedge in dollars.  Defaults to
+            ``_premium_with_basis(portfolio)`` (entry cost when available,
+            current mark otherwise) when not supplied.
 
     Returns:
-        hedge_pnl / premium, or 0.0 if premium is zero or negative —
+        gross_payoff / premium, or 0.0 if premium is zero or negative —
         there's no meaningful ratio to a non-positive premium.
 
     """
     if premium is None:
-        premium = _net_protective_premium(portfolio)
+        premium, _ = _premium_with_basis(portfolio)
     if premium <= 0:
         return 0.0
-    return _hedge_pnl_at_shock(portfolio, crash_pct) / premium
+    return _gross_long_put_payoff(portfolio, crash_pct) / premium
 
 
 def crash_scenario_table(
@@ -219,17 +234,13 @@ def crash_scenario_table(
     if ips_convexity is not None:
         all_shocks.add(ips_convexity.crash_scenario_pct)
 
-    premium = _net_protective_premium(portfolio)
+    premium, _ = _premium_with_basis(portfolio)
     analyzer = PortfolioAnalyzer(portfolio)
 
     rows = []
     for shock_pct in sorted(all_shocks, reverse=True):
-        hedge_pnl = _hedge_pnl_at_shock(portfolio, shock_pct)
-        ratio = crash_payoff_ratio(
-            portfolio,
-            crash_pct=shock_pct,
-            premium=premium,
-        )
+        hedge_pnl = _gross_long_put_payoff(portfolio, shock_pct)
+        ratio = hedge_pnl / premium if premium > 0 else 0.0
         convexity_pct = analyzer.calculate_crash_convexity_pct(
             crash_pct=_shock_to_multiplier(shock_pct),
         )
@@ -289,7 +300,7 @@ def compute_crash_convexity(
 
     rows: list[CrashScenarioRow] = []
     for shock_pct in sorted(all_shocks, reverse=True):
-        hedge_pnl = _hedge_pnl_at_shock(portfolio, shock_pct)
+        hedge_pnl = _gross_long_put_payoff(portfolio, shock_pct)
         ratio = hedge_pnl / premium if premium > 0 else 0.0
         convexity_pct = analyzer.calculate_crash_convexity_pct(
             crash_pct=_shock_to_multiplier(shock_pct),

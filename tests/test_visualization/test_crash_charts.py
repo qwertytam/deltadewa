@@ -47,7 +47,7 @@ def _empty_result() -> CrashConvexityResult:
         rows=[],
         headline_row=None,
         premium=0.0,
-        premium_basis=PremiumBasis.CURRENT,
+        premium_basis=PremiumBasis.MARK,
         ips_convexity=None,
     )
 

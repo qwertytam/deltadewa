@@ -49,19 +49,19 @@ class TestPremiumWithBasis:
     """Tests for _premium_with_basis."""
 
     def test_entry_basis_when_all_positions_have_premium(self) -> None:
-        """ENTRY basis when every long put has entry_premium set."""
+        """PAID basis when every long put has entry_premium set."""
         portfolio = _make_long_put_portfolio(quantity=10)
         pos = portfolio.positions[0]
         pos.entry_premium = 2.50
 
         premium, basis = _premium_with_basis(portfolio)
 
-        assert basis == PremiumBasis.ENTRY
+        assert basis == PremiumBasis.PAID
         expected = 2.50 * abs(pos.quantity) * pos.contract_size
         assert premium == pytest.approx(expected)
 
     def test_current_basis_when_any_position_lacks_premium(self) -> None:
-        """CURRENT basis when at least one long put lacks entry_premium."""
+        """MARK basis when at least one long put lacks entry_premium."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.2,
@@ -82,14 +82,14 @@ class TestPremiumWithBasis:
 
         _, basis = _premium_with_basis(portfolio)
 
-        assert basis == PremiumBasis.CURRENT
+        assert basis == PremiumBasis.MARK
 
     def test_empty_portfolio_returns_current_basis(self) -> None:
-        """No positions -> zero premium, CURRENT basis."""
+        """No positions -> zero premium, MARK basis."""
         portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
         premium, basis = _premium_with_basis(portfolio)
         assert premium == pytest.approx(0.0)
-        assert basis == PremiumBasis.CURRENT
+        assert basis == PremiumBasis.MARK
 
 
 class TestComputeCrashConvexity:
@@ -146,37 +146,39 @@ class TestComputeCrashConvexity:
         assert result.ips_convexity is None
 
     def test_premium_basis_entry_when_entry_premiums_set(self) -> None:
-        """PremiumBasis.ENTRY when all long puts have entry_premium."""
+        """PremiumBasis.PAID when all long puts have entry_premium."""
         portfolio = _make_long_put_portfolio()
         portfolio.positions[0].entry_premium = 2.50
 
         result = compute_crash_convexity(portfolio, shocks=[-25.0])
 
-        assert result.premium_basis == PremiumBasis.ENTRY
+        assert result.premium_basis == PremiumBasis.PAID
 
     def test_premium_basis_current_fallback(self) -> None:
-        """PremiumBasis.CURRENT when no entry_premium set."""
+        """PremiumBasis.MARK when no entry_premium set."""
         portfolio = _make_long_put_portfolio()
         # entry_premium is None by default
 
         result = compute_crash_convexity(portfolio, shocks=[-25.0])
 
-        assert result.premium_basis == PremiumBasis.CURRENT
+        assert result.premium_basis == PremiumBasis.MARK
 
     def test_single_pricing_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Each shock is priced exactly once — no double engine pass."""
         import deltadewa.analysis.crash_payoff as _cp
 
         calls: list[float] = []
-        original = _cp._hedge_pnl_at_shock
+        original = _cp._gross_long_put_payoff
 
-        def counting_hedge_pnl(
+        def counting_gross_payoff(
             portfolio: OptionPortfolio, shock_pct: float,
         ) -> float:
             calls.append(shock_pct)
             return original(portfolio, shock_pct)
 
-        monkeypatch.setattr(_cp, "_hedge_pnl_at_shock", counting_hedge_pnl)
+        monkeypatch.setattr(
+            _cp, "_gross_long_put_payoff", counting_gross_payoff,
+        )
 
         portfolio = _make_long_put_portfolio()
         shocks = [-10.0, -25.0, -40.0]
@@ -235,19 +237,20 @@ class TestCrashPayoffRatio:
     """Tests for crash_payoff_ratio."""
 
     def test_known_ratio_against_portfolio_oracle(self) -> None:
-        """Ratio matches the value derived from the portfolio's own methods.
+        """Ratio matches the gross intrinsic formula applied directly.
 
-        Avoids hand-deriving the QuantLib price; uses
-        ``calculate_pnl_at_expiry``/``position_value`` (already tested
-        elsewhere) as the oracle.
+        Uses the gross long-put intrinsic formula as the oracle, which
+        is independent of ``calculate_pnl_at_expiry`` (that function
+        subtracts current mark and includes all legs, not just long puts).
         """
         portfolio = _make_long_put_portfolio()
-        position = portfolio.positions[0]
-        expected_premium = position.position_value()
+        pos = portfolio.positions[0]
+        expected_premium = pos.position_value()  # mark fallback
         crash_spot = portfolio.spot_price * 0.75
-        expected_pnl = portfolio.calculate_pnl_at_expiry(
-            crash_spot,
-            include_underlying=False,
+        expected_pnl = (
+            max(0.0, pos.option.strike_price - crash_spot)
+            * pos.quantity
+            * pos.contract_size
         )
 
         ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0)
@@ -277,12 +280,14 @@ class TestCrashPayoffRatio:
         assert convexity_with_book != 0.0
 
     def test_explicit_premium_overrides_computed_premium(self) -> None:
-        """An explicit premium= bypasses _net_protective_premium."""
+        """An explicit premium= bypasses _premium_with_basis."""
         portfolio = _make_long_put_portfolio()
+        pos = portfolio.positions[0]
         crash_spot = portfolio.spot_price * 0.75
-        expected_pnl = portfolio.calculate_pnl_at_expiry(
-            crash_spot,
-            include_underlying=False,
+        expected_pnl = (
+            max(0.0, pos.option.strike_price - crash_spot)
+            * pos.quantity
+            * pos.contract_size
         )
 
         ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0, premium=500.0)
