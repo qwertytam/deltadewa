@@ -2,7 +2,10 @@
 
 from deltadewa.dashboard.carry_display import CarryDisplay
 from deltadewa.dashboard.changelog_display import ChangeLogDisplay
-from deltadewa.dashboard.crash_payoff_display import CrashPayoffDisplay
+from deltadewa.dashboard.crash_payoff_display import (
+    CrashPayoffDisplay,
+    render_crash_table,
+)
 from deltadewa.dashboard.monte_carlo_widget import MonteCarloStalenessWidget
 from deltadewa.dashboard.position_aging import PositionAgingDisplay
 from deltadewa.dashboard.position_detail import PositionDetailDisplay
@@ -23,6 +26,7 @@ __all__ = [
     "SessionContext",
     "StressDashboard",
     "VolatilityProfileDisplay",
+    "render_crash_table",
     "setup_dashboard",
     "start_session",
 ]

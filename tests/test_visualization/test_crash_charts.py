@@ -44,10 +44,11 @@ def _make_long_put_portfolio(
 
 def _empty_result() -> CrashConvexityResult:
     return CrashConvexityResult(
-        rows=[],
-        headline_row=None,
-        premium=0.0,
-        premium_basis=PremiumBasis.CURRENT,
+        curve=[],
+        scenario_rows=[],
+        payoff_ratio=None,
+        premium_paid=0.0,
+        premium_basis=PremiumBasis.MARK,
         ips_convexity=None,
     )
 
@@ -55,16 +56,14 @@ def _empty_result() -> CrashConvexityResult:
 class TestPlotCrashConvexity:
     """Tests for plot_crash_convexity."""
 
-    def test_returns_figure_with_two_axes(self) -> None:
-        """plot_crash_convexity returns a Figure with exactly 2 Axes."""
+    def test_returns_figure_with_one_axes(self) -> None:
+        """plot_crash_convexity returns a Figure with exactly 1 Axes."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(
-            portfolio, shocks=[-10.0, -20.0, -30.0],
-        )
+        result = compute_crash_convexity(portfolio)
 
         fig = plot_crash_convexity(result)
         try:
-            assert len(fig.axes) == 2
+            assert len(fig.axes) == 1
         finally:
             plt.close(fig)
 
@@ -76,9 +75,7 @@ class TestPlotCrashConvexity:
             target_min_pct=2.0,
             target_max_pct=10.0,
         )
-        result = compute_crash_convexity(
-            portfolio, shocks=[-10.0, -20.0, -30.0], ips_convexity=ips,
-        )
+        result = compute_crash_convexity(portfolio, ips_convexity=ips)
 
         fig = plot_crash_convexity(result)
         try:
@@ -87,24 +84,40 @@ class TestPlotCrashConvexity:
             plt.close(fig)
 
     def test_empty_rows_does_not_raise(self) -> None:
-        """Empty result rows produce a valid Figure without raising."""
+        """Empty result produces a valid single-Axes Figure without raising."""
         result = _empty_result()
         fig = plot_crash_convexity(result)
         try:
-            assert len(fig.axes) == 2
+            assert len(fig.axes) == 1
         finally:
             plt.close(fig)
 
-    def test_custom_figsize_is_respected(self) -> None:
-        """Figsize parameter is passed through to the Figure."""
-        result = _empty_result()
-        fig = plot_crash_convexity(result, figsize=(8, 4))
+    def test_plotted_curve_matches_result(self) -> None:
+        """Line x/y data matches result.curve (gross payoff, not ratio)."""
+        portfolio = _make_long_put_portfolio()
+        result = compute_crash_convexity(portfolio)
+
+        fig = plot_crash_convexity(result)
         try:
-            w, h = fig.get_size_inches()
-            assert w == pytest.approx(8.0)
-            assert h == pytest.approx(4.0)
+            ax = fig.axes[0]
+            xs_expected = [s for s, _ in result.curve]
+            ys_expected = [gp for _, gp in result.curve]
+            assert ax.lines[0].get_xdata() == pytest.approx(xs_expected)
+            assert ax.lines[0].get_ydata() == pytest.approx(ys_expected)
         finally:
             plt.close(fig)
+
+    def test_accepts_existing_axes(self) -> None:
+        """When ax is supplied, returned Figure is the axes' own figure."""
+        portfolio = _make_long_put_portfolio()
+        result = compute_crash_convexity(portfolio)
+
+        fig2, ax2 = plt.subplots()
+        try:
+            returned = plot_crash_convexity(result, ax=ax2)
+            assert returned is fig2
+        finally:
+            plt.close(fig2)
 
     def test_mixin_delegates_to_module_function(self) -> None:
         """CrashChartsMixin.plot_crash_convexity returns same figure type."""
@@ -112,10 +125,10 @@ class TestPlotCrashConvexity:
 
         portfolio = _make_long_put_portfolio()
         charts = OptionCharts(portfolio)
-        result = compute_crash_convexity(portfolio, shocks=[-20.0])
+        result = compute_crash_convexity(portfolio)
 
         fig = charts.plot_crash_convexity(result)
         try:
-            assert len(fig.axes) == 2
+            assert len(fig.axes) == 1
         finally:
             plt.close(fig)

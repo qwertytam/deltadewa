@@ -49,19 +49,19 @@ class TestPremiumWithBasis:
     """Tests for _premium_with_basis."""
 
     def test_entry_basis_when_all_positions_have_premium(self) -> None:
-        """ENTRY basis when every long put has entry_premium set."""
+        """PAID basis when every long put has entry_premium set."""
         portfolio = _make_long_put_portfolio(quantity=10)
         pos = portfolio.positions[0]
         pos.entry_premium = 2.50
 
         premium, basis = _premium_with_basis(portfolio)
 
-        assert basis == PremiumBasis.ENTRY
+        assert basis == PremiumBasis.PAID
         expected = 2.50 * abs(pos.quantity) * pos.contract_size
         assert premium == pytest.approx(expected)
 
     def test_current_basis_when_any_position_lacks_premium(self) -> None:
-        """CURRENT basis when at least one long put lacks entry_premium."""
+        """MARK basis when at least one long put lacks entry_premium."""
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.2,
@@ -82,21 +82,91 @@ class TestPremiumWithBasis:
 
         _, basis = _premium_with_basis(portfolio)
 
-        assert basis == PremiumBasis.CURRENT
+        assert basis == PremiumBasis.MARK
 
     def test_empty_portfolio_returns_current_basis(self) -> None:
-        """No positions -> zero premium, CURRENT basis."""
+        """No positions -> zero premium, MARK basis."""
         portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
         premium, basis = _premium_with_basis(portfolio)
         assert premium == pytest.approx(0.0)
-        assert basis == PremiumBasis.CURRENT
+        assert basis == PremiumBasis.MARK
 
 
 class TestComputeCrashConvexity:
     """Tests for compute_crash_convexity."""
 
-    def test_rows_match_crash_scenario_table(self) -> None:
-        """compute_crash_convexity rows agree with crash_scenario_table."""
+    def test_curve_has_n_points(self) -> None:
+        """result.curve contains exactly n_points entries."""
+        portfolio = _make_long_put_portfolio()
+        result = compute_crash_convexity(
+            portfolio, shock_range=(-30.0, 0.0), n_points=7,
+        )
+        assert len(result.curve) == 7
+
+    def test_curve_covers_shock_range(self) -> None:
+        """First and last curve shock_pct equal the shock_range bounds."""
+        portfolio = _make_long_put_portfolio()
+        result = compute_crash_convexity(
+            portfolio, shock_range=(-40.0, 10.0), n_points=51,
+        )
+        assert result.curve[0][0] == pytest.approx(-40.0)
+        assert result.curve[-1][0] == pytest.approx(10.0)
+
+    def test_scenario_rows_sampled_from_curve(self) -> None:
+        """scenario_rows hedge_pnl values match the curve at those shocks."""
+        portfolio = _make_long_put_portfolio()
+        result = compute_crash_convexity(
+            portfolio, shock_range=(-40.0, 10.0), n_points=51,
+        )
+        curve_dict = dict(result.curve)
+        for row in result.scenario_rows:
+            if row.shock_pct in curve_dict:
+                assert row.hedge_pnl == pytest.approx(
+                    curve_dict[row.shock_pct],
+                )
+
+    def test_ips_crash_point_in_scenario_rows(self) -> None:
+        """The IPS crash_scenario_pct always appears in scenario_rows."""
+        portfolio = _make_long_put_portfolio()
+        ips = IpsConvexity(
+            crash_scenario_pct=-25.0,
+            target_min_pct=0.0,
+            target_max_pct=100.0,
+        )
+        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        shocks_in_rows = {r.shock_pct for r in result.scenario_rows}
+        assert -25.0 in shocks_in_rows
+
+    def test_payoff_ratio_matches_manual(self) -> None:
+        """payoff_ratio equals gross_at_ips / premium_paid."""
+        portfolio = _make_long_put_portfolio()
+        ips = IpsConvexity(
+            crash_scenario_pct=-25.0,
+            target_min_pct=0.0,
+            target_max_pct=100.0,
+        )
+        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        assert result.payoff_ratio is not None
+        pos = portfolio.positions[0]
+        crash_spot = portfolio.spot_price * 0.75
+        expected_gross = (
+            max(0.0, pos.option.strike_price - crash_spot)
+            * pos.quantity
+            * pos.contract_size
+        )
+        assert result.payoff_ratio == pytest.approx(
+            expected_gross / result.premium_paid,
+        )
+
+    def test_payoff_ratio_none_without_ips(self) -> None:
+        """payoff_ratio is None when no ips_convexity is supplied."""
+        portfolio = _make_long_put_portfolio()
+        result = compute_crash_convexity(portfolio)
+        assert result.payoff_ratio is None
+        assert result.ips_convexity is None
+
+    def test_scenario_rows_match_crash_scenario_table(self) -> None:
+        """crash_scenario_table is a thin wrapper — rows are identical."""
         portfolio = _make_long_put_portfolio()
         shocks = [-10.0, -25.0, -40.0]
         ips = IpsConvexity(
@@ -104,85 +174,54 @@ class TestComputeCrashConvexity:
             target_min_pct=0.0,
             target_max_pct=100.0,
         )
-
         result = compute_crash_convexity(
+            portfolio, ips_convexity=ips, scenario_shocks=shocks,
+        )
+        table = crash_scenario_table(
             portfolio, shocks=shocks, ips_convexity=ips,
         )
-        legacy = crash_scenario_table(
-            portfolio, shocks=shocks, ips_convexity=ips,
-        )
-
-        assert len(result.rows) == len(legacy)
-        for new, old in zip(result.rows, legacy, strict=True):
-            assert new.shock_pct == old.shock_pct
-            assert new.hedge_pnl == pytest.approx(old.hedge_pnl)
-            assert new.payoff_ratio == pytest.approx(old.payoff_ratio)
-            assert new.convexity_pct == pytest.approx(old.convexity_pct)
-            assert new.meets_target == old.meets_target
-
-    def test_headline_row_set_when_ips_supplied(self) -> None:
-        """headline_row matches the IPS crash_scenario_pct row."""
-        portfolio = _make_long_put_portfolio()
-        ips = IpsConvexity(
-            crash_scenario_pct=-25.0,
-            target_min_pct=0.0,
-            target_max_pct=100.0,
-        )
-
-        result = compute_crash_convexity(
-            portfolio, shocks=[-10.0, -25.0], ips_convexity=ips,
-        )
-
-        assert result.headline_row is not None
-        assert result.headline_row.shock_pct == -25.0
-
-    def test_no_ips_convexity_yields_none_headline(self) -> None:
-        """Without ips_convexity, headline_row is None."""
-        portfolio = _make_long_put_portfolio()
-
-        result = compute_crash_convexity(portfolio, shocks=[-25.0])
-
-        assert result.headline_row is None
-        assert result.ips_convexity is None
+        assert result.scenario_rows == table
 
     def test_premium_basis_entry_when_entry_premiums_set(self) -> None:
-        """PremiumBasis.ENTRY when all long puts have entry_premium."""
+        """PremiumBasis.PAID when all long puts have entry_premium."""
         portfolio = _make_long_put_portfolio()
         portfolio.positions[0].entry_premium = 2.50
-
-        result = compute_crash_convexity(portfolio, shocks=[-25.0])
-
-        assert result.premium_basis == PremiumBasis.ENTRY
+        result = compute_crash_convexity(portfolio)
+        assert result.premium_basis == PremiumBasis.PAID
 
     def test_premium_basis_current_fallback(self) -> None:
-        """PremiumBasis.CURRENT when no entry_premium set."""
+        """PremiumBasis.MARK when no entry_premium set."""
         portfolio = _make_long_put_portfolio()
-        # entry_premium is None by default
-
-        result = compute_crash_convexity(portfolio, shocks=[-25.0])
-
-        assert result.premium_basis == PremiumBasis.CURRENT
+        result = compute_crash_convexity(portfolio)
+        assert result.premium_basis == PremiumBasis.MARK
 
     def test_single_pricing_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Each shock is priced exactly once — no double engine pass."""
+        """Each unique shock in the combined set is priced exactly once."""
         import deltadewa.analysis.crash_payoff as _cp
 
         calls: list[float] = []
-        original = _cp._hedge_pnl_at_shock
+        original = _cp._gross_long_put_payoff
 
-        def counting_hedge_pnl(
+        def counting_gross_payoff(
             portfolio: OptionPortfolio, shock_pct: float,
         ) -> float:
             calls.append(shock_pct)
             return original(portfolio, shock_pct)
 
-        monkeypatch.setattr(_cp, "_hedge_pnl_at_shock", counting_hedge_pnl)
+        monkeypatch.setattr(
+            _cp, "_gross_long_put_payoff", counting_gross_payoff,
+        )
 
         portfolio = _make_long_put_portfolio()
-        shocks = [-10.0, -25.0, -40.0]
-        compute_crash_convexity(portfolio, shocks=shocks)
-
-        assert len(calls) == len(shocks)
+        # n_points=11; linspace(-40,10,11) = -40,-35,...,10 (step 5).
+        # Default scenario shocks -10,-20,-30,-40 are all on the grid,
+        # so combined set = fine_grid only = 11 unique points.
+        n = 11
+        compute_crash_convexity(
+            portfolio, shock_range=(-40.0, 10.0), n_points=n,
+        )
+        assert len(calls) == n
+        assert len(set(calls)) == n
 
 
 class TestShockToMultiplier:
@@ -235,19 +274,20 @@ class TestCrashPayoffRatio:
     """Tests for crash_payoff_ratio."""
 
     def test_known_ratio_against_portfolio_oracle(self) -> None:
-        """Ratio matches the value derived from the portfolio's own methods.
+        """Ratio matches the gross intrinsic formula applied directly.
 
-        Avoids hand-deriving the QuantLib price; uses
-        ``calculate_pnl_at_expiry``/``position_value`` (already tested
-        elsewhere) as the oracle.
+        Uses the gross long-put intrinsic formula as the oracle, which
+        is independent of ``calculate_pnl_at_expiry`` (that function
+        subtracts current mark and includes all legs, not just long puts).
         """
         portfolio = _make_long_put_portfolio()
-        position = portfolio.positions[0]
-        expected_premium = position.position_value()
+        pos = portfolio.positions[0]
+        expected_premium = pos.position_value()  # mark fallback
         crash_spot = portfolio.spot_price * 0.75
-        expected_pnl = portfolio.calculate_pnl_at_expiry(
-            crash_spot,
-            include_underlying=False,
+        expected_pnl = (
+            max(0.0, pos.option.strike_price - crash_spot)
+            * pos.quantity
+            * pos.contract_size
         )
 
         ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0)
@@ -277,12 +317,14 @@ class TestCrashPayoffRatio:
         assert convexity_with_book != 0.0
 
     def test_explicit_premium_overrides_computed_premium(self) -> None:
-        """An explicit premium= bypasses _net_protective_premium."""
+        """An explicit premium= bypasses _premium_with_basis."""
         portfolio = _make_long_put_portfolio()
+        pos = portfolio.positions[0]
         crash_spot = portfolio.spot_price * 0.75
-        expected_pnl = portfolio.calculate_pnl_at_expiry(
-            crash_spot,
-            include_underlying=False,
+        expected_pnl = (
+            max(0.0, pos.option.strike_price - crash_spot)
+            * pos.quantity
+            * pos.contract_size
         )
 
         ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0, premium=500.0)

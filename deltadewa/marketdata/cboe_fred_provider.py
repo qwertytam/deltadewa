@@ -84,6 +84,8 @@ class CboeFredProvider:
     cached value exists, raises ``MarketDataError``.
     """
 
+    is_live: bool = True
+
     def __init__(
         self,
         cache_dir: Path | None = None,
