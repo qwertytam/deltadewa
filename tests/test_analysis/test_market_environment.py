@@ -293,3 +293,41 @@ class TestAssessMarketEnvironment:
             provider, dashboard_config=config,
         )
         assert config_env.hedge_cost_verdict == HedgeCostVerdict.CHEAP
+
+
+class TestDataQualityStatic:
+    """DataQuality.STATIC enum value and provider detection."""
+
+    def test_static_member_exists(self) -> None:
+        """DataQuality.STATIC is a valid member with value 'STATIC'."""
+        assert DataQuality.STATIC == "STATIC"
+
+    def test_static_provider_yields_static_quality(self) -> None:
+        """assess_market_environment returns STATIC for StaticProvider."""
+        from deltadewa.marketdata import StaticProvider
+
+        env = assess_market_environment(StaticProvider())
+        assert env.data_quality == DataQuality.STATIC
+
+    def test_stub_provider_without_hint_yields_live(self) -> None:
+        """A provider with no data_quality_hint attribute returns LIVE."""
+        env = assess_market_environment(_StubProvider())
+        assert env.data_quality == DataQuality.LIVE
+
+    def test_custom_hint_respected(self) -> None:
+        """A provider whose data_quality_hint='STATIC' returns STATIC."""
+
+        class _StaticHintProvider(_StubProvider):
+            data_quality_hint: str = "STATIC"
+
+        env = assess_market_environment(_StaticHintProvider())
+        assert env.data_quality == DataQuality.STATIC
+
+    def test_unknown_hint_falls_back_to_live(self) -> None:
+        """An unrecognised data_quality_hint string defaults to LIVE."""
+
+        class _BadHintProvider(_StubProvider):
+            data_quality_hint: str = "NOT_A_REAL_VALUE"
+
+        env = assess_market_environment(_BadHintProvider())
+        assert env.data_quality == DataQuality.LIVE

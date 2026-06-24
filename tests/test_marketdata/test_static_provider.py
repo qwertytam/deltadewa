@@ -73,3 +73,8 @@ class TestStaticProvider:
         provider = StaticProvider.from_assumptions(assumptions, symbol="SPX")
 
         assert provider.get_spot("SPX") == pytest.approx(4200.0)
+
+    def test_data_quality_hint_is_static(self) -> None:
+        """StaticProvider.data_quality_hint signals STATIC quality."""
+        assert StaticProvider.data_quality_hint == "STATIC"
+        assert StaticProvider().data_quality_hint == "STATIC"

@@ -172,6 +172,7 @@ class PortfolioSerializer:
                 "entry_date": (
                     pos.entry_date.isoformat() if pos.entry_date else None
                 ),
+                "entry_premium": pos.entry_premium,
             }
             data["positions"].append(position_data)
 
@@ -424,6 +425,7 @@ class PortfolioSerializer:
             new_position.entry_date = (
                 dt.fromisoformat(raw_entry_date) if raw_entry_date else None
             )
+            new_position.entry_premium = pos_data.get("entry_premium")
 
         return {
             "portfolio": imported_portfolio,
@@ -506,6 +508,7 @@ class PortfolioSerializer:
             new_position.entry_date = (
                 dt.fromisoformat(raw_entry_date) if raw_entry_date else None
             )
+            new_position.entry_premium = pos_config.get("entry_premium")
 
         return {
             "portfolio": imported_portfolio,

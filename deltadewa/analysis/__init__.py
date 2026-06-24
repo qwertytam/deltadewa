@@ -11,7 +11,10 @@ Date: 2026-01-12
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.crash_payoff import (
+    CrashConvexityResult,
     CrashScenarioRow,
+    PremiumBasis,
+    compute_crash_convexity,
     crash_payoff_ratio,
     crash_scenario_table,
 )
@@ -33,17 +36,20 @@ from deltadewa.analysis.market_environment import (
 from deltadewa.analysis.volatility import get_volatility_stats
 
 __all__ = [
+    "CrashConvexityResult",
     "CrashScenarioRow",
     "DataQuality",
     "HedgeCostVerdict",
     "HedgeTriggerThresholds",
     "MarketEnvironment",
     "PortfolioAnalyzer",
+    "PremiumBasis",
     "RegimeLabel",
     "ScenarioGridCache",
     "TermShape",
     "assess_market_environment",
     "classify_vix_regime",
+    "compute_crash_convexity",
     "crash_payoff_ratio",
     "crash_scenario_table",
     "evaluate_hedge_triggers",

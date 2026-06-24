@@ -45,10 +45,14 @@ class HedgeCostVerdict(StrEnum):
 
 
 class DataQuality(StrEnum):
-    """Whether a ``MarketEnvironment`` reflects live or unavailable data."""
+    """Data quality level of a ``MarketEnvironment``."""
 
     LIVE = "LIVE"
+    """All provider calls returned real-time or near-real-time data."""
+    STATIC = "STATIC"
+    """Provider is backed by fixed/hardcoded values (e.g. StaticProvider)."""
     UNAVAILABLE = "UNAVAILABLE"
+    """Provider failed; all environment fields are ``None``."""
 
 
 @dataclass(frozen=True)
@@ -234,6 +238,23 @@ def _hedge_cost_verdict(
     return HedgeCostVerdict.FAIR
 
 
+def _resolve_data_quality(provider: object) -> DataQuality:
+    """Return the DataQuality hint from *provider*, defaulting to LIVE.
+
+    Providers may expose a ``data_quality_hint: str`` class attribute
+    whose value is a valid ``DataQuality`` member name (e.g.
+    ``StaticProvider.data_quality_hint = "STATIC"``).  Absence or an
+    unrecognised value falls back to ``DataQuality.LIVE``.
+    """
+    hint: object = getattr(provider, "data_quality_hint", None)
+    if isinstance(hint, str):
+        try:
+            return DataQuality(hint)
+        except ValueError:
+            pass
+    return DataQuality.LIVE
+
+
 def assess_market_environment(
     provider: MarketDataProvider,
     *,
@@ -322,5 +343,5 @@ def assess_market_environment(
             skew_label,
             term_shape,
         ),
-        data_quality=DataQuality.LIVE,
+        data_quality=_resolve_data_quality(provider),
     )

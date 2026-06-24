@@ -1,6 +1,6 @@
 """Crash Payoff & Scenario Table display for the options dashboard.
 
-Thin presentation layer over ``analysis.crash_payoff.crash_scenario_table``
+Thin presentation layer over ``analysis.crash_payoff.compute_crash_convexity``
 — all P&L/ratio logic lives there; this module only formats the table.
 """
 
@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from IPython.display import display
 
-from deltadewa.analysis.crash_payoff import crash_scenario_table
+from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.dataframes import apply_table_preset
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from deltadewa.analysis.crash_payoff import CrashScenarioRow
+    from deltadewa.analysis.crash_payoff import CrashConvexityResult
     from deltadewa.ips_config import IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -70,6 +70,12 @@ class CrashPayoffDisplay:
         self._portfolio = portfolio
         self._ips_convexity = ips_convexity
         self._shocks = shocks
+        self._result: CrashConvexityResult | None = None
+
+    @property
+    def result(self) -> CrashConvexityResult | None:
+        """Last computed result, or ``None`` before ``display()`` is called."""
+        return self._result
 
     def display(self) -> None:
         """Print the headline payoff ratio and the styled scenario table."""
@@ -77,12 +83,14 @@ class CrashPayoffDisplay:
             print("No positions in portfolio yet.")
             return
 
-        rows = crash_scenario_table(
+        result = compute_crash_convexity(
             self._portfolio,
             shocks=self._shocks,
             ips_convexity=self._ips_convexity,
         )
-        self._print_headline(rows)
+        self._result = result
+        rows = result.rows
+        self._print_headline(result)
 
         target_shock = (
             f"{self._ips_convexity.crash_scenario_pct:+.0f}%"
@@ -123,21 +131,23 @@ class CrashPayoffDisplay:
 
         display(styled)
 
-    def _print_headline(self, rows: list[CrashScenarioRow]) -> None:
-        if self._ips_convexity is None:
+    def _print_headline(self, result: CrashConvexityResult) -> None:
+        if result.ips_convexity is None or result.headline_row is None:
             print(
                 "No IPS convexity target configured — showing the raw "
                 "scenario ladder only.",
             )
             return
 
-        target_pct = self._ips_convexity.crash_scenario_pct
-        headline = next(row for row in rows if row.shock_pct == target_pct)
+        ips = result.ips_convexity
+        headline = result.headline_row
         verdict = "PASS" if headline.meets_target else "FAIL"
+        basis_note = f" [premium basis: {result.premium_basis}]"
         print(
-            f"Headline payoff ratio at {target_pct:+.0f}% shock: "
+            f"Headline payoff ratio at {ips.crash_scenario_pct:+.0f}% shock: "
             f"{headline.payoff_ratio:.2f}x — {verdict} "
-            f"(target {self._ips_convexity.target_min_pct:.0f}-"
-            f"{self._ips_convexity.target_max_pct:.0f}% convexity, "
-            f"actual {headline.convexity_pct:.1f}%)",
+            f"(target {ips.target_min_pct:.0f}-"
+            f"{ips.target_max_pct:.0f}% convexity, "
+            f"actual {headline.convexity_pct:.1f}%)"
+            f"{basis_note}",
         )
