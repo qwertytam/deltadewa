@@ -18,6 +18,7 @@ class OptionPosition:
         exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
         entry_spot: float | None = None,
         entry_date: dt | None = None,
+        entry_premium: float | None = None,
     ) -> None:
         """Initialize an option position.
 
@@ -32,6 +33,9 @@ class OptionPosition:
             entry_spot: Spot price when this position was entered, or None
             if unknown (e.g. imported from a file predating entry tracking)
             entry_date: Date this position was entered, or None if unknown
+            entry_premium: Per-share option price paid at entry, or None if
+            unknown.  Total cost-basis = entry_premium * abs(quantity) *
+            contract_size.
 
         """
         self.option = option
@@ -41,6 +45,7 @@ class OptionPosition:
         self.exercise_style = exercise_style
         self.entry_spot = entry_spot
         self.entry_date = entry_date
+        self.entry_premium = entry_premium
 
     def position_value(self) -> float:
         """Calculate the total value of the position.
@@ -101,4 +106,5 @@ class OptionPosition:
             "custom_volatility": self.custom_volatility,
             "entry_spot": self.entry_spot,
             "entry_date": self.entry_date,
+            "entry_premium": self.entry_premium,
         }

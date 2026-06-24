@@ -782,3 +782,122 @@ class TestConvenienceFunctions:
 
         assert "portfolio" in result
         assert isinstance(result["portfolio"], OptionPortfolio)
+
+
+# ========== entry_premium Round-Trip Tests ==========
+
+
+class TestEntryPremiumPersistence:
+    """entry_premium survives JSON and YAML export/import round-trips."""
+
+    def _make_portfolio_with_entry_premium(
+        self,
+        entry_premium: float | None = 3.75,
+    ) -> OptionPortfolio:
+        from datetime import UTC, datetime, timedelta
+
+        from deltadewa.constants import ExerciseStyle, OptionType
+
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            risk_free_rate=0.04,
+            dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=60),
+            quantity=5,
+            option_type=OptionType.PUT,
+        )
+        portfolio.positions[-1].entry_premium = entry_premium
+        return portfolio
+
+    def test_json_export_includes_entry_premium(
+        self, tmp_path: Path,
+    ) -> None:
+        """entry_premium appears in the JSON output."""
+        portfolio = self._make_portfolio_with_entry_premium(3.75)
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(
+            portfolio, PortfolioLogger(), "ep.json",
+        )
+        data = json.loads(path.read_text())
+        assert data["positions"][0]["entry_premium"] == pytest.approx(3.75)
+
+    def test_json_export_entry_premium_null_for_legacy(
+        self, tmp_path: Path,
+    ) -> None:
+        """entry_premium exports as null when not set."""
+        portfolio = self._make_portfolio_with_entry_premium(None)
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(
+            portfolio, PortfolioLogger(), "ep_null.json",
+        )
+        data = json.loads(path.read_text())
+        assert data["positions"][0]["entry_premium"] is None
+
+    def test_json_import_restores_entry_premium(
+        self, tmp_path: Path,
+    ) -> None:
+        """Import restores entry_premium from JSON."""
+        portfolio = self._make_portfolio_with_entry_premium(3.75)
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(
+            portfolio, PortfolioLogger(), "ep_rt.json",
+        )
+        result = serializer.import_from_json(path)
+        assert result["portfolio"].positions[0].entry_premium == pytest.approx(
+            3.75,
+        )
+
+    def test_json_import_missing_key_is_none(self, tmp_path: Path) -> None:
+        """Files without entry_premium key import with entry_premium=None."""
+        from datetime import UTC, datetime, timedelta
+
+        path = tmp_path / "legacy.json"
+        maturity = (
+            datetime.now(tz=UTC) + timedelta(days=60)
+        ).isoformat()
+        legacy = {
+            "metadata": {"version": "1.0"},
+            "market_parameters": {
+                "spot_price": 100.0,
+                "volatility": 0.2,
+                "risk_free_rate": 0.04,
+                "dividend_yield": 0.0,
+                "underlying_quantity": 0.0,
+                "symbol": "SPX",
+            },
+            "positions": [
+                {
+                    "option_type": "put",
+                    "strike_price": 100.0,
+                    "maturity_date": maturity,
+                    "quantity": 5,
+                    "contract_size": 100,
+                    "volatility": 0.2,
+                    "custom_volatility": False,
+                },
+            ],
+            "session_changelog": [],
+        }
+        path.write_text(json.dumps(legacy))
+        serializer = PortfolioSerializer(tmp_path)
+        result = serializer.import_from_json(path)
+        assert result["portfolio"].positions[0].entry_premium is None
+
+    @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
+    def test_yaml_round_trip_entry_premium(self, tmp_path: Path) -> None:
+        """entry_premium survives a YAML export/import round-trip."""
+        portfolio = self._make_portfolio_with_entry_premium(2.10)
+        serializer = PortfolioSerializer(tmp_path)
+        yaml_path = serializer.export_to_yaml(
+            portfolio, PortfolioLogger(), "ep_yaml.yaml",
+        )
+        assert yaml_path is not None
+        result = serializer.import_from_yaml(yaml_path)
+        assert result["portfolio"].positions[0].entry_premium == pytest.approx(
+            2.10,
+        )

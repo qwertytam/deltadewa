@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from deltadewa.marketdata._errors import MarketDataUnavailableError
 
@@ -24,7 +24,9 @@ class StaticProvider:
     """No-network ``MarketDataProvider`` backed by explicit values.
 
     Default provider for tests and offline/notebook use — fully
-    deterministic, performs no I/O.
+    deterministic, performs no I/O.  ``assess_market_environment``
+    returns ``DataQuality.STATIC`` for this provider via the
+    ``data_quality_hint`` class attribute.
 
     Attributes:
         spot_prices: Mapping of symbol to spot price.
@@ -35,6 +37,8 @@ class StaticProvider:
             ``get_skew_percentile`` regardless of ``lookback_days``.
 
     """
+
+    data_quality_hint: ClassVar[str] = "STATIC"
 
     spot_prices: dict[str, float] = field(default_factory=dict)
     vix: float = 16.0

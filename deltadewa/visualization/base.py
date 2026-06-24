@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
 
+from deltadewa.visualization.crash_charts import CrashChartsMixin
 from deltadewa.visualization.greeks_charts import GreeksChartsMixin
 from deltadewa.visualization.pnl_charts import PnLChartsMixin
 from deltadewa.visualization.scenarios import ScenarioChartsMixin
@@ -113,6 +114,7 @@ class OptionCharts(
     GreeksChartsMixin,
     ThetaChartsMixin,
     ScenarioChartsMixin,
+    CrashChartsMixin,
     OptionChartsBase,
 ):
     """Comprehensive charting utilities for options portfolio analysis.
@@ -126,6 +128,7 @@ class OptionCharts(
     - GreeksChartsMixin: Greek visualization methods
     - ThetaChartsMixin: Theta and carry analysis charts
     - ScenarioChartsMixin: Scenario analysis visualization
+    - CrashChartsMixin: Crash payoff and convexity charts
     - OptionChartsBase: Core portfolio reference and style setup
 
     Attributes:

@@ -10,8 +10,10 @@ Date: 2026-01-12
 
 from deltadewa.visualization.base import OptionCharts
 from deltadewa.visualization.convenience import plot_greeks_consolidated
+from deltadewa.visualization.crash_charts import plot_crash_convexity
 
 __all__ = [
     "OptionCharts",
+    "plot_crash_convexity",
     "plot_greeks_consolidated",
 ]

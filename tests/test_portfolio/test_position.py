@@ -158,6 +158,53 @@ class TestOptionPosition:
         assert pos_dict["entry_spot"] is None
         assert pos_dict["entry_date"] is None
 
+    def test_entry_premium_none_by_default(self) -> None:
+        """entry_premium defaults to None when not provided."""
+        option = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.PUT,
+        )
+        position = OptionPosition(option=option, quantity=5)
+        assert position.entry_premium is None
+
+    def test_entry_premium_stored_when_given(self) -> None:
+        """entry_premium is stored verbatim and appears in to_dict."""
+        option = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.PUT,
+        )
+        position = OptionPosition(
+            option=option, quantity=5, entry_premium=2.50,
+        )
+        assert position.entry_premium == 2.50
+        assert position.to_dict()["entry_premium"] == 2.50
+
+    def test_entry_premium_none_in_to_dict_for_legacy(self) -> None:
+        """to_dict includes entry_premium key with None for legacy positions."""
+        option = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.PUT,
+        )
+        position = OptionPosition(option=option, quantity=1)
+        d = position.to_dict()
+        assert "entry_premium" in d
+        assert d["entry_premium"] is None
+
     def test_custom_volatility_flag(self) -> None:
         """Test custom_volatility flag."""
         option = OptionValuation(
