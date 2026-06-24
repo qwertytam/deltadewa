@@ -46,6 +46,8 @@ _NEAR_FLAT_TERM = {
 class _StubProvider:
     """Canned-value MarketDataProvider stand-in, no network."""
 
+    is_live: bool = True
+
     def __init__(
         self,
         vix: float = 16.0,
@@ -78,6 +80,8 @@ class _StubProvider:
 
 class _FailingProvider:
     """MarketDataProvider stand-in where every call raises."""
+
+    is_live: bool = True
 
     def get_spot(self, symbol: str) -> float:
         raise MarketDataError(symbol)
@@ -296,7 +300,7 @@ class TestAssessMarketEnvironment:
 
 
 class TestDataQualityStatic:
-    """DataQuality.STATIC enum value and provider detection."""
+    """DataQuality is set via provider.is_live, not duck-typed hints."""
 
     def test_static_member_exists(self) -> None:
         """DataQuality.STATIC is a valid member with value 'STATIC'."""
@@ -309,25 +313,29 @@ class TestDataQualityStatic:
         env = assess_market_environment(StaticProvider())
         assert env.data_quality == DataQuality.STATIC
 
-    def test_stub_provider_without_hint_yields_live(self) -> None:
-        """A provider with no data_quality_hint attribute returns LIVE."""
+    def test_live_stub_yields_live(self) -> None:
+        """A provider with is_live=True returns DataQuality.LIVE."""
         env = assess_market_environment(_StubProvider())
         assert env.data_quality == DataQuality.LIVE
 
-    def test_custom_hint_respected(self) -> None:
-        """A provider whose data_quality_hint='STATIC' returns STATIC."""
+    def test_non_live_stub_yields_static(self) -> None:
+        """A provider with is_live=False returns DataQuality.STATIC."""
 
-        class _StaticHintProvider(_StubProvider):
-            data_quality_hint: str = "STATIC"
+        class _NonLiveStub(_StubProvider):
+            is_live: bool = False
 
-        env = assess_market_environment(_StaticHintProvider())
+        env = assess_market_environment(_NonLiveStub())
         assert env.data_quality == DataQuality.STATIC
 
-    def test_unknown_hint_falls_back_to_live(self) -> None:
-        """An unrecognised data_quality_hint string defaults to LIVE."""
+    def test_erroring_stub_yields_unavailable(self) -> None:
+        """A provider that raises MarketDataError returns UNAVAILABLE."""
+        env = assess_market_environment(_FailingProvider())
+        assert env.data_quality == DataQuality.UNAVAILABLE
 
-        class _BadHintProvider(_StubProvider):
-            data_quality_hint: str = "NOT_A_REAL_VALUE"
+    def test_static_case_populates_fields(self) -> None:
+        """DataQuality.STATIC does not suppress environment fields."""
+        from deltadewa.marketdata import StaticProvider
 
-        env = assess_market_environment(_BadHintProvider())
-        assert env.data_quality == DataQuality.LIVE
+        env = assess_market_environment(StaticProvider())
+        assert env.vix is not None
+        assert env.regime_label is not None

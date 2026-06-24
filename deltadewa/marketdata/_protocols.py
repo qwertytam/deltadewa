@@ -14,6 +14,9 @@ from typing import Protocol
 class MarketDataProvider(Protocol):
     """Structural type for any source of spot/vol/skew market data."""
 
+    is_live: bool
+    """True when the provider fetches real-time / near-real-time data."""
+
     def get_spot(self, symbol: str) -> float:
         """Return the latest spot price for *symbol*."""
 

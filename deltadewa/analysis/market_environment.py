@@ -238,23 +238,6 @@ def _hedge_cost_verdict(
     return HedgeCostVerdict.FAIR
 
 
-def _resolve_data_quality(provider: object) -> DataQuality:
-    """Return the DataQuality hint from *provider*, defaulting to LIVE.
-
-    Providers may expose a ``data_quality_hint: str`` class attribute
-    whose value is a valid ``DataQuality`` member name (e.g.
-    ``StaticProvider.data_quality_hint = "STATIC"``).  Absence or an
-    unrecognised value falls back to ``DataQuality.LIVE``.
-    """
-    hint: object = getattr(provider, "data_quality_hint", None)
-    if isinstance(hint, str):
-        try:
-            return DataQuality(hint)
-        except ValueError:
-            pass
-    return DataQuality.LIVE
-
-
 def assess_market_environment(
     provider: MarketDataProvider,
     *,
@@ -343,5 +326,7 @@ def assess_market_environment(
             skew_label,
             term_shape,
         ),
-        data_quality=_resolve_data_quality(provider),
+        data_quality=(
+            DataQuality.LIVE if provider.is_live else DataQuality.STATIC
+        ),
     )
