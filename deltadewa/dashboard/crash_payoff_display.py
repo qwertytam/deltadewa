@@ -57,6 +57,89 @@ def _highlight_row_factory(
     return _highlight
 
 
+def _print_headline(result: CrashConvexityResult) -> None:
+    """Print the payoff-ratio headline for *result*."""
+    if result.ips_convexity is None or result.payoff_ratio is None:
+        print(
+            "No IPS convexity target configured — showing the raw "
+            "scenario ladder only.",
+        )
+        return
+
+    ips = result.ips_convexity
+    ips_row = next(
+        (r for r in result.scenario_rows
+         if r.shock_pct == ips.crash_scenario_pct),
+        None,
+    )
+    if ips_row is None:
+        return
+    verdict = "PASS" if ips_row.meets_target else "FAIL"
+    basis_note = f" [premium basis: {result.premium_basis}]"
+    print(
+        f"Headline payoff ratio at "
+        f"{ips.crash_scenario_pct:+.0f}% shock: "
+        f"{result.payoff_ratio:.2f}x — {verdict} "
+        f"(target {ips.target_min_pct:.0f}-"
+        f"{ips.target_max_pct:.0f}% convexity, "
+        f"actual {ips_row.convexity_pct:.1f}%)"
+        f"{basis_note}",
+    )
+
+
+def render_crash_table(result: CrashConvexityResult) -> None:
+    """Render the crash payoff scenario table from a pre-computed result.
+
+    Prints the headline payoff-ratio line and displays a styled scenario
+    table.  Does not recompute from the portfolio — consumes *result* only.
+
+    Args:
+        result: Pre-computed crash convexity result.
+
+    """
+    _print_headline(result)
+
+    target_shock = (
+        f"{result.ips_convexity.crash_scenario_pct:+.0f}%"
+        if result.ips_convexity is not None
+        else None
+    )
+    rows = result.scenario_rows
+    df = pd.DataFrame(
+        [
+            {
+                "Shock": f"{row.shock_pct:+.0f}%",
+                "Hedge P&L": row.hedge_pnl,
+                "Payoff Ratio": row.payoff_ratio,
+                "Convexity": row.convexity_pct,
+                "Meets Target": "✓ Pass" if row.meets_target else "✗ Fail",
+            }
+            for row in rows
+        ],
+    )
+
+    styled = df.style.format(
+        {
+            "Hedge P&L": "${:,.0f}",
+            "Payoff Ratio": "{:.2f}x",
+            "Convexity": "{:+.1f}%",
+        },
+    )
+    styled = styled.apply(
+        lambda col: col.map(_pass_fail_color),
+        subset=["Meets Target"],
+    )
+    if target_shock is not None:
+        styled = styled.apply(
+            _highlight_row_factory(target_shock),
+            axis=1,
+        )
+    styled = apply_table_preset(styled, preset="fancy")
+    styled = styled.hide(axis="index")
+
+    display(styled)
+
+
 class CrashPayoffDisplay:
     """Build and display the crash-scenario payoff ladder."""
 
@@ -89,72 +172,4 @@ class CrashPayoffDisplay:
             scenario_shocks=self._shocks,
         )
         self._result = result
-        rows = result.scenario_rows
-        self._print_headline(result)
-
-        target_shock = (
-            f"{self._ips_convexity.crash_scenario_pct:+.0f}%"
-            if self._ips_convexity is not None
-            else None
-        )
-        df = pd.DataFrame(
-            [
-                {
-                    "Shock": f"{row.shock_pct:+.0f}%",
-                    "Hedge P&L": row.hedge_pnl,
-                    "Payoff Ratio": row.payoff_ratio,
-                    "Convexity": row.convexity_pct,
-                    "Meets Target": "✓ Pass" if row.meets_target else "✗ Fail",
-                }
-                for row in rows
-            ],
-        )
-
-        styled = df.style.format(
-            {
-                "Hedge P&L": "${:,.0f}",
-                "Payoff Ratio": "{:.2f}x",
-                "Convexity": "{:+.1f}%",
-            },
-        )
-        styled = styled.apply(
-            lambda col: col.map(_pass_fail_color),
-            subset=["Meets Target"],
-        )
-        if target_shock is not None:
-            styled = styled.apply(
-                _highlight_row_factory(target_shock),
-                axis=1,
-            )
-        styled = apply_table_preset(styled, preset="fancy")
-        styled = styled.hide(axis="index")
-
-        display(styled)
-
-    def _print_headline(self, result: CrashConvexityResult) -> None:
-        if result.ips_convexity is None or result.payoff_ratio is None:
-            print(
-                "No IPS convexity target configured — showing the raw "
-                "scenario ladder only.",
-            )
-            return
-
-        ips = result.ips_convexity
-        ips_row = next(
-            (r for r in result.scenario_rows
-             if r.shock_pct == ips.crash_scenario_pct),
-            None,
-        )
-        if ips_row is None:
-            return
-        verdict = "PASS" if ips_row.meets_target else "FAIL"
-        basis_note = f" [premium basis: {result.premium_basis}]"
-        print(
-            f"Headline payoff ratio at "
-            f"{ips.crash_scenario_pct:+.0f}% shock: "
-            f"{result.payoff_ratio:.2f}x — {verdict} "
-            f"(target {ips.target_min_pct:.0f}-"
-            f"{ips.target_max_pct:.0f}% convexity, "
-            f"actual {ips_row.convexity_pct:.1f}%)"
-            f"{basis_note}",
-        )
+        render_crash_table(result)
