@@ -85,11 +85,11 @@ class CrashPayoffDisplay:
 
         result = compute_crash_convexity(
             self._portfolio,
-            shocks=self._shocks,
             ips_convexity=self._ips_convexity,
+            scenario_shocks=self._shocks,
         )
         self._result = result
-        rows = result.rows
+        rows = result.scenario_rows
         self._print_headline(result)
 
         target_shock = (
@@ -132,7 +132,7 @@ class CrashPayoffDisplay:
         display(styled)
 
     def _print_headline(self, result: CrashConvexityResult) -> None:
-        if result.ips_convexity is None or result.headline_row is None:
+        if result.ips_convexity is None or result.payoff_ratio is None:
             print(
                 "No IPS convexity target configured — showing the raw "
                 "scenario ladder only.",
@@ -140,14 +140,21 @@ class CrashPayoffDisplay:
             return
 
         ips = result.ips_convexity
-        headline = result.headline_row
-        verdict = "PASS" if headline.meets_target else "FAIL"
+        ips_row = next(
+            (r for r in result.scenario_rows
+             if r.shock_pct == ips.crash_scenario_pct),
+            None,
+        )
+        if ips_row is None:
+            return
+        verdict = "PASS" if ips_row.meets_target else "FAIL"
         basis_note = f" [premium basis: {result.premium_basis}]"
         print(
-            f"Headline payoff ratio at {ips.crash_scenario_pct:+.0f}% shock: "
-            f"{headline.payoff_ratio:.2f}x — {verdict} "
+            f"Headline payoff ratio at "
+            f"{ips.crash_scenario_pct:+.0f}% shock: "
+            f"{result.payoff_ratio:.2f}x — {verdict} "
             f"(target {ips.target_min_pct:.0f}-"
             f"{ips.target_max_pct:.0f}% convexity, "
-            f"actual {headline.convexity_pct:.1f}%)"
+            f"actual {ips_row.convexity_pct:.1f}%)"
             f"{basis_note}",
         )

@@ -29,7 +29,7 @@ def _plot_payoff_ratio_panel(
         result: Pre-computed crash convexity result.
 
     """
-    if not result.rows:
+    if not result.curve:
         ax.set_title("Payoff Ratio")
         ax.text(
             0.5,
@@ -46,18 +46,22 @@ def _plot_payoff_ratio_panel(
         if result.ips_convexity is not None
         else None
     )
-    xs = [row.shock_pct for row in result.rows]
-    ys = [row.payoff_ratio for row in result.rows]
+    premium = result.premium_paid
+    xs_curve = [s for s, _ in result.curve]
+    ys_curve = [
+        gp / premium if premium > 0 else 0.0
+        for _, gp in result.curve
+    ]
 
     ax.plot(
-        xs,
-        ys,
+        xs_curve,
+        ys_curve,
         color=DEFAULT_PALETTE.call,
         linewidth=1.8,
         zorder=2,
     )
 
-    for row in result.rows:
+    for row in result.scenario_rows:
         is_ips = row.shock_pct == ips_shock
         ax.scatter(
             [row.shock_pct],
@@ -105,7 +109,7 @@ def _plot_convexity_panel(
         result: Pre-computed crash convexity result.
 
     """
-    if not result.rows:
+    if not result.scenario_rows:
         ax.set_title("Convexity %")
         ax.text(
             0.5,
@@ -117,13 +121,13 @@ def _plot_convexity_panel(
         )
         return
 
-    xs = [row.shock_pct for row in result.rows]
-    heights = [row.convexity_pct for row in result.rows]
+    xs = [row.shock_pct for row in result.scenario_rows]
+    heights = [row.convexity_pct for row in result.scenario_rows]
     colors = [
         DEFAULT_PALETTE.positive
         if row.meets_target
         else DEFAULT_PALETTE.negative
-        for row in result.rows
+        for row in result.scenario_rows
     ]
 
     width = min(abs(xs[0] - xs[1]) * 0.6, 4.0) if len(xs) > 1 else 4.0

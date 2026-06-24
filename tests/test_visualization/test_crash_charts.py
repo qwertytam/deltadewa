@@ -44,9 +44,10 @@ def _make_long_put_portfolio(
 
 def _empty_result() -> CrashConvexityResult:
     return CrashConvexityResult(
-        rows=[],
-        headline_row=None,
-        premium=0.0,
+        curve=[],
+        scenario_rows=[],
+        payoff_ratio=None,
+        premium_paid=0.0,
         premium_basis=PremiumBasis.MARK,
         ips_convexity=None,
     )
@@ -58,9 +59,7 @@ class TestPlotCrashConvexity:
     def test_returns_figure_with_two_axes(self) -> None:
         """plot_crash_convexity returns a Figure with exactly 2 Axes."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(
-            portfolio, shocks=[-10.0, -20.0, -30.0],
-        )
+        result = compute_crash_convexity(portfolio)
 
         fig = plot_crash_convexity(result)
         try:
@@ -76,9 +75,7 @@ class TestPlotCrashConvexity:
             target_min_pct=2.0,
             target_max_pct=10.0,
         )
-        result = compute_crash_convexity(
-            portfolio, shocks=[-10.0, -20.0, -30.0], ips_convexity=ips,
-        )
+        result = compute_crash_convexity(portfolio, ips_convexity=ips)
 
         fig = plot_crash_convexity(result)
         try:
@@ -112,7 +109,7 @@ class TestPlotCrashConvexity:
 
         portfolio = _make_long_put_portfolio()
         charts = OptionCharts(portfolio)
-        result = compute_crash_convexity(portfolio, shocks=[-20.0])
+        result = compute_crash_convexity(portfolio)
 
         fig = charts.plot_crash_convexity(result)
         try:

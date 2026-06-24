@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
 
@@ -27,6 +29,9 @@ if TYPE_CHECKING:
 
     from deltadewa.ips_config import IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
+
+
+_DEFAULT_SCENARIO_SHOCKS: tuple[float, ...] = (-10.0, -20.0, -30.0, -40.0)
 
 
 class PremiumBasis(StrEnum):
@@ -46,21 +51,27 @@ class CrashConvexityResult:
     crash convexity chart — prices each shock exactly once.
 
     Attributes:
-        rows: Full payoff ladder, mild to severe (same shape as
-            ``crash_scenario_table`` returns).
-        headline_row: The row at ``ips_convexity.crash_scenario_pct``,
-            or ``None`` when no *ips_convexity* was supplied.
-        premium: Total put premium used as the payoff-ratio denominator
-            (dollars).
-        premium_basis: Whether *premium* came from ``entry_premium``
+        curve: Fine-grid payoff curve, ``n_points`` evenly-spaced
+            ``(shock_pct, gross_payoff)`` pairs sorted ascending by
+            shock_pct (severe to mild).  Used for the smooth left-panel
+            line in the chart.
+        scenario_rows: Discrete payoff ladder at standard shocks plus the
+            IPS crash point, sorted mild to severe.  Used for the table
+            widget and the right-panel bar chart.
+        payoff_ratio: Gross payoff at ``ips_convexity.crash_scenario_pct``
+            divided by ``premium_paid``.  ``None`` when no *ips_convexity*
+            was supplied or when premium is zero.
+        premium_paid: Total put premium used as the denominator (dollars).
+        premium_basis: Whether *premium_paid* came from ``entry_premium``
             fields or the current mark.
         ips_convexity: The ``IpsConvexity`` target used, or ``None``.
 
     """
 
-    rows: list[CrashScenarioRow]
-    headline_row: CrashScenarioRow | None
-    premium: float
+    curve: list[tuple[float, float]]
+    scenario_rows: list[CrashScenarioRow]
+    payoff_ratio: float | None
+    premium_paid: float
     premium_basis: PremiumBasis
     ips_convexity: IpsConvexity | None
 
@@ -208,132 +219,138 @@ def crash_payoff_ratio(
     return _gross_long_put_payoff(portfolio, crash_pct) / premium
 
 
+def compute_crash_convexity(
+    portfolio: OptionPortfolio,
+    *,
+    shock_range: tuple[float, float] = (-40.0, 10.0),
+    n_points: int = 51,
+    ips_convexity: IpsConvexity | None = None,
+    scenario_shocks: Sequence[float] | None = None,
+) -> CrashConvexityResult:
+    """Build a gross-payoff curve once and sample scenario rows from it.
+
+    Prices each grid point exactly once via ``_gross_long_put_payoff``,
+    then:
+
+    - exposes the full fine grid as ``result.curve`` for smooth chart
+      rendering;
+    - samples ``result.scenario_rows`` at the standard shock points
+      (by default ``_DEFAULT_SCENARIO_SHOCKS``) plus the IPS crash
+      scenario, without re-calling the payoff helper.
+
+    Args:
+        portfolio: Portfolio to evaluate.
+        shock_range: (min_shock_pct, max_shock_pct) bounding the grid.
+        n_points: Number of evenly-spaced points in the fine grid.
+        ips_convexity: IPS convexity target.  When supplied the IPS
+            crash scenario is guaranteed to appear in both the grid and
+            ``scenario_rows``, and ``payoff_ratio`` is populated.
+        scenario_shocks: Explicit shocks to include in
+            ``scenario_rows``.  ``None`` uses
+            ``_DEFAULT_SCENARIO_SHOCKS`` filtered to ``shock_range``.
+
+    Returns:
+        ``CrashConvexityResult`` with curve, scenario_rows,
+        payoff_ratio, premium_paid, premium_basis, and ips_convexity.
+
+    """
+    premium_paid, premium_basis = _premium_with_basis(portfolio)
+
+    # Fine grid (rounded to avoid float-key mismatches).
+    lo, hi = shock_range
+    fine_grid: set[float] = {
+        round(float(s), 6)
+        for s in np.linspace(lo, hi, n_points)
+    }
+
+    # Resolved scenario shocks (within range or explicit overrides).
+    if scenario_shocks is None:
+        s_shocks: set[float] = {
+            s for s in _DEFAULT_SCENARIO_SHOCKS if lo <= s <= hi
+        }
+    else:
+        s_shocks = {round(float(s), 6) for s in scenario_shocks}
+
+    # IPS crash point is always present in both sets when supplied.
+    ips_shock: float | None = None
+    if ips_convexity is not None:
+        ips_shock = round(ips_convexity.crash_scenario_pct, 6)
+        s_shocks.add(ips_shock)
+        fine_grid.add(ips_shock)
+
+    # Single pass: price every unique shock point once.
+    all_shocks = fine_grid | s_shocks
+    payoff_dict: dict[float, float] = {
+        s: _gross_long_put_payoff(portfolio, s) for s in all_shocks
+    }
+
+    # Curve — fine grid only, sorted ascending (severe left to mild right).
+    curve: list[tuple[float, float]] = [
+        (s, payoff_dict[s]) for s in sorted(fine_grid)
+    ]
+
+    # Scenario rows — sampled from payoff_dict, sorted mild to severe.
+    analyzer = PortfolioAnalyzer(portfolio)
+    scenario_rows: list[CrashScenarioRow] = []
+    for shock_pct in sorted(s_shocks, reverse=True):
+        hedge_pnl = payoff_dict[shock_pct]
+        ratio = hedge_pnl / premium_paid if premium_paid > 0 else 0.0
+        convexity_pct = analyzer.calculate_crash_convexity_pct(
+            crash_pct=_shock_to_multiplier(shock_pct),
+        )
+        meets_target = (
+            ips_convexity.target_min_pct
+            <= convexity_pct
+            <= ips_convexity.target_max_pct
+            if ips_convexity is not None
+            else False
+        )
+        scenario_rows.append(
+            CrashScenarioRow(
+                shock_pct=shock_pct,
+                hedge_pnl=hedge_pnl,
+                payoff_ratio=ratio,
+                convexity_pct=convexity_pct,
+                meets_target=meets_target,
+            ),
+        )
+
+    # Headline payoff ratio at the IPS crash shock.
+    payoff_ratio: float | None = None
+    if ips_shock is not None and premium_paid > 0:
+        payoff_ratio = payoff_dict[ips_shock] / premium_paid
+
+    return CrashConvexityResult(
+        curve=curve,
+        scenario_rows=scenario_rows,
+        payoff_ratio=payoff_ratio,
+        premium_paid=premium_paid,
+        premium_basis=premium_basis,
+        ips_convexity=ips_convexity,
+    )
+
+
 def crash_scenario_table(
     portfolio: OptionPortfolio,
     *,
     shocks: Sequence[float],
     ips_convexity: IpsConvexity | None = None,
 ) -> list[CrashScenarioRow]:
-    """Build a crash-scenario payoff ladder, mild to severe.
+    """Return discrete scenario rows; thin wrapper over compute_crash_convexity.
 
     Args:
         portfolio: Portfolio to evaluate.
         shocks: Signed shock percents (e.g. [-10.0, -25.0]).
-        ips_convexity: If supplied, ``crash_scenario_pct`` is added to
-            the ladder if not already present, and ``meets_target`` is
-            set from ``target_min_pct <= convexity_pct <= target_max_pct``
-            (inclusive, matching ``roll_status.py``'s HOLD-band
-            convention). Without it, every row's ``meets_target`` is
-            False — there's no target to evaluate against.
+            ``ips_convexity.crash_scenario_pct`` is added automatically
+            when not already present.
+        ips_convexity: IPS convexity target; sets ``meets_target`` flags.
 
     Returns:
-        One ``CrashScenarioRow`` per shock, sorted from mild to severe.
+        One ``CrashScenarioRow`` per shock, sorted mild to severe.
 
     """
-    all_shocks = set(shocks)
-    if ips_convexity is not None:
-        all_shocks.add(ips_convexity.crash_scenario_pct)
-
-    premium, _ = _premium_with_basis(portfolio)
-    analyzer = PortfolioAnalyzer(portfolio)
-
-    rows = []
-    for shock_pct in sorted(all_shocks, reverse=True):
-        hedge_pnl = _gross_long_put_payoff(portfolio, shock_pct)
-        ratio = hedge_pnl / premium if premium > 0 else 0.0
-        convexity_pct = analyzer.calculate_crash_convexity_pct(
-            crash_pct=_shock_to_multiplier(shock_pct),
-        )
-        meets_target = (
-            ips_convexity.target_min_pct
-            <= convexity_pct
-            <= ips_convexity.target_max_pct
-            if ips_convexity is not None
-            else False
-        )
-        rows.append(
-            CrashScenarioRow(
-                shock_pct=shock_pct,
-                hedge_pnl=hedge_pnl,
-                payoff_ratio=ratio,
-                convexity_pct=convexity_pct,
-                meets_target=meets_target,
-            ),
-        )
-    return rows
-
-
-def compute_crash_convexity(
-    portfolio: OptionPortfolio,
-    *,
-    shocks: Sequence[float],
-    ips_convexity: IpsConvexity | None = None,
-) -> CrashConvexityResult:
-    """Single-pass crash payoff and convexity computation.
-
-    Prices each shock once and returns a shared value object consumed
-    by both the table widget and the crash convexity chart.  The
-    premium basis (entry cost or current mark) is determined once and
-    recorded on the result.
-
-    Prefer this over calling ``crash_scenario_table`` and
-    ``crash_payoff_ratio`` separately — both trigger the pricing engine
-    for every shock, so combining them saves a full pass per shock.
-
-    Args:
-        portfolio: Portfolio to evaluate.
-        shocks: Signed shock percents (e.g. [-10.0, -25.0]).
-        ips_convexity: IPS convexity target.  When supplied,
-            ``crash_scenario_pct`` is added to the ladder if absent and
-            ``headline_row`` is populated.
-
-    Returns:
-        ``CrashConvexityResult`` with rows, headline, premium, and basis.
-
-    """
-    all_shocks = set(shocks)
-    if ips_convexity is not None:
-        all_shocks.add(ips_convexity.crash_scenario_pct)
-
-    premium, premium_basis = _premium_with_basis(portfolio)
-    analyzer = PortfolioAnalyzer(portfolio)
-
-    rows: list[CrashScenarioRow] = []
-    for shock_pct in sorted(all_shocks, reverse=True):
-        hedge_pnl = _gross_long_put_payoff(portfolio, shock_pct)
-        ratio = hedge_pnl / premium if premium > 0 else 0.0
-        convexity_pct = analyzer.calculate_crash_convexity_pct(
-            crash_pct=_shock_to_multiplier(shock_pct),
-        )
-        meets_target = (
-            ips_convexity.target_min_pct
-            <= convexity_pct
-            <= ips_convexity.target_max_pct
-            if ips_convexity is not None
-            else False
-        )
-        rows.append(
-            CrashScenarioRow(
-                shock_pct=shock_pct,
-                hedge_pnl=hedge_pnl,
-                payoff_ratio=ratio,
-                convexity_pct=convexity_pct,
-                meets_target=meets_target,
-            ),
-        )
-
-    headline_row: CrashScenarioRow | None = None
-    if ips_convexity is not None:
-        headline_row = next(
-            row
-            for row in rows
-            if row.shock_pct == ips_convexity.crash_scenario_pct
-        )
-
-    return CrashConvexityResult(
-        rows=rows,
-        headline_row=headline_row,
-        premium=premium,
-        premium_basis=premium_basis,
+    return compute_crash_convexity(
+        portfolio,
         ips_convexity=ips_convexity,
-    )
+        scenario_shocks=shocks,
+    ).scenario_rows
