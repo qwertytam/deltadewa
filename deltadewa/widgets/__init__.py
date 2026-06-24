@@ -27,6 +27,7 @@ Usage:
 from deltadewa.widgets.assumptions import GlobalAssumptions
 from deltadewa.widgets.base import InteractiveOutput
 from deltadewa.widgets.convenience import link_portfolio_to_assumptions
+from deltadewa.widgets.env_gauges import build_env_gauges
 from deltadewa.widgets.export_controls import ExportControlsMixin
 from deltadewa.widgets.gauges import GaugeIndicator
 from deltadewa.widgets.health_dashboard import (
@@ -47,5 +48,6 @@ __all__ = [
     "InteractiveOutput",
     "NetHedgeSummary",
     "PortfolioWidgets",
+    "build_env_gauges",
     "link_portfolio_to_assumptions",
 ]
