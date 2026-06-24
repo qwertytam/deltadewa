@@ -157,11 +157,15 @@ class TestPlotCarryVsConvexity:
 
     def test_plotted_point_matches_inputs(self) -> None:
         """Scatter point coordinates match carry_cost and convexity_pct."""
+        import numpy as np
+
         cost, conv = -42_000.0, 7.3
         fig = plot_carry_vs_convexity(carry_cost=cost, convexity_pct=conv)
         try:
             ax = fig.axes[0]
-            offsets = ax.collections[0].get_offsets()
+            offsets: np.ndarray = np.asarray(
+                ax.collections[0].get_offsets(),
+            )
             assert offsets[0][0] == pytest.approx(conv)
             assert offsets[0][1] == pytest.approx(cost)
         finally:
