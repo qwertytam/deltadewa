@@ -8,7 +8,6 @@ import pytest
 
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
-    _intrinsic_at_crash,
     required_crash_offset,
     size_from_unit,
     size_hedge,
@@ -332,24 +331,3 @@ class TestSizeHedge:
         assert result.book_notional == pytest.approx(0.0)
         assert result.required_crash_offset == pytest.approx(0.0)
         assert result.achieved_convexity_pct == pytest.approx(0.0)
-
-
-# ---------------------------------------------------------------------------
-# _intrinsic_at_crash (internal helper)
-# ---------------------------------------------------------------------------
-
-
-class TestIntrinsicAtCrash:
-    """Tests for the _intrinsic_at_crash helper."""
-
-    def test_in_the_money_at_crash(self) -> None:
-        """Put is ITM at crash → positive intrinsic."""
-        assert _intrinsic_at_crash(4750.0, 3750.0) == pytest.approx(1000.0)
-
-    def test_out_of_money_at_crash(self) -> None:
-        """Put is OTM at crash → zero (floors at 0)."""
-        assert _intrinsic_at_crash(3000.0, 3750.0) == pytest.approx(0.0)
-
-    def test_at_the_money_at_crash(self) -> None:
-        """Put is ATM at crash → zero intrinsic."""
-        assert _intrinsic_at_crash(3750.0, 3750.0) == pytest.approx(0.0)
