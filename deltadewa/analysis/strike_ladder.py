@@ -100,7 +100,7 @@ def strike_for_delta(
     target_delta: float,
     maturity_years: float,
     vol: float | None = None,
-) -> float:
+) -> float | None:
     """Find the strike whose put-delta magnitude equals *target_delta*.
 
     Uses :func:`scipy.optimize.brentq` on the bracket
@@ -120,12 +120,14 @@ def strike_for_delta(
             ``portfolio.volatility`` when ``None``.
 
     Returns:
-        Strike price (float) at which ``|put_delta| ≈ target_delta``.
+        Strike price (float) at which ``|put_delta| ≈ target_delta``, or
+        ``None`` when the target falls outside the solvable OTM range
+        (e.g. *target_delta* ≥ 0.5).
 
     Raises:
-        ValueError: When *target_delta* is non-positive, or when the solved
-            delta cannot be found within the search bracket (e.g. target ≥ 0.5
-            requires an ITM or ATM put outside the OTM range).
+        ValueError: Only when *target_delta* is non-positive (programmer
+            error).  Out-of-range or unsolvable targets return ``None``
+            instead.
 
     """
     if target_delta <= 0.0:
@@ -161,20 +163,8 @@ def strike_for_delta(
     f_lo = abs(_put_delta_at(lo)) - target_delta
     f_hi = abs(_put_delta_at(hi)) - target_delta
 
-    if f_lo >= 0.0:
-        msg = (
-            f"target_delta={target_delta!r} is too small: even the deepest "
-            f"OTM strike in the search bracket (spot x 0.40) has "
-            f"|delta| ≥ target_delta."
-        )
-        raise ValueError(msg)
-    if f_hi <= 0.0:
-        msg = (
-            f"target_delta={target_delta!r} is too large: the near-ATM "
-            f"strike in the search bracket (spot x 0.9999) has "
-            f"|delta| ≤ target_delta.  Use a target < 0.5."
-        )
-        raise ValueError(msg)
+    if f_lo >= 0.0 or f_hi <= 0.0:
+        return None
 
     try:
         return float(
@@ -186,12 +176,8 @@ def strike_for_delta(
                 maxiter=100,
             ),
         )
-    except ValueError as exc:
-        msg = (
-            f"brentq failed to converge for target_delta={target_delta!r}, "
-            f"maturity_years={maturity_years!r}: {exc}"
-        )
-        raise ValueError(msg) from exc
+    except ValueError:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +242,8 @@ def build_strike_ladder(
             maturity_years=maturity,
             vol=vol,
         )
+        if strike is None:
+            continue
         metrics = evaluate_candidate(
             portfolio,
             strike=strike,

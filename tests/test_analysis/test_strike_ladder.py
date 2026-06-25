@@ -96,6 +96,7 @@ class TestStrikeForDelta:
         strike = strike_for_delta(
             portfolio, target_delta=0.10, maturity_years=0.25,
         )
+        assert strike is not None
         assert strike < portfolio.spot_price
 
     def test_delta_magnitude_matches_target(self) -> None:
@@ -107,6 +108,7 @@ class TestStrikeForDelta:
         strike = strike_for_delta(
             portfolio, target_delta=target, maturity_years=0.25,
         )
+        assert strike is not None
         metrics = evaluate_candidate(
             portfolio,
             strike=strike,
@@ -124,6 +126,8 @@ class TestStrikeForDelta:
         strike_15 = strike_for_delta(
             portfolio, target_delta=0.15, maturity_years=0.25,
         )
+        assert strike_05 is not None
+        assert strike_15 is not None
         assert strike_15 > strike_05
 
     def test_vol_override_accepted(self) -> None:
@@ -132,6 +136,7 @@ class TestStrikeForDelta:
         strike = strike_for_delta(
             portfolio, target_delta=0.10, maturity_years=0.25, vol=0.25,
         )
+        assert strike is not None
         assert strike > 0.0
 
     def test_nonpositive_target_delta_raises(self) -> None:
@@ -150,13 +155,24 @@ class TestStrikeForDelta:
                 portfolio, target_delta=-0.05, maturity_years=0.25,
             )
 
-    def test_target_delta_too_large_raises(self) -> None:
-        """target_delta >= 0.5 raises ValueError (outside OTM bracket)."""
+    def test_no_solution_returns_none(self) -> None:
+        """target_delta >= 0.5 returns None — no OTM solution, no raise."""
         portfolio = _make_spx_portfolio()
-        with pytest.raises(ValueError):
-            strike_for_delta(
-                portfolio, target_delta=0.50, maturity_years=0.25,
-            )
+        result = strike_for_delta(
+            portfolio, target_delta=0.50, maturity_years=0.25,
+        )
+        assert result is None
+
+    def test_priced_european(self) -> None:
+        """Solver uses European exercise (portfolio.default_exercise_style)."""
+        portfolio = _make_spx_portfolio(
+            exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        result = strike_for_delta(
+            portfolio, target_delta=0.10, maturity_years=0.25,
+        )
+        assert result is not None
+        assert result < portfolio.spot_price
 
 
 # ---------------------------------------------------------------------------
@@ -278,3 +294,77 @@ class TestBuildStrikeLadder:
         )
         expected_budget = 2.0 / 100.0 * (5000.0 * 100.0)
         assert result[0].carry_budget == pytest.approx(expected_budget)
+
+    def test_rung_agrees_with_direct_helpers(self) -> None:
+        """Rung fields agree with evaluate_candidate + size_from_unit."""
+        from deltadewa.analysis.candidate import evaluate_candidate
+        from deltadewa.analysis.sizing import (
+            required_crash_offset,
+            size_from_unit,
+        )
+
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        ips = _make_ips(
+            annual_carry_pct=2.0,
+            crash_scenario_pct=-25.0,
+            max_tolerance_pct=20.0,
+        )
+        result = build_strike_ladder(
+            portfolio,
+            ips,
+            target_deltas=[0.10],
+            maturities_years=[0.25],
+        )
+        assert len(result) == 1
+        rung = result[0]
+
+        # Re-derive from shared helpers using the rung's solved strike.
+        book_notional = 100.0 * 5000.0
+        carry_budget = 2.0 / 100.0 * book_notional
+        crash_pct = -25.0
+        metrics = evaluate_candidate(
+            portfolio,
+            strike=rung.metrics.strike,
+            maturity_years=0.25,
+            crash_pct=crash_pct,
+        )
+        offset = required_crash_offset(book_notional, crash_pct, 20.0)
+        contracts, carry, within, headroom, _max = size_from_unit(
+            offset,
+            metrics.per_contract_payoff,
+            metrics.per_contract_carry,
+            carry_budget,
+        )
+
+        assert rung.metrics.put_delta == pytest.approx(metrics.put_delta)
+        assert rung.metrics.per_contract_carry == pytest.approx(
+            metrics.per_contract_carry,
+        )
+        assert rung.contracts_needed == contracts
+        assert rung.implied_annual_carry == pytest.approx(carry)
+        assert rung.within_budget == within
+        assert rung.carry_headroom == pytest.approx(headroom)
+
+    def test_no_solution_rung_skipped(self) -> None:
+        """Unsolvable target_delta produces no rung — no raise."""
+        portfolio = _make_spx_portfolio()
+        ips = _make_ips()
+        result = build_strike_ladder(
+            portfolio,
+            ips,
+            target_deltas=[0.50],
+            maturities_years=[0.25],
+        )
+        assert result == []
+
+    def test_empty_portfolio_no_raise(self) -> None:
+        """Portfolio with zero underlying_quantity raises no exception."""
+        portfolio = _make_spx_portfolio(qty=0.0)
+        ips = _make_ips()
+        result = build_strike_ladder(
+            portfolio,
+            ips,
+            target_deltas=[0.10],
+            maturities_years=[0.25],
+        )
+        assert isinstance(result, list)
