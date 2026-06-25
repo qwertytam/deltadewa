@@ -14,7 +14,8 @@ Implements the 5-step IPS-driven sizing framework:
 
 ``required_crash_offset`` and ``size_from_unit`` work on plain scalars
 and are independently unit-testable without any pricing dependency.
-``size_hedge`` wraps them with a single ``OptionValuation`` call.
+``size_hedge`` wraps them via
+:func:`~deltadewa.analysis.candidate.evaluate_candidate`.
 """
 
 from __future__ import annotations
@@ -22,20 +23,13 @@ from __future__ import annotations
 import math
 import sys
 from dataclasses import dataclass
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from deltadewa import constants as const
-from deltadewa.constants import OptionType
-from deltadewa.valuation import OptionValuation
+from deltadewa.analysis.candidate import evaluate_candidate
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
-
-_CONTRACT_SIZE: int = 100
-"""Standard US equity-index option contract multiplier (100 units)."""
-
 
 # ---------------------------------------------------------------------------
 # Dataclass
@@ -184,16 +178,6 @@ def size_from_unit(
 # ---------------------------------------------------------------------------
 
 
-def _intrinsic_at_crash(strike: float, crash_spot: float) -> float:
-    """Intrinsic put value per unit at the crash spot.
-
-    Shares the same formula as ``crash_payoff._gross_long_put_payoff``:
-    intrinsic-at-expiry under flat vol (conservative; excludes time value).
-
-    """
-    return max(0.0, strike - crash_spot)
-
-
 def size_hedge(
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
@@ -204,10 +188,9 @@ def size_hedge(
 ) -> HedgeSizingResult:
     """Size a candidate put against the IPS risk-budget constraints.
 
-    Prices one ``OptionValuation`` for the candidate put using
-    ``portfolio.default_exercise_style``; derives per-contract payoff from
-    intrinsic value at the IPS crash spot and per-contract carry from theta,
-    then delegates to ``size_from_unit`` for the scalar arithmetic.
+    Derives the strike from *candidate_pct_otm*, delegates per-contract
+    pricing to :func:`~deltadewa.analysis.candidate.evaluate_candidate`, then
+    calls :func:`size_from_unit` for the scalar arithmetic.
 
     Args:
         portfolio: Live portfolio; supplies spot, vol, rate, div, exercise
@@ -234,28 +217,12 @@ def size_hedge(
     )
 
     strike = portfolio.spot_price * (1.0 - candidate_pct_otm / 100.0)
-    crash_spot = portfolio.spot_price * (1.0 + crash_pct / 100.0)
-    per_contract_payoff = (
-        _intrinsic_at_crash(strike, crash_spot) * _CONTRACT_SIZE
-    )
-
-    maturity_date = portfolio.valuation_date + timedelta(
-        days=round(candidate_maturity_years * const.DAYS_PER_YEAR),
-    )
-    valuation = OptionValuation(
-        spot_price=portfolio.spot_price,
-        strike_price=strike,
-        maturity_date=maturity_date,
-        volatility=vol if vol is not None else portfolio.volatility,
-        risk_free_rate=portfolio.risk_free_rate,
-        dividend_yield=portfolio.dividend_yield,
-        option_type=OptionType.PUT,
-        exercise_style=portfolio.default_exercise_style,
-    )
-    # theta() is $/day per unit, negative for long put — take magnitude and
-    # annualise on the 365-calendar-day basis that carry.py uses
-    per_contract_carry = (
-        abs(valuation.theta()) * const.DAYS_PER_YEAR * _CONTRACT_SIZE
+    metrics = evaluate_candidate(
+        portfolio,
+        strike=strike,
+        maturity_years=candidate_maturity_years,
+        crash_pct=crash_pct,
+        vol=vol,
     )
 
     (
@@ -265,10 +232,13 @@ def size_hedge(
         carry_headroom,
         max_affordable,
     ) = size_from_unit(
-        offset, per_contract_payoff, per_contract_carry, carry_budget,
+        offset,
+        metrics.per_contract_payoff,
+        metrics.per_contract_carry,
+        carry_budget,
     )
 
-    achieved_payoff = contracts_needed * per_contract_payoff
+    achieved_payoff = contracts_needed * metrics.per_contract_payoff
     achieved_convexity_pct = (
         achieved_payoff / book_notional * 100.0 if book_notional > 0.0 else 0.0
     )
@@ -283,8 +253,8 @@ def size_hedge(
         book_notional=book_notional,
         carry_budget=carry_budget,
         required_crash_offset=offset,
-        per_contract_payoff=per_contract_payoff,
-        per_contract_carry=per_contract_carry,
+        per_contract_payoff=metrics.per_contract_payoff,
+        per_contract_carry=metrics.per_contract_carry,
         contracts_needed=contracts_needed,
         implied_annual_carry=implied_annual_carry,
         within_budget=within_budget,
