@@ -33,6 +33,12 @@ from deltadewa.analysis.market_environment import (
     forward_vol,
     term_structure_shape,
 )
+from deltadewa.analysis.sizing import (
+    HedgeSizingResult,
+    required_crash_offset,
+    size_from_unit,
+    size_hedge,
+)
 from deltadewa.analysis.volatility import get_volatility_stats
 
 __all__ = [
@@ -40,6 +46,7 @@ __all__ = [
     "CrashScenarioRow",
     "DataQuality",
     "HedgeCostVerdict",
+    "HedgeSizingResult",
     "HedgeTriggerThresholds",
     "MarketEnvironment",
     "PortfolioAnalyzer",
@@ -55,5 +62,8 @@ __all__ = [
     "evaluate_hedge_triggers",
     "forward_vol",
     "get_volatility_stats",
+    "required_crash_offset",
+    "size_from_unit",
+    "size_hedge",
     "term_structure_shape",
 ]
