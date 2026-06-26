@@ -108,3 +108,51 @@ sufficiency, delta drift, etc.).
 
 Presets live in `examples/dashboard/`. See
 [dashboard-config-guide.md](dashboard-config-guide.md) for the schema.
+
+## Live market data
+
+By default both notebooks use **static/offline data** seeded from the
+loaded portfolio's own values. No network calls are made in this mode and
+offline/gated runs are fully deterministic.
+
+To pull live end-of-day data, set the toggle near the top of the setup
+cell before running `start_session`:
+
+```python
+_USE_LIVE = True   # set True for live CBOE/FRED market data (needs internet)
+```
+
+### Endpoints
+
+Two public endpoints are used — no API key required:
+
+| Source | Host | Data |
+| --- | --- | --- |
+| CBOE CDN | `cdn.cboe.com` | SPX, VIX9D/VIX/VIX3M/VIX6M/VIX1Y, SKEW (daily CSV) |
+| FRED | `fred.stlouisfed.org` | VIXCLS series (daily CSV) |
+
+Data is delayed/end-of-day, not real-time. Check CBOE's and FRED's own
+terms before redistributing pulled values outside this session.
+
+### Disk cache and TTL
+
+`CboeFredProvider` caches each successful response to disk
+(`~/.cache/deltadewa/marketdata/` by default) with a **15-minute TTL**
+per endpoint. A fresh entry within that window is served from cache with
+no HTTP request. On network failure the provider falls back to the last
+cached value (regardless of TTL); if no cached value exists and the
+network is unreachable, a `MarketDataError` is raised.
+
+### Offline fallback
+
+`start_session` catches `MarketDataError` automatically: it warns via the
+reporter and falls back to `StaticProvider` (seeded from the portfolio's
+own values), so the session always starts. The effective source is
+recorded in `ctx.market_data_source` and displayed in the **Market
+Context** (`Data:` line) and **Market Environment** panels:
+
+| `ctx.market_data_source` | Meaning |
+| --- | --- |
+| `"live"` | `CboeFredProvider` is connected; data is live |
+| `"static"` | `_USE_LIVE = False` (deliberate offline mode) |
+| `"static (live unavailable)"` | `_USE_LIVE = True` but network unreachable; fell back to static |

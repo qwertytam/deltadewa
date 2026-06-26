@@ -26,6 +26,10 @@ _VIX_TERM_STRUCTURE_SYMBOLS = {
     "VIX1Y": "VIX1Y",
 }
 
+# VIX-family CSVs are OHLCV and carry a CLOSE column. SPX, SKEW, and other
+# CBOE price-only indices use the symbol name as the sole value column.
+_CBOE_OHLCV_SYMBOLS: frozenset[str] = frozenset(_VIX_TERM_STRUCTURE_SYMBOLS)
+
 _REQUEST_TIMEOUT_SECONDS = 10
 
 
@@ -154,11 +158,15 @@ class CboeFredProvider:
 
     def _fetch_cboe_history(self, symbol: str) -> list[tuple[str, float]]:
         url = _CBOE_HISTORY_URL.format(symbol=symbol)
-        return self._fetch_csv_series(url, date_col="DATE", value_col="CLOSE")
+        value_col = "CLOSE" if symbol in _CBOE_OHLCV_SYMBOLS else symbol
+        return self._fetch_csv_series(url, date_col="DATE", value_col=value_col)
 
     def _fetch_fred_history(self, series_id: str) -> list[tuple[str, float]]:
         url = _FRED_CSV_URL.format(series_id=series_id)
-        return self._fetch_csv_series(url, date_col="DATE", value_col=series_id)
+        # FRED's CSV export uses "observation_date" as the date column name.
+        return self._fetch_csv_series(
+            url, date_col="observation_date", value_col=series_id,
+        )
 
     def _fetch_csv_series(
         self,
@@ -171,7 +179,10 @@ class CboeFredProvider:
         frame = pd.read_csv(StringIO(response.text))
         frame = frame[[date_col, value_col]].dropna()
         frame[value_col] = pd.to_numeric(frame[value_col], errors="coerce")
-        frame = frame.dropna().sort_values(date_col)
+        frame = frame.dropna()
+        # Sort chronologically regardless of date string format (CBOE uses
+        # MM/DD/YYYY; FRED uses YYYY-MM-DD — string sort would mis-order CBOE).
+        frame = frame.iloc[pd.to_datetime(frame[date_col]).argsort()]
         return [
             (str(row[date_col]), float(row[value_col]))
             for _, row in frame.iterrows()

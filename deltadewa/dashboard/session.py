@@ -19,6 +19,17 @@ endpoints and FRED. Two caveats apply to that live path:
   intraday decisions.
 - CBOE/FRED feeds carry their own redistribution restrictions; check the
   source's terms before redistributing pulled data outside this session.
+
+Network requirements for the live path:
+
+- ``cdn.cboe.com`` — SPX, VIX-family, and SKEW history (public CSV)
+- ``fred.stlouisfed.org`` — VIXCLS series (public CSV, no API key)
+
+If either host is unreachable and no disk cache exists,
+``start_session`` warns via the reporter and automatically falls back to
+``StaticProvider`` (seeded from the portfolio's own values). The returned
+``ctx.market_data_source`` records which path was used: ``"live"``,
+``"static"``, or ``"static (live unavailable)"``.
 """
 
 from __future__ import annotations
@@ -36,6 +47,7 @@ from deltadewa.dashboard.setup import setup_dashboard
 from deltadewa.ips_config import IpsConfigError, load_ips_config
 from deltadewa.marketdata import (
     CboeFredProvider,
+    MarketDataError,
     MarketDataProvider,
     StaticProvider,
 )
@@ -93,6 +105,7 @@ class SessionContext:
     ips_config: IpsConfig | None
     dashboard_config: dict[str, Any] | None
     market_data: MarketDataProvider
+    market_data_source: str
     global_assumptions: GlobalAssumptions
     assumptions_link_cb: Callable[..., None]
     reporter: ConsoleReporter
@@ -135,11 +148,13 @@ def start_session(
         dashboard_path: Path to the ``HedgeHealthDashboard`` presentation
             config (gauge ranges). If missing or invalid, ``dashboard_config``
             is ``None`` and the session still starts — this never raises.
-        use_live_market_data: If ``True``, use ``CboeFredProvider()`` (live
-            CBOE/FRED data — delayed/end-of-day, and subject to the
-            source's redistribution restrictions). Defaults to ``False``,
-            which seeds a ``StaticProvider`` from the portfolio's current
-            values — no network calls in the default path.
+        use_live_market_data: If ``True``, attempt ``CboeFredProvider``
+            (live CBOE/FRED data — delayed/end-of-day, subject to the
+            source's redistribution restrictions). On ``MarketDataError``
+            (network unavailable, no cached data), warns and falls back to
+            ``StaticProvider`` automatically. Defaults to ``False``, which
+            seeds a ``StaticProvider`` from the portfolio's current values
+            — no network calls in the default path.
         export_dir: Export directory override (default ``./exports``).
         auto_load_default: When ``True`` (default), ``setup_dashboard``
             falls back to a demo portfolio if nothing was imported via
@@ -175,13 +190,29 @@ def start_session(
     dashboard_config = _load_dashboard_config(dashboard_path, reporter)
 
     market_data: MarketDataProvider
+    market_data_source: str
     if use_live_market_data:
-        market_data = CboeFredProvider()
+        live_provider = CboeFredProvider()
+        try:
+            live_provider.get_vix()
+            market_data = live_provider
+            market_data_source = "live"
+        except MarketDataError as exc:
+            reporter.warning(
+                "Live market data unavailable"
+                f" — falling back to offline data: {exc}",
+            )
+            market_data = StaticProvider(
+                spot_prices={portfolio.get_symbol(): portfolio.spot_price},
+                vix=portfolio.volatility * 100,
+            )
+            market_data_source = "static (live unavailable)"
     else:
         market_data = StaticProvider(
             spot_prices={portfolio.get_symbol(): portfolio.spot_price},
             vix=portfolio.volatility * 100,
         )
+        market_data_source = "static"
 
     ctx = setup_dashboard(
         portfolio,
@@ -198,6 +229,7 @@ def start_session(
         ips_config=ips_config,
         dashboard_config=dashboard_config,
         market_data=market_data,
+        market_data_source=market_data_source,
         global_assumptions=ctx["global_assumptions"],
         assumptions_link_cb=ctx["assumptions_link_cb"],
         reporter=reporter,
