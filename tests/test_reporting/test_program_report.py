@@ -18,6 +18,10 @@ from deltadewa.analysis.market_environment import (
     RegimeLabel,
     TermShape,
 )
+from deltadewa.analysis.monetization import (
+    MonetizationPlan,
+    MonetizationStepStatus,
+)
 from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import (
     IpsBudget,
@@ -152,6 +156,31 @@ def _make_portfolio(
     )
 
 
+def _make_plan(
+    *,
+    current_gain_pct: float | None = 75.0,
+    recommended_cumulative_sell_pct: float = 25.0,
+    value_to_harvest: float = 2_500.0,
+) -> MonetizationPlan:
+    """Minimal MonetizationPlan for use in report tests."""
+    return MonetizationPlan(
+        current_gain_pct=current_gain_pct,
+        steps=[
+            MonetizationStepStatus(
+                gain_pct=50.0, sell_pct=25.0, triggered=True,
+            ),
+            MonetizationStepStatus(
+                gain_pct=100.0, sell_pct=25.0, triggered=False,
+            ),
+        ],
+        recommended_cumulative_sell_pct=recommended_cumulative_sell_pct,
+        value_to_harvest=value_to_harvest,
+        remaining_sell_capacity=25.0,
+        gain_basis="paid",
+        vol_spike_context=None,
+    )
+
+
 def _build(
     *,
     theta_annual: float = -8_000.0,
@@ -164,6 +193,7 @@ def _build(
     meets_target: bool = True,
     data_quality: DataQuality = DataQuality.LIVE,
     schedule_steps: int = 2,
+    monetization_plan: MonetizationPlan | None = None,
 ) -> ProgramReport:
     return build_program_report(
         portfolio=_make_portfolio(
@@ -184,6 +214,7 @@ def _build(
         market_env=_make_market_env(data_quality),
         period_label="Q2 2026",
         as_of=_AS_OF,
+        monetization_plan=monetization_plan,
     )
 
 
@@ -501,3 +532,112 @@ class TestRenderHtml:
         html = render_html(_make_full_report())
         assert 'rel="stylesheet"' not in html
         assert "<script" not in html
+
+
+# ── MonetizationSection with plan ────────────────────────────────────────
+
+
+class TestMonetizationSectionWithPlan:
+    """build_program_report with a MonetizationPlan: advisory fields."""
+
+    def test_advisory_fields_populated(self) -> None:
+        """Advisory fields mirror the plan's values."""
+        plan = _make_plan(
+            current_gain_pct=75.0,
+            recommended_cumulative_sell_pct=25.0,
+            value_to_harvest=2_500.0,
+        )
+        report = _build(monetization_plan=plan)
+        m = report.monetization
+        assert m.current_gain_pct == pytest.approx(75.0)
+        assert m.recommended_cumulative_sell_pct == pytest.approx(25.0)
+        assert m.value_to_harvest == pytest.approx(2_500.0)
+
+    def test_realized_label_still_placeholder(self) -> None:
+        """realized_label keeps the placeholder even with a plan supplied."""
+        report = _build(monetization_plan=_make_plan())
+        assert "planned" in report.monetization.realized_label
+
+    def test_advisory_not_netted_against_carry(self) -> None:
+        """recommended_cumulative_sell_pct is independent of cost fields."""
+        plan = _make_plan(recommended_cumulative_sell_pct=25.0)
+        report = _build(
+            theta_annual=-8_000.0,
+            monetization_plan=plan,
+        )
+        m = report.monetization
+        assert m.recommended_cumulative_sell_pct != pytest.approx(
+            report.cost.carry_pct_of_notional,
+        )
+        assert m.recommended_cumulative_sell_pct != pytest.approx(
+            abs(report.cost.total_theta_annual),
+        )
+
+    def test_unknown_gain_renders_gracefully(self) -> None:
+        """current_gain_pct=None is stored without error."""
+        plan = _make_plan(current_gain_pct=None)
+        report = _build(monetization_plan=plan)
+        assert report.monetization.current_gain_pct is None
+
+    def test_markdown_shows_recommended_table(self) -> None:
+        """Markdown includes the advisory table header and key labels."""
+        report = _build(monetization_plan=_make_plan())
+        md = render_markdown(report)
+        assert "Recommended advisory (not realized)" in md
+        assert "Recommended cumulative sell" in md
+        assert "Estimated value to harvest" in md
+
+    def test_markdown_unknown_gain_shows_label(self) -> None:
+        """When gain is None, markdown shows 'unknown' in the table."""
+        report = _build(monetization_plan=_make_plan(current_gain_pct=None))
+        md = render_markdown(report)
+        assert "unknown" in md
+
+    def test_html_shows_recommended_table(self) -> None:
+        """HTML includes the advisory table header and key labels."""
+        report = _build(monetization_plan=_make_plan())
+        html = render_html(report)
+        assert "Recommended advisory (not realized)" in html
+        assert "Recommended cumulative sell" in html
+        assert "Estimated value to harvest" in html
+
+    def test_html_placeholder_still_present(self) -> None:
+        """Realized-label placeholder remains in HTML alongside advisory."""
+        report = _build(monetization_plan=_make_plan())
+        html = render_html(report)
+        assert "planned (C4)" in html
+
+
+# ── MonetizationSection without plan ─────────────────────────────────────
+
+
+class TestMonetizationSectionWithoutPlan:
+    """build_program_report without a plan preserves legacy behaviour."""
+
+    def test_advisory_fields_are_none(self) -> None:
+        """Without a plan, all three advisory fields are None."""
+        report = _build()
+        m = report.monetization
+        assert m.current_gain_pct is None
+        assert m.recommended_cumulative_sell_pct is None
+        assert m.value_to_harvest is None
+
+    def test_placeholder_renders_markdown(self) -> None:
+        """Placeholder text still appears in markdown output."""
+        md = render_markdown(_build())
+        assert "planned (C4)" in md
+
+    def test_placeholder_renders_html(self) -> None:
+        """Placeholder text still appears in HTML output."""
+        html = render_html(_build())
+        assert "planned (C4)" in html
+
+    def test_no_advisory_table_in_markdown(self) -> None:
+        """Without a plan, the advisory table header is absent."""
+        md = render_markdown(_build())
+        assert "Recommended advisory (not realized)" not in md
+
+    def test_no_advisory_table_in_html(self) -> None:
+        """Without a plan, the advisory table header is absent."""
+        html = render_html(_build())
+        assert "Recommended advisory (not realized)" not in html
