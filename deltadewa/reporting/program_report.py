@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from deltadewa.analysis.crash_payoff import CrashConvexityResult
     from deltadewa.analysis.market_environment import MarketEnvironment
+    from deltadewa.analysis.monetization import MonetizationPlan
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -133,7 +134,7 @@ class ReturnFramingSection:
 
 @dataclass(frozen=True)
 class MonetizationSection:
-    """Monetization realized summary.
+    """Monetization realized summary and advisory sell programme.
 
     Reported as a separate line item; never netted against carry cost.
 
@@ -141,11 +142,23 @@ class MonetizationSection:
         realized_label: Human-readable realized-gains status.
         schedule_steps: Number of ``IpsMonetizationStep`` entries
             defined in the IPS.
+        current_gain_pct: Current hedge gain as a percentage of cost
+            basis, or ``None`` when basis is unavailable or no plan
+            was supplied.
+        recommended_cumulative_sell_pct: RECOMMENDED cumulative sell
+            percentage at the current gain (advisory only — not
+            realized); ``None`` when no plan was supplied.
+        value_to_harvest: RECOMMENDED dollar amount to harvest now
+            (advisory only — not realized); ``None`` when no plan
+            was supplied.
 
     """
 
     realized_label: str
     schedule_steps: int
+    current_gain_pct: float | None = None
+    recommended_cumulative_sell_pct: float | None = None
+    value_to_harvest: float | None = None
 
 
 @dataclass(frozen=True)
@@ -202,6 +215,7 @@ def build_program_report(
     market_env: MarketEnvironment,
     period_label: str,
     as_of: datetime.date,
+    monetization_plan: MonetizationPlan | None = None,
 ) -> ProgramReport:
     """Assemble a ProgramReport from already-computed inputs.
 
@@ -220,6 +234,10 @@ def build_program_report(
         market_env: Pre-assessed from ``assess_market_environment``.
         period_label: Human-readable period (e.g. ``"Q2 2026"``).
         as_of: Report date.
+        monetization_plan: Optional pre-computed
+            :class:`~deltadewa.analysis.monetization.MonetizationPlan`.
+            When supplied, the ``MonetizationSection`` is enriched with
+            the current gain and advisory recommended sell amounts.
 
     Returns:
         Fully assembled ``ProgramReport``.
@@ -255,6 +273,21 @@ def build_program_report(
         monetization=MonetizationSection(
             realized_label=_MONETIZATION_PLACEHOLDER,
             schedule_steps=len(ips_config.monetization.schedule),
+            current_gain_pct=(
+                monetization_plan.current_gain_pct
+                if monetization_plan is not None
+                else None
+            ),
+            recommended_cumulative_sell_pct=(
+                monetization_plan.recommended_cumulative_sell_pct
+                if monetization_plan is not None
+                else None
+            ),
+            value_to_harvest=(
+                monetization_plan.value_to_harvest
+                if monetization_plan is not None
+                else None
+            ),
         ),
         ips_compliance=_build_compliance(cost, protection),
     )
@@ -577,9 +610,35 @@ def render_markdown(report: ProgramReport) -> str:
         "",
         f"Realized gains: **{m.realized_label}**",
         "",
+    ]
+    if m.recommended_cumulative_sell_pct is not None:
+        gain_str = (
+            f"{m.current_gain_pct:+.1f}%"
+            if m.current_gain_pct is not None
+            else "unknown (cost basis unavailable)"
+        )
+        harvest_str = (
+            _fmt_money(m.value_to_harvest)
+            if m.value_to_harvest is not None
+            else "—"
+        )
+        lines += [
+            "Recommended advisory (not realized):",
+            "",
+            "| Metric | Value |",
+            "|--------|-------|",
+            f"| Current hedge gain | {gain_str} |",
+            (
+                "| Recommended cumulative sell"
+                f" | {_fmt_pct(m.recommended_cumulative_sell_pct, 1)} |"
+            ),
+            f"| Estimated value to harvest | {harvest_str} |",
+            "",
+        ]
+    lines += [
         (
-            "_Monetization is reported separately and never netted against"
-            " carry cost._  "
+            "_Monetization is reported separately and never netted"
+            " against carry cost._  "
         ),
         f"IPS schedule: {m.schedule_steps} step(s) defined.",
         "",
@@ -707,6 +766,34 @@ def render_html(report: ProgramReport) -> str:
         for r in ic.rows
     )
 
+    mon_advisory_html = ""
+    if m.recommended_cumulative_sell_pct is not None:
+        gain_str_h = (
+            escape(f"{m.current_gain_pct:+.1f}%")
+            if m.current_gain_pct is not None
+            else "unknown (cost basis unavailable)"
+        )
+        harvest_str_h = (
+            escape(_fmt_money(m.value_to_harvest))
+            if m.value_to_harvest is not None
+            else "&mdash;"
+        )
+        sell_pct_h = escape(
+            _fmt_pct(m.recommended_cumulative_sell_pct, 1),
+        )
+        mon_advisory_html = (
+            "<p>Recommended advisory (not realized):</p>\n"
+            "<table>\n"
+            "<tr><th>Metric</th><th>Value</th></tr>\n"
+            f"<tr><td>Current hedge gain</td>"
+            f"<td>{gain_str_h}</td></tr>\n"
+            f"<tr><td>Recommended cumulative sell</td>"
+            f"<td>{sell_pct_h}</td></tr>\n"
+            f"<tr><td>Estimated value to harvest</td>"
+            f"<td>{harvest_str_h}</td></tr>\n"
+            "</table>"
+        )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -777,6 +864,7 @@ def render_html(report: ProgramReport) -> str:
 
 <h2>5. Monetization Realized</h2>
 <p>Realized gains: <strong>{escape(m.realized_label)}</strong></p>
+{mon_advisory_html}
 <p class="note">
   Monetization is reported separately and never netted against carry\
  cost.<br>
