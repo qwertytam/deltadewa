@@ -9,7 +9,7 @@ from unittest.mock import patch
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.dashboard import session as session_module
 from deltadewa.dashboard.session import SessionContext, start_session
-from deltadewa.marketdata import StaticProvider
+from deltadewa.marketdata import MarketDataError, StaticProvider
 from deltadewa.portfolio.core import OptionPortfolio
 
 # ruff: noqa: S101
@@ -107,8 +107,10 @@ class TestStartSession:
 
         assert len(ctx.portfolio.positions) == 0
 
-    def test_live_market_data_flag_constructs_cboe_fred_provider(self) -> None:
-        """Test use_live_market_data=True does construct the live provider."""
+    def test_live_market_data_flag_constructs_cboe_fred_provider(
+        self,
+    ) -> None:
+        """Test use_live_market_data=True constructs the live provider."""
         with patch.object(
             session_module,
             "CboeFredProvider",
@@ -116,7 +118,31 @@ class TestStartSession:
             ctx = start_session(globals_dict={}, use_live_market_data=True)
 
         mock_cboe_fred_provider.assert_called_once_with()
+        # get_vix is probed once; setup_dashboard may call it again via
+        # the live provider, so exact count is not asserted here.
+        mock_cboe_fred_provider.return_value.get_vix.assert_called()
         assert ctx.market_data is mock_cboe_fred_provider.return_value
+        assert ctx.market_data_source == "live"
+
+    def test_default_market_data_source_is_static(self) -> None:
+        """Test the default (offline) path sets market_data_source to static."""
+        ctx = start_session(globals_dict={})
+
+        assert ctx.market_data_source == "static"
+
+    def test_live_falls_back_to_static_on_market_data_error(self) -> None:
+        """Test live probe failure falls back silently to StaticProvider."""
+        with patch.object(
+            session_module,
+            "CboeFredProvider",
+        ) as mock_cboe_fred_provider:
+            mock_cboe_fred_provider.return_value.get_vix.side_effect = (
+                MarketDataError("network unreachable")
+            )
+            ctx = start_session(globals_dict={}, use_live_market_data=True)
+
+        assert isinstance(ctx.market_data, StaticProvider)
+        assert ctx.market_data_source == "static (live unavailable)"
 
     def test_loads_dashboard_config_when_present(self, tmp_path: Path) -> None:
         """Test dashboard_path is loaded into ctx.dashboard_config."""
