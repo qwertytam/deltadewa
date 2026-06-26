@@ -34,6 +34,12 @@ from deltadewa.analysis.market_environment import (
     forward_vol,
     term_structure_shape,
 )
+from deltadewa.analysis.monetization import (
+    MonetizationPlan,
+    MonetizationStepStatus,
+    build_monetization_plan,
+    compute_hedge_gain_pct,
+)
 from deltadewa.analysis.roll_planner import (
     RollAction,
     RollPlanRecord,
@@ -69,6 +75,8 @@ __all__ = [
     "HedgeTriggerThresholds",
     "LadderRung",
     "MarketEnvironment",
+    "MonetizationPlan",
+    "MonetizationStepStatus",
     "PortfolioAnalyzer",
     "PremiumBasis",
     "RegimeLabel",
@@ -79,10 +87,12 @@ __all__ = [
     "StrikeLadder",
     "TermShape",
     "assess_market_environment",
+    "build_monetization_plan",
     "build_roll_plan",
     "build_strike_ladder",
     "classify_vix_regime",
     "compute_crash_convexity",
+    "compute_hedge_gain_pct",
     "crash_payoff_ratio",
     "crash_scenario_table",
     "evaluate_candidate",
