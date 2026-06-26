@@ -34,6 +34,17 @@ from deltadewa.analysis.market_environment import (
     forward_vol,
     term_structure_shape,
 )
+from deltadewa.analysis.roll_planner import (
+    RollAction,
+    RollPlanRecord,
+    build_roll_plan,
+    gamma_theta_delay,
+)
+from deltadewa.analysis.roll_status import (
+    RollVerdict,
+    evaluate_roll_status,
+    new_strike_for_entry_otm,
+)
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
     required_crash_offset,
@@ -61,10 +72,14 @@ __all__ = [
     "PortfolioAnalyzer",
     "PremiumBasis",
     "RegimeLabel",
+    "RollAction",
+    "RollPlanRecord",
+    "RollVerdict",
     "ScenarioGridCache",
     "StrikeLadder",
     "TermShape",
     "assess_market_environment",
+    "build_roll_plan",
     "build_strike_ladder",
     "classify_vix_regime",
     "compute_crash_convexity",
@@ -72,8 +87,11 @@ __all__ = [
     "crash_scenario_table",
     "evaluate_candidate",
     "evaluate_hedge_triggers",
+    "evaluate_roll_status",
     "forward_vol",
+    "gamma_theta_delay",
     "get_volatility_stats",
+    "new_strike_for_entry_otm",
     "required_crash_offset",
     "size_from_unit",
     "size_hedge",

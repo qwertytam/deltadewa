@@ -177,11 +177,23 @@ def _strike_drift_trigger_verdict(
     return RollVerdict.HOLD
 
 
-def _new_strike_for_entry_otm(
+def new_strike_for_entry_otm(
     option_type: OptionType,
     current_spot: float,
     entry_otm_pct: float,
 ) -> float:
+    """Return the strike that restores entry OTM% at *current_spot*.
+
+    Args:
+        option_type: PUT or CALL.
+        current_spot: Current underlying spot price.
+        entry_otm_pct: Percent OTM recorded at position entry (positive).
+
+    Returns:
+        Strike price that places the option at *entry_otm_pct* OTM from
+        *current_spot*.
+
+    """
     if option_type == OptionType.CALL:
         return current_spot * (1 + entry_otm_pct / 100)
     return current_spot * (1 - entry_otm_pct / 100)
@@ -263,7 +275,7 @@ def evaluate_roll_status(
             verdict in (RollVerdict.REVIEW, RollVerdict.ROLL)
             and moneyness.entry_otm_pct is not None
         ):
-            new_strike = _new_strike_for_entry_otm(
+            new_strike = new_strike_for_entry_otm(
                 position.option.option_type,
                 current_spot,
                 moneyness.entry_otm_pct,
