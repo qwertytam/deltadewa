@@ -5,6 +5,7 @@ market_parameters:
   dividend_yield: 0.0075
   underlying_quantity: 100.0
   symbol: "MSFT"
+  contract_size: 100
 
 positions:
   # Long Puts - Downside Protection at 5% below spot

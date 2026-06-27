@@ -76,6 +76,7 @@ def create_default_portfolio():  # noqa: ANN201
             "dividend_yield": 0.0,
             "underlying_quantity": 300 * 0,
             "symbol": "NFLX",
+            "contract_size": 100,
         },
         "positions": [
             {
@@ -105,6 +106,7 @@ def create_default_portfolio():  # noqa: ANN201
     portfolio.risk_free_rate = market_params["risk_free_rate"]
     portfolio.dividend_yield = market_params["dividend_yield"]
     portfolio.symbol = market_params.get("symbol", "UNKNOWN")
+    portfolio.contract_size = market_params["contract_size"]
 
     portfolio.positions.clear()
 

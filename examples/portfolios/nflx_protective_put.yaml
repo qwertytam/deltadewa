@@ -10,6 +10,7 @@ market_parameters:
   dividend_yield: 0.0         # Dividend yield of the underlying asset
   underlying_quantity: 100.0  # Underlying position size (shares)
   symbol: "NFLX"              # Default symbol for positions (optional)
+  contract_size: 100          # Underlying units per contract
 
 # Option Positions
 # Define the options in the portfolio

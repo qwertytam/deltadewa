@@ -9,6 +9,7 @@ market_parameters:
   dividend_yield: 0.015
   underlying_quantity: 5000.0    # Long 5000 shares
   symbol: "SPY"
+  contract_size: 100
 
 positions:
   # Long Puts - Downside Protection at 5% below spot

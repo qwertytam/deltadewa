@@ -142,6 +142,7 @@ class PortfolioSerializer:
                 "dividend_yield": portfolio.dividend_yield,
                 "underlying_quantity": portfolio.underlying_quantity,
                 "symbol": portfolio.get_symbol(),
+                "contract_size": portfolio.contract_size,
             },
             "positions": [],
             "risk_metrics": portfolio.summary_stats(),
@@ -379,6 +380,7 @@ class PortfolioSerializer:
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
             symbol=market_params.get("symbol", "UNKNOWN"),
+            contract_size=market_params["contract_size"],
         )
 
         # Add positions (robust to variations in exported field names)
@@ -466,6 +468,7 @@ class PortfolioSerializer:
             dividend_yield=market_params["dividend_yield"],
             valuation_date=dt.now(tz=datetime.UTC),
             symbol=market_params.get("symbol", "UNKNOWN"),
+            contract_size=market_params["contract_size"],
         )
 
         # Add positions
