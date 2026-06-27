@@ -19,6 +19,15 @@ from deltadewa.analysis.crash_payoff import (
     crash_payoff_ratio,
     crash_scenario_table,
 )
+from deltadewa.analysis.decision_matrix import (
+    DecisionResult,
+    DecisionVerdict,
+    EntryTimingResult,
+    EntryTimingStep,
+    HedgeAdequacy,
+    decision_matrix,
+    entry_timing_tree,
+)
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
     evaluate_hedge_triggers,
@@ -70,6 +79,11 @@ __all__ = [
     "CrashConvexityResult",
     "CrashScenarioRow",
     "DataQuality",
+    "DecisionResult",
+    "DecisionVerdict",
+    "EntryTimingResult",
+    "EntryTimingStep",
+    "HedgeAdequacy",
     "HedgeCostVerdict",
     "HedgeSizingResult",
     "HedgeTriggerThresholds",
@@ -95,6 +109,8 @@ __all__ = [
     "compute_hedge_gain_pct",
     "crash_payoff_ratio",
     "crash_scenario_table",
+    "decision_matrix",
+    "entry_timing_tree",
     "evaluate_candidate",
     "evaluate_hedge_triggers",
     "evaluate_roll_status",
