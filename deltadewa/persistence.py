@@ -14,7 +14,7 @@ from typing import Any
 import pandas as pd
 
 from deltadewa import OptionPortfolio
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.reporting import PortfolioLogger
 
 try:
@@ -490,6 +490,14 @@ class PortfolioSerializer:
             # Get optional position-specific volatility
             position_volatility = pos_config.get("volatility", None)
 
+            raw_style = pos_config.get("exercise_style")
+            exercise_style: ExerciseStyle | None = None
+            if raw_style is not None:
+                try:
+                    exercise_style = ExerciseStyle(str(raw_style).upper())
+                except ValueError:
+                    exercise_style = None
+
             imported_portfolio.add_position(
                 strike_price=pos_config["strike_price"],
                 maturity_date=maturity,
@@ -501,6 +509,7 @@ class PortfolioSerializer:
                     else OptionType.PUT
                 ),
                 volatility=position_volatility,
+                exercise_style=exercise_style,
             )
 
             # See import_from_json for why this is set directly rather than

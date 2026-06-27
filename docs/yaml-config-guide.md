@@ -35,6 +35,9 @@ positions:
     maturity_days: 30
     quantity: -50
     volatility: 0.18             # optional, overrides market_parameters
+    exercise_style: "EUROPEAN"   # optional: "EUROPEAN" or omit (defaults to American)
+    entry_spot: 100.0            # optional: spot at entry (enables roll-status drift)
+    entry_premium: 3.50          # optional: cost basis (enables payoff ratio)
 ```
 
 This is the actual shape `PortfolioSerializer.import_from_yaml()`
@@ -51,13 +54,24 @@ optional.
 works. `volatility` is optional and overrides `market_parameters.volatility`
 for that position only.
 
-Two more optional per-position fields, `entry_spot` and `entry_date`, record
-the spot price and date the position was opened. They round-trip through
-export/import but aren't required to author a file by hand. **None of the
-files under `examples/portfolios/` set them** — importing one leaves
-`entry_spot` as `None`, which means Roll Status's moneyness-drift column
-shows `n/a` for that tranche until you re-enter the position with a real
-`entry_spot` (or set it directly on the position after import).
+Three more optional per-position fields support tracking and exercise style:
+
+- `entry_spot` and `entry_date` record the spot price and date the position
+  was opened.  They round-trip through export/import but aren't required to
+  author a file by hand.  Without them, Roll Status's moneyness-drift column
+  shows `n/a` and the monetisation panel cannot compute an unrealised gain.
+- `entry_premium` records the premium paid (or received) per index unit.
+  Without it, the payoff-ratio column also shows `n/a`.
+- `exercise_style` sets the pricing engine for that position: `"EUROPEAN"`
+  uses the analytic Black–Scholes engine; omitting it (or any other value)
+  falls back to the American approximation.  **SPX positions must set
+  `exercise_style: "EUROPEAN"`** — SPX options are cash-settled European and
+  the American approximation overstates put values.
+
+See `examples/portfolios/spx_protective_put.yaml` for a canonical SPX
+tail-hedge example with all three fields populated so every analytics
+panel — roll status, payoff ratio, crash convexity, and monetisation —
+produces non-degenerate output on first import.
 
 Files you export from the dashboard also include `greeks`, `price`,
 `position_value`, `contract_size`, and a `metadata` block. These are

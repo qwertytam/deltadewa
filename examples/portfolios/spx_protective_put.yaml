@@ -1,0 +1,45 @@
+# Portfolio Configuration Example
+# Canonical SPX tail-hedge: long index position protected by OTM long puts
+# European exercise (SPX is cash-settled), two tranches for a layered downside floor
+#
+# Notional: ~$5.8 M  (1 000 index units × spot 5 800)
+# Tranche 1: ~10 % OTM at 5 200, Jun-27 expiry  (5 contracts = 500 units)
+# Tranche 2: ~15 % OTM at 4 900, Jun-27 expiry  (5 contracts = 500 units)
+# Combined contracts fully cover the 1 000-unit underlying position.
+#
+# entry_spot / entry_premium reflect the trade prices when SPX was at 6 000
+# (~1 month before this example snapshot at 5 800). The -3.3% move since
+# entry has lifted both put tranches, so payoff ratio, roll-status moneyness-
+# drift, and monetisation gain are all non-degenerate on first import.
+
+# Market Parameters
+market_parameters:
+  spot_price: 5800.0           # SPX index level (current snapshot)
+  volatility: 0.17             # ~17 % ATM IV (normal-to-elevated)
+  risk_free_rate: 0.04         # annualised risk-free rate
+  dividend_yield: 0.013        # SPX index dividend yield
+  underlying_quantity: 1000.0  # 1 000 index units ≈ $5.8 M notional
+  symbol: "SPX"
+  contract_size: 100           # SPX $100 multiplier
+
+# Option Positions
+positions:
+  # Tranche 1 — ~10 % OTM put, Jun-27 LEAPS expiry
+  - option_type: "put"
+    strike_price: 5200.0
+    maturity_date: "2027-06-17"
+    quantity: 5                 # 5 contracts × 100 = 500 index units covered
+    volatility: 0.19            # OTM skew above ATM vol
+    exercise_style: "EUROPEAN"  # SPX is cash-settled European
+    entry_spot: 6000.0          # spot when position was opened (SPX ~13% OTM at entry)
+    entry_premium: 111.0        # premium paid per index unit at entry
+
+  # Tranche 2 — ~15 % OTM put, Jun-27 LEAPS expiry (catastrophe cover)
+  - option_type: "put"
+    strike_price: 4900.0
+    maturity_date: "2027-06-17"
+    quantity: 5
+    volatility: 0.22            # deeper OTM carries more skew
+    exercise_style: "EUROPEAN"
+    entry_spot: 6000.0          # spot when position was opened (SPX ~18% OTM at entry)
+    entry_premium: 95.0         # cheaper; provides tail / gap-risk cover
