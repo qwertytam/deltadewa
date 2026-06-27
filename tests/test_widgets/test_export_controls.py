@@ -19,6 +19,7 @@ market_parameters:
   risk_free_rate: 0.04
   dividend_yield: 0.015
   symbol: "SPY"
+  contract_size: 100
 
 positions:
   - option_type: "put"

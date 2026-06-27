@@ -9,6 +9,7 @@ market_parameters:
   dividend_yield: 0.0032
   underlying_quantity: 0.0     # No underlying position
   symbol: "META"
+  contract_size: 100
 
 positions:
   # Long ATM Calls - Profit from upside moves

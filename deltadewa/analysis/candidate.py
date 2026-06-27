@@ -21,9 +21,6 @@ from deltadewa.valuation import OptionValuation
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
-_CONTRACT_SIZE: int = 100
-"""Standard US equity-index option contract multiplier (100 units)."""
-
 
 # ---------------------------------------------------------------------------
 # Dataclass
@@ -38,11 +35,13 @@ class CandidateMetrics:
         strike: Absolute strike price.
         pct_otm: Percent out-of-the-money: ``(spot - strike) / spot * 100``.
         put_delta: Put delta (negative; e.g. ``-0.10`` for a 10-delta put).
-        premium: Option price x contract size in dollars (positive cost).
+        premium: Option price x portfolio contract size in dollars
+            (positive cost).
         per_contract_payoff: Intrinsic put value at the crash spot times the
-            contract size — ``max(0, strike - crash_spot) * 100`` — in dollars.
+            portfolio contract size — ``max(0, strike - crash_spot) *
+            contract_size`` — in dollars.
         per_contract_carry: Annualised theta cost per contract as a positive
-            dollar amount: ``|theta/day| * 365 * 100``.
+            dollar amount: ``|theta/day| * 365 * contract_size``.
 
     """
 
@@ -110,7 +109,7 @@ def evaluate_candidate(
     pct_otm = (spot - strike) / spot * 100.0
     crash_spot = spot * (1.0 + crash_pct / 100.0)
     per_contract_payoff = (
-        _intrinsic_at_crash(strike, crash_spot) * _CONTRACT_SIZE
+        _intrinsic_at_crash(strike, crash_spot) * portfolio.contract_size
     )
 
     maturity_date = portfolio.valuation_date + timedelta(
@@ -128,11 +127,11 @@ def evaluate_candidate(
     )
 
     put_delta = valuation.delta()
-    premium = valuation.price() * _CONTRACT_SIZE
+    premium = valuation.price() * portfolio.contract_size
     # theta() is $/day per unit, negative for a long put; annualise on the
     # 365-calendar-day basis that carry.py uses.
     per_contract_carry = (
-        abs(valuation.theta()) * const.DAYS_PER_YEAR * _CONTRACT_SIZE
+        abs(valuation.theta()) * const.DAYS_PER_YEAR * portfolio.contract_size
     )
 
     return CandidateMetrics(

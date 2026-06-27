@@ -71,28 +71,29 @@ def create_default_portfolio():  # noqa: ANN201
     """Build default market parameters and positions from inline config."""
     default_config = {
         "market_parameters": {
-            "spot_price": 84.61,
-            "risk_free_rate": 0.0400,
+            "spot_price": 100,
+            "risk_free_rate": 0.0500,
             "dividend_yield": 0.0,
-            "underlying_quantity": 300 * 0,
-            "symbol": "NFLX",
+            "underlying_quantity": 10 * 1,
+            "symbol": "SPX",
+            "contract_size": 100,
         },
         "positions": [
             {
-                "option_type": OptionType.CALL,
-                "strike_price": 95.0,
-                "maturity_days": 322,
-                "volatility": 0.387,
+                "option_type": OptionType.PUT,
+                "strike_price": 80.0,
+                "maturity_days": 365,
+                "volatility": 0.3,
                 "quantity": 5,
-                "exercise_style": ExerciseStyle.AMERICAN,
+                "exercise_style": ExerciseStyle.EUROPEAN,
             },
             {
                 "option_type": OptionType.PUT,
-                "strike_price": 70.0,
-                "maturity_days": 322,
-                "volatility": 0.424,
+                "strike_price": 50.0,
+                "maturity_days": 365,
+                "volatility": 0.4,
                 "quantity": -5,
-                "exercise_style": ExerciseStyle.AMERICAN,
+                "exercise_style": ExerciseStyle.EUROPEAN,
             },
         ],
     }
@@ -105,6 +106,7 @@ def create_default_portfolio():  # noqa: ANN201
     portfolio.risk_free_rate = market_params["risk_free_rate"]
     portfolio.dividend_yield = market_params["dividend_yield"]
     portfolio.symbol = market_params.get("symbol", "UNKNOWN")
+    portfolio.contract_size = market_params["contract_size"]
 
     portfolio.positions.clear()
 

@@ -28,6 +28,7 @@ def _make_spx_portfolio(
     rate: float = 0.04,
     div: float = 0.015,
     exercise_style: ExerciseStyle = ExerciseStyle.EUROPEAN,
+    contract_size: int = 100,
 ) -> OptionPortfolio:
     return OptionPortfolio(
         spot_price=spot,
@@ -36,6 +37,7 @@ def _make_spx_portfolio(
         risk_free_rate=rate,
         dividend_yield=div,
         default_exercise_style=exercise_style,
+        contract_size=contract_size,
     )
 
 
@@ -192,3 +194,47 @@ class TestEvaluateCandidate:
             crash_pct=-25.0,
         )
         assert result.per_contract_carry > 0.0
+
+
+class TestCandidateContractSizeScaling:
+    """evaluate_candidate scales dollar outputs with portfolio.contract_size."""
+
+    def test_premium_scales_with_contract_size(self) -> None:
+        """Premium halves when contract_size halves."""
+        p100 = _make_spx_portfolio(contract_size=100)
+        p50 = _make_spx_portfolio(contract_size=50)
+        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        r100 = evaluate_candidate(p100, **kwargs)
+        r50 = evaluate_candidate(p50, **kwargs)
+        assert r50.premium == pytest.approx(r100.premium / 2)
+
+    def test_payoff_scales_with_contract_size(self) -> None:
+        """per_contract_payoff halves when contract_size halves."""
+        p100 = _make_spx_portfolio(contract_size=100)
+        p50 = _make_spx_portfolio(contract_size=50)
+        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        r100 = evaluate_candidate(p100, **kwargs)
+        r50 = evaluate_candidate(p50, **kwargs)
+        assert r50.per_contract_payoff == pytest.approx(
+            r100.per_contract_payoff / 2,
+        )
+
+    def test_carry_scales_with_contract_size(self) -> None:
+        """per_contract_carry halves when contract_size halves."""
+        p100 = _make_spx_portfolio(contract_size=100)
+        p50 = _make_spx_portfolio(contract_size=50)
+        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        r100 = evaluate_candidate(p100, **kwargs)
+        r50 = evaluate_candidate(p50, **kwargs)
+        assert r50.per_contract_carry == pytest.approx(
+            r100.per_contract_carry / 2,
+        )
+
+    def test_pct_otm_unaffected_by_contract_size(self) -> None:
+        """pct_otm is a pure spot/strike ratio — unchanged by contract_size."""
+        p100 = _make_spx_portfolio(contract_size=100)
+        p50 = _make_spx_portfolio(contract_size=50)
+        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        assert evaluate_candidate(p100, **kwargs).pct_otm == pytest.approx(
+            evaluate_candidate(p50, **kwargs).pct_otm,
+        )

@@ -38,6 +38,7 @@ class OptionPortfolioBase:
         valuation_date: dt | None = None,
         symbol: str = "UNKNOWN",
         default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        contract_size: int = 100,
     ) -> None:
         """Initialize option portfolio.
 
@@ -50,7 +51,9 @@ class OptionPortfolioBase:
             valuation_date: Valuation date for all options (defaults to now)
             symbol: Underlying symbol or identifier for display/export
             default_exercise_style: Exercise style used by add_position()
-            when its own exercise_style argument is omitted
+                when its own exercise_style argument is omitted
+            contract_size: Number of underlying units per contract; used as
+                the default for positions added via add_position()
 
         """
         self.positions: list[OptionPosition] = []
@@ -62,6 +65,7 @@ class OptionPortfolioBase:
         self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
         self.symbol = symbol
         self.default_exercise_style = default_exercise_style
+        self.contract_size = contract_size
         self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
@@ -75,7 +79,7 @@ class OptionPortfolioBase:
         maturity_date: dt,
         quantity: int,
         option_type: OptionType = OptionType.CALL,
-        contract_size: int = 100,
+        contract_size: int | None = None,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
         entry_spot: float | None = None,
@@ -88,15 +92,22 @@ class OptionPortfolioBase:
             maturity_date: Maturity date of the option
             quantity: Number of contracts
             option_type: OptionType.CALL or OptionType.PUT
-            contract_size: Number of underlying shares per option contract
+            contract_size: Number of underlying units per contract.  When
+                ``None`` (the default) the position inherits
+                ``self.contract_size``.  Pass an explicit value only when a
+                specific position needs a different multiplier.
             volatility: Optional position-specific volatility (uses portfolio
-            default if None)
+                default if None)
             exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
-            (uses self.default_exercise_style if None)
+                (uses self.default_exercise_style if None)
             entry_spot: Spot price at entry (uses self.spot_price if None)
             entry_date: Date of entry (uses self.valuation_date if None)
 
         """
+        effective_cs = (
+            contract_size if contract_size is not None else self.contract_size
+        )
+
         # Use position-specific volatility or portfolio default
         if volatility is not None:
             option_volatility = volatility
@@ -128,7 +139,7 @@ class OptionPortfolioBase:
         position = OptionPosition(
             option,
             quantity,
-            contract_size=contract_size,
+            contract_size=effective_cs,
             custom_volatility=custom_volatility,
             exercise_style=exercise_style,
             entry_spot=entry_spot,

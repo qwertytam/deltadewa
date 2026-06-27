@@ -315,6 +315,7 @@ class TestJsonRoundtrip:
                 "dividend_yield": 0.0,
                 "underlying_quantity": 0.0,
                 "symbol": "TEST",
+                "contract_size": 100,
             },
             "positions": [
                 {
@@ -388,6 +389,7 @@ class TestJsonRoundtrip:
                 "volatility": 0.3,
                 "risk_free_rate": 0.05,
                 "dividend_yield": 0.02,
+                "contract_size": 100,
             },
             "positions": [
                 {
@@ -421,6 +423,7 @@ class TestJsonRoundtrip:
                 "volatility": 0.3,
                 "risk_free_rate": 0.05,
                 "dividend_yield": 0.02,
+                "contract_size": 100,
             },
             "positions": [
                 {
@@ -554,6 +557,7 @@ class TestYamlRoundtrip:
                 "dividend_yield": 0.02,
                 "underlying_quantity": 100.0,
                 "symbol": "TEST",
+                "contract_size": 100,
             },
             "positions": [
                 {
@@ -869,6 +873,7 @@ class TestEntryPremiumPersistence:
                 "dividend_yield": 0.0,
                 "underlying_quantity": 0.0,
                 "symbol": "SPX",
+                "contract_size": 100,
             },
             "positions": [
                 {
@@ -901,3 +906,78 @@ class TestEntryPremiumPersistence:
         assert result["portfolio"].positions[0].entry_premium == pytest.approx(
             2.10,
         )
+
+
+# ========== contract_size round-trip ==========
+
+
+class TestContractSizeRoundtrip:
+    """contract_size is a required market_parameters field and survives I/O."""
+
+    def _make_portfolio(self, contract_size: int) -> OptionPortfolio:
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        p = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            symbol="TEST",
+            contract_size=contract_size,
+        )
+        p.add_position(
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        # Position with explicit override
+        p.add_position(
+            strike_price=90.0,
+            maturity_date=maturity,
+            quantity=-1,
+            option_type=OptionType.PUT,
+            contract_size=200,
+        )
+        return p
+
+    def test_json_roundtrip_preserves_contract_size(
+        self, tmp_path: Path,
+    ) -> None:
+        """JSON export/import preserves portfolio-level contract_size."""
+        p = self._make_portfolio(50)
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(p, PortfolioLogger(), "cs.json")
+        result = serializer.import_from_json(path)
+        imported = result["portfolio"]
+        assert imported.contract_size == 50
+        # Position added without explicit cs inherits portfolio default
+        assert imported.positions[0].contract_size == 50
+
+    def test_json_explicit_position_contract_size_honoured(
+        self, tmp_path: Path,
+    ) -> None:
+        """A per-position contract_size overriding the portfolio default.
+
+        The override is written and read back correctly in per-position data.
+        """
+        p = self._make_portfolio(50)
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(p, PortfolioLogger(), "cs2.json")
+        with Path.open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+        # The per-position export should record 200 for the second position
+        assert raw["positions"][1]["contract_size"] == 200
+
+    @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
+    def test_yaml_roundtrip_preserves_contract_size(
+        self, tmp_path: Path,
+    ) -> None:
+        """YAML export/import preserves portfolio-level contract_size."""
+        p = self._make_portfolio(50)
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_yaml(p, PortfolioLogger(), "cs.yaml")
+        assert path is not None
+        result = serializer.import_from_yaml(path)
+        imported = result["portfolio"]
+        assert imported.contract_size == 50
+        assert imported.positions[0].contract_size == 50

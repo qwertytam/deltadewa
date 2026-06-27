@@ -11,6 +11,7 @@ market_parameters:
   dividend_yield: 0.02       # Annual dividend yield (0.02 = 2%)
   underlying_quantity: 1000.0  # Underlying position size (shares)
   symbol: "SPY"              # Default symbol for positions (optional)
+  contract_size: 100         # Underlying units per contract
 
 # Portfolio Positions
 # Define options positions with strikes, maturities, and quantities
