@@ -134,7 +134,7 @@ class MonteCarloStalenessWidget:
 
             output_area = widgets.Output()
 
-            def on_rerun_click(b) -> None:  # noqa: ANN001
+            def on_rerun_click(b: widgets.Button) -> None:
                 with output_area:
                     output_area.clear_output()
                     b.description = "Running..."

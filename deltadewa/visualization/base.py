@@ -136,5 +136,3 @@ class OptionCharts(
         style: Matplotlib style to use (default: 'seaborn-v0_8-darkgrid')
 
     """
-
-    pass  # noqa: PIE790  pylint: disable=unnecessary-pass

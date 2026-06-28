@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
 
-def _fmt_enum_val(v) -> str:  # noqa: ANN001
+def _fmt_enum_val(v: object) -> str:
     if hasattr(v, "name"):
         return v.name.capitalize()
     s = str(v)

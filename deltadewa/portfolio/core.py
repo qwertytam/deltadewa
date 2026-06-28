@@ -549,5 +549,3 @@ class OptionPortfolio(
 
     For scenario analysis, use PortfolioAnalyzer from deltadewa.analysis.
     """
-
-    pass  # noqa: PIE790  pylint: disable=unnecessary-pass

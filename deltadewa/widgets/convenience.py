@@ -27,7 +27,7 @@ def link_portfolio_to_assumptions(
     additional callbacks; callers may ignore the return value).
     """
 
-    def _on_assumptions_change(_change) -> None:  # noqa: ANN001
+    def _on_assumptions_change(_change: object) -> None:
         # Read widget values and update portfolio
         spot = float(assumptions.spot_price.value)
         vol = float(assumptions.volatility.value)

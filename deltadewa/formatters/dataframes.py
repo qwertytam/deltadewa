@@ -463,7 +463,7 @@ def format_pivot_table(
     pivot: pd.DataFrame,
     format_str: str = "{:,.2f}",
     cmap: str = "RdYlGn",
-    highlight_zeros: bool = True,  # pylint: disable=unused-argument  # noqa: ARG001
+    highlight_zeros: bool = True,  # noqa: ARG001
 ) -> Styler:
     """Format pivot table with consistent styling.
 
@@ -537,9 +537,9 @@ def highlight_negative_values(
 
     """
 
-    def highlight_neg(val) -> str:  # noqa: ANN001
+    def highlight_neg(val: object) -> str:
         try:
-            return f"background-color: {color}" if float(val) < 0 else ""
+            return f"background-color: {color}" if float(val) < 0 else ""  # type: ignore[arg-type]
         except (ValueError, TypeError):
             return ""
 

@@ -1,11 +1,17 @@
 """Factory functions for creating option portfolios."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from deltadewa.constants import ExerciseStyle, OptionType
 
+if TYPE_CHECKING:
+    from deltadewa.portfolio.core import OptionPortfolio
 
-def create_empty_portfolio(**kwargs):  # noqa: ANN003 ANN201
+
+def create_empty_portfolio(**kwargs: Any) -> OptionPortfolio:  # noqa: ANN401
     """Create and return an empty `OptionPortfolio` with sensible defaults.
 
     Args:
@@ -26,7 +32,7 @@ def create_empty_portfolio(**kwargs):  # noqa: ANN003 ANN201
     return OptionPortfolio(**kwargs)
 
 
-def create_demo_portfolio():  # noqa: ANN201
+def create_demo_portfolio() -> OptionPortfolio:
     """Create and return a small demo `OptionPortfolio`.
 
     Pre-populated with example positions. Useful for notebook demos and initial
@@ -67,9 +73,9 @@ def create_demo_portfolio():  # noqa: ANN201
     return p
 
 
-def create_default_portfolio():  # noqa: ANN201
+def create_default_portfolio() -> OptionPortfolio:
     """Build default market parameters and positions from inline config."""
-    default_config = {
+    default_config: dict[str, Any] = {
         "market_parameters": {
             "spot_price": 100,
             "risk_free_rate": 0.0500,

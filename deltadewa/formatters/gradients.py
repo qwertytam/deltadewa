@@ -99,9 +99,9 @@ def apply_traffic_light_colors(
 
     """
 
-    def color_traffic_light(val) -> float | str:  # noqa: ANN001
+    def color_traffic_light(val: object) -> float | str:
         try:
-            val = float(val)
+            val = float(val)  # type: ignore[arg-type]
         except (ValueError, TypeError):
             return ""
 

@@ -4,10 +4,13 @@ This module provides module-level convenience functions that wrap
 OptionCharts methods for easier use.
 """
 
-from typing import TYPE_CHECKING, overload
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, overload
 
 import matplotlib.pyplot as plt
 import pandas as pd
+from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
 
@@ -18,24 +21,25 @@ from deltadewa.visualization.base import OptionCharts
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio, OptionPortfolioBase
 
-# ruff: noqa: ANN001 ANN003
-
 
 @overload
 def plot_pnl_diagram(
-    portfolio: "OptionPortfolio",
-    **kwargs,
+    portfolio: OptionPortfolio,
+    **kwargs: Any,  # noqa: ANN401
 ) -> Figure: ...
 
 
 @overload
 def plot_pnl_diagram(
-    portfolio: "OptionPortfolioBase",
-    **kwargs,
+    portfolio: OptionPortfolioBase,
+    **kwargs: Any,  # noqa: ANN401
 ) -> Figure: ...
 
 
-def plot_pnl_diagram(portfolio, **kwargs) -> Figure:
+def plot_pnl_diagram(
+    portfolio: OptionPortfolio | OptionPortfolioBase,
+    **kwargs: Any,
+) -> Figure:
     """Plot P&L diagram - convenience function.
 
     Args:
@@ -52,19 +56,22 @@ def plot_pnl_diagram(portfolio, **kwargs) -> Figure:
 
 @overload
 def plot_pnl_distribution_with_metrics(
-    portfolio: "OptionPortfolio",
-    **kwargs,
+    portfolio: OptionPortfolio,
+    **kwargs: Any,  # noqa: ANN401
 ) -> Figure: ...
 
 
 @overload
 def plot_pnl_distribution_with_metrics(
-    portfolio: "OptionPortfolioBase",
-    **kwargs,
+    portfolio: OptionPortfolioBase,
+    **kwargs: Any,  # noqa: ANN401
 ) -> Figure: ...
 
 
-def plot_pnl_distribution_with_metrics(portfolio, **kwargs) -> Figure:
+def plot_pnl_distribution_with_metrics(
+    portfolio: OptionPortfolio | OptionPortfolioBase,
+    **kwargs: Any,
+) -> Figure:
     """Plot P&L distribution with key metrics - convenience function.
 
     Args:
@@ -79,7 +86,10 @@ def plot_pnl_distribution_with_metrics(portfolio, **kwargs) -> Figure:
     return charts.plot_pnl_distribution_with_metrics(**kwargs)
 
 
-def plot_greeks_by_strike(portfolio, **kwargs) -> Figure:
+def plot_greeks_by_strike(
+    portfolio: OptionPortfolio | OptionPortfolioBase,
+    **kwargs: Any,  # noqa: ANN401
+) -> Figure:
     """Plot Greeks by strike - convenience function.
 
     Args:
@@ -94,7 +104,10 @@ def plot_greeks_by_strike(portfolio, **kwargs) -> Figure:
     return charts.plot_greeks_by_strike(**kwargs)
 
 
-def plot_theta_analysis(portfolio, **kwargs) -> Figure:
+def plot_theta_analysis(
+    portfolio: OptionPortfolio | OptionPortfolioBase,
+    **kwargs: Any,  # noqa: ANN401
+) -> Figure:
     """Plot theta analysis - convenience function.
 
     Args:
@@ -110,7 +123,7 @@ def plot_theta_analysis(portfolio, **kwargs) -> Figure:
 
 
 def plot_greeks_consolidated(
-    portfolio,
+    portfolio: OptionPortfolio | OptionPortfolioBase,
     top_n: int = 5,
     figsize: tuple[int, int] = (16, 10),
 ) -> Figure:
@@ -161,7 +174,7 @@ def plot_greeks_consolidated(
     fig.patch.set_alpha(0.0)
 
     def _set_axis_formatting(
-        ax,
+        ax: Axes,
         title: str = "",
         xaxis: bool = True,
         yaxis: bool = True,
@@ -311,7 +324,7 @@ def plot_greeks_consolidated(
 
     if len(strike_values) > 0:
         labels = [f"{strike:.2f}" for strike in strike_values.index]
-        values = strike_values.values
+        values = strike_values.tolist()
         colors_contrib = [
             DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
             for v in values
@@ -355,7 +368,7 @@ def plot_greeks_consolidated(
 
     if len(maturity_values) > 0:
         labels = list(maturity_values.index)
-        values = maturity_values.values
+        values = maturity_values.tolist()
         colors_contrib = [
             DEFAULT_PALETTE.positive if v > 0 else DEFAULT_PALETTE.negative
             for v in values

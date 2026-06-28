@@ -14,7 +14,10 @@ on other formatter submodules.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from matplotlib.ticker import FuncFormatter
 
 import pandas as pd
 
@@ -331,7 +334,7 @@ def format_currency_for_df(value: object) -> str:
 # ============================================================================
 
 
-def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
+def get_currency_axis_formatter(compact: bool = True) -> FuncFormatter:
     """Return a matplotlib FuncFormatter for currency values.
 
     Args:
@@ -351,7 +354,7 @@ def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
     )
 
 
-def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
+def get_percentage_axis_formatter(from_decimal: bool = True) -> FuncFormatter:
     """Return a matplotlib FuncFormatter for percentage values.
 
     Args:
@@ -371,7 +374,7 @@ def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
     )
 
 
-def get_spot_price_axis_formatter(current_spot: float):  # noqa: ANN201
+def get_spot_price_axis_formatter(current_spot: float) -> FuncFormatter:
     """Return a matplotlib FuncFormatter for spot price with % change.
 
     Args:
