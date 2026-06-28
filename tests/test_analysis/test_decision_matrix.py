@@ -1,6 +1,5 @@
 """Tests for deltadewa.analysis.decision_matrix."""
 
-# ruff: noqa: S101
 
 from __future__ import annotations
 
@@ -28,7 +27,7 @@ from deltadewa.ips_config import IpsConvexity
 # ── Shared helpers ────────────────────────────────────────────────────
 
 
-def _make_env(**kwargs: Any) -> MarketEnvironment:  # noqa: ANN401
+def _make_env(**kwargs: Any) -> MarketEnvironment:
     """Return a fully-populated LIVE MarketEnvironment with overrides."""
     defaults: dict[str, Any] = {
         "vix": 18.0,

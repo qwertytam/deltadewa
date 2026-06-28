@@ -23,9 +23,6 @@ from deltadewa.ips_config import (
 )
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

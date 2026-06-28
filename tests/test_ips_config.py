@@ -9,8 +9,6 @@ import yaml
 from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import IpsConfigError, load_ips_config
 
-# ruff: noqa: S101
-
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.yaml"
 
 _VALID_CONFIG: dict[str, Any] = {

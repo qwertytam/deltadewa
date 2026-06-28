@@ -23,8 +23,6 @@ from deltadewa.ips_config import (
 from deltadewa.marketdata import StaticProvider
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 # pylint: disable=redefined-outer-name
 
 

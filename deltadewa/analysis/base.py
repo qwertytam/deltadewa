@@ -1,5 +1,7 @@
 """Base class for portfolio analysis."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from deltadewa.analysis.carry import CarryMixin
@@ -13,7 +15,7 @@ from deltadewa.analysis.scenarios import ScenariosMixin
 from deltadewa.analysis.summary import SummaryMixin
 
 if TYPE_CHECKING:
-    pass
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class PortfolioAnalyzerBase:
@@ -24,7 +26,7 @@ class PortfolioAnalyzerBase:
     mixins build upon this base class.
     """
 
-    def __init__(self, portfolio) -> None:  # noqa: ANN001
+    def __init__(self, portfolio: OptionPortfolio) -> None:
         """Initialize analyzer with portfolio.
 
         Args:

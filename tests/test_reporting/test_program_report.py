@@ -1,6 +1,5 @@
 """Tests for deltadewa.reporting.program_report."""
 
-# ruff: noqa: S101
 
 import datetime
 

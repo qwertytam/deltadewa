@@ -6,8 +6,6 @@ from datetime import UTC, datetime, timedelta
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio, OptionPortfolioBase
 
-# ruff: noqa: S101
-
 
 class TestOptionPortfolioBase:
     """Test cases for OptionPortfolioBase class."""

@@ -8,7 +8,6 @@ Tests exercise:
 - Portfolio evolution table length
 """
 
-# ruff: noqa: S101 D102 ANN001 D101
 # pylint: disable=missing-function-docstring, protected-access, missing-class-docstring
 
 from __future__ import annotations

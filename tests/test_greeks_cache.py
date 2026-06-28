@@ -7,8 +7,6 @@ import pytest
 
 from deltadewa.greeks_cache import GreeksCache
 
-# ruff: noqa: S101 ANN001
-
 
 class TestGreeksCache:
     """Test cases for GreeksCache."""

@@ -14,7 +14,10 @@ on other formatter submodules.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from matplotlib.ticker import FuncFormatter
 
 import pandas as pd
 
@@ -331,7 +334,7 @@ def format_currency_for_df(value: object) -> str:
 # ============================================================================
 
 
-def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
+def get_currency_axis_formatter(compact: bool = True) -> FuncFormatter:
     """Return a matplotlib FuncFormatter for currency values.
 
     Args:
@@ -346,14 +349,12 @@ def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
 
     if compact:
         return FUNC_FORMATTER(format_currency_for_axis)
-    # ruff: disable[ARG005]  # noqa: ERA001
     return FUNC_FORMATTER(
-        lambda x, pos: format_currency(x, compact=False, precision=0),
+        lambda x, pos: format_currency(x, compact=False, precision=0),  # noqa: ARG005
     )
-    # ruff: enable[ARG005]  # noqa: ERA001
 
 
-def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
+def get_percentage_axis_formatter(from_decimal: bool = True) -> FuncFormatter:
     """Return a matplotlib FuncFormatter for percentage values.
 
     Args:
@@ -368,14 +369,12 @@ def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
 
     if from_decimal:
         return FUNC_FORMATTER(format_percentage_for_axis)
-    # ruff: disable[ARG005]  # noqa: ERA001
     return FUNC_FORMATTER(
-        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),
+        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),  # noqa: ARG005
     )
-    # ruff: enable[ARG005]  # noqa: ERA001
 
 
-def get_spot_price_axis_formatter(current_spot: float):  # noqa: ANN201
+def get_spot_price_axis_formatter(current_spot: float) -> FuncFormatter:
     """Return a matplotlib FuncFormatter for spot price with % change.
 
     Args:

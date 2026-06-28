@@ -20,8 +20,6 @@ from deltadewa.ips_config import (
 )
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 
 def _make_ips_config() -> IpsConfig:
     return IpsConfig(

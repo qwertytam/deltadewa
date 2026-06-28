@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class _AnalyzerProtocol(Protocol):
     """Structural type of self inside all PortfolioAnalyzer mixins."""
 
-    portfolio: "OptionPortfolio"  # noqa: UP037
+    portfolio: OptionPortfolio
 
     # Mixin methods (defined in their respective mixin classes, but declared
     # here for static type checking)

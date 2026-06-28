@@ -8,8 +8,6 @@ import pytest
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.valuation import OptionValuation
 
-# ruff: noqa: S101
-
 
 class TestVolatilityQuoteCaching:
     """Tests for efficient volatility update mechanism."""

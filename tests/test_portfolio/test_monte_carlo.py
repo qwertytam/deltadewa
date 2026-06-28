@@ -7,8 +7,6 @@ import numpy as np
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 
 class TestMonteCarloMixin:
     """Test cases for MonteCarloMixin."""

@@ -188,18 +188,16 @@ class RecommendationsMixin:
             if total_abs > 0:
                 top_strikes = by_strike.nlargest(top_n)
 
-                def _safe_to_number(val) -> float:  # noqa: ANN001
-                    # If val is a native numeric type or numpy numeric,
-                    # return float; otherwise preserve original
+                def _safe_to_number(val: object) -> float:
                     if isinstance(
                         val,
                         (int, float, np.integer, np.floating, numbers.Real),
                     ):
                         return float(val)
                     try:
-                        return float(val)
+                        return float(val)  # type: ignore[arg-type]
                     except (TypeError, ValueError):
-                        return val
+                        return 0.0
 
                 result["by_strike"][metric] = [
                     {

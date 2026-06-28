@@ -380,9 +380,7 @@ def setup_dashboard(
         reporter=_reporter,
     )
 
-    # ruff: disable[RUF052]  # noqa: ERA001
-    _export_dir = Path(export_dir) if export_dir else Path.cwd() / "exports"
-    # ruff: enable[RUF052]  # noqa: ERA001
+    _export_dir = Path(export_dir) if export_dir else Path.cwd() / "exports"  # noqa: RUF052
 
     return {
         "portfolio_imported": portfolio_imported,

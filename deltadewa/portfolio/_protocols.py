@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 class _PortfolioProtocol(Protocol):
     """Structural type of self inside all PortfolioAnalyzer mixins."""
 
-    positions: list["OptionPosition"]  # noqa: UP037
+    positions: list[OptionPosition]
     underlying_quantity: float
     volatility: float
     valuation_date: datetime

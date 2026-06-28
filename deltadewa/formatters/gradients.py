@@ -26,12 +26,11 @@ if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
 
 
-# ruff: disable[ARG001]  # noqa: ERA001
 def create_heatmap_style(
     df: pd.DataFrame,
     cmap: str = "RdYlGn",
     format_str: str = "{:,.2f}",
-    center_value: float | None = None,  # pylint: disable=unused-argument
+    center_value: float | None = None,  # noqa: ARG001
     vmin: float | None = None,
     vmax: float | None = None,
 ) -> Styler:
@@ -51,7 +50,6 @@ def create_heatmap_style(
         Styled DataFrame with heatmap coloring
 
     """
-    # ruff: enable[ARG001]  # noqa: ERA001
     styled = df.style.background_gradient(
         cmap=cmap,
         axis=None,
@@ -101,9 +99,9 @@ def apply_traffic_light_colors(
 
     """
 
-    def color_traffic_light(val) -> float | str:  # noqa: ANN001
+    def color_traffic_light(val: object) -> float | str:
         try:
-            val = float(val)
+            val = float(val)  # type: ignore[arg-type]
         except (ValueError, TypeError):
             return ""
 

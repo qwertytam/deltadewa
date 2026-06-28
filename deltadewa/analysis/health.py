@@ -209,9 +209,6 @@ class HealthMixin:
         # This is a simplified measure - actual hedge P&L would need
         # historical tracking
         # https://github.com/qwertytam/deltadewa/issues/70
-        # stats = self.portfolio.summary_stats()  # noqa: ERA001
-        # current_option_value = stats["total_value"]  # noqa: ERA001
-
         # For now, use crash protection value as a proxy for hedge value
         current_spot = self.portfolio.spot_price
         crash_spot = current_spot * crash_pct
@@ -240,11 +237,7 @@ class HealthMixin:
         """
         scores = []
 
-        for (
-            _key,
-            metric,
-            # pylint: disable=consider-using-dict-items
-        ) in metrics.items():  # noqa: PERF102
+        for metric in metrics.values():
             # Normalize metric to 0-100 score
             # For non-inverted metrics: min_val=0, max_val=100
             # For inverted metrics: min_val=100, max_val=0

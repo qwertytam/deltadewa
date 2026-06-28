@@ -5,7 +5,6 @@ print()ed headline (captured with capsys) and by checking display() does
 not raise, mirroring test_position_detail.py's conventions.
 """
 
-# ruff: noqa: S101 D102 ANN001
 # pylint: disable=missing-function-docstring
 
 from __future__ import annotations

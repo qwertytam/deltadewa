@@ -201,7 +201,7 @@ class GlobalAssumptions:
         )
 
         # Link time horizon selector to custom days field
-        def on_horizon_change(change) -> None:  # noqa: ANN001
+        def on_horizon_change(change: dict[str, Any]) -> None:
             if change["new"] == -1:
                 self.custom_days.disabled = False
             else:
@@ -287,7 +287,7 @@ class GlobalAssumptions:
         ]:
             getattr(self, widget_attr).observe(self._notify_callbacks, "value")
 
-    def _notify_callbacks(self, change) -> None:  # noqa: ANN001
+    def _notify_callbacks(self, change: dict[str, Any]) -> None:
         """Notify all registered callbacks when any parameter changes."""
         for callback in self._callbacks:
             callback(change)
@@ -313,7 +313,7 @@ class GlobalAssumptions:
         return self.time_horizon.value
 
     @property
-    def time_horizon_days(self):  # noqa: ANN201
+    def time_horizon_days(self) -> SimpleNamespace:
         """Property to get the selected number of days forward.
 
         This is a convenience property that wraps get_days_forward()

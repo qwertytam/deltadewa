@@ -108,9 +108,8 @@ class PnLMixin:
         )
 
         # Vectorized intrinsic value calculation using broadcasting
-        # Shape: spot_scenarios[:, None] is (n_spots, 1)  # noqa: ERA001
-        # Shape: strikes[None, :] is (1, n_positions)  # noqa: ERA001
-        # Result: (n_spots, n_positions)  # noqa: ERA001
+        # Broadcasting reshapes spot_scenarios to (n_spots, 1) and strikes
+        # to (1, n_positions), giving a result of shape (n_spots, n_positions).
         spots_2d = spot_scenarios[:, np.newaxis]
         strikes_2d = strikes[np.newaxis, :]
 

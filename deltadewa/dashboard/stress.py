@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from IPython.display import display
+from matplotlib.axes import Axes
 from matplotlib.ticker import FuncFormatter
 
 from deltadewa.analysis import PortfolioAnalyzer, ScenarioGridCache
@@ -195,7 +196,7 @@ class StressDashboard:
                 days_to_max_maturity=days_to_max_maturity,
             )
 
-        def _on_change(_change) -> None:  # noqa: ANN001
+        def _on_change(_change: object) -> None:
             _render(
                 self.global_assumptions.spot_shock_pct.value,
                 metric_selector.value,
@@ -382,7 +383,7 @@ class StressDashboard:
                 baseline_value=baseline_value,
             )
 
-        def _on_change(_change) -> None:  # noqa: ANN001
+        def _on_change(_change: object) -> None:
             if metric_selector.value is not None:
                 _render(
                     date_selector.value,
@@ -693,7 +694,7 @@ class StressDashboard:
                     values="value",
                 ).sort_index(ascending=False)
 
-                def _col_label(d) -> str:  # noqa: ANN001
+                def _col_label(d: str | float) -> str:
                     try:
                         di = int(float(d))
                     except Exception:  # pylint: disable=broad-exception-caught
@@ -706,7 +707,7 @@ class StressDashboard:
                         else f"T+{di}\n{date_str}"
                     )
 
-                def _row_label(s) -> str:  # noqa: ANN001
+                def _row_label(s: str | float) -> str:
                     try:
                         si = float(s)
                     except Exception:  # pylint: disable=broad-exception-caught
@@ -717,10 +718,10 @@ class StressDashboard:
                     sign = "+" if pct > 0 else ""
                     return f"${_spot_formatter(si)}\n({sign}{pct:.0%})"
 
-                pivot_df.columns = pd.Index(
+                pivot_df.columns = pd.Index(  # type: ignore[misc]
                     [_col_label(d) for d in pivot_df.columns],
                 )
-                pivot_df.index = pd.Index(
+                pivot_df.index = pd.Index(  # type: ignore[misc]
                     [_row_label(s) for s in pivot_df.index],
                 )
                 pivot_df.index.name = "Spot Price"
@@ -1004,7 +1005,7 @@ class StressDashboard:
                     label="Current Position",
                 )
 
-                def _fmt_spot(x, _pos) -> str:  # noqa: ANN001
+                def _fmt_spot(x: float, _pos: int | None) -> str:
                     pct = (x - original_spot) / original_spot
                     if abs(pct) < 0.001:
                         return f"${x:,.0f}\n(~0%)"
@@ -1107,7 +1108,7 @@ class StressDashboard:
     @staticmethod
     def _make_status_widget(
         status_type: str,
-        **kwargs,  # noqa: ANN003
+        **kwargs: Any,  # noqa: ANN401
     ) -> widgets.HTML:
         """Return a styled HTML status indicator widget."""
         styles = {
@@ -1193,7 +1194,7 @@ class StressDashboard:
         """Render the side-by-side PDF histogram and CDF charts."""
 
         def _axis_fmt(
-            ax,  # noqa: ANN001
+            ax: Axes,
             title: str,
             ylbl: str,
             yint: float = 0.0,

@@ -2,8 +2,6 @@
 
 from deltadewa.widgets.gauges import GaugeIndicator
 
-# ruff: noqa: S101
-
 
 class TestGaugeIndicator:
     """Test cases for GaugeIndicator class."""

@@ -6,8 +6,6 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 
 class TestCarryMixin:
     """Test cases for CarryMixin."""

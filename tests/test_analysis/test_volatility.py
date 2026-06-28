@@ -11,8 +11,6 @@ from deltadewa.analysis.volatility import (
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 
 class TestCalculatePortfolioAvgVolatility:
     """Test cases for calculate_portfolio_avg_volatility function."""

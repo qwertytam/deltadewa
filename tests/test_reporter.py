@@ -2,8 +2,6 @@
 
 from deltadewa.reporting.console import ConsoleReporter
 
-# ruff: noqa: S101, ANN001
-
 
 class TestPrintFormatting:
     """Tests for print formatting utilities."""

@@ -18,8 +18,6 @@ from deltadewa.visualization.convenience import (
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
-# ruff: noqa: S101
-
 
 class TestIntegration:
     """Integration tests for the complete visualization module."""

@@ -12,8 +12,6 @@ from deltadewa.dashboard.session import SessionContext, start_session
 from deltadewa.marketdata import MarketDataError, StaticProvider
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 
 class TestStartSession:
     """Tests for start_session."""

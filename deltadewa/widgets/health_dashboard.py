@@ -717,7 +717,7 @@ class HedgeHealthDashboard:
         )
         output = widgets.Output()
 
-        def on_upload(change) -> None:  # noqa: ANN001
+        def on_upload(change: dict[str, Any]) -> None:
             if not change["new"]:
                 return
 

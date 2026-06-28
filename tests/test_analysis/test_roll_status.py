@@ -26,8 +26,6 @@ from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
 
-# ruff: noqa: S101
-
 
 def _make_ips_config(
     *,
@@ -288,8 +286,8 @@ class TestEvaluateRollStatus:
         value: float,
     ) -> None:
         def _fake_calculate_crash_convexity_pct(
-            self,  # noqa: ANN001, ARG001
-            crash_pct: float = 0.80,  # noqa: ARG001
+            self,
+            crash_pct: float = 0.80,
         ) -> float:
             return value
 
