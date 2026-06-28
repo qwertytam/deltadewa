@@ -11,8 +11,6 @@ from deltadewa.widgets.health_dashboard import (
     HedgeHealthMetric,
 )
 
-# ruff: noqa: S101
-
 
 class TestHedgeHealthMetric:
     """Test cases for HedgeHealthMetric class."""

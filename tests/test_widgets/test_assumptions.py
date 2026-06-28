@@ -4,8 +4,6 @@ from datetime import datetime, timedelta
 
 from deltadewa.widgets.assumptions import GlobalAssumptions
 
-# ruff: noqa: S101
-
 
 class TestGlobalAssumptions:
     """Test cases for GlobalAssumptions class."""
@@ -116,7 +114,7 @@ class TestGlobalAssumptions:
         assumptions = GlobalAssumptions()
         call_log = []
 
-        def callback(change) -> None:  # noqa: ANN001
+        def callback(change) -> None:
             call_log.append(change)
 
         assumptions.on_change(callback)

@@ -16,13 +16,12 @@ import ipywidgets as widgets  # type: ignore[import-untyped]
 class ExportDirVBox(widgets.VBox):
     """Custom VBox to hold export directory configuration and metadata."""
 
-    # ruff: disable[ANN401]  # noqa: ERA001
-    def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:  # noqa: ANN401
         """Initialize ExportDirVBox with export_dir metadata."""
         super().__init__(*args, **kwargs)
         self.export_dir: Path = export_dir
 
-    def __copy__(self, **kwargs: Any) -> "ExportDirVBox":
+    def __copy__(self, **kwargs: Any) -> "ExportDirVBox":  # noqa: ANN401
         """Create a copy of the widget while preserving export_dir."""
         new_widget = super().__copy__(**kwargs)
         new_widget.export_dir = self.export_dir
@@ -33,8 +32,6 @@ class ExportDirVBox(widgets.VBox):
         new_widget = super().__deepcopy__(memo)
         new_widget.export_dir = self.export_dir
         return new_widget
-
-    # ruff: enable[ANN401]  # noqa: ERA001
 
 
 def create_export_dir_widget(
@@ -220,15 +217,13 @@ def create_export_dir_widget(
             else:
                 export_dir = Path.cwd()
 
-            # ruff : disable[S603, S607]  # noqa: ERA001
             # We trust the export_dir value since it was created by our own code
             if platform.system() == "Darwin":
-                subprocess.run(["open", str(export_dir)], check=False)
+                subprocess.run(["open", str(export_dir)], check=False)  # noqa: S603, S607
             elif platform.system() == "Windows":
-                subprocess.run(["explorer", str(export_dir)], check=False)
+                subprocess.run(["explorer", str(export_dir)], check=False)  # noqa: S603, S607
             else:
-                subprocess.run(["xdg-open", str(export_dir)], check=False)
-            # ruff : enable[S603, S607]  # noqa: ERA001
+                subprocess.run(["xdg-open", str(export_dir)], check=False)  # noqa: S603, S607
         except Exception as e:  # pylint: disable=broad-exception-caught
             with status_output:
                 print(f"⚠️  Could not open:  {e}")

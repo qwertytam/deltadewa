@@ -18,8 +18,6 @@ from deltadewa.analysis.market_environment import (
 )
 from deltadewa.marketdata._errors import MarketDataError
 
-# ruff: noqa: S101
-
 _CALM_TERM = {
     "VIX9D": 14.0,
     "VIX": 15.0,

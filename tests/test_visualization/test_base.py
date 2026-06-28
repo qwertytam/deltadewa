@@ -6,8 +6,6 @@ from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts, OptionChartsBase
 
-# ruff: noqa: S101
-
 
 class TestOptionChartsBase:
     """Test cases for OptionChartsBase class."""

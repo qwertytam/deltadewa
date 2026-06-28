@@ -6,7 +6,6 @@ Verifies:
 - Importing the package does not trigger expensive side effects
 """
 
-# ruff: noqa: S101 D101 D102 ANN001
 # pylint: disable=missing-function-docstring, import-outside-toplevel, unused-import, missing-class-docstring
 
 from __future__ import annotations

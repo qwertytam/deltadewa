@@ -5,8 +5,6 @@ from pathlib import Path
 from deltadewa.analysis.hedge_triggers import HedgeTriggerThresholds
 from deltadewa.ips_config import load_ips_config
 
-# ruff: noqa: S101
-
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
 
 

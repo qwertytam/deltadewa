@@ -8,8 +8,6 @@ import pytest
 from deltadewa import create_empty_portfolio
 from deltadewa.widgets.summary import NetHedgeSummary
 
-# ruff: noqa: S101
-
 
 class TestNetHedgeSummary:
     """Test cases for NetHedgeSummary class."""

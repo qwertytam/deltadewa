@@ -346,11 +346,9 @@ def get_currency_axis_formatter(compact: bool = True):  # noqa: ANN201
 
     if compact:
         return FUNC_FORMATTER(format_currency_for_axis)
-    # ruff: disable[ARG005]  # noqa: ERA001
     return FUNC_FORMATTER(
-        lambda x, pos: format_currency(x, compact=False, precision=0),
+        lambda x, pos: format_currency(x, compact=False, precision=0),  # noqa: ARG005
     )
-    # ruff: enable[ARG005]  # noqa: ERA001
 
 
 def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
@@ -368,11 +366,9 @@ def get_percentage_axis_formatter(from_decimal: bool = True):  # noqa: ANN201
 
     if from_decimal:
         return FUNC_FORMATTER(format_percentage_for_axis)
-    # ruff: disable[ARG005]  # noqa: ERA001
     return FUNC_FORMATTER(
-        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),
+        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),  # noqa: ARG005
     )
-    # ruff: enable[ARG005]  # noqa: ERA001
 
 
 def get_spot_price_axis_formatter(current_spot: float):  # noqa: ANN201

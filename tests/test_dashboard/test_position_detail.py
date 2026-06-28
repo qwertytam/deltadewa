@@ -6,7 +6,6 @@ display() calls are no-ops outside IPython; we verify behaviour by inspecting
 the underlying DataFrame logic and helper functions rather than widget output.
 """
 
-# ruff: noqa: S101 D102 ANN001
 # pylint: disable=missing-function-docstring
 
 from __future__ import annotations
@@ -152,7 +151,7 @@ class TestPositionDetailDataFrame:
 
     def test_maturity_column_is_string(self, single_position_portfolio) -> None:
         """Maturity dates should already be formatted as strings
-        by to_dataframe()."""  # noqa: D205 D209
+        by to_dataframe()."""
         df = single_position_portfolio.to_dataframe()
         assert df["maturity"].dtype == object
         # Should be parseable as a date string

@@ -18,8 +18,6 @@ from deltadewa.persistence import (
 )
 from deltadewa.reporting.audit import PortfolioLogger
 
-# ruff: noqa: S101 ANN001
-
 # ========== Fixtures ==========
 
 

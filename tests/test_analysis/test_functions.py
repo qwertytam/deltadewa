@@ -20,8 +20,6 @@ from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.spot_utils import generate_spot_range
 
-# ruff: noqa: S101
-
 
 class TestGenerateSpotRange:
     """Test cases for generate_spot_range function."""

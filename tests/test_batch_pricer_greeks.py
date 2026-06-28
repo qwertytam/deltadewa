@@ -11,10 +11,8 @@ from deltadewa import OptionPortfolio, OptionValuation
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 
-# ruff: noqa: S101 ANN001
 
-
-def _make_pricer(portfolio, **kwargs) -> BatchPricer:  # noqa: ANN003
+def _make_pricer(portfolio, **kwargs) -> BatchPricer:
     return BatchPricer(
         positions=portfolio.positions,
         risk_free_rate=portfolio.risk_free_rate,

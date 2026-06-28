@@ -6,7 +6,6 @@ Focus areas:
 - PositionAgingDisplay.display(): smoke tests + freshness of "today"
 """
 
-# ruff: noqa: S101 D101 D102 ANN001
 # pylint: disable=missing-class-docstring, missing-function-docstring, protected-access
 
 from __future__ import annotations

@@ -27,8 +27,6 @@ from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
 
-# ruff: noqa: S101
-
 _SPOT = 100.0
 _VOL = 0.20
 _RATE = 0.04
@@ -106,7 +104,7 @@ def _patch_convexity(
     monkeypatch: pytest.MonkeyPatch,
     value: float,
 ) -> None:
-    def _fake(self: object, crash_pct: float = 0.80) -> float:  # noqa: ARG001
+    def _fake(self: object, crash_pct: float = 0.80) -> float:
         return value
 
     monkeypatch.setattr(

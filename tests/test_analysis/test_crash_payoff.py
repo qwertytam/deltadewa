@@ -18,8 +18,6 @@ from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 
 def _make_long_put_portfolio(
     *,

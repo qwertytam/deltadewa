@@ -7,8 +7,6 @@ from deltadewa.portfolio.factory import (
     create_empty_portfolio,
 )
 
-# ruff: noqa: S101
-
 
 class TestFactoryFunctions:
     """Test cases for factory functions."""

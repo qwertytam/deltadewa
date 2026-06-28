@@ -12,8 +12,6 @@ from deltadewa.formatters.values import (
     format_spot_with_pct,
 )
 
-# ruff: noqa: S101
-
 
 class TestFormatCurrency:
     """Test cases for format_currency function."""

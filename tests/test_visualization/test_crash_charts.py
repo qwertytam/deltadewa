@@ -21,8 +21,6 @@ from deltadewa.visualization.crash_charts import (
 
 matplotlib.use("Agg")
 
-# ruff: noqa: S101
-
 
 def _make_long_put_portfolio(
     *,

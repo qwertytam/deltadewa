@@ -5,8 +5,6 @@ import pytest
 from deltadewa.marketdata import MarketDataUnavailableError, StaticProvider
 from deltadewa.widgets.assumptions import GlobalAssumptions
 
-# ruff: noqa: S101
-
 
 class TestStaticProvider:
     """Tests for StaticProvider."""

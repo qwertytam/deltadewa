@@ -11,8 +11,6 @@ from deltadewa.analysis.market_environment import (
 )
 from deltadewa.widgets.env_gauges import build_env_gauges
 
-# ruff: noqa: S101
-
 
 def _env(
     *,

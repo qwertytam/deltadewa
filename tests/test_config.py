@@ -9,8 +9,6 @@ from deltadewa.config import (
     get_export_dir_from_widget,
 )
 
-# ruff: noqa: S101 ANN001
-
 
 class TestCreateExportDirWidget:
     """Tests for create_export_dir_widget."""

@@ -8,8 +8,6 @@ import requests
 
 from deltadewa.marketdata import CboeFredProvider, MarketDataError
 
-# ruff: noqa: S101 ANN001
-
 # Real CBOE SPX format: DATE + symbol-name column (no OHLCV).
 # Dates are MM/DD/YYYY — must not be sorted as strings or December rows
 # will sort after January rows of the following year.

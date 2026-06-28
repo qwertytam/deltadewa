@@ -5,8 +5,6 @@ from datetime import UTC, datetime, timedelta
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 
 class TestPortfolioConsistency:
     """Tests for portfolio logic and data integrity."""

@@ -13,8 +13,6 @@ from deltadewa.analysis.portfolio_shape import (
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
 _EXPIRY = datetime.now(tz=UTC) + timedelta(days=90)
 
 

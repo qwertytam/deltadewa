@@ -13,8 +13,6 @@ from deltadewa.portfolio.factory import (
 )
 from deltadewa.portfolio.position import OptionPosition
 
-# ruff: noqa: S101
-
 
 class TestPortfolioIntegration:
     """Integration tests for full portfolio functionality."""

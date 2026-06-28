@@ -12,8 +12,6 @@ from deltadewa.visualization.base import OptionCharts
 
 matplotlib.use("Agg")  # Use non-interactive backend
 
-# ruff: noqa: S101
-
 
 class TestScenarioChartsMixin:
     """Test cases for ScenarioChartsMixin class."""

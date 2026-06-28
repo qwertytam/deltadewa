@@ -10,8 +10,6 @@ from deltadewa.persistence import PortfolioSerializer
 from deltadewa.widgets import export_controls
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
 
-# ruff: noqa: S101
-
 PORTFOLIO_YAML = """
 market_parameters:
   spot_price: 100.0

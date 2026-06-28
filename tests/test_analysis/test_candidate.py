@@ -12,9 +12,6 @@ from deltadewa.analysis.candidate import (
 from deltadewa.constants import ExerciseStyle
 from deltadewa.portfolio.core import OptionPortfolio
 
-# ruff: noqa: S101
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

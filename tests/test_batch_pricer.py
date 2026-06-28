@@ -17,7 +17,6 @@ from deltadewa.batch_pricer import BatchPricer
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.warnings import ClosedFormAccuracyWarning
 
-# ruff: noqa: S101 D102
 # pylint: disable=too-many-lines, missing-function-docstring
 
 
@@ -793,7 +792,7 @@ class TestClosedFormAccuracyWarning:
     """Tests for ClosedFormAccuracyWarning emitted by BatchPricer."""
 
     @pytest.fixture(autouse=True)
-    def _reset_warning_registry(self):  # noqa: ANN202
+    def _reset_warning_registry(self):
         """Reset warning registry.
 
         Clear the valuation module's __warningregistry__ before/after each test
@@ -805,7 +804,7 @@ class TestClosedFormAccuracyWarning:
             _valuation_module.__warningregistry__.clear()  # type: ignore[error]
 
     @staticmethod
-    def _clear_registry():  # noqa: ANN205
+    def _clear_registry():
         """Clear inside a catch_warnings block to defeat deduplication."""
         if hasattr(_valuation_module, "__warningregistry__"):
             _valuation_module.__warningregistry__.clear()  # type: ignore[error]

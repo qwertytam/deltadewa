@@ -2,8 +2,6 @@
 
 from deltadewa.widgets.base import InteractiveOutput
 
-# ruff: noqa: S101
-
 
 class TestInteractiveOutput:
     """Test cases for InteractiveOutput class."""
@@ -21,7 +19,7 @@ class TestInteractiveOutput:
         call_count = []
 
         @output.update
-        def test_func(value) -> str:  # noqa: ANN001
+        def test_func(value) -> str:
             call_count.append(value)
             return f"processed: {value}"
 
@@ -41,7 +39,7 @@ class TestInteractiveOutput:
         results = []
 
         @output.update
-        def test_func(*args, **kwargs) -> int:  # noqa: ANN002 ANN003
+        def test_func(*args, **kwargs) -> int:
             results.append((args, kwargs))
             return len(args) + len(kwargs)
 

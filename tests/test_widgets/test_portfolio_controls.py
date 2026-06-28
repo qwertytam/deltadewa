@@ -6,8 +6,6 @@ import pytest
 
 from deltadewa.widgets.portfolio_controls import PortfolioWidgets
 
-# ruff: noqa: S101 ANN001
-
 
 class TestPortfolioWidgets:
     """Test cases for PortfolioWidgets class."""
