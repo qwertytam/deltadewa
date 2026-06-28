@@ -1,26 +1,77 @@
 # deltadewa
 
-American Options Dashboard using QuantLib - Bjerksund-Stensland Model
+SPX tail-risk hedging system — two Jupyter dashboards, IPS-driven, QuantLib-priced.
 
 ## Overview
 
-`deltadewa` is a comprehensive Jupyter-based dashboard for pricing and managing American options portfolios. It uses the **Bjerksund-Stensland** approximation model via QuantLib to provide accurate American option pricing and Greeks calculation.
+`deltadewa` is a Jupyter-based hedging dashboard for a single-name **SPX tail-risk /
+downside-protection** program. Two notebooks share the same underlying package, each
+targeting a different audience:
 
-### Features
+- **`monitor_dashboard.ipynb` — Monitor & Report**: read-mostly view of the current book
+  for routine checks and IC/board reporting. Covers handbook Tiers 1–4 and the Part VII
+  program report.
+- **`hedge_design.ipynb` — Hedge Design**: the analyst's workbench — position editor, roll
+  planner, sizing workbench, strike ladder builder, monetization planner, and decision
+  matrix.
 
-- **American Option Pricing**: Uses the Bjerksund-Stensland approximation for accurate American option valuation
-- **Portfolio Management**: Handle multiple positions with different strikes, maturities, and option types
-- **Greeks Calculation**: Delta, Gamma, Vega, Theta, and Rho for individual positions and portfolio
-- **Hedge Analysis**: Manage options against a notional position with hedge ratio and delta adjustment recommendations
-- **Interactive Dashboard**: Jupyter widgets for real-time scenario analysis
-- **Visualizations**: Comprehensive charts for P&L, Greeks, and position breakdowns
-- **Scenario Analysis**: Test portfolio performance across different spot prices and volatilities
+Both call `start_session(role=..., globals_dict=globals())` from `deltadewa.dashboard`.
+The program policy lives in `config/ips.yaml` (carry budget, convexity targets, drawdown
+tolerance, roll and monetization triggers). Methodology is drawn from
+[`docs/hedging handbook.md`](docs/hedging%20handbook.md).
+
+Market data defaults to **fully offline** (seeded from the loaded portfolio), with an
+optional live CBOE/FRED pull that falls back gracefully on network failure.
+
+## Features
+
+- **Crash convexity & payoff ratio** — hedge P&L at –20% spot; realised payoff vs.
+  cumulative carry paid
+- **Net carry** — annualized theta as % of notional; tracked against the IPS carry budget
+- **Market-environment tiers** — VIX term structure (contango / flat / backwardation),
+  SKEW-index percentile, vol-regime percentile
+- **Roll Status** — per-position moneyness drift, time decay, and roll-up cost ladder
+- **Seven hedge-health gauges** with configurable thresholds (`config/dashboard.yaml`)
+- **Sizing workbench, strike ladder builder, monetization planner** — active development
+  in `hedge_design.ipynb`
+- **Decision matrix** — structured roll / monetization / re-risk checklist
+- **Program report** — IC/board format (Monitor dashboard)
+- **IPS policy contract** — carry budget, convexity and drawdown targets, roll/rally/
+  monetization triggers (`config/ips.yaml`)
+- **Live CBOE/FRED market data** (optional; 15-minute disk cache; automatic offline
+  fallback)
+
+## Pricing
+
+### SPX — European (default)
+
+SPX options are **cash-settled European** with no early-exercise value. Price them with
+the analytic Black-Scholes engine by setting `exercise_style: "EUROPEAN"` on each
+position (see `examples/portfolios/spx_protective_put.yaml`). The American approximation
+**overstates put values** for SPX and must not be used.
+
+### SPY / single-name equities — American (secondary)
+
+For underlyings with potential early exercise (dividends, physically-settled single-stock
+options), omit `exercise_style` or set it to `"AMERICAN"`. This selects the
+**Bjerksund-Stensland** analytical approximation via QuantLib.
+
+#### Bjerksund-Stensland Model
+
+The Bjerksund-Stensland model provides fast, closed-form American option pricing that:
+
+- Handles early-exercise features for dividend-paying underlyings
+- Works for both calls and puts
+- Delivers near-instantaneous Greeks without lattice or PDE overhead
+
+Both engines share the same `OptionValuation` interface in `deltadewa/valuation.py`;
+exercise style is selected per-position in the portfolio YAML.
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.11 or higher
 - Poetry (for dependency management)
 
 ### Setup
@@ -55,7 +106,8 @@ poetry shell
 
 ### Jupyter Notebook Output Management
 
-This repository uses `nbstripout` to keep notebook outputs out of version control while preserving them locally.
+This repository uses `nbstripout` to keep notebook outputs out of version control while
+preserving them locally.
 
 **Initial Setup:**
 
@@ -80,37 +132,32 @@ git config filter.nbstripout-commit.required true
 
 **If you see repeated outputs:** You need to run the setup script above.
 
-## Usage
+## Dashboard Organization
 
-### Dashboard Organization
-
-The dashboard is split into two notebooks, each with its own audience and
-purpose. Both call `start_session(role=..., globals_dict=globals())` from
-`deltadewa.dashboard` and share the same underlying package — only the
-panels and setup differ.
+The dashboard is split into two notebooks, each with its own audience and purpose. Both
+call `start_session(role=..., globals_dict=globals())` from `deltadewa.dashboard` and
+share the same underlying package — only the panels and setup differ.
 
 #### 📋 `monitor_dashboard.ipynb` — Monitor & Report
 
-Read-mostly view of the current book, for routine checks and IC/board
-reporting. Starts **empty** — load a portfolio explicitly via the import
-widget. No position editor.
+Read-mostly view of the current book, for routine checks and IC/board reporting. Starts
+**empty** — load a portfolio explicitly via the import widget. No position editor.
 
 - Net Hedge Summary, Hedge Health, Roll Status, Hedge Decision Triggers
 - Cost of Carry, Position Aging, Position Detail
 - Consolidated Greeks view
-- A single current-structure stress snapshot (spot x vol heatmap)
+- A single current-structure stress snapshot (spot × vol heatmap)
 - Session Change Log and export
 
-#### 🛠️ `hedge_design.ipynb` — Design & Roll
+#### 🛠️ `hedge_design.ipynb` — Hedge Design
 
 Workbench mode: load a book and design changes to it.
 
 - Position Editor, editable scenario assumptions
 - Roll planner (candidate roll-up costs via `analysis.roll_status`)
-- Sizing workbench, strike ladder builder, monetization planner — stubbed,
-  future work
-- Eager Monte Carlo run, full stress tooling (time x price / spot x vol
-  heatmaps), Risk/Reward summary, Volatility Profile
+- Sizing workbench, strike ladder builder, monetization planner — in development
+- Eager Monte Carlo run, full stress tooling (time × price / spot × vol heatmaps),
+  Risk/Reward summary, Volatility Profile
 - Session Change Log and export
 
 ### Launch Jupyter Dashboard
@@ -127,201 +174,104 @@ Start the Hedge Design dashboard (construction + stress testing):
 jupyter lab hedge_design.ipynb
 ```
 
-### Quick Start Example
+## Quick Start
 
-The dashboard provides a complete workflow:
+The canonical SPX tail-hedge book is in `examples/portfolios/spx_protective_put.yaml` —
+two tranches of OTM long puts against a 1,000-unit SPX notional, with European exercise
+style, entry tracking, and realistic implied-vol skew. Import it via the
+**Import Portfolio** widget at the top of each notebook.
 
-1. **Set Market Parameters**: Configure spot price, volatility, interest rates
-2. **Build Portfolio**: Add multiple option positions (calls/puts, different strikes/maturities)
-3. **Analyze Positions**: View all positions with Greeks and values
-4. **Review Analytics**: Get portfolio-level metrics and hedge analysis
-5. **Run Scenarios**: Test P&L across different market conditions
-6. **Get Recommendations**: Receive hedge adjustment suggestions
-
-### Python API Usage
-
-You can also use the library programmatically:
+### Session bootstrap
 
 ```python
-import datetime
-from datetime import datetime as dt
-from datetime import timedelta
-from deltadewa import AmericanOption, OptionPortfolio
+# Paste into the notebook setup cell, then run all cells.
+from deltadewa.dashboard import start_session
 
-# Create a portfolio
-portfolio = OptionPortfolio(
-    underlying_quantity=1000.0,  # Long 1000 shares
-    spot_price=100.0,
-    volatility=0.25,
-    risk_free_rate=0.05,
-    dividend_yield=0.02
-)
-
-# Add option positions
-maturity = dt.now(datetime.UTC) + timedelta(days=60)
-portfolio.add_position(
-    strike_price=95.0,
-    maturity_date=maturity,
-    quantity=10,
-    option_type="put"
-)
-
-# Get portfolio analytics
-stats = portfolio.summary_stats()
-print(f"Total Delta: {stats['total_delta']:.2f}")
-print(f"Net Delta: {stats['net_delta']:.2f}")
-print(f"Hedge Ratio: {stats['hedge_ratio']:.2f}%")
-
-# View positions
-df = portfolio.to_dataframe()
-print(df)
+ctx = start_session(role="monitor", globals_dict=globals())
+# Use the Import Portfolio widget to load a YAML book, e.g.:
+#   examples/portfolios/spx_protective_put.yaml
 ```
 
-### Per-Position Volatility
-
-You can specify different implied volatilities for individual positions to model volatility skew or smile:
-
 ```python
-portfolio = OptionPortfolio(
-    underlying_quantity=1000.0,
-    spot_price=100.0,
-    volatility=0.25,  # Default volatility
-    risk_free_rate=0.05,
-    dividend_yield=0.02
+# For live CBOE/FRED market data (optional; falls back offline on network error):
+ctx = start_session(
+    role="monitor",
+    globals_dict=globals(),
+    use_live_market_data=True,
 )
-
-# Add position with custom volatility (e.g., modeling volatility skew)
-portfolio.add_position(
-    strike_price=95.0,
-    maturity_date=maturity,
-    quantity=10,
-    option_type="put",
-    volatility=0.35  # Custom volatility for this position (35%)
-)
-
-# Add position using default portfolio volatility
-portfolio.add_position(
-    strike_price=100.0,
-    maturity_date=maturity,
-    quantity=-5,
-    option_type="call",
-    # No volatility specified - uses portfolio default of 0.25
-)
-
-# View volatility per position
-df = portfolio.to_dataframe()
-print(df[['type', 'strike', 'volatility', 'custom_volatility']])
-
-# Check volatility statistics
-stats = portfolio.summary_stats()
-print(f"Volatility range: {stats['volatility_min']:.2%} - {stats['volatility_max']:.2%}")
-print(f"Positions with custom volatility: {stats['custom_volatility_count']}")
 ```
 
-## Example Scenario
+The `role` argument (`"monitor"` or `"design"`) is stored on the returned
+`SessionContext` for later use.
 
-The default dashboard configuration includes:
+### Per-position volatility
 
-- **Market**: Spot = $100, Vol = 25%, Risk-free = 5%, Dividend = 2%
-- **Notional**: Long 1000 shares (to be hedged)
-- **Positions**:
-  - Long puts at strikes 90, 95, 100 (downside protection)
-  - Short calls at strikes 105, 110, 115 (income generation)
-  - Multiple maturities: 30, 60, 90 days
+Portfolio YAML files support per-position implied volatility to model the skew:
 
-This creates a **collar-like** strategy that protects the downside while generating income from covered calls.
-
-## Key Concepts
-
-### Bjerksund-Stensland Model
-
-The Bjerksund-Stensland model is an analytical approximation for American option pricing that:
-
-- Provides fast, closed-form solutions
-- Accurately handles early exercise features
-- Works well for both calls and puts
-- Considers dividends in the valuation
-
-### Greeks
-
-- **Delta**: Sensitivity to underlying price changes (hedge ratio)
-- **Gamma**: Rate of change of delta (convexity risk)
-- **Vega**: Sensitivity to volatility changes
-- **Theta**: Time decay per day
-- **Rho**: Sensitivity to interest rate changes
-
-### Hedge Management
-
-The dashboard helps you:
-
-- Monitor net delta exposure (portfolio + notional)
-- Calculate hedge ratio (% of notional hedged)
-- Determine adjustments needed for delta neutrality
-- Understand gamma risk and how delta will change
-
-### Volatility Analysis
-
-The dashboard includes sophisticated volatility sensitivity analysis that properly handles portfolios with position-level volatilities:
-
-#### Proportional Volatility Scaling
-
-When testing volatility scenarios (stress tests, scenario grids), the system:
-
-1. Calculates a **vega-weighted average volatility** across all positions
-2. Scales each position's volatility proportionally to maintain the volatility skew/smile
-3. Preserves the relative volatility structure between positions
-
-**Example:**
-
-```python
-# Portfolio with volatility skew
-positions = [
-    {"strike": 90, "vol": 0.35},   # OTM put - higher IV
-    {"strike": 95, "vol": 0.30},   # Nearer put
-    {"strike": 100, "vol": 0.25},  # ATM - default IV
-    {"strike": 105, "vol": 0.22},  # OTM call - lower IV
-]
-
-# Vega-weighted average: 0.283
-# Testing +20% vol scenario (avg becomes 0.34):
-#   90 strike: 0.35 → 0.42 (scaled by 1.2×)
-#   95 strike: 0.30 → 0.36 (scaled by 1.2×)
-#   100 strike: 0.25 → 0.30 (scaled by 1.2×)
-#   105 strike: 0.22 → 0.264 (scaled by 1.2×)
-# Skew structure preserved!
+```yaml
+positions:
+  - option_type: "put"
+    strike_price: 5200.0
+    maturity_date: "2027-06-17"
+    quantity: 5
+    volatility: 0.19          # OTM skew above ATM
+    exercise_style: "EUROPEAN"
 ```
 
-**Benefits:**
-
-- **Accurate vega analysis** - Position sensitivities remain proportional
-- **Realistic scenarios** - Models real market volatility behavior
-- **Proper risk assessment** - Captures volatility skew effects
-
-**Volatility Statistics:**
-
-Use the utility functions to analyze your portfolio's volatility profile:
+Scenario grids (stress tests) preserve the relative skew structure by scaling each
+position's vol proportionally to a vega-weighted portfolio average. Use
+`get_volatility_stats` to inspect:
 
 ```python
-from deltadewa.analysis import get_volatility_stats, calculate_portfolio_avg_volatility
+from deltadewa.analysis import get_volatility_stats
 
-stats = get_volatility_stats(portfolio)
+stats = get_volatility_stats(ctx.portfolio)
 print(f"Vega-weighted avg: {stats['avg_volatility']:.2%}")
-print(f"Volatility range: {stats['min_volatility']:.2%} - {stats['max_volatility']:.2%}")
-print(f"Positions with custom vol: {stats['num_custom_vol']}/{stats['num_positions']}")
+print(f"Vol range:         {stats['min_volatility']:.2%} – {stats['max_volatility']:.2%}")
 ```
+
+## Configuration
+
+| File | Purpose | Guide |
+|---|---|---|
+| `config/ips.yaml` | Program policy — carry budget, convexity targets, drawdown tolerance, roll/monetization triggers | [yaml-config-guide.md](docs/yaml-config-guide.md) |
+| `config/dashboard.yaml` | Health-gauge thresholds and color bands (presentation only) | [dashboard-config-guide.md](docs/dashboard-config-guide.md) |
+
+Presets live in `examples/ips/` and `examples/dashboard/`. Copy one over the
+corresponding `config/` file to activate it. Both files are optional — missing or
+invalid → a warning and sensible defaults, never a hard failure.
 
 ## Project Structure
 
 ```ini
 deltadewa/
-├── deltadewa/                 # Python package
-│   ├── __init__.py
-│   ├── american_option.py    # American option pricing
-│   └── portfolio.py           # Portfolio management
-├── monitor_dashboard.ipynb    # Monitor & Report dashboard
-├── hedge_design.ipynb         # Design & Roll dashboard
-├── pyproject.toml            # Poetry dependencies
-└── README.md                 # This file
+├── deltadewa/
+│   ├── analysis/          # metrics: carry, health, hedge triggers, market env, roll status, vol
+│   ├── dashboard/         # start_session(), session bootstrap, widget wiring
+│   ├── marketdata/        # CboeFredProvider, StaticProvider, provider interface
+│   ├── portfolio/         # domain model: position.py, core.py, Monte Carlo, risk, factory
+│   ├── reporting/         # ConsoleReporter, PortfolioLogger
+│   ├── visualization/     # chart builders
+│   ├── widgets/           # Jupyter UI widgets
+│   ├── constants.py       # ExerciseStyle enum and shared constants
+│   ├── ips_config.py      # IPS policy schema and loader
+│   ├── persistence.py     # PortfolioSerializer (YAML/JSON round-trip)
+│   └── valuation.py       # OptionValuation (QuantLib pricing engine)
+├── config/
+│   ├── ips.yaml           # program policy (edit in place)
+│   └── dashboard.yaml     # health-gauge thresholds (edit in place)
+├── examples/
+│   ├── portfolios/        # spx_protective_put.yaml, spy_collar.yaml, …
+│   ├── ips/               # policy presets
+│   └── dashboard/         # gauge-threshold presets
+├── docs/
+│   ├── hedging handbook.md
+│   ├── yaml-config-guide.md
+│   └── dashboard-config-guide.md
+├── monitor_dashboard.ipynb
+├── hedge_design.ipynb
+├── pyproject.toml
+└── tests/
 ```
 
 ## Dependencies
@@ -344,6 +294,9 @@ See LICENSE file for details.
 
 ## References
 
+- [`docs/hedging handbook.md`](docs/hedging%20handbook.md) — methodology source of truth
+  for the hedging program
 - [QuantLib Documentation](https://www.quantlib.org/)
-- Bjerksund, P., and Stensland, G. (1993). "Closed-Form Approximation of American Options"
+- Bjerksund, P., and Stensland, G. (1993). "Closed-Form Approximation of American
+  Options"
 - Hull, J. C. "Options, Futures, and Other Derivatives"

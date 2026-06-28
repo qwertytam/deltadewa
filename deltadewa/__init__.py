@@ -1,4 +1,4 @@
-"""deltadewa - American options dashboard using QuantLib."""
+"""deltadewa — SPX tail-risk hedging system, QuantLib-priced."""
 
 __version__ = "0.1.0"
 

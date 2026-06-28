@@ -1,5 +1,7 @@
 # YAML Configuration Guide
 
+> **Navigation:** [README](../README.md) · [dashboard-config-guide.md](dashboard-config-guide.md) · [hedging handbook.md](hedging%20handbook.md)
+
 `deltadewa` uses YAML in two unrelated ways. Keeping them straight matters:
 
 - **`config/`** — live files the app reads automatically at startup
@@ -23,6 +25,7 @@ market_parameters:
   dividend_yield: 0.015
   underlying_quantity: 5000.0    # optional, default 0.0
   symbol: "SPY"                  # optional, default "UNKNOWN"
+  contract_size: 100             # required; 100 for SPX and SPY, 1 for single-name equities
 
 positions:
   - option_type: "put"
@@ -41,12 +44,13 @@ positions:
 ```
 
 This is the actual shape `PortfolioSerializer.import_from_yaml()`
-(`deltadewa/persistence.py`) parses — see `examples/portfolios/spy_collar.yaml`
-for a complete worked example.
+(`deltadewa/persistence.py`) parses — see `examples/portfolios/spx_protective_put.yaml`
+for the canonical SPX tail-hedge example, or `examples/portfolios/spy_collar.yaml`
+for a multi-leg collar.
 
-**`market_parameters`**: `spot_price`, `volatility`, `risk_free_rate`, and
-`dividend_yield` are required. `underlying_quantity` and `symbol` are
-optional.
+**`market_parameters`**: `spot_price`, `volatility`, `risk_free_rate`,
+`dividend_yield`, and `contract_size` are required. `underlying_quantity` and
+`symbol` are optional.
 
 **Each position** needs `option_type` ("call" or "put"), `strike_price`,
 `quantity`, and **either** `maturity_date` (an ISO date string) **or**
