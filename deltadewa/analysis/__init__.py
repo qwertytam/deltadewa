@@ -49,6 +49,10 @@ from deltadewa.analysis.monetization import (
     build_monetization_plan,
     compute_hedge_gain_pct,
 )
+from deltadewa.analysis.portfolio_shape import (
+    PortfolioShape,
+    classify_portfolio_shape,
+)
 from deltadewa.analysis.roll_planner import (
     RollAction,
     RollPlanRecord,
@@ -92,6 +96,7 @@ __all__ = [
     "MonetizationPlan",
     "MonetizationStepStatus",
     "PortfolioAnalyzer",
+    "PortfolioShape",
     "PremiumBasis",
     "RegimeLabel",
     "RollAction",
@@ -104,6 +109,7 @@ __all__ = [
     "build_monetization_plan",
     "build_roll_plan",
     "build_strike_ladder",
+    "classify_portfolio_shape",
     "classify_vix_regime",
     "compute_crash_convexity",
     "compute_hedge_gain_pct",
