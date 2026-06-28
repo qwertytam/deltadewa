@@ -1,5 +1,7 @@
 # Dashboard Config Guide
 
+> **Navigation:** [README](../README.md) · [yaml-config-guide.md](yaml-config-guide.md) · [hedging handbook.md](hedging%20handbook.md)
+
 `config/dashboard.yaml` controls the gauge ranges and color thresholds
 `HedgeHealthDashboard` (`deltadewa/widgets/health_dashboard.py`) uses for
 its seven health metrics. It's presentation-only — it changes how the
