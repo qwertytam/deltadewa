@@ -51,7 +51,7 @@ def _gauge_inner_html(
     else:
         low_color = DEFAULT_PALETTE.negative
         high_color = DEFAULT_PALETTE.positive
-    return (
+    return str(
         GaugeIndicator(
             start=start,
             end=end,
@@ -72,7 +72,7 @@ def _gauge_inner_html(
             title=None,
         )
         .create_widget()
-        .value
+        .value,
     )
 
 

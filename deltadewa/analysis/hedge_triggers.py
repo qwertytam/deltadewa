@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import deltadewa.constants as const
 
@@ -243,7 +243,7 @@ def evaluate_hedge_triggers(
 
 
 def _print_delta_trigger(
-    stats: dict,
+    stats: dict[str, Any],
     delta_drift_pct: float,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
@@ -281,7 +281,7 @@ def _print_delta_trigger(
 
 def _print_expiry_trigger(
     portfolio: OptionPortfolio,
-    near_expiry_positions: list,
+    near_expiry_positions: list[Any],
     days_to_nearest_expiry: int,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
@@ -411,9 +411,9 @@ def _print_gamma_trigger(
 
 
 def _build_action_list(
-    stats: dict,
+    stats: dict[str, Any],
     delta_drift_pct: float,
-    near_expiry_positions: list,
+    near_expiry_positions: list[Any],
     days_to_nearest_expiry: int,
     theta_cost_pct: float,
     total_gamma: float,

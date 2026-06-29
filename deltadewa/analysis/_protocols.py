@@ -9,7 +9,7 @@ like inside each mixin at runtime — i.e., the full composed PortfolioAnalyzer.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 import pandas as pd
@@ -27,8 +27,8 @@ class _AnalyzerProtocol(Protocol):
     # here for static type checking)
 
     # CarryMixin
-    def calculate_carry_metrics(self) -> dict: ...
-    def _empty_carry_metrics(self) -> dict: ...
+    def calculate_carry_metrics(self) -> dict[str, Any]: ...
+    def _empty_carry_metrics(self) -> dict[str, Any]: ...
     def create_theta_summary_table(self) -> pd.DataFrame: ...
 
     # MaturityMixin
@@ -39,27 +39,27 @@ class _AnalyzerProtocol(Protocol):
         self,
         delta_change_needed: float,
         max_alternatives: int,
-    ) -> list: ...
-    def _empty_concentration(self) -> dict: ...
+    ) -> list[Any]: ...
+    def _empty_concentration(self) -> dict[str, Any]: ...
     def analyze_risk_concentration(
         self,
         metrics: list[str] | None = None,
         top_n: int = 3,
-    ) -> dict: ...
+    ) -> dict[str, Any]: ...
 
     # RiskRewardMixin
     def risk_reward_analysis(
         self,
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         num_simulations: int = 10**4,
-    ) -> dict: ...
+    ) -> dict[str, Any]: ...
 
     # SummaryMixin
     def format_risk_summary(
         self,
-        stats: dict | None = None,
+        stats: dict[str, Any] | None = None,
     ) -> str: ...
     def format_risk_reward_summary(
         self,
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
     ) -> str: ...

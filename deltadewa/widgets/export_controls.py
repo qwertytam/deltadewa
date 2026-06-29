@@ -203,7 +203,7 @@ class ExportControlsMixin:
 
     def display_import(
         self,
-        on_import_success: Callable | None = None,
+        on_import_success: Callable[..., Any] | None = None,
     ) -> widgets.VBox:
         """Create and display import interface.
 

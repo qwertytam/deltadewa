@@ -35,7 +35,7 @@ class HealthMixin:
 
         # Annualize and convert to percentage
         annual_theta = daily_theta * const.DAYS_PER_YEAR
-        return (annual_theta / underlying_value) * 100
+        return float((annual_theta / underlying_value) * 100)
 
     def calculate_crash_convexity_pct(self, crash_pct: float = 0.80) -> float:
         """Calculate crash convexity.
@@ -67,7 +67,7 @@ class HealthMixin:
             include_underlying=True,
         )
 
-        return (hedge_pnl / underlying_value) * 100
+        return float((hedge_pnl / underlying_value) * 100)
 
     def calculate_vega_sufficiency_pct(
         self,
@@ -96,7 +96,7 @@ class HealthMixin:
         # For vol_shock_points, impact = vega * vol_shock_points
         vol_shock_impact = total_vega * vol_shock_points
 
-        return (vol_shock_impact / portfolio_value) * 100
+        return float((vol_shock_impact / portfolio_value) * 100)
 
     def calculate_delta_drift_pct(self) -> float:
         """Calculate delta drift: Net hedge delta as % of equity delta.
@@ -115,7 +115,7 @@ class HealthMixin:
         if underlying_qty == 0:
             return 0.0
 
-        return (net_delta / underlying_qty) * 100
+        return float((net_delta / underlying_qty) * 100)
 
     def calculate_convexity_cliff_days(
         self,
@@ -221,7 +221,9 @@ class HealthMixin:
         # Positive if hedge protection > carry cost
         return (hedge_pnl / abs(cumulative_carry_paid)) * 100
 
-    def calculate_overall_health_score(self, metrics: dict) -> float:
+    def calculate_overall_health_score(
+        self, metrics: dict[str, Any],
+    ) -> float:
         """Calculate an overall health score (0-100) based on all metrics.
 
         Args:

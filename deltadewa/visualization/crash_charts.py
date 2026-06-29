@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from matplotlib.ticker import FuncFormatter
 
 from deltadewa.colours import DEFAULT_PALETTE
 
@@ -121,10 +122,10 @@ def plot_crash_convexity(
     ax.set_ylabel("Gross Payoff ($)")
     ax.set_title("Gross Hedge Payoff vs Shock")
     ax.xaxis.set_major_formatter(
-        plt.FuncFormatter(lambda v, _: f"{v:+.0f}%"),
+        FuncFormatter(lambda v, _: f"{v:+.0f}%"),
     )
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda v, _: f"${v:,.0f}"),
+        FuncFormatter(lambda v, _: f"${v:,.0f}"),
     )
 
     return fig
@@ -236,10 +237,10 @@ def plot_carry_vs_convexity(
     )
 
     ax.xaxis.set_major_formatter(
-        plt.FuncFormatter(lambda v, _: f"{v:+.1f}%"),
+        FuncFormatter(lambda v, _: f"{v:+.1f}%"),
     )
     ax.yaxis.set_major_formatter(
-        plt.FuncFormatter(lambda v, _: f"${v:,.0f}"),
+        FuncFormatter(lambda v, _: f"${v:,.0f}"),
     )
     ax.grid(True, alpha=0.3, zorder=0)
     ax.legend(fontsize=8)

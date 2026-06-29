@@ -1,6 +1,6 @@
 """Theta and carry analysis charts for option visualization."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,10 +19,10 @@ class ThetaChartsMixin:
     """Mixin providing theta and carry analysis charts."""
 
     if TYPE_CHECKING:
-        _self: "_VisualizationProtocol"
+        _self: "_VisualizationProtocol[Any]"
 
     def plot_theta_analysis(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         projection_days: int = 30,
         figsize: tuple[int, int] = (16, 12),
     ) -> Figure:
@@ -66,9 +66,9 @@ class ThetaChartsMixin:
         return fig
 
     def _prepare_theta_data(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         df: pd.DataFrame,
-    ) -> tuple[pd.DataFrame, dict]:
+    ) -> tuple[pd.DataFrame, dict[str, Any]]:
         """Prepare data for theta analysis."""
         df_carry = df.copy()
 
@@ -105,7 +105,7 @@ class ThetaChartsMixin:
         return df_carry, theta_metrics
 
     def _plot_theta_by_bucket(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         ax: Axes,
         df_carry: pd.DataFrame,
     ) -> None:
@@ -182,9 +182,9 @@ class ThetaChartsMixin:
         ax.legend(loc="best")
 
     def _plot_theta_projection(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         ax: Axes,
-        theta_metrics: dict,
+        theta_metrics: dict[str, Any],
         projection_days: int,
     ) -> None:
         """Plot cumulative theta projection."""
@@ -234,7 +234,7 @@ class ThetaChartsMixin:
         ax.grid(True, alpha=0.3)
 
     def _plot_carry_efficiency(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         ax: Axes,
         df_carry: pd.DataFrame,
     ) -> None:
@@ -312,7 +312,7 @@ class ThetaChartsMixin:
         ax.grid(True, alpha=0.3, axis="x")
 
     def _plot_theta_vs_contracts(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         ax: Axes,
         df_carry: pd.DataFrame,
     ) -> None:

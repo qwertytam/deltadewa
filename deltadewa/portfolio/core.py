@@ -196,7 +196,7 @@ class OptionPortfolioBase:
 
     def summary_stats(
         self: "_PortfolioProtocol",
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Get summary statistics of the portfolio.
 
         Returns:
@@ -318,7 +318,7 @@ class OptionPortfolioBase:
             f"Valuation Date: {self.valuation_date.date()}"
         )
 
-    def get_positions(self) -> list[dict]:
+    def get_positions(self) -> list[dict[str, Any]]:
         """Return positions in a format suitable for widgets/UI."""
         return [
             {

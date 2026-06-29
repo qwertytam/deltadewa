@@ -1,6 +1,7 @@
 """Option position representation."""
 
 from datetime import datetime as dt
+from typing import Any
 
 from deltadewa.constants import ExerciseStyle
 from deltadewa.valuation import OptionValuation
@@ -77,7 +78,7 @@ class OptionPosition:
         """Calculate the total rho of the position."""
         return self.option.rho() * self.quantity * self.contract_size
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert position to dict (optimized with batch Greek computation)."""
         # Use batch computation - gets all Greeks in one efficient call
         greeks = self.option.greeks()

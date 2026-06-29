@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.reporting import ConsoleReporter
@@ -23,7 +23,7 @@ class VolatilityProfileDisplay:
         self._portfolio = portfolio
         self._reporter = reporter or ConsoleReporter()
 
-    def display(self, vol_stats: dict | None = None) -> None:
+    def display(self, vol_stats: dict[str, Any] | None = None) -> None:
         """Print the portfolio volatility profile.
 
         If vol_stats is None, it is computed fresh from the portfolio.
@@ -85,7 +85,7 @@ class VolatilityProfileDisplay:
 
         self._reporter.divider()
 
-    def _compute_vol_stats(self) -> dict:
+    def _compute_vol_stats(self) -> dict[str, Any]:
         """Compute volatility statistics for the portfolio.
 
         Delegates to `deltadewa.analysis.volatility.get_volatility_stats`

@@ -16,6 +16,7 @@ from __future__ import annotations
 import datetime
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -68,7 +69,7 @@ def initialize_portfolio(
     portfolio: OptionPortfolio,
     reporter: ConsoleReporter | None = None,
     *,
-    globals_dict: dict | None = None,
+    globals_dict: dict[str, Any] | None = None,
     auto_load_default: bool = True,
 ) -> bool:
     """Detect an already-imported portfolio, or load the default.
@@ -303,12 +304,12 @@ def setup_dashboard(
     portfolio: OptionPortfolio,
     reporter: ConsoleReporter | None = None,
     *,
-    globals_dict: dict | None = None,
+    globals_dict: dict[str, Any] | None = None,
     export_dir: str | Path | None = None,
     market_data: MarketDataProvider | None = None,
     ips_config: IpsConfig | None = None,
     auto_load_default: bool = True,
-) -> dict:
+) -> dict[str, Any]:
     """Run the full MODE 0 setup sequence and return a context dict.
 
     This is a convenience wrapper that calls, in order:

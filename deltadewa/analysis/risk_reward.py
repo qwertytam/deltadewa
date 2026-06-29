@@ -1,6 +1,6 @@
 """Risk/reward analysis mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -22,9 +22,9 @@ class RiskRewardMixin:
 
     def risk_reward_analysis(
         self: "_AnalyzerProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         num_simulations: int = 10**4,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Generate comprehensive risk/reward analysis of the portfolio.
 
         Args:

@@ -110,7 +110,7 @@ class IpsConfig:
 def _require_section(config: dict[str, Any], name: str) -> dict[str, Any]:
     if name not in config or not isinstance(config[name], dict):
         raise IpsConfigError(f"ips.yaml must contain a '{name}' section")
-    return config[name]
+    return dict(config[name])
 
 
 def _require_field(

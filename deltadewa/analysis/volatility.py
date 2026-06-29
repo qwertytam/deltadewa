@@ -5,7 +5,7 @@ volatility, including vega-weighted averaging, proportional scaling, and
 statistical analysis.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -73,7 +73,7 @@ def apply_proportional_volatility_shift(
     portfolio: "OptionPortfolio",
     target_avg_vol: float,
     preserve_structure: bool = True,
-) -> dict:
+) -> dict[int, float]:
     """Scale all position volatilities proportionally to achieve target average.
 
     This function shifts volatilities while maintaining the relative volatility
@@ -138,7 +138,7 @@ def apply_proportional_volatility_shift(
 
 def restore_volatilities(
     portfolio: "OptionPortfolio",
-    original_vols: dict,
+    original_vols: dict[int, float],
 ) -> None:
     """Restore position volatilities to their original values.
 
@@ -167,7 +167,9 @@ def restore_volatilities(
             portfolio.positions[i].option.update_volatility(vol)
 
 
-def get_volatility_stats(portfolio: "OptionPortfolio") -> dict:
+def get_volatility_stats(
+    portfolio: "OptionPortfolio",
+) -> dict[str, Any]:
     """Get statistical summary of volatility distribution across positions.
 
     This function analyzes the volatility structure of a portfolio,

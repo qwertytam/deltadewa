@@ -1,6 +1,6 @@
 """Summary and insights mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -20,7 +20,7 @@ class SummaryMixin:
 
     def format_risk_summary(
         self: "_AnalyzerProtocol",
-        stats: dict | None = None,
+        stats: dict[str, Any] | None = None,
     ) -> str:
         """Generate formatted risk summary text.
 
@@ -160,7 +160,7 @@ class SummaryMixin:
 
     def format_risk_reward_summary(
         self: "_AnalyzerProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
     ) -> str:
         """Generate formatted risk/reward summary text.
 
@@ -317,7 +317,7 @@ class SummaryMixin:
 
     def print_risk_reward_summary(
         self: "_AnalyzerProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
     ) -> None:
         """Print a formatted risk/reward summary of the portfolio.
 

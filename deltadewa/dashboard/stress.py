@@ -39,7 +39,7 @@ from deltadewa.widgets import GlobalAssumptions
 # ---------------------------------------------------------------------------
 # Metric configuration shared across heatmap methods
 # ---------------------------------------------------------------------------
-_METRIC_CONFIG: dict[str, dict] = {
+_METRIC_CONFIG: dict[str, dict[str, Any]] = {
     "pnl": {"title": "P&L", "fmt": "${:,.0f}"},
     "value": {"title": "Value", "fmt": "${:,.0f}"},
     "net_delta": {"title": "Net Delta", "fmt": "{:,.1f}"},
@@ -420,7 +420,9 @@ class StressDashboard:
 
         return vbox
 
-    def display_risk_reward_summary(self, mc_results: dict) -> None:
+    def display_risk_reward_summary(
+        self, mc_results: dict[str, Any],
+    ) -> None:
         """Print and plot the Monte Carlo risk/reward summary.
 
         Displays:
@@ -844,8 +846,8 @@ class StressDashboard:
         spot_max: float,
         vol_min: float,
         vol_max: float,
-        spot_scenarios: np.ndarray,
-        vol_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
+        vol_scenarios: np.ndarray[Any, np.dtype[Any]],
         grid_resolution: int,
         spot_shock_pct: float,
         vol_shock_pct: float,
@@ -1179,7 +1181,7 @@ class StressDashboard:
     def _plot_mc_distribution(
         self,
         *,
-        pnls_clean: np.ndarray,
+        pnls_clean: np.ndarray[Any, np.dtype[Any]],
         expected_pnl: float,
         median_pnl: float,
         min_pnl: float,

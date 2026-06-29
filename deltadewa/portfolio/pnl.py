@@ -1,6 +1,6 @@
 """P&L calculations mixin for option portfolio."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -70,9 +70,9 @@ class PnLMixin:
 
     def vectorized_pnl_at_expiry(
         self: "_PortfolioProtocol",
-        spot_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
         include_underlying: bool = True,
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Calculate P&L at expiry using vectorized NumPy operations.
 
         This method provides a vectorized alternative to calculate_pnl_at_expiry
@@ -131,9 +131,10 @@ class PnLMixin:
 
         # Add underlying P&L if requested
         if include_underlying and self.underlying_quantity != 0:
-            underlying_pnl = self.underlying_quantity * (
-                spot_scenarios - self.spot_price
+            underlying_pnl: np.ndarray[Any, np.dtype[Any]] = (
+                self.underlying_quantity
+                * (spot_scenarios - self.spot_price)
             )
             pnl += underlying_pnl
 
-        return pnl
+        return np.asarray(pnl)

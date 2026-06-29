@@ -8,12 +8,12 @@ import shutil
 import subprocess  # noqa: S404
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import ipywidgets as widgets
 
 
-class ExportDirVBox(widgets.VBox):  # pylint: disable=too-many-ancestors  # ipywidgets MRO depth; not our code
+class ExportDirVBox(widgets.VBox):  # type: ignore[misc]  # pylint: disable=too-many-ancestors  # ipywidgets MRO depth; not our code
     """Custom VBox to hold export directory configuration and metadata."""
 
     def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:  # noqa: ANN401
@@ -23,20 +23,20 @@ class ExportDirVBox(widgets.VBox):  # pylint: disable=too-many-ancestors  # ipyw
 
     def __copy__(self, **kwargs: Any) -> "ExportDirVBox":  # noqa: ANN401
         """Create a copy of the widget while preserving export_dir."""
-        new_widget = super().__copy__(**kwargs)
+        new_widget = cast("ExportDirVBox", super().__copy__(**kwargs))
         new_widget.export_dir = self.export_dir
         return new_widget
 
     def __deepcopy__(self, memo: dict[int, Any]) -> "ExportDirVBox":
         """Create a deepcopy of the widget while preserving export_dir."""
-        new_widget = super().__deepcopy__(memo)
+        new_widget = cast("ExportDirVBox", super().__deepcopy__(memo))
         new_widget.export_dir = self.export_dir
         return new_widget
 
 
 def create_export_dir_widget(
     default_dir: str = "exports",
-    on_change_callback: Callable | None = None,
+    on_change_callback: Callable[..., Any] | None = None,
     show_browser: bool = True,
 ) -> ExportDirVBox:
     """Create interactive export directory configuration widget.

@@ -1,6 +1,6 @@
 """Risk analysis mixin for option portfolio."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -19,12 +19,12 @@ class RiskMixin:
 
     def _get_spot_range(
         self: "_PortfolioProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
         num_points: int = 250,
         use_comprehensive_range: bool = False,
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Get or create a spot price range for analysis.
 
         Delegates to analysis.functions.generate_spot_range() for consistent
@@ -57,7 +57,7 @@ class RiskMixin:
 
     def _check_unlimited_trend(
         self: "_PortfolioProtocol",
-        pnl_array: np.ndarray,
+        pnl_array: np.ndarray[Any, np.dtype[Any]],
         check_increasing: bool,
     ) -> bool:
         """Check if P&L trend continues at the extreme end of the PnL array.
@@ -90,10 +90,10 @@ class RiskMixin:
 
     def calculate_max_loss_options(
         self: "_PortfolioProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Calculate maximum loss from options positions only.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot
@@ -150,10 +150,10 @@ class RiskMixin:
 
     def calculate_max_profit_options(
         self: "_PortfolioProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Calculate maximum profit from options positions only.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot
@@ -210,10 +210,10 @@ class RiskMixin:
 
     def calculate_max_loss_total(
         self: "_PortfolioProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Calculate maximum loss including underlying position.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot
@@ -280,10 +280,10 @@ class RiskMixin:
 
     def calculate_max_profit_total(
         self: "_PortfolioProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Calculate maximum profit including underlying position.
 
         CRITICAL: Checks extreme scenarios including spot = $0 and high spot
@@ -347,7 +347,7 @@ class RiskMixin:
 
     def calculate_breakeven_points(
         self: "_PortfolioProtocol",
-        spot_range: np.ndarray | None = None,
+        spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
         include_underlying: bool = False,
         spot_min_pct: float = 0.0,
         spot_max_pct: float = 200.0,

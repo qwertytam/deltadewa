@@ -23,7 +23,7 @@ from __future__ import annotations
 import datetime
 from collections.abc import Callable
 from datetime import datetime as dt
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from deltadewa.constants import PortfolioAction
 
@@ -46,7 +46,7 @@ class PortfolioLogger:
 
         """
         self.name = name
-        self.changelog: list[dict] = []
+        self.changelog: list[dict[str, Any]] = []
         self.__initial_changelog_entry()
 
     def __initial_changelog_entry(self) -> None:
@@ -98,7 +98,7 @@ class PortfolioLogger:
         }
         self.changelog.append(entry)
 
-    def get_all_entries(self) -> list[dict]:
+    def get_all_entries(self) -> list[dict[str, Any]]:
         """Get the full changelog."""
         return self.changelog
 
@@ -106,7 +106,7 @@ class PortfolioLogger:
         self,
         sort: bool = True,
         key: str = "timestamp",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Get a list of all portfolio snapshots from the changelog.
 
         In pratice this should be all entries exlucding the initial one, but we
@@ -131,7 +131,7 @@ class PortfolioLogger:
             snapshots.sort(key=lambda x: x[key])
         return snapshots
 
-    def get_last_entry(self) -> dict:
+    def get_last_entry(self) -> dict[str, Any]:
         """Get the most recent log entry."""
         return self.changelog[-1]
 
@@ -174,10 +174,12 @@ class PortfolioLogger:
 
     def get_total_delta_impact(self) -> float:
         """Calculate the total delta impact across all log entries."""
-        return sum(
-            entry["impact_delta"]
-            for entry in self.changelog
-            if entry["impact_delta"] is not None
+        return float(
+            sum(
+                entry["impact_delta"]
+                for entry in self.changelog
+                if entry["impact_delta"] is not None
+            ),
         )
 
 
@@ -224,7 +226,7 @@ class PortfolioChangeTracker:
         self._portfolio = portfolio
         self._logger = logger
         self._reporter = reporter
-        self._last_state: dict | None = None
+        self._last_state: dict[str, Any] | None = None
         # Seed baseline from the current portfolio state
         self.reset(portfolio)
 
@@ -324,7 +326,7 @@ class PortfolioChangeTracker:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _snapshot(portfolio: OptionPortfolio) -> dict:
+    def _snapshot(portfolio: OptionPortfolio) -> dict[str, Any]:
         """Capture a lightweight state snapshot of *portfolio*."""
         return {
             "positions": len(portfolio.positions),

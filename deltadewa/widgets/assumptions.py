@@ -268,7 +268,7 @@ class GlobalAssumptions:
         )
 
         # Callbacks registry
-        self._callbacks: list[Callable] = []
+        self._callbacks: list[Callable[..., Any]] = []
 
         # Register observers for all widgets
         for widget_attr in [
@@ -292,7 +292,7 @@ class GlobalAssumptions:
         for callback in self._callbacks:
             callback(change)
 
-    def on_change(self, callback: Callable) -> None:
+    def on_change(self, callback: Callable[..., Any]) -> None:
         """Register a callback to be called when any parameter changes.
 
         Args:
@@ -309,8 +309,8 @@ class GlobalAssumptions:
 
         """
         if self.time_horizon.value == -1:
-            return self.custom_days.value
-        return self.time_horizon.value
+            return int(self.custom_days.value)
+        return int(self.time_horizon.value)
 
     @property
     def time_horizon_days(self) -> SimpleNamespace:

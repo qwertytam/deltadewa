@@ -9,7 +9,7 @@ like inside each mixin at runtime — i.e., the full composed OptionPortfolio.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
 
 import numpy as np
 import pandas as pd
@@ -48,9 +48,11 @@ class _VisualizationProtocol(Protocol, Generic[PortfolioT]):
     def _plot_pnl_panel(
         self,
         ax: Axes,
-        spot_range: np.ndarray,
-        pnl_values: list[float] | np.ndarray,
-        analysis: dict,
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: (
+            list[float] | np.ndarray[Any, np.dtype[Any]]
+        ),
+        analysis: dict[str, Any],
         analysis_key: str,
         title: str,
     ) -> None: ...
@@ -59,7 +61,7 @@ class _VisualizationProtocol(Protocol, Generic[PortfolioT]):
     def _prepare_theta_data(
         self,
         df: pd.DataFrame,
-    ) -> tuple[pd.DataFrame, dict]: ...
+    ) -> tuple[pd.DataFrame, dict[str, Any]]: ...
 
     def _plot_theta_by_bucket(
         self,
@@ -70,7 +72,7 @@ class _VisualizationProtocol(Protocol, Generic[PortfolioT]):
     def _plot_theta_projection(
         self,
         ax: Axes,
-        theta_metrics: dict,
+        theta_metrics: dict[str, Any],
         projection_days: int,
     ) -> None: ...
 

@@ -438,7 +438,7 @@ class HedgeHealthDashboard:
         )
 
         # Use the public API to create the widget and return its HTML value
-        return gauge.create_widget().value
+        return str(gauge.create_widget().value)
 
     def _build_metric_card_html(
         self,

@@ -1,6 +1,6 @@
 """Greek visualization methods for option charts."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -18,10 +18,10 @@ class GreeksChartsMixin:
     """Mixin providing Greek visualization methods."""
 
     if TYPE_CHECKING:
-        _self: "_VisualizationProtocol"
+        _self: "_VisualizationProtocol[Any]"
 
     def plot_greeks_by_strike(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         metrics: list[str] | None = None,
         figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
@@ -59,7 +59,7 @@ class GreeksChartsMixin:
         return fig
 
     def plot_greeks_by_maturity(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         metrics: list[str] | None = None,
         figsize: tuple[int, int] = (18, 16),
     ) -> Figure:
@@ -101,7 +101,7 @@ class GreeksChartsMixin:
         return fig
 
     def _plot_greek_by_dimension(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         ax: Axes,
         df: pd.DataFrame,
         metric: str,

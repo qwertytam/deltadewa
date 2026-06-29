@@ -7,6 +7,7 @@ focused on wiring/translation logic only.
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 from deltadewa.portfolio.core import OptionPortfolioBase
 from deltadewa.widgets.assumptions import GlobalAssumptions
@@ -15,7 +16,7 @@ from deltadewa.widgets.assumptions import GlobalAssumptions
 def link_portfolio_to_assumptions(
     portfolio: OptionPortfolioBase,
     assumptions: GlobalAssumptions,
-) -> Callable:
+) -> Callable[..., Any]:
     """Link a portfolio object's market fields to a GlobalAssumptions widget.
 
     The helper registers a callback with ``assumptions`` so that when the

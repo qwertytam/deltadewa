@@ -125,7 +125,7 @@ def apply_traffic_light_colors(
 
 
 def get_diverging_color_params(
-    values: np.ndarray,
+    values: np.ndarray[Any, np.dtype[Any]],
     center: float = 0.0,
 ) -> tuple[float, float]:
     """Calculate vmin and vmax for a diverging colormap centered at a value.
@@ -190,10 +190,10 @@ def apply_financial_gradient_2d(
 
 
 def get_matplotlib_norm_and_cmap(
-    values: np.ndarray,
+    values: np.ndarray[Any, np.dtype[Any]],
     center: float = 0.0,
     cmap_name: str = "RdYlGn",
-) -> tuple:
+) -> tuple[Any, ...]:
     """Get matplotlib Normalize and colormap for consistent visualization.
 
     Args:
