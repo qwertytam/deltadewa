@@ -30,7 +30,7 @@ def create_heatmap_style(
     df: pd.DataFrame,
     cmap: str = "RdYlGn",
     format_str: str = "{:,.2f}",
-    center_value: float | None = None,  # noqa: ARG001
+    _center_value: float | None = None,
     vmin: float | None = None,
     vmax: float | None = None,
 ) -> Styler:
@@ -42,7 +42,8 @@ def create_heatmap_style(
         df: Input DataFrame
         cmap: Colormap name
         format_str: Format string for values
-        center_value: Value to center colormap at (e.g., 0 for diverging colors)
+        _center_value: Reserved; not currently applied (use vmin/vmax or
+            apply_financial_gradient_2d for diverging scales).
         vmin: Minimum value for color scale
         vmax: Maximum value for color scale
 

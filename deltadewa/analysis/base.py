@@ -36,7 +36,7 @@ class PortfolioAnalyzerBase:
         self.portfolio = portfolio
 
 
-class PortfolioAnalyzer(
+class PortfolioAnalyzer(  # pylint: disable=too-many-ancestors  # mixin architecture; each mixin is a separate concern
     MaturityMixin,
     CarryMixin,
     RecommendationsMixin,

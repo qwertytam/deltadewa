@@ -36,7 +36,7 @@ AFRICAN_TURQUOISE = "#000000"
 
 # Optional grouped palette
 @dataclass(frozen=True)
-class Palette:
+class Palette:  # pylint: disable=too-many-instance-attributes  # color-palette dataclass; each attribute is a named color
     """To hold colours."""
 
     positive: str = GAMMA_GREEN

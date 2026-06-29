@@ -260,7 +260,7 @@ def evaluate_roll_status(
         # gaining convexity on its own. If there's no time pressure and
         # crash convexity is still within target, don't force a roll that
         # was only triggered by strike drift.
-        if (
+        if (  # pylint: disable=too-many-boolean-expressions  # six independent roll-suppression guards; decomposing would obscure the policy
             verdict == RollVerdict.ROLL
             and position.option.option_type == OptionType.PUT
             and time_verdict != RollVerdict.ROLL

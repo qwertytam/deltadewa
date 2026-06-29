@@ -21,11 +21,13 @@ Python `>=3.11,<4.0`, managed with **Poetry**. Run everything through `poetry ru
 - Tests: `poetry run pytest`
 - Type-check: `poetry run mypy .` (custom stubs live in `typings/`; `pandas-stubs` is installed)
 - Lint: `poetry run ruff check .`
+- Design/refactor smells: `poetry run pylint deltadewa` — covers duplicate-code, cyclic-import, and
+  complexity limits; `tests/` and notebooks are intentionally out of scope for now
 - Format: `poetry run black .` (or `poetry run ruff format .`) — **line length is 80**
 - Lint/type-check notebooks: `poetry run nbqa ruff <notebook>` / `poetry run nbqa mypy <notebook>`
 
 Before considering any change done: `poetry run pytest` and `poetry run mypy .` must both be green,
-and `poetry run ruff check .` must be clean.
+`poetry run ruff check .` must be clean, and `poetry run pylint deltadewa` must exit 0.
 
 ## Architecture (keep UI thin)
 

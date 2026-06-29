@@ -12,7 +12,7 @@ from deltadewa.greeks_cache import GreeksCache
 from deltadewa.warnings import ClosedFormAccuracyWarning
 
 
-class OptionValuation:
+class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantLib wrapper needs all market/model params as attributes
     """Option pricing engine.
 
     Supports both American (Finite Difference) and European (Analytic

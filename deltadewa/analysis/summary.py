@@ -302,8 +302,7 @@ class SummaryMixin:
         if (
             not max_loss_opts["is_unlimited"]
             and not max_profit_opts["is_unlimited"]
-            and max_profit_opts["max_profit"] > 0
-            and max_loss_opts["max_loss"] < 0
+            and max_loss_opts["max_loss"] < 0 < max_profit_opts["max_profit"]
         ):
             # Standard risk/reward ratio: profit potential to loss potential
             rr_ratio = (
