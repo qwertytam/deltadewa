@@ -463,7 +463,7 @@ def format_pivot_table(
     pivot: pd.DataFrame,
     format_str: str = "{:,.2f}",
     cmap: str = "RdYlGn",
-    highlight_zeros: bool = True,  # noqa: ARG001
+    _highlight_zeros: bool = True,
 ) -> Styler:
     """Format pivot table with consistent styling.
 
@@ -471,7 +471,7 @@ def format_pivot_table(
         pivot: Pivot table DataFrame
         format_str: Format string for cell values
         cmap: Colormap for background gradient
-        highlight_zeros: Whether to highlight zero/near-zero values
+        _highlight_zeros: Reserved; zero-highlighting not yet implemented.
 
     Returns:
         Styled pivot table

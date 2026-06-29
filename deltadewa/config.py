@@ -13,7 +13,7 @@ from typing import Any
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 
-class ExportDirVBox(widgets.VBox):
+class ExportDirVBox(widgets.VBox):  # pylint: disable=too-many-ancestors  # ipywidgets MRO depth; not our code
     """Custom VBox to hold export directory configuration and metadata."""
 
     def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:  # noqa: ANN401

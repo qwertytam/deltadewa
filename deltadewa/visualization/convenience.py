@@ -22,6 +22,19 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio, OptionPortfolioBase
 
 
+def _annotate_no_data(ax: Axes) -> None:
+    """Show a centred 'No data' label and turn the axis off."""
+    ax.text(
+        0.5,
+        0.5,
+        "No data",
+        ha="center",
+        va="center",
+        transform=ax.transAxes,
+    )
+    ax.axis("off")
+
+
 @overload
 def plot_pnl_diagram(
     portfolio: OptionPortfolio,
@@ -242,15 +255,7 @@ def plot_greeks_consolidated(
                         fontsize=8,
                     )
         else:
-            ax.text(
-                0.5,
-                0.5,
-                "No data",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-            )
-            ax.axis("off")
+            _annotate_no_data(ax)
 
     # Detailed panels (if requested)
     # Panel 3: Top Vega Contributors
@@ -277,15 +282,7 @@ def plot_greeks_consolidated(
         _set_axis_formatting(ax, f"Top {top_n} Vega Contributors", yint=yint)
 
     else:
-        ax.text(
-            0.5,
-            0.5,
-            "No data",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.axis("off")
+        _annotate_no_data(ax)
 
     # Panel 4: Top Theta Contributors
     ax = axes[1, 1]
@@ -340,15 +337,7 @@ def plot_greeks_consolidated(
         )
         ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:
-        ax.text(
-            0.5,
-            0.5,
-            "No data",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.axis("off")
+        _annotate_no_data(ax)
 
     # Panel 6: Value by Maturity
     ax = axes[2, 1]
@@ -384,15 +373,7 @@ def plot_greeks_consolidated(
         )
         ax.xaxis.set_major_formatter(FuncFormatter(format_currency_for_axis))
     else:
-        ax.text(
-            0.5,
-            0.5,
-            "No data",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.axis("off")
+        _annotate_no_data(ax)
 
     # Panel 7: Greeks by Strike
     ax = axes[3, 0]
@@ -411,15 +392,7 @@ def plot_greeks_consolidated(
         _set_axis_formatting(ax, "Greeks by Strike", xint=xint)
 
     else:
-        ax.text(
-            0.5,
-            0.5,
-            "No data",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.axis("off")
+        _annotate_no_data(ax)
 
     # Panel 8: Greeks by Maturity
     ax = axes[3, 1]
@@ -440,14 +413,6 @@ def plot_greeks_consolidated(
         xint, _ = ax.get_xlim()
         _set_axis_formatting(ax, "Greeks by Maturity", xint=xint)
     else:
-        ax.text(
-            0.5,
-            0.5,
-            "No data",
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-        )
-        ax.axis("off")
+        _annotate_no_data(ax)
 
     return fig

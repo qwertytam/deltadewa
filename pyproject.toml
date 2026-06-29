@@ -99,3 +99,45 @@ filterwarnings = [
 	"ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
 	"ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 ]
+
+[tool.pylint.main]
+py-version = "3.11"
+jobs = 0
+ignore-paths = ["typings"]
+fail-under = 10.0
+
+[tool.pylint.format]
+max-line-length = 80
+
+[tool.pylint."messages control"]
+disable = [
+  "line-too-long", "trailing-whitespace", "missing-final-newline",
+  "unused-import", "wrong-import-order", "wrong-import-position", "ungrouped-imports",
+  "invalid-name",
+  "missing-module-docstring", "missing-class-docstring", "missing-function-docstring",
+  "import-error",
+  "too-few-public-methods",
+  # R0917 always co-fires with R0913; keeping one source of truth for arity
+  "too-many-positional-arguments",
+  # C0302 large but cohesive widget/dashboard modules are acceptable
+  "too-many-lines",
+]
+
+[tool.pylint.design]
+# Limits set to the observed codebase ceiling — any future code exceeding these
+# is a genuine regression.  Comments name the current ceiling holder.
+max-args        = 18   # widgets/gauges.py GaugeIndicator.__init__
+max-locals      = 65   # visualization/pnl_charts.py plot_pnl_distribution_with_metrics
+max-attributes  = 27   # deltadewa/valuation.py OptionValuation (QuantLib wrapper)
+max-branches    = 22   # analysis/summary.py format_risk_reward_summary
+max-statements  = 130  # visualization/convenience.py plot_greeks_consolidated
+max-returns     = 8    # analysis/decision_matrix.py
+max-bool-expr   = 6    # analysis/roll_status.py _check_roll_verdict
+
+[tool.pylint.similarities]
+# Short patterns (6-10 lines) are typically calling-convention idioms for the
+# same shared API, not structural duplication worth extracting.  Genuine
+# R0801 findings still surface at 12+ lines.
+min-similarity-lines = 12
+ignore-imports       = true   # import blocks appear in every module; skip them
+ignore-docstrings    = true   # docstring templates are not logic duplication

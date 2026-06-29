@@ -13,8 +13,8 @@ from typing import Any
 
 import pandas as pd
 
-from deltadewa import OptionPortfolio
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting import PortfolioLogger
 
 try:
