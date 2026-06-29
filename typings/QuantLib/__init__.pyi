@@ -119,8 +119,11 @@ class QuoteHandle:
 
 # Term structures
 
-class BlackVolTermStructureHandle(Any): ...
-class YieldTermStructureHandle(Any): ...
+class BlackVolTermStructureHandle:
+    def __init__(self, structure: Any) -> None: ...
+
+class YieldTermStructureHandle:
+    def __init__(self, structure: Any) -> None: ...
 
 def FlatForward(
     date: Date,

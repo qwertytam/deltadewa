@@ -43,6 +43,17 @@ build-backend = "poetry.core.masonry.api"
 [tool.black]
 line-length = 80
 
+[tool.mypy]
+mypy_path = ["typings"]
+strict = true
+# tests/ mirrors ruff's ANN/D exemptions — exclude from strict checking.
+# typings/ are stub inputs, not subject to strict checking themselves.
+exclude = ["^tests/", "^typings/"]
+
+[[tool.mypy.overrides]]
+module = ["ipywidgets", "ipywidgets.*", "ipyfilechooser", "ipyfilechooser.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 80
 target-version = "py311"
