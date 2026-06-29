@@ -4,7 +4,7 @@ Minimal, hand-maintained typing stubs for the QuantLib symbols used in this
 project.
 """
 
-# ruff: noqa: N802, UP037, ANN401
+# ruff: noqa: N802, UP037
 # pylint: disable=unused-argument missing-class-docstring missing-function-docstring, invalid-name
 from typing import Any
 

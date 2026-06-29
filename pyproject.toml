@@ -91,6 +91,7 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "ANN", "D", "ARG"]  # asserts, annotations, docstrings, unused-args are noise in tests
+"typings/**" = ["ANN", "D"]  # stub files use Any freely; docstrings not required
 
 [dependency-groups]
 dev = [
