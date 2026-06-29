@@ -4,7 +4,7 @@ Minimal, hand-maintained typing stubs for the QuantLib symbols used in this
 project.
 """
 
-# ruff: noqa: N802, UP037, ANN401
+# ruff: noqa: N802, UP037
 # pylint: disable=unused-argument missing-class-docstring missing-function-docstring, invalid-name
 from typing import Any
 
@@ -119,8 +119,11 @@ class QuoteHandle:
 
 # Term structures
 
-class BlackVolTermStructureHandle(Any): ...
-class YieldTermStructureHandle(Any): ...
+class BlackVolTermStructureHandle:
+    def __init__(self, structure: Any) -> None: ...
+
+class YieldTermStructureHandle:
+    def __init__(self, structure: Any) -> None: ...
 
 def FlatForward(
     date: Date,

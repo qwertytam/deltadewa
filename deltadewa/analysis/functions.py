@@ -1,5 +1,7 @@
 """Module-level convenience functions for portfolio analysis."""
 
+from typing import Any
+
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -22,7 +24,7 @@ def classify_maturity_bucket(days_to_expiry: int) -> str:
     return PortfolioAnalyzer.classify_maturity_bucket(days_to_expiry)
 
 
-def quick_carry_analysis(portfolio: OptionPortfolio) -> dict:
+def quick_carry_analysis(portfolio: OptionPortfolio) -> dict[str, Any]:
     """Quick carry analysis for a portfolio.
 
     Args:
@@ -45,7 +47,7 @@ def quick_carry_analysis(portfolio: OptionPortfolio) -> dict:
 def quick_risk_concentration(
     portfolio: OptionPortfolio,
     metrics: list[str] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Quick risk concentration analysis.
 
     Args:

@@ -120,7 +120,7 @@ class SessionContext:
 def start_session(
     *,
     role: str = "combined",
-    globals_dict: dict,
+    globals_dict: dict[str, Any],
     ips_path: Path = Path("config/ips.yaml"),
     dashboard_path: Path = Path("config/dashboard.yaml"),
     use_live_market_data: bool = False,

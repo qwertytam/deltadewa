@@ -43,6 +43,17 @@ build-backend = "poetry.core.masonry.api"
 [tool.black]
 line-length = 80
 
+[tool.mypy]
+mypy_path = ["typings"]
+strict = true
+# tests/ mirrors ruff's ANN/D exemptions — exclude from strict checking.
+# typings/ are stub inputs, not subject to strict checking themselves.
+exclude = ["^tests/", "^typings/"]
+
+[[tool.mypy.overrides]]
+module = ["ipywidgets", "ipywidgets.*", "ipyfilechooser", "ipyfilechooser.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 80
 target-version = "py311"
@@ -80,6 +91,7 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "ANN", "D", "ARG"]  # asserts, annotations, docstrings, unused-args are noise in tests
+"typings/**" = ["ANN", "D"]  # stub files use Any freely; docstrings not required
 
 [dependency-groups]
 dev = [

@@ -87,22 +87,24 @@ class ScenariosMixin:
                 np.array([spot]),
                 valuation_date,
             )
-            return values[0]
+            return float(values[0])
 
         # Fallback to creating a temporary pricer if none provided
         # This is still cleaner than the old loop as it delegates to the
         # optimized class
         temp_pricer = self._create_batch_pricer()
-        return temp_pricer.portfolio_values_at(
-            np.array([spot]),
-            valuation_date,
-        )[0]
+        return float(
+            temp_pricer.portfolio_values_at(
+                np.array([spot]),
+                valuation_date,
+            )[0],
+        )
 
     def _calculate_pnl_at_expiry_vectorized(
         self,
-        spot_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
         include_underlying: bool = True,
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Calculate P&L at expiry using vectorized NumPy operations.
 
         This method should only be used for at-expiry calculations where all
@@ -132,7 +134,7 @@ class ScenariosMixin:
 
     def scenario_grid(
         self,
-        spot_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
         time_points: list[datetime],
         metric: str = "pnl",
         baseline_spot: float | None = None,
@@ -255,8 +257,8 @@ class ScenariosMixin:
 
     def scenario_grid_spot_vol(
         self,
-        spot_scenarios: np.ndarray,
-        vol_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
+        vol_scenarios: np.ndarray[Any, np.dtype[Any]],
         metric: str = "pnl",
         baseline_value: float | None = None,
         proportional_vol_scaling: bool = True,

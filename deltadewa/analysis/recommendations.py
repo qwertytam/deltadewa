@@ -26,7 +26,7 @@ class RecommendationsMixin:
         target_hedge_ratio: float,
         include_option_alternatives: bool = True,
         max_alternatives: int = 10,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Generate hedge recommendations to achieve target hedge ratio.
 
         Args:
@@ -94,7 +94,7 @@ class RecommendationsMixin:
         self: "_AnalyzerProtocol",
         delta_change_needed: float,
         max_alternatives: int,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Calculate option-based hedge alternatives.
 
         Args:
@@ -142,7 +142,7 @@ class RecommendationsMixin:
         self: "_AnalyzerProtocol",
         metrics: list[str] | None = None,
         top_n: int = 3,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Identify concentrated risk by strike and maturity.
 
         Analyzes which strikes/maturities contribute most to portfolio Greeks.
@@ -245,6 +245,6 @@ class RecommendationsMixin:
 
         return result
 
-    def _empty_concentration(self) -> dict:
+    def _empty_concentration(self) -> dict[str, Any]:
         """Return empty concentration structure."""
         return {"by_strike": {}, "by_maturity": {}, "concentration_scores": {}}

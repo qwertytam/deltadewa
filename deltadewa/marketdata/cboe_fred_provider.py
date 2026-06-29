@@ -51,7 +51,7 @@ class _DiskCache:
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text())
+            return dict(json.loads(path.read_text()))
         except (json.JSONDecodeError, OSError):
             return None
 
@@ -125,7 +125,7 @@ class CboeFredProvider:
             "vix_fred",
             lambda: self._fetch_fred_history("VIXCLS"),
         )
-        return series[-1][1]
+        return float(series[-1][1])
 
     def get_vix_term_structure(self) -> dict[str, float]:
         """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name."""
@@ -139,7 +139,7 @@ class CboeFredProvider:
             f"spot_{symbol}",
             lambda: self._fetch_cboe_history(symbol),
         )
-        return series[-1][1]
+        return float(series[-1][1])
 
     def get_skew_index(self) -> float:
         """Return the current CBOE SKEW index level."""

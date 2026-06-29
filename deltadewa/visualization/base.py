@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -77,7 +77,7 @@ class OptionChartsBase:
         cols: int,
         titles: list[str],
         figsize: tuple[int, int] | None = None,
-    ) -> tuple[Figure, np.ndarray]:
+    ) -> tuple[Figure, np.ndarray[Any, np.dtype[Any]]]:
         """Create standardized multi-panel chart grid with consistent styling.
 
         Args:

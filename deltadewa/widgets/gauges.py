@@ -4,7 +4,7 @@ This module provides visual gauge indicators with configurable color gradients
 and value markers for displaying portfolio health metrics.
 """
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 from deltadewa.colours import DEFAULT_PALETTE
 

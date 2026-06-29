@@ -9,7 +9,7 @@ three horizontal gauge cards using the same
 
 from __future__ import annotations
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 from deltadewa.analysis.market_environment import (
     DataQuality,
@@ -51,7 +51,7 @@ def _gauge_inner_html(
     else:
         low_color = DEFAULT_PALETTE.negative
         high_color = DEFAULT_PALETTE.positive
-    return (
+    return str(
         GaugeIndicator(
             start=start,
             end=end,
@@ -72,7 +72,7 @@ def _gauge_inner_html(
             title=None,
         )
         .create_widget()
-        .value
+        .value,
     )
 
 

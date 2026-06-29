@@ -5,8 +5,9 @@ the deltadewa widget system.
 """
 
 from collections.abc import Callable
+from typing import Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 
 class InteractiveOutput:
@@ -31,7 +32,9 @@ class InteractiveOutput:
         """Initialize output widget."""
         self.widget = widgets.Output()
 
-    def update(self, func: Callable) -> Callable:
+    def update(
+        self, func: Callable[..., Any],
+    ) -> Callable[..., Any]:
         """Create wrapper function to handle output clearing.
 
         Args:
@@ -42,7 +45,7 @@ class InteractiveOutput:
 
         """
 
-        def wrapper(*args, **kwargs):  # noqa: ANN002 ANN003 ANN202
+        def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
             with self.widget:
                 self.widget.clear_output(wait=True)
                 return func(*args, **kwargs)

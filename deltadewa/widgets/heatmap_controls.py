@@ -6,7 +6,7 @@ in the deltadewa dashboard.
 
 from typing import TYPE_CHECKING, Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 if TYPE_CHECKING:
     from deltadewa.widgets._protocols import WidgetsProtocol

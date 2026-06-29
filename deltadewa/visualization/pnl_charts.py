@@ -1,6 +1,6 @@
 """P&L diagram plotting methods for option charts."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,10 +28,10 @@ class PnLChartsMixin:
     """Mixin providing P&L diagram plotting methods."""
 
     if TYPE_CHECKING:
-        _self: "_VisualizationProtocol"
+        _self: "_VisualizationProtocol[Any]"
 
     def plot_pnl_diagram(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         spot_range_pct: float = 40.0,
         num_points: int = 300,
         show_underlying: bool = True,
@@ -122,7 +122,7 @@ class PnLChartsMixin:
         return fig
 
     def plot_pnl_distribution_with_metrics(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         spot_range_pct: float = 100.0,
         num_points: int = 1000,
         figsize: tuple[int, int] = (16, 8),
@@ -732,11 +732,13 @@ class PnLChartsMixin:
         return fig
 
     def _plot_pnl_panel(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         ax: Axes,
-        spot_range: np.ndarray,
-        pnl_values: list[float] | np.ndarray,
-        analysis: dict,
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: (
+            list[float] | np.ndarray[Any, np.dtype[Any]]
+        ),
+        analysis: dict[str, Any],
         analysis_key: str,
         title: str,
     ) -> None:

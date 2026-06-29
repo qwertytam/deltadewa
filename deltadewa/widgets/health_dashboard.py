@@ -7,7 +7,7 @@ the health and effectiveness of equity hedges through key metrics.
 import json
 from typing import Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 import yaml
 
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -438,7 +438,7 @@ class HedgeHealthDashboard:
         )
 
         # Use the public API to create the widget and return its HTML value
-        return gauge.create_widget().value
+        return str(gauge.create_widget().value)
 
     def _build_metric_card_html(
         self,

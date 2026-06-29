@@ -1,6 +1,6 @@
 """Greeks calculations mixin for option portfolio."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from deltadewa.portfolio._protocols import _PortfolioProtocol
@@ -81,7 +81,7 @@ class GreeksMixin:
         """
         return -self.net_delta()
 
-    def all_greeks(self: "_PortfolioProtocol") -> dict:
+    def all_greeks(self: "_PortfolioProtocol") -> dict[str, Any]:
         """Calculate all portfolio Greeks in a single efficient pass.
 
         More efficient than calling individual methods when you need all Greeks.

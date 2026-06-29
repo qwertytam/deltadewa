@@ -2,6 +2,7 @@
 
 import hashlib
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -11,11 +12,11 @@ from deltadewa.portfolio.core import OptionPortfolio
 
 
 def create_scenario_cache_key(
-    spot_scenarios: np.ndarray,
+    spot_scenarios: np.ndarray[Any, np.dtype[Any]],
     time_points: list[datetime],
     metric: str,
     portfolio_state_hash: str,
-) -> tuple:
+) -> tuple[Any, ...]:
     """Create a hashable cache key for scenario grid results.
 
     Args:
@@ -36,11 +37,11 @@ def create_scenario_cache_key(
 
 
 def create_spot_vol_cache_key(
-    spot_scenarios: np.ndarray,
-    vol_scenarios: np.ndarray,
+    spot_scenarios: np.ndarray[Any, np.dtype[Any]],
+    vol_scenarios: np.ndarray[Any, np.dtype[Any]],
     metric: str,
     portfolio_state_hash: str,
-) -> tuple:
+) -> tuple[Any, ...]:
     """Create hashable cache key for spot x vol scenario grid results.
 
     Args:
@@ -132,15 +133,15 @@ class ScenarioGridCache:
             max_size: Maximum number of cached results (LRU eviction)
 
         """
-        self._cache: dict[tuple, pd.DataFrame] = {}
+        self._cache: dict[tuple[Any, ...], pd.DataFrame] = {}
         self._max_size = max_size
-        self._access_order: list[tuple] = []
+        self._access_order: list[tuple[Any, ...]] = []
 
     def get_or_calculate(
         self,
         portfolio: OptionPortfolio,
         analyzer: PortfolioAnalyzer,
-        spot_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
         time_points: list[datetime],
         metric: str,
         baseline_spot: float | None = None,
@@ -203,8 +204,8 @@ class ScenarioGridCache:
         self,
         portfolio: OptionPortfolio,
         analyzer: PortfolioAnalyzer,
-        spot_scenarios: np.ndarray,
-        vol_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
+        vol_scenarios: np.ndarray[Any, np.dtype[Any]],
         metric: str = "pnl",
         baseline_value: float | None = None,
         proportional_vol_scaling: bool = True,

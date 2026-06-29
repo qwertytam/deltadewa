@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 import pandas as pd
 
-FUNC_FORMATTER: Any = None  # pylint: disable=invalid-name
+FUNC_FORMATTER: type[FuncFormatter] | None = None  # pylint: disable=invalid-name
 try:
     from matplotlib.ticker import FuncFormatter as _FuncFormatter
 

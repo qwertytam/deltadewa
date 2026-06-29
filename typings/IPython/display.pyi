@@ -1,0 +1,6 @@
+"""Minimal stubs for IPython.display used in this project."""
+
+from typing import Any
+
+def display(*objs: Any, **kwargs: Any) -> None: ...
+def clear_output(wait: bool = ...) -> None: ...

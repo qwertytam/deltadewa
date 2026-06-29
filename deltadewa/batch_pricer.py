@@ -4,6 +4,7 @@ import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime as dt
+from typing import Any
 
 import numpy as np
 
@@ -116,9 +117,9 @@ class BatchPricer:
 
     def portfolio_values_at(
         self,
-        spots: np.ndarray,
+        spots: np.ndarray[Any, np.dtype[Any]],
         valuation_date: dt,
-    ) -> np.ndarray:
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Calculate portfolio values at multiple spot prices for a given date.
 
         For each position, checks if a cached OptionValuation exists for the
@@ -205,10 +206,10 @@ class BatchPricer:
 
     def portfolio_greeks_at(
         self,
-        spots: np.ndarray,
+        spots: np.ndarray[Any, np.dtype[Any]],
         valuation_date: dt,
         greeks: tuple[str, ...] = ("delta", "gamma", "vega", "theta"),
-    ) -> dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray[Any, np.dtype[Any]]]:
         """Calculate portfolio Greeks at multiple spot prices for a given date.
 
         Reuses the same (position, date) cache as portfolio_values_at().
@@ -247,7 +248,9 @@ class BatchPricer:
 
         n = len(spots)
         # Initialize result arrays
-        result: dict[str, np.ndarray] = {name: np.zeros(n) for name in greeks}
+        result: dict[str, np.ndarray[Any, np.dtype[Any]]] = {
+            name: np.zeros(n) for name in greeks
+        }
         if "price" not in result:
             result["price"] = np.zeros(n)
 
@@ -389,7 +392,10 @@ class BatchPricer:
             return self._cache[cache_key], True
 
     @staticmethod
-    def _sweep_spots(opt: OptionValuation, spots: np.ndarray) -> np.ndarray:
+    def _sweep_spots(
+        opt: OptionValuation,
+        spots: np.ndarray[Any, np.dtype[Any]],
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Sweep a single OptionValuation across an array of spot prices.
 
         Returns an array of per-contract prices (before scaling by quantity
@@ -404,9 +410,9 @@ class BatchPricer:
     @staticmethod
     def _sweep_spots_and_greeks(
         opt: OptionValuation,
-        spots: np.ndarray,
-        greek_names: tuple,
-    ) -> dict:
+        spots: np.ndarray[Any, np.dtype[Any]],
+        greek_names: tuple[str, ...],
+    ) -> dict[str, np.ndarray[Any, np.dtype[Any]]]:
         """Sweep spot prices, collecting price and any requested Greeks.
 
         Calls update_spot_price() once per spot (cheap SimpleQuote.setValue()),
@@ -416,7 +422,7 @@ class BatchPricer:
         to an array of per-contract values of length len(spots).
         """
         n = len(spots)
-        arrays: dict[str, np.ndarray] = {
+        arrays: dict[str, np.ndarray[Any, np.dtype[Any]]] = {
             name: np.empty(n) for name in greek_names
         }
         arrays["price"] = np.empty(n)
@@ -432,10 +438,10 @@ class BatchPricer:
     def _sweep_parallel(
         self,
         live_positions: list[tuple[int, OptionPosition]],
-        spots: np.ndarray,
+        spots: np.ndarray[Any, np.dtype[Any]],
         valuation_date: dt,
-        portfolio_values: np.ndarray,
-    ) -> np.ndarray:
+        portfolio_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> np.ndarray[Any, np.dtype[Any]]:
         """Price live positions in parallel and accumulate results.
 
         Each position's spot sweep runs in a separate thread. Results are
@@ -501,11 +507,11 @@ class BatchPricer:
     def _sweep_parallel_greeks(
         self,
         live_positions: list[tuple[int, OptionPosition]],
-        spots: np.ndarray,
+        spots: np.ndarray[Any, np.dtype[Any]],
         valuation_date: dt,
         requested: tuple[str, ...],
-        result: dict[str, np.ndarray],
-    ) -> dict[str, np.ndarray]:
+        result: dict[str, np.ndarray[Any, np.dtype[Any]]],
+    ) -> dict[str, np.ndarray[Any, np.dtype[Any]]]:
         """Calc Greeks for live positions in parallel and accumulate results.
 
         Mirrors ``_sweep_parallel`` but uses ``_sweep_spots_and_greeks`` as the

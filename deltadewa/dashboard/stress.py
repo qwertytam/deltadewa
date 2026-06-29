@@ -16,7 +16,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -39,7 +39,7 @@ from deltadewa.widgets import GlobalAssumptions
 # ---------------------------------------------------------------------------
 # Metric configuration shared across heatmap methods
 # ---------------------------------------------------------------------------
-_METRIC_CONFIG: dict[str, dict] = {
+_METRIC_CONFIG: dict[str, dict[str, Any]] = {
     "pnl": {"title": "P&L", "fmt": "${:,.0f}"},
     "value": {"title": "Value", "fmt": "${:,.0f}"},
     "net_delta": {"title": "Net Delta", "fmt": "{:,.1f}"},
@@ -420,7 +420,9 @@ class StressDashboard:
 
         return vbox
 
-    def display_risk_reward_summary(self, mc_results: dict) -> None:
+    def display_risk_reward_summary(
+        self, mc_results: dict[str, Any],
+    ) -> None:
         """Print and plot the Monte Carlo risk/reward summary.
 
         Displays:
@@ -718,10 +720,10 @@ class StressDashboard:
                     sign = "+" if pct > 0 else ""
                     return f"${_spot_formatter(si)}\n({sign}{pct:.0%})"
 
-                pivot_df.columns = pd.Index(  # type: ignore[misc]
+                pivot_df.columns = pd.Index(
                     [_col_label(d) for d in pivot_df.columns],
                 )
-                pivot_df.index = pd.Index(  # type: ignore[misc]
+                pivot_df.index = pd.Index(
                     [_row_label(s) for s in pivot_df.index],
                 )
                 pivot_df.index.name = "Spot Price"
@@ -844,8 +846,8 @@ class StressDashboard:
         spot_max: float,
         vol_min: float,
         vol_max: float,
-        spot_scenarios: np.ndarray,
-        vol_scenarios: np.ndarray,
+        spot_scenarios: np.ndarray[Any, np.dtype[Any]],
+        vol_scenarios: np.ndarray[Any, np.dtype[Any]],
         grid_resolution: int,
         spot_shock_pct: float,
         vol_shock_pct: float,
@@ -1179,7 +1181,7 @@ class StressDashboard:
     def _plot_mc_distribution(
         self,
         *,
-        pnls_clean: np.ndarray,
+        pnls_clean: np.ndarray[Any, np.dtype[Any]],
         expected_pnl: float,
         median_pnl: float,
         min_pnl: float,

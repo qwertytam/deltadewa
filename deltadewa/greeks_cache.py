@@ -16,7 +16,7 @@ class GreeksCache:
 
     _compute_funcs: dict[str, Callable[[], float]] = field(default_factory=dict)
     _cache: dict[str, float] = field(default_factory=dict)
-    _dirty: set = field(
+    _dirty: set[str] = field(
         default_factory=lambda: {
             "delta",
             "gamma",
@@ -44,7 +44,7 @@ class GreeksCache:
                 self._dirty.discard(name)
             return self._cache[name]
 
-    def invalidate(self, names: set | None = None) -> None:
+    def invalidate(self, names: set[str] | None = None) -> None:
         """Mark Greeks as needing recomputation."""
         with self._lock:
             if names is None:

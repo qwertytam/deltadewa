@@ -1,6 +1,6 @@
 """Carry and theta analysis mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -20,7 +20,9 @@ class CarryMixin:
     if TYPE_CHECKING:
         _self: "_AnalyzerProtocol"
 
-    def calculate_carry_metrics(self: "_AnalyzerProtocol") -> dict:
+    def calculate_carry_metrics(
+        self: "_AnalyzerProtocol",
+    ) -> dict[str, Any]:
         """Analyze portfolio carry (theta decay) characteristics.
 
         Note: All theta calculations use the industry standard convention of
@@ -141,7 +143,7 @@ class CarryMixin:
             "is_positive_carry": net_carry > 0,
         }
 
-    def _empty_carry_metrics(self) -> dict:
+    def _empty_carry_metrics(self) -> dict[str, Any]:
         """Return empty carry metrics structure."""
         return {
             "total_theta_daily": 0.0,

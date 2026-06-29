@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 
 def _fmt_enum_val(v: object) -> str:
     if hasattr(v, "name"):
-        return v.name.capitalize()
+        return str(v.name).capitalize()
     s = str(v)
     if "." in s:
         return s.rsplit(".", maxsplit=1)[-1].capitalize()
-    return str(s).capitalize()
+    return s.capitalize()
 
 
 class PositionDetailDisplay:

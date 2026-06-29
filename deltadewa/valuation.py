@@ -3,6 +3,7 @@
 import datetime
 import warnings
 from datetime import datetime as dt
+from typing import Any
 
 import QuantLib as QtLib
 
@@ -492,7 +493,7 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
         """Calculate Rho (sensitivity to interest rate) (cached)."""
         return self._greeks_cache.get("rho")
 
-    def greeks(self) -> dict:
+    def greeks(self) -> dict[str, Any]:
         """Calculate all Greeks (batch computation for efficiency)."""
         return self._greeks_cache.compute_all()
 

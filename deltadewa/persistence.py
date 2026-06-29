@@ -347,7 +347,7 @@ class PortfolioSerializer:
         self,
         filepath: str | Path,
         create_portfolio: bool = True,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Import portfolio from JSON file.
 
         Args:
@@ -363,7 +363,7 @@ class PortfolioSerializer:
             data = json.load(f)
 
         if not create_portfolio:
-            return data
+            return dict(data)
 
         # Extract market parameters
         market_params = data["market_parameters"]
@@ -435,7 +435,7 @@ class PortfolioSerializer:
             "metadata": data.get("metadata", {}),
         }
 
-    def import_from_yaml(self, filepath: str | Path) -> dict:
+    def import_from_yaml(self, filepath: str | Path) -> dict[str, Any]:
         """Import portfolio from YAML configuration file.
 
         Args:
@@ -528,7 +528,7 @@ class PortfolioSerializer:
             "metadata": {"source": "yaml", "filepath": str(filepath)},
         }
 
-    def import_portfolio(self, filepath: str | Path) -> dict:
+    def import_portfolio(self, filepath: str | Path) -> dict[str, Any]:
         """Universal import function - auto-detects file format.
 
         Args:

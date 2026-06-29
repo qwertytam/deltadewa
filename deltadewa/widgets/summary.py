@@ -6,7 +6,7 @@ indicators in a compact, always-visible format.
 
 from typing import TYPE_CHECKING
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer

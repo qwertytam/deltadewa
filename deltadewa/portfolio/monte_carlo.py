@@ -19,7 +19,9 @@ class MonteCarloMixin:
 
     # Declare attribute for static type checkers. The concrete
     # `OptionPortfolioBase` provides a property for this name at runtime.
-    monte_carlo_results: dict[str, float | int | np.ndarray] | None
+    monte_carlo_results: (
+        dict[str, float | int | np.ndarray[Any, np.dtype[Any]]] | None
+    )
 
     def _calculate_theoretical_max_loss(
         self: "_PortfolioProtocol",
@@ -49,7 +51,7 @@ class MonteCarloMixin:
 
     def _analyze_concentration(
         self: "_PortfolioProtocol",
-        pnls: np.ndarray,
+        pnls: np.ndarray[Any, np.dtype[Any]],
     ) -> tuple[bool, float, tuple[float, int] | None]:
         """Analyze P&L distribution concentration."""
         unique_rounded = np.unique(np.round(pnls, 2))

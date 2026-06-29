@@ -12,7 +12,7 @@ reduced to a single ``display()`` call.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from IPython.display import display
@@ -134,7 +134,9 @@ class CarryDisplay:
         )
         display(styled)
 
-    def _display_carry_status(self, carry_metrics: dict) -> None:
+    def _display_carry_status(
+        self, carry_metrics: dict[str, Any],
+    ) -> None:
         """Print positive / negative carry status message."""
         print()
         if carry_metrics["is_positive_carry"]:
@@ -158,7 +160,7 @@ class CarryDisplay:
 
     def _display_bucket_table(
         self,
-        carry_metrics: dict,
+        carry_metrics: dict[str, Any],
         df_carry: pd.DataFrame,
     ) -> None:
         """Render the theta-by-maturity-bucket styled table."""
@@ -235,7 +237,9 @@ class CarryDisplay:
         )
         display(styled)
 
-    def _display_validation(self, carry_metrics: dict) -> None:
+    def _display_validation(
+        self, carry_metrics: dict[str, Any],
+    ) -> None:
         """Print the net-carry == total-theta validation line."""
         print()
         net = carry_metrics["net_carry"]

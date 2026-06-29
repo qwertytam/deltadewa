@@ -1,7 +1,7 @@
 """Scenario analysis visualization for option charts."""
 
 from datetime import datetime as dt
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -19,10 +19,10 @@ class ScenarioChartsMixin:
     """Mixin providing scenario analysis visualization."""
 
     if TYPE_CHECKING:
-        _self: "_VisualizationProtocol"
+        _self: "_VisualizationProtocol[Any]"
 
     def plot_scenario_analysis(
-        self: "_VisualizationProtocol",
+        self: "_VisualizationProtocol[Any]",
         scenario_df: pd.DataFrame,
         days_forward: int,
         valuation_date: dt,
