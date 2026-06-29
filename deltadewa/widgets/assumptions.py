@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE

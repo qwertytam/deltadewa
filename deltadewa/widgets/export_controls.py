@@ -9,8 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
-from ipyfilechooser import FileChooser  # type: ignore[import-untyped]
+import ipywidgets as widgets
+from ipyfilechooser import FileChooser
 
 from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,

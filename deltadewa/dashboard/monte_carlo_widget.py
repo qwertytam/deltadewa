@@ -6,7 +6,7 @@ import datetime
 from datetime import datetime as dt
 from typing import TYPE_CHECKING
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 from IPython.display import display
 
 from deltadewa.reporting import ConsoleReporter

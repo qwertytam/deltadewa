@@ -16,7 +16,7 @@ import traceback
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -718,10 +718,10 @@ class StressDashboard:
                     sign = "+" if pct > 0 else ""
                     return f"${_spot_formatter(si)}\n({sign}{pct:.0%})"
 
-                pivot_df.columns = pd.Index(  # type: ignore[misc]
+                pivot_df.columns = pd.Index(
                     [_col_label(d) for d in pivot_df.columns],
                 )
-                pivot_df.index = pd.Index(  # type: ignore[misc]
+                pivot_df.index = pd.Index(
                     [_row_label(s) for s in pivot_df.index],
                 )
                 pivot_df.index.name = "Spot Price"

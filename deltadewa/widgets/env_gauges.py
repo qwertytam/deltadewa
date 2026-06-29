@@ -9,7 +9,7 @@ three horizontal gauge cards using the same
 
 from __future__ import annotations
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 from deltadewa.analysis.market_environment import (
     DataQuality,

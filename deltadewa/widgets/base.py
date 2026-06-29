@@ -6,7 +6,7 @@ the deltadewa widget system.
 
 from collections.abc import Callable
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 
 class InteractiveOutput:

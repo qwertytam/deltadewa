@@ -10,7 +10,7 @@ from datetime import datetime as dt
 from datetime import timedelta
 from typing import Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.persistence import PortfolioLogger, PortfolioSerializer
@@ -59,7 +59,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         description: str = "Select Position:",
         width: str = "500px",
         include_index: bool = True,
-    ) -> widgets.Dropdown:  # type: ignore[name-defined]
+    ) -> widgets.Dropdown:
         """Create dropdown for position selection.
 
         Args:
@@ -106,7 +106,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
     def create_position_editor(
         self,
         on_change_callback: Callable | None = None,
-    ) -> widgets.VBox:  # type: ignore[name-defined]
+    ) -> widgets.VBox:
         """Create complete position editor interface.
 
         Provides widgets for adding, updating, and removing positions with

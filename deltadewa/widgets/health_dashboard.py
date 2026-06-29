@@ -7,7 +7,7 @@ the health and effectiveness of equity hedges through key metrics.
 import json
 from typing import Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 import yaml
 
 from deltadewa.analysis.base import PortfolioAnalyzer

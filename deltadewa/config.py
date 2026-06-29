@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 
 
 class ExportDirVBox(widgets.VBox):  # pylint: disable=too-many-ancestors  # ipywidgets MRO depth; not our code
