@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: poetry
+
+      - name: Install deps
+        run: poetry install --no-interaction
+
+      - name: Ruff
+        run: poetry run ruff check .
+
+      - name: Pylint
+        run: poetry run pylint deltadewa
+
+      - name: Mypy (strict)
+        run: poetry run mypy deltadewa
+
+      - name: Pytest
+        run: poetry run pytest
+
+      - name: Notebook lint
+        run: poetry run nbqa ruff monitor_dashboard.ipynb hedge_design.ipynb
+
+      - name: Notebook execute (offline)
+        env:
+          _USE_LIVE: "False"
+          MPLBACKEND: Agg
+        run: |
+          poetry run jupyter nbconvert --to notebook --execute \
+            --ExecutePreprocessor.timeout=600 \
+            --output /tmp/_mon.ipynb monitor_dashboard.ipynb
+          poetry run jupyter nbconvert --to notebook --execute \
+            --ExecutePreprocessor.timeout=600 \
+            --output /tmp/_des.ipynb hedge_design.ipynb
