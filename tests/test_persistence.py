@@ -442,6 +442,28 @@ class TestJsonRoundtrip:
         with pytest.raises(ValueError, match="missing strike price"):
             serializer.import_from_json(json_path, create_portfolio=True)
 
+    def test_json_roundtrip_preserves_position_id(
+        self,
+        tmp_path,
+        sample_portfolio,
+    ) -> None:
+        """Export then import JSON — position_id must survive the round-trip."""
+        serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
+
+        original_ids = [p.position_id for p in sample_portfolio.positions]
+
+        output_path = serializer.export_to_json(
+            sample_portfolio,
+            changelog,
+            "test.json",
+        )
+        result = serializer.import_from_json(output_path, create_portfolio=True)
+        imported_portfolio = result["portfolio"]
+
+        imported_ids = [p.position_id for p in imported_portfolio.positions]
+        assert imported_ids == original_ids
+
 
 # ========== YAML Roundtrip Tests ==========
 
@@ -584,6 +606,41 @@ class TestYamlRoundtrip:
             position.option.maturity_date - datetime.now(tz=UTC)
         ).total_seconds() / 86400
         assert time_to_maturity == pytest.approx(30, abs=1)
+
+    def test_yaml_import_without_position_id_gets_fresh_uuid(
+        self,
+        tmp_path,
+    ) -> None:
+        """Hand-authored YAML without position_id → auto-generated UUID."""
+        config = {
+            "market_parameters": {
+                "spot_price": 100.0,
+                "volatility": 0.3,
+                "risk_free_rate": 0.05,
+                "dividend_yield": 0.02,
+                "underlying_quantity": 0.0,
+                "symbol": "TEST",
+                "contract_size": 100,
+            },
+            "positions": [
+                {
+                    "option_type": OptionType.CALL.value,
+                    "strike_price": 100.0,
+                    "maturity_days": 30,
+                    "quantity": 1,
+                    # deliberately no position_id key
+                },
+            ],
+        }
+        yaml_path = tmp_path / "no_id.yaml"
+        with Path.open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        serializer = PortfolioSerializer(tmp_path)
+        result = serializer.import_from_yaml(yaml_path)
+        pos = result["portfolio"].positions[0]
+        assert isinstance(pos.position_id, str)
+        assert pos.position_id != ""
 
 
 # ========== CSV Export Tests ==========

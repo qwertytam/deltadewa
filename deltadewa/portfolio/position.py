@@ -1,5 +1,6 @@
 """Option position representation."""
 
+import uuid
 from datetime import datetime as dt
 from typing import Any
 
@@ -20,6 +21,7 @@ class OptionPosition:
         entry_spot: float | None = None,
         entry_date: dt | None = None,
         entry_premium: float | None = None,
+        position_id: str = "",
     ) -> None:
         """Initialize an option position.
 
@@ -37,6 +39,10 @@ class OptionPosition:
             entry_premium: Per-share option price paid at entry, or None if
             unknown.  Total cost-basis = entry_premium * abs(quantity) *
             contract_size.
+            position_id: Stable runtime identity for this position.  When
+            empty (the default) a fresh UUID is generated automatically.
+            Pass an explicit value only when restoring a serialized position
+            so that save→load preserves identity.
 
         """
         self.option = option
@@ -47,6 +53,7 @@ class OptionPosition:
         self.entry_spot = entry_spot
         self.entry_date = entry_date
         self.entry_premium = entry_premium
+        self.position_id = position_id if position_id else str(uuid.uuid4())
 
     def position_value(self) -> float:
         """Calculate the total value of the position.
@@ -85,6 +92,7 @@ class OptionPosition:
         multiplier = self.quantity * self.contract_size
 
         return {
+            "position_id": self.position_id,
             "option_type": self.option.option_type,
             "strike": self.option.strike_price,
             "maturity": self.option.maturity_date,
