@@ -84,7 +84,7 @@ class OptionPortfolioBase:
         exercise_style: ExerciseStyle | None = None,
         entry_spot: float | None = None,
         entry_date: dt | None = None,
-    ) -> None:
+    ) -> OptionPosition:
         """Add an option position to the portfolio.
 
         Args:
@@ -102,6 +102,9 @@ class OptionPortfolioBase:
                 (uses self.default_exercise_style if None)
             entry_spot: Spot price at entry (uses self.spot_price if None)
             entry_date: Date of entry (uses self.valuation_date if None)
+
+        Returns:
+            The newly created and appended OptionPosition.
 
         """
         effective_cs = (
@@ -146,6 +149,7 @@ class OptionPortfolioBase:
             entry_date=entry_date,
         )
         self.positions.append(position)
+        return position
 
     def set_volatility(self, volatility: float) -> None:
         """Set portfolio volatility.

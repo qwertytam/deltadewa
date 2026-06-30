@@ -29,6 +29,7 @@ from deltadewa.constants import PortfolioAction
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.position import OptionPosition
     from deltadewa.reporting.console import ConsoleReporter
 
 
@@ -251,12 +252,14 @@ class PortfolioChangeTracker:
     def track(self) -> None:
         """Diff current portfolio state against the last snapshot and log.
 
-        Infers the action type from the change in position count:
+        Uses position_id set-difference to infer the action type:
 
-        - count increased  → ``ADD``
-        - count decreased  → ``REMOVE``
-        - count unchanged  → ``UPDATE``
+        - IDs appeared   → ``ADD``   (one log entry per new position)
+        - IDs disappeared → ``REMOVE`` (one log entry per removed position)
+        - IDs unchanged  → ``UPDATE``
 
+        Removed positions are described from the prior snapshot's id→desc map
+        so their details survive after they are gone from the live portfolio.
         Also marks Monte Carlo results stale when they exist.
         """
         pf = self._portfolio
@@ -268,29 +271,48 @@ class PortfolioChangeTracker:
             return
 
         last = self._last_state
-
-        # --- infer action and build detail string ---
-        if current["positions"] > last["positions"]:
-            action = PortfolioAction.ADD
-            details = self._describe_last_added(pf)
-        elif current["positions"] < last["positions"]:
-            action = PortfolioAction.REMOVE
-            details = f"Removed position (total now: {current['positions']})"
-        else:
-            action = PortfolioAction.UPDATE
-            details = "Updated position"
-
         delta_change = current["delta"] - last["delta"]
         value_change = current["value"] - last["value"]
 
-        self._logger.log_portfolio_change(
-            portfolio=pf,
-            action_type=action,
-            details=details,
-            impact_delta=delta_change,
-            impact_cost=value_change,
-            position_id=None,
-        )
+        added_ids = current["position_ids"] - last["position_ids"]
+        removed_ids = last["position_ids"] - current["position_ids"]
+
+        if added_ids:
+            id_to_pos = {p.position_id: p for p in pf.positions}
+            for pos_id in added_ids:
+                self._logger.log_portfolio_change(
+                    portfolio=pf,
+                    action_type=PortfolioAction.ADD,
+                    details=(
+                        f"Added {self._describe_position(id_to_pos[pos_id])}"
+                    ),
+                    impact_delta=delta_change,
+                    impact_cost=value_change,
+                    position_id=pos_id,
+                )
+        elif removed_ids:
+            for pos_id in removed_ids:
+                desc = last["id_to_desc"].get(pos_id, "position")
+                self._logger.log_portfolio_change(
+                    portfolio=pf,
+                    action_type=PortfolioAction.REMOVE,
+                    details=(
+                        f"Removed {desc}"
+                        f" (total now: {current['positions']})"
+                    ),
+                    impact_delta=delta_change,
+                    impact_cost=value_change,
+                    position_id=pos_id,
+                )
+        else:
+            self._logger.log_portfolio_change(
+                portfolio=pf,
+                action_type=PortfolioAction.UPDATE,
+                details="Updated position",
+                impact_delta=delta_change,
+                impact_cost=value_change,
+                position_id=None,
+            )
 
         # Mark Monte Carlo results stale if they exist
         if getattr(pf, "monte_carlo_results", None):
@@ -301,8 +323,11 @@ class PortfolioChangeTracker:
         self._last_state = current
 
         if self._reporter is not None:
-            ts = self._logger.get_last_entry()["timestamp"].strftime("%H:%M:%S")
-            self._reporter.success(f"Change logged: {action} at {ts}")
+            last_entry = self._logger.get_last_entry()
+            ts = last_entry["timestamp"].strftime("%H:%M:%S")
+            self._reporter.success(
+                f"Change logged: {last_entry['action']} at {ts}",
+            )
 
     def as_callback(self) -> Callable[[], None]:
         """Return a zero-argument callable that calls :meth:`track`.
@@ -332,22 +357,18 @@ class PortfolioChangeTracker:
             "positions": len(portfolio.positions),
             "delta": portfolio.total_delta(),
             "value": portfolio.total_value(),
+            "position_ids": {p.position_id for p in portfolio.positions},
+            "id_to_desc": {
+                p.position_id: PortfolioChangeTracker._describe_position(p)
+                for p in portfolio.positions
+            },
         }
 
     @staticmethod
-    def _describe_last_added(portfolio: OptionPortfolio) -> str:
-        """Build a human-readable description of last added position."""
-        # This is a bit hacky since it relies on the assumption that the
-        # last position in the list is the one just added, but it works for our
-        # current use case and keeps the logger decoupled from the portfolio
-        # internals.
-        # https://github.com/qwertytam/deltadewa/issues/71
-
-        if not portfolio.positions:
-            return "Added position"
-        pos = portfolio.positions[-1]
+    def _describe_position(pos: OptionPosition) -> str:
+        """Return a short human-readable label for *pos*."""
         return (
-            f"Added {pos.quantity}x "
+            f"{pos.quantity}x "
             f"{pos.option.option_type.upper()} "
             f"${pos.option.strike_price:.0f} "
             f"exp {pos.option.maturity_date.strftime('%Y-%m-%d')}"

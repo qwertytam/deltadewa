@@ -126,6 +126,19 @@ class TestOptionPortfolioBase:
         except IndexError:
             pass
 
+    def test_add_position_returns_appended_position(self) -> None:
+        """add_position returns the object that was appended to positions."""
+        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        returned = portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        assert returned is portfolio.positions[-1]
+        assert isinstance(returned.position_id, str)
+        assert returned.position_id != ""
+
     def test_update_position(self) -> None:
         """Test updating a position."""
         portfolio = OptionPortfolioBase(symbol="TEST")
@@ -194,6 +207,26 @@ class TestOptionPortfolioBase:
             "OptionValuation.exercise_style reverted after "
             "update_market_conditions"
         )
+
+    def test_update_position_preserves_position_id(self) -> None:
+        """update_position keeps same object; position_id is stable."""
+        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        original_id = portfolio.positions[0].position_id
+        assert original_id != ""
+
+        # Update quantity (field mutation — no OptionValuation rebuild)
+        portfolio.update_position(0, quantity=5)
+        assert portfolio.positions[0].position_id == original_id
+
+        # Update strike (triggers OptionValuation rebuild inside OptionPosition)
+        portfolio.update_position(0, strike=110.0)
+        assert portfolio.positions[0].position_id == original_id
 
     def test_clear_positions(self) -> None:
         """Test clearing all positions."""

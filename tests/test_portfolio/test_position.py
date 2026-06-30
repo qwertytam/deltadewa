@@ -203,6 +203,77 @@ class TestOptionPosition:
         assert "entry_premium" in d
         assert d["entry_premium"] is None
 
+    def test_position_id_auto_generated(self) -> None:
+        """position_id is a non-empty string when not supplied."""
+        option = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.CALL,
+        )
+        position = OptionPosition(option=option, quantity=1)
+        assert isinstance(position.position_id, str)
+        assert position.position_id != ""
+
+    def test_position_id_unique_per_instance(self) -> None:
+        """Two independently created positions get different IDs."""
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        option_a = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=maturity,
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.CALL,
+        )
+        option_b = OptionValuation(
+            spot_price=100.0,
+            strike_price=105.0,
+            maturity_date=maturity,
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.PUT,
+        )
+        pos_a = OptionPosition(option=option_a, quantity=1)
+        pos_b = OptionPosition(option=option_b, quantity=1)
+        assert pos_a.position_id != pos_b.position_id
+
+    def test_position_id_explicit_restored(self) -> None:
+        """An explicit position_id is stored verbatim (serializer restore)."""
+        option = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.CALL,
+        )
+        pid = "fixed-id-for-test"
+        position = OptionPosition(option=option, quantity=1, position_id=pid)
+        assert position.position_id == pid
+
+    def test_to_dict_includes_position_id(self) -> None:
+        """to_dict() includes position_id key."""
+        option = OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            volatility=0.2,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            option_type=OptionType.CALL,
+        )
+        position = OptionPosition(option=option, quantity=1)
+        d = position.to_dict()
+        assert "position_id" in d
+        assert d["position_id"] == position.position_id
+
     def test_custom_volatility_flag(self) -> None:
         """Test custom_volatility flag."""
         option = OptionValuation(

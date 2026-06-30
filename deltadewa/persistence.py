@@ -151,6 +151,7 @@ class PortfolioSerializer:
 
         for pos in portfolio.positions:
             position_data = {
+                "position_id": pos.position_id,
                 "option_type": pos.option.option_type.value,
                 "strike_price": pos.option.strike_price,
                 "maturity_date": pos.option.maturity_date.isoformat(),
@@ -428,6 +429,8 @@ class PortfolioSerializer:
                 dt.fromisoformat(raw_entry_date) if raw_entry_date else None
             )
             new_position.entry_premium = pos_data.get("entry_premium")
+            if pid := pos_data.get("position_id"):
+                new_position.position_id = pid
 
         return {
             "portfolio": imported_portfolio,
@@ -521,6 +524,8 @@ class PortfolioSerializer:
                 dt.fromisoformat(raw_entry_date) if raw_entry_date else None
             )
             new_position.entry_premium = pos_config.get("entry_premium")
+            if pid := pos_config.get("position_id"):
+                new_position.position_id = pid
 
         return {
             "portfolio": imported_portfolio,
