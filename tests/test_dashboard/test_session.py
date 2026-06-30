@@ -116,9 +116,11 @@ class TestStartSession:
             ctx = start_session(globals_dict={}, use_live_market_data=True)
 
         mock_cboe_fred_provider.assert_called_once_with()
-        # get_vix is probed once; setup_dashboard may call it again via
-        # the live provider, so exact count is not asserted here.
+        # get_vix and get_spot are probed once each; setup_dashboard may
+        # call them again via the live provider, so exact counts are not
+        # asserted here.
         mock_cboe_fred_provider.return_value.get_vix.assert_called()
+        mock_cboe_fred_provider.return_value.get_spot.assert_called()
         assert ctx.market_data is mock_cboe_fred_provider.return_value
         assert ctx.market_data_source == "live"
 
@@ -136,6 +138,21 @@ class TestStartSession:
         ) as mock_cboe_fred_provider:
             mock_cboe_fred_provider.return_value.get_vix.side_effect = (
                 MarketDataError("network unreachable")
+            )
+            ctx = start_session(globals_dict={}, use_live_market_data=True)
+
+        assert isinstance(ctx.market_data, StaticProvider)
+        assert ctx.market_data_source == "static (live unavailable)"
+
+    def test_live_falls_back_to_static_when_get_spot_raises(self) -> None:
+        """Test get_spot failure (CBOE down, FRED up) falls back to static."""
+        with patch.object(
+            session_module,
+            "CboeFredProvider",
+        ) as mock_cboe_fred_provider:
+            mock_cboe_fred_provider.return_value.get_vix.return_value = 18.5
+            mock_cboe_fred_provider.return_value.get_spot.side_effect = (
+                MarketDataError("CBOE unreachable")
             )
             ctx = start_session(globals_dict={}, use_live_market_data=True)
 
