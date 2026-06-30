@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from deltadewa import create_empty_portfolio
+from deltadewa.formatters.html import format_html_metric
 from deltadewa.widgets.summary import NetHedgeSummary
 
 
@@ -119,9 +120,31 @@ class TestNetHedgeSummary:
 
         get_volatility_stats() returns {} when there are no positions;
         update() must not index "avg_volatility" unconditionally.
+
+        The avg_volatility fallback (0.0) hits the near-zero threshold and
+        renders as "- %" — NOT "0.00%". The previous assertion checked for
+        "0.00%" which coincidentally matched "20.00%" (the default portfolio
+        volatility shown in Min/Max Vol badges), never actually exercising the
+        fallback path. This test pins the correct empty-state behaviour across
+        multiple sections of the widget.
         """
         portfolio = create_empty_portfolio()
 
         summary = NetHedgeSummary(portfolio)
 
-        assert "0.00%" in summary.vol_metrics_html.value
+        # vol section: Vega-W.Avg Vol uses .get("avg_volatility", 0.0);
+        # the exact badge should match what format_html_metric produces for 0.0.
+        expected_avg_vol_badge = format_html_metric(
+            "Vega-W.Avg Vol",
+            0.0,
+            format_type="percentage",
+            is_neutral=True,
+        )
+        assert expected_avg_vol_badge in summary.vol_metrics_html.value
+
+        # value section: all zero → near-zero placeholder "$ -"
+        assert "Option Value" in summary.value_metrics_html.value
+        assert "Total Portfolio Value" in summary.value_metrics_html.value
+
+        # prob section: no Monte Carlo run → N/A breakeven
+        assert "Breakeven Points:</strong> N/A" in summary.prob_stats_html.value
