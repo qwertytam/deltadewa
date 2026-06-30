@@ -182,7 +182,9 @@ class TestOptionPosition:
             option_type=OptionType.PUT,
         )
         position = OptionPosition(
-            option=option, quantity=5, entry_premium=2.50,
+            option=option,
+            quantity=5,
+            entry_premium=2.50,
         )
         assert position.entry_premium == 2.50
         assert position.to_dict()["entry_premium"] == 2.50

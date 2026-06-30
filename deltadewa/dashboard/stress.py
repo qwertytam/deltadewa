@@ -421,7 +421,8 @@ class StressDashboard:
         return vbox
 
     def display_risk_reward_summary(
-        self, mc_results: dict[str, Any],
+        self,
+        mc_results: dict[str, Any],
     ) -> None:
         """Print and plot the Monte Carlo risk/reward summary.
 
@@ -962,8 +963,11 @@ class StressDashboard:
 
                 cbar = plt.colorbar(im, ax=ax)
                 if metric_type in ("pnl", "value"):
-                    vmin_, vmax_ = np.nanmin(result_matrix), np.nanmax(
-                        result_matrix,
+                    vmin_, vmax_ = (
+                        np.nanmin(result_matrix),
+                        np.nanmax(
+                            result_matrix,
+                        ),
                     )
                     if (
                         np.isfinite(vmin_)
@@ -1161,8 +1165,8 @@ class StressDashboard:
         return widgets.HTML(
             value=f"""
             <div style='
-                background: {style['bg']};
-                border: 1px solid {style['border']};
+                background: {style["bg"]};
+                border: 1px solid {style["border"]};
                 padding: 12px 15px;
                 border-radius: 5px;
                 margin-bottom: 10px;

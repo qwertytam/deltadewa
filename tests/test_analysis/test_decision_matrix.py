@@ -1,6 +1,5 @@
 """Tests for deltadewa.analysis.decision_matrix."""
 
-
 from __future__ import annotations
 
 from typing import Any
@@ -57,7 +56,9 @@ def _make_plan(*, harvest: float) -> MonetizationPlan:
         current_gain_pct=50.0,
         steps=[
             MonetizationStepStatus(
-                gain_pct=25.0, sell_pct=25.0, triggered=True,
+                gain_pct=25.0,
+                sell_pct=25.0,
+                triggered=True,
             ),
         ],
         recommended_cumulative_sell_pct=25.0,
@@ -70,6 +71,7 @@ def _make_plan(*, harvest: float) -> MonetizationPlan:
 
 # ── decision_matrix: data-quality guard ──────────────────────────────
 
+
 class TestDecisionMatrixInsufficientData:
     """Non-LIVE data_quality must return INSUFFICIENT_DATA, no raise."""
 
@@ -77,7 +79,9 @@ class TestDecisionMatrixInsufficientData:
         """STATIC provider gives INSUFFICIENT_DATA verdict."""
         env = _make_env(data_quality=DataQuality.STATIC)
         result = decision_matrix(
-            env, convexity_now_pct=15.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=15.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
         assert result.data_quality_note is not None
@@ -90,7 +94,9 @@ class TestDecisionMatrixInsufficientData:
             hedge_cost_verdict=None,
         )
         result = decision_matrix(
-            env, convexity_now_pct=15.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=15.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
 
@@ -99,7 +105,9 @@ class TestDecisionMatrixInsufficientData:
         env = _make_env(data_quality=DataQuality.STATIC)
         # 8.0 < target_min_pct=10.0 → UNDER
         result = decision_matrix(
-            env, convexity_now_pct=8.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=8.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
@@ -108,7 +116,9 @@ class TestDecisionMatrixInsufficientData:
         """LIVE but cost_verdict=None returns INSUFFICIENT_DATA."""
         env = _make_env(hedge_cost_verdict=None)
         result = decision_matrix(
-            env, convexity_now_pct=15.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=15.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
         assert result.data_quality_note is not None
@@ -117,6 +127,7 @@ class TestDecisionMatrixInsufficientData:
 
 # ── decision_matrix: BUY signals ─────────────────────────────────────
 
+
 class TestDecisionMatrixBuySignals:
     """UNDER-hedged + CHEAP or FAIR → BUY."""
 
@@ -124,7 +135,9 @@ class TestDecisionMatrixBuySignals:
         """Under-hedged with cheap protection → BUY."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.CHEAP)
         result = decision_matrix(
-            env, convexity_now_pct=5.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=5.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.BUY
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
@@ -133,7 +146,9 @@ class TestDecisionMatrixBuySignals:
         """Under-hedged with fair protection → BUY (adequacy takes priority)."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.FAIR)
         result = decision_matrix(
-            env, convexity_now_pct=5.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=5.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.BUY
 
@@ -141,13 +156,16 @@ class TestDecisionMatrixBuySignals:
         """Convexity just below target_min_pct=10.0 is UNDER."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.CHEAP)
         result = decision_matrix(
-            env, convexity_now_pct=9.99, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=9.99,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.BUY
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
 
 
 # ── decision_matrix: AVOID signal ────────────────────────────────────
+
 
 class TestDecisionMatrixAvoidSignal:
     """UNDER-hedged + EXPENSIVE → AVOID."""
@@ -156,13 +174,16 @@ class TestDecisionMatrixAvoidSignal:
         """Under-hedged with expensive protection → AVOID."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.EXPENSIVE)
         result = decision_matrix(
-            env, convexity_now_pct=5.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=5.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.AVOID
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
 
 
 # ── decision_matrix: MAINTAIN signals ────────────────────────────────
+
 
 class TestDecisionMatrixMaintainSignals:
     """Various paths that should resolve to MAINTAIN."""
@@ -171,7 +192,9 @@ class TestDecisionMatrixMaintainSignals:
         """Adequate convexity, fair cost, no gains → MAINTAIN."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.FAIR)
         result = decision_matrix(
-            env, convexity_now_pct=20.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=20.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
         assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
@@ -202,7 +225,9 @@ class TestDecisionMatrixMaintainSignals:
         """Adequate + expensive but no gains → MAINTAIN."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.EXPENSIVE)
         result = decision_matrix(
-            env, convexity_now_pct=20.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=20.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
 
@@ -210,7 +235,9 @@ class TestDecisionMatrixMaintainSignals:
         """Over-hedged with no gains → MAINTAIN (nothing to harvest)."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.EXPENSIVE)
         result = decision_matrix(
-            env, convexity_now_pct=35.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=35.0,
+            ips_convexity=_IPS,
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
         assert result.hedge_adequacy is HedgeAdequacy.OVER
@@ -219,7 +246,9 @@ class TestDecisionMatrixMaintainSignals:
         """Convexity exactly at target_min_pct=10.0 is ADEQUATE."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.FAIR)
         result = decision_matrix(
-            env, convexity_now_pct=10.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=10.0,
+            ips_convexity=_IPS,
         )
         assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
 
@@ -227,12 +256,15 @@ class TestDecisionMatrixMaintainSignals:
         """Convexity exactly at target_max_pct=30.0 is ADEQUATE."""
         env = _make_env(hedge_cost_verdict=HedgeCostVerdict.FAIR)
         result = decision_matrix(
-            env, convexity_now_pct=30.0, ips_convexity=_IPS,
+            env,
+            convexity_now_pct=30.0,
+            ips_convexity=_IPS,
         )
         assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
 
 
 # ── decision_matrix: MONETIZE signals ────────────────────────────────
+
 
 class TestDecisionMatrixMonetizeSignals:
     """Conditions that should resolve to MONETIZE."""
@@ -286,6 +318,7 @@ class TestDecisionMatrixMonetizeSignals:
 
 # ── entry_timing_tree: data-quality guard ────────────────────────────
 
+
 class TestEntryTimingTreeInsufficientData:
     """Non-LIVE data quality declines entry-timing evaluation."""
 
@@ -301,7 +334,8 @@ class TestEntryTimingTreeInsufficientData:
     def test_unavailable_quality_declines(self) -> None:
         """UNAVAILABLE env → INSUFFICIENT_DATA, empty steps."""
         env = _make_env(
-            data_quality=DataQuality.UNAVAILABLE, vix=None,
+            data_quality=DataQuality.UNAVAILABLE,
+            vix=None,
         )
         result = entry_timing_tree(env)
         assert result.should_enter is False
@@ -326,6 +360,7 @@ class TestEntryTimingTreeInsufficientData:
 
 
 # ── entry_timing_tree: VIX-level stops ───────────────────────────────
+
 
 class TestEntryTimingTreeVixStop:
     """Elevated VIX stops the tree at step 1."""
@@ -359,6 +394,7 @@ class TestEntryTimingTreeVixStop:
 
 # ── entry_timing_tree: skew-level stop ───────────────────────────────
 
+
 class TestEntryTimingTreeSkewStop:
     """Expensive skew stops the tree at step 2."""
 
@@ -373,6 +409,7 @@ class TestEntryTimingTreeSkewStop:
 
 
 # ── entry_timing_tree: full three-step paths ─────────────────────────
+
 
 class TestEntryTimingTreeFullPath:
     """Three-step paths that reach step 3 with should_enter=True."""

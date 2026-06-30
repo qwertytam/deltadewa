@@ -251,28 +251,20 @@ class OptionPortfolioBase:
         else:
             # Fallback to individual methods (existing code)
             if hasattr(self, "total_delta"):
-
                 stats["total_delta"] = self.total_delta()
             if hasattr(self, "net_delta"):
-
                 stats["net_delta"] = self.net_delta()
             if hasattr(self, "hedge_ratio"):
-
                 stats["hedge_ratio"] = self.hedge_ratio()
             if hasattr(self, "delta_adjustment_needed"):
-
                 stats["delta_adjustment"] = self.delta_adjustment_needed()
             if hasattr(self, "total_gamma"):
-
                 stats["total_gamma"] = self.total_gamma()
             if hasattr(self, "total_vega"):
-
                 stats["total_vega"] = self.total_vega()
             if hasattr(self, "total_theta"):
-
                 stats["total_theta"] = self.total_theta()
             if hasattr(self, "total_rho"):
-
                 stats["total_rho"] = self.total_rho()
 
         # Add volatility statistics

@@ -17,10 +17,7 @@ _SPX_CSV = "DATE,SPX\n06/15/2026,5000.0\n"
 # 12/31/2025 (6800) sorts after 06/25/2026 (5000) in string order, so a
 # correct chronological sort must pick 5000 as the latest value.
 _SPX_CSV_MULTIROW = (
-    "DATE,SPX\n"
-    "06/25/2026,5000.0\n"
-    "12/31/2025,6800.0\n"
-    "01/02/2025,4500.0\n"
+    "DATE,SPX\n06/25/2026,5000.0\n12/31/2025,6800.0\n01/02/2025,4500.0\n"
 )
 
 # Real CBOE VIX-family format: full OHLCV with a CLOSE column.
@@ -29,9 +26,7 @@ _VIX_CSV = "DATE,OPEN,HIGH,LOW,CLOSE\n06/15/2026,16.0,16.5,15.5,16.5\n"
 # Real CBOE SKEW format: DATE + symbol-name column (no OHLCV).
 _SKEW_CSV = (
     "DATE,SKEW\n"
-    + "\n".join(
-        f"{(i % 12) + 1:02d}/01/2026,{120.0 + i}" for i in range(10)
-    )
+    + "\n".join(f"{(i % 12) + 1:02d}/01/2026,{120.0 + i}" for i in range(10))
     + "\n"
 )
 

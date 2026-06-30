@@ -211,9 +211,9 @@ def forward_vol(term: dict[str, float]) -> float | None:
 
     s1 = term["VIX"] / 100
     s2 = term["VIX3M"] / 100
-    forward_var = (
-        s2**2 * _VIX3M_TENOR_YEARS - s1**2 * _VIX_TENOR_YEARS
-    ) / (_VIX3M_TENOR_YEARS - _VIX_TENOR_YEARS)
+    forward_var = (s2**2 * _VIX3M_TENOR_YEARS - s1**2 * _VIX_TENOR_YEARS) / (
+        _VIX3M_TENOR_YEARS - _VIX_TENOR_YEARS
+    )
     return math.sqrt(max(forward_var, 0.0)) * 100
 
 

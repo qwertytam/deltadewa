@@ -213,7 +213,9 @@ def size_hedge(
 
     crash_pct = ips_config.convexity.crash_scenario_pct  # negative
     offset = required_crash_offset(
-        book_notional, crash_pct, ips_config.drawdown.max_tolerance_pct,
+        book_notional,
+        crash_pct,
+        ips_config.drawdown.max_tolerance_pct,
     )
 
     strike = portfolio.spot_price * (1.0 - candidate_pct_otm / 100.0)

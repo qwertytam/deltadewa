@@ -297,8 +297,7 @@ class PortfolioChangeTracker:
                     portfolio=pf,
                     action_type=PortfolioAction.REMOVE,
                     details=(
-                        f"Removed {desc}"
-                        f" (total now: {current['positions']})"
+                        f"Removed {desc} (total now: {current['positions']})"
                     ),
                     impact_delta=delta_change,
                     impact_cost=value_change,

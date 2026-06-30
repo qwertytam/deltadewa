@@ -33,7 +33,8 @@ class InteractiveOutput:
         self.widget = widgets.Output()
 
     def update(
-        self, func: Callable[..., Any],
+        self,
+        func: Callable[..., Any],
     ) -> Callable[..., Any]:
         """Create wrapper function to handle output clearing.
 

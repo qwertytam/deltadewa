@@ -571,7 +571,9 @@ def highlight_max_min(
             (
                 f"background-color: {max_color}"
                 if v == col.max()
-                else f"background-color: {min_color}" if v == col.min() else ""
+                else f"background-color: {min_color}"
+                if v == col.min()
+                else ""
             )
             for v in col
         ],

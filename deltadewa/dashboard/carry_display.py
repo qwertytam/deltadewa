@@ -135,7 +135,8 @@ class CarryDisplay:
         display(styled)
 
     def _display_carry_status(
-        self, carry_metrics: dict[str, Any],
+        self,
+        carry_metrics: dict[str, Any],
     ) -> None:
         """Print positive / negative carry status message."""
         print()
@@ -238,7 +239,8 @@ class CarryDisplay:
         display(styled)
 
     def _display_validation(
-        self, carry_metrics: dict[str, Any],
+        self,
+        carry_metrics: dict[str, Any],
     ) -> None:
         """Print the net-carry == total-theta validation line."""
         print()

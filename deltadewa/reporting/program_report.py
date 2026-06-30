@@ -243,9 +243,7 @@ def build_program_report(
         Fully assembled ``ProgramReport``.
 
     """
-    book_notional = (
-        abs(portfolio.underlying_quantity) * portfolio.spot_price
-    )
+    book_notional = abs(portfolio.underlying_quantity) * portfolio.spot_price
 
     header = ReportHeader(
         program_name=ips_config.program.name,
@@ -302,9 +300,7 @@ def _build_cost(
     """Build the CostSection from carry metrics and notional."""
     theta_annual: float = carry_metrics.get("total_theta_annual", 0.0)
     carry_pct = (
-        abs(theta_annual) / book_notional * 100
-        if book_notional > 0
-        else 0.0
+        abs(theta_annual) / book_notional * 100 if book_notional > 0 else 0.0
     )
     return CostSection(
         total_theta_annual=theta_annual,
@@ -395,19 +391,14 @@ def _build_compliance(
         and p.target_max_pct is not None
     ):
         target_str = (
-            f"{p.target_min_pct:.1f}%"
-            f"\u2013{p.target_max_pct:.1f}% of book"
+            f"{p.target_min_pct:.1f}%\u2013{p.target_max_pct:.1f}% of book"
         )
         actual_str = (
-            f"{p.convexity_pct:.1f}%"
-            if p.convexity_pct is not None
-            else "—"
+            f"{p.convexity_pct:.1f}%" if p.convexity_pct is not None else "—"
         )
         rows.append(
             IpsComplianceRow(
-                metric=(
-                    f"Crash convexity ({p.ips_crash_pct:.0f}% shock)"
-                ),
+                metric=(f"Crash convexity ({p.ips_crash_pct:.0f}% shock)"),
                 target=target_str,
                 actual=actual_str,
                 passes=bool(p.meets_target),
@@ -519,9 +510,7 @@ def render_markdown(report: ProgramReport) -> str:
     # ── 2. Protection ───────────────────────────────────────────────────
     p = report.protection
     ratio_str = (
-        f"{p.payoff_ratio:.1f}\u00d7"
-        if p.payoff_ratio is not None
-        else "—"
+        f"{p.payoff_ratio:.1f}\u00d7" if p.payoff_ratio is not None else "—"
     )
     crash_label = (
         f"{p.ips_crash_pct:.0f}% shock"
@@ -545,10 +534,7 @@ def render_markdown(report: ProgramReport) -> str:
         ),
         f"| IPS crash scenario | {crash_label} |",
         f"| Payoff ratio at crash | {ratio_str} |",
-        (
-            f"| Convexity (net P&L % of book)"
-            f" | {_fmt_pct(p.convexity_pct, 1)} |"
-        ),
+        (f"| Convexity (net P&L % of book) | {_fmt_pct(p.convexity_pct, 1)} |"),
         f"| IPS convexity target | {target_band} |",
         f"| Status | {_pass_fail_md(p.meets_target)} |",
         "",
@@ -567,11 +553,7 @@ def render_markdown(report: ProgramReport) -> str:
             ),
             "",
         ]
-    vix_str = (
-        f"{mc.vix:.1f}"
-        if mc.vix is not None
-        else "—"
-    )
+    vix_str = f"{mc.vix:.1f}" if mc.vix is not None else "—"
     skew_str = (
         f"{mc.skew_percentile * 100:.1f}%"
         if mc.skew_percentile is not None

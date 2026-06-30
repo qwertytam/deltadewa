@@ -237,8 +237,9 @@ class TestHedgeHealthDashboard:
         dashboard = HedgeHealthDashboard(mock_portfolio)
 
         defaults = dashboard._get_default_config()  # pylint: disable=W0212
-        assert dashboard.config["parameters"]["historical_vol_low"] == (
-            defaults["parameters"]["historical_vol_low"]
+        assert (
+            dashboard.config["parameters"]["historical_vol_low"]
+            == (defaults["parameters"]["historical_vol_low"])
         )
 
     def test_get_default_config(self, mock_portfolio: OptionPortfolio) -> None:
@@ -363,12 +364,12 @@ class TestHedgeHealthDashboard:
         assert hasattr(loader_widget, "children")
         # Check for expected widget types rather than exact count
         children = loader_widget.children
-        assert any(
-            isinstance(child, widgets.HTML) for child in children
-        ), "Should have HTML label widget"
+        assert any(isinstance(child, widgets.HTML) for child in children), (
+            "Should have HTML label widget"
+        )
         assert any(
             isinstance(child, widgets.FileUpload) for child in children
         ), "Should have FileUpload widget"
-        assert any(
-            isinstance(child, widgets.Output) for child in children
-        ), "Should have Output widget"
+        assert any(isinstance(child, widgets.Output) for child in children), (
+            "Should have Output widget"
+        )

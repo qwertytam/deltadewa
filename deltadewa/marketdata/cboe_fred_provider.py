@@ -165,7 +165,9 @@ class CboeFredProvider:
         url = _FRED_CSV_URL.format(series_id=series_id)
         # FRED's CSV export uses "observation_date" as the date column name.
         return self._fetch_csv_series(
-            url, date_col="observation_date", value_col=series_id,
+            url,
+            date_col="observation_date",
+            value_col=series_id,
         )
 
     def _fetch_csv_series(

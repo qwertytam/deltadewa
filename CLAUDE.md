@@ -18,6 +18,7 @@ logic lives in the package.
 Python `>=3.11,<4.0`, managed with **Poetry**. Run everything through `poetry run`.
 
 - Install: `poetry install`
+- Pre-commit hooks: `poetry run pre-commit install` (once per clone; installs the `.pre-commit-config.yaml` hooks)
 - Tests: `poetry run pytest`
 - Type-check: `poetry run mypy deltadewa` — **strict mode** (`strict = true` in `[tool.mypy]` in
   `pyproject.toml`); custom stubs live in `typings/`; `pandas-stubs` installed; tests/ and
@@ -25,7 +26,7 @@ Python `>=3.11,<4.0`, managed with **Poetry**. Run everything through `poetry ru
 - Lint: `poetry run ruff check .`
 - Design/refactor smells: `poetry run pylint deltadewa` — covers duplicate-code, cyclic-import, and
   complexity limits; `tests/` and notebooks are intentionally out of scope for now
-- Format: `poetry run black .` (or `poetry run ruff format .`) — **line length is 80**
+- Format: `poetry run ruff format .` — **line length is 80**
 - Lint/type-check notebooks: `poetry run nbqa ruff <notebook>` / `poetry run nbqa mypy <notebook>`
 
 Before considering any change done: `poetry run pytest` and `poetry run mypy deltadewa` must both be

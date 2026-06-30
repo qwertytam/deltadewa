@@ -735,9 +735,7 @@ class PnLChartsMixin:
         self: "_VisualizationProtocol[Any]",
         ax: Axes,
         spot_range: np.ndarray[Any, np.dtype[Any]],
-        pnl_values: (
-            list[float] | np.ndarray[Any, np.dtype[Any]]
-        ),
+        pnl_values: (list[float] | np.ndarray[Any, np.dtype[Any]]),
         analysis: dict[str, Any],
         analysis_key: str,
         title: str,

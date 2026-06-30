@@ -91,7 +91,9 @@ class TestStrikeForDelta:
         """A 10-delta put strike must be below spot (OTM)."""
         portfolio = _make_spx_portfolio(spot=5000.0)
         strike = strike_for_delta(
-            portfolio, target_delta=0.10, maturity_years=0.25,
+            portfolio,
+            target_delta=0.10,
+            maturity_years=0.25,
         )
         assert strike is not None
         assert strike < portfolio.spot_price
@@ -103,7 +105,9 @@ class TestStrikeForDelta:
         portfolio = _make_spx_portfolio(spot=5000.0)
         target = 0.10
         strike = strike_for_delta(
-            portfolio, target_delta=target, maturity_years=0.25,
+            portfolio,
+            target_delta=target,
+            maturity_years=0.25,
         )
         assert strike is not None
         metrics = evaluate_candidate(
@@ -118,10 +122,14 @@ class TestStrikeForDelta:
         """Higher target delta (closer to ATM) → strike closer to spot."""
         portfolio = _make_spx_portfolio(spot=5000.0)
         strike_05 = strike_for_delta(
-            portfolio, target_delta=0.05, maturity_years=0.25,
+            portfolio,
+            target_delta=0.05,
+            maturity_years=0.25,
         )
         strike_15 = strike_for_delta(
-            portfolio, target_delta=0.15, maturity_years=0.25,
+            portfolio,
+            target_delta=0.15,
+            maturity_years=0.25,
         )
         assert strike_05 is not None
         assert strike_15 is not None
@@ -131,7 +139,10 @@ class TestStrikeForDelta:
         """vol= override produces a result without error."""
         portfolio = _make_spx_portfolio()
         strike = strike_for_delta(
-            portfolio, target_delta=0.10, maturity_years=0.25, vol=0.25,
+            portfolio,
+            target_delta=0.10,
+            maturity_years=0.25,
+            vol=0.25,
         )
         assert strike is not None
         assert strike > 0.0
@@ -141,7 +152,9 @@ class TestStrikeForDelta:
         portfolio = _make_spx_portfolio()
         with pytest.raises(ValueError, match="target_delta must be positive"):
             strike_for_delta(
-                portfolio, target_delta=0.0, maturity_years=0.25,
+                portfolio,
+                target_delta=0.0,
+                maturity_years=0.25,
             )
 
     def test_negative_target_delta_raises(self) -> None:
@@ -149,14 +162,18 @@ class TestStrikeForDelta:
         portfolio = _make_spx_portfolio()
         with pytest.raises(ValueError, match="target_delta must be positive"):
             strike_for_delta(
-                portfolio, target_delta=-0.05, maturity_years=0.25,
+                portfolio,
+                target_delta=-0.05,
+                maturity_years=0.25,
             )
 
     def test_no_solution_returns_none(self) -> None:
         """target_delta >= 0.5 returns None — no OTM solution, no raise."""
         portfolio = _make_spx_portfolio()
         result = strike_for_delta(
-            portfolio, target_delta=0.50, maturity_years=0.25,
+            portfolio,
+            target_delta=0.50,
+            maturity_years=0.25,
         )
         assert result is None
 
@@ -166,7 +183,9 @@ class TestStrikeForDelta:
             exercise_style=ExerciseStyle.EUROPEAN,
         )
         result = strike_for_delta(
-            portfolio, target_delta=0.10, maturity_years=0.25,
+            portfolio,
+            target_delta=0.10,
+            maturity_years=0.25,
         )
         assert result is not None
         assert result < portfolio.spot_price
@@ -249,7 +268,8 @@ class TestBuildStrikeLadder:
         )
         for rung in result:
             assert abs(rung.metrics.put_delta) == pytest.approx(
-                rung.target_delta, abs=1e-3,
+                rung.target_delta,
+                abs=1e-3,
             )
 
     def test_meets_target_within_budget_compound_flag(self) -> None:

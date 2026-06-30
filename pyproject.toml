@@ -21,7 +21,6 @@ dependencies = [
 	"nbconvert (>=7.17.1,<8.0.0)",
 	"scipy (>=1.17.0,<2.0.0)",
 	"playwright (>=1.58.0,<2.0.0)",
-	"black (>=26.3,<27.0)",
 	"bleach (>=6.3,<7.0)",
 	"idna (>=3.15,<4.0)",
 	"jupyter-server (>=2.18,<3.0)",
@@ -39,9 +38,6 @@ dependencies = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.black]
-line-length = 80
 
 [tool.mypy]
 mypy_path = ["typings"]
@@ -87,7 +83,9 @@ select = [
 	"W",    # Warning
 	# "YTT",  # flake8-2020 
 ]
-ignore = []
+ignore = [
+	"COM812",  # conflicts with ruff formatter (formatter manages trailing commas)
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "ANN", "D", "ARG"]  # asserts, annotations, docstrings, unused-args are noise in tests
@@ -96,6 +94,7 @@ ignore = []
 [dependency-groups]
 dev = [
 	"ruff (>=0.5.3)",
+	"pre-commit (>=4.0,<5.0)",
 	"debugpy (>=1.8.19,<2.0.0)",
 	"mypy>=1.10",
 	"types-PyYAML>=6.0",

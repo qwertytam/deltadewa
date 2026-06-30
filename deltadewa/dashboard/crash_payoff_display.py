@@ -68,8 +68,11 @@ def _print_headline(result: CrashConvexityResult) -> None:
 
     ips = result.ips_convexity
     ips_row = next(
-        (r for r in result.scenario_rows
-         if r.shock_pct == ips.crash_scenario_pct),
+        (
+            r
+            for r in result.scenario_rows
+            if r.shock_pct == ips.crash_scenario_pct
+        ),
         None,
     )
     if ips_row is None:
