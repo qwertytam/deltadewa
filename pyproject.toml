@@ -137,13 +137,11 @@ disable = [
 ]
 
 [tool.pylint.design]
-# Limits set to the observed codebase ceiling — any future code exceeding these
-# is a genuine regression.  Comments name the current ceiling holder.
-max-args        = 18   # widgets/gauges.py GaugeIndicator.__init__
-max-locals      = 65   # visualization/pnl_charts.py plot_pnl_distribution_with_metrics
+max-args        = 8
+max-locals      = 25
 max-attributes  = 27   # deltadewa/valuation.py OptionValuation (QuantLib wrapper)
-max-branches    = 22   # analysis/summary.py format_risk_reward_summary
-max-statements  = 130  # visualization/convenience.py plot_greeks_consolidated
+max-branches    = 15
+max-statements  = 60
 max-returns     = 8    # analysis/decision_matrix.py
 max-bool-expr   = 6    # analysis/roll_status.py _check_roll_verdict
 

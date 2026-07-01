@@ -16,12 +16,12 @@ import ipywidgets as widgets
 class ExportDirVBox(widgets.VBox):  # type: ignore[misc]  # pylint: disable=too-many-ancestors  # ipywidgets MRO depth; not our code
     """Custom VBox to hold export directory configuration and metadata."""
 
-    def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:  # noqa: ANN401
+    def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:  # noqa: ANN401  # super().__init__ passthrough; ipywidgets VBox args are untyped
         """Initialize ExportDirVBox with export_dir metadata."""
         super().__init__(*args, **kwargs)
         self.export_dir: Path = export_dir
 
-    def __copy__(self, **kwargs: Any) -> "ExportDirVBox":  # noqa: ANN401
+    def __copy__(self, **kwargs: Any) -> "ExportDirVBox":  # noqa: ANN401  # __copy__ protocol; kwargs forwarded to parent
         """Create a copy of the widget while preserving export_dir."""
         new_widget = cast("ExportDirVBox", super().__copy__(**kwargs))
         new_widget.export_dir = self.export_dir
@@ -34,7 +34,7 @@ class ExportDirVBox(widgets.VBox):  # type: ignore[misc]  # pylint: disable=too-
         return new_widget
 
 
-def create_export_dir_widget(
+def create_export_dir_widget(  # pylint: disable=too-many-statements
     default_dir: str = "exports",
     on_change_callback: Callable[..., Any] | None = None,
     show_browser: bool = True,

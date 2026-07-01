@@ -48,7 +48,7 @@ class GlobalAssumptions:
 
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments  # market params set
         self,
         spot_price: float = 100.0,
         volatility: float = 0.25,

@@ -17,7 +17,7 @@ from deltadewa.analysis.market_environment import (
 )
 from deltadewa.colours import DEFAULT_PALETTE
 
-from .gauges import GaugeIndicator
+from .gauges import GaugeConfig, GaugeIndicator
 
 # Breakpoints for 0-100 percentile gauges.
 # Match the vol_regime config in health_dashboard.py (25 / 50 / 75).
@@ -51,28 +51,26 @@ def _gauge_inner_html(
     else:
         low_color = DEFAULT_PALETTE.negative
         high_color = DEFAULT_PALETTE.positive
+    cfg = GaugeConfig(
+        start=start,
+        end=end,
+        min_val=min_val,
+        mid_val=mid_val,
+        max_val=max_val,
+        low_color=low_color,
+        mid_color=DEFAULT_PALETTE.yellow,
+        high_color=high_color,
+        orientation="horizontal",
+        width=280,
+        height=25,
+        show_actual_label=True,
+        show_minmidmax_labels=False,
+        show_startend_labels=True,
+        label_format=label_format,
+        title=None,
+    )
     return str(
-        GaugeIndicator(
-            start=start,
-            end=end,
-            min_val=min_val,
-            mid_val=mid_val,
-            max_val=max_val,
-            actual=actual,
-            low_color=low_color,
-            mid_color=DEFAULT_PALETTE.yellow,
-            high_color=high_color,
-            orientation="horizontal",
-            width=280,
-            height=25,
-            show_actual_label=True,
-            show_minmidmax_labels=False,
-            show_startend_labels=True,
-            label_format=label_format,
-            title=None,
-        )
-        .create_widget()
-        .value,
+        GaugeIndicator(actual=actual, config=cfg).create_widget().value,
     )
 
 

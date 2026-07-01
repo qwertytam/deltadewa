@@ -117,7 +117,7 @@ def _require_field(
     section: dict[str, Any],
     section_name: str,
     field: str,
-) -> Any:  # noqa: ANN401
+) -> Any:  # noqa: ANN401  # YAML field is polymorphic (str | int | float | bool | list | dict)
     if field not in section:
         raise IpsConfigError(
             f"ips.yaml '{section_name}' section missing required field "

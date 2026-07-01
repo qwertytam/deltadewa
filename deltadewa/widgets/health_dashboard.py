@@ -14,7 +14,7 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.portfolio.core import OptionPortfolio
 
-from .gauges import GaugeIndicator
+from .gauges import GaugeConfig, GaugeIndicator
 
 
 class HedgeHealthMetric:
@@ -34,7 +34,7 @@ class HedgeHealthMetric:
 
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments  # metric config
         self,
         name: str,
         description: str,
@@ -417,13 +417,12 @@ class HedgeHealthDashboard:
             mid_color = DEFAULT_PALETTE.yellow  # Yellow
             high_color = DEFAULT_PALETTE.positive  # Green for high
 
-        gauge = GaugeIndicator(
+        cfg = GaugeConfig(
             start=metric.start,
             end=metric.end,
             min_val=metric.min_val,
             mid_val=metric.mid_val,
             max_val=metric.max_val,
-            actual=metric.actual,
             low_color=low_color,
             mid_color=mid_color,
             high_color=high_color,
@@ -434,8 +433,9 @@ class HedgeHealthDashboard:
             show_minmidmax_labels=False,
             show_startend_labels=True,
             label_format=metric.label_format,
-            title=None,  # We'll add title separately
+            title=None,
         )
+        gauge = GaugeIndicator(actual=metric.actual, config=cfg)
 
         # Use the public API to create the widget and return its HTML value
         return str(gauge.create_widget().value)

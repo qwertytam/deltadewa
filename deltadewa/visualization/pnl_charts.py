@@ -121,7 +121,7 @@ class PnLChartsMixin:
         plt.tight_layout()
         return fig
 
-    def plot_pnl_distribution_with_metrics(
+    def plot_pnl_distribution_with_metrics(  # pylint: disable=R0914,R0912,R0915
         self: "_VisualizationProtocol[Any]",
         spot_range_pct: float = 100.0,
         num_points: int = 1000,

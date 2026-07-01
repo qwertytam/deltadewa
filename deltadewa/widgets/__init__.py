@@ -9,6 +9,7 @@ Classes:
     GlobalAssumptions: Centralized market parameters and assumptions
     NetHedgeSummary: Always-visible KPI header showing hedge metrics
     PortfolioWidgets: Widget creation and management utilities
+    GaugeConfig: Configuration dataclass for GaugeIndicator display parameters
     GaugeIndicator: Visual gauge indicator with configurable color gradient
     HedgeHealthMetric: Configuration for a single hedge health metric
     HedgeHealthDashboard: Comprehensive hedge health dashboard with visual
@@ -29,7 +30,7 @@ from deltadewa.widgets.base import InteractiveOutput
 from deltadewa.widgets.convenience import link_portfolio_to_assumptions
 from deltadewa.widgets.env_gauges import build_env_gauges
 from deltadewa.widgets.export_controls import ExportControlsMixin
-from deltadewa.widgets.gauges import GaugeIndicator
+from deltadewa.widgets.gauges import GaugeConfig, GaugeIndicator
 from deltadewa.widgets.health_dashboard import (
     HedgeHealthDashboard,
     HedgeHealthMetric,
@@ -40,6 +41,7 @@ from deltadewa.widgets.summary import NetHedgeSummary
 
 __all__ = [
     "ExportControlsMixin",
+    "GaugeConfig",
     "GaugeIndicator",
     "GlobalAssumptions",
     "HeatmapControlsMixin",

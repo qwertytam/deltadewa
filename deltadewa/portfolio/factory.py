@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
 
-def create_empty_portfolio(**kwargs: Any) -> OptionPortfolio:  # noqa: ANN401
+def create_empty_portfolio(**kwargs: Any) -> OptionPortfolio:  # noqa: ANN401  # OptionPortfolio **kwargs; PEP 692 Unpack needed for proper typing
     """Create and return an empty `OptionPortfolio` with sensible defaults.
 
     Args:

@@ -46,7 +46,7 @@ class InteractiveOutput:
 
         """
 
-        def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401  # generic decorator; ParamSpec+TypeVar needed to narrow return type
             with self.widget:
                 self.widget.clear_output(wait=True)
                 return func(*args, **kwargs)

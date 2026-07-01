@@ -45,7 +45,7 @@ class ConsoleReporter:
     def key_value(
         self,
         key: str,
-        value: Any,  # noqa: ANN401
+        value: Any,  # noqa: ANN401  # {value:>N} format spec depends on runtime type; object won't work
         width: int = 40,
         align: str = "left",
     ) -> None:

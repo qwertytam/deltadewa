@@ -11,7 +11,7 @@ from deltadewa.valuation import OptionValuation
 class OptionPosition:
     """Represents a position in an option."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments  # position config
         self,
         option: OptionValuation,
         quantity: int,

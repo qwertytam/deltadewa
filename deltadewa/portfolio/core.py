@@ -28,7 +28,7 @@ class OptionPortfolioBase:
     if TYPE_CHECKING:
         _self: "_PortfolioProtocol"
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments  # market data set
         self,
         underlying_quantity: float = 0.0,
         spot_price: float = 100.0,
@@ -73,7 +73,7 @@ class OptionPortfolioBase:
         self.monte_carlo_timestamp: dt | None = None
         self.monte_carlo_last_modified: dt | None = None
 
-    def add_position(
+    def add_position(  # pylint: disable=too-many-arguments
         self,
         strike_price: float,
         maturity_date: dt,
@@ -333,7 +333,7 @@ class OptionPortfolioBase:
             raise IndexError("Position index out of range")
         self.positions.pop(index)
 
-    def update_position(
+    def update_position(  # pylint: disable=too-many-arguments
         self,
         index: int,
         quantity: int | None = None,

@@ -255,7 +255,7 @@ class ScenariosMixin:
 
         return pd.DataFrame(results)
 
-    def scenario_grid_spot_vol(
+    def scenario_grid_spot_vol(  # pylint: disable=too-many-branches
         self,
         spot_scenarios: np.ndarray[Any, np.dtype[Any]],
         vol_scenarios: np.ndarray[Any, np.dtype[Any]],
