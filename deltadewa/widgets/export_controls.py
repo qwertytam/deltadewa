@@ -201,7 +201,7 @@ class ExportControlsMixin:
             "import_button": import_button,
         }
 
-    def display_import(
+    def display_import(  # pylint: disable=too-many-statements  # import UI
         self,
         on_import_success: Callable[..., Any] | None = None,
     ) -> widgets.VBox:

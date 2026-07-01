@@ -185,24 +185,24 @@ class TestOptionPortfolioBase:
         pos = portfolio.positions[0]
         # Both OptionPosition and OptionValuation attributes must reflect the
         # change
-        assert (
-            pos.option.exercise_style == ExerciseStyle.EUROPEAN
-        ), "OptionValuation.exercise_style not updated"
-        assert (
-            pos.exercise_style == ExerciseStyle.EUROPEAN
-        ), "OptionPosition.exercise_style not synced after update"
+        assert pos.option.exercise_style == ExerciseStyle.EUROPEAN, (
+            "OptionValuation.exercise_style not updated"
+        )
+        assert pos.exercise_style == ExerciseStyle.EUROPEAN, (
+            "OptionPosition.exercise_style not synced after update"
+        )
 
         # Confirm to_dict (used by the position table) also reflects the change
-        assert (
-            pos.to_dict()["exercise_style"] == ExerciseStyle.EUROPEAN
-        ), "to_dict() still returns stale exercise_style"
+        assert pos.to_dict()["exercise_style"] == ExerciseStyle.EUROPEAN, (
+            "to_dict() still returns stale exercise_style"
+        )
 
         # Confirm update_market_conditions preserves the updated exercise style
         portfolio.update_market_conditions(spot_price=105.0)
         pos = portfolio.positions[0]
-        assert (
-            pos.exercise_style == ExerciseStyle.EUROPEAN
-        ), "exercise_style reverted after update_market_conditions"
+        assert pos.exercise_style == ExerciseStyle.EUROPEAN, (
+            "exercise_style reverted after update_market_conditions"
+        )
         assert pos.option.exercise_style == ExerciseStyle.EUROPEAN, (
             "OptionValuation.exercise_style reverted after "
             "update_market_conditions"

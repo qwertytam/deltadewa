@@ -97,7 +97,9 @@ class TestComputeCrashConvexity:
         """result.curve contains exactly n_points entries."""
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
-            portfolio, shock_range=(-30.0, 0.0), n_points=7,
+            portfolio,
+            shock_range=(-30.0, 0.0),
+            n_points=7,
         )
         assert len(result.curve) == 7
 
@@ -105,7 +107,9 @@ class TestComputeCrashConvexity:
         """First and last curve shock_pct equal the shock_range bounds."""
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
-            portfolio, shock_range=(-40.0, 10.0), n_points=51,
+            portfolio,
+            shock_range=(-40.0, 10.0),
+            n_points=51,
         )
         assert result.curve[0][0] == pytest.approx(-40.0)
         assert result.curve[-1][0] == pytest.approx(10.0)
@@ -114,7 +118,9 @@ class TestComputeCrashConvexity:
         """scenario_rows hedge_pnl values match the curve at those shocks."""
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
-            portfolio, shock_range=(-40.0, 10.0), n_points=51,
+            portfolio,
+            shock_range=(-40.0, 10.0),
+            n_points=51,
         )
         curve_dict = dict(result.curve)
         for row in result.scenario_rows:
@@ -173,10 +179,14 @@ class TestComputeCrashConvexity:
             target_max_pct=100.0,
         )
         result = compute_crash_convexity(
-            portfolio, ips_convexity=ips, scenario_shocks=shocks,
+            portfolio,
+            ips_convexity=ips,
+            scenario_shocks=shocks,
         )
         table = crash_scenario_table(
-            portfolio, shocks=shocks, ips_convexity=ips,
+            portfolio,
+            shocks=shocks,
+            ips_convexity=ips,
         )
         assert result.scenario_rows == table
 
@@ -201,13 +211,16 @@ class TestComputeCrashConvexity:
         original = _cp._gross_long_put_payoff
 
         def counting_gross_payoff(
-            portfolio: OptionPortfolio, shock_pct: float,
+            portfolio: OptionPortfolio,
+            shock_pct: float,
         ) -> float:
             calls.append(shock_pct)
             return original(portfolio, shock_pct)
 
         monkeypatch.setattr(
-            _cp, "_gross_long_put_payoff", counting_gross_payoff,
+            _cp,
+            "_gross_long_put_payoff",
+            counting_gross_payoff,
         )
 
         portfolio = _make_long_put_portfolio()
@@ -216,7 +229,9 @@ class TestComputeCrashConvexity:
         # so combined set = fine_grid only = 11 unique points.
         n = 11
         compute_crash_convexity(
-            portfolio, shock_range=(-40.0, 10.0), n_points=n,
+            portfolio,
+            shock_range=(-40.0, 10.0),
+            n_points=n,
         )
         assert len(calls) == n
         assert len(set(calls)) == n

@@ -105,7 +105,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
             disabled=disabled,
         )
 
-    def create_position_editor(
+    def create_position_editor(  # pylint: disable=too-many-statements
         self,
         on_change_callback: Callable[..., Any] | None = None,
     ) -> widgets.VBox:

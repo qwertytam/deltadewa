@@ -124,7 +124,8 @@ class TestTrackAdd:
         tracker.track()  # called once after both adds
 
         add_entries = [
-            e for e in logger.get_all_entries()
+            e
+            for e in logger.get_all_entries()
             if e["action"] == PortfolioAction.ADD
         ]
         assert len(add_entries) == 2
@@ -175,7 +176,8 @@ class TestTrackRemove:
         tracker.track()  # should log REMOVE
 
         remove_entries = [
-            e for e in logger.get_all_entries()
+            e
+            for e in logger.get_all_entries()
             if e["action"] == PortfolioAction.REMOVE
         ]
         assert len(remove_entries) == 1
@@ -193,7 +195,8 @@ class TestTrackRemove:
         tracker.track()
 
         remove_entry = next(
-            e for e in logger.get_all_entries()
+            e
+            for e in logger.get_all_entries()
             if e["action"] == PortfolioAction.REMOVE
         )
         assert remove_entry["position_id"] is not None
@@ -215,7 +218,8 @@ class TestTrackRemove:
         tracker.track()
 
         remove_entry = next(
-            e for e in logger.get_all_entries()
+            e
+            for e in logger.get_all_entries()
             if e["action"] == PortfolioAction.REMOVE
         )
         assert "95" in remove_entry["details"]
@@ -243,7 +247,8 @@ class TestTrackUpdate:
         tracker.track()
 
         update_entries = [
-            e for e in logger.get_all_entries()
+            e
+            for e in logger.get_all_entries()
             if e["action"] == PortfolioAction.UPDATE
         ]
         assert len(update_entries) == 1

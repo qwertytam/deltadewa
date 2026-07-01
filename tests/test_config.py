@@ -103,9 +103,9 @@ class TestCreateExportDirWidget:
             if "Open" in b.description or "Finder" in b.description
         ]
 
-        assert (
-            len(open_buttons) == 0
-        ), "No 'Open in Finder' button should exist when show_browser=False"
+        assert len(open_buttons) == 0, (
+            "No 'Open in Finder' button should exist when show_browser=False"
+        )
 
     def test_custom_default_dir(self, tmp_path) -> None:
         """Test widget creation with a custom default directory."""

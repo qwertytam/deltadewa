@@ -229,7 +229,7 @@ class NetHedgeSummary:
 
         self.update()
 
-    def update(self) -> None:
+    def update(self) -> None:  # pylint: disable=R0914,R0912,R0915
         """Update all metrics with current portfolio data."""
         stats = self.portfolio.summary_stats()
         vol_stats = get_volatility_stats(self.portfolio)

@@ -87,9 +87,9 @@ class TestGetUrgencyCategory:
         """Every returned category must be one of the canonical tier strings."""
         for days in [0, 6, 7, 13, 14, 20, 21, 44, 45, 100]:
             result = _get_urgency_category(days)
-            assert (
-                result in _URGENCY_ORDER
-            ), f"days={days}: '{result}' not found in _URGENCY_ORDER"
+            assert result in _URGENCY_ORDER, (
+                f"days={days}: '{result}' not found in _URGENCY_ORDER"
+            )
 
 
 # ===========================================================================

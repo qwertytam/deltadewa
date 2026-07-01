@@ -243,7 +243,7 @@ class StressDashboard:
 
         return vbox
 
-    def create_spot_vol_heatmap(
+    def create_spot_vol_heatmap(  # pylint: disable=too-many-locals
         self,
         metric: str = "pnl",
         days_forward: int = 0,
@@ -420,8 +420,9 @@ class StressDashboard:
 
         return vbox
 
-    def display_risk_reward_summary(
-        self, mc_results: dict[str, Any],
+    def display_risk_reward_summary(  # pylint: disable=R0914,R0912,R0915
+        self,
+        mc_results: dict[str, Any],
     ) -> None:
         """Print and plot the Monte Carlo risk/reward summary.
 
@@ -634,7 +635,7 @@ class StressDashboard:
     # Internal rendering helpers
     # ------------------------------------------------------------------
 
-    def _render_time_heatmap(
+    def _render_time_heatmap(  # pylint: disable=R0913,R0914,R0915
         self,
         output_widget: widgets.Output,
         *,
@@ -833,7 +834,7 @@ class StressDashboard:
                 print(f"Error generating heatmap: {exc}")
                 traceback.print_exc()
 
-    def _render_spot_vol_heatmap(
+    def _render_spot_vol_heatmap(  # pylint: disable=R0913,R0914,R0915
         self,
         output_widget: widgets.Output,
         *,
@@ -962,8 +963,11 @@ class StressDashboard:
 
                 cbar = plt.colorbar(im, ax=ax)
                 if metric_type in ("pnl", "value"):
-                    vmin_, vmax_ = np.nanmin(result_matrix), np.nanmax(
-                        result_matrix,
+                    vmin_, vmax_ = (
+                        np.nanmin(result_matrix),
+                        np.nanmax(
+                            result_matrix,
+                        ),
                     )
                     if (
                         np.isfinite(vmin_)
@@ -1110,7 +1114,7 @@ class StressDashboard:
     @staticmethod
     def _make_status_widget(
         status_type: str,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,  # noqa: ANN401  # ipywidgets **kwargs passthrough
     ) -> widgets.HTML:
         """Return a styled HTML status indicator widget."""
         styles = {
@@ -1161,8 +1165,8 @@ class StressDashboard:
         return widgets.HTML(
             value=f"""
             <div style='
-                background: {style['bg']};
-                border: 1px solid {style['border']};
+                background: {style["bg"]};
+                border: 1px solid {style["border"]};
                 padding: 12px 15px;
                 border-radius: 5px;
                 margin-bottom: 10px;
@@ -1178,7 +1182,7 @@ class StressDashboard:
         """Return a simple VBox containing a plain-text HTML label."""
         return widgets.VBox([widgets.HTML(f"<p>{message}</p>")])
 
-    def _plot_mc_distribution(
+    def _plot_mc_distribution(  # pylint: disable=R0913,R0914,R0915
         self,
         *,
         pnls_clean: np.ndarray[Any, np.dtype[Any]],

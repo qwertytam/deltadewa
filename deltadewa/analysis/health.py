@@ -222,7 +222,8 @@ class HealthMixin:
         return (hedge_pnl / abs(cumulative_carry_paid)) * 100
 
     def calculate_overall_health_score(
-        self, metrics: dict[str, Any],
+        self,
+        metrics: dict[str, Any],
     ) -> float:
         """Calculate an overall health score (0-100) based on all metrics.
 

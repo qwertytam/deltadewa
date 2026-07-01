@@ -228,7 +228,8 @@ class TestPlotCarryVsConvexity:
         charts = OptionCharts(portfolio)
 
         fig = charts.plot_carry_vs_convexity(
-            carry_cost=-50_000.0, convexity_pct=8.5,
+            carry_cost=-50_000.0,
+            convexity_pct=8.5,
         )
         try:
             assert len(fig.axes) == 1

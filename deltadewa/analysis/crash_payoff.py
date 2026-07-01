@@ -133,8 +133,7 @@ def _gross_long_put_payoff(
         * pos.quantity
         * pos.contract_size
         for pos in portfolio.positions
-        if pos.option.option_type == const.OptionType.PUT
-        and pos.quantity > 0
+        if pos.option.option_type == const.OptionType.PUT and pos.quantity > 0
     )
 
 
@@ -259,8 +258,7 @@ def compute_crash_convexity(
     # Fine grid (rounded to avoid float-key mismatches).
     lo, hi = shock_range
     fine_grid: set[float] = {
-        round(float(s), 6)
-        for s in np.linspace(lo, hi, n_points)
+        round(float(s), 6) for s in np.linspace(lo, hi, n_points)
     }
 
     # Resolved scenario shocks (within range or explicit overrides).

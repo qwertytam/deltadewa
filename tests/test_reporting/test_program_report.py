@@ -1,6 +1,5 @@
 """Tests for deltadewa.reporting.program_report."""
 
-
 import datetime
 
 import pytest
@@ -166,10 +165,14 @@ def _make_plan(
         current_gain_pct=current_gain_pct,
         steps=[
             MonetizationStepStatus(
-                gain_pct=50.0, sell_pct=25.0, triggered=True,
+                gain_pct=50.0,
+                sell_pct=25.0,
+                triggered=True,
             ),
             MonetizationStepStatus(
-                gain_pct=100.0, sell_pct=25.0, triggered=False,
+                gain_pct=100.0,
+                sell_pct=25.0,
+                triggered=False,
             ),
         ],
         recommended_cumulative_sell_pct=recommended_cumulative_sell_pct,

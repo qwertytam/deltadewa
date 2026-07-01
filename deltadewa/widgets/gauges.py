@@ -4,9 +4,37 @@ This module provides visual gauge indicators with configurable color gradients
 and value markers for displaying portfolio health metrics.
 """
 
+from dataclasses import dataclass, field
+
 import ipywidgets as widgets
 
 from deltadewa.colours import DEFAULT_PALETTE
+
+
+@dataclass
+class GaugeConfig:
+    """Configuration for a :class:`GaugeIndicator` display.
+
+    Groups all scale, colour, layout, and label parameters so the
+    ``GaugeIndicator`` constructor stays within the ``max-args`` limit.
+    """
+
+    start: float = 0.0
+    end: float = 100.0
+    min_val: float = 25.0
+    mid_val: float = 50.0
+    max_val: float = 75.0
+    low_color: str = field(default_factory=lambda: DEFAULT_PALETTE.negative)
+    mid_color: str = field(default_factory=lambda: DEFAULT_PALETTE.yellow)
+    high_color: str = field(default_factory=lambda: DEFAULT_PALETTE.positive)
+    orientation: str = "horizontal"
+    width: int = 400
+    height: int = 40
+    show_actual_label: bool = True
+    show_minmidmax_labels: bool = True
+    show_startend_labels: bool = True
+    label_format: str = "{:.1f}"
+    title: str | None = None
 
 
 class GaugeIndicator:
@@ -54,70 +82,45 @@ class GaugeIndicator:
 
     def __init__(
         self,
-        start: float = 0.0,
-        end: float = 100.0,
-        min_val: float = 25.0,
-        mid_val: float = 50.0,
-        max_val: float = 75.0,
         actual: float = 50.0,
-        low_color: str = DEFAULT_PALETTE.negative,  # Red
-        mid_color: str = DEFAULT_PALETTE.yellow,  # Yellow/Orange
-        high_color: str = DEFAULT_PALETTE.positive,  # Green
-        orientation: str = "horizontal",
-        width: int = 400,
-        height: int = 40,
-        show_actual_label: bool = True,
-        show_minmidmax_labels: bool = True,
-        show_startend_labels: bool = True,
-        label_format: str = "{:.1f}",
-        title: str | None = None,
+        config: GaugeConfig | None = None,
     ) -> None:
         """Initialize the GaugeIndicator.
 
         Args:
-            start: Minimum value of the gauge scale
-            end: Maximum value of the gauge scale
-            min_val: Value where low_color reaches full saturation
-            mid_val: Value at the color midpoint
-            max_val: Value where high_color reaches full saturation
-            actual: The actual value to mark on the gauge
-            low_color: Color for values at/below min_val
-            mid_color: Color for values at mid_val
-            high_color: Color for values at/above max_val
-            orientation: 'horizontal' or 'vertical'
-            width: Width in pixels
-            height: Height in pixels
-            show_actual_label: Display the actual value label
-            show_minmidmax_labels: Display min/mid/max labels
-            show_startend_labels: Display start/end labels
-            label_format: Format string for labels
-            title: Optional title text
+            actual: The actual value to mark on the gauge.
+            config: Display configuration. Defaults to :class:`GaugeConfig`
+                defaults (0-100 scale, standard traffic-light colours).
 
         """
-        # Validate inputs
-        if not start <= min_val <= mid_val <= max_val <= end:
+        cfg = config or GaugeConfig()
+        if not (
+            cfg.start <= cfg.min_val <= cfg.mid_val <= cfg.max_val <= cfg.end
+        ):
             raise ValueError(
-                f"Values must satisfy: start ({start}) <= min ({min_val}) "
-                f"<= mid ({mid_val}) <= max ({max_val}) <= end ({end})",
+                "Values must satisfy: "
+                f"start ({cfg.start}) <= min ({cfg.min_val}) "
+                f"<= mid ({cfg.mid_val}) <= max ({cfg.max_val}) "
+                f"<= end ({cfg.end})",
             )
 
-        self.start = start
-        self.end = end
-        self.min_val = min_val
-        self.mid_val = mid_val
-        self.max_val = max_val
+        self.start = cfg.start
+        self.end = cfg.end
+        self.min_val = cfg.min_val
+        self.mid_val = cfg.mid_val
+        self.max_val = cfg.max_val
         self.actual = actual
-        self.low_color = low_color
-        self.mid_color = mid_color
-        self.high_color = high_color
-        self.orientation = orientation.lower()
-        self.width = width
-        self.height = height
-        self.show_actual_label = show_actual_label
-        self.show_minmidmax_labels = show_minmidmax_labels
-        self.show_startend_labels = show_startend_labels
-        self.label_format = label_format
-        self.title = title
+        self.low_color = cfg.low_color
+        self.mid_color = cfg.mid_color
+        self.high_color = cfg.high_color
+        self.orientation = cfg.orientation.lower()
+        self.width = cfg.width
+        self.height = cfg.height
+        self.show_actual_label = cfg.show_actual_label
+        self.show_minmidmax_labels = cfg.show_minmidmax_labels
+        self.show_startend_labels = cfg.show_startend_labels
+        self.label_format = cfg.label_format
+        self.title = cfg.title
 
         self._widget = None
 

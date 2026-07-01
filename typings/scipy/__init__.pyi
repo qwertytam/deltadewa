@@ -14,7 +14,9 @@ class norm_gen:
     def cdf(self, x: float) -> float: ...
     def ppf(self, q: float) -> float: ...
     def __call__(
-        self, loc: float = ..., scale: float = ...,
+        self,
+        loc: float = ...,
+        scale: float = ...,
     ) -> "norm_gen": ...
 
 class _StatsNS:

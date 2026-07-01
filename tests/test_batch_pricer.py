@@ -1051,9 +1051,9 @@ class TestClosedFormAccuracyWarning:
             for w in caught
             if issubclass(w.category, ClosedFormAccuracyWarning)
         ]
-        assert (
-            len(cf_warnings) >= 1
-        ), "Warning should be emitted for deep ITM call"
+        assert len(cf_warnings) >= 1, (
+            "Warning should be emitted for deep ITM call"
+        )
         # Now promote to error with a fresh pricer
         pricer2 = _pricer(portfolio, use_closed_form=True)
         with warnings.catch_warnings():

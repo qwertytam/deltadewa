@@ -98,7 +98,7 @@ class MonteCarloMixin:
             "most_common_pnl": None,
         }
 
-    def run_monte_carlo_simulation(
+    def run_monte_carlo_simulation(  # pylint: disable=too-many-locals
         self: "_PortfolioProtocol",
         num_simulations: int = 10**5,
         include_underlying: bool = True,

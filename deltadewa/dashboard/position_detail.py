@@ -107,25 +107,25 @@ class PositionDetailDisplay:
             # functions so static type checkers (mypy) accept the mapping type.
             format_dict: dict[str, str | Callable[[object], str] | None] = {}
 
-            def _fmt_currency(x: Any) -> str:  # noqa: ANN401
+            def _fmt_currency(x: Any) -> str:  # noqa: ANN401  # pandas style formatter; float/int(x) requires Any — object would fail mypy
                 try:
                     return f"${float(x):,.2f}"
                 except Exception:  # pylint: disable=broad-except
                     return str(x)
 
-            def _fmt_pct(x: Any) -> str:  # noqa: ANN401
+            def _fmt_pct(x: Any) -> str:  # noqa: ANN401  # pandas style formatter; float/int(x) requires Any — object would fail mypy
                 try:
                     return f"{float(x):.1%}"
                 except Exception:  # pylint: disable=broad-except
                     return str(x)
 
-            def _fmt_int(x: Any) -> str:  # noqa: ANN401
+            def _fmt_int(x: Any) -> str:  # noqa: ANN401  # pandas style formatter; float/int(x) requires Any — object would fail mypy
                 try:
                     return f"{int(x):.0f}"
                 except Exception:  # pylint: disable=broad-except
                     return str(x)
 
-            def _fmt_greek(x: Any) -> str:  # noqa: ANN401
+            def _fmt_greek(x: Any) -> str:  # noqa: ANN401  # pandas style formatter; float/int(x) requires Any — object would fail mypy
                 try:
                     return f"{float(x):.5g}"
                 except Exception:  # pylint: disable=broad-except

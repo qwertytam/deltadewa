@@ -119,9 +119,7 @@ def gamma_theta_delay(
         convexity is outside the target band.
 
     """
-    not_in_roll_window = (
-        months_to_maturity > ips_triggers.roll_time_months
-    )
+    not_in_roll_window = months_to_maturity > ips_triggers.roll_time_months
     in_target_band = (
         ips_convexity.target_min_pct
         <= convexity_now_pct
@@ -147,10 +145,7 @@ def _roll_now_rationale(
             f" {record.convexity_target_min_pct:.1f}%."
         )
     drift = record.moneyness.drift_pct
-    if (
-        drift is not None
-        and abs(drift) > ips_triggers.strike_drift_max_otm_pct
-    ):
+    if drift is not None and abs(drift) > ips_triggers.strike_drift_max_otm_pct:
         return f"Strike drift {drift:+.1f}% OTM exceeded threshold."
     return f"Roll recommended ({record.verdict})."
 
@@ -201,10 +196,7 @@ def build_roll_plan(
     result: list[RollPlanRecord] = []
     for record in status_records:
         pos = record.position
-        if not (
-            pos.option.option_type == OptionType.PUT
-            and pos.quantity > 0
-        ):
+        if not (pos.option.option_type == OptionType.PUT and pos.quantity > 0):
             continue
 
         months_to_maturity = (
@@ -221,9 +213,7 @@ def build_roll_plan(
                     record.moneyness.entry_otm_pct,
                 )
         elif target_basis == "delta" and target_delta is not None:
-            maturity_years = (
-                record.days_to_maturity / const.DAYS_PER_YEAR
-            )
+            maturity_years = record.days_to_maturity / const.DAYS_PER_YEAR
             target_strike = strike_for_delta(
                 portfolio,
                 target_delta=target_delta,

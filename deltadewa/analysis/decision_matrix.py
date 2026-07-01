@@ -153,8 +153,7 @@ def _environment_verdict(
     # ADEQUATE or OVER: monetize only when gains are available and the
     # hedge is either over-sized or the cost justifies harvesting.
     if gains and (
-        adequacy is HedgeAdequacy.OVER
-        or cost is HedgeCostVerdict.EXPENSIVE
+        adequacy is HedgeAdequacy.OVER or cost is HedgeCostVerdict.EXPENSIVE
     ):
         return DecisionVerdict.MONETIZE
     return DecisionVerdict.MAINTAIN
@@ -167,12 +166,8 @@ def _verdict_rationale(
 ) -> str:
     """Build a human-readable rationale for a non-INSUFFICIENT_DATA verdict."""
     if verdict is DecisionVerdict.BUY:
-        cost_word = (
-            "cheap" if cost is HedgeCostVerdict.CHEAP else "fair"
-        )
-        return (
-            f"Under-hedged; protection is {cost_word} — add exposure"
-        )
+        cost_word = "cheap" if cost is HedgeCostVerdict.CHEAP else "fair"
+        return f"Under-hedged; protection is {cost_word} — add exposure"
     if verdict is DecisionVerdict.AVOID:
         return (
             "Under-hedged but protection is expensive"
@@ -180,10 +175,7 @@ def _verdict_rationale(
         )
     if verdict is DecisionVerdict.MONETIZE:
         if adequacy is HedgeAdequacy.OVER:
-            return (
-                "Over-hedged with gains available"
-                " — reduce and monetize"
-            )
+            return "Over-hedged with gains available — reduce and monetize"
         return (
             "Convexity adequate; protection expensive with gains"
             " available — harvest"
@@ -244,8 +236,7 @@ def decision_matrix(
     """
     adequacy = _classify_adequacy(convexity_now_pct, ips_convexity)
     gains_available = (
-        monetization_plan is not None
-        and monetization_plan.value_to_harvest > 0
+        monetization_plan is not None and monetization_plan.value_to_harvest > 0
     )
 
     if market_env.data_quality is not DataQuality.LIVE:
@@ -270,9 +261,7 @@ def decision_matrix(
     if cost is None:
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
-            rationale=(
-                "hedge_cost_verdict is None despite LIVE data quality"
-            ),
+            rationale=("hedge_cost_verdict is None despite LIVE data quality"),
             data_quality_note=(
                 "MarketEnvironment.hedge_cost_verdict is None"
                 " — provider may be missing skew or term-structure data"
@@ -365,9 +354,7 @@ def entry_timing_tree(
                 step=1,
                 label="VIX",
                 value=None,
-                recommendation=(
-                    "VIX unavailable despite LIVE data quality"
-                ),
+                recommendation=("VIX unavailable despite LIVE data quality"),
                 proceed=False,
             ),
         )
@@ -387,8 +374,11 @@ def entry_timing_tree(
         )
         steps.append(
             EntryTimingStep(
-                step=1, label="VIX", value=vix,
-                recommendation=rec, proceed=False,
+                step=1,
+                label="VIX",
+                value=vix,
+                recommendation=rec,
+                proceed=False,
             ),
         )
         return EntryTimingResult(
@@ -405,8 +395,11 @@ def entry_timing_tree(
         )
         steps.append(
             EntryTimingStep(
-                step=1, label="VIX", value=vix,
-                recommendation=rec, proceed=False,
+                step=1,
+                label="VIX",
+                value=vix,
+                recommendation=rec,
+                proceed=False,
             ),
         )
         return EntryTimingResult(
@@ -416,16 +409,15 @@ def entry_timing_tree(
             data_quality_note=None,
         )
 
-    urgency = (
-        " — increased urgency to accumulate" if vix <= vix_low else ""
-    )
-    step1_rec = (
-        f"Vol regime moderate to low{urgency}; proceed to skew check"
-    )
+    urgency = " — increased urgency to accumulate" if vix <= vix_low else ""
+    step1_rec = f"Vol regime moderate to low{urgency}; proceed to skew check"
     steps.append(
         EntryTimingStep(
-            step=1, label="VIX", value=vix,
-            recommendation=step1_rec, proceed=True,
+            step=1,
+            label="VIX",
+            value=vix,
+            recommendation=step1_rec,
+            proceed=True,
         ),
     )
 
@@ -454,14 +446,14 @@ def entry_timing_tree(
         )
 
     if skew > skew_high:
-        rec = (
-            "Buy selectively or defer"
-            " — deep OTM puts expensive vs history"
-        )
+        rec = "Buy selectively or defer — deep OTM puts expensive vs history"
         steps.append(
             EntryTimingStep(
-                step=2, label="skew_percentile", value=skew,
-                recommendation=rec, proceed=False,
+                step=2,
+                label="skew_percentile",
+                value=skew,
+                recommendation=rec,
+                proceed=False,
             ),
         )
         return EntryTimingResult(
@@ -478,8 +470,11 @@ def entry_timing_tree(
     )
     steps.append(
         EntryTimingStep(
-            step=2, label="skew_percentile", value=skew,
-            recommendation=step2_rec, proceed=True,
+            step=2,
+            label="skew_percentile",
+            value=skew,
+            recommendation=step2_rec,
+            proceed=True,
         ),
     )
 
@@ -502,8 +497,7 @@ def entry_timing_tree(
             should_enter=False,
             steps=steps,
             data_quality_note=(
-                "MarketEnvironment.term_shape is None"
-                " with LIVE data_quality"
+                "MarketEnvironment.term_shape is None with LIVE data_quality"
             ),
         )
 
@@ -522,8 +516,11 @@ def entry_timing_tree(
 
     steps.append(
         EntryTimingStep(
-            step=3, label="term_shape", value=str(shape),
-            recommendation=step3_rec, proceed=True,
+            step=3,
+            label="term_shape",
+            value=str(shape),
+            recommendation=step3_rec,
+            proceed=True,
         ),
     )
     return EntryTimingResult(

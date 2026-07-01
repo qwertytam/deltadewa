@@ -88,9 +88,9 @@ class TestVolatilityQuoteCaching:
         # Prices should be monotonically increasing with volatility (for ATM
         # call)
         for i in range(1, len(prices)):
-            assert (
-                prices[i] > prices[i - 1]
-            ), f"Price should increase with vol: {prices}"
+            assert prices[i] > prices[i - 1], (
+                f"Price should increase with vol: {prices}"
+            )
 
     def test_vol_update_preserves_other_params(
         self,

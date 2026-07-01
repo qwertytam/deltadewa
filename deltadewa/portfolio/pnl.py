@@ -132,8 +132,7 @@ class PnLMixin:
         # Add underlying P&L if requested
         if include_underlying and self.underlying_quantity != 0:
             underlying_pnl: np.ndarray[Any, np.dtype[Any]] = (
-                self.underlying_quantity
-                * (spot_scenarios - self.spot_price)
+                self.underlying_quantity * (spot_scenarios - self.spot_price)
             )
             pnl += underlying_pnl
 

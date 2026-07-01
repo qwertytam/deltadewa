@@ -36,9 +36,9 @@ class TestDashboardPackageImports:
         import deltadewa.dashboard as dashboard
 
         cls = getattr(dashboard, class_name, None)
-        assert (
-            cls is not None
-        ), f"deltadewa.dashboard.{class_name} is not accessible"
+        assert cls is not None, (
+            f"deltadewa.dashboard.{class_name} is not accessible"
+        )
 
     def test_carry_display_importable(self) -> None:
         from deltadewa.dashboard import CarryDisplay  # noqa: F401

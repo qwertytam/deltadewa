@@ -282,7 +282,9 @@ class TestAssessMarketEnvironment:
         """dashboard_config parameters override the function's own defaults."""
         # skew=0.40, default bands (0.30, 0.70): NORMAL -> verdict FAIR
         provider = _StubProvider(
-            vix=18.0, term=_CALM_TERM, skew_percentile=0.40,
+            vix=18.0,
+            term=_CALM_TERM,
+            skew_percentile=0.40,
         )
         default_env = assess_market_environment(provider)
         assert default_env.hedge_cost_verdict == HedgeCostVerdict.FAIR
@@ -292,7 +294,8 @@ class TestAssessMarketEnvironment:
             "parameters": {"skew_low_pctile": 45, "skew_high_pctile": 75},
         }
         config_env = assess_market_environment(
-            provider, dashboard_config=config,
+            provider,
+            dashboard_config=config,
         )
         assert config_env.hedge_cost_verdict == HedgeCostVerdict.CHEAP
 

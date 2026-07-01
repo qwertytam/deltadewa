@@ -874,37 +874,46 @@ class TestEntryPremiumPersistence:
         return portfolio
 
     def test_json_export_includes_entry_premium(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """entry_premium appears in the JSON output."""
         portfolio = self._make_portfolio_with_entry_premium(3.75)
         serializer = PortfolioSerializer(tmp_path)
         path = serializer.export_to_json(
-            portfolio, PortfolioLogger(), "ep.json",
+            portfolio,
+            PortfolioLogger(),
+            "ep.json",
         )
         data = json.loads(path.read_text())
         assert data["positions"][0]["entry_premium"] == pytest.approx(3.75)
 
     def test_json_export_entry_premium_null_for_legacy(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """entry_premium exports as null when not set."""
         portfolio = self._make_portfolio_with_entry_premium(None)
         serializer = PortfolioSerializer(tmp_path)
         path = serializer.export_to_json(
-            portfolio, PortfolioLogger(), "ep_null.json",
+            portfolio,
+            PortfolioLogger(),
+            "ep_null.json",
         )
         data = json.loads(path.read_text())
         assert data["positions"][0]["entry_premium"] is None
 
     def test_json_import_restores_entry_premium(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Import restores entry_premium from JSON."""
         portfolio = self._make_portfolio_with_entry_premium(3.75)
         serializer = PortfolioSerializer(tmp_path)
         path = serializer.export_to_json(
-            portfolio, PortfolioLogger(), "ep_rt.json",
+            portfolio,
+            PortfolioLogger(),
+            "ep_rt.json",
         )
         result = serializer.import_from_json(path)
         assert result["portfolio"].positions[0].entry_premium == pytest.approx(
@@ -916,9 +925,7 @@ class TestEntryPremiumPersistence:
         from datetime import UTC, datetime, timedelta
 
         path = tmp_path / "legacy.json"
-        maturity = (
-            datetime.now(tz=UTC) + timedelta(days=60)
-        ).isoformat()
+        maturity = (datetime.now(tz=UTC) + timedelta(days=60)).isoformat()
         legacy = {
             "metadata": {"version": "1.0"},
             "market_parameters": {
@@ -954,7 +961,9 @@ class TestEntryPremiumPersistence:
         portfolio = self._make_portfolio_with_entry_premium(2.10)
         serializer = PortfolioSerializer(tmp_path)
         yaml_path = serializer.export_to_yaml(
-            portfolio, PortfolioLogger(), "ep_yaml.yaml",
+            portfolio,
+            PortfolioLogger(),
+            "ep_yaml.yaml",
         )
         assert yaml_path is not None
         result = serializer.import_from_yaml(yaml_path)
@@ -996,7 +1005,8 @@ class TestContractSizeRoundtrip:
         return p
 
     def test_json_roundtrip_preserves_contract_size(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """JSON export/import preserves portfolio-level contract_size."""
         p = self._make_portfolio(50)
@@ -1009,7 +1019,8 @@ class TestContractSizeRoundtrip:
         assert imported.positions[0].contract_size == 50
 
     def test_json_explicit_position_contract_size_honoured(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """A per-position contract_size overriding the portfolio default.
 
@@ -1025,7 +1036,8 @@ class TestContractSizeRoundtrip:
 
     @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
     def test_yaml_roundtrip_preserves_contract_size(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """YAML export/import preserves portfolio-level contract_size."""
         p = self._make_portfolio(50)

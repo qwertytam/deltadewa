@@ -158,7 +158,7 @@ class SummaryMixin:
 
         return insights
 
-    def format_risk_reward_summary(
+    def format_risk_reward_summary(  # pylint: disable=R0912,R0915
         self: "_AnalyzerProtocol",
         spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
     ) -> str:

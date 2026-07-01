@@ -51,7 +51,7 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
     _CF_HIGH_VOL_THRESHOLD = 0.80  # annualised vol above which accuracy
     # degrades
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments  # all market params
         self,
         spot_price: float,
         strike_price: float,

@@ -294,7 +294,8 @@ class TestValueToHarvest:
             plan.recommended_cumulative_sell_pct / 100.0 * expected_mark
         )
         assert plan.value_to_harvest == pytest.approx(
-            expected_harvest, rel=1e-9,
+            expected_harvest,
+            rel=1e-9,
         )
 
     def test_zero_harvest_when_no_triggers(self) -> None:
@@ -406,7 +407,9 @@ class TestVolSpikeContext:
         portfolio = _portfolio_with_put()
         env = _make_market_env(RegimeLabel.HIGH)
         plan = build_monetization_plan(
-            portfolio, _THREE_STEP_IPS, market_env=env,
+            portfolio,
+            _THREE_STEP_IPS,
+            market_env=env,
         )
         assert plan.vol_spike_context is not None
         assert "HIGH" in plan.vol_spike_context
@@ -416,7 +419,9 @@ class TestVolSpikeContext:
         portfolio = _portfolio_with_put()
         env = _make_market_env(RegimeLabel.NORMAL)
         plan = build_monetization_plan(
-            portfolio, _THREE_STEP_IPS, market_env=env,
+            portfolio,
+            _THREE_STEP_IPS,
+            market_env=env,
         )
         assert plan.vol_spike_context is None
 
@@ -425,7 +430,9 @@ class TestVolSpikeContext:
         portfolio = _portfolio_with_put()
         env = _make_market_env(RegimeLabel.LOW)
         plan = build_monetization_plan(
-            portfolio, _THREE_STEP_IPS, market_env=env,
+            portfolio,
+            _THREE_STEP_IPS,
+            market_env=env,
         )
         assert plan.vol_spike_context is None
 

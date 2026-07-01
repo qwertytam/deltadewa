@@ -1,6 +1,6 @@
 """Tests for deltadewa.widgets.gauges module."""
 
-from deltadewa.widgets.gauges import GaugeIndicator
+from deltadewa.widgets.gauges import GaugeConfig, GaugeIndicator
 
 
 class TestGaugeIndicator:
@@ -15,12 +15,14 @@ class TestGaugeIndicator:
         """Test GaugeIndicator with initial value."""
         gauge = GaugeIndicator(
             actual=0.75,
-            title="Test Gauge",
-            start=0.0,
-            end=1.0,
-            min_val=0.25,
-            mid_val=0.5,
-            max_val=0.75,
+            config=GaugeConfig(
+                title="Test Gauge",
+                start=0.0,
+                end=1.0,
+                min_val=0.25,
+                mid_val=0.5,
+                max_val=0.75,
+            ),
         )
         assert gauge is not None
 
@@ -28,15 +30,17 @@ class TestGaugeIndicator:
         """Test GaugeIndicator with custom thresholds."""
         gauge = GaugeIndicator(
             actual=0.5,
-            title="Test Gauge",
-            start=0.0,
-            end=1.0,
-            min_val=0.3,
-            mid_val=0.5,
-            max_val=0.7,
-            low_color="red",
-            mid_color="yellow",
-            high_color="green",
+            config=GaugeConfig(
+                title="Test Gauge",
+                start=0.0,
+                end=1.0,
+                min_val=0.3,
+                mid_val=0.5,
+                max_val=0.7,
+                low_color="red",
+                mid_color="yellow",
+                high_color="green",
+            ),
         )
         assert gauge is not None
 
@@ -66,7 +70,9 @@ class TestGaugeIndicator:
         # storage (self.actual) doesn't strictly have to be clamped unless
         # implementation enforces it.
         # But let's check if valid inputs don't crash.
-        gauge = GaugeIndicator(actual=50.0, start=0, end=100)
+        gauge = GaugeIndicator(
+            actual=50.0, config=GaugeConfig(start=0, end=100)
+        )
 
         # This will trigger bounds check during update if specific params are
         # touched, but pure actual update doesn't trigger start/end/min/mid/max
@@ -84,5 +90,7 @@ class TestGaugeIndicator:
 
     def test_with_label(self) -> None:
         """Test gauge with label."""
-        gauge = GaugeIndicator(actual=50.0, title="My Gauge")
+        gauge = GaugeIndicator(
+            actual=50.0, config=GaugeConfig(title="My Gauge")
+        )
         assert gauge is not None

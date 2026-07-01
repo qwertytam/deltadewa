@@ -195,6 +195,7 @@ def start_session(
         live_provider = CboeFredProvider()
         try:
             live_provider.get_vix()
+            live_provider.get_spot(portfolio.get_symbol())
             market_data = live_provider
             market_data_source = "live"
         except MarketDataError as exc:

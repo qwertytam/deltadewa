@@ -221,8 +221,10 @@ class TestSizeHedge:
         portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
         ips = _make_ips(annual_carry_pct=2.0)
         result = size_hedge(
-            portfolio, ips,
-            candidate_pct_otm=5.0, candidate_maturity_years=0.25,
+            portfolio,
+            ips,
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
         )
         assert result.carry_budget == pytest.approx(10_000.0)
 
@@ -233,8 +235,10 @@ class TestSizeHedge:
         portfolio = _make_spx_portfolio(spot=5000.0)
         ips = _make_ips(crash_scenario_pct=-25.0)
         result = size_hedge(
-            portfolio, ips,
-            candidate_pct_otm=5.0, candidate_maturity_years=0.25,
+            portfolio,
+            ips,
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
         )
         assert result.per_contract_payoff == pytest.approx(100_000.0)
 
@@ -254,12 +258,18 @@ class TestSizeHedge:
         portfolio = _make_spx_portfolio(vol=0.20)
         ips = _make_ips()
         r_low = size_hedge(
-            portfolio, ips,
-            candidate_pct_otm=5.0, candidate_maturity_years=0.25, vol=0.15,
+            portfolio,
+            ips,
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+            vol=0.15,
         )
         r_high = size_hedge(
-            portfolio, ips,
-            candidate_pct_otm=5.0, candidate_maturity_years=0.25, vol=0.30,
+            portfolio,
+            ips,
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+            vol=0.30,
         )
         assert r_high.per_contract_carry > r_low.per_contract_carry
 
@@ -289,8 +299,10 @@ class TestSizeHedge:
             target_max_pct=30.0,
         )
         result = size_hedge(
-            portfolio, ips,
-            candidate_pct_otm=5.0, candidate_maturity_years=0.25,
+            portfolio,
+            ips,
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
         )
         assert result.achieved_convexity_pct == pytest.approx(20.0)
         assert result.meets_convexity_target is True
@@ -310,8 +322,10 @@ class TestSizeHedge:
             target_max_pct=30.0,
         )
         result = size_hedge(
-            portfolio, ips,
-            candidate_pct_otm=5.0, candidate_maturity_years=0.25,
+            portfolio,
+            ips,
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
         )
         assert result.achieved_convexity_pct > 30.0
         assert result.meets_convexity_target is False

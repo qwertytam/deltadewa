@@ -123,7 +123,8 @@ class TestGammaThetaDelay:
     """Truth-table tests for gamma_theta_delay."""
 
     def _triggers(
-        self, roll_time_months: float = 1.0,
+        self,
+        roll_time_months: float = 1.0,
     ) -> IpsTriggers:
         return IpsTriggers(
             delta_drift_warn_pct=5.0,

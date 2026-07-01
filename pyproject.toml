@@ -21,7 +21,6 @@ dependencies = [
 	"nbconvert (>=7.17.1,<8.0.0)",
 	"scipy (>=1.17.0,<2.0.0)",
 	"playwright (>=1.58.0,<2.0.0)",
-	"black (>=26.3,<27.0)",
 	"bleach (>=6.3,<7.0)",
 	"idna (>=3.15,<4.0)",
 	"jupyter-server (>=2.18,<3.0)",
@@ -39,9 +38,6 @@ dependencies = [
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.black]
-line-length = 80
 
 [tool.mypy]
 mypy_path = ["typings"]
@@ -87,7 +83,9 @@ select = [
 	"W",    # Warning
 	# "YTT",  # flake8-2020 
 ]
-ignore = []
+ignore = [
+	"COM812",  # conflicts with ruff formatter (formatter manages trailing commas)
+]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "ANN", "D", "ARG"]  # asserts, annotations, docstrings, unused-args are noise in tests
@@ -96,6 +94,7 @@ ignore = []
 [dependency-groups]
 dev = [
 	"ruff (>=0.5.3)",
+	"pre-commit (>=4.0,<5.0)",
 	"debugpy (>=1.8.19,<2.0.0)",
 	"mypy>=1.10",
 	"types-PyYAML>=6.0",
@@ -138,13 +137,11 @@ disable = [
 ]
 
 [tool.pylint.design]
-# Limits set to the observed codebase ceiling — any future code exceeding these
-# is a genuine regression.  Comments name the current ceiling holder.
-max-args        = 18   # widgets/gauges.py GaugeIndicator.__init__
-max-locals      = 65   # visualization/pnl_charts.py plot_pnl_distribution_with_metrics
+max-args        = 8
+max-locals      = 25
 max-attributes  = 27   # deltadewa/valuation.py OptionValuation (QuantLib wrapper)
-max-branches    = 22   # analysis/summary.py format_risk_reward_summary
-max-statements  = 130  # visualization/convenience.py plot_greeks_consolidated
+max-branches    = 15
+max-statements  = 60
 max-returns     = 8    # analysis/decision_matrix.py
 max-bool-expr   = 6    # analysis/roll_status.py _check_roll_verdict
 

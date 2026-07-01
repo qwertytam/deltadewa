@@ -204,7 +204,7 @@ class BatchPricer:
         with self._cache_lock:
             self._cache.clear()
 
-    def portfolio_greeks_at(
+    def portfolio_greeks_at(  # pylint: disable=too-many-branches
         self,
         spots: np.ndarray[Any, np.dtype[Any]],
         valuation_date: dt,

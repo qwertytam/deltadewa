@@ -12,26 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - uses: actions/checkout@v6
 
       - name: Install Poetry
-        run: pip install "poetry>=2.0,<3"
+        run: pipx install "poetry>=2.0,<3"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: poetry
 
       - name: Configure in-project virtualenv
         run: poetry config virtualenvs.in-project true
-
-      - name: Cache virtualenv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: ${{ runner.os }}-venv-${{ hashFiles('poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-venv-
 
       - name: Install dependencies
         run: poetry install --no-interaction
