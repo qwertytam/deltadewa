@@ -4,10 +4,12 @@ This module provides mixin classes for export/import functionality
 in the deltadewa dashboard.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import ipywidgets as widgets
 from ipyfilechooser import FileChooser
@@ -15,9 +17,11 @@ from ipyfilechooser import FileChooser
 from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
 )
-from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.audit import PortfolioLogger
+
+if TYPE_CHECKING:
+    from deltadewa.persistence import PortfolioSerializer
 
 
 class ExportControlsMixin:

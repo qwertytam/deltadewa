@@ -8,6 +8,7 @@ import pytest
 
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
+    UnitSizingResult,
     required_crash_offset,
     size_from_unit,
     size_hedge,
@@ -122,66 +123,76 @@ class TestRequiredCrashOffset:
 class TestSizeFromUnit:
     """Tests for size_from_unit."""
 
-    def test_within_budget(self) -> None:
-        """Standard case: 80 contracts, carry within budget."""
-        contracts, carry, within, headroom, max_aff = size_from_unit(
+    def test_returns_unit_sizing_result(self) -> None:
+        """size_from_unit returns a UnitSizingResult instance."""
+        result = size_from_unit(
             required_offset=200_000.0,
             per_contract_payoff=2_500.0,
             per_contract_carry=3_000.0,
             carry_budget=500_000.0,
         )
-        assert contracts == 80  # ceil(200_000 / 2_500)
-        assert carry == pytest.approx(240_000.0)
-        assert within is True
-        assert headroom == pytest.approx(260_000.0)
-        assert max_aff == 166  # floor(500_000 / 3_000)
+        assert isinstance(result, UnitSizingResult)
+
+    def test_within_budget(self) -> None:
+        """Standard case: 80 contracts, carry within budget."""
+        r = size_from_unit(
+            required_offset=200_000.0,
+            per_contract_payoff=2_500.0,
+            per_contract_carry=3_000.0,
+            carry_budget=500_000.0,
+        )
+        assert r.contracts_needed == 80  # ceil(200_000 / 2_500)
+        assert r.implied_annual_carry == pytest.approx(240_000.0)
+        assert r.within_budget is True
+        assert r.carry_headroom == pytest.approx(260_000.0)
+        assert r.max_affordable_contracts == 166  # floor(500_000 / 3_000)
 
     def test_over_budget(self) -> None:
         """Large required offset pushes implied carry above budget."""
-        contracts, carry, within, headroom, max_aff = size_from_unit(
+        r = size_from_unit(
             required_offset=1_000_000.0,
             per_contract_payoff=2_500.0,
             per_contract_carry=3_000.0,
             carry_budget=100_000.0,
         )
-        assert contracts == 400  # ceil(1_000_000 / 2_500)
-        assert carry == pytest.approx(1_200_000.0)
-        assert within is False
-        assert headroom == pytest.approx(-1_100_000.0)
-        assert max_aff == 33  # floor(100_000 / 3_000)
+        assert r.contracts_needed == 400  # ceil(1_000_000 / 2_500)
+        assert r.implied_annual_carry == pytest.approx(1_200_000.0)
+        assert r.within_budget is False
+        assert r.carry_headroom == pytest.approx(-1_100_000.0)
+        assert r.max_affordable_contracts == 33  # floor(100_000 / 3_000)
 
     def test_zero_payoff_guard(self) -> None:
         """Zero payoff → contracts_needed is 0, no ZeroDivisionError."""
-        contracts, carry, within, headroom, _max_aff = size_from_unit(
+        r = size_from_unit(
             required_offset=100_000.0,
             per_contract_payoff=0.0,
             per_contract_carry=3_000.0,
             carry_budget=500_000.0,
         )
-        assert contracts == 0
-        assert carry == pytest.approx(0.0)
-        assert within is True
-        assert headroom == pytest.approx(500_000.0)
+        assert r.contracts_needed == 0
+        assert r.implied_annual_carry == pytest.approx(0.0)
+        assert r.within_budget is True
+        assert r.carry_headroom == pytest.approx(500_000.0)
 
     def test_zero_carry_guard(self) -> None:
-        """Zero carry → max_affordable is sys.maxsize, no ZeroDivisionError."""
-        _, _, _, _, max_aff = size_from_unit(
+        """Zero carry → max_affordable_contracts is sys.maxsize."""
+        r = size_from_unit(
             required_offset=100_000.0,
             per_contract_payoff=2_500.0,
             per_contract_carry=0.0,
             carry_budget=500_000.0,
         )
-        assert max_aff == sys.maxsize
+        assert r.max_affordable_contracts == sys.maxsize
 
     def test_exact_offset_no_rounding(self) -> None:
         """Required offset exactly divisible by payoff → no rounding up."""
-        contracts, *_ = size_from_unit(
+        r = size_from_unit(
             required_offset=250_000.0,
             per_contract_payoff=2_500.0,
             per_contract_carry=3_000.0,
             carry_budget=1_000_000.0,
         )
-        assert contracts == 100  # exact, no ceil effect
+        assert r.contracts_needed == 100  # exact, no ceil effect
 
 
 # ---------------------------------------------------------------------------
