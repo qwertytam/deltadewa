@@ -262,3 +262,333 @@ class TestRiskRewardMixin:
         assert "net_debit" in analysis
         assert "max_loss_options" in analysis
         assert "max_profit_options" in analysis
+
+
+class TestFormatRiskRewardSummaryCharacterization:
+    """Golden-string tests pinning format_risk_reward_summary's exact
+    output, so its case-dispatch refactor can be verified as
+    output-identical. `risk_reward_analysis` is deterministic (Monte
+    Carlo uses `random_seed=42` by default), so these compare full
+    strings rather than substrings.
+    """
+
+    def test_long_call_options_only(self) -> None:
+        """Bounded loss (with % of net debit), unlimited profit, no
+        total section: net_debit > 0 so the loss line gets a pct
+        suffix; profit is unlimited so no risk/reward ratio line.
+        """
+        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.3)
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        summary = analyzer.format_risk_reward_summary()
+
+        expected = "\n".join(
+            [
+                "=" * 80,
+                "PORTFOLIO RISK/REWARD ANALYSIS",
+                "=" * 80,
+                "",
+                "CAPITAL REQUIREMENTS:",
+                "  Net Debit: $363.32 (capital required to implement)",
+                "",
+                "OPTIONS ONLY RISK/REWARD:",
+                "  Max Loss: $363.32 (100.0% of net debit)",
+                "    └─ Occurs at spot price: $0.01",
+                "  Max Profit: UNLIMITED",
+                "  Breakeven Points: $103.69",
+                "",
+                "PROBABILITY ANALYSIS:",
+                "  Chance of Profit: 33.9%",
+                "  Expected Value: $1.25 (probabilistic weighted average)",
+                "",
+                "=" * 80,
+            ],
+        )
+        assert summary == expected
+
+    def test_naked_short_call_net_credit(self) -> None:
+        """Unlimited loss ('naked short positions'), bounded profit
+        with no pct suffix since net_debit < 0 (net credit).
+        """
+        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.3)
+        portfolio.add_position(
+            strike_price=110.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=-1,
+            option_type=OptionType.CALL,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        summary = analyzer.format_risk_reward_summary()
+
+        expected = "\n".join(
+            [
+                "=" * 80,
+                "PORTFOLIO RISK/REWARD ANALYSIS",
+                "=" * 80,
+                "",
+                "CAPITAL REQUIREMENTS:",
+                "  Net Credit: $66.74 (capital received)",
+                "",
+                "OPTIONS ONLY RISK/REWARD:",
+                "  Max Loss: UNLIMITED (naked short positions)",
+                "  Max Profit: $66.74",
+                "    └─ Occurs at spot price: $0.01",
+                "  Breakeven Points: $113.72",
+                "",
+                "PROBABILITY ANALYSIS:",
+                "  Chance of Profit: 87.9%",
+                "  Expected Value: $-1.03 (probabilistic weighted average)",
+                "",
+                "=" * 80,
+            ],
+        )
+        assert summary == expected
+
+    def test_covered_call_with_long_underlying(self) -> None:
+        """Underlying present: exercises both total-section unlimited
+        labels together. The short call makes max_loss_total unlimited
+        via the naked-short-call check (not the underlying sign) yet
+        the printed label is still 'short underlying position' —
+        that's an existing quirk of the current code, pinned as-is.
+        max_profit_total is unlimited via the long underlying position.
+        """
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            underlying_quantity=100.0,
+        )
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        portfolio.add_position(
+            strike_price=110.0,
+            maturity_date=maturity,
+            quantity=-1,
+            option_type=OptionType.CALL,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        summary = analyzer.format_risk_reward_summary()
+
+        expected = "\n".join(
+            [
+                "=" * 80,
+                "PORTFOLIO RISK/REWARD ANALYSIS",
+                "=" * 80,
+                "",
+                "CAPITAL REQUIREMENTS:",
+                "  Net Debit: $65.27 (capital required to implement)",
+                "",
+                "OPTIONS ONLY RISK/REWARD:",
+                "  Max Loss: UNLIMITED (naked short positions)",
+                "  Max Profit: $9,433.73 (14452.8% return on net debit)",
+                "    └─ Occurs at spot price: $0.01",
+                "  Breakeven Points: $97.00",
+                "",
+                "TOTAL PORTFOLIO RISK/REWARD (Options + Underlying):",
+                "  Max Loss: UNLIMITED (short underlying position)",
+                "  Max Profit: UNLIMITED (long underlying position)",
+                "    └─ Profit increases with spot price",
+                "  Breakeven Points: $103.69",
+                "",
+                "PROBABILITY ANALYSIS:",
+                "  Chance of Profit: 47.1%",
+                "  Expected Value: $39.32 (probabilistic weighted average)",
+                "",
+                "=" * 80,
+            ],
+        )
+        assert summary == expected
+
+    def test_short_underlying_only_quirk_case(self) -> None:
+        """Short underlying alone: max_loss_total is unlimited, so
+        `portfolio_value` (used for the total section's '% of
+        portfolio value' suffixes) is never assigned — max_profit_total
+        is bounded but its line has no pct suffix as a result. This is
+        an existing quirk of the current code, pinned as-is.
+        """
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            underlying_quantity=-50.0,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        summary = analyzer.format_risk_reward_summary()
+
+        expected = "\n".join(
+            [
+                "=" * 80,
+                "PORTFOLIO RISK/REWARD ANALYSIS",
+                "=" * 80,
+                "",
+                "CAPITAL REQUIREMENTS:",
+                "  Net Credit: $0.00 (capital received)",
+                "",
+                "OPTIONS ONLY RISK/REWARD:",
+                "  Max Loss: $-0.00",
+                "    └─ Occurs at spot price: $0.01",
+                "  Max Profit: $0.00",
+                "    └─ Occurs at spot price: $0.01",
+                "  Breakeven Points: None identified",
+                "",
+                "TOTAL PORTFOLIO RISK/REWARD (Options + Underlying):",
+                "  Max Loss: UNLIMITED (short underlying position)",
+                "  Max Profit: $4,999.50",
+                "    └─ Occurs at spot price: $0.01",
+                "  Breakeven Points: $100.00, $100.34",
+                "",
+                "PROBABILITY ANALYSIS:",
+                "  Chance of Profit: 50.0%",
+                "  Expected Value: $-19.80 (probabilistic weighted average)",
+                "",
+                "=" * 80,
+            ],
+        )
+        assert summary == expected
+
+    def test_protective_put_with_long_underlying_and_ratio(self) -> None:
+        """Long underlying with a protective put: max_loss_total is
+        bounded (so the '% of portfolio value' suffix *does* show on
+        the loss line here), max_profit_total is unlimited via the
+        long underlying. Options loss/profit are both bounded, which
+        also exercises the risk/reward ratio section.
+        """
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            underlying_quantity=100.0,
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        summary = analyzer.format_risk_reward_summary()
+
+        expected = "\n".join(
+            [
+                "=" * 80,
+                "PORTFOLIO RISK/REWARD ANALYSIS",
+                "=" * 80,
+                "",
+                "CAPITAL REQUIREMENTS:",
+                "  Net Debit: $132.01 (capital required to implement)",
+                "",
+                "OPTIONS ONLY RISK/REWARD:",
+                "  Max Loss: $132.01 (100.0% of net debit)",
+                "    └─ Occurs at spot price: $97.00",
+                "  Max Profit: $9,366.99 (7095.7% return on net debit)",
+                "    └─ Occurs at spot price: $0.01",
+                "  Breakeven Points: $97.00",
+                "",
+                "TOTAL PORTFOLIO RISK/REWARD (Options + Underlying):",
+                "  Max Loss: $632.01 (6.2% of portfolio value)",
+                "    └─ Occurs at spot price: $0.01",
+                "  Max Profit: UNLIMITED (long underlying position)",
+                "    └─ Profit increases with spot price",
+                "  Breakeven Points: $103.69",
+                "",
+                "PROBABILITY ANALYSIS:",
+                "  Chance of Profit: 44.1%",
+                "  Expected Value: $40.35 (probabilistic weighted average)",
+                "",
+                "RISK/REWARD RATIO: 70.96:1 (max profit to max loss)",
+                "=" * 80,
+            ],
+        )
+        assert summary == expected
+
+    def test_call_spread_net_credit_both_unlimited(self) -> None:
+        """Short-strike-lower / long-strike-higher call spread: the
+        naked short leg makes both loss and profit read as unlimited
+        (profit unlimited comes from the long call leg), net_debit < 0.
+        """
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.3)
+        portfolio.add_position(
+            strike_price=110.0,
+            maturity_date=maturity,
+            quantity=-1,
+            option_type=OptionType.CALL,
+        )
+        portfolio.add_position(
+            strike_price=120.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        summary = analyzer.format_risk_reward_summary()
+
+        expected = "\n".join(
+            [
+                "=" * 80,
+                "PORTFOLIO RISK/REWARD ANALYSIS",
+                "=" * 80,
+                "",
+                "CAPITAL REQUIREMENTS:",
+                "  Net Credit: $60.16 (capital received)",
+                "",
+                "OPTIONS ONLY RISK/REWARD:",
+                "  Max Loss: UNLIMITED (naked short positions)",
+                "  Max Profit: UNLIMITED",
+                "  Breakeven Points: $113.72",
+                "",
+                "PROBABILITY ANALYSIS:",
+                "  Chance of Profit: 88.1%",
+                "  Expected Value: $2.20 (probabilistic weighted average)",
+                "",
+                "=" * 80,
+            ],
+        )
+        assert summary == expected
+
+    def test_empty_portfolio(self) -> None:
+        """Empty portfolio: net_debit is 0 (credit branch), no
+        breakevens, no total section, no ratio section.
+        """
+        portfolio = OptionPortfolio(spot_price=100.0)
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        summary = analyzer.format_risk_reward_summary()
+
+        expected = "\n".join(
+            [
+                "=" * 80,
+                "PORTFOLIO RISK/REWARD ANALYSIS",
+                "=" * 80,
+                "",
+                "CAPITAL REQUIREMENTS:",
+                "  Net Credit: $0.00 (capital received)",
+                "",
+                "OPTIONS ONLY RISK/REWARD:",
+                "  Max Loss: $-0.00",
+                "    └─ Occurs at spot price: $0.01",
+                "  Max Profit: $0.00",
+                "    └─ Occurs at spot price: $0.01",
+                "  Breakeven Points: None identified",
+                "",
+                "PROBABILITY ANALYSIS:",
+                "  Chance of Profit: 100.0%",
+                "  Expected Value: $0.00 (probabilistic weighted average)",
+                "",
+                "=" * 80,
+            ],
+        )
+        assert summary == expected
