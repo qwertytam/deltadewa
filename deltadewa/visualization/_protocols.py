@@ -55,6 +55,98 @@ class _VisualizationProtocol(Protocol, Generic[PortfolioT]):
         title: str,
     ) -> None: ...
 
+    def _compute_time_to_maturity(self) -> float: ...
+
+    def _compute_pdf_overlay_and_percentiles(
+        self,
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+        current_spot: float,
+        time_to_maturity: float,
+    ) -> tuple[float, np.ndarray[Any, np.dtype[Any]], float, float]: ...
+
+    def _shade_probability_density(
+        self,
+        ax: Axes,
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pdf_baseline: float,
+        pdf_plot_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None: ...
+
+    def _annotate_percentile_lines(
+        self,
+        ax: Axes,
+        is_5th_in_range: bool,
+        is_95th_in_range: bool,
+        spot_5th_percentile: float,
+        spot_95th_percentile: float,
+    ) -> None: ...
+
+    def _annotate_percentile_label(
+        self,
+        ax: Axes,
+        pct_label: str,
+        spot_value: float,
+        in_range: bool,
+        edge_spot: float,
+        y_positions: tuple[float, float],
+        side: str,
+    ) -> None: ...
+
+    def _shade_profit_loss_zones(
+        self,
+        ax: Axes,
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None: ...
+
+    def _annotate_current_spot_marker(
+        self,
+        ax: Axes,
+        current_spot: float,
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None: ...
+
+    def _annotate_breakevens(
+        self,
+        ax: Axes,
+        analysis: dict[str, Any],
+        be_key: str,
+        include_underlying: bool,
+    ) -> None: ...
+
+    def _annotate_max_loss(
+        self,
+        ax: Axes,
+        analysis: dict[str, Any],
+        ml_key: str,
+        spot_range_min: float,
+        spot_range_max: float,
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None: ...
+
+    def _annotate_max_profit(
+        self,
+        ax: Axes,
+        analysis: dict[str, Any],
+        mp_key: str,
+    ) -> None: ...
+
+    def _annotate_expected_value(
+        self,
+        ax: Axes,
+        analysis: dict[str, Any],
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None: ...
+
+    def _format_pnl_distribution_axes(
+        self,
+        ax: Axes,
+        include_underlying: bool,
+        current_spot: float,
+    ) -> None: ...
+
     # ThetaChartsMixin
     def _prepare_theta_data(
         self,
