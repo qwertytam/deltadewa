@@ -346,7 +346,7 @@ class TestBuildStrikeLadder:
             crash_pct=crash_pct,
         )
         offset = required_crash_offset(book_notional, crash_pct, 20.0)
-        contracts, carry, within, headroom, _max = size_from_unit(
+        sizing = size_from_unit(
             offset,
             metrics.per_contract_payoff,
             metrics.per_contract_carry,
@@ -357,10 +357,12 @@ class TestBuildStrikeLadder:
         assert rung.metrics.per_contract_carry == pytest.approx(
             metrics.per_contract_carry,
         )
-        assert rung.contracts_needed == contracts
-        assert rung.implied_annual_carry == pytest.approx(carry)
-        assert rung.within_budget == within
-        assert rung.carry_headroom == pytest.approx(headroom)
+        assert rung.contracts_needed == sizing.contracts_needed
+        assert rung.implied_annual_carry == pytest.approx(
+            sizing.implied_annual_carry
+        )
+        assert rung.within_budget == sizing.within_budget
+        assert rung.carry_headroom == pytest.approx(sizing.carry_headroom)
 
     def test_no_solution_rung_skipped(self) -> None:
         """Unsolvable target_delta produces no rung — no raise."""

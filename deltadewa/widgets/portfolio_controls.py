@@ -4,21 +4,25 @@ This module provides comprehensive widget controls for creating, editing,
 and managing option portfolios in the deltadewa dashboard.
 """
 
+from __future__ import annotations
+
 import datetime
 from collections.abc import Callable
 from datetime import datetime as dt
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import ipywidgets as widgets
 
 from deltadewa.constants import ExerciseStyle, OptionType
-from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.reporting import PortfolioLogger
 from deltadewa.widgets.export_controls import ExportControlsMixin
 from deltadewa.widgets.heatmap_controls import HeatmapControlsMixin
+
+if TYPE_CHECKING:
+    from deltadewa.persistence import PortfolioSerializer
 
 
 class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):

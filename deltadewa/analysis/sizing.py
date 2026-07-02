@@ -97,6 +97,30 @@ class HedgeSizingResult:
     meets_convexity_target: bool
 
 
+@dataclass(frozen=True)
+class UnitSizingResult:
+    """Return value of :func:`size_from_unit`.
+
+    Attributes:
+        contracts_needed: Minimum whole contracts to cover the required offset;
+            0 when ``per_contract_payoff`` is zero.
+        implied_annual_carry: ``contracts_needed * per_contract_carry``.
+        within_budget: ``True`` when ``implied_annual_carry <= carry_budget``.
+        carry_headroom: ``carry_budget - implied_annual_carry``; negative
+            means over-budget.
+        max_affordable_contracts: Most contracts the budget can support
+            (floor division); ``sys.maxsize`` when ``per_contract_carry``
+            is zero.
+
+    """
+
+    contracts_needed: int
+    implied_annual_carry: float
+    within_budget: bool
+    carry_headroom: float
+    max_affordable_contracts: int
+
+
 # ---------------------------------------------------------------------------
 # Pure-math core
 # ---------------------------------------------------------------------------
@@ -132,7 +156,7 @@ def size_from_unit(
     per_contract_payoff: float,
     per_contract_carry: float,
     carry_budget: float,
-) -> tuple[int, float, bool, float, int]:
+) -> UnitSizingResult:
     """Pure scalar sizing math — no pricing, no portfolio.
 
     Args:
@@ -164,12 +188,12 @@ def size_from_unit(
         else sys.maxsize
     )
 
-    return (
-        contracts_needed,
-        implied_annual_carry,
-        within_budget,
-        carry_headroom,
-        max_affordable,
+    return UnitSizingResult(
+        contracts_needed=contracts_needed,
+        implied_annual_carry=implied_annual_carry,
+        within_budget=within_budget,
+        carry_headroom=carry_headroom,
+        max_affordable_contracts=max_affordable,
     )
 
 
@@ -227,20 +251,14 @@ def size_hedge(
         vol=vol,
     )
 
-    (
-        contracts_needed,
-        implied_annual_carry,
-        within_budget,
-        carry_headroom,
-        max_affordable,
-    ) = size_from_unit(
+    sizing = size_from_unit(
         offset,
         metrics.per_contract_payoff,
         metrics.per_contract_carry,
         carry_budget,
     )
 
-    achieved_payoff = contracts_needed * metrics.per_contract_payoff
+    achieved_payoff = sizing.contracts_needed * metrics.per_contract_payoff
     achieved_convexity_pct = (
         achieved_payoff / book_notional * 100.0 if book_notional > 0.0 else 0.0
     )
@@ -257,11 +275,11 @@ def size_hedge(
         required_crash_offset=offset,
         per_contract_payoff=metrics.per_contract_payoff,
         per_contract_carry=metrics.per_contract_carry,
-        contracts_needed=contracts_needed,
-        implied_annual_carry=implied_annual_carry,
-        within_budget=within_budget,
-        carry_headroom=carry_headroom,
-        max_affordable_contracts=max_affordable,
+        contracts_needed=sizing.contracts_needed,
+        implied_annual_carry=sizing.implied_annual_carry,
+        within_budget=sizing.within_budget,
+        carry_headroom=sizing.carry_headroom,
+        max_affordable_contracts=sizing.max_affordable_contracts,
         achieved_convexity_pct=achieved_convexity_pct,
         meets_convexity_target=meets_convexity_target,
     )

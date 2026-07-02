@@ -22,10 +22,12 @@ from typing import TYPE_CHECKING
 from scipy.optimize import brentq
 
 from deltadewa import constants as const
-from deltadewa.analysis.candidate import CandidateMetrics, evaluate_candidate
+from deltadewa.analysis.candidate import (
+    CandidateMetrics,
+    build_put_valuation,
+    evaluate_candidate,
+)
 from deltadewa.analysis.sizing import required_crash_offset, size_from_unit
-from deltadewa.constants import OptionType
-from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
@@ -142,15 +144,8 @@ def strike_for_delta(
 
     def _put_delta_at(strike: float) -> float:
         """Compute put delta for *strike*, all other inputs fixed."""
-        v = OptionValuation(
-            spot_price=spot,
-            strike_price=strike,
-            maturity_date=maturity_date,
-            volatility=effective_vol,
-            risk_free_rate=portfolio.risk_free_rate,
-            dividend_yield=portfolio.dividend_yield,
-            option_type=OptionType.PUT,
-            exercise_style=portfolio.default_exercise_style,
+        v = build_put_valuation(
+            spot, strike, maturity_date, effective_vol, portfolio
         )
         return v.delta()
 
@@ -251,20 +246,14 @@ def build_strike_ladder(
             crash_pct=crash_pct,
             vol=vol,
         )
-        (
-            contracts_needed,
-            implied_annual_carry,
-            within_budget,
-            carry_headroom,
-            max_affordable,
-        ) = size_from_unit(
+        sizing = size_from_unit(
             offset,
             metrics.per_contract_payoff,
             metrics.per_contract_carry,
             carry_budget,
         )
         achieved_convexity_pct = (
-            contracts_needed
+            sizing.contracts_needed
             * metrics.per_contract_payoff
             / book_notional
             * 100.0
@@ -280,15 +269,17 @@ def build_strike_ladder(
                 maturity_years=maturity,
                 metrics=metrics,
                 required_crash_offset=offset,
-                contracts_needed=contracts_needed,
-                implied_annual_carry=implied_annual_carry,
+                contracts_needed=sizing.contracts_needed,
+                implied_annual_carry=sizing.implied_annual_carry,
                 carry_budget=carry_budget,
-                within_budget=within_budget,
-                carry_headroom=carry_headroom,
-                max_affordable_contracts=max_affordable,
+                within_budget=sizing.within_budget,
+                carry_headroom=sizing.carry_headroom,
+                max_affordable_contracts=sizing.max_affordable_contracts,
                 achieved_convexity_pct=achieved_convexity_pct,
                 meets_convexity=meets_convexity,
-                meets_target_within_budget=within_budget and meets_convexity,
+                meets_target_within_budget=(
+                    sizing.within_budget and meets_convexity
+                ),
             ),
         )
     return rungs

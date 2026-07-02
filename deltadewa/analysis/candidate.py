@@ -11,7 +11,7 @@ eliminating any duplicated pricing or payoff logic between the two callers.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from deltadewa import constants as const
@@ -54,7 +54,7 @@ class CandidateMetrics:
 
 
 # ---------------------------------------------------------------------------
-# Internal helper
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 
@@ -66,6 +66,47 @@ def _intrinsic_at_crash(strike: float, crash_spot: float) -> float:
 
     """
     return max(0.0, strike - crash_spot)
+
+
+def build_put_valuation(
+    spot: float,
+    strike: float,
+    maturity_date: datetime,
+    effective_vol: float,
+    portfolio: OptionPortfolio,
+) -> OptionValuation:
+    """Construct a put :class:`~deltadewa.valuation.OptionValuation`.
+
+    Centralises the nine-kwarg constructor that both
+    :func:`evaluate_candidate` and
+    :func:`~deltadewa.analysis.strike_ladder.strike_for_delta` need,
+    keeping exercise style, rate, and dividend wired from the portfolio
+    in one place.
+
+    Args:
+        spot: Current underlying spot price.
+        strike: Put strike price.
+        maturity_date: Option expiry date.
+        effective_vol: Implied volatility (annualised fraction); typically
+            ``portfolio.volatility`` or an explicit override.
+        portfolio: Supplies ``risk_free_rate``, ``dividend_yield``, and
+            ``default_exercise_style``.
+
+    Returns:
+        Configured :class:`~deltadewa.valuation.OptionValuation` ready
+        for ``.price()``, ``.delta()``, or ``.theta()`` calls.
+
+    """
+    return OptionValuation(
+        spot_price=spot,
+        strike_price=strike,
+        maturity_date=maturity_date,
+        volatility=effective_vol,
+        risk_free_rate=portfolio.risk_free_rate,
+        dividend_yield=portfolio.dividend_yield,
+        option_type=OptionType.PUT,
+        exercise_style=portfolio.default_exercise_style,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,15 +156,8 @@ def evaluate_candidate(
     maturity_date = portfolio.valuation_date + timedelta(
         days=round(maturity_years * const.DAYS_PER_YEAR),
     )
-    valuation = OptionValuation(
-        spot_price=spot,
-        strike_price=strike,
-        maturity_date=maturity_date,
-        volatility=effective_vol,
-        risk_free_rate=portfolio.risk_free_rate,
-        dividend_yield=portfolio.dividend_yield,
-        option_type=OptionType.PUT,
-        exercise_style=portfolio.default_exercise_style,
+    valuation = build_put_valuation(
+        spot, strike, maturity_date, effective_vol, portfolio
     )
 
     put_delta = valuation.delta()
