@@ -1,11 +1,251 @@
 """Summary and insights mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 
 if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
+    from deltadewa.portfolio.core import OptionPortfolio
+
+_T = TypeVar("_T")
+_Row = tuple[Callable[[_T], bool], Callable[[_T], list[str]]]
+
+
+def _resolve(context: _T, rows: tuple[_Row[_T], ...]) -> list[str]:
+    """Return the lines from the first row whose predicate matches."""
+    for predicate, formatter in rows:
+        if predicate(context):
+            return formatter(context)
+    return []
+
+
+_CAPITAL_ROWS: tuple[_Row[float], ...] = (
+    (
+        lambda net_debit: net_debit > 0,
+        lambda net_debit: [
+            f"  Net Debit: ${net_debit:,.2f} (capital required to implement)",
+        ],
+    ),
+    (
+        lambda _net_debit: True,
+        lambda net_debit: [
+            f"  Net Credit: ${-net_debit:,.2f} (capital received)",
+        ],
+    ),
+)
+
+_BREAKEVEN_ROWS: tuple[_Row[list[float]], ...] = (
+    (
+        bool,
+        lambda breakevens: [
+            "  Breakeven Points: "
+            + ", ".join(f"${be:.2f}" for be in breakevens),
+        ],
+    ),
+    (
+        lambda _breakevens: True,
+        lambda _breakevens: ["  Breakeven Points: None identified"],
+    ),
+)
+
+
+@dataclass(frozen=True)
+class _MaxLossContext:
+    """Parameters for formatting a max-loss line in either section."""
+
+    info: dict[str, Any]
+    unlimited_label: str
+    pct_basis: float
+    pct_phrase: str
+    show_pct: bool
+
+
+def _format_unlimited_max_loss(ctx: _MaxLossContext) -> list[str]:
+    """Format the max-loss line when loss is unlimited."""
+    return [f"  Max Loss: UNLIMITED ({ctx.unlimited_label})"]
+
+
+def _format_bounded_max_loss(ctx: _MaxLossContext) -> list[str]:
+    """Format the max-loss line and spot marker when loss is bounded."""
+    loss_line = f"  Max Loss: ${-ctx.info['max_loss']:,.2f}"
+    if ctx.show_pct:
+        loss_pct = (-ctx.info["max_loss"] / abs(ctx.pct_basis)) * 100
+        loss_line += f" ({loss_pct:.1f}% {ctx.pct_phrase})"
+    return [
+        loss_line,
+        f"    └─ Occurs at spot price: ${ctx.info['spot_at_max_loss']:.2f}",
+    ]
+
+
+_MAX_LOSS_ROWS: tuple[_Row[_MaxLossContext], ...] = (
+    (lambda ctx: bool(ctx.info["is_unlimited"]), _format_unlimited_max_loss),
+    (lambda _ctx: True, _format_bounded_max_loss),
+)
+
+
+def _format_max_loss(ctx: _MaxLossContext) -> list[str]:
+    """Dispatch max-loss formatting on the unlimited/bounded case."""
+    return _resolve(ctx, _MAX_LOSS_ROWS)
+
+
+@dataclass(frozen=True)
+class _MaxProfitContext:
+    """Parameters for formatting a max-profit line in either section."""
+
+    info: dict[str, Any]
+    unlimited_lines: list[str]
+    pct_basis: float
+    pct_phrase: str
+    show_pct: bool
+
+
+def _format_unlimited_max_profit(ctx: _MaxProfitContext) -> list[str]:
+    """Format the max-profit line(s) when profit is unlimited."""
+    return ctx.unlimited_lines
+
+
+def _format_bounded_max_profit(ctx: _MaxProfitContext) -> list[str]:
+    """Format the max-profit line and spot marker when profit is bounded."""
+    profit_line = f"  Max Profit: ${ctx.info['max_profit']:,.2f}"
+    if ctx.show_pct:
+        profit_pct = (ctx.info["max_profit"] / ctx.pct_basis) * 100
+        profit_line += f" ({profit_pct:.1f}% {ctx.pct_phrase})"
+    return [
+        profit_line,
+        f"    └─ Occurs at spot price: ${ctx.info['spot_at_max_profit']:.2f}",
+    ]
+
+
+_MAX_PROFIT_ROWS: tuple[_Row[_MaxProfitContext], ...] = (
+    (
+        lambda ctx: bool(ctx.info["is_unlimited"]),
+        _format_unlimited_max_profit,
+    ),
+    (lambda _ctx: True, _format_bounded_max_profit),
+)
+
+
+def _format_max_profit(ctx: _MaxProfitContext) -> list[str]:
+    """Dispatch max-profit formatting on the unlimited/bounded case."""
+    return _resolve(ctx, _MAX_PROFIT_ROWS)
+
+
+_TOTAL_UNLIMITED_PROFIT_ROWS: tuple[_Row[float], ...] = (
+    (
+        lambda underlying_quantity: underlying_quantity > 0,
+        lambda _underlying_quantity: [
+            "  Max Profit: UNLIMITED (long underlying position)",
+            "    └─ Profit increases with spot price",
+        ],
+    ),
+    (
+        lambda _underlying_quantity: True,
+        lambda _underlying_quantity: [
+            "  Max Profit: UNLIMITED",
+            "    └─ Profit increases with spot price",
+        ],
+    ),
+)
+
+
+def _format_capital_section(net_debit: float) -> list[str]:
+    """Format the capital-requirements section."""
+    return ["CAPITAL REQUIREMENTS:", *_resolve(net_debit, _CAPITAL_ROWS), ""]
+
+
+def _format_options_section(
+    analysis: dict[str, Any],
+    net_debit: float,
+) -> list[str]:
+    """Format the options-only risk/reward section."""
+    loss_ctx = _MaxLossContext(
+        info=analysis["max_loss_options"],
+        unlimited_label="naked short positions",
+        pct_basis=net_debit,
+        pct_phrase="of net debit",
+        show_pct=net_debit != 0,
+    )
+    profit_ctx = _MaxProfitContext(
+        info=analysis["max_profit_options"],
+        unlimited_lines=["  Max Profit: UNLIMITED"],
+        pct_basis=net_debit,
+        pct_phrase="return on net debit",
+        show_pct=net_debit > 0,
+    )
+    return [
+        "OPTIONS ONLY RISK/REWARD:",
+        *_format_max_loss(loss_ctx),
+        *_format_max_profit(profit_ctx),
+        *_resolve(analysis["breakeven_options"], _BREAKEVEN_ROWS),
+        "",
+    ]
+
+
+def _format_total_section(
+    portfolio: "OptionPortfolio",
+    analysis: dict[str, Any],
+) -> list[str]:
+    """Format the total-portfolio (options + underlying) section."""
+    max_loss_total = analysis["max_loss_total"]
+    portfolio_value = 0.0
+    if not max_loss_total["is_unlimited"]:
+        portfolio_value = portfolio.total_portfolio_value()
+
+    loss_ctx = _MaxLossContext(
+        info=max_loss_total,
+        unlimited_label="short underlying position",
+        pct_basis=portfolio_value,
+        pct_phrase="of portfolio value",
+        show_pct=portfolio_value > 0,
+    )
+    profit_ctx = _MaxProfitContext(
+        info=analysis["max_profit_total"],
+        unlimited_lines=_resolve(
+            portfolio.underlying_quantity,
+            _TOTAL_UNLIMITED_PROFIT_ROWS,
+        ),
+        pct_basis=portfolio_value,
+        pct_phrase="of portfolio value",
+        show_pct=portfolio_value > 0,
+    )
+    return [
+        "TOTAL PORTFOLIO RISK/REWARD (Options + Underlying):",
+        *_format_max_loss(loss_ctx),
+        *_format_max_profit(profit_ctx),
+        *_resolve(analysis["breakeven_total"], _BREAKEVEN_ROWS),
+        "",
+    ]
+
+
+def _format_probability_section(analysis: dict[str, Any]) -> list[str]:
+    """Format the probability-analysis section."""
+    prob = analysis["prob_profit"]
+    return [
+        "PROBABILITY ANALYSIS:",
+        f"  Chance of Profit: {prob * 100:.1f}%",
+        f"  Expected Value: ${analysis['expected_pnl']:,.2f} "
+        f"(probabilistic weighted average)",
+        "",
+    ]
+
+
+def _format_ratio_section(analysis: dict[str, Any]) -> list[str]:
+    """Format the risk/reward ratio line, if the ratio is meaningful."""
+    max_loss_opts = analysis["max_loss_options"]
+    max_profit_opts = analysis["max_profit_options"]
+    if (
+        not max_loss_opts["is_unlimited"]
+        and not max_profit_opts["is_unlimited"]
+        and max_loss_opts["max_loss"] < 0 < max_profit_opts["max_profit"]
+    ):
+        rr_ratio = max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
+        return [
+            f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)",
+        ]
+    return []
 
 
 class SummaryMixin:
@@ -158,7 +398,7 @@ class SummaryMixin:
 
         return insights
 
-    def format_risk_reward_summary(  # pylint: disable=R0912,R0915
+    def format_risk_reward_summary(
         self: "_AnalyzerProtocol",
         spot_range: np.ndarray[Any, np.dtype[Any]] | None = None,
     ) -> str:
@@ -172,145 +412,15 @@ class SummaryMixin:
 
         """
         analysis = self.risk_reward_analysis(spot_range)
-        portfolio_value = 0.0
-
-        lines = []
-        lines.append("=" * 80)
-        lines.append("PORTFOLIO RISK/REWARD ANALYSIS")
-        lines.append("=" * 80)
-        lines.append("")
-
-        # Capital Requirements
-        lines.append("CAPITAL REQUIREMENTS:")
         net_debit = analysis["net_debit"]
-        if net_debit > 0:
-            lines.append(
-                f"  Net Debit: ${net_debit:,.2f} "
-                f"(capital required to implement)",
-            )
-        else:
-            lines.append(f"  Net Credit: ${-net_debit:,.2f} (capital received)")
-        lines.append("")
 
-        # Options Only Risk/Reward
-        lines.append("OPTIONS ONLY RISK/REWARD:")
-        max_loss_opts = analysis["max_loss_options"]
-        max_profit_opts = analysis["max_profit_options"]
-
-        if max_loss_opts["is_unlimited"]:
-            lines.append("  Max Loss: UNLIMITED (naked short positions)")
-        else:
-            loss_line = f"  Max Loss: ${-max_loss_opts['max_loss']:,.2f}"
-            if net_debit != 0:
-                loss_pct = (-max_loss_opts["max_loss"] / abs(net_debit)) * 100
-                loss_line += f" ({loss_pct:.1f}% of net debit)"
-            lines.append(loss_line)
-            lines.append(
-                f"    └─ Occurs at spot price: $"
-                f"{max_loss_opts['spot_at_max_loss']:.2f}",
-            )
-
-        if max_profit_opts["is_unlimited"]:
-            lines.append("  Max Profit: UNLIMITED")
-        else:
-            profit_line = f"  Max Profit: ${max_profit_opts['max_profit']:,.2f}"
-            if net_debit > 0:
-                roi = (max_profit_opts["max_profit"] / net_debit) * 100
-                profit_line += f" ({roi:.1f}% return on net debit)"
-            lines.append(profit_line)
-            lines.append(
-                f"    └─ Occurs at spot price: $"
-                f"{max_profit_opts['spot_at_max_profit']:.2f}",
-            )
-
-        if analysis["breakeven_options"]:
-            breakevens_str = ", ".join(
-                [f"${be:.2f}" for be in analysis["breakeven_options"]],
-            )
-            lines.append(f"  Breakeven Points: {breakevens_str}")
-        else:
-            lines.append("  Breakeven Points: None identified")
-        lines.append("")
-
-        # Total Portfolio Risk/Reward
+        lines = ["=" * 80, "PORTFOLIO RISK/REWARD ANALYSIS", "=" * 80, ""]
+        lines.extend(_format_capital_section(net_debit))
+        lines.extend(_format_options_section(analysis, net_debit))
         if self.portfolio.underlying_quantity != 0:
-            lines.append("TOTAL PORTFOLIO RISK/REWARD (Options + Underlying):")
-            max_loss_total = analysis["max_loss_total"]
-            max_profit_total = analysis["max_profit_total"]
-
-            if max_loss_total["is_unlimited"]:
-                lines.append(
-                    "  Max Loss: UNLIMITED (short underlying position)",
-                )
-            else:
-                portfolio_value = self.portfolio.total_portfolio_value()
-                loss_line = f"  Max Loss: ${-max_loss_total['max_loss']:,.2f}"
-                if portfolio_value > 0:
-                    loss_pct = (
-                        -max_loss_total["max_loss"] / portfolio_value
-                    ) * 100
-                    loss_line += f" ({loss_pct:.1f}% of portfolio value)"
-                lines.append(loss_line)
-                lines.append(
-                    f"    └─ Occurs at spot price: $"
-                    f"{max_loss_total['spot_at_max_loss']:.2f}",
-                )
-
-            if max_profit_total["is_unlimited"]:
-                if self.portfolio.underlying_quantity > 0:
-                    lines.append(
-                        "  Max Profit: UNLIMITED (long underlying position)",
-                    )
-                else:
-                    lines.append("  Max Profit: UNLIMITED")
-                lines.append("    └─ Profit increases with spot price")
-            else:
-                profit_line = (
-                    f"  Max Profit: ${max_profit_total['max_profit']:,.2f}"
-                )
-                if portfolio_value > 0:
-                    profit_pct = (
-                        max_profit_total["max_profit"] / portfolio_value
-                    ) * 100
-                    profit_line += f" ({profit_pct:.1f}% of portfolio value)"
-                lines.append(profit_line)
-                lines.append(
-                    f"    └─ Occurs at spot price: $"
-                    f"{max_profit_total['spot_at_max_profit']:.2f}",
-                )
-
-            if analysis["breakeven_total"]:
-                breakevens_str = ", ".join(
-                    [f"${be:.2f}" for be in analysis["breakeven_total"]],
-                )
-                lines.append(f"  Breakeven Points: {breakevens_str}")
-            else:
-                lines.append("  Breakeven Points: None identified")
-            lines.append("")
-
-        # Probability Analysis
-        lines.append("PROBABILITY ANALYSIS:")
-        prob = analysis["prob_profit"]
-        lines.append(f"  Chance of Profit: {prob * 100:.1f}%")
-        lines.append(
-            f"  Expected Value: ${analysis['expected_pnl']:,.2f} "
-            f"(probabilistic weighted average)",
-        )
-        lines.append("")
-
-        # Risk/Reward Ratio
-        if (
-            not max_loss_opts["is_unlimited"]
-            and not max_profit_opts["is_unlimited"]
-            and max_loss_opts["max_loss"] < 0 < max_profit_opts["max_profit"]
-        ):
-            # Standard risk/reward ratio: profit potential to loss potential
-            rr_ratio = (
-                max_profit_opts["max_profit"] / -max_loss_opts["max_loss"]
-            )
-            lines.append(
-                f"RISK/REWARD RATIO: {rr_ratio:.2f}:1 (max profit to max loss)",
-            )
+            lines.extend(_format_total_section(self.portfolio, analysis))
+        lines.extend(_format_probability_section(analysis))
+        lines.extend(_format_ratio_section(analysis))
         lines.append("=" * 80)
 
         return "\n".join(lines)

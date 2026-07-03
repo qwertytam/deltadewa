@@ -121,7 +121,7 @@ class PnLChartsMixin:
         plt.tight_layout()
         return fig
 
-    def plot_pnl_distribution_with_metrics(  # pylint: disable=R0914,R0912,R0915
+    def plot_pnl_distribution_with_metrics(
         self: "_VisualizationProtocol[Any]",
         spot_range_pct: float = 100.0,
         num_points: int = 1000,
@@ -168,14 +168,11 @@ class PnLChartsMixin:
         # Generate spot price range
         # Note: spot_range_pct is symmetric ± percentage (e.g., 100 means 0% to
         # 200%)
-        # Convert to spot_min_pct and spot_max_pct for generate_spot_range
         current_spot = self.portfolio.spot_price
-        spot_min_pct = 100 - spot_range_pct
-        spot_max_pct = 100 + spot_range_pct
         spot_range = generate_spot_range(
             spot_price=current_spot,
-            spot_min_pct=spot_min_pct,
-            spot_max_pct=spot_max_pct,
+            spot_min_pct=100 - spot_range_pct,
+            spot_max_pct=100 + spot_range_pct,
             num_points=num_points,
         )
 
@@ -189,8 +186,9 @@ class PnLChartsMixin:
         # CRITICAL: Pass spot_range=None to allow comprehensive range check for
         # max loss/profit
         # The visualization uses spot_range only for the chart display
-        analyzer = PortfolioAnalyzer(self.portfolio)
-        analysis = analyzer.risk_reward_analysis(spot_range=None)
+        analysis = PortfolioAnalyzer(self.portfolio).risk_reward_analysis(
+            spot_range=None,
+        )
 
         # Use pre-calculated Monte Carlo expected value if available to ensure
         # consistency between the main analysis and the chart visualization
@@ -210,8 +208,118 @@ class PnLChartsMixin:
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
 
-        # Calculate probability density function for spot prices at maturity
-        # Use the nearest maturity date for time horizon
+        time_to_maturity = self._compute_time_to_maturity()
+        (
+            pdf_baseline,
+            pdf_plot_values,
+            spot_5th_percentile,
+            spot_95th_percentile,
+        ) = self._compute_pdf_overlay_and_percentiles(
+            spot_range,
+            pnl_values,
+            current_spot,
+            time_to_maturity,
+        )
+        self._shade_probability_density(
+            ax,
+            spot_range,
+            pdf_baseline,
+            pdf_plot_values,
+        )
+
+        # Determine visible range bounds
+        spot_range_min = spot_range.min()
+        spot_range_max = spot_range.max()
+        is_5th_in_range = (
+            spot_range_min <= spot_5th_percentile <= spot_range_max
+        )
+        is_95th_in_range = (
+            spot_range_min <= spot_95th_percentile <= spot_range_max
+        )
+        self._annotate_percentile_lines(
+            ax,
+            is_5th_in_range,
+            is_95th_in_range,
+            spot_5th_percentile,
+            spot_95th_percentile,
+        )
+
+        ax.plot(
+            spot_range,
+            pnl_values,
+            linewidth=3,
+            color=DEFAULT_PALETTE.medium_background,
+            label="P&L at Maturity",
+            zorder=3,
+        )
+
+        # Add annotations for percentile levels
+        y_annotation = pnl_values.max() * 0.95
+        y_mid = (pnl_values.max() + pnl_values.min()) / 2
+        self._annotate_percentile_label(
+            ax,
+            "5%",
+            spot_5th_percentile,
+            is_5th_in_range,
+            spot_range_min,
+            (y_annotation, y_mid),
+            "left",
+        )
+        self._annotate_percentile_label(
+            ax,
+            "95%",
+            spot_95th_percentile,
+            is_95th_in_range,
+            spot_range_max,
+            (y_annotation, y_mid),
+            "right",
+        )
+
+        self._shade_profit_loss_zones(ax, spot_range, pnl_values)
+        self._annotate_current_spot_marker(ax, current_spot, pnl_values)
+
+        self._annotate_breakevens(
+            ax,
+            analysis,
+            "breakeven_total" if include_underlying else "breakeven_options",
+            include_underlying,
+        )
+
+        self._annotate_max_loss(
+            ax,
+            analysis,
+            "max_loss_total" if include_underlying else "max_loss_options",
+            spot_range_min,
+            spot_range_max,
+            pnl_values,
+        )
+
+        self._annotate_max_profit(
+            ax,
+            analysis,
+            (
+                "max_profit_total"
+                if include_underlying
+                else "max_profit_options"
+            ),
+        )
+
+        self._annotate_expected_value(ax, analysis, spot_range, pnl_values)
+
+        self._format_pnl_distribution_axes(
+            ax,
+            include_underlying,
+            current_spot,
+        )
+
+        # Return figure
+        plt.tight_layout()
+        return fig
+
+    def _compute_time_to_maturity(
+        self: "_VisualizationProtocol[Any]",
+    ) -> float:
+        """Compute years to nearest position maturity, else 30-day default."""
         if self.portfolio.positions:
             min_maturity = min(
                 pos.option.maturity_date for pos in self.portfolio.positions
@@ -220,13 +328,23 @@ class PnLChartsMixin:
                 1,
                 (min_maturity - self.portfolio.valuation_date).days,
             )
-            time_to_maturity = days_to_maturity / const.DAYS_PER_YEAR
-        else:
-            time_to_maturity = (
-                const.CALENDAR_DAYS_PER_MONTH / const.DAYS_PER_YEAR
-            )  # Default to 30 days
+            return float(days_to_maturity / const.DAYS_PER_YEAR)
+        # Default to 30 days
+        return const.CALENDAR_DAYS_PER_MONTH / const.DAYS_PER_YEAR
 
-        # Calculate log-normal PDF for terminal spot prices (GBM assumption)
+    def _compute_pdf_overlay_and_percentiles(
+        self: "_VisualizationProtocol[Any]",
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+        current_spot: float,
+        time_to_maturity: float,
+    ) -> tuple[float, np.ndarray[Any, np.dtype[Any]], float, float]:
+        """Compute the terminal-spot PDF overlay and 5th/95th percentiles.
+
+        Returns the PDF baseline and scaled plot values (for shading under
+        the P&L curve) plus the 5th and 95th percentile spot prices, using
+        log-normal (GBM) parameters.
+        """
         volatility = self.portfolio.volatility
         risk_free_rate = self.portfolio.risk_free_rate
         dividend_yield = self.portfolio.dividend_yield
@@ -239,22 +357,43 @@ class PnLChartsMixin:
         )
         sigma = volatility * np.sqrt(time_to_maturity)
 
-        # Calculate PDF values
+        # Calculate PDF values, scaled to fit the full height of the chart
         pdf_values = (1 / (spot_range * sigma * np.sqrt(2 * np.pi))) * np.exp(
             -((np.log(spot_range) - mu) ** 2) / (2 * sigma**2),
         )
-
-        # Scale PDF to fit full height of chart
-        pnl_range = pnl_values.max() - pnl_values.min()
-        pdf_height = pnl_range  # Full height
-
-        # Normalize PDF to this height
+        pdf_height = pnl_values.max() - pnl_values.min()
         pdf_scaled = (pdf_values / pdf_values.max()) * pdf_height
-
-        # Position PDF at bottom of chart
         pdf_baseline = pnl_values.min()
         pdf_plot_values = pdf_baseline + pdf_scaled
 
+        # Calculate 5th and 95th percentile spot prices (90% confidence
+        # interval) using the analytical log-normal inverse CDF
+        try:
+            z_5th = stats.norm.ppf(0.05)
+            z_95th = stats.norm.ppf(0.95)
+        except ImportError:
+            # Fallback standard-normal quantile approximation
+            z_5th = -1.6449
+            z_95th = 1.6449
+
+        spot_5th_percentile = np.exp(mu + sigma * z_5th)
+        spot_95th_percentile = np.exp(mu + sigma * z_95th)
+
+        return (
+            pdf_baseline,
+            pdf_plot_values,
+            spot_5th_percentile,
+            spot_95th_percentile,
+        )
+
+    def _shade_probability_density(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pdf_baseline: float,
+        pdf_plot_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None:
+        """Shade the terminal-spot probability density under the P&L curve."""
         # Plot PDF on MAIN axis with zorder=1 (behind other elements)
         ax.fill_between(
             spot_range,
@@ -265,43 +404,15 @@ class PnLChartsMixin:
             zorder=1,
         )
 
-        # Calculate 5th and 95th percentile spot prices (90% confidence
-        # interval)
-        # Using analytical log-normal distribution (inverse CDF)
-        # For log-normal with parameters mu and sigma:
-        # percentile_p = exp(mu + sigma * z_p) where z_p is the standard normal
-        # quantile
-        try:
-            z_5th = stats.norm.ppf(
-                0.05,
-            )  # Standard normal quantile for 5th percentile
-            z_95th = stats.norm.ppf(
-                0.95,
-            )  # Standard normal quantile for 95th percentile
-        except ImportError:
-            # Fallback to approximation if scipy not available
-            # Using inverse error function approximation for standard normal
-            # quantiles
-            # z_0.05 ≈ -1.645, z_0.95 ≈ 1.645
-            z_5th = -1.6449
-            z_95th = 1.6449
-
-        spot_5th_percentile = np.exp(mu + sigma * z_5th)
-        spot_95th_percentile = np.exp(mu + sigma * z_95th)
-
-        # Determine visible range bounds
-        spot_range_min = spot_range.min()
-        spot_range_max = spot_range.max()
-
-        # Check if percentiles are within visible range
-        is_5th_in_range = (
-            spot_range_min <= spot_5th_percentile <= spot_range_max
-        )
-        is_95th_in_range = (
-            spot_range_min <= spot_95th_percentile <= spot_range_max
-        )
-
-        # Add vertical dashed lines for percentiles only if in range
+    def _annotate_percentile_lines(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        is_5th_in_range: bool,
+        is_95th_in_range: bool,
+        spot_5th_percentile: float,
+        spot_95th_percentile: float,
+    ) -> None:
+        """Draw vertical dashed lines at the 5th/95th percentile spots."""
         if is_5th_in_range:
             ax.axvline(
                 spot_5th_percentile,
@@ -323,104 +434,80 @@ class PnLChartsMixin:
                 label="95% Probability Level",
             )
 
-        ax.plot(
-            spot_range,
-            pnl_values,
-            linewidth=3,
-            color=DEFAULT_PALETTE.medium_background,
-            label="P&L at Maturity",
-            zorder=3,
+    def _annotate_percentile_label(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        pct_label: str,
+        spot_value: float,
+        in_range: bool,
+        edge_spot: float,
+        y_positions: tuple[float, float],
+        side: str,
+    ) -> None:
+        """Label a percentile spot in-range, or point to it from the edge.
+
+        Args:
+            ax: Matplotlib axes.
+            pct_label: e.g. "5%" or "95%".
+            spot_value: The percentile spot price.
+            in_range: Whether spot_value falls within the visible x-range.
+            edge_spot: Chart edge to anchor the out-of-range callout to.
+            y_positions: (y_annotation, y_mid) — text-box Y position for the
+                in-range case, callout Y position for the out-of-range case.
+            side: "left" or "right" — edge/arrow direction to use.
+
+        """
+        y_annotation, y_mid = y_positions
+        if in_range:
+            ax.text(
+                spot_value,
+                y_annotation,
+                f"{pct_label} @ ${spot_value:,.0f}",
+                ha="center",
+                va="top",
+                fontsize=9,
+                color=DEFAULT_PALETTE.dark_background,
+                fontweight="bold",
+                bbox={
+                    "boxstyle": "round,pad=0.3",
+                    "facecolor": DEFAULT_PALETTE.white,
+                    "edgecolor": DEFAULT_PALETTE.dark_background,
+                    "alpha": 0.8,
+                },
+            )
+            return
+
+        offset = (30, 0) if side == "left" else (-30, 0)
+        ax.annotate(
+            f"{pct_label}\n${spot_value:,.0f}",
+            xy=(edge_spot, y_mid),
+            xytext=offset,
+            textcoords="offset points",
+            fontsize=9,
+            color=DEFAULT_PALETTE.dark_background,
+            fontweight="bold",
+            ha=side,
+            va="center",
+            bbox={
+                "boxstyle": "round,pad=0.3",
+                "facecolor": DEFAULT_PALETTE.white,
+                "edgecolor": DEFAULT_PALETTE.dark_background,
+                "alpha": 0.8,
+            },
+            arrowprops={
+                "arrowstyle": "<-",
+                "color": DEFAULT_PALETTE.dark_background,
+                "lw": 1.5,
+            },
         )
 
-        # Add annotations for percentile levels
-        y_annotation = pnl_values.max() * 0.95
-        y_mid = (pnl_values.max() + pnl_values.min()) / 2
-
-        if is_5th_in_range:
-            ax.text(
-                spot_5th_percentile,
-                y_annotation,
-                f"5% @ ${spot_5th_percentile:,.0f}",
-                ha="center",
-                va="top",
-                fontsize=9,
-                color=DEFAULT_PALETTE.dark_background,
-                fontweight="bold",
-                bbox={
-                    "boxstyle": "round,pad=0.3",
-                    "facecolor": DEFAULT_PALETTE.white,
-                    "edgecolor": DEFAULT_PALETTE.dark_background,
-                    "alpha": 0.8,
-                },
-            )
-        else:
-            # 5th percentile is below visible range - show arrow on left edge
-            ax.annotate(
-                f"5%\n${spot_5th_percentile:,.0f}",
-                xy=(spot_range_min, y_mid),
-                xytext=(30, 0),
-                textcoords="offset points",
-                fontsize=9,
-                color=DEFAULT_PALETTE.dark_background,
-                fontweight="bold",
-                ha="left",
-                va="center",
-                bbox={
-                    "boxstyle": "round,pad=0.3",
-                    "facecolor": DEFAULT_PALETTE.white,
-                    "edgecolor": DEFAULT_PALETTE.dark_background,
-                    "alpha": 0.8,
-                },
-                arrowprops={
-                    "arrowstyle": "<-",
-                    "color": DEFAULT_PALETTE.dark_background,
-                    "lw": 1.5,
-                },
-            )
-
-        if is_95th_in_range:
-            ax.text(
-                spot_95th_percentile,
-                y_annotation,
-                f"95% @ ${spot_95th_percentile:,.0f}",
-                ha="center",
-                va="top",
-                fontsize=9,
-                color=DEFAULT_PALETTE.dark_background,
-                fontweight="bold",
-                bbox={
-                    "boxstyle": "round,pad=0.3",
-                    "facecolor": DEFAULT_PALETTE.white,
-                    "edgecolor": DEFAULT_PALETTE.dark_background,
-                    "alpha": 0.8,
-                },
-            )
-        else:
-            # 95th percentile is above visible range - show arrow on right edge
-            ax.annotate(
-                f"95%\n${spot_95th_percentile:,.0f}",
-                xy=(spot_range_max, y_mid),
-                xytext=(-30, 0),
-                textcoords="offset points",
-                fontsize=9,
-                color=DEFAULT_PALETTE.dark_background,
-                fontweight="bold",
-                ha="right",
-                va="center",
-                bbox={
-                    "boxstyle": "round,pad=0.3",
-                    "facecolor": DEFAULT_PALETTE.white,
-                    "edgecolor": DEFAULT_PALETTE.dark_background,
-                    "alpha": 0.8,
-                },
-                arrowprops={
-                    "arrowstyle": "<-",
-                    "color": DEFAULT_PALETTE.dark_background,
-                    "lw": 1.5,
-                },
-            )
-
-        # Add profit/loss zones with fill_between
+    def _shade_profit_loss_zones(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None:
+        """Shade profit (P&L >= 0) and loss (P&L < 0) zones under the curve."""
         ax.fill_between(
             spot_range,
             pnl_values,
@@ -440,7 +527,13 @@ class PnLChartsMixin:
             label="Loss Zone",
         )
 
-        # Add zero line and current spot marker
+    def _annotate_current_spot_marker(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        current_spot: float,
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None:
+        """Draw the zero line, current-spot line, and its label."""
         ax.axhline(
             0,
             color=DEFAULT_PALETTE.black,
@@ -473,172 +566,56 @@ class PnLChartsMixin:
             },
         )
 
-        # Annotate break-even points
-        be_key = (
-            "breakeven_total" if include_underlying else "breakeven_options"
-        )
-        if analysis.get(be_key):
-            for i, be in enumerate(analysis[be_key]):
-                be_pnl = self.portfolio.calculate_pnl_at_expiry(
-                    be,
-                    include_underlying=include_underlying,
-                )
-                # Add vertical dashed line at break-even
-                ax.axvline(
-                    be,
-                    color=DEFAULT_PALETTE.medium_grey,
-                    linestyle="--",
-                    linewidth=1.5,
-                    alpha=0.6,
-                    zorder=2,
-                )
+    def _annotate_breakevens(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        analysis: dict[str, Any],
+        be_key: str,
+        include_underlying: bool,
+    ) -> None:
+        """Mark break-even points with a diamond, line, and $-value label."""
+        if not analysis.get(be_key):
+            return
+        for i, be in enumerate(analysis[be_key]):
+            be_pnl = self.portfolio.calculate_pnl_at_expiry(
+                be,
+                include_underlying=include_underlying,
+            )
+            # Add vertical dashed line at break-even
+            ax.axvline(
+                be,
+                color=DEFAULT_PALETTE.medium_grey,
+                linestyle="--",
+                linewidth=1.5,
+                alpha=0.6,
+                zorder=2,
+            )
 
-                # Plot marker
-                ax.plot(
-                    be,
-                    be_pnl,
-                    marker="D",
-                    markersize=12,
-                    markeredgewidth=2,
-                    markerfacecolor=DEFAULT_PALETTE.yellow,
-                    markeredgecolor=DEFAULT_PALETTE.black,
-                    zorder=5,
-                )
-                # Add annotation
-                ax.annotate(
-                    f"BE ${be:.2f}",
-                    xy=(be, be_pnl),
-                    xytext=(0, 30 if i % 2 == 0 else -40),
-                    textcoords="offset points",
-                    fontsize=10,
-                    fontweight="bold",
-                    ha="center",
-                    bbox={
-                        "boxstyle": "round,pad=0.5",
-                        "facecolor": DEFAULT_PALETTE.yellow,
-                        "alpha": 0.7,
-                        "edgecolor": DEFAULT_PALETTE.black,
-                    },
-                    arrowprops={
-                        "arrowstyle": "->",
-                        "connectionstyle": "arc3,rad=0",
-                        "lw": 1.5,
-                    },
-                )
-
-        # Annotate maximum loss
-        ml_key = "max_loss_total" if include_underlying else "max_loss_options"
-        max_loss_info = analysis[ml_key]
-        if not max_loss_info["is_unlimited"]:
-            ml_spot = max_loss_info["spot_at_max_loss"]
-            ml_val = max_loss_info["max_loss"]
-
-            # Check if max loss spot is within visible range
-            is_ml_in_range = spot_range_min <= ml_spot <= spot_range_max
-
-            if is_ml_in_range:
-                # Plot marker at actual location
-                ax.plot(
-                    ml_spot,
-                    ml_val,
-                    marker="v",
-                    markersize=15,
-                    markeredgewidth=2,
-                    markerfacecolor=DEFAULT_PALETTE.negative,
-                    markeredgecolor=DEFAULT_PALETTE.negative,
-                    zorder=5,
-                )
-                # Add annotation
-                ax.annotate(
-                    f"ML ${ml_val:,.0f}",
-                    xy=(ml_spot, ml_val),
-                    xytext=(0, -50),
-                    textcoords="offset points",
-                    fontsize=10,
-                    fontweight="bold",
-                    ha="center",
-                    bbox={
-                        "boxstyle": "round,pad=0.5",
-                        "facecolor": DEFAULT_PALETTE.negative_faded,
-                        "alpha": 0.8,
-                        "edgecolor": DEFAULT_PALETTE.negative,
-                    },
-                    arrowprops={
-                        "arrowstyle": "->",
-                        "connectionstyle": "arc3,rad=0",
-                        "lw": 1.5,
-                    },
-                )
-            else:
-                # Max loss is outside visible range - show arrow at edge
-                if ml_spot < spot_range_min:
-                    edge_spot = spot_range_min
-                    edge_pnl = pnl_values[0]
-                    arrow_direction = "<-"
-                    text_offset = (40, -30)
-                    ha = "left"
-                else:
-                    edge_spot = spot_range_max
-                    edge_pnl = pnl_values[-1]
-                    arrow_direction = "<-"
-                    text_offset = (-40, -30)
-                    ha = "right"
-
-                ax.annotate(
-                    f"ML ${ml_val:,.0f} @ ${ml_spot:,.0f}",
-                    xy=(edge_spot, edge_pnl),
-                    xytext=text_offset,
-                    textcoords="offset points",
-                    fontsize=10,
-                    fontweight="bold",
-                    ha=ha,
-                    bbox={
-                        "boxstyle": "round,pad=0.5",
-                        "facecolor": DEFAULT_PALETTE.negative_faded,
-                        "alpha": 0.8,
-                        "edgecolor": DEFAULT_PALETTE.negative,
-                    },
-                    arrowprops={
-                        "arrowstyle": arrow_direction,
-                        "connectionstyle": "arc3,rad=0",
-                        "lw": 1.5,
-                        "color": DEFAULT_PALETTE.negative,
-                    },
-                )
-
-        # Annotate maximum profit
-        mp_key = (
-            "max_profit_total" if include_underlying else "max_profit_options"
-        )
-        max_profit_info = analysis[mp_key]
-        if not max_profit_info["is_unlimited"]:
-            mp_spot = max_profit_info["spot_at_max_profit"]
-            mp_val = max_profit_info["max_profit"]
             # Plot marker
             ax.plot(
-                mp_spot,
-                mp_val,
-                marker="^",
-                markersize=15,
+                be,
+                be_pnl,
+                marker="D",
+                markersize=12,
                 markeredgewidth=2,
-                markerfacecolor=DEFAULT_PALETTE.negative,
-                markeredgecolor=DEFAULT_PALETTE.positive,
+                markerfacecolor=DEFAULT_PALETTE.yellow,
+                markeredgecolor=DEFAULT_PALETTE.black,
                 zorder=5,
             )
             # Add annotation
             ax.annotate(
-                f"MP ${mp_val:,.0f}",
-                xy=(mp_spot, mp_val),
-                xytext=(0, 50),
+                f"BE ${be:.2f}",
+                xy=(be, be_pnl),
+                xytext=(0, 30 if i % 2 == 0 else -40),
                 textcoords="offset points",
                 fontsize=10,
                 fontweight="bold",
                 ha="center",
                 bbox={
                     "boxstyle": "round,pad=0.5",
-                    "facecolor": DEFAULT_PALETTE.positive_faded,
-                    "alpha": 0.8,
-                    "edgecolor": DEFAULT_PALETTE.positive,
+                    "facecolor": DEFAULT_PALETTE.yellow,
+                    "alpha": 0.7,
+                    "edgecolor": DEFAULT_PALETTE.black,
                 },
                 arrowprops={
                     "arrowstyle": "->",
@@ -647,48 +624,198 @@ class PnLChartsMixin:
                 },
             )
 
-        # Annotate expected value
-        expected_pnl = analysis.get("expected_pnl", 0)
-        if expected_pnl is not None:
-            # Find the spot price closest to the expected value on P&L curve
-            idx_closest = np.argmin(np.abs(pnl_values - expected_pnl))
-            ev_spot = spot_range[idx_closest]
-            ev_pnl = pnl_values[idx_closest]
+    def _annotate_max_loss(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        analysis: dict[str, Any],
+        ml_key: str,
+        spot_range_min: float,
+        spot_range_max: float,
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None:
+        """Mark the maximum-loss point, or point to it if off-chart."""
+        max_loss_info = analysis[ml_key]
+        if max_loss_info["is_unlimited"]:
+            return
 
-            # Plot marker
+        ml_spot = max_loss_info["spot_at_max_loss"]
+        ml_val = max_loss_info["max_loss"]
+
+        # Check if max loss spot is within visible range
+        is_ml_in_range = spot_range_min <= ml_spot <= spot_range_max
+
+        if is_ml_in_range:
+            # Plot marker at actual location
             ax.plot(
-                ev_spot,
-                ev_pnl,
-                marker="*",
-                markersize=20,
+                ml_spot,
+                ml_val,
+                marker="v",
+                markersize=15,
                 markeredgewidth=2,
-                markerfacecolor="gold",
-                markeredgecolor="orange",
+                markerfacecolor=DEFAULT_PALETTE.negative,
+                markeredgecolor=DEFAULT_PALETTE.negative,
                 zorder=5,
             )
             # Add annotation
             ax.annotate(
-                f"EV ${expected_pnl:,.0f}",
-                xy=(ev_spot, ev_pnl),
-                xytext=(50, 20),
+                f"ML ${ml_val:,.0f}",
+                xy=(ml_spot, ml_val),
+                xytext=(0, -50),
                 textcoords="offset points",
                 fontsize=10,
                 fontweight="bold",
                 ha="center",
                 bbox={
                     "boxstyle": "round,pad=0.5",
-                    "facecolor": DEFAULT_PALETTE.orange_faded,
+                    "facecolor": DEFAULT_PALETTE.negative_faded,
                     "alpha": 0.8,
-                    "edgecolor": "orange",
+                    "edgecolor": DEFAULT_PALETTE.negative,
                 },
                 arrowprops={
                     "arrowstyle": "->",
-                    "connectionstyle": "arc3,rad=0.2",
+                    "connectionstyle": "arc3,rad=0",
                     "lw": 1.5,
                 },
             )
+            return
 
-        # Format axes and labels
+        # Max loss is outside visible range - show arrow at edge
+        if ml_spot < spot_range_min:
+            edge_spot = spot_range_min
+            edge_pnl = pnl_values[0]
+            text_offset = (40, -30)
+            ha = "left"
+        else:
+            edge_spot = spot_range_max
+            edge_pnl = pnl_values[-1]
+            text_offset = (-40, -30)
+            ha = "right"
+
+        ax.annotate(
+            f"ML ${ml_val:,.0f} @ ${ml_spot:,.0f}",
+            xy=(edge_spot, edge_pnl),
+            xytext=text_offset,
+            textcoords="offset points",
+            fontsize=10,
+            fontweight="bold",
+            ha=ha,
+            bbox={
+                "boxstyle": "round,pad=0.5",
+                "facecolor": DEFAULT_PALETTE.negative_faded,
+                "alpha": 0.8,
+                "edgecolor": DEFAULT_PALETTE.negative,
+            },
+            arrowprops={
+                "arrowstyle": "<-",
+                "connectionstyle": "arc3,rad=0",
+                "lw": 1.5,
+                "color": DEFAULT_PALETTE.negative,
+            },
+        )
+
+    def _annotate_max_profit(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        analysis: dict[str, Any],
+        mp_key: str,
+    ) -> None:
+        """Mark the maximum-profit point on the P&L curve."""
+        max_profit_info = analysis[mp_key]
+        if max_profit_info["is_unlimited"]:
+            return
+
+        mp_spot = max_profit_info["spot_at_max_profit"]
+        mp_val = max_profit_info["max_profit"]
+        # Plot marker
+        ax.plot(
+            mp_spot,
+            mp_val,
+            marker="^",
+            markersize=15,
+            markeredgewidth=2,
+            markerfacecolor=DEFAULT_PALETTE.negative,
+            markeredgecolor=DEFAULT_PALETTE.positive,
+            zorder=5,
+        )
+        # Add annotation
+        ax.annotate(
+            f"MP ${mp_val:,.0f}",
+            xy=(mp_spot, mp_val),
+            xytext=(0, 50),
+            textcoords="offset points",
+            fontsize=10,
+            fontweight="bold",
+            ha="center",
+            bbox={
+                "boxstyle": "round,pad=0.5",
+                "facecolor": DEFAULT_PALETTE.positive_faded,
+                "alpha": 0.8,
+                "edgecolor": DEFAULT_PALETTE.positive,
+            },
+            arrowprops={
+                "arrowstyle": "->",
+                "connectionstyle": "arc3,rad=0",
+                "lw": 1.5,
+            },
+        )
+
+    def _annotate_expected_value(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        analysis: dict[str, Any],
+        spot_range: np.ndarray[Any, np.dtype[Any]],
+        pnl_values: np.ndarray[Any, np.dtype[Any]],
+    ) -> None:
+        """Mark the expected-value point closest to it on the P&L curve."""
+        expected_pnl = analysis.get("expected_pnl", 0)
+        if expected_pnl is None:
+            return
+
+        # Find the spot price closest to the expected value on P&L curve
+        idx_closest = np.argmin(np.abs(pnl_values - expected_pnl))
+        ev_spot = spot_range[idx_closest]
+        ev_pnl = pnl_values[idx_closest]
+
+        # Plot marker
+        ax.plot(
+            ev_spot,
+            ev_pnl,
+            marker="*",
+            markersize=20,
+            markeredgewidth=2,
+            markerfacecolor="gold",
+            markeredgecolor="orange",
+            zorder=5,
+        )
+        # Add annotation
+        ax.annotate(
+            f"EV ${expected_pnl:,.0f}",
+            xy=(ev_spot, ev_pnl),
+            xytext=(50, 20),
+            textcoords="offset points",
+            fontsize=10,
+            fontweight="bold",
+            ha="center",
+            bbox={
+                "boxstyle": "round,pad=0.5",
+                "facecolor": DEFAULT_PALETTE.orange_faded,
+                "alpha": 0.8,
+                "edgecolor": "orange",
+            },
+            arrowprops={
+                "arrowstyle": "->",
+                "connectionstyle": "arc3,rad=0.2",
+                "lw": 1.5,
+            },
+        )
+
+    def _format_pnl_distribution_axes(
+        self: "_VisualizationProtocol[Any]",
+        ax: Axes,
+        include_underlying: bool,
+        current_spot: float,
+    ) -> None:
+        """Apply axis labels, title, grid, and currency/pct tick formatters."""
         ax.set_xlabel(
             "Spot Price at Maturity ($)",
             fontsize=13,
@@ -726,10 +853,6 @@ class PnLChartsMixin:
             which="major",
             pad=8,
         )  # Add padding for two-line labels
-
-        # Return figure
-        plt.tight_layout()
-        return fig
 
     def _plot_pnl_panel(
         self: "_VisualizationProtocol[Any]",
