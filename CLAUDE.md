@@ -77,7 +77,7 @@ with a test — not in a widget or a notebook cell.
 ## Testing
 
 - Tests live in `tests/`, mirroring the package (`tests/test_portfolio/`,
-  `tests/test_dashboard/`, `tests/test_visualization/`). ~47 files today.
+  `tests/test_dashboard/`, `tests/test_visualization/`). 78 files / 1,009 tests today.
 - Add or extend tests for every behaviour change. Pricing/metric logic must have
   unit tests with crafted inputs; UI widgets get lighter smoke tests.
 - Prefer deterministic tests — no live network calls (mock HTTP; use static/offline
@@ -93,15 +93,25 @@ with a test — not in a widget or a notebook cell.
 
 ## Work in progress
 
-The foundation work is done: a `marketdata/` provider interface (free
-CBOE/FRED backend), an `ips.yaml` program config, a Roll Status panel, and
-the notebook split into `monitor_dashboard.ipynb` and `hedge_design.ipynb`.
+The foundation is done and the handbook's Part X panels are built: a
+`marketdata/` provider interface (free CBOE/FRED backend), an `ips.yaml` program
+config, a Roll Status panel, and the notebook split into `monitor_dashboard.ipynb`
+and `hedge_design.ipynb`. The **sizing workbench, strike-ladder builder, and
+monetization planner are also done, tested, and wired** — each is its own
+`analysis/`-layer module (`sizing.py`, `strike_ladder.py`, `monetization.py`, with
+`roll_planner.py`) driving a panel in `hedge_design.ipynb`. See
+`docs/part-x-coverage.md` for the full handbook-item → implementation map and
+`docs/hedging handbook.md` for the cited sections.
 
-Next up, all currently stubbed as clearly-marked placeholder cells in
-`hedge_design.ipynb` (see `examples/hedging handbook.md` for the cited
-sections): a sizing workbench, a strike ladder builder, and a monetization
-planner. Each is its own `analysis/`-layer module with tests — UI-free,
-per the architecture rule above.
+Current work is the **correctness + Dash migration**, tracked in
+`.migrations/implementation-plan.md` — **treat that plan as the source of truth for
+what to build next.** It fixes the pricing/metric (engine) layer first, then
+rebuilds both notebooks as a Dash app.
+
+The only features still genuinely outstanding are the data-blocked Tier-4 metrics —
+**#12 Liquidity Risk**, **#13 Delta Drift**, and **#14 Vega Term Exposure** — each
+of which needs a live options-chain or position-history feed that isn't available
+yet (see "Outstanding Tier-4 items" in `docs/part-x-coverage.md`).
 
 ## Workflow expectations
 
