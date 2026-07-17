@@ -264,6 +264,60 @@ def _reprice_shock_grid(
     return repriced, floor
 
 
+def _build_scenario_rows(
+    portfolio: OptionPortfolio,
+    *,
+    s_shocks: set[float],
+    repriced: dict[float, float],
+    floor: dict[float, float],
+    premium_paid: float,
+    vol_shock: float,
+    ips_convexity: IpsConvexity | None,
+) -> list[CrashScenarioRow]:
+    """Assemble scenario rows from the pre-priced grid, sorted mild to severe.
+
+    Args:
+        portfolio: Portfolio to evaluate (for the convexity gauge).
+        s_shocks: Signed shock percents to emit as rows.
+        repriced: Repriced hedge value keyed by shock percent.
+        floor: Intrinsic floor keyed by shock percent.
+        premium_paid: Premium denominator for the payoff ratio (dollars).
+        vol_shock: Flat additive crash vol bump as a decimal.
+        ips_convexity: IPS convexity target, or ``None``.
+
+    Returns:
+        One ``CrashScenarioRow`` per shock, sorted severe to mild.
+
+    """
+    analyzer = PortfolioAnalyzer(portfolio)
+    rows: list[CrashScenarioRow] = []
+    for shock_pct in sorted(s_shocks, reverse=True):
+        hedge_pnl = repriced[shock_pct]
+        ratio = hedge_pnl / premium_paid if premium_paid > 0 else 0.0
+        convexity_pct = analyzer.calculate_crash_convexity_pct(
+            crash_scenario_pct=shock_pct,
+            crash_vol_shock=vol_shock,
+        )
+        meets_target = (
+            ips_convexity.target_min_pct
+            <= convexity_pct
+            <= ips_convexity.target_max_pct
+            if ips_convexity is not None
+            else False
+        )
+        rows.append(
+            CrashScenarioRow(
+                shock_pct=shock_pct,
+                hedge_pnl=hedge_pnl,
+                payoff_ratio=ratio,
+                convexity_pct=convexity_pct,
+                meets_target=meets_target,
+                intrinsic_floor=floor[shock_pct],
+            ),
+        )
+    return rows
+
+
 def compute_crash_convexity(
     portfolio: OptionPortfolio,
     *,
@@ -344,32 +398,15 @@ def compute_crash_convexity(
     ]
 
     # Scenario rows — sampled from the repriced pass, sorted mild to severe.
-    analyzer = PortfolioAnalyzer(portfolio)
-    scenario_rows: list[CrashScenarioRow] = []
-    for shock_pct in sorted(s_shocks, reverse=True):
-        hedge_pnl = repriced[shock_pct]
-        ratio = hedge_pnl / premium_paid if premium_paid > 0 else 0.0
-        convexity_pct = analyzer.calculate_crash_convexity_pct(
-            crash_scenario_pct=shock_pct,
-            crash_vol_shock=vol_shock,
-        )
-        meets_target = (
-            ips_convexity.target_min_pct
-            <= convexity_pct
-            <= ips_convexity.target_max_pct
-            if ips_convexity is not None
-            else False
-        )
-        scenario_rows.append(
-            CrashScenarioRow(
-                shock_pct=shock_pct,
-                hedge_pnl=hedge_pnl,
-                payoff_ratio=ratio,
-                convexity_pct=convexity_pct,
-                meets_target=meets_target,
-                intrinsic_floor=floor[shock_pct],
-            ),
-        )
+    scenario_rows = _build_scenario_rows(
+        portfolio,
+        s_shocks=s_shocks,
+        repriced=repriced,
+        floor=floor,
+        premium_paid=premium_paid,
+        vol_shock=vol_shock,
+        ips_convexity=ips_convexity,
+    )
 
     # Headline payoff ratio at the IPS crash shock.
     payoff_ratio: float | None = None
