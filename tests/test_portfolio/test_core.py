@@ -3,6 +3,8 @@
 import unittest
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio, OptionPortfolioBase
 
@@ -422,6 +424,97 @@ class TestOptionPortfolioBase:
 
         assert portfolio.volatility == 0.3
         assert portfolio.positions[0].option.volatility == 0.3
+
+    def test_set_volatility_reprices_leg(self) -> None:
+        """Regression (M4): set_volatility must reprice, not just set the attr.
+
+        The old implementation assigned ``pos.option.volatility`` directly,
+        leaving the QuantLib quote and the greek cache stale, so ``price()``
+        returned the value at the *previous* vol.
+        """
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        price_before = portfolio.positions[0].option.price()
+
+        # Reference leg built directly at the higher vol for comparison.
+        reference = OptionPortfolioBase(spot_price=100.0, volatility=0.5)
+        reference.add_position(
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        expected_price = reference.positions[0].option.price()
+
+        portfolio.set_volatility(0.5)
+        price_after = portfolio.positions[0].option.price()
+
+        # An ATM call is worth more at higher vol; the old code left it flat.
+        assert price_after > price_before
+        assert price_after == pytest.approx(expected_price)
+
+    def test_set_volatility_skips_custom_volatility_leg(self) -> None:
+        """Regression (M4): a custom-vol leg must be left untouched.
+
+        ``set_volatility`` only repositions legs whose vol tracks the
+        portfolio; a leg with an explicit ``custom_volatility`` must keep both
+        its vol quote and its price when the portfolio vol moves.
+        """
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+            volatility=0.3,
+        )
+        custom_leg = portfolio.positions[0]
+        assert custom_leg.custom_volatility is True
+        price_before = custom_leg.option.price()
+
+        portfolio.set_volatility(0.5)
+
+        assert custom_leg.option.volatility == 0.3
+        assert custom_leg.option.price() == pytest.approx(price_before)
+
+    def test_update_market_conditions_rate_change_preserves_identity(
+        self,
+    ) -> None:
+        """Regression (C3): the rate/dividend rebuild must keep entry + id.
+
+        Changing the risk-free rate or dividend yield recreates every
+        OptionPosition; the old rebuild dropped entry_spot/date/premium and
+        minted a fresh position_id, silently losing cost basis and identity.
+        """
+        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        entry_date = datetime(2026, 1, 2, tzinfo=UTC)
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+            entry_spot=98.0,
+            entry_date=entry_date,
+        )
+        pos = portfolio.positions[0]
+        pos.entry_premium = 4.25
+        original_id = pos.position_id
+
+        # Rate change triggers the position-rebuild branch.
+        portfolio.update_market_conditions(risk_free_rate=0.06)
+
+        rebuilt = portfolio.positions[0]
+        assert rebuilt.entry_spot == 98.0
+        assert rebuilt.entry_date == entry_date
+        assert rebuilt.entry_premium == pytest.approx(4.25)
+        assert rebuilt.position_id == original_id
 
     def test_get_symbol(self) -> None:
         """Test get_symbol method."""

@@ -157,6 +157,7 @@ class PortfolioSerializer:
                 "maturity_date": pos.option.maturity_date.isoformat(),
                 "quantity": pos.quantity,
                 "contract_size": pos.contract_size,
+                "exercise_style": pos.exercise_style.value,
                 "volatility": pos.option.volatility,
                 "custom_volatility": pos.custom_volatility,
                 "greeks": {
@@ -348,12 +349,18 @@ class PortfolioSerializer:
         self,
         filepath: str | Path,
         create_portfolio: bool = True,
+        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
     ) -> dict[str, Any]:
         """Import portfolio from JSON file.
 
         Args:
             filepath: path to JSON file
             create_portfolio: if True, creates and returns portfolio object
+            default_exercise_style: exercise style applied to positions whose
+            entry has no explicit ``exercise_style`` (e.g. files predating
+            exercise-style serialization).  Callers should pass the program's
+            IPS style (``ips_config.pricing.exercise_style``); defaults to
+            ``ExerciseStyle.AMERICAN`` to preserve legacy behaviour.
 
         Returns:
             dict with portfolio data (and 'portfolio' key if
@@ -381,6 +388,7 @@ class PortfolioSerializer:
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
             symbol=market_params.get("symbol", "UNKNOWN"),
+            default_exercise_style=default_exercise_style,
             contract_size=market_params["contract_size"],
         )
 
@@ -411,12 +419,23 @@ class PortfolioSerializer:
                 else None
             )
 
+            # Honor a serialized exercise_style; when absent (legacy files),
+            # add_position falls back to the portfolio's default style.
+            raw_style = pos_data.get("exercise_style")
+            exercise_style: ExerciseStyle | None = None
+            if raw_style is not None:
+                try:
+                    exercise_style = ExerciseStyle(str(raw_style).upper())
+                except ValueError:
+                    exercise_style = None
+
             imported_portfolio.add_position(
                 strike_price=strike,
                 maturity_date=maturity,
                 option_type=option_type,
                 quantity=quantity,
                 volatility=position_volatility,
+                exercise_style=exercise_style,
             )
 
             # Set entry tracking directly (not via add_position's kwargs)
@@ -438,11 +457,20 @@ class PortfolioSerializer:
             "metadata": data.get("metadata", {}),
         }
 
-    def import_from_yaml(self, filepath: str | Path) -> dict[str, Any]:
+    def import_from_yaml(
+        self,
+        filepath: str | Path,
+        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+    ) -> dict[str, Any]:
         """Import portfolio from YAML configuration file.
 
         Args:
             filepath: path to YAML file
+            default_exercise_style: exercise style applied to positions whose
+            config has no explicit ``exercise_style``.  Callers should pass the
+            program's IPS style (``ips_config.pricing.exercise_style``);
+            defaults to ``ExerciseStyle.AMERICAN`` to preserve legacy
+            behaviour.
 
         Returns:
             dict with 'portfolio', 'market_params', and 'metadata' keys
@@ -471,6 +499,7 @@ class PortfolioSerializer:
             dividend_yield=market_params["dividend_yield"],
             valuation_date=dt.now(tz=datetime.UTC),
             symbol=market_params.get("symbol", "UNKNOWN"),
+            default_exercise_style=default_exercise_style,
             contract_size=market_params["contract_size"],
         )
 
@@ -533,11 +562,19 @@ class PortfolioSerializer:
             "metadata": {"source": "yaml", "filepath": str(filepath)},
         }
 
-    def import_portfolio(self, filepath: str | Path) -> dict[str, Any]:
+    def import_portfolio(
+        self,
+        filepath: str | Path,
+        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+    ) -> dict[str, Any]:
         """Universal import function - auto-detects file format.
 
         Args:
             filepath: path to JSON or YAML file
+            default_exercise_style: exercise style applied to positions with no
+            explicit ``exercise_style``; forwarded to the format-specific
+            importer.  Callers should pass the IPS style
+            (``ips_config.pricing.exercise_style``).
 
         Returns:
             dict with 'portfolio', 'market_params', and 'metadata' keys
@@ -546,7 +583,14 @@ class PortfolioSerializer:
         file_format = self.detect_file_format(filepath)
 
         if file_format == "yaml":
-            return self.import_from_yaml(filepath)
+            return self.import_from_yaml(
+                filepath,
+                default_exercise_style=default_exercise_style,
+            )
         if file_format == "json":
-            return self.import_from_json(filepath, create_portfolio=True)
+            return self.import_from_json(
+                filepath,
+                create_portfolio=True,
+                default_exercise_style=default_exercise_style,
+            )
         raise ValueError(f"Unsupported file format: {filepath}")
