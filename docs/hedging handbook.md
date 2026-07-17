@@ -1627,6 +1627,11 @@ Define:
 
 $\text{Crash Convexity}_x = \frac{V_{crash} − V_{today}}{Portfolio}$
 
+> This definition leaves $V_{crash}$'s repricing mechanics unspecified. See
+> [`docs/repricing-methodology.md`](repricing-methodology.md) for the normative
+> recipe (hedge-only, repriced not intrinsic, instantaneous, flat vol-bump
+> convention) that the implementation must follow.
+
 Where:
 
 $x$ is the assumed market decline (e.g. 20%, 30%, 40%)
