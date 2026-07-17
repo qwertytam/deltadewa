@@ -239,10 +239,13 @@ class TestSizeHedge:
         )
         assert result.carry_budget == pytest.approx(10_000.0)
 
-    def test_per_contract_payoff_intrinsic(self) -> None:
-        """per_contract_payoff matches hand-computed intrinsic * 100."""
-        # spot=5000, 5% OTM → strike=4750; crash=-25% → crash_spot=3750
-        # intrinsic = 4750 - 3750 = 1000; per contract = 1000 * 100 = 100_000
+    def test_per_contract_intrinsic_floor(self) -> None:
+        """per_contract_intrinsic_floor matches hand-computed intrinsic * 100.
+
+        spot=5000, 5% OTM → strike=4750; crash=-25% → crash_spot=3750;
+        intrinsic = 4750 - 3750 = 1000; per contract = 1000 * 100 = 100_000.
+        The repriced payoff is surfaced as a separate positive dollar value.
+        """
         portfolio = _make_spx_portfolio(spot=5000.0)
         ips = _make_ips(crash_scenario_pct=-25.0)
         result = size_hedge(
@@ -251,7 +254,8 @@ class TestSizeHedge:
             candidate_pct_otm=5.0,
             candidate_maturity_years=0.25,
         )
-        assert result.per_contract_payoff == pytest.approx(100_000.0)
+        assert result.per_contract_intrinsic_floor == pytest.approx(100_000.0)
+        assert result.per_contract_payoff > 0.0
 
     def test_per_contract_carry_positive(self) -> None:
         """per_contract_carry is a positive dollar cost."""
@@ -299,8 +303,8 @@ class TestSizeHedge:
         """Achieved convexity inside IPS band → meets_convexity_target True.
 
         spot=5000, qty=100 → notional=500_000; crash=-25%, tol=20% →
-        required_offset=25_000; strike=4750, crash_spot=3750 → payoff
-        1000*100=100_000/contract; 1 contract → convexity=20% ∈ [5,30].
+        required_offset=25_000; strike=4750 → repriced payoff ≈ 100_000/
+        contract; 1 contract → convexity ≈ 20%, inside the [5, 30] band.
         """
         portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
         ips = _make_ips(
@@ -315,7 +319,8 @@ class TestSizeHedge:
             candidate_pct_otm=5.0,
             candidate_maturity_years=0.25,
         )
-        assert result.achieved_convexity_pct == pytest.approx(20.0)
+        # Achieved convexity lands inside the IPS band → target met.
+        assert 5.0 <= result.achieved_convexity_pct <= 30.0
         assert result.meets_convexity_target is True
 
     def test_convexity_out_of_band_above(self) -> None:

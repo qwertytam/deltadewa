@@ -6,14 +6,32 @@ import datetime
 
 import pytest
 
+from deltadewa import constants as const
 from deltadewa.analysis.candidate import (
     CandidateMetrics,
-    _intrinsic_at_crash,
     build_put_valuation,
     evaluate_candidate,
 )
-from deltadewa.constants import ExerciseStyle
+from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.ips_config import IpsConvexity
 from deltadewa.portfolio.core import OptionPortfolio
+
+# Representative crash vol shock (IpsConvexity default) for the tests that do
+# not otherwise care about its exact value.
+_CRASH_VOL_SHOCK = 0.15
+
+# §4 worked-example crash state (docs/repricing-methodology.md): spot 6600,
+# 18-month European puts, 20% flat today-vol, +15% crash vol shock, -25% crash.
+_APX_SPOT = 6600.0
+_APX_VOL = 0.20
+_APX_VOL_SHOCK = 0.15
+_APX_CRASH_PCT = -25.0
+_APX_MATURITY_YEARS = 1.5
+# 20 / 30 / 40 %-OTM strikes from the worked example.
+_APX_STRIKE_20_OTM = 5280.0
+_APX_STRIKE_30_OTM = 4620.0
+_APX_STRIKE_40_OTM = 3960.0
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -41,25 +59,18 @@ def _make_spx_portfolio(
     )
 
 
-# ---------------------------------------------------------------------------
-# _intrinsic_at_crash (moved from test_sizing.py)
-# ---------------------------------------------------------------------------
-
-
-class TestIntrinsicAtCrash:
-    """Tests for the _intrinsic_at_crash helper."""
-
-    def test_in_the_money_at_crash(self) -> None:
-        """Put is ITM at crash → positive intrinsic."""
-        assert _intrinsic_at_crash(4750.0, 3750.0) == pytest.approx(1000.0)
-
-    def test_out_of_money_at_crash(self) -> None:
-        """Put is OTM at crash → zero (floors at 0)."""
-        assert _intrinsic_at_crash(3000.0, 3750.0) == pytest.approx(0.0)
-
-    def test_at_the_money_at_crash(self) -> None:
-        """Put is ATM at crash → zero intrinsic."""
-        assert _intrinsic_at_crash(3750.0, 3750.0) == pytest.approx(0.0)
+def _make_appendix_portfolio() -> OptionPortfolio:
+    """A §4-style SPX book: spot 6600, 18-month European puts, 20% vol."""
+    valuation_date = datetime.datetime(2026, 1, 2, tzinfo=datetime.UTC)
+    return OptionPortfolio(
+        spot_price=_APX_SPOT,
+        underlying_quantity=_APX_SPOT,  # arbitrary; candidate is hedge-only
+        volatility=_APX_VOL,
+        risk_free_rate=0.045,
+        dividend_yield=0.015,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+        valuation_date=valuation_date,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +89,7 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
         assert isinstance(result, CandidateMetrics)
 
@@ -90,6 +102,7 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
         assert result.pct_otm == pytest.approx(5.0)
 
@@ -101,14 +114,19 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
         assert result.put_delta < 0.0
 
-    def test_per_contract_payoff_hand_computed(self) -> None:
-        """per_contract_payoff matches max(0, strike - crash_spot) * 100.
+    def test_intrinsic_floor_hand_computed(self) -> None:
+        """per_contract_intrinsic_floor = max(0, strike - crash_spot) * 100.
 
-        spot=5000, strike=4750, crash=-25% → crash_spot=3750
-        intrinsic = 4750 - 3750 = 1000; per contract = 1000 * 100 = 100_000
+        spot=5000, strike=4750, crash=-25% → crash_spot=3750;
+        intrinsic = 4750 - 3750 = 1000; per contract = 1000 * 100 = 100_000.
+        Only the (undiscounted) floor is pinned here: a deep-ITM short-dated
+        European put can reprice just *below* it because of discounting, so
+        the floor-vs-repriced ordering is exercised separately, where time
+        value dominates (see :class:`TestCrashRepricingBasis`).
         """
         portfolio = _make_spx_portfolio(spot=5000.0)
         result = evaluate_candidate(
@@ -116,20 +134,29 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
-        assert result.per_contract_payoff == pytest.approx(100_000.0)
+        assert result.per_contract_intrinsic_floor == pytest.approx(100_000.0)
+        assert result.per_contract_payoff > 0.0
 
-    def test_per_contract_payoff_zero_when_otm_at_crash(self) -> None:
-        """per_contract_payoff is zero when the put is OTM at the crash spot."""
-        # spot=5000, strike=3000, crash=-25% → crash_spot=3750 > strike → OTM
+    def test_deep_otm_at_crash_reprices_above_zero_floor(self) -> None:
+        """A strike still OTM at the crash spot reprices > 0 (C4 fix).
+
+        spot=5000, strike=3000, crash=-25% → crash_spot=3750 > strike, so the
+        put is OTM at the crash spot and its intrinsic floor is 0.  The
+        repriced value keeps its (positive) remaining time value — the whole
+        point of C4: the intrinsic basis wrongly scored this strike at zero.
+        """
         portfolio = _make_spx_portfolio(spot=5000.0)
         result = evaluate_candidate(
             portfolio,
             strike=3000.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
-        assert result.per_contract_payoff == pytest.approx(0.0)
+        assert result.per_contract_intrinsic_floor == pytest.approx(0.0)
+        assert result.per_contract_payoff > 0.0
 
     def test_per_contract_carry_positive(self) -> None:
         """per_contract_carry is a positive dollar cost."""
@@ -139,6 +166,7 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
         assert result.per_contract_carry > 0.0
 
@@ -150,6 +178,7 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
         assert result.premium > 0.0
 
@@ -161,6 +190,7 @@ class TestEvaluateCandidate:
             strike=4600.0,
             maturity_years=0.50,
             crash_pct=-30.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
         assert result.strike == pytest.approx(4600.0)
 
@@ -172,6 +202,7 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
             vol=0.15,
         )
         r_high = evaluate_candidate(
@@ -179,10 +210,28 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
             vol=0.30,
         )
         assert r_high.premium > r_low.premium
         assert r_high.per_contract_carry > r_low.per_contract_carry
+
+    def test_higher_crash_vol_shock_raises_payoff(self) -> None:
+        """A larger crash vol shock lifts the repriced payoff (more IV).
+
+        Guards the crash_vol_shock plumbing: the payoff is the option
+        repriced at ``candidate_vol + crash_vol_shock``, so a bigger shock
+        must produce a strictly larger repriced value.
+        """
+        portfolio = _make_spx_portfolio(spot=5000.0)
+        kwargs = {
+            "strike": 3500.0,  # OTM at the -25% crash → time value only
+            "maturity_years": 0.5,
+            "crash_pct": -25.0,
+        }
+        r_low = evaluate_candidate(portfolio, **kwargs, crash_vol_shock=0.05)
+        r_high = evaluate_candidate(portfolio, **kwargs, crash_vol_shock=0.25)
+        assert r_high.per_contract_payoff > r_low.per_contract_payoff
 
     def test_european_exercise_no_error(self) -> None:
         """European exercise style runs without error."""
@@ -192,6 +241,7 @@ class TestEvaluateCandidate:
             strike=4750.0,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=_CRASH_VOL_SHOCK,
         )
         assert result.per_contract_carry > 0.0
 
@@ -203,7 +253,12 @@ class TestCandidateContractSizeScaling:
         """Premium halves when contract_size halves."""
         p100 = _make_spx_portfolio(contract_size=100)
         p50 = _make_spx_portfolio(contract_size=50)
-        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        kwargs = {
+            "strike": 4750.0,
+            "maturity_years": 0.25,
+            "crash_pct": -25.0,
+            "crash_vol_shock": _CRASH_VOL_SHOCK,
+        }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
         assert r50.premium == pytest.approx(r100.premium / 2)
@@ -212,7 +267,12 @@ class TestCandidateContractSizeScaling:
         """per_contract_payoff halves when contract_size halves."""
         p100 = _make_spx_portfolio(contract_size=100)
         p50 = _make_spx_portfolio(contract_size=50)
-        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        kwargs = {
+            "strike": 4750.0,
+            "maturity_years": 0.25,
+            "crash_pct": -25.0,
+            "crash_vol_shock": _CRASH_VOL_SHOCK,
+        }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
         assert r50.per_contract_payoff == pytest.approx(
@@ -223,7 +283,12 @@ class TestCandidateContractSizeScaling:
         """per_contract_carry halves when contract_size halves."""
         p100 = _make_spx_portfolio(contract_size=100)
         p50 = _make_spx_portfolio(contract_size=50)
-        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        kwargs = {
+            "strike": 4750.0,
+            "maturity_years": 0.25,
+            "crash_pct": -25.0,
+            "crash_vol_shock": _CRASH_VOL_SHOCK,
+        }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
         assert r50.per_contract_carry == pytest.approx(
@@ -234,10 +299,103 @@ class TestCandidateContractSizeScaling:
         """pct_otm is a pure spot/strike ratio — unchanged by contract_size."""
         p100 = _make_spx_portfolio(contract_size=100)
         p50 = _make_spx_portfolio(contract_size=50)
-        kwargs = {"strike": 4750.0, "maturity_years": 0.25, "crash_pct": -25.0}
+        kwargs = {
+            "strike": 4750.0,
+            "maturity_years": 0.25,
+            "crash_pct": -25.0,
+            "crash_vol_shock": _CRASH_VOL_SHOCK,
+        }
         assert evaluate_candidate(p100, **kwargs).pct_otm == pytest.approx(
             evaluate_candidate(p50, **kwargs).pct_otm,
         )
+
+
+class TestCrashRepricingBasis:
+    """C4 — candidates are repriced via the shared crash_hedge_value helper."""
+
+    def test_appendix_deep_otm_legs_reprice_above_zero(self) -> None:
+        """§4's 30% and 40% OTM legs reprice > 0 at -25% (C4 regression).
+
+        On the intrinsic basis both legs scored exactly zero (they are OTM at
+        the crash spot); the repriced basis gives each a positive value while
+        the intrinsic floor stays at zero.
+        """
+        portfolio = _make_appendix_portfolio()
+        for strike in (_APX_STRIKE_30_OTM, _APX_STRIKE_40_OTM):
+            result = evaluate_candidate(
+                portfolio,
+                strike=strike,
+                maturity_years=_APX_MATURITY_YEARS,
+                crash_pct=_APX_CRASH_PCT,
+                crash_vol_shock=_APX_VOL_SHOCK,
+            )
+            assert result.per_contract_payoff > 0.0
+            assert result.per_contract_intrinsic_floor == pytest.approx(0.0)
+            assert (
+                result.per_contract_intrinsic_floor < result.per_contract_payoff
+            )
+
+    def test_floor_below_repriced_for_in_the_money_leg(self) -> None:
+        """Intrinsic floor is strictly below the repriced value (time value).
+
+        The 20% OTM leg is ITM at the -25% crash: crash_spot = 6600*0.75 =
+        4950, so intrinsic = (5280 - 4950) * 100 = 33_000; the repriced value
+        adds the remaining time value.
+        """
+        portfolio = _make_appendix_portfolio()
+        result = evaluate_candidate(
+            portfolio,
+            strike=_APX_STRIKE_20_OTM,
+            maturity_years=_APX_MATURITY_YEARS,
+            crash_pct=_APX_CRASH_PCT,
+            crash_vol_shock=_APX_VOL_SHOCK,
+        )
+        assert result.per_contract_intrinsic_floor == pytest.approx(33_000.0)
+        assert result.per_contract_intrinsic_floor < result.per_contract_payoff
+
+    def test_payoff_consistent_with_crash_payoff_headline(self) -> None:
+        """Candidate payoff == the crash_payoff headline for the same strike.
+
+        Both surfaces reprice one contract through the shared
+        crash_hedge_value helper, so a single-contract long-put book's
+        repriced hedge value at the policy depth (the crash_payoff row's
+        ``hedge_pnl``) must equal evaluate_candidate's per_contract_payoff.
+        """
+        from deltadewa.analysis.crash_payoff import crash_scenario_table
+
+        strike = _APX_STRIKE_30_OTM
+        portfolio = _make_appendix_portfolio()
+        maturity_date = portfolio.valuation_date + datetime.timedelta(
+            days=round(_APX_MATURITY_YEARS * const.DAYS_PER_YEAR),
+        )
+        portfolio.add_position(
+            strike_price=strike,
+            maturity_date=maturity_date,
+            quantity=1,
+            option_type=OptionType.PUT,
+            volatility=_APX_VOL,
+        )
+
+        candidate = evaluate_candidate(
+            portfolio,
+            strike=strike,
+            maturity_years=_APX_MATURITY_YEARS,
+            crash_pct=_APX_CRASH_PCT,
+            crash_vol_shock=_APX_VOL_SHOCK,
+        )
+        ips = IpsConvexity(
+            crash_scenario_pct=_APX_CRASH_PCT,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+            crash_vol_shock=_APX_VOL_SHOCK,
+        )
+        rows = crash_scenario_table(
+            portfolio,
+            shocks=[_APX_CRASH_PCT],
+            ips_convexity=ips,
+        )
+        row = next(r for r in rows if r.shock_pct == _APX_CRASH_PCT)
+        assert candidate.per_contract_payoff == pytest.approx(row.hedge_pnl)
 
 
 # ---------------------------------------------------------------------------
