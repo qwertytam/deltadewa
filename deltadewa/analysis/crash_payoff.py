@@ -294,7 +294,7 @@ def compute_crash_convexity(
         hedge_pnl = payoff_dict[shock_pct]
         ratio = hedge_pnl / premium_paid if premium_paid > 0 else 0.0
         convexity_pct = analyzer.calculate_crash_convexity_pct(
-            crash_pct=_shock_to_multiplier(shock_pct),
+            crash_scenario_pct=shock_pct,
         )
         meets_target = (
             ips_convexity.target_min_pct

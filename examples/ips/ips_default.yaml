@@ -19,9 +19,11 @@ budget:
   annual_carry_pct: 2.0      # premium budget, % of portfolio / yr
 
 convexity:
-  crash_scenario_pct: -25.0
+  crash_scenario_pct: -25.0     # single source of truth for the crash move
   target_min_pct: 15.0
   target_max_pct: 25.0
+  crash_vol_shock: 0.15         # flat additive vol bump at the crash spot (M1.2)
+  crash_floor_reported: true    # surface the intrinsic-floor column
 
 drawdown:
   max_tolerance_pct: 20.0

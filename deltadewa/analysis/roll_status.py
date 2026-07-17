@@ -225,7 +225,7 @@ def evaluate_roll_status(
 
     analyzer = PortfolioAnalyzer(portfolio)
     crash_convexity_pct = analyzer.calculate_crash_convexity_pct(
-        crash_pct=1 + convexity.crash_scenario_pct / 100,
+        crash_scenario_pct=convexity.crash_scenario_pct,
     )
 
     now = datetime.now(tz=UTC)

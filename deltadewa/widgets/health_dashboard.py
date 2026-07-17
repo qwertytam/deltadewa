@@ -93,7 +93,7 @@ class HedgeHealthDashboard:
 
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments  # presentation/config knobs
         self,
         portfolio: OptionPortfolio,
         cumulative_carry_paid: float = 0.0,
@@ -101,6 +101,8 @@ class HedgeHealthDashboard:
         historical_vol_high: float = 0.35,
         convexity_cliff_days: int = 180,
         config: dict[str, Any] | None = None,
+        *,
+        crash_scenario_pct: float | None = None,
     ) -> None:
         """Initialize the Hedge Health Dashboard.
 
@@ -116,10 +118,17 @@ class HedgeHealthDashboard:
                 ``SessionContext.dashboard_config`` from ``start_session``.
                 ``display_config_loader()`` remains available afterwards
                 for ad hoc overrides on top of this.
+            crash_scenario_pct: Signed crash move as a percent of current spot,
+                single-sourced from ``IpsConvexity.crash_scenario_pct`` (pass
+                ``ctx.ips_config.convexity.crash_scenario_pct``). When ``None``
+                (no IPS), the crash-convexity and hedge-success gauges read
+                ``0.0`` — the crash scenario is policy and is never hardcoded
+                here.
 
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
+        self._crash_scenario_pct = crash_scenario_pct
 
         # Initialize default configuration
         self.config = self._get_default_config()
@@ -254,6 +263,7 @@ class HedgeHealthDashboard:
             historical_vol_low=params["historical_vol_low"],
             historical_vol_high=params["historical_vol_high"],
             convexity_cliff_days=params["convexity_cliff_days"],
+            crash_scenario_pct=self._crash_scenario_pct,
         )
 
     # ==========================================================================
@@ -291,11 +301,11 @@ class HedgeHealthDashboard:
             label_format="{:+.2f}%",
         )
 
-        # 2. Crash Convexity (Hedge P&L at -20% spot)
+        # 2. Crash Convexity (Hedge P&L at the IPS crash scenario)
         c = cfg["crash_convexity"]
         metrics["crash_convexity"] = HedgeHealthMetric(
             name="Crash Convexity",
-            description="Hedge P&L at -20% spot as % of underlying",
+            description="Hedge P&L at IPS crash scenario as % of underlying",
             start=c["start"],
             end=c["end"],
             min_val=c["min_val"],

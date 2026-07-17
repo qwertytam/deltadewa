@@ -37,17 +37,22 @@ class HealthMixin:
         annual_theta = daily_theta * const.DAYS_PER_YEAR
         return float((annual_theta / underlying_value) * 100)
 
-    def calculate_crash_convexity_pct(self, crash_pct: float = 0.80) -> float:
+    def calculate_crash_convexity_pct(
+        self,
+        crash_scenario_pct: float,
+    ) -> float:
         """Calculate crash convexity.
 
-        Calculates Hedge P&L at crash spot as % of underlying.
+        Calculates Hedge P&L at the crash spot as % of underlying.
 
         A positive value means the hedge is providing protection in a crash.
         A negative value means the portfolio loses money in a crash.
 
         Args:
-            crash_pct: Crash scenario as percentage of current spot (default:
-            0.80 for -20%)
+            crash_scenario_pct: Signed crash move as a percent of current spot
+                (e.g. ``-25.0`` for a 25% decline). Single-sourced from
+                ``IpsConvexity.crash_scenario_pct``; there is no hardcoded
+                default.
 
         Returns:
             Hedge P&L at crash spot as percentage of underlying value.
@@ -61,7 +66,7 @@ class HealthMixin:
             return 0.0
 
         # Calculate P&L at crash spot (include underlying to see net effect)
-        crash_spot = current_spot * crash_pct
+        crash_spot = current_spot * (1 + crash_scenario_pct / 100)
         hedge_pnl = self.portfolio.calculate_pnl_at_expiry(
             crash_spot,
             include_underlying=True,
@@ -185,7 +190,7 @@ class HealthMixin:
     def calculate_hedge_success_pct(
         self,
         cumulative_carry_paid: float,
-        crash_pct: float = 0.80,
+        crash_scenario_pct: float,
     ) -> float:
         """Calculate hedge success: Hedge P&L vs cumulative carry paid.
 
@@ -194,8 +199,9 @@ class HealthMixin:
 
         Args:
             cumulative_carry_paid: Total carry paid for the hedge
-            crash_pct: Crash scenario as percentage of current spot
-            (default: 0.80 for -20%)
+            crash_scenario_pct: Signed crash move as a percent of current spot
+                (e.g. ``-25.0`` for a 25% decline). Single-sourced from
+                ``IpsConvexity.crash_scenario_pct``.
 
         Returns:
             Ratio of hedge P&L to carry paid as percentage.
@@ -209,9 +215,12 @@ class HealthMixin:
         # This is a simplified measure - actual hedge P&L would need
         # historical tracking
         # https://github.com/qwertytam/deltadewa/issues/70
-        # For now, use crash protection value as a proxy for hedge value
+        # For now, use crash protection value as a proxy for hedge value.
+        # NOTE (M1.2/Mo1): only the crash *scenario* is single-sourced here;
+        # the include_underlying basis and carry wiring are unchanged and this
+        # gauge stays a proxy until M2.4 wires it to realized tracking.
         current_spot = self.portfolio.spot_price
-        crash_spot = current_spot * crash_pct
+        crash_spot = current_spot * (1 + crash_scenario_pct / 100)
         hedge_pnl = self.portfolio.calculate_pnl_at_expiry(
             crash_spot,
             include_underlying=True,
@@ -262,12 +271,14 @@ class HealthMixin:
 
         return sum(scores) / len(scores) if scores else 50
 
-    def calculate_health_metrics(
+    def calculate_health_metrics(  # pylint: disable=too-many-arguments  # one metric-config arg per gauge
         self,
         cumulative_carry_paid: float = 0.0,
         historical_vol_low: float = 0.15,
         historical_vol_high: float = 0.35,
         convexity_cliff_days: int = 180,
+        *,
+        crash_scenario_pct: float | None = None,
     ) -> dict[str, Any]:
         """Calculate all health metrics in one call.
 
@@ -277,11 +288,16 @@ class HealthMixin:
             historical_vol_high: Historical high volatility (default: 0.35)
             convexity_cliff_days: Days threshold for high-gamma region
             (default: 180)
+            crash_scenario_pct: Signed crash move as a percent of current spot,
+                single-sourced from ``IpsConvexity.crash_scenario_pct``. When
+                ``None`` (no IPS supplied), the crash-derived gauges
+                (crash convexity, hedge success) read ``0.0`` rather than
+                fall back to a hardcoded scenario.
 
         Returns:
             Dictionary containing all calculated health metrics:
             - net_carry_pct: Net carry as % of underlying
-            - crash_convexity_pct: Hedge P&L at -20% spot
+            - crash_convexity_pct: Hedge P&L at the IPS crash scenario
             - vega_sufficiency_pct: Portfolio % impact per +10 vol
             - delta_drift_pct: Net delta as % of equity
             - convexity_cliff_days: Days until high-gamma region
@@ -289,9 +305,21 @@ class HealthMixin:
             - hedge_success_pct: Hedge P&L vs carry paid
 
         """
+        if crash_scenario_pct is None:
+            crash_convexity_pct = 0.0
+            hedge_success_pct = 0.0
+        else:
+            crash_convexity_pct = self.calculate_crash_convexity_pct(
+                crash_scenario_pct,
+            )
+            hedge_success_pct = self.calculate_hedge_success_pct(
+                cumulative_carry_paid,
+                crash_scenario_pct,
+            )
+
         return {
             "net_carry_pct": self.calculate_net_carry_pct(),
-            "crash_convexity_pct": self.calculate_crash_convexity_pct(),
+            "crash_convexity_pct": crash_convexity_pct,
             "vega_sufficiency_pct": self.calculate_vega_sufficiency_pct(),
             "delta_drift_pct": self.calculate_delta_drift_pct(),
             "convexity_cliff_days": self.calculate_convexity_cliff_days(
@@ -301,7 +329,5 @@ class HealthMixin:
                 historical_vol_low,
                 historical_vol_high,
             ),
-            "hedge_success_pct": self.calculate_hedge_success_pct(
-                cumulative_carry_paid,
-            ),
+            "hedge_success_pct": hedge_success_pct,
         }

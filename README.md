@@ -25,8 +25,8 @@ optional live CBOE/FRED pull that falls back gracefully on network failure.
 
 ## Features
 
-- **Crash convexity & payoff ratio** — hedge P&L at –20% spot; realised payoff vs.
-  cumulative carry paid
+- **Crash convexity & payoff ratio** — hedge P&L at the IPS crash scenario
+  (`convexity.crash_scenario_pct`); realised payoff vs. cumulative carry paid
 - **Net carry** — annualized theta as % of notional; tracked against the IPS carry budget
 - **Market-environment tiers** — VIX term structure (contango / flat / backwardation),
   SKEW-index percentile, vol-regime percentile

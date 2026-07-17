@@ -104,7 +104,7 @@ def _patch_convexity(
     monkeypatch: pytest.MonkeyPatch,
     value: float,
 ) -> None:
-    def _fake(self: object, crash_pct: float = 0.80) -> float:
+    def _fake(self: object, crash_scenario_pct: float) -> float:
         return value
 
     monkeypatch.setattr(

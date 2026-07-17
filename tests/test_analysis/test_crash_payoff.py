@@ -321,10 +321,10 @@ class TestCrashPayoffRatio:
         analyzer_no_book = PortfolioAnalyzer(unhedged_book)
         analyzer_with_book = PortfolioAnalyzer(hedged_book)
         convexity_no_book = analyzer_no_book.calculate_crash_convexity_pct(
-            crash_pct=0.75,
+            crash_scenario_pct=-25.0,
         )
         convexity_with_book = analyzer_with_book.calculate_crash_convexity_pct(
-            crash_pct=0.75,
+            crash_scenario_pct=-25.0,
         )
         assert convexity_no_book == 0.0
         assert convexity_with_book != 0.0
@@ -440,8 +440,12 @@ class TestCrashScenarioTable:
             quantity=20,
         )
         analyzer = PortfolioAnalyzer(portfolio)
-        convexity_25 = analyzer.calculate_crash_convexity_pct(crash_pct=0.75)
-        convexity_10 = analyzer.calculate_crash_convexity_pct(crash_pct=0.90)
+        convexity_25 = analyzer.calculate_crash_convexity_pct(
+            crash_scenario_pct=-25.0,
+        )
+        convexity_10 = analyzer.calculate_crash_convexity_pct(
+            crash_scenario_pct=-10.0,
+        )
         assert convexity_10 != pytest.approx(convexity_25)
 
         # Single-point band around the -25% result: that row should meet

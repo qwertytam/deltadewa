@@ -60,6 +60,8 @@ class TestLoadIpsConfig:
         assert ips.budget.annual_carry_pct == 2.0
         assert ips.convexity.target_min_pct == 15.0
         assert ips.convexity.target_max_pct == 25.0
+        assert ips.convexity.crash_vol_shock == 0.15
+        assert ips.convexity.crash_floor_reported is True
         assert ips.drawdown.max_tolerance_pct == 20.0
         assert ips.triggers.delta_drift_warn_pct == 5.0
         assert len(ips.monetization.schedule) == 3
@@ -140,6 +142,51 @@ class TestLoadIpsConfig:
         path = _write_yaml(tmp_path, config)
 
         with pytest.raises(IpsConfigError, match="crash_scenario_pct"):
+            load_ips_config(path)
+
+    def test_crash_knobs_default_when_omitted(self, tmp_path: Path) -> None:
+        """Omitted crash_vol_shock / crash_floor_reported fall back."""
+        # _VALID_CONFIG's convexity section carries no crash knobs.
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+
+        ips = load_ips_config(path)
+
+        assert ips.convexity.crash_vol_shock == 0.15
+        assert ips.convexity.crash_floor_reported is True
+
+    def test_crash_knobs_round_trip_when_set(self, tmp_path: Path) -> None:
+        """Explicit crash_vol_shock / crash_floor_reported are honoured."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "crash_vol_shock": 0.20,
+                "crash_floor_reported": False,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        ips = load_ips_config(path)
+
+        assert ips.convexity.crash_vol_shock == 0.20
+        assert ips.convexity.crash_floor_reported is False
+
+    def test_negative_crash_vol_shock_raises(self, tmp_path: Path) -> None:
+        """A negative crash_vol_shock raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "crash_vol_shock": -0.05,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="crash_vol_shock"):
             load_ips_config(path)
 
     def test_negative_budget_raises(self, tmp_path: Path) -> None:

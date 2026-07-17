@@ -25,7 +25,8 @@ metrics:
     max_val: 2.0              # Green zone begins (earning carry)
     invert_colors: false      # Normal coloring: negative=red, positive=green
 
-  # 2. Crash Convexity - Hedge P&L at -20% spot as % of underlying
+  # 2. Crash Convexity - Hedge P&L at the IPS crash scenario as % of underlying
+  #    (the crash move is policy: convexity.crash_scenario_pct in ips.yaml)
   crash_convexity:
     start: -30.0
     end: 30.0
