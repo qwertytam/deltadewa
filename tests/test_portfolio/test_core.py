@@ -459,6 +459,31 @@ class TestOptionPortfolioBase:
         assert price_after > price_before
         assert price_after == pytest.approx(expected_price)
 
+    def test_set_volatility_skips_custom_volatility_leg(self) -> None:
+        """Regression (M4): a custom-vol leg must be left untouched.
+
+        ``set_volatility`` only repositions legs whose vol tracks the
+        portfolio; a leg with an explicit ``custom_volatility`` must keep both
+        its vol quote and its price when the portfolio vol moves.
+        """
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+            volatility=0.3,
+        )
+        custom_leg = portfolio.positions[0]
+        assert custom_leg.custom_volatility is True
+        price_before = custom_leg.option.price()
+
+        portfolio.set_volatility(0.5)
+
+        assert custom_leg.option.volatility == 0.3
+        assert custom_leg.option.price() == pytest.approx(price_before)
+
     def test_update_market_conditions_rate_change_preserves_identity(
         self,
     ) -> None:

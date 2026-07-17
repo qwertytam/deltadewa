@@ -353,6 +353,9 @@ class TestJsonRoundtrip:
             option_type=OptionType.PUT,
             exercise_style=ExerciseStyle.EUROPEAN,
         )
+        # Capture the European mark; an American re-mark would move the price
+        # by the early-exercise premium, so this pins the style end-to-end.
+        original_price = portfolio.positions[0].option.price()
 
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -362,6 +365,7 @@ class TestJsonRoundtrip:
         pos = imported.positions[0]
         assert pos.exercise_style == ExerciseStyle.EUROPEAN
         assert pos.option.exercise_style == ExerciseStyle.EUROPEAN
+        assert pos.option.price() == pytest.approx(original_price)
 
     def test_json_import_defaults_missing_exercise_style_from_arg(
         self,
@@ -648,6 +652,9 @@ class TestYamlRoundtrip:
             option_type=OptionType.PUT,
             exercise_style=ExerciseStyle.EUROPEAN,
         )
+        # Capture the European mark; an American re-mark would move the price
+        # by the early-exercise premium, so this pins the style end-to-end.
+        original_price = portfolio.positions[0].option.price()
 
         serializer = PortfolioSerializer(tmp_path)
         changelog = PortfolioLogger()
@@ -659,6 +666,7 @@ class TestYamlRoundtrip:
         pos = imported.positions[0]
         assert pos.exercise_style == ExerciseStyle.EUROPEAN
         assert pos.option.exercise_style == ExerciseStyle.EUROPEAN
+        assert pos.option.price() == pytest.approx(original_price)
 
     def test_yaml_roundtrip_with_maturity_days(self, tmp_path) -> None:
         """Test YAML import with maturity_days instead of maturity_date."""
