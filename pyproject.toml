@@ -85,6 +85,8 @@ select = [
 ]
 ignore = [
 	"COM812", # conflicts with ruff formatter (formatter manages trailing commas)
+	"D203",   # incompatible with D211; codebase uses D211 (no blank line before class docstring)
+	"D213",   # incompatible with D212; codebase uses D212 (summary on first line)
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -98,7 +100,7 @@ ignore = [
 
 [dependency-groups]
 dev = [
-	"ruff (>=0.5.3)",
+	"ruff (>=0.14.9)",
 	"pre-commit (>=4.0,<5.0)",
 	"debugpy (>=1.8.19,<2.0.0)",
 	"mypy>=1.10",
@@ -146,10 +148,6 @@ disable = [
 	"too-many-positional-arguments",
 	# C0302 large but cohesive widget/dashboard modules are acceptable
 	"too-many-lines",
-	"incorrect-blank-line-before-class",
-	# (D203) and no-blank-line-before-class (D211) are incompatible
-	"multi-line-summary-second-line,",
-	# (D212) and multi-line-summary-second-line (D213) are incompatible
 ]
 
 [tool.pylint.design]
