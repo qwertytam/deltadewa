@@ -104,7 +104,7 @@ monetization planner are also done, tested, and wired** — each is its own
 `docs/hedging handbook.md` for the cited sections.
 
 Current work is the **correctness + Dash migration**, tracked in
-`.migrations/implementation-plan.md` — **treat that plan as the source of truth for
+`docs/implementation-plan.md` — **treat that plan as the source of truth for
 what to build next.** It fixes the pricing/metric (engine) layer first, then
 rebuilds both notebooks as a Dash app.
 
