@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING, Any
 
 from deltadewa import constants as const
+from deltadewa.analysis.crash_repricing import crash_convexity_pct
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
@@ -40,39 +41,40 @@ class HealthMixin:
     def calculate_crash_convexity_pct(
         self,
         crash_scenario_pct: float,
+        crash_vol_shock: float = 0.0,
     ) -> float:
-        """Calculate crash convexity.
+        """Calculate crash convexity, hedge-only and repriced (§1-3).
 
-        Calculates Hedge P&L at the crash spot as % of underlying.
+        Repriced, hedge-only value change of the option legs at the crash
+        state, as a percentage of the protected book. The underlying / equity
+        position is excluded from both terms, the legs are repriced at the
+        crash spot and shocked vol (full option value, not intrinsic, not
+        value at expiry), and the valuation date does not advance. See
+        ``docs/repricing-methodology.md``.
 
-        A positive value means the hedge is providing protection in a crash.
-        A negative value means the portfolio loses money in a crash.
+        A positive value means the hedge gains value in a crash.
 
         Args:
             crash_scenario_pct: Signed crash move as a percent of current spot
                 (e.g. ``-25.0`` for a 25% decline). Single-sourced from
                 ``IpsConvexity.crash_scenario_pct``; there is no hardcoded
                 default.
+            crash_vol_shock: Flat additive vol bump as a decimal (e.g.
+                ``0.15``) applied to every leg's own today-vol, single-sourced
+                from ``IpsConvexity.crash_vol_shock``. Defaults to ``0.0`` (a
+                spot-only crash) when no IPS shock is supplied.
 
         Returns:
-            Hedge P&L at crash spot as percentage of underlying value.
+            Hedge-only crash convexity as a percentage of the protected book
+            (``abs(underlying_quantity * spot)``). ``0.0`` when the book is
+            empty, since the ratio is then undefined.
 
         """
-        stats = self.portfolio.summary_stats()
-        underlying_value = abs(stats["total_underlying_value"])
-        current_spot = self.portfolio.spot_price
-
-        if underlying_value == 0:
-            return 0.0
-
-        # Calculate P&L at crash spot (include underlying to see net effect)
-        crash_spot = current_spot * (1 + crash_scenario_pct / 100)
-        hedge_pnl = self.portfolio.calculate_pnl_at_expiry(
-            crash_spot,
-            include_underlying=True,
+        return crash_convexity_pct(
+            self.portfolio,
+            crash_move=crash_scenario_pct / 100.0,
+            vol_shock=crash_vol_shock,
         )
-
-        return float((hedge_pnl / underlying_value) * 100)
 
     def calculate_vega_sufficiency_pct(
         self,
@@ -279,6 +281,7 @@ class HealthMixin:
         convexity_cliff_days: int = 180,
         *,
         crash_scenario_pct: float | None = None,
+        crash_vol_shock: float = 0.0,
     ) -> dict[str, Any]:
         """Calculate all health metrics in one call.
 
@@ -293,6 +296,9 @@ class HealthMixin:
                 ``None`` (no IPS supplied), the crash-derived gauges
                 (crash convexity, hedge success) read ``0.0`` rather than
                 fall back to a hardcoded scenario.
+            crash_vol_shock: Flat additive crash vol bump as a decimal,
+                single-sourced from ``IpsConvexity.crash_vol_shock`` and used
+                to reprice the crash-convexity gauge. Defaults to ``0.0``.
 
         Returns:
             Dictionary containing all calculated health metrics:
@@ -306,11 +312,12 @@ class HealthMixin:
 
         """
         if crash_scenario_pct is None:
-            crash_convexity_pct = 0.0
+            crash_convexity_value = 0.0
             hedge_success_pct = 0.0
         else:
-            crash_convexity_pct = self.calculate_crash_convexity_pct(
+            crash_convexity_value = self.calculate_crash_convexity_pct(
                 crash_scenario_pct,
+                crash_vol_shock,
             )
             hedge_success_pct = self.calculate_hedge_success_pct(
                 cumulative_carry_paid,
@@ -319,7 +326,7 @@ class HealthMixin:
 
         return {
             "net_carry_pct": self.calculate_net_carry_pct(),
-            "crash_convexity_pct": crash_convexity_pct,
+            "crash_convexity_pct": crash_convexity_value,
             "vega_sufficiency_pct": self.calculate_vega_sufficiency_pct(),
             "delta_drift_pct": self.calculate_delta_drift_pct(),
             "convexity_cliff_days": self.calculate_convexity_cliff_days(

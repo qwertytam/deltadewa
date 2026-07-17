@@ -103,6 +103,7 @@ class HedgeHealthDashboard:
         config: dict[str, Any] | None = None,
         *,
         crash_scenario_pct: float | None = None,
+        crash_vol_shock: float = 0.0,
     ) -> None:
         """Initialize the Hedge Health Dashboard.
 
@@ -124,11 +125,16 @@ class HedgeHealthDashboard:
                 (no IPS), the crash-convexity and hedge-success gauges read
                 ``0.0`` — the crash scenario is policy and is never hardcoded
                 here.
+            crash_vol_shock: Flat additive crash vol bump as a decimal,
+                single-sourced from ``IpsConvexity.crash_vol_shock`` (pass
+                ``ctx.ips_config.convexity.crash_vol_shock``). Used to reprice
+                the crash-convexity gauge. Defaults to ``0.0`` (spot-only).
 
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
         self._crash_scenario_pct = crash_scenario_pct
+        self._crash_vol_shock = crash_vol_shock
 
         # Initialize default configuration
         self.config = self._get_default_config()
@@ -264,6 +270,7 @@ class HedgeHealthDashboard:
             historical_vol_high=params["historical_vol_high"],
             convexity_cliff_days=params["convexity_cliff_days"],
             crash_scenario_pct=self._crash_scenario_pct,
+            crash_vol_shock=self._crash_vol_shock,
         )
 
     # ==========================================================================
