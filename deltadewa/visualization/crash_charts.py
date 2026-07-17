@@ -21,12 +21,13 @@ def plot_crash_convexity(
     *,
     ax: Axes | None = None,
 ) -> Figure:
-    """Single-panel gross hedge payoff chart.
+    """Single-panel repriced hedge payoff chart.
 
-    Plots raw gross payoff ($) vs shock (%) from ``result.curve``.
-    Horizontal reference line at ``premium_paid`` makes cost vs. payoff
-    directly visible.  A vertical line marks the IPS crash shock and a
-    text annotation shows the payoff ratio (e.g. "8.5x").
+    Plots the repriced hedge value ($) vs shock (%) from ``result.curve``
+    (the long puts repriced at each crash spot, hedge-only).  Horizontal
+    reference line at ``premium_paid`` makes cost vs. payoff directly
+    visible.  A vertical line marks the IPS crash shock and a text
+    annotation shows the payoff ratio (e.g. "8.5x").
 
     Does not recompute anything from the portfolio — consumes the
     pre-computed ``CrashConvexityResult`` value object only.
@@ -49,7 +50,7 @@ def plot_crash_convexity(
         fig = cast(Figure, maybe_fig)
 
     if not result.curve:
-        ax.set_title("Gross Hedge Payoff vs Shock")
+        ax.set_title("Repriced Hedge Payoff vs Shock")
         ax.text(
             0.5,
             0.5,
@@ -119,8 +120,8 @@ def plot_crash_convexity(
     )
 
     ax.set_xlabel("Shock (%)")
-    ax.set_ylabel("Gross Payoff ($)")
-    ax.set_title("Gross Hedge Payoff vs Shock")
+    ax.set_ylabel("Repriced Hedge Value ($)")
+    ax.set_title("Repriced Hedge Payoff vs Shock")
     ax.xaxis.set_major_formatter(
         FuncFormatter(lambda v, _: f"{v:+.0f}%"),
     )
@@ -151,9 +152,10 @@ def plot_carry_vs_convexity(
             ``calculate_carry_metrics()["total_theta_annual"]``).
             Negative for net-long-premium books.  ``None`` renders a
             labelled empty figure.
-        convexity_pct: Net crash P&L as % of book notional at the IPS
-            scenario (``CrashScenarioRow.convexity_pct``).  ``None``
-            renders a labelled empty figure.
+        convexity_pct: Hedge-only repriced crash convexity as % of the
+            protected book at the IPS scenario
+            (``CrashScenarioRow.convexity_pct``).  ``None`` renders a
+            labelled empty figure.
         ips_convexity: Optional IPS convexity target; shades the
             ``[target_min_pct, target_max_pct]`` band when supplied.
         ax: Existing Axes to draw on.  Creates a new Figure when

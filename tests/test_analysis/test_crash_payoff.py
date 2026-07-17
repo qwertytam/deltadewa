@@ -7,6 +7,7 @@ import pytest
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_payoff import (
     PremiumBasis,
+    _long_puts,
     _net_protective_premium,
     _premium_with_basis,
     _shock_to_multiplier,
@@ -14,6 +15,7 @@ from deltadewa.analysis.crash_payoff import (
     crash_payoff_ratio,
     crash_scenario_table,
 )
+from deltadewa.analysis.crash_repricing import crash_hedge_value
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.portfolio.core import OptionPortfolio
@@ -142,7 +144,7 @@ class TestComputeCrashConvexity:
         assert -25.0 in shocks_in_rows
 
     def test_payoff_ratio_matches_manual(self) -> None:
-        """payoff_ratio equals gross_at_ips / premium_paid."""
+        """payoff_ratio equals repriced_hedge_at_ips / premium_paid."""
         portfolio = _make_long_put_portfolio()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
@@ -151,15 +153,14 @@ class TestComputeCrashConvexity:
         )
         result = compute_crash_convexity(portfolio, ips_convexity=ips)
         assert result.payoff_ratio is not None
-        pos = portfolio.positions[0]
-        crash_spot = portfolio.spot_price * 0.75
-        expected_gross = (
-            max(0.0, pos.option.strike_price - crash_spot)
-            * pos.quantity
-            * pos.contract_size
+        expected_repriced = crash_hedge_value(
+            portfolio,
+            crash_move=-0.25,
+            vol_shock=ips.crash_vol_shock,
+            positions=_long_puts(portfolio),
         )
         assert result.payoff_ratio == pytest.approx(
-            expected_gross / result.premium_paid,
+            expected_repriced / result.premium_paid,
         )
 
     def test_payoff_ratio_none_without_ips(self) -> None:
@@ -204,24 +205,28 @@ class TestComputeCrashConvexity:
         assert result.premium_basis == PremiumBasis.MARK
 
     def test_single_pricing_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Each unique shock in the combined set is priced exactly once."""
+        """Each unique shock in the combined set is repriced exactly once."""
         import deltadewa.analysis.crash_payoff as _cp
 
         calls: list[float] = []
-        original = _cp._gross_long_put_payoff
+        original = _cp.crash_hedge_value
 
-        def counting_gross_payoff(
+        def counting_hedge_value(
             portfolio: OptionPortfolio,
-            shock_pct: float,
+            *,
+            crash_move: float,
+            vol_shock: float,
+            positions: object = None,
         ) -> float:
-            calls.append(shock_pct)
-            return original(portfolio, shock_pct)
+            calls.append(round(crash_move * 100.0, 6))
+            return original(
+                portfolio,
+                crash_move=crash_move,
+                vol_shock=vol_shock,
+                positions=positions,
+            )
 
-        monkeypatch.setattr(
-            _cp,
-            "_gross_long_put_payoff",
-            counting_gross_payoff,
-        )
+        monkeypatch.setattr(_cp, "crash_hedge_value", counting_hedge_value)
 
         portfolio = _make_long_put_portfolio()
         # n_points=11; linspace(-40,10,11) = -40,-35,...,10 (step 5).
@@ -287,25 +292,25 @@ class TestCrashPayoffRatio:
     """Tests for crash_payoff_ratio."""
 
     def test_known_ratio_against_portfolio_oracle(self) -> None:
-        """Ratio matches the gross intrinsic formula applied directly.
+        """Ratio matches the repriced long-put value / premium directly.
 
-        Uses the gross long-put intrinsic formula as the oracle, which
-        is independent of ``calculate_pnl_at_expiry`` (that function
-        subtracts current mark and includes all legs, not just long puts).
+        Uses the shared crash-repricing helper as the oracle — the repriced
+        hedge value of the long puts (hedge-only, no vol shock by default),
+        over the mark-fallback premium.
         """
         portfolio = _make_long_put_portfolio()
         pos = portfolio.positions[0]
         expected_premium = pos.position_value()  # mark fallback
-        crash_spot = portfolio.spot_price * 0.75
-        expected_pnl = (
-            max(0.0, pos.option.strike_price - crash_spot)
-            * pos.quantity
-            * pos.contract_size
+        expected_repriced = crash_hedge_value(
+            portfolio,
+            crash_move=-0.25,
+            vol_shock=0.0,
+            positions=_long_puts(portfolio),
         )
 
         ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0)
 
-        assert ratio == pytest.approx(expected_pnl / expected_premium)
+        assert ratio == pytest.approx(expected_repriced / expected_premium)
 
     def test_underlying_quantity_does_not_affect_payoff(self) -> None:
         """hedge_pnl/payoff_ratio ignore the protected book's P&L."""
@@ -332,17 +337,16 @@ class TestCrashPayoffRatio:
     def test_explicit_premium_overrides_computed_premium(self) -> None:
         """An explicit premium= bypasses _premium_with_basis."""
         portfolio = _make_long_put_portfolio()
-        pos = portfolio.positions[0]
-        crash_spot = portfolio.spot_price * 0.75
-        expected_pnl = (
-            max(0.0, pos.option.strike_price - crash_spot)
-            * pos.quantity
-            * pos.contract_size
+        expected_repriced = crash_hedge_value(
+            portfolio,
+            crash_move=-0.25,
+            vol_shock=0.0,
+            positions=_long_puts(portfolio),
         )
 
         ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0, premium=500.0)
 
-        assert ratio == pytest.approx(expected_pnl / 500.0)
+        assert ratio == pytest.approx(expected_repriced / 500.0)
 
     def test_zero_premium_is_safe(self) -> None:
         """No long puts -> zero premium -> ratio is 0.0, no division error."""
@@ -439,12 +443,17 @@ class TestCrashScenarioTable:
             strike_price=95.0,
             quantity=20,
         )
+        # The reference convexity must use the same crash vol shock the table
+        # will (single-sourced from the IPS), so the -25% row matches exactly.
+        vol_shock = 0.0
         analyzer = PortfolioAnalyzer(portfolio)
         convexity_25 = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
+            crash_vol_shock=vol_shock,
         )
         convexity_10 = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=-10.0,
+            crash_vol_shock=vol_shock,
         )
         assert convexity_10 != pytest.approx(convexity_25)
 
@@ -455,6 +464,7 @@ class TestCrashScenarioTable:
             crash_scenario_pct=-25.0,
             target_min_pct=convexity_25,
             target_max_pct=convexity_25,
+            crash_vol_shock=vol_shock,
         )
 
         rows = crash_scenario_table(

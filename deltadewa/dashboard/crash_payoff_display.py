@@ -18,7 +18,10 @@ from deltadewa.formatters.dataframes import apply_table_preset
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from deltadewa.analysis.crash_payoff import CrashConvexityResult
+    from deltadewa.analysis.crash_payoff import (
+        CrashConvexityResult,
+        CrashScenarioRow,
+    )
     from deltadewa.ips_config import IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -107,19 +110,27 @@ def render_crash_table(result: CrashConvexityResult) -> None:
         if result.ips_convexity is not None
         else None
     )
-    rows = result.scenario_rows
-    df = pd.DataFrame(
-        [
-            {
-                "Shock": f"{row.shock_pct:+.0f}%",
-                "Hedge P&L": row.hedge_pnl,
-                "Payoff Ratio": row.payoff_ratio,
-                "Convexity": row.convexity_pct,
-                "Meets Target": "✓ Pass" if row.meets_target else "✗ Fail",
-            }
-            for row in rows
-        ],
+    # Intrinsic floor is a labelled conservative lower bound, surfaced only
+    # when the IPS opts in (crash_floor_reported); never the headline.
+    floor_on = (
+        result.ips_convexity is not None
+        and result.ips_convexity.crash_floor_reported
     )
+    rows = result.scenario_rows
+
+    def _row_record(row: CrashScenarioRow) -> dict[str, object]:
+        record: dict[str, object] = {
+            "Shock": f"{row.shock_pct:+.0f}%",
+            "Hedge P&L": row.hedge_pnl,
+            "Payoff Ratio": row.payoff_ratio,
+            "Convexity": row.convexity_pct,
+            "Meets Target": "✓ Pass" if row.meets_target else "✗ Fail",
+        }
+        if floor_on:
+            record["Intrinsic Floor"] = row.intrinsic_floor
+        return record
+
+    df = pd.DataFrame([_row_record(row) for row in rows])
 
     styled = df.style.format(
         {
@@ -128,6 +139,8 @@ def render_crash_table(result: CrashConvexityResult) -> None:
             "Convexity": "{:+.1f}%",
         },
     )
+    if floor_on:
+        styled = styled.format({"Intrinsic Floor": "${:,.0f}"})
     styled = styled.apply(
         lambda col: col.map(_pass_fail_color),
         subset=["Meets Target"],

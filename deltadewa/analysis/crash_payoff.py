@@ -7,10 +7,12 @@ a % of the protected book's notional rather than as a multiple of premium
 paid.
 
 A payoff ratio of 8.5x means the hedge returns 8.5x its cost in the defined
-crash; net-profit ratio = payoff_ratio - 1.  Gross payoff is computed from
-the intrinsic value of long put legs at the shocked spot under flat vol — a
-conservative, time-value-excluding estimate.  Full crash-mark repricing with
-a vol shock is a later refinement.
+crash; net-profit ratio = payoff_ratio - 1.  The headline payoff is the long
+put legs **repriced** at the crash state (crash spot + flat additive vol shock,
+full option value including time value) via ``analysis.crash_repricing`` — the
+same hedge-only basis the health convexity gauge uses.  The intrinsic value at
+the crash spot is retained as a separate, clearly-labelled conservative floor
+(``CrashScenarioRow.intrinsic_floor``), never the headline.
 """
 
 from __future__ import annotations
@@ -23,12 +25,17 @@ import numpy as np
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.crash_repricing import (
+    crash_hedge_value,
+    crash_intrinsic_floor,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from deltadewa.ips_config import IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.position import OptionPosition
 
 
 _DEFAULT_SCENARIO_SHOCKS: tuple[float, ...] = (-10.0, -20.0, -30.0, -40.0)
@@ -52,15 +59,17 @@ class CrashConvexityResult:
 
     Attributes:
         curve: Fine-grid payoff curve, ``n_points`` evenly-spaced
-            ``(shock_pct, gross_payoff)`` pairs sorted ascending by
-            shock_pct (severe to mild).  Used for the smooth left-panel
-            line in the chart.
+            ``(shock_pct, repriced_hedge_value)`` pairs sorted ascending by
+            shock_pct (severe to mild).  Values are the long puts repriced at
+            each crash spot (hedge-only, full option value).  Used for the
+            smooth left-panel line in the chart.
         scenario_rows: Discrete payoff ladder at standard shocks plus the
             IPS crash point, sorted mild to severe.  Used for the table
             widget and the right-panel bar chart.
-        payoff_ratio: Gross payoff at ``ips_convexity.crash_scenario_pct``
-            divided by ``premium_paid``.  ``None`` when no *ips_convexity*
-            was supplied or when premium is zero.
+        payoff_ratio: Repriced hedge value at
+            ``ips_convexity.crash_scenario_pct`` divided by ``premium_paid``.
+            ``None`` when no *ips_convexity* was supplied or when premium is
+            zero.
         premium_paid: Total put premium used as the denominator (dollars).
         premium_basis: Whether *premium_paid* came from ``entry_premium``
             fields or the current mark.
@@ -82,13 +91,16 @@ class CrashScenarioRow:
 
     Attributes:
         shock_pct: Signed shock percent for this row (e.g. -25.0).
-        hedge_pnl: Gross intrinsic payoff of long put legs at the shocked
-            spot (no cost basis subtracted).
+        hedge_pnl: Long put legs **repriced** at the shocked spot and crash
+            vol (hedge-only, full option value; no cost basis subtracted).
         payoff_ratio: hedge_pnl as a multiple of premium paid.
-        convexity_pct: Net-of-underlying crash P&L as % of book notional
-            (``HealthMixin.calculate_crash_convexity_pct``).
+        convexity_pct: Hedge-only repriced crash convexity as % of the
+            protected book (``HealthMixin.calculate_crash_convexity_pct``).
         meets_target: Whether convexity_pct falls within the IPS
             convexity target band, if one was supplied.
+        intrinsic_floor: Intrinsic value of the long put legs at the shocked
+            spot — a conservative lower bound on ``hedge_pnl``, surfaced as a
+            separate labelled floor (never the headline).
 
     """
 
@@ -97,6 +109,7 @@ class CrashScenarioRow:
     payoff_ratio: float
     convexity_pct: float
     meets_target: bool
+    intrinsic_floor: float
 
 
 def _shock_to_multiplier(shock_pct: float) -> float:
@@ -104,37 +117,21 @@ def _shock_to_multiplier(shock_pct: float) -> float:
     return 1 + shock_pct / 100
 
 
-def _gross_long_put_payoff(
-    portfolio: OptionPortfolio,
-    shock_pct: float,
-) -> float:
-    """Gross intrinsic payoff of long put legs at a shocked spot.
-
-    Returns ``sum(max(0, strike - crash_spot) * qty * contract_size)``
-    over positions where ``option_type == PUT`` and ``quantity > 0``.
-    No cost basis is subtracted — this is the gross (numerator) figure
-    used in the payoff ratio.
-
-    Note: uses intrinsic-at-expiry under flat vol — a conservative,
-    time-value-excluding estimate; full crash-mark repricing with a vol
-    shock is a later refinement.
+def _long_puts(portfolio: OptionPortfolio) -> list[OptionPosition]:
+    """Return the long put legs — the crash-protection positions.
 
     Args:
         portfolio: Portfolio to evaluate.
-        shock_pct: Signed shock percent (e.g. -25.0).
 
     Returns:
-        Gross intrinsic payoff in dollars.
+        Positions where ``option_type == PUT`` and ``quantity > 0``.
 
     """
-    crash_spot = portfolio.spot_price * _shock_to_multiplier(shock_pct)
-    return sum(
-        max(0.0, pos.option.strike_price - crash_spot)
-        * pos.quantity
-        * pos.contract_size
+    return [
+        pos
         for pos in portfolio.positions
         if pos.option.option_type == const.OptionType.PUT and pos.quantity > 0
-    )
+    ]
 
 
 def _premium_with_basis(
@@ -195,8 +192,12 @@ def crash_payoff_ratio(
     *,
     crash_pct: float,
     premium: float | None = None,
+    vol_shock: float = 0.0,
 ) -> float:
-    """Gross hedge payoff at a crash shock, as a multiple of premium paid.
+    """Repriced hedge payoff at a crash shock, as a multiple of premium paid.
+
+    The numerator is the long put legs repriced at the crash spot and shocked
+    vol (hedge-only, full option value including time value) — not intrinsic.
 
     Args:
         portfolio: Portfolio to evaluate.
@@ -205,9 +206,11 @@ def crash_payoff_ratio(
         premium: Premium paid for the hedge in dollars.  Defaults to
             ``_premium_with_basis(portfolio)`` (entry cost when available,
             current mark otherwise) when not supplied.
+        vol_shock: Flat additive crash vol bump as a decimal (default 0.0),
+            single-sourced from ``IpsConvexity.crash_vol_shock``.
 
     Returns:
-        gross_payoff / premium, or 0.0 if premium is zero or negative —
+        repriced_payoff / premium, or 0.0 if premium is zero or negative —
         there's no meaningful ratio to a non-positive premium.
 
     """
@@ -215,7 +218,50 @@ def crash_payoff_ratio(
         premium, _ = _premium_with_basis(portfolio)
     if premium <= 0:
         return 0.0
-    return _gross_long_put_payoff(portfolio, crash_pct) / premium
+    repriced = crash_hedge_value(
+        portfolio,
+        crash_move=crash_pct / 100.0,
+        vol_shock=vol_shock,
+        positions=_long_puts(portfolio),
+    )
+    return repriced / premium
+
+
+def _reprice_shock_grid(
+    portfolio: OptionPortfolio,
+    positions: list[OptionPosition],
+    shocks: set[float],
+    vol_shock: float,
+) -> tuple[dict[float, float], dict[float, float]]:
+    """Reprice each shock exactly once: ``(repriced, intrinsic_floor)`` maps.
+
+    Args:
+        portfolio: Portfolio to evaluate.
+        positions: Legs to price (typically the long puts).
+        shocks: Unique signed shock percents to price.
+        vol_shock: Flat additive crash vol bump as a decimal.
+
+    Returns:
+        Two dicts keyed by shock percent: the repriced hedge value and the
+        intrinsic floor at each shock.
+
+    """
+    repriced: dict[float, float] = {}
+    floor: dict[float, float] = {}
+    for shock in shocks:
+        move = shock / 100.0
+        repriced[shock] = crash_hedge_value(
+            portfolio,
+            crash_move=move,
+            vol_shock=vol_shock,
+            positions=positions,
+        )
+        floor[shock] = crash_intrinsic_floor(
+            portfolio,
+            crash_move=move,
+            positions=positions,
+        )
+    return repriced, floor
 
 
 def compute_crash_convexity(
@@ -226,16 +272,16 @@ def compute_crash_convexity(
     ips_convexity: IpsConvexity | None = None,
     scenario_shocks: Sequence[float] | None = None,
 ) -> CrashConvexityResult:
-    """Build a gross-payoff curve once and sample scenario rows from it.
+    """Build a repriced-payoff curve once and sample scenario rows from it.
 
-    Prices each grid point exactly once via ``_gross_long_put_payoff``,
-    then:
+    Reprices the long puts at each grid point exactly once (hedge-only, full
+    option value at the crash spot + IPS vol shock), then:
 
     - exposes the full fine grid as ``result.curve`` for smooth chart
       rendering;
     - samples ``result.scenario_rows`` at the standard shock points
       (by default ``_DEFAULT_SCENARIO_SHOCKS``) plus the IPS crash
-      scenario, without re-calling the payoff helper.
+      scenario, without re-pricing.
 
     Args:
         portfolio: Portfolio to evaluate.
@@ -254,6 +300,12 @@ def compute_crash_convexity(
 
     """
     premium_paid, premium_basis = _premium_with_basis(portfolio)
+    long_puts = _long_puts(portfolio)
+
+    # Crash vol shock is policy: single-sourced from the IPS (0.0 = spot-only).
+    vol_shock = (
+        ips_convexity.crash_vol_shock if ips_convexity is not None else 0.0
+    )
 
     # Fine grid (rounded to avoid float-key mismatches).
     lo, hi = shock_range
@@ -276,25 +328,30 @@ def compute_crash_convexity(
         s_shocks.add(ips_shock)
         fine_grid.add(ips_shock)
 
-    # Single pass: price every unique shock point once.
+    # Single pass: reprice every unique shock point once (headline) and take
+    # its intrinsic floor (conservative lower bound, never the headline).
     all_shocks = fine_grid | s_shocks
-    payoff_dict: dict[float, float] = {
-        s: _gross_long_put_payoff(portfolio, s) for s in all_shocks
-    }
+    repriced, floor = _reprice_shock_grid(
+        portfolio,
+        long_puts,
+        all_shocks,
+        vol_shock,
+    )
 
     # Curve — fine grid only, sorted ascending (severe left to mild right).
     curve: list[tuple[float, float]] = [
-        (s, payoff_dict[s]) for s in sorted(fine_grid)
+        (s, repriced[s]) for s in sorted(fine_grid)
     ]
 
-    # Scenario rows — sampled from payoff_dict, sorted mild to severe.
+    # Scenario rows — sampled from the repriced pass, sorted mild to severe.
     analyzer = PortfolioAnalyzer(portfolio)
     scenario_rows: list[CrashScenarioRow] = []
     for shock_pct in sorted(s_shocks, reverse=True):
-        hedge_pnl = payoff_dict[shock_pct]
+        hedge_pnl = repriced[shock_pct]
         ratio = hedge_pnl / premium_paid if premium_paid > 0 else 0.0
         convexity_pct = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=shock_pct,
+            crash_vol_shock=vol_shock,
         )
         meets_target = (
             ips_convexity.target_min_pct
@@ -310,13 +367,14 @@ def compute_crash_convexity(
                 payoff_ratio=ratio,
                 convexity_pct=convexity_pct,
                 meets_target=meets_target,
+                intrinsic_floor=floor[shock_pct],
             ),
         )
 
     # Headline payoff ratio at the IPS crash shock.
     payoff_ratio: float | None = None
     if ips_shock is not None and premium_paid > 0:
-        payoff_ratio = payoff_dict[ips_shock] / premium_paid
+        payoff_ratio = repriced[ips_shock] / premium_paid
 
     return CrashConvexityResult(
         curve=curve,
