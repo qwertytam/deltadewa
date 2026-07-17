@@ -159,7 +159,9 @@ class OptionPortfolioBase:
         self.volatility = volatility
         for pos in self.positions:
             if not pos.custom_volatility:
-                pos.option.volatility = volatility
+                # Route through update_volatility() so the QuantLib quote and
+                # the greek cache are updated, not just the Python attribute.
+                pos.option.update_volatility(volatility)
 
     def get_symbol(self) -> str:
         """Get the symbol of the portfolio."""
@@ -491,6 +493,11 @@ class OptionPortfolioBase:
                         # Preserve custom volatility flag
                         custom_volatility=pos.custom_volatility,
                         exercise_style=pos.exercise_style,
+                        # Preserve cost basis and identity across the rebuild
+                        entry_spot=pos.entry_spot,
+                        entry_date=pos.entry_date,
+                        entry_premium=pos.entry_premium,
+                        position_id=pos.position_id,
                     ),
                 )
             self.positions = new_positions
