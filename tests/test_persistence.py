@@ -11,7 +11,7 @@ import pytest
 import yaml
 
 from deltadewa import OptionPortfolio
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.persistence import (
     YAML_AVAILABLE,
     PortfolioSerializer,
@@ -339,6 +339,74 @@ class TestJsonRoundtrip:
         assert imported_portfolio.positions[0].entry_spot is None
         assert imported_portfolio.positions[0].entry_date is None
 
+    def test_json_roundtrip_preserves_exercise_style(self, tmp_path) -> None:
+        """Regression (C2): a European book must reload European via JSON.
+
+        The old export never wrote exercise_style and the import never read
+        it, so a European (SPX) leg silently re-marked to American on reload.
+        """
+        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=365),
+            quantity=1,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
+        output_path = serializer.export_to_json(portfolio, changelog, "eu.json")
+        imported = serializer.import_from_json(output_path)["portfolio"]
+
+        pos = imported.positions[0]
+        assert pos.exercise_style == ExerciseStyle.EUROPEAN
+        assert pos.option.exercise_style == ExerciseStyle.EUROPEAN
+
+    def test_json_import_defaults_missing_exercise_style_from_arg(
+        self,
+        tmp_path,
+    ) -> None:
+        """Regression (C2): legacy legs honor the import default exercise style.
+
+        A file lacking per-position exercise_style must adopt the caller's
+        default (the program's IPS style) instead of the hardcoded American.
+        """
+        legacy_data = {
+            "market_parameters": {
+                "spot_price": 100.0,
+                "volatility": 0.2,
+                "risk_free_rate": 0.05,
+                "dividend_yield": 0.0,
+                "underlying_quantity": 0.0,
+                "symbol": "SPX",
+                "contract_size": 100,
+            },
+            "positions": [
+                {
+                    "option_type": "PUT",
+                    "strike_price": 90.0,
+                    "maturity_date": "2030-01-01T00:00:00+00:00",
+                    "quantity": 1,
+                    "contract_size": 100,
+                    "volatility": 0.2,
+                    "custom_volatility": False,
+                },
+            ],
+            "risk_metrics": {},
+        }
+        legacy_path = tmp_path / "legacy_spx.json"
+        legacy_path.write_text(json.dumps(legacy_data))
+
+        serializer = PortfolioSerializer(tmp_path)
+        result = serializer.import_from_json(
+            legacy_path,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        pos = result["portfolio"].positions[0]
+        assert pos.exercise_style == ExerciseStyle.EUROPEAN
+        assert pos.option.exercise_style == ExerciseStyle.EUROPEAN
+
     def test_import_from_json_without_portfolio_creation(
         self,
         tmp_path,
@@ -565,6 +633,32 @@ class TestYamlRoundtrip:
                 imported_pos.option.option_type == orig_pos.option.option_type
             )
             assert imported_pos.quantity == orig_pos.quantity
+
+    def test_yaml_roundtrip_preserves_exercise_style(self, tmp_path) -> None:
+        """Regression (C2): European legs must reload European via YAML.
+
+        YAML import already parsed exercise_style, but the shared export
+        builder never wrote it, so the round-trip still lost the style.
+        """
+        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=365),
+            quantity=1,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
+        output_path = serializer.export_to_yaml(portfolio, changelog, "eu.yaml")
+
+        assert output_path is not None
+        imported = serializer.import_from_yaml(output_path)["portfolio"]
+
+        pos = imported.positions[0]
+        assert pos.exercise_style == ExerciseStyle.EUROPEAN
+        assert pos.option.exercise_style == ExerciseStyle.EUROPEAN
 
     def test_yaml_roundtrip_with_maturity_days(self, tmp_path) -> None:
         """Test YAML import with maturity_days instead of maturity_date."""
