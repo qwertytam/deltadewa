@@ -22,6 +22,11 @@ class TestNetHedgeSummary:
         portfolio.volatility = 0.25
         portfolio.risk_free_rate = 0.05
         portfolio.dividend_yield = 0.02
+        # No equity leg -> the hedge-only crash-convexity ladder short-circuits
+        # to 0.0 (undefined book), so these build-smoke tests need no priceable
+        # positions. Convexity repricing itself is covered in
+        # test_crash_repricing.py against a real portfolio.
+        portfolio.underlying_quantity = 0.0
 
         # Setup mock position for volatility stats
         pos = Mock()

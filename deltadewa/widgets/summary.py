@@ -10,6 +10,7 @@ import ipywidgets as widgets
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.crash_repricing import crash_convexity_pct
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.html import format_html_badge, format_html_metric
@@ -38,16 +39,53 @@ class NetHedgeSummary:
 
     """
 
-    def __init__(self, portfolio: "OptionPortfolio") -> None:
+    # Fixed presentation gridpoints for the crash-convexity profile.
+    # Future refinement: fold these and the crash scenario-table gridpoints
+    # into a single IPS-defined crash scenario *set* (not the single
+    # crash_scenario_pct scalar) so the ladder is policy-driven, not
+    # hardcoded. Deliberately NOT single-sourced to crash_scenario_pct.
+    _CRASH_RUNG_SHOCKS: tuple[float, ...] = (-10.0, -20.0, -30.0)
+
+    def __init__(
+        self,
+        portfolio: "OptionPortfolio",
+        *,
+        crash_vol_shock: float = 0.0,
+    ) -> None:
         """Initialize net hedge summary widget.
 
         Args:
             portfolio: OptionPortfolio instance
+            crash_vol_shock: Flat additive crash vol bump as a decimal,
+                single-sourced from ``IpsConvexity.crash_vol_shock`` (pass
+                ``ctx.ips_config.convexity.crash_vol_shock``). Used to reprice
+                the hedge-only crash-convexity ladder. Defaults to ``0.0``.
 
         """
         self.portfolio = portfolio
+        self._crash_vol_shock = crash_vol_shock
         self.widget = None
         self._create_widget()
+
+    def _crash_convexity_rungs(self) -> list[tuple[float, float]]:
+        """Hedge-only repriced crash convexity at the fixed ladder gridpoints.
+
+        Returns ``(shock_pct, convexity_pct)`` pairs at -10/-20/-30% - the
+        same hedge-only repriced basis (crash spot + IPS vol shock, underlying
+        excluded) as the health convexity gauge, so a rung equals the gauge
+        exactly at an equal crash depth. See ``docs/repricing-methodology.md``.
+        """
+        return [
+            (
+                shock,
+                crash_convexity_pct(
+                    self.portfolio,
+                    crash_move=shock / 100.0,
+                    vol_shock=self._crash_vol_shock,
+                ),
+            )
+            for shock in self._CRASH_RUNG_SHOCKS
+        ]
 
     def _format_large_block(
         self,
@@ -148,32 +186,6 @@ class NetHedgeSummary:
             is_neutral=is_neutral,
         )
 
-    def _format_crash_indicator(self, shock_pct: float, pnl: float) -> str:
-        """Format crash convexity indicator.
-
-        Args:
-            shock_pct: Spot price shock percentage
-            pnl: P&L at that shock level
-
-        Returns:
-            HTML string with formatted indicator
-
-        """
-        if pnl >= 0:
-            color = DEFAULT_PALETTE.positive
-        elif pnl > -1000:
-            color = DEFAULT_PALETTE.orange
-        else:
-            color = DEFAULT_PALETTE.negative
-
-        return (
-            f'<div style="display:inline-block; background-color:{color}; '
-            f"color:white; padding:6px 10px; margin:3px; "
-            f'border-radius:3px; font-size:12px; min-width:100px;">'
-            f"<strong>{shock_pct:+.0f}%:</strong> ${pnl:,.0f}"
-            f"</div>"
-        )
-
     def _create_widget(self) -> None:
         """Create the KPI display widget."""
         self.value_metrics_html = widgets.HTML(value="")
@@ -249,30 +261,15 @@ class NetHedgeSummary:
             f'<div style="padding:10px;">{value_html}</div>'
         )
 
-        # Crash convexity
-        current_spot = self.portfolio.spot_price
-        pnl_0 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 1.00,
-            include_underlying=True,
-        )
-        pnl_10 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.90,
-            include_underlying=True,
-        )
-        pnl_20 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.80,
-            include_underlying=True,
-        )
-        pnl_30 = self.portfolio.calculate_pnl_at_expiry(
-            current_spot * 0.70,
-            include_underlying=True,
-        )
-
-        crash_html = (
-            self._format_greek("Current Price", pnl_0)
-            + self._format_greek("Price -10%", pnl_10)
-            + self._format_greek("Price -20%", pnl_20)
-            + self._format_greek("Price -30%", pnl_30)
+        # Crash convexity: hedge-only, repriced (docs/repricing-methodology).
+        # These rungs express the option legs' convexity; the net book-P&L
+        # question is answered by the separate "P&L @ -20%" indicator below.
+        crash_html = "".join(
+            self._format_pct(
+                f"Convexity @ {shock:+.0f}% (hedge-only)",
+                convexity / 100.0,
+            )
+            for shock, convexity in self._crash_convexity_rungs()
         )
         self.crash_indicators_html.value = (
             f'<div style="padding:10px;">{crash_html}</div>'
@@ -288,10 +285,17 @@ class NetHedgeSummary:
             f'<div style="padding:10px;">{health_indicators_r1_html}</div>'
         )
 
+        # Net book P&L at -20% (includes the underlying) — the legitimately
+        # equity-netted figure, kept separate from the hedge-only convexity
+        # ladder above.
+        net_pnl_20 = self.portfolio.calculate_pnl_at_expiry(
+            self.portfolio.spot_price * 0.80,
+            include_underlying=True,
+        )
         health_indicators_r2_html = (
             self._format_greek("Vega", stats["total_vega"])
             + self._format_greek("Gamma", stats["total_gamma"])
-            + self._format_greek("P&L @ -20%", pnl_20)
+            + self._format_greek("P&L @ -20%", net_pnl_20)
         )
         self.health_indicators_r2_html.value = (
             f'<div style="padding:10px;">{health_indicators_r2_html}</div>'
