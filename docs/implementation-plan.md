@@ -125,9 +125,22 @@ conformant book; the regime figure is a real percentile or honestly named.
   `include_underlying` default mismatch between scalar and vectorized P&L;
   silently-dropped unsolvable ladder rungs; IPS `annual_carry_pct` default
   `2.0` → `1.0` (align to the handbook family-office ceiling it cites).
+- **Crash vol-shock single-source** — tie `crash_vol_shock` to
+  `crash_scenario_pct` so the two cannot diverge: when a crash scenario is
+  supplied, the vol shock must be sourced from the IPS too. Remove the independent
+  `= 0.0` fallback in `health.calculate_health_metrics` and `crash_payoff`
+  (`compute_crash_convexity`) so a supplied scenario can never be repriced
+  spot-only by omission. M1.2 made the `calculate_crash_convexity_pct` primitive
+  require `crash_vol_shock`; this closes the same gap at the metric-assembly
+  callers, where the `= 0.0` degradation default still pairs with a non-`None`
+  scenario. Absent IPS must **disable** the crash gauges (the
+  `crash_scenario_pct is None` path), not silently reprice at a 0.0 shock — same
+  fail-loud-not-degrade discipline as `underlying_quantity` above.
 
 **Acceptance:** what-if valuation dates move trigger/roll logic; no threshold
-defined in two places; the shipped carry default matches its own handbook.
+defined in two places; the shipped carry default matches its own handbook; a
+supplied crash scenario can never be repriced with a spot-only (`0.0`) vol shock,
+and a missing IPS disables the crash gauges rather than repricing spot-only.
 
 ### M1.5 — Engine test backfill (Mo6, the part that must precede re-skinning)
 
