@@ -44,14 +44,15 @@ metrics:
     max_val: 20.0             # High positive vega exposure
     invert_colors: false
 
-  # 4. Delta Drift - Net hedge delta as % of equity delta
+  # 4. Delta Drift - |deviation| from the target net-delta ratio, in pp
+  #    (the target is policy: triggers.target_delta_ratio_pct in ips.yaml)
   delta_drift:
-    start: -50.0
-    end: 50.0
-    min_val: -20.0            # Under-hedged
-    mid_val: 0.0              # Perfectly hedged
-    max_val: 20.0             # Over-hedged
-    invert_colors: false
+    start: 0.0
+    end: 30.0
+    min_val: 5.0              # Green: within the warn band (at target)
+    mid_val: 7.5             # Yellow: MONITOR
+    max_val: 10.0             # Red: beyond the action band
+    invert_colors: true       # Inverted: small drift=green, large=red
 
   # 5. Time to Convexity Cliff - Days until puts enter high-gamma region
   convexity_cliff:

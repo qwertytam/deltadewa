@@ -63,6 +63,7 @@ class TestLoadIpsConfig:
         assert ips.convexity.crash_vol_shock == 0.15
         assert ips.convexity.crash_floor_reported is True
         assert ips.drawdown.max_tolerance_pct == 20.0
+        assert ips.triggers.target_delta_ratio_pct == 90.0
         assert ips.triggers.delta_drift_warn_pct == 5.0
         assert len(ips.monetization.schedule) == 3
         assert ips.monetization.schedule[0].gain_pct == 100
@@ -274,4 +275,51 @@ class TestLoadIpsConfig:
             IpsConfigError,
             match="strike_drift_review_fraction",
         ):
+            load_ips_config(path)
+
+    def test_target_delta_ratio_default_when_omitted(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Omitted target_delta_ratio_pct falls back to 90.0."""
+        # _VALID_CONFIG's triggers section carries no target_delta_ratio_pct.
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+
+        ips = load_ips_config(path)
+
+        assert ips.triggers.target_delta_ratio_pct == 90.0
+
+    def test_target_delta_ratio_round_trip_when_set(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """An explicit target_delta_ratio_pct is loaded as given."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "target_delta_ratio_pct": 80.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        ips = load_ips_config(path)
+
+        assert ips.triggers.target_delta_ratio_pct == 80.0
+
+    def test_negative_target_delta_ratio_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A negative target_delta_ratio_pct raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "target_delta_ratio_pct": -10.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="target_delta_ratio_pct"):
             load_ips_config(path)

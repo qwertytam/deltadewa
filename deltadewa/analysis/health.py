@@ -9,6 +9,38 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
 
+def delta_drift_from_target(
+    net_delta: float,
+    underlying_qty: float,
+    target_delta_ratio_pct: float,
+) -> float | None:
+    """Delta drift as signed deviation from a target net-delta ratio.
+
+    A tail-hedged book is deliberately net long, so drift is measured against a
+    stated ``target_delta_ratio_pct`` (the intended net-delta-to-equity ratio,
+    e.g. ``90.0``) rather than against full delta-neutrality. This is the single
+    definition shared by the health gauge
+    (:meth:`HealthMixin.calculate_delta_drift_pct`) and the delta trigger
+    (``hedge_triggers.evaluate_hedge_triggers``).
+
+    Args:
+        net_delta: Net portfolio delta (options + underlying).
+        underlying_qty: Equity/underlying quantity being hedged.
+        target_delta_ratio_pct: Intended net-delta-to-equity ratio, as a percent
+            (single-sourced from ``IpsTriggers.target_delta_ratio_pct``).
+
+    Returns:
+        Signed deviation from target in percentage points (0 = at target,
+        positive = under-hedged / more net long, negative = over-hedged), or
+        ``None`` when ``underlying_qty`` is unset — the ratio is then undefined
+        and the metric is reported unavailable, never a fabricated ``0.0``.
+
+    """
+    if underlying_qty == 0:
+        return None
+    return net_delta / underlying_qty * 100.0 - target_delta_ratio_pct
+
+
 class HealthMixin:
     """Mixin for portfolio health metrics calculation.
 
@@ -107,24 +139,32 @@ class HealthMixin:
 
         return float((vol_shock_impact / portfolio_value) * 100)
 
-    def calculate_delta_drift_pct(self) -> float:
-        """Calculate delta drift: Net hedge delta as % of equity delta.
+    def calculate_delta_drift_pct(
+        self,
+        target_delta_ratio_pct: float,
+    ) -> float | None:
+        """Calculate delta drift as deviation from the target hedge ratio.
 
-        Target is 0% (perfectly hedged). Positive means over-hedged,
-        negative means under-hedged.
+        Drift is the net-delta-to-equity ratio minus the stated
+        ``target_delta_ratio_pct`` (see :func:`delta_drift_from_target`). 0 =
+        at target, positive = under-hedged (more net long than target), negative
+        = over-hedged.
+
+        Args:
+            target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
+                single-sourced from ``IpsTriggers.target_delta_ratio_pct``.
 
         Returns:
-            Net delta as percentage of underlying quantity.
+            Signed deviation from target in percentage points, or ``None`` when
+            ``underlying_quantity`` is unset (metric unavailable).
 
         """
         stats = self.portfolio.summary_stats()
-        net_delta = stats["net_delta"]
-        underlying_qty = abs(stats["underlying_quantity"])
-
-        if underlying_qty == 0:
-            return 0.0
-
-        return float((net_delta / underlying_qty) * 100)
+        return delta_drift_from_target(
+            stats["net_delta"],
+            stats["underlying_quantity"],
+            target_delta_ratio_pct,
+        )
 
     def calculate_convexity_cliff_days(
         self,
@@ -254,6 +294,12 @@ class HealthMixin:
         scores = []
 
         for metric in metrics.values():
+            # Skip metrics reported unavailable (e.g. delta drift with no
+            # underlying_quantity) — they contribute no score rather than a
+            # fabricated one.
+            if metric.actual is None:
+                continue
+
             # Normalize metric to 0-100 score
             # For non-inverted metrics: min_val=0, max_val=100
             # For inverted metrics: min_val=100, max_val=0
@@ -284,6 +330,7 @@ class HealthMixin:
         *,
         crash_scenario_pct: float | None = None,
         crash_vol_shock: float = 0.0,
+        target_delta_ratio_pct: float | None = None,
     ) -> dict[str, Any]:
         """Calculate all health metrics in one call.
 
@@ -301,13 +348,18 @@ class HealthMixin:
             crash_vol_shock: Flat additive crash vol bump as a decimal,
                 single-sourced from ``IpsConvexity.crash_vol_shock`` and used
                 to reprice the crash-convexity gauge. Defaults to ``0.0``.
+            target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
+                single-sourced from ``IpsTriggers.target_delta_ratio_pct``.
+                When ``None`` (no IPS supplied), ``delta_drift_pct`` is ``None``
+                (unavailable) rather than measured against a hardcoded target.
 
         Returns:
             Dictionary containing all calculated health metrics:
             - net_carry_pct: Net carry as % of underlying
             - crash_convexity_pct: Hedge P&L at the IPS crash scenario
             - vega_sufficiency_pct: Portfolio % impact per +10 vol
-            - delta_drift_pct: Net delta as % of equity
+            - delta_drift_pct: Deviation from the target hedge ratio (pp), or
+              ``None`` when unavailable
             - convexity_cliff_days: Days until high-gamma region
             - vol_regime_percentile: Volatility percentile (0-100)
             - hedge_success_pct: Hedge P&L vs carry paid
@@ -326,11 +378,18 @@ class HealthMixin:
                 crash_scenario_pct,
             )
 
+        if target_delta_ratio_pct is None:
+            delta_drift_value = None
+        else:
+            delta_drift_value = self.calculate_delta_drift_pct(
+                target_delta_ratio_pct,
+            )
+
         return {
             "net_carry_pct": self.calculate_net_carry_pct(),
             "crash_convexity_pct": crash_convexity_value,
             "vega_sufficiency_pct": self.calculate_vega_sufficiency_pct(),
-            "delta_drift_pct": self.calculate_delta_drift_pct(),
+            "delta_drift_pct": delta_drift_value,
             "convexity_cliff_days": self.calculate_convexity_cliff_days(
                 convexity_cliff_days,
             ),

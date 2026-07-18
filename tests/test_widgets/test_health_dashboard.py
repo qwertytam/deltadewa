@@ -373,3 +373,59 @@ class TestHedgeHealthDashboard:
         assert any(isinstance(child, widgets.Output) for child in children), (
             "Should have Output widget"
         )
+
+    def test_delta_drift_default_config_is_magnitude_inverted(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """The delta-drift gauge is |drift|, inverted, banded at warn/action."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+        cfg = dashboard._get_default_config()["metrics"]["delta_drift"]  # pylint: disable=W0212
+
+        assert cfg["start"] == 0.0
+        assert cfg["end"] == 30.0
+        assert cfg["min_val"] == 5.0
+        assert cfg["max_val"] == 10.0
+        assert cfg["invert_colors"] is True
+
+    def test_delta_drift_unavailable_without_target(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """No IPS target -> delta drift reads unavailable, not a value."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+
+        summary = dashboard.get_metrics_summary()
+
+        assert summary["delta_drift"]["status"] == "unavailable"
+        assert summary["delta_drift"]["value"] is None
+        # Score still computes with the unavailable metric excluded.
+        assert isinstance(summary["overall_score"], float)
+
+    def test_delta_drift_shows_magnitude_with_target(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """With a target, the gauge shows |deviation| and bands correctly."""
+        mock_portfolio.summary_stats.return_value["net_delta"] = 97.0
+        dashboard = HedgeHealthDashboard(
+            mock_portfolio,
+            target_delta_ratio_pct=90.0,
+        )
+
+        summary = dashboard.get_metrics_summary()
+
+        # drift = 97/100*100 - 90 = +7 -> magnitude 7.0, within (warn, action).
+        assert summary["delta_drift"]["value"] == 7.0
+        assert summary["delta_drift"]["status"] == "watch"
+
+    def test_dashboard_renders_with_unavailable_drift(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """Rendering must not raise when delta drift is unavailable."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+
+        widget = dashboard.display()
+
+        assert widget is not None
