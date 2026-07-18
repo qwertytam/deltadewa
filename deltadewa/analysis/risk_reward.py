@@ -78,4 +78,5 @@ class RiskRewardMixin:
             "breakeven_total": breakeven_total,
             "prob_profit": prob_analysis["prob_profit"],
             "expected_pnl": prob_analysis["expected_pnl"],
+            "drift_measure": prob_analysis.get("drift_measure", "risk_neutral"),
         }

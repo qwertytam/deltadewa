@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 
+from deltadewa.portfolio.monte_carlo import drift_measure_label
+
 if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
     from deltadewa.portfolio.core import OptionPortfolio
@@ -223,9 +225,10 @@ def _format_total_section(
 def _format_probability_section(analysis: dict[str, Any]) -> list[str]:
     """Format the probability-analysis section."""
     prob = analysis["prob_profit"]
+    measure = drift_measure_label(analysis.get("drift_measure", "risk_neutral"))
     return [
         "PROBABILITY ANALYSIS:",
-        f"  Chance of Profit: {prob * 100:.1f}%",
+        f"  Chance of Profit: {prob * 100:.1f}% ({measure} drift)",
         f"  Expected Value: ${analysis['expected_pnl']:,.2f} "
         f"(probabilistic weighted average)",
         "",
