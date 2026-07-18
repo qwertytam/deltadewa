@@ -327,9 +327,11 @@ class TestCrashPayoffRatio:
         analyzer_with_book = PortfolioAnalyzer(hedged_book)
         convexity_no_book = analyzer_no_book.calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
+            crash_vol_shock=0.0,
         )
         convexity_with_book = analyzer_with_book.calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
+            crash_vol_shock=0.0,
         )
         assert convexity_no_book == 0.0
         assert convexity_with_book != 0.0

@@ -136,8 +136,13 @@ policy input, so it belongs in the IPS, not in presentation config.
   `ips.crash.scenario_move`.
 - **`analysis/candidate.py`** (sizing + strike ladder) — reprice candidates at the
   crash state per §3 (**C4**); keep intrinsic as the floor column only.
-- **`roll_status.py`** convexity trigger — no change needed; it consumes the
-  corrected metric and stops firing spuriously once the number is right.
+- **`roll_status.py`** convexity trigger — consumes the corrected metric **and**
+  must pass the IPS vol shock (`convexity.crash_vol_shock`) so its convexity
+  matches the health gauge. `calculate_crash_convexity_pct` makes `crash_vol_shock`
+  a **required** argument, so the trigger can no longer fall back to a spot-only
+  (`vol_shock=0`) reading — that understated convexity and biased the roll toward
+  firing. *(Corrects the earlier "no change needed": it was wrong about the
+  vol_shock argument.)*
 - **Mo1 single-source** — `health.py` default (`0.80`), the README figure, and
   `dashboard.yaml` all defer to `ips.crash.scenario_move`; delete the local
   constants.

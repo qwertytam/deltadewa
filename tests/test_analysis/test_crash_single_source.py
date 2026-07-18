@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from deltadewa.analysis import health as health_module
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
@@ -35,6 +37,8 @@ from deltadewa.portfolio.core import OptionPortfolio
 # every crash-derived figure must differ between them.
 _SHALLOW_PCT = -10.0
 _DEEP_PCT = -30.0
+# Representative crash vol shock for the direct gauge calls.
+_VOL_SHOCK = 0.15
 
 
 def _make_hedged_book() -> OptionPortfolio:
@@ -57,8 +61,12 @@ def _make_hedged_book() -> OptionPortfolio:
     return portfolio
 
 
-def _make_ips(crash_scenario_pct: float) -> IpsConfig:
-    """Full IpsConfig parameterised only on the crash move."""
+def _make_ips(
+    crash_scenario_pct: float,
+    *,
+    crash_vol_shock: float = 0.15,
+) -> IpsConfig:
+    """Full IpsConfig parameterised on the crash move and vol shock."""
     return IpsConfig(
         program=IpsProgram(name="test", instrument="SPX"),
         pricing=IpsPricing(exercise_style=ExerciseStyle.EUROPEAN),
@@ -67,6 +75,7 @@ def _make_ips(crash_scenario_pct: float) -> IpsConfig:
             crash_scenario_pct=crash_scenario_pct,
             target_min_pct=15.0,
             target_max_pct=25.0,
+            crash_vol_shock=crash_vol_shock,
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=20.0),
         triggers=IpsTriggers(
@@ -90,9 +99,11 @@ class TestCrashScenarioSingleSource:
 
         shallow = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=_SHALLOW_PCT,
+            crash_vol_shock=_VOL_SHOCK,
         )
         deep = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=_DEEP_PCT,
+            crash_vol_shock=_VOL_SHOCK,
         )
 
         assert shallow != deep
@@ -158,3 +169,45 @@ class TestCrashScenarioSingleSource:
         assert "crash_pct" not in source
         # Scenario is taken from a parameter, not a literal.
         assert "crash_scenario_pct" in source
+
+
+class TestRollMatchesGauge:
+    """§7.5 — the roll trigger shares the gauge basis AND the IPS vol shock."""
+
+    @staticmethod
+    def _gauge(portfolio: OptionPortfolio, ips: IpsConfig) -> float:
+        """The health-gauge convexity at the IPS scenario and vol shock."""
+        return PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
+            crash_scenario_pct=ips.convexity.crash_scenario_pct,
+            crash_vol_shock=ips.convexity.crash_vol_shock,
+        )
+
+    def test_roll_convexity_equals_gauge_for_same_book(self) -> None:
+        """roll_status's crash convexity == the gauge's, same book and IPS.
+
+        Regression for the spot-only roll trigger: before the fix the roll
+        used ``vol_shock=0`` while the gauge used the IPS shock, so a
+        conformant book could read as failing convexity on the roll and
+        passing on the gauge.
+        """
+        portfolio = _make_hedged_book()
+        ips = _make_ips(_DEEP_PCT, crash_vol_shock=0.15)
+
+        roll = evaluate_roll_status(portfolio, ips)[0].crash_convexity_pct
+
+        assert roll == pytest.approx(self._gauge(portfolio, ips))
+
+    def test_roll_and_gauge_move_together_with_vol_shock(self) -> None:
+        """Changing only crash_vol_shock moves roll and gauge together."""
+        portfolio = _make_hedged_book()
+        ips_lo = _make_ips(_DEEP_PCT, crash_vol_shock=0.10)
+        ips_hi = _make_ips(_DEEP_PCT, crash_vol_shock=0.20)
+
+        roll_lo = evaluate_roll_status(portfolio, ips_lo)[0].crash_convexity_pct
+        roll_hi = evaluate_roll_status(portfolio, ips_hi)[0].crash_convexity_pct
+
+        # The vol shock is actually consulted (the two differ)...
+        assert roll_lo != roll_hi
+        # ...and the roll tracks the gauge at each shock.
+        assert roll_lo == pytest.approx(self._gauge(portfolio, ips_lo))
+        assert roll_hi == pytest.approx(self._gauge(portfolio, ips_hi))

@@ -20,6 +20,7 @@ from deltadewa.analysis import crash_repricing as cr
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.health import HealthMixin
+from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.persistence import PortfolioSerializer
@@ -351,6 +352,24 @@ class TestNoLegacyBasisInConvexityPaths:
 
         assert "include_underlying" not in source
         assert "calculate_pnl_at_expiry" not in source
+
+    def test_crash_vol_shock_is_required_on_the_gauge(self) -> None:
+        """crash_vol_shock has no default — every caller must pass it.
+
+        Making it required is the enforcement point: no site (gauge, roll
+        trigger, summary ladder) can silently reprice spot-only by omission.
+        """
+        param = inspect.signature(
+            HealthMixin.calculate_crash_convexity_pct,
+        ).parameters["crash_vol_shock"]
+
+        assert param.default is inspect.Parameter.empty
+
+    def test_roll_status_sources_vol_shock_from_ips(self) -> None:
+        """The roll trigger passes the IPS vol shock, matching the gauge."""
+        source = inspect.getsource(evaluate_roll_status)
+
+        assert "crash_vol_shock=convexity.crash_vol_shock" in source
 
 
 class TestCanonicalExampleInvariants:

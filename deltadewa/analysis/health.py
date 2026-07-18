@@ -41,7 +41,7 @@ class HealthMixin:
     def calculate_crash_convexity_pct(
         self,
         crash_scenario_pct: float,
-        crash_vol_shock: float = 0.0,
+        crash_vol_shock: float,
     ) -> float:
         """Calculate crash convexity, hedge-only and repriced (§1-3).
 
@@ -60,9 +60,11 @@ class HealthMixin:
                 ``IpsConvexity.crash_scenario_pct``; there is no hardcoded
                 default.
             crash_vol_shock: Flat additive vol bump as a decimal (e.g.
-                ``0.15``) applied to every leg's own today-vol, single-sourced
-                from ``IpsConvexity.crash_vol_shock``. Defaults to ``0.0`` (a
-                spot-only crash) when no IPS shock is supplied.
+                ``0.15``) applied to every leg's own today-vol. **Required**
+                — single-sourced from ``IpsConvexity.crash_vol_shock`` by every
+                caller (the gauge, the scenario table, and the roll trigger) so
+                no site can silently reprice at a different vol. Pass ``0.0``
+                explicitly for a spot-only crash when no IPS shock applies.
 
         Returns:
             Hedge-only crash convexity as a percentage of the protected book
