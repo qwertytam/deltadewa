@@ -10,9 +10,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from deltadewa.constants import ExerciseStyle
+
+# Defaults for the crash-repricing knobs that live alongside
+# ``crash_scenario_pct`` in the ``convexity`` section. The crash *move* itself
+# is single-sourced from ``crash_scenario_pct`` (never duplicated here); these
+# two knobs are the flat vol-bump magnitude and the intrinsic-floor toggle used
+# by the M1.2 crash-repricing metric.
+_DEFAULT_CRASH_VOL_SHOCK: Final[float] = 0.15
+_DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 
 try:
     import yaml
@@ -51,11 +59,21 @@ class IpsBudget:
 
 @dataclass(frozen=True)
 class IpsConvexity:
-    """Target convexity (hedge payoff) range under a crash scenario."""
+    """Target convexity (hedge payoff) range under a crash scenario.
+
+    ``crash_scenario_pct`` is the single source of truth for the crash *move*
+    (a signed percent, e.g. ``-25.0``) across every panel. ``crash_vol_shock``
+    and ``crash_floor_reported`` are the two crash-repricing knobs co-located
+    here (see ``docs/repricing-methodology.md`` §5): the flat additive
+    volatility bump applied at the crash spot, and whether the intrinsic-floor
+    column is surfaced.
+    """
 
     crash_scenario_pct: float
     target_min_pct: float
     target_max_pct: float
+    crash_vol_shock: float = _DEFAULT_CRASH_VOL_SHOCK
+    crash_floor_reported: bool = _DEFAULT_CRASH_FLOOR_REPORTED
 
 
 @dataclass(frozen=True)
@@ -184,10 +202,22 @@ def _parse_convexity(config: dict[str, Any]) -> IpsConvexity:
             "convexity.target_min_pct must be <= target_max_pct, got "
             f"{target_min_pct} > {target_max_pct}",
         )
+
+    crash_vol_shock = section.get(
+        "crash_vol_shock",
+        _DEFAULT_CRASH_VOL_SHOCK,
+    )
+    _require_non_negative(crash_vol_shock, "convexity.crash_vol_shock")
+    crash_floor_reported = bool(
+        section.get("crash_floor_reported", _DEFAULT_CRASH_FLOOR_REPORTED),
+    )
+
     return IpsConvexity(
         crash_scenario_pct=crash_scenario_pct,
         target_min_pct=target_min_pct,
         target_max_pct=target_max_pct,
+        crash_vol_shock=crash_vol_shock,
+        crash_floor_reported=crash_floor_reported,
     )
 
 

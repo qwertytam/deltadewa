@@ -93,6 +93,7 @@ def _make_crash_result(
                 payoff_ratio=payoff_ratio or 0.0,
                 convexity_pct=convexity_pct,
                 meets_target=meets_target,
+                intrinsic_floor=premium_paid * (payoff_ratio or 0) * 0.2,
             ),
         )
     return CrashConvexityResult(

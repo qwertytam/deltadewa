@@ -287,7 +287,8 @@ class TestEvaluateRollStatus:
     ) -> None:
         def _fake_calculate_crash_convexity_pct(
             self,
-            crash_pct: float = 0.80,
+            crash_scenario_pct: float,
+            crash_vol_shock: float,
         ) -> float:
             return value
 

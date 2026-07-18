@@ -59,7 +59,7 @@ the red→amber→green band edges on the `start`–`end` gauge.
 | Key | What it measures | Default `start`–`end` | Default bands (`min_val` / `mid_val` / `max_val`) | `invert_colors` |
 | --- | --- | --- | --- | --- |
 | `net_carry` | Annualized theta as % of underlying value | -10.0 to 10.0 | -5.0 / 0.0 / 2.0 | `false` |
-| `crash_convexity` | Hedge P&L at -20% spot, as % of underlying | -30.0 to 30.0 | -10.0 / 0.0 / 10.0 | `false` |
+| `crash_convexity` | Hedge P&L at the IPS crash scenario (`convexity.crash_scenario_pct`), as % of underlying | -30.0 to 30.0 | -10.0 / 0.0 / 10.0 | `false` |
 | `vega_sufficiency` | Portfolio % change per +10 vol shock | -50.0 to 50.0 | -20.0 / 0.0 / 20.0 | `false` |
 | `delta_drift` | Net hedge delta as % of equity delta | -50.0 to 50.0 | -20.0 / 0.0 / 20.0 | `false` |
 | `convexity_cliff` | Days until long puts enter the high-gamma region | 0 to 365 | 30 / 90 / 180 | `false` |

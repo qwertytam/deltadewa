@@ -4,8 +4,10 @@ Implements the 5-step IPS-driven sizing framework:
 
 1. ``required_crash_offset`` — dollars the hedge must recover beyond the
    acceptable drawdown.
-2. Per-contract payoff: intrinsic put value at the IPS crash spot, same
-   basis as ``crash_payoff._gross_long_put_payoff`` (no time value).
+2. Per-contract payoff: the candidate **repriced** at the IPS crash state
+   (crash spot + vol shock) via
+   :func:`~deltadewa.analysis.candidate.evaluate_candidate` — full option
+   value, with intrinsic value kept only as a labelled floor.
 3. Per-contract carry: annualised theta cost (positive), matching
    ``carry.py``'s 365-day convention.
 4. ``size_from_unit`` — pure scalar sizing: contracts needed, carry check,
@@ -49,8 +51,12 @@ class HedgeSizingResult:
             (``annual_carry_pct / 100 * book_notional``).
         required_crash_offset: Dollars of crash loss beyond the drawdown
             tolerance that the hedge must offset.
-        per_contract_payoff: Intrinsic payoff of one contract at the IPS
-            crash spot (``max(0, strike - crash_spot) * 100``), in dollars.
+        per_contract_payoff: One contract **repriced** at the IPS crash state
+            (crash spot + vol shock), in dollars — the full hedge-only option
+            value, not intrinsic.
+        per_contract_intrinsic_floor: One contract's intrinsic value at the
+            crash spot (``max(0, strike - crash_spot) * 100``), in dollars — a
+            conservative labelled floor, always ``<= per_contract_payoff``.
         per_contract_carry: Annualised theta cost of one contract as a
             positive dollar amount (``|theta/day| * 365 * 100``).
         contracts_needed: Minimum whole contracts to cover
@@ -83,6 +89,7 @@ class HedgeSizingResult:
 
     # Per-contract economics
     per_contract_payoff: float
+    per_contract_intrinsic_floor: float
     per_contract_carry: float
 
     # Steps 2-3 - sizing & carry check
@@ -248,6 +255,7 @@ def size_hedge(
         strike=strike,
         maturity_years=candidate_maturity_years,
         crash_pct=crash_pct,
+        crash_vol_shock=ips_config.convexity.crash_vol_shock,
         vol=vol,
     )
 
@@ -274,6 +282,7 @@ def size_hedge(
         carry_budget=carry_budget,
         required_crash_offset=offset,
         per_contract_payoff=metrics.per_contract_payoff,
+        per_contract_intrinsic_floor=metrics.per_contract_intrinsic_floor,
         per_contract_carry=metrics.per_contract_carry,
         contracts_needed=sizing.contracts_needed,
         implied_annual_carry=sizing.implied_annual_carry,

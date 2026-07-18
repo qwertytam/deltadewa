@@ -115,6 +115,7 @@ class TestStrikeForDelta:
             strike=strike,
             maturity_years=0.25,
             crash_pct=-25.0,
+            crash_vol_shock=0.15,
         )
         assert abs(metrics.put_delta) == pytest.approx(target, abs=1e-4)
 
@@ -344,6 +345,7 @@ class TestBuildStrikeLadder:
             strike=rung.metrics.strike,
             maturity_years=0.25,
             crash_pct=crash_pct,
+            crash_vol_shock=ips.convexity.crash_vol_shock,
         )
         offset = required_crash_offset(book_notional, crash_pct, 20.0)
         sizing = size_from_unit(

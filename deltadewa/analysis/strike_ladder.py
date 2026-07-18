@@ -244,6 +244,7 @@ def build_strike_ladder(
             strike=strike,
             maturity_years=maturity,
             crash_pct=crash_pct,
+            crash_vol_shock=conv.crash_vol_shock,
             vol=vol,
         )
         sizing = size_from_unit(

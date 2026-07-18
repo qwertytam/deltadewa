@@ -224,8 +224,12 @@ def evaluate_roll_status(
     roll_window_days = triggers.roll_time_months * const.CALENDAR_DAYS_PER_MONTH
 
     analyzer = PortfolioAnalyzer(portfolio)
+    # Source the crash vol shock from the IPS so the roll trigger's convexity
+    # matches the health gauge / scenario table exactly; passing spot-only
+    # (vol_shock=0) understated convexity and biased the roll toward firing.
     crash_convexity_pct = analyzer.calculate_crash_convexity_pct(
-        crash_pct=1 + convexity.crash_scenario_pct / 100,
+        crash_scenario_pct=convexity.crash_scenario_pct,
+        crash_vol_shock=convexity.crash_vol_shock,
     )
 
     now = datetime.now(tz=UTC)
