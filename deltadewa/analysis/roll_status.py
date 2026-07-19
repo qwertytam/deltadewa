@@ -8,7 +8,6 @@ HOLD/MONITOR/REVIEW/ROLL verdict for every position in a portfolio.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -232,11 +231,13 @@ def evaluate_roll_status(
         crash_vol_shock=convexity.crash_vol_shock,
     )
 
-    now = datetime.now(tz=UTC)
+    # Measure DTE against the portfolio's (what-if) valuation date, not the
+    # wall clock, so moving the valuation date moves every roll verdict.
+    as_of = portfolio.valuation_date
     records: list[RollStatusRecord] = []
 
     for position in portfolio.positions:
-        days_to_maturity = (position.option.maturity_date - now).days
+        days_to_maturity = (position.option.maturity_date - as_of).days
 
         time_verdict = _time_trigger_verdict(
             days_to_maturity,

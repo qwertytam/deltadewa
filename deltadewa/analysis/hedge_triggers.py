@@ -14,6 +14,8 @@ import datetime
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
+
 import deltadewa.constants as const
 from deltadewa.analysis.health import delta_drift_from_target
 
@@ -166,7 +168,9 @@ def evaluate_hedge_triggers(
 
     """
     t = thresholds or HedgeTriggerThresholds()
-    now = datetime.datetime.now(tz=datetime.UTC)
+    # Evaluate DTE/expiry against the portfolio's (what-if) valuation date, not
+    # the wall clock, so a moved valuation date moves the trigger logic.
+    now = portfolio.valuation_date
 
     # --- compute metrics ---
     stats = portfolio.summary_stats()
@@ -337,17 +341,17 @@ def _print_expiry_trigger(
             f"PLAN ROLLS WITHIN {t.expiry_soon_days} DAYS",
         )
 
-        # Per-position details inside the soon-but-not-urgent window
+        # Per-position details inside the soon-but-not-urgent window. The
+        # maturity column is a tz-naive string; localize *now* (the tz-aware
+        # valuation date) away so the subtraction stays naive-vs-naive.
         df_positions = portfolio.to_dataframe()
         if (
             not df_positions.empty
             and "days_to_expiry" not in df_positions.columns
         ):
+            as_of = pd.Timestamp(now).tz_localize(None)
             df_positions["days_to_expiry"] = df_positions["maturity"].apply(
-                lambda x: (
-                    __import__("pandas").to_datetime(x)
-                    - __import__("pandas").Timestamp.now()
-                ).days,
+                lambda x: (pd.to_datetime(x) - as_of).days,
             )
         urgent_theta = (
             df_positions[df_positions["days_to_expiry"] < t.expiry_urgent_days][

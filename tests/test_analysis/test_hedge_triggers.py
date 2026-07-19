@@ -1,5 +1,6 @@
 """Tests for deltadewa.analysis.hedge_triggers."""
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -7,7 +8,9 @@ from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
     evaluate_hedge_triggers,
 )
+from deltadewa.constants import OptionType
 from deltadewa.ips_config import load_ips_config
+from deltadewa.portfolio.core import OptionPortfolio
 
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
 
@@ -29,6 +32,48 @@ def _mock_portfolio(net_delta: float, underlying_qty: float) -> Mock:
 def _action_text(result_actions: list[tuple[str, str]]) -> str:
     """Join all action descriptions for substring assertions."""
     return " ".join(desc for _, desc in result_actions)
+
+
+class TestValuationDateDrivesExpiry:
+    """Expiry/DTE triggers move with the portfolio's what-if valuation date."""
+
+    _MATURITY = datetime(2027, 1, 1, tzinfo=UTC)
+
+    def _portfolio_asof(self, days_before_maturity: int) -> OptionPortfolio:
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.2,
+        )
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=self._MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        # A what-if valuation date, not the wall clock, sets the DTE.
+        portfolio.valuation_date = self._MATURITY - timedelta(
+            days=days_before_maturity,
+        )
+        return portfolio
+
+    def test_far_valuation_date_is_not_urgent(self) -> None:
+        """100 days out -> nearest expiry 100 days, nothing near-expiry."""
+        result = evaluate_hedge_triggers(self._portfolio_asof(100), Mock())
+        assert result.days_to_nearest_expiry == 100
+        assert result.near_expiry_count == 0
+
+    def test_soon_window_exercises_the_dataframe_dte_path(self) -> None:
+        """15 days out (soon-but-not-urgent) uses the valuation-date DTE."""
+        result = evaluate_hedge_triggers(self._portfolio_asof(15), Mock())
+        assert result.days_to_nearest_expiry == 15
+        assert result.near_expiry_count == 0
+
+    def test_near_valuation_date_is_urgent(self) -> None:
+        """5 days out (< 7-day urgent window) counts as near-expiry."""
+        result = evaluate_hedge_triggers(self._portfolio_asof(5), Mock())
+        assert result.days_to_nearest_expiry == 5
+        assert result.near_expiry_count == 1
 
 
 class TestHedgeTriggerThresholdsFromIpsConfig:

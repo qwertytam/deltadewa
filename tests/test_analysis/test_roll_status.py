@@ -331,6 +331,32 @@ class TestEvaluateRollStatus:
         assert records[0].verdict == RollVerdict.ROLL
         assert records[0].estimated_roll_up_cost is not None
 
+    def test_valuation_date_moves_roll_verdict(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A what-if valuation date, not the wall clock, drives the roll DTE."""
+        self._patch_convexity(monkeypatch, 20.0)  # convexity comfortable
+        position = _make_position(days_to_maturity=200, entry_spot=100.0)
+        ips = _make_ips_config(roll_time_months=1.0)  # ~30-day roll window
+
+        # As of today (~200 days out) -> HOLD.
+        today_rec = evaluate_roll_status(
+            self._portfolio_with(position),
+            ips,
+            current_spot=100.0,
+        )[0]
+        assert today_rec.verdict == RollVerdict.HOLD
+
+        # Move the valuation date to 10 days before maturity -> ROLL.
+        whatif = self._portfolio_with(position)
+        whatif.valuation_date = position.option.maturity_date - timedelta(
+            days=10,
+        )
+        whatif_rec = evaluate_roll_status(whatif, ips, current_spot=100.0)[0]
+        assert whatif_rec.days_to_maturity == 10
+        assert whatif_rec.verdict == RollVerdict.ROLL
+
     def test_roll_from_convexity_below_min_alone(
         self,
         monkeypatch: pytest.MonkeyPatch,

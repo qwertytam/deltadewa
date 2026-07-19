@@ -10,6 +10,8 @@ the underlying DataFrame logic and helper functions rather than widget output.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pandas as pd
 
 from deltadewa.constants import OptionType
@@ -117,6 +119,24 @@ class TestPositionDetailDisplayMethod:
         portfolio_with_underlying,
     ) -> None:
         PositionDetailDisplay(portfolio_with_underlying).display()
+
+    def test_display_uses_valuation_date_dte_without_tz_error(
+        self,
+        single_position_portfolio,
+    ) -> None:
+        """DTE is measured off the tz-aware valuation date.
+
+        The maturity column is a tz-naive string; if the valuation date's
+        timezone were not stripped, the subtraction would raise. Setting a
+        what-if valuation date and rendering guards that handling (Mi4).
+        """
+        single_position_portfolio.valuation_date = datetime(
+            2027,
+            1,
+            1,
+            tzinfo=UTC,
+        ) - timedelta(days=30)
+        PositionDetailDisplay(single_position_portfolio).display()
 
 
 # ===========================================================================

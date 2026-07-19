@@ -72,9 +72,12 @@ class ThetaChartsMixin:
         """Prepare data for theta analysis."""
         df_carry = df.copy()
 
-        # Calculate days to expiry
+        # Days to expiry measured against the portfolio's (what-if) valuation
+        # date, not the wall clock. The maturity column is a tz-naive string,
+        # so localize the tz-aware valuation date away before subtracting.
+        as_of = pd.Timestamp(self.portfolio.valuation_date).tz_localize(None)
         df_carry["days_to_expiry"] = df_carry["maturity"].apply(
-            lambda x: (pd.to_datetime(x) - pd.Timestamp.now()).days,
+            lambda x: (pd.to_datetime(x) - as_of).days,
         )
 
         # Maturity buckets

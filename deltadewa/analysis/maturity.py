@@ -1,6 +1,11 @@
 """Maturity classification mixin for portfolio analysis."""
 
+from typing import TYPE_CHECKING
+
 import pandas as pd
+
+if TYPE_CHECKING:
+    from deltadewa.portfolio.core import OptionPortfolio
 
 
 class MaturityMixin:
@@ -9,6 +14,9 @@ class MaturityMixin:
     Provides methods for classifying options by time to expiration
     and adding maturity bucket columns to DataFrames.
     """
+
+    if TYPE_CHECKING:
+        portfolio: "OptionPortfolio"
 
     @staticmethod
     def classify_maturity_bucket(days_to_expiry: int) -> str:
@@ -50,9 +58,12 @@ class MaturityMixin:
         """
         df = df.copy()
 
-        # Calculate days to expiry
+        # Days to expiry measured against the portfolio's (what-if) valuation
+        # date, not the wall clock. The maturity column is a tz-naive string,
+        # so localize the tz-aware valuation date away before subtracting.
+        as_of = pd.Timestamp(self.portfolio.valuation_date).tz_localize(None)
         df["days_to_expiry"] = df["maturity"].apply(
-            lambda x: (pd.to_datetime(x) - pd.Timestamp.now()).days,
+            lambda x: (pd.to_datetime(x) - as_of).days,
         )
 
         # Classify into buckets

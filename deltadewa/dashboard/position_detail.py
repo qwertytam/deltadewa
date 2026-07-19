@@ -43,9 +43,14 @@ class PositionDetailDisplay:
             # Make the index 1-based for user-friendly display
             display_df.index = pd.Index(range(1, len(display_df) + 1))
 
-            # Calculate days to maturity
+            # Days to maturity measured against the portfolio's (what-if)
+            # valuation date, not the wall clock. The maturity column is a
+            # tz-naive string, so localize the tz-aware valuation date away.
+            as_of = pd.Timestamp(
+                self._portfolio.valuation_date,
+            ).tz_localize(None)
             display_df["days_to_maturity"] = display_df["maturity"].apply(
-                lambda x: (pd.to_datetime(x) - pd.Timestamp.now()).days,
+                lambda x: (pd.to_datetime(x) - as_of).days,
             )
 
             # Normalize option `type` and `exercise_style` for user-friendly
