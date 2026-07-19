@@ -9,11 +9,9 @@ parameters:
   
   # Earlier warning for convexity cliff
   convexity_cliff_days: 240   # Alert when within 8 months (vs 6 months default)
-
-  # Market environment assessment — tighter bands, flags stressed skew sooner
-  skew_low_pctile: 30           # below = benign skew
-  skew_high_pctile: 70          # above = expensive/stressed skew
-  term_contango_tolerance: 0.25 # VIX points; smaller diffs read FLAT
+  # Hedge-cost verdict thresholds (vol regime / skew / term structure) are
+  # policy, not presentation — set them in market_environment in ips.yaml
+  # (a conservative posture is a policy choice, so it belongs to the IPS).
 
 metrics:
   # Stricter carry tolerance

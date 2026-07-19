@@ -12,8 +12,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Final
 
+from deltadewa.ips_config import (
+    DEFAULT_VOL_REGIME_HIGH,
+    DEFAULT_VOL_REGIME_LOW,
+    IpsMarketEnvironment,
+)
 from deltadewa.marketdata._errors import MarketDataError
 
 if TYPE_CHECKING:
@@ -123,8 +128,8 @@ def _classify_band(value: float, low: float, high: float) -> RegimeLabel:
 
 def classify_vix_regime(
     vix: float,
-    low: float = 0.15,
-    high: float = 0.35,
+    low: float = DEFAULT_VOL_REGIME_LOW,
+    high: float = DEFAULT_VOL_REGIME_HIGH,
 ) -> tuple[float, RegimeLabel]:
     """Classify a VIX level into a regime percentile and label.
 
@@ -141,8 +146,10 @@ def classify_vix_regime(
 
     Args:
         vix: Current VIX level, in vol points.
-        low: Historical low VIX, decimal (default 0.15).
-        high: Historical high VIX, decimal (default 0.35).
+        low: Historical low VIX, decimal. Defaults to the IPS single source
+            :data:`~deltadewa.ips_config.DEFAULT_VOL_REGIME_LOW`.
+        high: Historical high VIX, decimal. Defaults to
+            :data:`~deltadewa.ips_config.DEFAULT_VOL_REGIME_HIGH`.
 
     Returns:
         Tuple of (regime_percentile, regime_label).
@@ -240,39 +247,26 @@ def _hedge_cost_verdict(
 
 def assess_market_environment(
     provider: MarketDataProvider,
+    env_policy: IpsMarketEnvironment | None = None,
     *,
-    dashboard_config: dict[str, Any] | None = None,
-    regime_bands: tuple[float, float] = (0.15, 0.35),
-    skew_bands: tuple[float, float] = (0.30, 0.70),
-    term_tolerance: float = 0.5,
     skew_lookback_days: int = 252,
 ) -> MarketEnvironment:
     """Assess current market conditions from a ``MarketDataProvider``.
 
     Pulls VIX, the VIX term structure, and SKEW from *provider* and
-    classifies them. Never raises: if any provider call raises
-    ``MarketDataError``, returns a ``MarketEnvironment`` with every
-    field ``None`` except ``data_quality=DataQuality.UNAVAILABLE``.
+    classifies them against the IPS market-environment policy bands (the
+    single source of the hedge-cost thresholds — never presentation config).
+    Never raises: if any provider call raises ``MarketDataError``, returns a
+    ``MarketEnvironment`` with every field ``None`` except
+    ``data_quality=DataQuality.UNAVAILABLE``.
 
     Args:
         provider: Source of VIX/SKEW market data.
-        dashboard_config: Optional dashboard config dict (as loaded by
-            ``session.py``). When present, the following keys under
-            ``parameters`` override the matching keyword args:
-
-            - ``skew_low_pctile`` (int, 0-100) → ``skew_bands[0]``
-            - ``skew_high_pctile`` (int, 0-100) → ``skew_bands[1]``
-            - ``term_contango_tolerance`` (float, VIX points) →
-              ``term_tolerance``
-
-            Missing keys fall back to the keyword-arg defaults below.
-        regime_bands: (low, high) decimal VIX band for
-            ``classify_vix_regime`` (default (0.15, 0.35)).
-        skew_bands: (low, high) SKEW percentile band, as a 0-1 fraction
-            matching ``get_skew_percentile``'s own units (default
-            (0.30, 0.70)).
-        term_tolerance: Vol-point tolerance for ``term_structure_shape``
-            (default 0.5).
+        env_policy: The IPS market-environment policy bands
+            (``ips_config.market_environment``). ``None`` uses the
+            ``IpsMarketEnvironment`` defaults (the ``DEFAULT_*`` single source).
+            The skew percentile band is converted to the 0-1 fraction
+            ``get_skew_percentile`` returns once, here at the edge.
         skew_lookback_days: Lookback window passed to
             ``get_skew_percentile`` (default 252).
 
@@ -281,14 +275,15 @@ def assess_market_environment(
         ``data_quality=UNAVAILABLE`` on any provider failure.
 
     """
-    if dashboard_config is not None:
-        params: dict[str, Any] = dashboard_config.get("parameters", {})
-        low_raw = params.get("skew_low_pctile", skew_bands[0] * 100)
-        high_raw = params.get("skew_high_pctile", skew_bands[1] * 100)
-        skew_bands = (float(low_raw) / 100, float(high_raw) / 100)
-        term_tolerance = float(
-            params.get("term_contango_tolerance", term_tolerance),
-        )
+    policy = env_policy if env_policy is not None else IpsMarketEnvironment()
+    regime_bands = (policy.vol_regime_low, policy.vol_regime_high)
+    # Skew band is policy in percentiles (0-100); convert to the 0-1 fraction
+    # ``get_skew_percentile`` returns, once, here at the edge.
+    skew_bands = (
+        policy.skew_low_pctile / 100.0,
+        policy.skew_high_pctile / 100.0,
+    )
+    term_tolerance = policy.term_contango_tolerance
     try:
         vix = provider.get_vix()
         term = provider.get_vix_term_structure()

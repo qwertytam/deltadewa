@@ -7,7 +7,15 @@ import pytest
 import yaml
 
 from deltadewa.constants import ExerciseStyle
-from deltadewa.ips_config import IpsConfigError, load_ips_config
+from deltadewa.ips_config import (
+    DEFAULT_SKEW_HIGH_PCTILE,
+    DEFAULT_SKEW_LOW_PCTILE,
+    DEFAULT_TERM_CONTANGO_TOLERANCE,
+    DEFAULT_VOL_REGIME_HIGH,
+    DEFAULT_VOL_REGIME_LOW,
+    IpsConfigError,
+    load_ips_config,
+)
 
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.yaml"
 
@@ -323,3 +331,96 @@ class TestLoadIpsConfig:
 
         with pytest.raises(IpsConfigError, match="target_delta_ratio_pct"):
             load_ips_config(path)
+
+
+class TestMarketEnvironment:
+    """Tests for the ``market_environment`` policy section (Mo2)."""
+
+    def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
+        """A config without the section uses the DEFAULT_* single source."""
+        path = _write_yaml(tmp_path, _VALID_CONFIG)  # no market_environment
+        env = load_ips_config(path).market_environment
+
+        assert env.vol_regime_low == DEFAULT_VOL_REGIME_LOW
+        assert env.vol_regime_high == DEFAULT_VOL_REGIME_HIGH
+        assert env.skew_low_pctile == DEFAULT_SKEW_LOW_PCTILE
+        assert env.skew_high_pctile == DEFAULT_SKEW_HIGH_PCTILE
+        assert env.term_contango_tolerance == DEFAULT_TERM_CONTANGO_TOLERANCE
+
+    def test_example_ips_yaml_market_environment(self) -> None:
+        """The shipped config/ips.yaml carries the policy bands."""
+        env = load_ips_config(EXAMPLE_IPS_YAML).market_environment
+
+        assert env.vol_regime_low == 0.15
+        assert env.vol_regime_high == 0.35
+        assert env.skew_low_pctile == 25
+        assert env.skew_high_pctile == 75
+        assert env.term_contango_tolerance == 0.5
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        """Section values round-trip through the loader unchanged."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "vol_regime_low": 0.12,
+                "vol_regime_high": 0.40,
+                "skew_low_pctile": 20,
+                "skew_high_pctile": 80,
+                "term_contango_tolerance": 1.0,
+            },
+        }
+        env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
+
+        assert env.vol_regime_low == 0.12
+        assert env.vol_regime_high == 0.40
+        assert env.skew_low_pctile == 20
+        assert env.skew_high_pctile == 80
+        assert env.term_contango_tolerance == 1.0
+
+    def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
+        """vol_regime_low >= vol_regime_high raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "vol_regime_low": 0.40,
+                "vol_regime_high": 0.35,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="vol_regime_low"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_skew_low_not_below_high_raises(self, tmp_path: Path) -> None:
+        """skew_low_pctile >= skew_high_pctile raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "skew_low_pctile": 75,
+                "skew_high_pctile": 25,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="skew"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_skew_out_of_percentile_range_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A skew percentile above 100 raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "skew_low_pctile": 25,
+                "skew_high_pctile": 120,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="skew"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_negative_term_tolerance_raises(self, tmp_path: Path) -> None:
+        """A negative term_contango_tolerance raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {"term_contango_tolerance": -0.5},
+        }
+        with pytest.raises(IpsConfigError, match="term_contango_tolerance"):
+            load_ips_config(_write_yaml(tmp_path, config))

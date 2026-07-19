@@ -9,6 +9,7 @@ style — distinct from ``dashboard_config_*.yaml`` (loaded by
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any, Final
 
@@ -28,6 +29,19 @@ _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 # measured as deviation from this stated net-delta-to-equity ratio rather than
 # distance from full delta-neutrality.
 _DEFAULT_TARGET_DELTA_RATIO_PCT: Final[float] = 90.0
+
+# Single source for the market-environment policy bands (see
+# ``IpsMarketEnvironment``). Public because they are consumed across
+# ``analysis.market_environment``, ``analysis.health``,
+# ``analysis.decision_matrix``, and ``widgets.health_dashboard`` — no consumer
+# redefines a band literal. The vol-regime band is decimal implied vol; the skew
+# band is a percentile on 0-100 (converted to a 0-1 fraction at the consumer
+# edge); the term tolerance is in VIX points.
+DEFAULT_VOL_REGIME_LOW: Final[float] = 0.15
+DEFAULT_VOL_REGIME_HIGH: Final[float] = 0.35
+DEFAULT_SKEW_LOW_PCTILE: Final[float] = 25.0
+DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 75.0
+DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
 
 try:
     import yaml
@@ -55,6 +69,30 @@ class IpsPricing:
 
     exercise_style: ExerciseStyle
     american_use_closed_form: bool = True
+
+
+@dataclass(frozen=True)
+class IpsMarketEnvironment:
+    """Policy bands that classify the market's hedge-cost environment.
+
+    These drive the ``hedge_cost_verdict`` decision (CHEAP/FAIR/EXPENSIVE) and
+    the vol-regime gauge, so they are policy, not presentation. This is the
+    single source every consumer reads; no module redefines a band literal.
+
+    Units:
+        ``vol_regime_low``/``vol_regime_high`` are decimal implied vol
+        (``0.15`` = 15%), compared against ``VIX / 100``.
+        ``skew_low_pctile``/``skew_high_pctile`` are SKEW percentiles on 0-100,
+        converted to the 0-1 fraction ``get_skew_percentile`` returns once at
+        the ``assess_market_environment`` edge.
+        ``term_contango_tolerance`` is in VIX points; slopes below it read FLAT.
+    """
+
+    vol_regime_low: float = DEFAULT_VOL_REGIME_LOW
+    vol_regime_high: float = DEFAULT_VOL_REGIME_HIGH
+    skew_low_pctile: float = DEFAULT_SKEW_LOW_PCTILE
+    skew_high_pctile: float = DEFAULT_SKEW_HIGH_PCTILE
+    term_contango_tolerance: float = DEFAULT_TERM_CONTANGO_TOLERANCE
 
 
 @dataclass(frozen=True)
@@ -138,6 +176,9 @@ class IpsConfig:
     drawdown: IpsDrawdown
     triggers: IpsTriggers
     monetization: IpsMonetization
+    market_environment: IpsMarketEnvironment = dataclass_field(
+        default_factory=IpsMarketEnvironment,
+    )
 
 
 def _require_section(config: dict[str, Any], name: str) -> dict[str, Any]:
@@ -250,8 +291,8 @@ def _parse_drawdown(config: dict[str, Any]) -> IpsDrawdown:
 def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
     section = _require_section(config, "triggers")
     fields = {
-        field: _require_field(section, "triggers", field)
-        for field in (
+        key: _require_field(section, "triggers", key)
+        for key in (
             "delta_drift_warn_pct",
             "delta_drift_action_pct",
             "theta_cost_acceptable_pct",
@@ -260,8 +301,8 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             "strike_drift_max_otm_pct",
         )
     }
-    for field, value in fields.items():
-        _require_non_negative(value, f"triggers.{field}")
+    for key, value in fields.items():
+        _require_non_negative(value, f"triggers.{key}")
     if fields["delta_drift_warn_pct"] >= fields["delta_drift_action_pct"]:
         raise IpsConfigError(
             "triggers.delta_drift_warn_pct must be < "
@@ -306,6 +347,53 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         target_delta_ratio_pct=target_delta_ratio_pct,
         roll_review_buffer=roll_review_buffer,
         strike_drift_review_fraction=strike_drift_review_fraction,
+    )
+
+
+def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
+    """Parse the optional ``market_environment`` policy section.
+
+    The section is optional: a missing section (or any missing field) falls back
+    to the ``DEFAULT_*`` module constants — the same single source the dataclass
+    defaults use — so an older ips.yaml keeps working.
+    """
+    section = config.get("market_environment", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'market_environment' section must be a mapping",
+        )
+
+    vol_low = section.get("vol_regime_low", DEFAULT_VOL_REGIME_LOW)
+    vol_high = section.get("vol_regime_high", DEFAULT_VOL_REGIME_HIGH)
+    skew_low = section.get("skew_low_pctile", DEFAULT_SKEW_LOW_PCTILE)
+    skew_high = section.get("skew_high_pctile", DEFAULT_SKEW_HIGH_PCTILE)
+    term_tol = section.get(
+        "term_contango_tolerance",
+        DEFAULT_TERM_CONTANGO_TOLERANCE,
+    )
+
+    if vol_low >= vol_high:
+        raise IpsConfigError(
+            "market_environment.vol_regime_low must be < vol_regime_high, got "
+            f"{vol_low} >= {vol_high}",
+        )
+    if not 0 <= skew_low < skew_high <= 100:
+        raise IpsConfigError(
+            "market_environment skew percentiles must satisfy 0 <= "
+            "skew_low_pctile < skew_high_pctile <= 100, got "
+            f"{skew_low}, {skew_high}",
+        )
+    _require_non_negative(
+        term_tol,
+        "market_environment.term_contango_tolerance",
+    )
+
+    return IpsMarketEnvironment(
+        vol_regime_low=vol_low,
+        vol_regime_high=vol_high,
+        skew_low_pctile=skew_low,
+        skew_high_pctile=skew_high,
+        term_contango_tolerance=term_tol,
     )
 
 
@@ -381,4 +469,5 @@ def load_ips_config(path: Path) -> IpsConfig:
         drawdown=_parse_drawdown(config),
         triggers=_parse_triggers(config),
         monetization=_parse_monetization(config),
+        market_environment=_parse_market_environment(config),
     )

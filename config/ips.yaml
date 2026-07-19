@@ -28,6 +28,15 @@ convexity:
 drawdown:
   max_tolerance_pct: 20.0
 
+market_environment:
+  # Hedge-cost verdict policy (CHEAP/FAIR/EXPENSIVE) — these drive a decision,
+  # not a display, so they live here, not in dashboard.yaml (presentation).
+  vol_regime_low: 0.15         # decimal IV; VIX/100 at/below = cheap-vol regime
+  vol_regime_high: 0.35        # decimal IV; VIX/100 at/above = high-vol regime
+  skew_low_pctile: 25          # SKEW percentile (0-100); below = benign skew
+  skew_high_pctile: 75         # SKEW percentile (0-100); above = stressed skew
+  term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
+
 triggers:
   target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is
                                    # measured (in pp) as deviation from this, not

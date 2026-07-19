@@ -9,11 +9,8 @@ parameters:
   
   # Convexity cliff threshold (days)
   convexity_cliff_days: 180   # Alert when puts enter high-gamma region within this many days
-
-  # Market environment assessment (assess_market_environment)
-  skew_low_pctile: 25          # below = benign skew
-  skew_high_pctile: 75         # above = expensive/stressed skew
-  term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
+  # Hedge-cost verdict thresholds (vol regime / skew / term structure) are
+  # policy, not presentation — see market_environment in ips.yaml.
 
 metrics:
   # 1. Net Carry (Theta) - Annualized theta as % of underlying
