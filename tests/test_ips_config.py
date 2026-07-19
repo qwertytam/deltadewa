@@ -424,3 +424,70 @@ class TestMarketEnvironment:
         }
         with pytest.raises(IpsConfigError, match="term_contango_tolerance"):
             load_ips_config(_write_yaml(tmp_path, config))
+
+
+class TestExpiryThetaTriggers:
+    """Tests for the expiry / theta-excellent trigger thresholds (Mo3)."""
+
+    def test_defaults_when_absent(self, tmp_path: Path) -> None:
+        """A triggers section without the new keys uses the defaults."""
+        # _VALID_CONFIG's triggers omit the new keys.
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+        triggers = ips.triggers
+
+        assert triggers.expiry_urgent_days == 7
+        assert triggers.expiry_soon_days == 21
+        assert triggers.theta_cost_excellent_pct == 1.0
+
+    def test_example_ips_yaml_expiry_theta(self) -> None:
+        """The shipped config/ips.yaml carries the new trigger keys."""
+        triggers = load_ips_config(EXAMPLE_IPS_YAML).triggers
+
+        assert triggers.expiry_urgent_days == 7
+        assert triggers.expiry_soon_days == 21
+        assert triggers.theta_cost_excellent_pct == 1.0
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        """Custom expiry / theta-excellent values round-trip."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "expiry_urgent_days": 10,
+                "expiry_soon_days": 40,
+                "theta_cost_excellent_pct": 0.5,
+            },
+        }
+        triggers = load_ips_config(_write_yaml(tmp_path, config)).triggers
+
+        assert triggers.expiry_urgent_days == 10
+        assert triggers.expiry_soon_days == 40
+        assert triggers.theta_cost_excellent_pct == 0.5
+
+    def test_urgent_not_below_soon_raises(self, tmp_path: Path) -> None:
+        """expiry_urgent_days >= expiry_soon_days raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "expiry_urgent_days": 30,
+                "expiry_soon_days": 21,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="expiry_urgent_days"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_theta_excellent_not_below_acceptable_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """theta_cost_excellent_pct >= theta_cost_acceptable_pct raises."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "theta_cost_excellent_pct": 3.0,  # acceptable is 2.0
+            },
+        }
+        with pytest.raises(IpsConfigError, match="theta_cost_excellent_pct"):
+            load_ips_config(_write_yaml(tmp_path, config))

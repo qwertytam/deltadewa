@@ -41,7 +41,10 @@ triggers:
                                   # deviation (pp) from this, not from neutrality
   delta_drift_warn_pct: 5.0      # pp of drift from target -> MONITOR
   delta_drift_action_pct: 10.0   # pp of drift from target -> ACTION
-  theta_cost_acceptable_pct: 2.0
+  theta_cost_excellent_pct: 1.0  # annual theta % below this -> EXCELLENT
+  theta_cost_acceptable_pct: 2.0 # ...below this -> ACCEPTABLE, else EXPENSIVE
+  expiry_urgent_days: 7          # DTE below this -> URGENT (roll immediately)
+  expiry_soon_days: 21           # DTE below this -> plan rolls SOON
   roll_time_months: 9.0          # roll when maturity below this
   rally_rebalance_pct: 15.0      # market rally that forces a re-strike review
   strike_drift_max_otm_pct: 45.0

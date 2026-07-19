@@ -30,6 +30,13 @@ _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 # distance from full delta-neutrality.
 _DEFAULT_TARGET_DELTA_RATIO_PCT: Final[float] = 90.0
 
+# Defaults for the expiry / theta trigger thresholds that
+# ``HedgeTriggerThresholds`` previously hardcoded. Sourced here so ``from_ips``
+# can map every threshold and no policy value stays on a dataclass literal.
+_DEFAULT_EXPIRY_URGENT_DAYS: Final[int] = 7
+_DEFAULT_EXPIRY_SOON_DAYS: Final[int] = 21
+_DEFAULT_THETA_COST_EXCELLENT_PCT: Final[float] = 1.0
+
 # Single source for the market-environment policy bands (see
 # ``IpsMarketEnvironment``). Public because they are consumed across
 # ``analysis.market_environment``, ``analysis.health``,
@@ -136,6 +143,11 @@ class IpsTriggers:
     percentage points), and the ``delta_drift_*`` fields are those deviation
     bands. Distinct from ``recommendations``'s ``target_hedge_ratio`` (the
     complement, option-offset framing).
+
+    ``expiry_urgent_days`` / ``expiry_soon_days`` bound the URGENT / SOON
+    expiration windows and ``theta_cost_excellent_pct`` is the EXCELLENT theta
+    cutoff; ``HedgeTriggerThresholds.from_ips`` maps them all so no trigger
+    threshold stays hardcoded.
     """
 
     delta_drift_warn_pct: float
@@ -147,6 +159,9 @@ class IpsTriggers:
     target_delta_ratio_pct: float = _DEFAULT_TARGET_DELTA_RATIO_PCT
     roll_review_buffer: float = 1.5
     strike_drift_review_fraction: float = 0.75
+    expiry_urgent_days: int = _DEFAULT_EXPIRY_URGENT_DAYS
+    expiry_soon_days: int = _DEFAULT_EXPIRY_SOON_DAYS
+    theta_cost_excellent_pct: float = _DEFAULT_THETA_COST_EXCELLENT_PCT
 
 
 @dataclass(frozen=True)
@@ -338,11 +353,46 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         "triggers.target_delta_ratio_pct",
     )
 
+    expiry_urgent_days = section.get(
+        "expiry_urgent_days",
+        _DEFAULT_EXPIRY_URGENT_DAYS,
+    )
+    expiry_soon_days = section.get(
+        "expiry_soon_days",
+        _DEFAULT_EXPIRY_SOON_DAYS,
+    )
+    _require_non_negative(expiry_urgent_days, "triggers.expiry_urgent_days")
+    _require_non_negative(expiry_soon_days, "triggers.expiry_soon_days")
+    if expiry_urgent_days >= expiry_soon_days:
+        raise IpsConfigError(
+            "triggers.expiry_urgent_days must be < expiry_soon_days, got "
+            f"{expiry_urgent_days} >= {expiry_soon_days}",
+        )
+
+    theta_cost_excellent_pct = section.get(
+        "theta_cost_excellent_pct",
+        _DEFAULT_THETA_COST_EXCELLENT_PCT,
+    )
+    _require_non_negative(
+        theta_cost_excellent_pct,
+        "triggers.theta_cost_excellent_pct",
+    )
+    if theta_cost_excellent_pct >= fields["theta_cost_acceptable_pct"]:
+        raise IpsConfigError(
+            "triggers.theta_cost_excellent_pct must be < "
+            "theta_cost_acceptable_pct, got "
+            f"{theta_cost_excellent_pct} >= "
+            f"{fields['theta_cost_acceptable_pct']}",
+        )
+
     return IpsTriggers(
         **fields,
         target_delta_ratio_pct=target_delta_ratio_pct,
         roll_review_buffer=roll_review_buffer,
         strike_drift_review_fraction=strike_drift_review_fraction,
+        expiry_urgent_days=expiry_urgent_days,
+        expiry_soon_days=expiry_soon_days,
+        theta_cost_excellent_pct=theta_cost_excellent_pct,
     )
 
 

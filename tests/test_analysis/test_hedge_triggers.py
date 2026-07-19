@@ -8,30 +8,67 @@ from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
     evaluate_hedge_triggers,
 )
-from deltadewa.constants import OptionType
-from deltadewa.ips_config import load_ips_config
+from deltadewa.constants import DAYS_PER_YEAR, OptionType
+from deltadewa.ips_config import IpsTriggers, load_ips_config
 from deltadewa.portfolio.core import OptionPortfolio
 
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
 
 
-def _mock_portfolio(net_delta: float, underlying_qty: float) -> Mock:
-    """Positionless portfolio mock with a crafted net_delta / equity."""
+def _mock_portfolio(
+    net_delta: float,
+    underlying_qty: float,
+    total_theta: float = 0.0,
+) -> Mock:
+    """Positionless portfolio mock with a crafted net_delta / equity / theta."""
     portfolio = Mock()
     portfolio.positions = []
     portfolio.spot_price = 100.0
     portfolio.summary_stats.return_value = {
         "net_delta": net_delta,
         "underlying_quantity": underlying_qty,
-        "total_theta": 0.0,
+        "total_theta": total_theta,
         "total_gamma": 0.0,
     }
     return portfolio
 
 
+def _reporter_text(reporter: Mock) -> str:
+    """Join the text of every success/warning/error call on a Mock reporter."""
+    lines = [
+        str(call.args[0])
+        for method in ("success", "warning", "error")
+        for call in getattr(reporter, method).call_args_list
+        if call.args
+    ]
+    return " ".join(lines)
+
+
 def _action_text(result_actions: list[tuple[str, str]]) -> str:
     """Join all action descriptions for substring assertions."""
     return " ".join(desc for _, desc in result_actions)
+
+
+_ASOF_MATURITY = datetime(2027, 1, 1, tzinfo=UTC)
+
+
+def _asof_portfolio(days_before_maturity: int) -> OptionPortfolio:
+    """Single-put portfolio whose valuation date is N days before maturity."""
+    portfolio = OptionPortfolio(
+        underlying_quantity=100.0,
+        spot_price=100.0,
+        volatility=0.2,
+    )
+    portfolio.add_position(
+        strike_price=90.0,
+        maturity_date=_ASOF_MATURITY,
+        quantity=1,
+        option_type=OptionType.PUT,
+    )
+    portfolio.valuation_date = _ASOF_MATURITY - timedelta(
+        days=days_before_maturity,
+    )
+    return portfolio
 
 
 class TestValuationDateDrivesExpiry:
@@ -100,20 +137,20 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
             thresholds.theta_cost_acceptable_pct
             == ips.triggers.theta_cost_acceptable_pct
         )
+        assert thresholds.expiry_urgent_days == ips.triggers.expiry_urgent_days
+        assert thresholds.expiry_soon_days == ips.triggers.expiry_soon_days
+        assert (
+            thresholds.theta_cost_excellent_pct
+            == ips.triggers.theta_cost_excellent_pct
+        )
 
-    def test_leaves_unmapped_fields_at_dataclass_defaults(self) -> None:
-        """Test that fields not in the IPS schema keep their defaults."""
+    def test_leaves_only_gamma_at_dataclass_defaults(self) -> None:
+        """Only the gamma bands stay unmapped (recalibrated later)."""
         ips = load_ips_config(EXAMPLE_IPS_YAML)
         defaults = HedgeTriggerThresholds()
 
         thresholds = HedgeTriggerThresholds.from_ips(ips.triggers)
 
-        assert thresholds.expiry_urgent_days == defaults.expiry_urgent_days
-        assert thresholds.expiry_soon_days == defaults.expiry_soon_days
-        assert (
-            thresholds.theta_cost_excellent_pct
-            == defaults.theta_cost_excellent_pct
-        )
         assert thresholds.gamma_low == defaults.gamma_low
         assert thresholds.gamma_moderate == defaults.gamma_moderate
 
@@ -134,6 +171,94 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
             thresholds.theta_cost_acceptable_pct
             == ips.triggers.theta_cost_acceptable_pct
         )
+
+
+class TestIpsThresholdsMoveTriggers:
+    """Each newly-mapped IPS threshold changes the trigger it drives."""
+
+    def test_from_ips_maps_all_non_gamma_thresholds(self) -> None:
+        """Distinct IPS values (not the dataclass defaults) are mapped."""
+        triggers = IpsTriggers(
+            delta_drift_warn_pct=5.0,
+            delta_drift_action_pct=10.0,
+            theta_cost_acceptable_pct=2.0,
+            roll_time_months=9.0,
+            rally_rebalance_pct=15.0,
+            strike_drift_max_otm_pct=45.0,
+            expiry_urgent_days=9,
+            expiry_soon_days=40,
+            theta_cost_excellent_pct=0.5,
+        )
+
+        thresholds = HedgeTriggerThresholds.from_ips(triggers)
+
+        assert thresholds.expiry_urgent_days == 9
+        assert thresholds.expiry_soon_days == 40
+        assert thresholds.theta_cost_excellent_pct == 0.5
+
+    def test_expiry_soon_days_moves_the_soon_action(self) -> None:
+        """A wider soon window turns a 25-DTE book into a SOON action."""
+        portfolio = _asof_portfolio(days_before_maturity=25)
+
+        narrow = evaluate_hedge_triggers(
+            portfolio,
+            Mock(),
+            HedgeTriggerThresholds(expiry_soon_days=21),
+        )
+        wide = evaluate_hedge_triggers(
+            portfolio,
+            Mock(),
+            HedgeTriggerThresholds(expiry_soon_days=30),
+        )
+
+        # The expiry-specific SOON action (distinct from a delta-drift one).
+        assert "approaching expiration" not in _action_text(narrow.actions)
+        assert "approaching expiration" in _action_text(wide.actions)
+
+    def test_expiry_urgent_days_moves_the_urgent_count(self) -> None:
+        """The urgent window decides whether a 5-DTE leg is near-expiry."""
+        portfolio = _asof_portfolio(days_before_maturity=5)
+
+        narrow = evaluate_hedge_triggers(
+            portfolio,
+            Mock(),
+            HedgeTriggerThresholds(expiry_urgent_days=3),
+        )
+        wide = evaluate_hedge_triggers(
+            portfolio,
+            Mock(),
+            HedgeTriggerThresholds(expiry_urgent_days=7),
+        )
+
+        assert narrow.near_expiry_count == 0  # 5 is not < 3
+        assert wide.near_expiry_count == 1  # 5 < 7
+
+    def test_theta_cost_excellent_pct_moves_the_label(self) -> None:
+        """The EXCELLENT cutoff decides the theta label for a 1.5% cost book."""
+        # annual theta 150 on 10,000 notional -> theta_cost_pct == 1.5%.
+        portfolio = _mock_portfolio(
+            net_delta=90.0,
+            underlying_qty=100.0,
+            total_theta=-150.0 / DAYS_PER_YEAR,
+        )
+
+        below = Mock()
+        evaluate_hedge_triggers(
+            portfolio,
+            below,
+            HedgeTriggerThresholds(theta_cost_excellent_pct=1.0),
+        )
+        above = Mock()
+        evaluate_hedge_triggers(
+            portfolio,
+            above,
+            HedgeTriggerThresholds(theta_cost_excellent_pct=1.8),
+        )
+
+        # 1.5% > 1.0 cutoff -> ACCEPTABLE; 1.5% < 1.8 cutoff -> EXCELLENT.
+        assert "ACCEPTABLE" in _reporter_text(below)
+        assert "EXCELLENT" not in _reporter_text(below)
+        assert "EXCELLENT" in _reporter_text(above)
 
 
 class TestEvaluateDeltaDriftTrigger:

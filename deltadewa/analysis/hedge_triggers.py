@@ -81,14 +81,17 @@ class HedgeTriggerThresholds:
     def from_ips(cls, triggers: IpsTriggers) -> HedgeTriggerThresholds:
         """Build thresholds from an ``IpsTriggers`` section.
 
-        Fields the IPS schema does not define (``expiry_urgent_days``,
-        ``expiry_soon_days``, ``theta_cost_excellent_pct``, ``gamma_low``,
-        ``gamma_moderate``) keep this dataclass's literal defaults.
+        Every threshold the IPS defines is mapped here. Only the gamma bands
+        (``gamma_low`` / ``gamma_moderate``) still keep this dataclass's literal
+        defaults, pending their SPX-scale recalibration.
         """
         return cls(
             target_delta_ratio_pct=triggers.target_delta_ratio_pct,
             delta_drift_warn_pct=triggers.delta_drift_warn_pct,
             delta_drift_action_pct=triggers.delta_drift_action_pct,
+            expiry_urgent_days=triggers.expiry_urgent_days,
+            expiry_soon_days=triggers.expiry_soon_days,
+            theta_cost_excellent_pct=triggers.theta_cost_excellent_pct,
             theta_cost_acceptable_pct=triggers.theta_cost_acceptable_pct,
         )
 
