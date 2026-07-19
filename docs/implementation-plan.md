@@ -218,6 +218,16 @@ both surfaces are covered by app + report tests.
   single-name **basis/beta** guidance, the §1256 **wash-sale** correction, a
   **cash/margin** section, and quantified **put-spread vs outright** economics.
   Reconcile the Quick Start "1–2%" vs benchmark "0.5–1.5% / 1% ceiling" tension.
+  - **Concentrated single-name crash-beta gap (opened by the §2499 beta
+    multiplier).** M1.4 shipped `IpsSizing.portfolio_beta` — the handbook's
+    beta-adjusted sizing (`hedge notional = book × β`) — but the handbook only
+    covers a *diversified* book with a stable β near 1.0. It gives **no
+    process** for (a) estimating a *crash* beta for a concentrated,
+    single-name-heavy book (betas fan out and rise in a sell-off), nor (b)
+    deciding **when single-name (idiosyncratic) put overlays are warranted**
+    versus index puts alone. The shipped multiplier deliberately does not
+    invent this; index puts under-protect idiosyncratic risk, and this section
+    must supply the missing methodology before that book type is sized here.
 - Add CHANGELOG / CONTRIBUTING / SECURITY; fix the LICENSE author vs repo-owner
   mismatch.
 

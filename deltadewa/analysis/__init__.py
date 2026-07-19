@@ -66,6 +66,7 @@ from deltadewa.analysis.roll_status import (
 )
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
+    beta_adjusted_notional,
     required_crash_offset,
     size_from_unit,
     size_hedge,
@@ -106,6 +107,7 @@ __all__ = [
     "StrikeLadder",
     "TermShape",
     "assess_market_environment",
+    "beta_adjusted_notional",
     "build_monetization_plan",
     "build_roll_plan",
     "build_strike_ladder",

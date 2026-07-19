@@ -2,6 +2,9 @@
 
 Implements the 5-step IPS-driven sizing framework:
 
+0. ``beta_adjusted_notional`` — the book's SPX-equivalent exposure
+   (``book_notional * portfolio_beta``, handbook §2499). The offset and
+   convexity are measured against it, so beta ≠ 1 sizes the hedge up/down.
 1. ``required_crash_offset`` — dollars the hedge must recover beyond the
    acceptable drawdown.
 2. Per-contract payoff: the candidate **repriced** at the IPS crash state
@@ -47,10 +50,19 @@ class HedgeSizingResult:
             (e.g. 5.0 → strike = spot * 0.95).
         candidate_maturity_years: Time to expiry of the candidate put in years.
         book_notional: ``abs(underlying_quantity) * spot_price`` in dollars.
+        portfolio_beta: Book beta versus SPX used to size the hedge
+            (``IpsSizing.portfolio_beta``); a user input, not estimated.
+        beta_adjusted_notional: SPX-equivalent exposure
+            (``book_notional * portfolio_beta``); the notional the crash offset
+            and convexity are measured against. Equals ``book_notional`` at
+            beta 1.0.
         carry_budget: Annual premium budget in dollars
-            (``annual_carry_pct / 100 * book_notional``).
+            (``annual_carry_pct / 100 * book_notional`` — on the true book
+            value, not beta-adjusted: the premium budget is a fraction of actual
+            wealth).
         required_crash_offset: Dollars of crash loss beyond the drawdown
-            tolerance that the hedge must offset.
+            tolerance that the hedge must offset, measured on the
+            ``beta_adjusted_notional``.
         per_contract_payoff: One contract **repriced** at the IPS crash state
             (crash spot + vol shock), in dollars — the full hedge-only option
             value, not intrinsic.
@@ -70,7 +82,7 @@ class HedgeSizingResult:
             (floor division); ``sys.maxsize`` when ``per_contract_carry`` is
             zero (practically unlimited).
         achieved_convexity_pct: ``(contracts_needed * per_contract_payoff)
-            / book_notional * 100``; 0.0 when ``book_notional`` is zero.
+            / beta_adjusted_notional * 100``; 0.0 when the notional is zero.
         meets_convexity_target: True when ``achieved_convexity_pct`` lies
             within the IPS band ``[target_min_pct, target_max_pct]``.
 
@@ -82,6 +94,8 @@ class HedgeSizingResult:
 
     # Notional & budget
     book_notional: float
+    portfolio_beta: float
+    beta_adjusted_notional: float
     carry_budget: float
 
     # Step 1 — drawdown offset
@@ -131,6 +145,35 @@ class UnitSizingResult:
 # ---------------------------------------------------------------------------
 # Pure-math core
 # ---------------------------------------------------------------------------
+
+
+def beta_adjusted_notional(
+    book_notional: float,
+    portfolio_beta: float,
+) -> float:
+    """SPX-equivalent market exposure of the book (handbook §2499).
+
+    The sizing framework protects the book's *systematic* exposure, which is
+    ``book_notional * portfolio_beta`` — the notional of SPX the book behaves
+    like. A beta below 1.0 sizes the hedge down; above 1.0 sizes it up,
+    proportionally. At ``portfolio_beta == 1.0`` this is the book notional
+    unchanged, reproducing the pre-beta sizing exactly.
+
+    Args:
+        book_notional: ``abs(underlying_quantity) * spot_price`` in dollars.
+        portfolio_beta: Book beta versus SPX. A **user input, not estimated** —
+            the investor sets it in the IPS (``IpsSizing.portfolio_beta``).
+
+    Returns:
+        Beta-adjusted (SPX-equivalent) notional in dollars.
+
+    Note:
+        SPX puts hedge only the market-beta component, so this multiplier
+        **under-protects idiosyncratic risk**: a concentrated single-name book
+        carries crash exposure beta alone does not capture.
+
+    """
+    return book_notional * portfolio_beta
 
 
 def required_crash_offset(
@@ -223,11 +266,20 @@ def size_hedge(
     pricing to :func:`~deltadewa.analysis.candidate.evaluate_candidate`, then
     calls :func:`size_from_unit` for the scalar arithmetic.
 
+    Sizing operates on the **beta-adjusted (SPX-equivalent) notional**
+    ``book_notional * ips_config.sizing.portfolio_beta`` (handbook §2499): the
+    crash offset and achieved convexity are measured against it, so a book beta
+    below/above 1.0 sizes the hedge down/up proportionally. ``portfolio_beta``
+    is a **user input, not estimated** (set in the IPS); SPX puts hedge only the
+    systematic component and therefore **under-protect idiosyncratic risk**. The
+    carry budget stays on the true ``book_notional`` — the premium budget is a
+    fraction of actual wealth, which beta does not change.
+
     Args:
         portfolio: Live portfolio; supplies spot, vol, rate, div, exercise
             style, and valuation date.
         ips_config: Policy parameters (carry budget, drawdown tolerance,
-            crash scenario, convexity target band).
+            crash scenario, convexity target band, portfolio beta).
         candidate_pct_otm: Strike as percent out-of-the-money
             (e.g. 5.0 → ``strike = spot * 0.95``).
         candidate_maturity_years: Time to expiry in years
@@ -250,11 +302,13 @@ def size_hedge(
             "underlying_quantity is unset (book notional is 0)"
         )
         raise ValueError(msg)
+    portfolio_beta = ips_config.sizing.portfolio_beta
+    beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
     carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
 
     crash_pct = ips_config.convexity.crash_scenario_pct  # negative
     offset = required_crash_offset(
-        book_notional,
+        beta_adj_notional,
         crash_pct,
         ips_config.drawdown.max_tolerance_pct,
     )
@@ -278,7 +332,9 @@ def size_hedge(
 
     achieved_payoff = sizing.contracts_needed * metrics.per_contract_payoff
     achieved_convexity_pct = (
-        achieved_payoff / book_notional * 100.0 if book_notional > 0.0 else 0.0
+        achieved_payoff / beta_adj_notional * 100.0
+        if beta_adj_notional > 0.0
+        else 0.0
     )
     conv = ips_config.convexity
     meets_convexity_target = (
@@ -289,6 +345,8 @@ def size_hedge(
         candidate_pct_otm=candidate_pct_otm,
         candidate_maturity_years=candidate_maturity_years,
         book_notional=book_notional,
+        portfolio_beta=portfolio_beta,
+        beta_adjusted_notional=beta_adj_notional,
         carry_budget=carry_budget,
         required_crash_offset=offset,
         per_contract_payoff=metrics.per_contract_payoff,

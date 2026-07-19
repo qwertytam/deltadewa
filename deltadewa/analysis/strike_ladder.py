@@ -27,7 +27,11 @@ from deltadewa.analysis.candidate import (
     build_put_valuation,
     evaluate_candidate,
 )
-from deltadewa.analysis.sizing import required_crash_offset, size_from_unit
+from deltadewa.analysis.sizing import (
+    beta_adjusted_notional,
+    required_crash_offset,
+    size_from_unit,
+)
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
@@ -49,20 +53,29 @@ class LadderRung:
         maturity_years: Time to expiry in years.
         metrics: Pricing and payoff metrics from
             :func:`~deltadewa.analysis.candidate.evaluate_candidate`.
+        portfolio_beta: Book beta versus SPX used to size the hedge
+            (``IpsSizing.portfolio_beta``); a user input, not estimated. Same
+            for all rungs.
+        beta_adjusted_notional: SPX-equivalent exposure
+            (``book_notional * portfolio_beta``); the notional the offset and
+            convexity are measured against. Equals ``book_notional`` at beta
+            1.0. Same for all rungs.
         required_crash_offset: Dollars of crash loss beyond the drawdown
-            tolerance that the hedge must offset (same for all rungs given
-            fixed portfolio and IPS config).
+            tolerance that the hedge must offset, measured on the
+            ``beta_adjusted_notional`` (same for all rungs given fixed
+            portfolio and IPS config).
         contracts_needed: Minimum whole contracts to cover
             ``required_crash_offset`` (ceiling division).
         implied_annual_carry: ``contracts_needed * per_contract_carry``.
-        carry_budget: Annual carry budget in dollars for this portfolio.
+        carry_budget: Annual carry budget in dollars for this portfolio (on the
+            true book value, not beta-adjusted).
         within_budget: ``True`` when ``implied_annual_carry <= carry_budget``.
         carry_headroom: ``carry_budget - implied_annual_carry``; negative when
             over budget.
         max_affordable_contracts: Most contracts the carry budget supports
             (floor division).
         achieved_convexity_pct: ``(contracts_needed * per_contract_payoff)
-            / book_notional * 100``.
+            / beta_adjusted_notional * 100``.
         meets_convexity: ``True`` when ``achieved_convexity_pct`` lies within
             the IPS convexity band ``[target_min_pct, target_max_pct]``.
         meets_target_within_budget: ``True`` when both ``within_budget`` and
@@ -75,6 +88,8 @@ class LadderRung:
     metrics: CandidateMetrics
 
     # Sizing outputs
+    portfolio_beta: float
+    beta_adjusted_notional: float
     required_crash_offset: float
     contracts_needed: int
     implied_annual_carry: float
@@ -230,10 +245,15 @@ def build_strike_ladder(
             "underlying_quantity is unset (book notional is 0)"
         )
         raise ValueError(msg)
+    # Beta-adjusted (SPX-equivalent) notional the hedge is sized against
+    # (handbook §2499); equals book_notional at beta 1.0. Carry budget stays on
+    # the true book value — the premium budget is a fraction of actual wealth.
+    portfolio_beta = ips_config.sizing.portfolio_beta
+    beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
     carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
     crash_pct = ips_config.convexity.crash_scenario_pct
     offset = required_crash_offset(
-        book_notional,
+        beta_adj_notional,
         crash_pct,
         ips_config.drawdown.max_tolerance_pct,
     )
@@ -266,9 +286,9 @@ def build_strike_ladder(
         achieved_convexity_pct = (
             sizing.contracts_needed
             * metrics.per_contract_payoff
-            / book_notional
+            / beta_adj_notional
             * 100.0
-            if book_notional > 0.0
+            if beta_adj_notional > 0.0
             else 0.0
         )
         meets_convexity = (
@@ -279,6 +299,8 @@ def build_strike_ladder(
                 target_delta=delta,
                 maturity_years=maturity,
                 metrics=metrics,
+                portfolio_beta=portfolio_beta,
+                beta_adjusted_notional=beta_adj_notional,
                 required_crash_offset=offset,
                 contracts_needed=sizing.contracts_needed,
                 implied_annual_carry=sizing.implied_annual_carry,

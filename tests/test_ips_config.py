@@ -531,3 +531,34 @@ class TestGammaDriftBands:
         }
         with pytest.raises(IpsConfigError, match="gamma_drift_moderate_pct"):
             load_ips_config(_write_yaml(tmp_path, config))
+
+
+class TestSizing:
+    """Tests for the ``sizing`` policy section (beta-adjusted sizing, §2499)."""
+
+    def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
+        """A config without a sizing section defaults portfolio_beta to 1.0."""
+        path = _write_yaml(tmp_path, _VALID_CONFIG)  # no sizing section
+        assert load_ips_config(path).sizing.portfolio_beta == 1.0
+
+    def test_example_ips_yaml_sizing(self) -> None:
+        """The shipped config/ips.yaml carries portfolio_beta 1.0."""
+        assert load_ips_config(EXAMPLE_IPS_YAML).sizing.portfolio_beta == 1.0
+
+    def test_round_trips_custom_value(self, tmp_path: Path) -> None:
+        """A supplied portfolio_beta round-trips through the loader."""
+        config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": 0.85}}
+        sizing = load_ips_config(_write_yaml(tmp_path, config)).sizing
+        assert sizing.portfolio_beta == 0.85
+
+    def test_zero_beta_raises(self, tmp_path: Path) -> None:
+        """A non-positive portfolio_beta raises IpsConfigError."""
+        config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": 0.0}}
+        with pytest.raises(IpsConfigError, match="portfolio_beta"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_negative_beta_raises(self, tmp_path: Path) -> None:
+        """A negative portfolio_beta raises IpsConfigError."""
+        config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": -1.0}}
+        with pytest.raises(IpsConfigError, match="portfolio_beta"):
+            load_ips_config(_write_yaml(tmp_path, config))

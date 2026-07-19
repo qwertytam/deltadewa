@@ -43,6 +43,12 @@ _DEFAULT_THETA_COST_EXCELLENT_PCT: Final[float] = 1.0
 _DEFAULT_GAMMA_DRIFT_MODERATE_PCT: Final[float] = 2.0
 _DEFAULT_GAMMA_DRIFT_HIGH_PCT: Final[float] = 5.0
 
+# Default portfolio beta vs SPX for hedge sizing (see ``IpsSizing``). 1.0 means
+# the protected book is assumed to move 1:1 with the index — the same implicit
+# assumption the sizing framework carried before beta-adjustment, so a config
+# without a ``sizing`` section reproduces the pre-beta sizing exactly.
+_DEFAULT_PORTFOLIO_BETA: Final[float] = 1.0
+
 # Single source for the market-environment policy bands (see
 # ``IpsMarketEnvironment``). Public because they are consumed across
 # ``analysis.market_environment``, ``analysis.health``,
@@ -141,6 +147,27 @@ class IpsDrawdown:
 
 
 @dataclass(frozen=True)
+class IpsSizing:
+    """Hedge-sizing policy inputs (handbook §2499 — Beta-Adjusted Sizing).
+
+    ``portfolio_beta`` is the protected book's beta versus SPX. The hedge
+    notional the sizing framework works against is
+    ``book_value * portfolio_beta`` (the SPX-equivalent market exposure), so a
+    beta below 1.0 sizes down the hedge and a beta above 1.0 sizes it up,
+    proportionally.
+
+    ``portfolio_beta`` is a **user input, not estimated** here: the investor
+    recalculates it (handbook: at least annually, or on a >10% position change)
+    and sets it in policy. SPX puts hedge only the systematic (market-beta)
+    component of the book, so they **under-protect idiosyncratic risk** — a
+    concentrated single-name book carries crash exposure this multiplier does
+    not capture (see ``docs/implementation-plan.md``, Phase 3).
+    """
+
+    portfolio_beta: float = _DEFAULT_PORTFOLIO_BETA
+
+
+@dataclass(frozen=True)
 class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
@@ -205,6 +232,7 @@ class IpsConfig:
     market_environment: IpsMarketEnvironment = dataclass_field(
         default_factory=IpsMarketEnvironment,
     )
+    sizing: IpsSizing = dataclass_field(default_factory=IpsSizing)
 
 
 def _require_section(config: dict[str, Any], name: str) -> dict[str, Any]:
@@ -475,6 +503,27 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
     )
 
 
+def _parse_sizing(config: dict[str, Any]) -> IpsSizing:
+    """Parse the optional ``sizing`` policy section.
+
+    The section is optional: a missing section (or a missing
+    ``portfolio_beta``) falls back to ``_DEFAULT_PORTFOLIO_BETA`` (1.0) — the
+    same value the dataclass default uses — so an older ips.yaml keeps the
+    pre-beta sizing behaviour.
+    """
+    section = config.get("sizing", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError("ips.yaml 'sizing' section must be a mapping")
+
+    portfolio_beta = section.get("portfolio_beta", _DEFAULT_PORTFOLIO_BETA)
+    if portfolio_beta <= 0:
+        raise IpsConfigError(
+            f"sizing.portfolio_beta must be > 0, got {portfolio_beta}",
+        )
+
+    return IpsSizing(portfolio_beta=portfolio_beta)
+
+
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     section = _require_section(config, "monetization")
     raw_schedule = _require_field(section, "monetization", "schedule")
@@ -548,4 +597,5 @@ def load_ips_config(path: Path) -> IpsConfig:
         triggers=_parse_triggers(config),
         monetization=_parse_monetization(config),
         market_environment=_parse_market_environment(config),
+        sizing=_parse_sizing(config),
     )

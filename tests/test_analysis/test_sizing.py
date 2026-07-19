@@ -9,6 +9,7 @@ import pytest
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
     UnitSizingResult,
+    beta_adjusted_notional,
     required_crash_offset,
     size_from_unit,
     size_hedge,
@@ -23,6 +24,7 @@ from deltadewa.ips_config import (
     IpsMonetizationStep,
     IpsPricing,
     IpsProgram,
+    IpsSizing,
     IpsTriggers,
 )
 from deltadewa.portfolio.core import OptionPortfolio
@@ -39,6 +41,7 @@ def _make_ips(
     max_tolerance_pct: float = 20.0,
     target_min_pct: float = 5.0,
     target_max_pct: float = 30.0,
+    portfolio_beta: float = 1.0,
 ) -> IpsConfig:
     return IpsConfig(
         program=IpsProgram(name="Test", instrument="SPX"),
@@ -61,6 +64,7 @@ def _make_ips(
         monetization=IpsMonetization(
             schedule=(IpsMonetizationStep(gain_pct=50.0, sell_pct=25.0),),
         ),
+        sizing=IpsSizing(portfolio_beta=portfolio_beta),
     )
 
 
@@ -356,3 +360,112 @@ class TestSizeHedge:
                 candidate_pct_otm=5.0,
                 candidate_maturity_years=0.25,
             )
+
+
+# ---------------------------------------------------------------------------
+# beta_adjusted_notional
+# ---------------------------------------------------------------------------
+
+
+class TestBetaAdjustedNotional:
+    """The pure beta-adjusted-notional helper (handbook §2499)."""
+
+    def test_beta_one_is_identity(self) -> None:
+        """Beta 1.0 leaves the book notional unchanged."""
+        assert beta_adjusted_notional(500_000.0, 1.0) == pytest.approx(
+            500_000.0,
+        )
+
+    def test_beta_below_one_sizes_down(self) -> None:
+        """Beta 0.85 sizes the hedge notional down to 85% of book."""
+        assert beta_adjusted_notional(500_000.0, 0.85) == pytest.approx(
+            425_000.0,
+        )
+
+    def test_beta_above_one_sizes_up(self) -> None:
+        """Beta 1.3 sizes the hedge notional up to 130% of book."""
+        assert beta_adjusted_notional(500_000.0, 1.3) == pytest.approx(
+            650_000.0,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Beta-adjusted size_hedge
+# ---------------------------------------------------------------------------
+
+
+class TestBetaAdjustedSizing:
+    """size_hedge sizes against book_notional * portfolio_beta."""
+
+    def test_beta_one_reproduces_pre_beta_sizing(self) -> None:
+        """Beta 1.0: adjusted notional == book; offset unchanged (25_000)."""
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        result = size_hedge(
+            portfolio,
+            _make_ips(
+                crash_scenario_pct=-25.0,
+                max_tolerance_pct=20.0,
+                portfolio_beta=1.0,
+            ),
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+        )
+        assert result.portfolio_beta == pytest.approx(1.0)
+        assert result.beta_adjusted_notional == pytest.approx(500_000.0)
+        # 500_000 * (25 - 20) / 100 — the pre-beta offset, unchanged.
+        assert result.required_crash_offset == pytest.approx(25_000.0)
+
+    def test_beta_scales_notional_and_offset_proportionally(self) -> None:
+        """Beta 2.0 doubles the beta-adjusted notional and the crash offset."""
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=10_000.0)
+        base = size_hedge(
+            portfolio,
+            _make_ips(portfolio_beta=1.0),
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+        )
+        scaled = size_hedge(
+            portfolio,
+            _make_ips(portfolio_beta=2.0),
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+        )
+        assert scaled.beta_adjusted_notional == pytest.approx(
+            2.0 * base.beta_adjusted_notional,
+        )
+        assert scaled.required_crash_offset == pytest.approx(
+            2.0 * base.required_crash_offset,
+        )
+        assert scaled.contracts_needed > base.contracts_needed
+
+    def test_carry_budget_not_beta_adjusted(self) -> None:
+        """Carry budget stays on the true book value, independent of beta."""
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        base = size_hedge(
+            portfolio,
+            _make_ips(portfolio_beta=1.0),
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+        )
+        scaled = size_hedge(
+            portfolio,
+            _make_ips(portfolio_beta=1.5),
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+        )
+        assert scaled.carry_budget == pytest.approx(base.carry_budget)
+
+    def test_beta_single_sourced_from_ips(self) -> None:
+        """The beta used is exactly ips_config.sizing.portfolio_beta."""
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        ips = _make_ips(portfolio_beta=1.3)
+        result = size_hedge(
+            portfolio,
+            ips,
+            candidate_pct_otm=5.0,
+            candidate_maturity_years=0.25,
+        )
+        assert result.portfolio_beta == pytest.approx(1.3)
+        assert result.beta_adjusted_notional == pytest.approx(
+            result.book_notional * ips.sizing.portfolio_beta,
+        )

@@ -19,6 +19,7 @@ from deltadewa.ips_config import (
     IpsMonetizationStep,
     IpsPricing,
     IpsProgram,
+    IpsSizing,
     IpsTriggers,
 )
 from deltadewa.portfolio.core import OptionPortfolio
@@ -54,6 +55,7 @@ def _make_ips(
     max_tolerance_pct: float = 20.0,
     target_min_pct: float = 5.0,
     target_max_pct: float = 30.0,
+    portfolio_beta: float = 1.0,
 ) -> IpsConfig:
     return IpsConfig(
         program=IpsProgram(name="Test", instrument="SPX"),
@@ -76,6 +78,7 @@ def _make_ips(
         monetization=IpsMonetization(
             schedule=(IpsMonetizationStep(gain_pct=50.0, sell_pct=25.0),),
         ),
+        sizing=IpsSizing(portfolio_beta=portfolio_beta),
     )
 
 
@@ -389,3 +392,59 @@ class TestBuildStrikeLadder:
                 target_deltas=[0.10],
                 maturities_years=[0.25],
             )
+
+
+class TestBetaAdjustment:
+    """Beta scales each rung's SPX-equivalent notional (handbook §2499)."""
+
+    def test_beta_one_matches_book_notional(self) -> None:
+        """At beta 1.0 the rung's beta_adjusted_notional == book notional."""
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        result = build_strike_ladder(
+            portfolio,
+            _make_ips(portfolio_beta=1.0),
+            target_deltas=[0.10],
+            maturities_years=[0.25],
+        )
+        rung = result[0]
+        assert rung.portfolio_beta == pytest.approx(1.0)
+        assert rung.beta_adjusted_notional == pytest.approx(500_000.0)
+
+    def test_beta_scales_offset_proportionally(self) -> None:
+        """beta 2.0 doubles beta_adjusted_notional and the crash offset."""
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        base = build_strike_ladder(
+            portfolio,
+            _make_ips(portfolio_beta=1.0),
+            target_deltas=[0.10],
+            maturities_years=[0.25],
+        )[0]
+        scaled = build_strike_ladder(
+            portfolio,
+            _make_ips(portfolio_beta=2.0),
+            target_deltas=[0.10],
+            maturities_years=[0.25],
+        )[0]
+        assert scaled.beta_adjusted_notional == pytest.approx(
+            2.0 * base.beta_adjusted_notional,
+        )
+        assert scaled.required_crash_offset == pytest.approx(
+            2.0 * base.required_crash_offset,
+        )
+
+    def test_carry_budget_not_beta_adjusted(self) -> None:
+        """Carry budget stays on the true book value, independent of beta."""
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        base = build_strike_ladder(
+            portfolio,
+            _make_ips(portfolio_beta=1.0),
+            target_deltas=[0.10],
+            maturities_years=[0.25],
+        )[0]
+        scaled = build_strike_ladder(
+            portfolio,
+            _make_ips(portfolio_beta=2.0),
+            target_deltas=[0.10],
+            maturities_years=[0.25],
+        )[0]
+        assert scaled.carry_budget == pytest.approx(base.carry_budget)

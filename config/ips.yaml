@@ -27,6 +27,15 @@ convexity:
 drawdown:
   max_tolerance_pct: 20.0
 
+sizing:
+  # Beta-adjusted hedge sizing (handbook §2499). The hedge is sized against the
+  # SPX-equivalent exposure = book value * portfolio_beta. This is a USER INPUT,
+  # not estimated here — recalc it at least annually (or on a >10% position
+  # change) and set it in policy. SPX puts hedge only the systematic (market-
+  # beta) component, so they UNDER-PROTECT idiosyncratic risk on a concentrated
+  # single-name book. 1.0 = protected book assumed to move 1:1 with the index.
+  portfolio_beta: 1.0
+
 market_environment:
   # Hedge-cost verdict policy (CHEAP/FAIR/EXPENSIVE) — these drive a decision,
   # not a display, so they live here, not in dashboard.yaml (presentation).
