@@ -19,8 +19,14 @@ def _mock_portfolio(
     net_delta: float,
     underlying_qty: float,
     total_theta: float = 0.0,
+    total_gamma: float = 0.0,
 ) -> Mock:
-    """Positionless portfolio mock with a crafted net_delta / equity / theta."""
+    """Positionless portfolio mock: crafted net_delta / equity / theta / gamma.
+
+    With ``spot_price == underlying_qty == 100`` the gamma-drift metric
+    (``|gamma| * spot / |underlying_qty|``) equals ``total_gamma``, so the
+    crafted gamma is also the drift percent.
+    """
     portfolio = Mock()
     portfolio.positions = []
     portfolio.spot_price = 100.0
@@ -28,7 +34,7 @@ def _mock_portfolio(
         "net_delta": net_delta,
         "underlying_quantity": underlying_qty,
         "total_theta": total_theta,
-        "total_gamma": 0.0,
+        "total_gamma": total_gamma,
     }
     return portfolio
 
@@ -144,15 +150,19 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
             == ips.triggers.theta_cost_excellent_pct
         )
 
-    def test_leaves_only_gamma_at_dataclass_defaults(self) -> None:
-        """Only the gamma bands stay unmapped (recalibrated later)."""
+    def test_maps_gamma_drift_bands(self) -> None:
+        """The gamma-drift bands are mapped too — nothing stays unmapped now."""
         ips = load_ips_config(EXAMPLE_IPS_YAML)
-        defaults = HedgeTriggerThresholds()
 
         thresholds = HedgeTriggerThresholds.from_ips(ips.triggers)
 
-        assert thresholds.gamma_low == defaults.gamma_low
-        assert thresholds.gamma_moderate == defaults.gamma_moderate
+        assert (
+            thresholds.gamma_drift_moderate_pct
+            == ips.triggers.gamma_drift_moderate_pct
+        )
+        assert (
+            thresholds.gamma_drift_high_pct == ips.triggers.gamma_drift_high_pct
+        )
 
     def test_from_ips_maps_triggers_section_directly(self) -> None:
         """Test from_ips accepts an IpsTriggers section directly."""
@@ -259,6 +269,95 @@ class TestIpsThresholdsMoveTriggers:
         assert "ACCEPTABLE" in _reporter_text(below)
         assert "EXCELLENT" not in _reporter_text(below)
         assert "EXCELLENT" in _reporter_text(above)
+
+
+class TestGammaDriftTrigger:
+    """The gamma trigger fires on book-size-independent gamma drift."""
+
+    @staticmethod
+    def _gamma_action_present(result: object) -> bool:
+        return any(
+            "gamma drift" in desc.lower()
+            for _, desc in result.actions  # type: ignore[attr-defined]
+        )
+
+    def test_low_gamma_drift_is_low_risk(self) -> None:
+        """1% drift (< 2% moderate) reads LOW and emits no gamma action."""
+        portfolio = _mock_portfolio(
+            net_delta=90.0,
+            underlying_qty=100.0,
+            total_gamma=1.0,
+        )
+        reporter = Mock()
+
+        result = evaluate_hedge_triggers(portfolio, reporter)
+
+        assert result.gamma_drift_pct == 1.0  # 1.0 * 100 / 100
+        assert "LOW RISK" in _reporter_text(reporter)
+        assert not self._gamma_action_present(result)
+
+    def test_high_gamma_drift_fires(self) -> None:
+        """6% drift (> 5% high) reads HIGH RISK and emits a MONITOR action.
+
+        Raw gamma of 6 would sit far below the old inert 10/30 bands and never
+        fire; normalized drift catches it.
+        """
+        portfolio = _mock_portfolio(
+            net_delta=90.0,
+            underlying_qty=100.0,
+            total_gamma=6.0,
+        )
+        reporter = Mock()
+
+        result = evaluate_hedge_triggers(portfolio, reporter)
+
+        assert result.gamma_drift_pct == 6.0
+        assert "HIGH RISK" in _reporter_text(reporter)
+        assert self._gamma_action_present(result)
+
+    def test_bands_move_the_classification(self) -> None:
+        """Gamma-drift bands move a 3% book between MODERATE and HIGH."""
+        portfolio = _mock_portfolio(
+            net_delta=90.0,
+            underlying_qty=100.0,
+            total_gamma=3.0,
+        )
+
+        wide = Mock()
+        evaluate_hedge_triggers(
+            portfolio,
+            wide,
+            HedgeTriggerThresholds(
+                gamma_drift_moderate_pct=2.0,
+                gamma_drift_high_pct=5.0,
+            ),
+        )
+        narrow = Mock()
+        evaluate_hedge_triggers(
+            portfolio,
+            narrow,
+            HedgeTriggerThresholds(
+                gamma_drift_moderate_pct=1.0,
+                gamma_drift_high_pct=2.5,
+            ),
+        )
+
+        assert "MODERATE" in _reporter_text(wide)
+        assert "HIGH RISK" in _reporter_text(narrow)
+
+    def test_unavailable_without_underlying(self) -> None:
+        """No equity position -> gamma drift is None and reads unavailable."""
+        portfolio = _mock_portfolio(
+            net_delta=0.0,
+            underlying_qty=0.0,
+            total_gamma=6.0,
+        )
+        reporter = Mock()
+
+        result = evaluate_hedge_triggers(portfolio, reporter)
+
+        assert result.gamma_drift_pct is None
+        assert "Gamma drift: unavailable" in _reporter_text(reporter)
 
 
 class TestEvaluateDeltaDriftTrigger:

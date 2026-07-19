@@ -52,6 +52,12 @@ triggers:
   roll_review_buffer: 1.5        # REVIEW fires within roll_time_months * this
   strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
                                        # of strike_drift_max_otm_pct
+  # Gamma drift = % of the hedged equity that net delta shifts per 1% spot move
+  # (|gamma|*spot/|underlying_qty|); book-size-independent. A tail hedge is
+  # deliberately gamma-light (canonical SPX book ~1.3% -> LOW). >2%/1% move
+  # warrants watching; >5% warrants active rebalancing.
+  gamma_drift_moderate_pct: 2.0  # drift below this -> LOW, above -> MODERATE
+  gamma_drift_high_pct: 5.0      # drift above this -> HIGH (active rebalancing)
 
 monetization:
   schedule:                      # hedge-gain -> fraction to sell

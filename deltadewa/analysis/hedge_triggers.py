@@ -25,6 +25,33 @@ if TYPE_CHECKING:
     from deltadewa.reporting import ConsoleReporter
 
 
+def gamma_drift_pct(
+    total_gamma: float,
+    spot_price: float,
+    underlying_quantity: float,
+) -> float | None:
+    """Net-delta drift per 1% spot move, as % of the hedged equity.
+
+    ``|total_gamma| * spot / |underlying_quantity|`` — the net-delta change (in
+    index units) for a 1% spot move, divided by the equity units. Unlike raw
+    gamma it is independent of book size, so a fixed band means the same thing
+    on a $5M and a $50M book. Returns ``None`` when ``underlying_quantity`` is
+    unset — the ratio is then undefined and the trigger reports unavailable.
+
+    Args:
+        total_gamma: Portfolio total gamma (``summary_stats`` ``total_gamma``).
+        spot_price: Current underlying spot.
+        underlying_quantity: Equity/underlying quantity being hedged.
+
+    Returns:
+        Gamma drift as a percent, or ``None`` when ``underlying_quantity`` is 0.
+
+    """
+    if underlying_quantity == 0:
+        return None
+    return abs(total_gamma) * spot_price / abs(underlying_quantity)
+
+
 # ---------------------------------------------------------------------------
 # Threshold configuration
 # ---------------------------------------------------------------------------
@@ -60,10 +87,11 @@ class HedgeTriggerThresholds:
     theta_cost_acceptable_pct:
         Annualised theta cost % of portfolio below which the cost is ACCEPTABLE
         (default 2.0 %).
-    gamma_low:
-        Total gamma below which gamma risk is LOW (default 10).
-    gamma_moderate:
-        Total gamma below which gamma risk is MODERATE (default 30).
+    gamma_drift_moderate_pct:
+        Gamma drift (% of hedged equity that net delta shifts per 1% spot move)
+        below which gamma risk is LOW (default 2 %).
+    gamma_drift_high_pct:
+        Gamma drift above which gamma risk is HIGH (default 5 %).
 
     """
 
@@ -74,16 +102,15 @@ class HedgeTriggerThresholds:
     expiry_soon_days: int = 21
     theta_cost_excellent_pct: float = 1.0
     theta_cost_acceptable_pct: float = 2.0
-    gamma_low: float = 10.0
-    gamma_moderate: float = 30.0
+    gamma_drift_moderate_pct: float = 2.0
+    gamma_drift_high_pct: float = 5.0
 
     @classmethod
     def from_ips(cls, triggers: IpsTriggers) -> HedgeTriggerThresholds:
         """Build thresholds from an ``IpsTriggers`` section.
 
-        Every threshold the IPS defines is mapped here. Only the gamma bands
-        (``gamma_low`` / ``gamma_moderate``) still keep this dataclass's literal
-        defaults, pending their SPX-scale recalibration.
+        Every threshold the IPS defines is mapped here — no policy value is left
+        on a dataclass literal.
         """
         return cls(
             target_delta_ratio_pct=triggers.target_delta_ratio_pct,
@@ -93,6 +120,8 @@ class HedgeTriggerThresholds:
             expiry_soon_days=triggers.expiry_soon_days,
             theta_cost_excellent_pct=triggers.theta_cost_excellent_pct,
             theta_cost_acceptable_pct=triggers.theta_cost_acceptable_pct,
+            gamma_drift_moderate_pct=triggers.gamma_drift_moderate_pct,
+            gamma_drift_high_pct=triggers.gamma_drift_high_pct,
         )
 
 
@@ -118,7 +147,11 @@ class HedgeTriggerResult:
     theta_cost_pct:
         Annualised theta cost as a percentage of notional value.
     total_gamma:
-        Absolute total portfolio gamma.
+        Absolute total portfolio gamma (raw, for reference).
+    gamma_drift_pct:
+        Net-delta drift per 1% spot move as % of the hedged equity — the figure
+        the gamma trigger bands on. ``None`` when ``underlying_quantity`` is
+        unset (the metric is then unavailable).
     actions:
         Ordered list of ``(priority_label, description)`` tuples.
         Empty when the portfolio is well-managed.
@@ -130,6 +163,7 @@ class HedgeTriggerResult:
     near_expiry_count: int
     theta_cost_pct: float
     total_gamma: float
+    gamma_drift_pct: float | None
     actions: list[tuple[str, str]] = field(default_factory=list)
 
 
@@ -209,6 +243,11 @@ def evaluate_hedge_triggers(
     )
 
     total_gamma = abs(stats["total_gamma"])
+    gamma_drift = gamma_drift_pct(
+        stats["total_gamma"],
+        portfolio.spot_price,
+        stats["underlying_quantity"],
+    )
 
     # --- print report ---
     reporter.header("  HEDGE DECISION TRIGGERS")
@@ -230,7 +269,7 @@ def evaluate_hedge_triggers(
         reporter,
         t,
     )
-    _print_gamma_trigger(total_gamma, reporter, t)
+    _print_gamma_trigger(total_gamma, gamma_drift, reporter, t)
 
     actions = _build_action_list(
         stats,
@@ -238,7 +277,7 @@ def evaluate_hedge_triggers(
         near_expiry_positions,
         days_to_nearest_expiry,
         theta_cost_pct,
-        total_gamma,
+        gamma_drift,
         t,
     )
     _print_action_summary(actions, reporter, t)
@@ -249,6 +288,7 @@ def evaluate_hedge_triggers(
         near_expiry_count=len(near_expiry_positions),
         theta_cost_pct=theta_cost_pct,
         total_gamma=total_gamma,
+        gamma_drift_pct=gamma_drift,
         actions=actions,
     )
 
@@ -435,20 +475,33 @@ def _print_theta_trigger(
 
 def _print_gamma_trigger(
     total_gamma: float,
+    gamma_drift_pct: float | None,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
 ) -> None:
     print("4️⃣  GAMMA EXPOSURE:")
     reporter.divider()
-    if total_gamma < t.gamma_low:
-        reporter.success(f"    Total gamma: {total_gamma:.2f} - LOW RISK")
+    if gamma_drift_pct is None:
+        reporter.warning(
+            "    Gamma drift: unavailable - no underlying_quantity set",
+        )
+        print("     → Set the equity position to measure gamma drift")
+        print()
+        return
+
+    label = (
+        f"    Gamma drift: {gamma_drift_pct:.2f}% of equity per 1% move "
+        f"(gamma {total_gamma:.2f})"
+    )
+    if gamma_drift_pct < t.gamma_drift_moderate_pct:
+        reporter.success(f"{label} - LOW RISK")
         print("     → Delta will be stable as spot moves")
-    elif total_gamma < t.gamma_moderate:
-        reporter.warning(f"    Total gamma: {total_gamma:.2f} - MODERATE")
+    elif gamma_drift_pct < t.gamma_drift_high_pct:
+        reporter.warning(f"{label} - MODERATE")
         print("     → Delta will change moderately with spot price moves")
         print("     → May need intraday rebalancing on large moves")
     else:
-        reporter.error(f"    Total gamma: {total_gamma:.2f} - HIGH RISK")
+        reporter.error(f"{label} - HIGH RISK")
         print("     → Delta is highly sensitive to spot price changes")
         print("     → Expect frequent rebalancing needs")
         print("     → Consider spreading strikes to reduce gamma concentration")
@@ -461,7 +514,7 @@ def _build_action_list(
     near_expiry_positions: list[Any],
     days_to_nearest_expiry: int,
     theta_cost_pct: float,
-    total_gamma: float,
+    gamma_drift_pct: float | None,
     t: HedgeTriggerThresholds,
 ) -> list[tuple[str, str]]:
     """Build a priority-ordered list of (label, description) action tuples."""
@@ -522,11 +575,11 @@ def _build_action_list(
         )
 
     # Monitoring
-    if total_gamma > t.gamma_moderate:
+    if gamma_drift_pct is not None and gamma_drift_pct > t.gamma_drift_high_pct:
         actions.append(
             (
                 "🟢 MONITOR",
-                "High gamma → Watch for delta changes on large moves",
+                "High gamma drift → Watch for delta changes on large moves",
             ),
         )
 

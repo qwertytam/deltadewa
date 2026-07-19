@@ -491,3 +491,43 @@ class TestExpiryThetaTriggers:
         }
         with pytest.raises(IpsConfigError, match="theta_cost_excellent_pct"):
             load_ips_config(_write_yaml(tmp_path, config))
+
+
+class TestGammaDriftBands:
+    """Tests for the gamma-drift trigger bands (Mo3)."""
+
+    def test_defaults_when_absent(self, tmp_path: Path) -> None:
+        """A triggers section without the gamma keys uses the defaults."""
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+        triggers = ips.triggers
+
+        assert triggers.gamma_drift_moderate_pct == 2.0
+        assert triggers.gamma_drift_high_pct == 5.0
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        """Custom gamma-drift bands round-trip."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "gamma_drift_moderate_pct": 1.5,
+                "gamma_drift_high_pct": 4.0,
+            },
+        }
+        triggers = load_ips_config(_write_yaml(tmp_path, config)).triggers
+
+        assert triggers.gamma_drift_moderate_pct == 1.5
+        assert triggers.gamma_drift_high_pct == 4.0
+
+    def test_moderate_not_below_high_raises(self, tmp_path: Path) -> None:
+        """gamma_drift_moderate_pct >= gamma_drift_high_pct raises."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "gamma_drift_moderate_pct": 5.0,
+                "gamma_drift_high_pct": 2.0,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="gamma_drift_moderate_pct"):
+            load_ips_config(_write_yaml(tmp_path, config))

@@ -37,6 +37,12 @@ _DEFAULT_EXPIRY_URGENT_DAYS: Final[int] = 7
 _DEFAULT_EXPIRY_SOON_DAYS: Final[int] = 21
 _DEFAULT_THETA_COST_EXCELLENT_PCT: Final[float] = 1.0
 
+# Gamma-drift bands, in % of the hedged equity that net delta shifts per 1% spot
+# move (``|gamma| * spot / |underlying_quantity|`` — book-size-independent).
+# A tail hedge is deliberately gamma-light: the canonical SPX book reads ~1.3%.
+_DEFAULT_GAMMA_DRIFT_MODERATE_PCT: Final[float] = 2.0
+_DEFAULT_GAMMA_DRIFT_HIGH_PCT: Final[float] = 5.0
+
 # Single source for the market-environment policy bands (see
 # ``IpsMarketEnvironment``). Public because they are consumed across
 # ``analysis.market_environment``, ``analysis.health``,
@@ -148,6 +154,10 @@ class IpsTriggers:
     expiration windows and ``theta_cost_excellent_pct`` is the EXCELLENT theta
     cutoff; ``HedgeTriggerThresholds.from_ips`` maps them all so no trigger
     threshold stays hardcoded.
+
+    ``gamma_drift_moderate_pct`` / ``gamma_drift_high_pct`` band the gamma
+    trigger. It fires on gamma *drift* — the % of the hedged equity that net
+    delta shifts per 1% spot move — not raw gamma, which scales with book size.
     """
 
     delta_drift_warn_pct: float
@@ -162,6 +172,8 @@ class IpsTriggers:
     expiry_urgent_days: int = _DEFAULT_EXPIRY_URGENT_DAYS
     expiry_soon_days: int = _DEFAULT_EXPIRY_SOON_DAYS
     theta_cost_excellent_pct: float = _DEFAULT_THETA_COST_EXCELLENT_PCT
+    gamma_drift_moderate_pct: float = _DEFAULT_GAMMA_DRIFT_MODERATE_PCT
+    gamma_drift_high_pct: float = _DEFAULT_GAMMA_DRIFT_HIGH_PCT
 
 
 @dataclass(frozen=True)
@@ -385,6 +397,24 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             f"{fields['theta_cost_acceptable_pct']}",
         )
 
+    gamma_drift_moderate_pct = section.get(
+        "gamma_drift_moderate_pct",
+        _DEFAULT_GAMMA_DRIFT_MODERATE_PCT,
+    )
+    gamma_drift_high_pct = section.get(
+        "gamma_drift_high_pct",
+        _DEFAULT_GAMMA_DRIFT_HIGH_PCT,
+    )
+    _require_non_negative(
+        gamma_drift_moderate_pct,
+        "triggers.gamma_drift_moderate_pct",
+    )
+    if gamma_drift_moderate_pct >= gamma_drift_high_pct:
+        raise IpsConfigError(
+            "triggers.gamma_drift_moderate_pct must be < gamma_drift_high_pct, "
+            f"got {gamma_drift_moderate_pct} >= {gamma_drift_high_pct}",
+        )
+
     return IpsTriggers(
         **fields,
         target_delta_ratio_pct=target_delta_ratio_pct,
@@ -393,6 +423,8 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         expiry_urgent_days=expiry_urgent_days,
         expiry_soon_days=expiry_soon_days,
         theta_cost_excellent_pct=theta_cost_excellent_pct,
+        gamma_drift_moderate_pct=gamma_drift_moderate_pct,
+        gamma_drift_high_pct=gamma_drift_high_pct,
     )
 
 
