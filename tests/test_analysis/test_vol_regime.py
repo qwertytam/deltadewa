@@ -12,12 +12,14 @@ import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.health import (
-    VOL_REGIME_HIGH,
     VOL_REGIME_LOOKBACK_DAYS,
-    VOL_REGIME_LOW,
     VolRegime,
     VolRegimeBasis,
     compute_vol_regime,
+)
+from deltadewa.ips_config import (
+    DEFAULT_VOL_REGIME_HIGH,
+    DEFAULT_VOL_REGIME_LOW,
 )
 
 
@@ -104,7 +106,7 @@ class TestComputeVolRegimeNormalizedFallback:
 
     def test_normalized_matches_min_max_endpoints(self) -> None:
         """Normalized figure is linear min-max, clamped to [0, 100]."""
-        low, high = VOL_REGIME_LOW, VOL_REGIME_HIGH
+        low, high = DEFAULT_VOL_REGIME_LOW, DEFAULT_VOL_REGIME_HIGH
         mid = (low + high) / 2
 
         assert compute_vol_regime(low - 0.05, vix_history=None).value == 0.0

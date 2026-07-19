@@ -24,6 +24,10 @@ from deltadewa.analysis.market_environment import (
     HedgeCostVerdict,
     TermShape,
 )
+from deltadewa.ips_config import (
+    DEFAULT_SKEW_HIGH_PCTILE,
+    DEFAULT_SKEW_LOW_PCTILE,
+)
 
 if TYPE_CHECKING:
     from deltadewa.analysis.market_environment import MarketEnvironment
@@ -288,8 +292,8 @@ def entry_timing_tree(
     vix_very_high: float = 40.0,
     vix_caution: float = 25.0,
     vix_low: float = 15.0,
-    skew_high: float = 0.70,
-    skew_low: float = 0.30,
+    skew_high: float = DEFAULT_SKEW_HIGH_PCTILE / 100.0,
+    skew_low: float = DEFAULT_SKEW_LOW_PCTILE / 100.0,
 ) -> EntryTimingResult:
     """Walk the three-step entry-timing tree for new hedge purchases.
 
@@ -307,7 +311,7 @@ def entry_timing_tree(
     - ``vix_*`` thresholds are in vol points (e.g. 40.0 = VIX at 40),
       matching ``MarketEnvironment.vix``.
     - ``skew_high`` / ``skew_low`` are 0-1 fractions, matching
-      ``MarketEnvironment.skew_percentile`` (0.70 = 70th percentile).
+      ``MarketEnvironment.skew_percentile`` (e.g. 0.75 = the 75th percentile).
 
     Declines on non-``LIVE`` ``data_quality``; returns
     ``should_enter=False`` with a ``data_quality_note``.  Also returns
@@ -323,9 +327,11 @@ def entry_timing_tree(
         vix_low: VIX level at or below which accumulation urgency
             increases (default 15.0).
         skew_high: Skew percentile (0-1) above which protection is
-            expensive vs history (default 0.70).
+            expensive vs history. Defaults to the IPS single source
+            ``DEFAULT_SKEW_HIGH_PCTILE`` (as a 0-1 fraction).
         skew_low: Skew percentile (0-1) below which protection is
-            cheap vs history (default 0.30).
+            cheap vs history. Defaults to ``DEFAULT_SKEW_LOW_PCTILE``
+            (as a 0-1 fraction).
 
     Returns:
         An :class:`EntryTimingResult` with the terminal recommendation,

@@ -3,14 +3,10 @@
 # Modify these values to customize threshold behavior for your use case.
 
 parameters:
-  # Volatility regime percentiles (historical IV thresholds)
-  historical_vol_low: 0.15    # 25th percentile (low vol = cheap hedges)
-  historical_vol_high: 0.35   # 75th percentile (high vol = expensive hedges)
-  
   # Convexity cliff threshold (days)
   convexity_cliff_days: 180   # Alert when puts enter high-gamma region within this many days
-  # Hedge-cost verdict thresholds (vol regime / skew / term structure) are
-  # policy, not presentation — see market_environment in ips.yaml.
+  # Vol-regime band + hedge-cost verdict thresholds (skew / term structure)
+  # are policy, not presentation — see market_environment in ips.yaml.
 
 metrics:
   # 1. Net Carry (Theta) - Annualized theta as % of underlying

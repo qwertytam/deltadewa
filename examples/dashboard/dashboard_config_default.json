@@ -1,7 +1,5 @@
 {
   "parameters": {
-    "historical_vol_low": 0.15,
-    "historical_vol_high": 0.35,
     "convexity_cliff_days": 180
   },
   "metrics": {

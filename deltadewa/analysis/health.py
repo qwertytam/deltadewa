@@ -7,17 +7,18 @@ from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa import constants as const
 from deltadewa.analysis.crash_repricing import crash_convexity_pct
+from deltadewa.ips_config import (
+    DEFAULT_VOL_REGIME_HIGH,
+    DEFAULT_VOL_REGIME_LOW,
+)
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
-# Vol-regime normalization band (decimal implied vol) and rank window.
-# NOTE (Mo4 -> M1.4/Mo2): this 0.15/0.35 band is still duplicated in
-# ``market_environment.classify_vix_regime`` and the dashboard config;
-# M1.4/Mo2 hoists it into the IPS (policy vs presentation). This is the single
-# source *inside health.py* until then — do not add a fourth literal copy.
-VOL_REGIME_LOW: Final[float] = 0.15
-VOL_REGIME_HIGH: Final[float] = 0.35
+# Vol-regime rank window. The normalization band (decimal implied vol) is
+# single-sourced from the IPS — ``ips_config.DEFAULT_VOL_REGIME_LOW`` /
+# ``DEFAULT_VOL_REGIME_HIGH`` (surfaced on ``IpsMarketEnvironment``). No band
+# literal lives here; callers pass the policy value in.
 VOL_REGIME_LOOKBACK_DAYS: Final[int] = 252
 
 
@@ -77,8 +78,8 @@ def compute_vol_regime(
     current_vol: float,
     *,
     vix_history: Sequence[float] | None,
-    normalized_low: float = VOL_REGIME_LOW,
-    normalized_high: float = VOL_REGIME_HIGH,
+    normalized_low: float = DEFAULT_VOL_REGIME_LOW,
+    normalized_high: float = DEFAULT_VOL_REGIME_HIGH,
     lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
 ) -> VolRegime:
     """Rank *current_vol* against VIX history, or normalize honestly.
@@ -322,8 +323,8 @@ class HealthMixin:
 
     def calculate_vol_regime_percentile(
         self,
-        historical_vol_low: float = VOL_REGIME_LOW,
-        historical_vol_high: float = VOL_REGIME_HIGH,
+        historical_vol_low: float = DEFAULT_VOL_REGIME_LOW,
+        historical_vol_high: float = DEFAULT_VOL_REGIME_HIGH,
         vix_history: Sequence[float] | None = None,
         lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
     ) -> float:
@@ -338,9 +339,9 @@ class HealthMixin:
 
         Args:
             historical_vol_low: Historical low volatility for the normalized
-                fallback (default: :data:`VOL_REGIME_LOW`).
+                fallback (default: :data:`DEFAULT_VOL_REGIME_LOW`).
             historical_vol_high: Historical high volatility for the normalized
-                fallback (default: :data:`VOL_REGIME_HIGH`).
+                fallback (default: :data:`DEFAULT_VOL_REGIME_HIGH`).
             vix_history: Trailing VIX closes in vol points; when non-empty a
                 true percentile is computed. ``None``/empty -> normalized.
             lookback_days: Rank window in trading days (default:
@@ -451,8 +452,8 @@ class HealthMixin:
     def calculate_health_metrics(  # pylint: disable=too-many-arguments  # one metric-config arg per gauge
         self,
         cumulative_carry_paid: float = 0.0,
-        historical_vol_low: float = VOL_REGIME_LOW,
-        historical_vol_high: float = VOL_REGIME_HIGH,
+        historical_vol_low: float = DEFAULT_VOL_REGIME_LOW,
+        historical_vol_high: float = DEFAULT_VOL_REGIME_HIGH,
         convexity_cliff_days: int = 180,
         *,
         crash_scenario_pct: float | None = None,
@@ -466,9 +467,9 @@ class HealthMixin:
         Args:
             cumulative_carry_paid: Total carry paid for the hedge (default: 0.0)
             historical_vol_low: Historical low volatility for the vol-regime
-                normalized fallback (default: :data:`VOL_REGIME_LOW`)
+                normalized fallback (default: :data:`DEFAULT_VOL_REGIME_LOW`)
             historical_vol_high: Historical high volatility for the vol-regime
-                normalized fallback (default: :data:`VOL_REGIME_HIGH`)
+                normalized fallback (default: :data:`DEFAULT_VOL_REGIME_HIGH`)
             convexity_cliff_days: Days threshold for high-gamma region
             (default: 180)
             crash_scenario_pct: Signed crash move as a percent of current spot,
