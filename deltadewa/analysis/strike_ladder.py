@@ -218,8 +218,18 @@ def build_strike_ladder(
         delta-major order (all maturities for the first delta, then all for
         the second, etc.).
 
+    Raises:
+        ValueError: When the book notional is 0 (no underlying position);
+            the ladder's sizing is undefined and never fabricates a zero result.
+
     """
     book_notional = abs(portfolio.underlying_quantity) * portfolio.spot_price
+    if book_notional <= 0.0:
+        msg = (
+            "strike-ladder sizing requires an underlying position; "
+            "underlying_quantity is unset (book notional is 0)"
+        )
+        raise ValueError(msg)
     carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
     crash_pct = ips_config.convexity.crash_scenario_pct
     offset = required_crash_offset(

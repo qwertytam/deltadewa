@@ -346,15 +346,13 @@ class TestSizeHedge:
         assert result.achieved_convexity_pct > 30.0
         assert result.meets_convexity_target is False
 
-    def test_zero_notional_portfolio_no_raise(self) -> None:
-        """Portfolio with underlying_quantity=0 → zero notional, no error."""
+    def test_zero_notional_portfolio_raises(self) -> None:
+        """No underlying position fails loud — never a fabricated result."""
         portfolio = _make_spx_portfolio(qty=0.0)
-        result = size_hedge(
-            portfolio,
-            _make_ips(),
-            candidate_pct_otm=5.0,
-            candidate_maturity_years=0.25,
-        )
-        assert result.book_notional == pytest.approx(0.0)
-        assert result.required_crash_offset == pytest.approx(0.0)
-        assert result.achieved_convexity_pct == pytest.approx(0.0)
+        with pytest.raises(ValueError, match="underlying position"):
+            size_hedge(
+                portfolio,
+                _make_ips(),
+                candidate_pct_otm=5.0,
+                candidate_maturity_years=0.25,
+            )

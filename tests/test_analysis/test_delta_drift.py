@@ -13,7 +13,11 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.health import delta_drift_from_target
 
 
-def _analyzer(net_delta: float, underlying_qty: float) -> PortfolioAnalyzer:
+def _analyzer(
+    net_delta: float,
+    underlying_qty: float,
+    underlying_value: float = 10_000.0,
+) -> PortfolioAnalyzer:
     """PortfolioAnalyzer over a mock whose summary_stats is crafted."""
     portfolio = Mock()
     portfolio.positions = []
@@ -22,7 +26,7 @@ def _analyzer(net_delta: float, underlying_qty: float) -> PortfolioAnalyzer:
         "net_delta": net_delta,
         "underlying_quantity": underlying_qty,
         "total_theta": -10.0,
-        "total_underlying_value": 10_000.0,
+        "total_underlying_value": underlying_value,
         "total_vega": 20.0,
         "total_portfolio_value": 20_000.0,
     }
@@ -68,6 +72,30 @@ class TestCalculateDeltaDriftPct:
     def test_unset_underlying_is_none(self) -> None:
         """Unset underlying_quantity returns None (unavailable)."""
         assert _analyzer(0.0, 0.0).calculate_delta_drift_pct(90.0) is None
+
+
+class TestCalculateNetCarryPct:
+    """Net carry reports None (unavailable) when the underlying is unset."""
+
+    def test_computed_when_underlying_present(self) -> None:
+        """With an underlying value the carry is a real (here negative) %."""
+        result = _analyzer(90.0, 100.0).calculate_net_carry_pct()
+        assert result is not None
+        assert result < 0  # paying carry (negative theta)
+
+    def test_unset_underlying_is_none(self) -> None:
+        """No underlying value -> unavailable, never a fabricated 0.0."""
+        analyzer = _analyzer(0.0, 0.0, underlying_value=0.0)
+        assert analyzer.calculate_net_carry_pct() is None
+
+    def test_health_metrics_net_carry_none_when_unset(self) -> None:
+        """calculate_health_metrics surfaces the None through the dict."""
+        metrics = _analyzer(
+            0.0,
+            0.0,
+            underlying_value=0.0,
+        ).calculate_health_metrics()
+        assert metrics["net_carry_pct"] is None
 
 
 class TestCalculateHealthMetricsThreadsTarget:

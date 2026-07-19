@@ -145,7 +145,8 @@ class HedgeTriggerResult:
     near_expiry_count:
         Number of positions within ``thresholds.expiry_urgent_days``.
     theta_cost_pct:
-        Annualised theta cost as a percentage of notional value.
+        Annualised theta cost as a percentage of notional value, or ``None``
+        when ``underlying_quantity`` is unset (the metric is unavailable).
     total_gamma:
         Absolute total portfolio gamma (raw, for reference).
     gamma_drift_pct:
@@ -161,7 +162,7 @@ class HedgeTriggerResult:
     delta_drift_pct: float | None
     days_to_nearest_expiry: int
     near_expiry_count: int
-    theta_cost_pct: float
+    theta_cost_pct: float | None
     total_gamma: float
     gamma_drift_pct: float | None
     actions: list[tuple[str, str]] = field(default_factory=list)
@@ -235,11 +236,13 @@ def evaluate_hedge_triggers(
     theta_cost_per_day = abs(stats["total_theta"])
     theta_annual_cost = theta_cost_per_day * const.DAYS_PER_YEAR
 
+    # Theta cost is a % of the hedged equity; unavailable (not a fabricated 0)
+    # when there is no underlying position to measure it against.
     portfolio_value = abs(stats["underlying_quantity"] * portfolio.spot_price)
-    theta_cost_pct = (
+    theta_cost_pct: float | None = (
         (theta_annual_cost / portfolio_value * 100)
         if portfolio_value > 0
-        else 0.0
+        else None
     )
 
     total_gamma = abs(stats["total_gamma"])
@@ -440,12 +443,20 @@ def _print_expiry_trigger(
 def _print_theta_trigger(
     theta_annual_cost: float,
     theta_cost_per_day: float,
-    theta_cost_pct: float,
+    theta_cost_pct: float | None,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
 ) -> None:
     print("3️⃣  TIME DECAY COST:")
     reporter.divider()
+    if theta_cost_pct is None:
+        reporter.warning(
+            "    Theta cost: unavailable - no underlying_quantity set",
+        )
+        print(f"     → Annual theta: ${theta_annual_cost:,.0f}/yr")
+        print("     → Set the equity position to measure cost as % of book")
+        print()
+        return
     if theta_cost_pct < t.theta_cost_excellent_pct:
         reporter.success(
             f"    Annual theta cost: ${theta_annual_cost:,.0f} "
@@ -513,7 +524,7 @@ def _build_action_list(
     delta_drift_pct: float | None,
     near_expiry_positions: list[Any],
     days_to_nearest_expiry: int,
-    theta_cost_pct: float,
+    theta_cost_pct: float | None,
     gamma_drift_pct: float | None,
     t: HedgeTriggerThresholds,
 ) -> list[tuple[str, str]]:
@@ -566,7 +577,10 @@ def _build_action_list(
                 f"→ May need adjustment",
             ),
         )
-    if theta_cost_pct > t.theta_cost_acceptable_pct:
+    if (
+        theta_cost_pct is not None
+        and theta_cost_pct > t.theta_cost_acceptable_pct
+    ):
         actions.append(
             (
                 "🟡 REVIEW",

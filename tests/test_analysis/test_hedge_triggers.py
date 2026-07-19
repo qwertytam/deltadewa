@@ -360,6 +360,26 @@ class TestGammaDriftTrigger:
         assert "Gamma drift: unavailable" in _reporter_text(reporter)
 
 
+class TestThetaUnavailableWithoutUnderlying:
+    """Theta cost reports unavailable (None) when the underlying is unset."""
+
+    def test_theta_cost_none_and_unavailable(self) -> None:
+        """No equity position -> theta_cost_pct None, no fabricated 0."""
+        portfolio = _mock_portfolio(
+            net_delta=0.0,
+            underlying_qty=0.0,
+            total_theta=-100.0,
+        )
+        reporter = Mock()
+
+        result = evaluate_hedge_triggers(portfolio, reporter)
+
+        assert result.theta_cost_pct is None
+        assert "Theta cost: unavailable" in _reporter_text(reporter)
+        # No theta REVIEW action is emitted on an unavailable cost.
+        assert "Hedge cost is high" not in _action_text(result.actions)
+
+
 class TestEvaluateDeltaDriftTrigger:
     """Delta-drift banding, unavailability, and messaging (M1)."""
 

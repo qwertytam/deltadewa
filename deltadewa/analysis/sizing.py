@@ -238,8 +238,18 @@ def size_hedge(
     Returns:
         ``HedgeSizingResult`` with all sizing and convexity metrics.
 
+    Raises:
+        ValueError: When the book notional is 0 (no underlying position);
+            sizing is undefined and never returns a fabricated zero result.
+
     """
     book_notional = abs(portfolio.underlying_quantity) * portfolio.spot_price
+    if book_notional <= 0.0:
+        msg = (
+            "hedge sizing requires an underlying position; "
+            "underlying_quantity is unset (book notional is 0)"
+        )
+        raise ValueError(msg)
     carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
 
     crash_pct = ips_config.convexity.crash_scenario_pct  # negative

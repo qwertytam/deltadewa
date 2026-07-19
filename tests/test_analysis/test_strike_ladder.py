@@ -378,14 +378,14 @@ class TestBuildStrikeLadder:
         )
         assert result == []
 
-    def test_empty_portfolio_no_raise(self) -> None:
-        """Portfolio with zero underlying_quantity raises no exception."""
+    def test_zero_notional_portfolio_raises(self) -> None:
+        """No underlying position fails loud — never a fabricated ladder."""
         portfolio = _make_spx_portfolio(qty=0.0)
         ips = _make_ips()
-        result = build_strike_ladder(
-            portfolio,
-            ips,
-            target_deltas=[0.10],
-            maturities_years=[0.25],
-        )
-        assert isinstance(result, list)
+        with pytest.raises(ValueError, match="underlying position"):
+            build_strike_ladder(
+                portfolio,
+                ips,
+                target_deltas=[0.10],
+                maturities_years=[0.25],
+            )

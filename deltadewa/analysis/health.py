@@ -171,12 +171,14 @@ class HealthMixin:
     if TYPE_CHECKING:
         portfolio: "OptionPortfolio"
 
-    def calculate_net_carry_pct(self) -> float:
+    def calculate_net_carry_pct(self) -> float | None:
         """Calculate net carry (theta) as annualized % of underlying value.
 
         Returns:
-            Annualized theta as percentage of underlying value.
-            Positive = earning carry, Negative = paying carry.
+            Annualized theta as percentage of underlying value (positive =
+            earning carry, negative = paying carry), or ``None`` when the
+            underlying position is unset — the ratio is then undefined and the
+            metric is reported unavailable, never a fabricated ``0.0``.
 
         """
         stats = self.portfolio.summary_stats()
@@ -184,7 +186,7 @@ class HealthMixin:
         underlying_value = abs(stats["total_underlying_value"])
 
         if underlying_value == 0:
-            return 0.0
+            return None
 
         # Annualize and convert to percentage
         annual_theta = daily_theta * const.DAYS_PER_YEAR
@@ -493,7 +495,8 @@ class HealthMixin:
 
         Returns:
             Dictionary containing all calculated health metrics:
-            - net_carry_pct: Net carry as % of underlying
+            - net_carry_pct: Net carry as % of underlying, or ``None`` when
+              ``underlying_quantity`` is unset (unavailable)
             - crash_convexity_pct: Hedge P&L at the IPS crash scenario
             - vega_sufficiency_pct: Portfolio % impact per +10 vol
             - delta_drift_pct: Deviation from the target hedge ratio (pp), or
