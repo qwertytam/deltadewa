@@ -29,8 +29,11 @@ drawdown:
   max_tolerance_pct: 20.0
 
 triggers:
-  delta_drift_warn_pct: 5.0
-  delta_drift_action_pct: 10.0
+  target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is
+                                   # measured (in pp) as deviation from this, not
+                                   # from full delta-neutrality
+  delta_drift_warn_pct: 5.0        # pp of drift from target -> MONITOR
+  delta_drift_action_pct: 10.0     # pp of drift from target -> ACTION
   theta_cost_acceptable_pct: 2.0
   roll_time_months: 9.0          # roll when maturity below this
   rally_rebalance_pct: 15.0      # market rally that forces a re-strike review

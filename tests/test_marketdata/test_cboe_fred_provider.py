@@ -33,6 +33,13 @@ _SKEW_CSV = (
 # Real FRED format: "observation_date" (not "DATE") as the date column.
 _VIXCLS_CSV = "observation_date,VIXCLS\n2026-06-15,16.5\n"
 
+# Multi-row VIXCLS history for percentile/history tests (chronological).
+_VIXCLS_CSV_MULTIROW = (
+    "observation_date,VIXCLS\n"
+    + "\n".join(f"2026-{(i % 12) + 1:02d}-01,{12.0 + i}" for i in range(10))
+    + "\n"
+)
+
 
 def _mock_response(text: str) -> MagicMock:
     response = MagicMock()
@@ -190,3 +197,25 @@ class TestCboeFredProvider:
         percentile = provider.get_skew_percentile(lookback_days=10)
 
         assert percentile == 1.0
+
+    def test_get_vix_history_returns_last_n_closes(self, tmp_path) -> None:
+        """get_vix_history returns the last-N VIXCLS closes, oldest first."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_VIXCLS_CSV_MULTIROW)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        history = provider.get_vix_history(lookback_days=3)
+
+        # Last three rows of 12.0..21.0 are 19.0, 20.0, 21.0 (chronological).
+        assert history == [19.0, 20.0, 21.0]
+
+    def test_get_vix_history_reuses_vix_cache(self, tmp_path) -> None:
+        """History shares the vix_fred cache key — no second HTTP call."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_VIXCLS_CSV_MULTIROW)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        provider.get_vix()  # primes the vix_fred cache
+        provider.get_vix_history()
+
+        assert session.get.call_count == 1

@@ -228,3 +228,65 @@ class TestPnLMixin:
                 f"Mismatch at spot={spot}: vectorized={pnl_array[i]}, "
                 f"scalar={scalar_pnl}"
             )
+
+    def test_scalar_and_vectorized_agree_both_modes(self) -> None:
+        """Scalar and vectorized P&L match for both include_underlying values.
+
+        Uses a book *with* an underlying so the two modes actually differ,
+        pinning Mi5 parity across the choice.
+        """
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        spots = np.linspace(80, 120, 25)
+        for include_underlying in (False, True):
+            vectorized = portfolio.vectorized_pnl_at_expiry(
+                spots,
+                include_underlying=include_underlying,
+            )
+            scalar = np.array(
+                [
+                    portfolio.calculate_pnl_at_expiry(
+                        float(spot),
+                        include_underlying=include_underlying,
+                    )
+                    for spot in spots
+                ],
+            )
+            np.testing.assert_allclose(vectorized, scalar, rtol=1e-10)
+
+    def test_pnl_defaults_to_options_only(self) -> None:
+        """Both P&L paths default to options-only (Mi5: unified to False)."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        spots = np.array([90.0, 110.0])
+        # Default == explicit options-only for both paths.
+        np.testing.assert_allclose(
+            portfolio.vectorized_pnl_at_expiry(spots),
+            portfolio.vectorized_pnl_at_expiry(spots, include_underlying=False),
+        )
+        assert portfolio.calculate_pnl_at_expiry(
+            110.0,
+        ) == portfolio.calculate_pnl_at_expiry(110.0, include_underlying=False)
+        # And the default really excludes the (present) underlying.
+        assert not np.allclose(
+            portfolio.vectorized_pnl_at_expiry(spots),
+            portfolio.vectorized_pnl_at_expiry(spots, include_underlying=True),
+        )

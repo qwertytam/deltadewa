@@ -34,7 +34,10 @@ class PnLMixin:
 
         Args:
             spot_price_at_expiry: Spot price at expiration
-            include_underlying: Whether to include underlying position P&L
+            include_underlying: Whether to include underlying position P&L.
+                Defaults to ``False`` — options-only payoff — matching
+                :meth:`vectorized_pnl_at_expiry`; the underlying is an explicit
+                overlay callers opt into.
 
         Returns:
             Total P&L at expiration
@@ -71,7 +74,7 @@ class PnLMixin:
     def vectorized_pnl_at_expiry(
         self: "_PortfolioProtocol",
         spot_scenarios: np.ndarray[Any, np.dtype[Any]],
-        include_underlying: bool = True,
+        include_underlying: bool = False,
     ) -> np.ndarray[Any, np.dtype[Any]]:
         """Calculate P&L at expiry using vectorized NumPy operations.
 
@@ -82,7 +85,10 @@ class PnLMixin:
 
         Args:
             spot_scenarios: Array of spot prices to evaluate (shape: (n,))
-            include_underlying: Whether to include underlying position P&L
+            include_underlying: Whether to include underlying position P&L.
+                Defaults to ``False`` — options-only payoff — matching
+                :meth:`calculate_pnl_at_expiry`; the underlying is an explicit
+                overlay callers opt into.
 
         Returns:
             np.ndarray of P&L values for each spot scenario (shape: (n,))

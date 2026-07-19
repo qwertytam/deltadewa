@@ -148,7 +148,7 @@ class TestPnLChartsMixin:
             "BE $100.34",
             "ML $-491",
             "MP $509",
-            "EV $-8",
+            "EV $-6",
         }
 
         plt.close(fig)

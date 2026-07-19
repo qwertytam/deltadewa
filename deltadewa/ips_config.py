@@ -22,6 +22,13 @@ from deltadewa.constants import ExerciseStyle
 _DEFAULT_CRASH_VOL_SHOCK: Final[float] = 0.15
 _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 
+# Default for the delta-drift target that lives alongside the delta_drift
+# thresholds in the ``triggers`` section. A tail-hedged book is deliberately
+# net long (deep-OTM puts offset only a sliver of equity delta), so drift is
+# measured as deviation from this stated net-delta-to-equity ratio rather than
+# distance from full delta-neutrality.
+_DEFAULT_TARGET_DELTA_RATIO_PCT: Final[float] = 90.0
+
 try:
     import yaml
 
@@ -85,7 +92,14 @@ class IpsDrawdown:
 
 @dataclass(frozen=True)
 class IpsTriggers:
-    """Thresholds that trigger a hedge review or rebalance."""
+    """Thresholds that trigger a hedge review or rebalance.
+
+    ``target_delta_ratio_pct`` is the intended net-delta-to-equity ratio (%)
+    the book is run at; delta drift is measured as deviation from it (in
+    percentage points), and the ``delta_drift_*`` fields are those deviation
+    bands. Distinct from ``recommendations``'s ``target_hedge_ratio`` (the
+    complement, option-offset framing).
+    """
 
     delta_drift_warn_pct: float
     delta_drift_action_pct: float
@@ -93,6 +107,7 @@ class IpsTriggers:
     roll_time_months: float
     rally_rebalance_pct: float
     strike_drift_max_otm_pct: float
+    target_delta_ratio_pct: float = _DEFAULT_TARGET_DELTA_RATIO_PCT
     roll_review_buffer: float = 1.5
     strike_drift_review_fraction: float = 0.75
 
@@ -277,8 +292,18 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             f"{strike_drift_review_fraction}",
         )
 
+    target_delta_ratio_pct = section.get(
+        "target_delta_ratio_pct",
+        _DEFAULT_TARGET_DELTA_RATIO_PCT,
+    )
+    _require_non_negative(
+        target_delta_ratio_pct,
+        "triggers.target_delta_ratio_pct",
+    )
+
     return IpsTriggers(
         **fields,
+        target_delta_ratio_pct=target_delta_ratio_pct,
         roll_review_buffer=roll_review_buffer,
         strike_drift_review_fraction=strike_drift_review_fraction,
     )

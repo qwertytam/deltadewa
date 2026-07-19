@@ -1,12 +1,163 @@
 """Health metrics mixin for portfolio analysis."""
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa import constants as const
 from deltadewa.analysis.crash_repricing import crash_convexity_pct
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
+
+# Vol-regime normalization band (decimal implied vol) and rank window.
+# NOTE (Mo4 -> M1.4/Mo2): this 0.15/0.35 band is still duplicated in
+# ``market_environment.classify_vix_regime`` and the dashboard config;
+# M1.4/Mo2 hoists it into the IPS (policy vs presentation). This is the single
+# source *inside health.py* until then — do not add a fourth literal copy.
+VOL_REGIME_LOW: Final[float] = 0.15
+VOL_REGIME_HIGH: Final[float] = 0.35
+VOL_REGIME_LOOKBACK_DAYS: Final[int] = 252
+
+
+class VolRegimeBasis(StrEnum):
+    """How a vol-regime figure was derived.
+
+    Distinguishes an honest percentile from the min-max fallback so no caller
+    can present a normalized number as a percentile it never computed.
+    """
+
+    PERCENTILE = "percentile"
+    """True rank of current vol against a VIX history distribution."""
+    NORMALIZED = "normalized"
+    """Min-max normalization between the historical band — NOT a percentile."""
+
+
+@dataclass(frozen=True)
+class VolRegime:
+    """A vol-regime reading and the basis it was computed on.
+
+    Attributes:
+        value: Regime figure on a 0-100 scale (0 = cheap, 100 = expensive).
+        basis: Whether ``value`` is a true percentile or a normalized figure.
+        lookback_days: Rank window in trading days when
+            ``basis is VolRegimeBasis.PERCENTILE``; ``None`` for the normalized
+            fallback (a normalized figure has no lookback).
+        sample_size: Number of historical observations ranked against when
+            ``basis is VolRegimeBasis.PERCENTILE``; ``None`` otherwise.
+
+    """
+
+    value: float
+    basis: VolRegimeBasis
+    lookback_days: int | None
+    sample_size: int | None
+
+
+def _normalized_vol_regime(
+    current_vol: float,
+    low: float,
+    high: float,
+) -> float:
+    """Min-max normalize *current_vol* into 0-100 between *low* and *high*.
+
+    This is the legacy figure: linear interpolation between a hardcoded band,
+    clamped to [0, 100]. It is NOT a percentile — it is only ever returned
+    labelled ``VolRegimeBasis.NORMALIZED``.
+    """
+    if current_vol <= low:
+        return 0.0
+    if current_vol >= high:
+        return 100.0
+    return (current_vol - low) / (high - low) * 100.0
+
+
+def compute_vol_regime(
+    current_vol: float,
+    *,
+    vix_history: Sequence[float] | None,
+    normalized_low: float = VOL_REGIME_LOW,
+    normalized_high: float = VOL_REGIME_HIGH,
+    lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
+) -> VolRegime:
+    """Rank *current_vol* against VIX history, or normalize honestly.
+
+    When *vix_history* is non-empty, computes a **true** percentile: the
+    fraction of the last *lookback_days* VIX closes at or below *current_vol*,
+    scaled to 0-100 (inclusive ``<=`` rank, the same convention as
+    ``MarketDataProvider.get_skew_percentile``). When it is ``None`` or empty
+    — the offline/no-history case — falls back to min-max normalization
+    between *normalized_low*/*normalized_high* and labels it
+    ``VolRegimeBasis.NORMALIZED`` so it is never mistaken for a percentile.
+
+    Args:
+        current_vol: Current implied volatility as a decimal (e.g. ``0.20``).
+        vix_history: Historical VIX closes in **vol points** (e.g. ``20.0``),
+            as returned by ``MarketDataProvider.get_vix_history``. ``None`` or
+            empty selects the normalized fallback.
+        normalized_low: Historical low vol (decimal) for the fallback.
+        normalized_high: Historical high vol (decimal) for the fallback.
+        lookback_days: Number of trailing observations to rank against.
+
+    Returns:
+        A ``VolRegime`` carrying the figure and its basis.
+
+    """
+    if vix_history:
+        # VIX history is in points; convert to decimal to match current_vol.
+        window = [level / 100.0 for level in list(vix_history)[-lookback_days:]]
+        at_or_below = sum(1 for level in window if level <= current_vol)
+        percentile = at_or_below / len(window) * 100.0
+        return VolRegime(
+            value=percentile,
+            basis=VolRegimeBasis.PERCENTILE,
+            lookback_days=lookback_days,
+            sample_size=len(window),
+        )
+    normalized = _normalized_vol_regime(
+        current_vol,
+        normalized_low,
+        normalized_high,
+    )
+    return VolRegime(
+        value=normalized,
+        basis=VolRegimeBasis.NORMALIZED,
+        lookback_days=None,
+        sample_size=None,
+    )
+
+
+def delta_drift_from_target(
+    net_delta: float,
+    underlying_qty: float,
+    target_delta_ratio_pct: float,
+) -> float | None:
+    """Delta drift as signed deviation from a target net-delta ratio.
+
+    A tail-hedged book is deliberately net long, so drift is measured against a
+    stated ``target_delta_ratio_pct`` (the intended net-delta-to-equity ratio,
+    e.g. ``90.0``) rather than against full delta-neutrality. This is the single
+    definition shared by the health gauge
+    (:meth:`HealthMixin.calculate_delta_drift_pct`) and the delta trigger
+    (``hedge_triggers.evaluate_hedge_triggers``).
+
+    Args:
+        net_delta: Net portfolio delta (options + underlying).
+        underlying_qty: Equity/underlying quantity being hedged.
+        target_delta_ratio_pct: Intended net-delta-to-equity ratio, as a percent
+            (single-sourced from ``IpsTriggers.target_delta_ratio_pct``).
+
+    Returns:
+        Signed deviation from target in percentage points (0 = at target,
+        positive = under-hedged / more net long, negative = over-hedged), or
+        ``None`` when ``underlying_qty`` is unset — the ratio is then undefined
+        and the metric is reported unavailable, never a fabricated ``0.0``.
+
+    """
+    if underlying_qty == 0:
+        return None
+    return net_delta / underlying_qty * 100.0 - target_delta_ratio_pct
 
 
 class HealthMixin:
@@ -107,24 +258,32 @@ class HealthMixin:
 
         return float((vol_shock_impact / portfolio_value) * 100)
 
-    def calculate_delta_drift_pct(self) -> float:
-        """Calculate delta drift: Net hedge delta as % of equity delta.
+    def calculate_delta_drift_pct(
+        self,
+        target_delta_ratio_pct: float,
+    ) -> float | None:
+        """Calculate delta drift as deviation from the target hedge ratio.
 
-        Target is 0% (perfectly hedged). Positive means over-hedged,
-        negative means under-hedged.
+        Drift is the net-delta-to-equity ratio minus the stated
+        ``target_delta_ratio_pct`` (see :func:`delta_drift_from_target`). 0 =
+        at target, positive = under-hedged (more net long than target), negative
+        = over-hedged.
+
+        Args:
+            target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
+                single-sourced from ``IpsTriggers.target_delta_ratio_pct``.
 
         Returns:
-            Net delta as percentage of underlying quantity.
+            Signed deviation from target in percentage points, or ``None`` when
+            ``underlying_quantity`` is unset (metric unavailable).
 
         """
         stats = self.portfolio.summary_stats()
-        net_delta = stats["net_delta"]
-        underlying_qty = abs(stats["underlying_quantity"])
-
-        if underlying_qty == 0:
-            return 0.0
-
-        return float((net_delta / underlying_qty) * 100)
+        return delta_drift_from_target(
+            stats["net_delta"],
+            stats["underlying_quantity"],
+            target_delta_ratio_pct,
+        )
 
     def calculate_convexity_cliff_days(
         self,
@@ -163,33 +322,41 @@ class HealthMixin:
 
     def calculate_vol_regime_percentile(
         self,
-        historical_vol_low: float = 0.15,
-        historical_vol_high: float = 0.35,
+        historical_vol_low: float = VOL_REGIME_LOW,
+        historical_vol_high: float = VOL_REGIME_HIGH,
+        vix_history: Sequence[float] | None = None,
+        lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
     ) -> float:
-        """Calculate volatility regime as a percentile (0-100).
+        """Calculate the volatility-regime figure (0-100).
 
-        Uses simple linear interpolation between historical low and high.
-        0 = at or below historical low (cheap vol)
-        50 = at historical median
-        100 = at or above historical high (expensive vol)
+        Returns a **true** percentile (rank of the current implied vol against
+        the trailing VIX distribution) when *vix_history* is supplied, and
+        otherwise a min-max normalized figure between the historical band. This
+        method returns only the value; use :func:`compute_vol_regime` when the
+        caller needs to know which basis was used (percentile vs normalized) so
+        a normalized figure is never mislabelled a percentile.
 
         Args:
-            historical_vol_low: Historical low volatility (default: 0.15)
-            historical_vol_high: Historical high volatility (default: 0.35)
+            historical_vol_low: Historical low volatility for the normalized
+                fallback (default: :data:`VOL_REGIME_LOW`).
+            historical_vol_high: Historical high volatility for the normalized
+                fallback (default: :data:`VOL_REGIME_HIGH`).
+            vix_history: Trailing VIX closes in vol points; when non-empty a
+                true percentile is computed. ``None``/empty -> normalized.
+            lookback_days: Rank window in trading days (default:
+                :data:`VOL_REGIME_LOOKBACK_DAYS`).
 
         Returns:
-            Volatility percentile (0-100).
+            Volatility-regime figure (0-100).
 
         """
-        current_vol = self.portfolio.volatility
-
-        if current_vol <= historical_vol_low:
-            return 0.0
-        if current_vol >= historical_vol_high:
-            return 100.0
-        # Linear interpolation
-        vol_range = historical_vol_high - historical_vol_low
-        return ((current_vol - historical_vol_low) / vol_range) * 100
+        return compute_vol_regime(
+            self.portfolio.volatility,
+            vix_history=vix_history,
+            normalized_low=historical_vol_low,
+            normalized_high=historical_vol_high,
+            lookback_days=lookback_days,
+        ).value
 
     def calculate_hedge_success_pct(
         self,
@@ -254,6 +421,12 @@ class HealthMixin:
         scores = []
 
         for metric in metrics.values():
+            # Skip metrics reported unavailable (e.g. delta drift with no
+            # underlying_quantity) — they contribute no score rather than a
+            # fabricated one.
+            if metric.actual is None:
+                continue
+
             # Normalize metric to 0-100 score
             # For non-inverted metrics: min_val=0, max_val=100
             # For inverted metrics: min_val=100, max_val=0
@@ -278,19 +451,24 @@ class HealthMixin:
     def calculate_health_metrics(  # pylint: disable=too-many-arguments  # one metric-config arg per gauge
         self,
         cumulative_carry_paid: float = 0.0,
-        historical_vol_low: float = 0.15,
-        historical_vol_high: float = 0.35,
+        historical_vol_low: float = VOL_REGIME_LOW,
+        historical_vol_high: float = VOL_REGIME_HIGH,
         convexity_cliff_days: int = 180,
         *,
         crash_scenario_pct: float | None = None,
         crash_vol_shock: float = 0.0,
+        target_delta_ratio_pct: float | None = None,
+        vix_history: Sequence[float] | None = None,
+        vol_regime_lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
     ) -> dict[str, Any]:
         """Calculate all health metrics in one call.
 
         Args:
             cumulative_carry_paid: Total carry paid for the hedge (default: 0.0)
-            historical_vol_low: Historical low volatility (default: 0.15)
-            historical_vol_high: Historical high volatility (default: 0.35)
+            historical_vol_low: Historical low volatility for the vol-regime
+                normalized fallback (default: :data:`VOL_REGIME_LOW`)
+            historical_vol_high: Historical high volatility for the vol-regime
+                normalized fallback (default: :data:`VOL_REGIME_HIGH`)
             convexity_cliff_days: Days threshold for high-gamma region
             (default: 180)
             crash_scenario_pct: Signed crash move as a percent of current spot,
@@ -301,15 +479,30 @@ class HealthMixin:
             crash_vol_shock: Flat additive crash vol bump as a decimal,
                 single-sourced from ``IpsConvexity.crash_vol_shock`` and used
                 to reprice the crash-convexity gauge. Defaults to ``0.0``.
+            target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
+                single-sourced from ``IpsTriggers.target_delta_ratio_pct``.
+                When ``None`` (no IPS supplied), ``delta_drift_pct`` is ``None``
+                (unavailable) rather than measured against a hardcoded target.
+            vix_history: Trailing VIX closes in vol points (from
+                ``MarketDataProvider.get_vix_history``). When non-empty the
+                vol-regime figure is a **true** percentile; ``None``/empty
+                yields the min-max normalized figure, labelled as such.
+            vol_regime_lookback_days: Rank window for the vol-regime percentile
+                (default: :data:`VOL_REGIME_LOOKBACK_DAYS`).
 
         Returns:
             Dictionary containing all calculated health metrics:
             - net_carry_pct: Net carry as % of underlying
             - crash_convexity_pct: Hedge P&L at the IPS crash scenario
             - vega_sufficiency_pct: Portfolio % impact per +10 vol
-            - delta_drift_pct: Net delta as % of equity
+            - delta_drift_pct: Deviation from the target hedge ratio (pp), or
+              ``None`` when unavailable
             - convexity_cliff_days: Days until high-gamma region
-            - vol_regime_percentile: Volatility percentile (0-100)
+            - vol_regime_percentile: Vol-regime figure (0-100)
+            - vol_regime_basis: ``"percentile"`` (true rank vs VIX history) or
+              ``"normalized"`` (min-max fallback — not a percentile)
+            - vol_regime_lookback_days: Rank window when the basis is a true
+              percentile, else ``None``
             - hedge_success_pct: Hedge P&L vs carry paid
 
         """
@@ -326,17 +519,31 @@ class HealthMixin:
                 crash_scenario_pct,
             )
 
+        if target_delta_ratio_pct is None:
+            delta_drift_value = None
+        else:
+            delta_drift_value = self.calculate_delta_drift_pct(
+                target_delta_ratio_pct,
+            )
+
+        vol_regime = compute_vol_regime(
+            self.portfolio.volatility,
+            vix_history=vix_history,
+            normalized_low=historical_vol_low,
+            normalized_high=historical_vol_high,
+            lookback_days=vol_regime_lookback_days,
+        )
+
         return {
             "net_carry_pct": self.calculate_net_carry_pct(),
             "crash_convexity_pct": crash_convexity_value,
             "vega_sufficiency_pct": self.calculate_vega_sufficiency_pct(),
-            "delta_drift_pct": self.calculate_delta_drift_pct(),
+            "delta_drift_pct": delta_drift_value,
             "convexity_cliff_days": self.calculate_convexity_cliff_days(
                 convexity_cliff_days,
             ),
-            "vol_regime_percentile": self.calculate_vol_regime_percentile(
-                historical_vol_low,
-                historical_vol_high,
-            ),
+            "vol_regime_percentile": vol_regime.value,
+            "vol_regime_basis": vol_regime.basis.value,
+            "vol_regime_lookback_days": vol_regime.lookback_days,
             "hedge_success_pct": hedge_success_pct,
         }

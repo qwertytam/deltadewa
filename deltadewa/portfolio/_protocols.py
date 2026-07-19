@@ -58,7 +58,7 @@ class _PortfolioProtocol(Protocol):
     def vectorized_pnl_at_expiry(
         self,
         spot_scenarios: np.ndarray[Any, np.dtype[Any]],
-        include_underlying: bool = True,
+        include_underlying: bool = False,
     ) -> np.ndarray[Any, np.dtype[Any]]: ...
 
     # MonteCarloMixin methods
@@ -66,6 +66,17 @@ class _PortfolioProtocol(Protocol):
         self,
         days_to_expiry: int,
     ) -> dict[str, Any]: ...
+    def _horizon_spot_grid(
+        self,
+        final_spots: np.ndarray[Any, np.dtype[Any]],
+        num_points: int = ...,
+    ) -> np.ndarray[Any, np.dtype[Any]]: ...
+    def _simulate_horizon_pnls(
+        self,
+        final_spots: np.ndarray[Any, np.dtype[Any]],
+        days_to_expiry: int,
+        include_underlying: bool,
+    ) -> np.ndarray[Any, np.dtype[Any]]: ...
     def _calculate_theoretical_max_loss(self) -> float | None: ...
     def _analyze_concentration(
         self,

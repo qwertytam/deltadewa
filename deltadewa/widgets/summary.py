@@ -14,6 +14,7 @@ from deltadewa.analysis.crash_repricing import crash_convexity_pct
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.html import format_html_badge, format_html_metric
+from deltadewa.portfolio.monte_carlo import drift_measure_label
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
@@ -353,8 +354,12 @@ class NetHedgeSummary:
                 expected_pnl = mc_results.get("expected_pnl", 0)
 
                 prob_profit = mc_results.get("prob_profit", 0)
+                measure = drift_measure_label(
+                    str(mc_results.get("drift_measure", "risk_neutral")),
+                )
                 prob_html += "<p><strong>Probability of Profit:"
-                prob_html += f"</strong> {prob_profit * 100:.1f}%</p>"
+                prob_html += f"</strong> {prob_profit * 100:.1f}% "
+                prob_html += f"<em>({measure} drift)</em></p>"
                 prob_html += "<p><strong>Expected Value:</strong> $"
                 prob_html += f"{expected_pnl:,.2f}</p>"
         else:

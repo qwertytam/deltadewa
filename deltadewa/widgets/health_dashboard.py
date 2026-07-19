@@ -11,7 +11,10 @@ import ipywidgets as widgets
 import yaml
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.health import VolRegimeBasis
 from deltadewa.colours import DEFAULT_PALETTE
+from deltadewa.marketdata._errors import MarketDataError
+from deltadewa.marketdata._protocols import MarketDataProvider
 from deltadewa.portfolio.core import OptionPortfolio
 
 from .gauges import GaugeConfig, GaugeIndicator
@@ -28,7 +31,8 @@ class HedgeHealthMetric:
         min_val: Where "bad" color ends
         mid_val: Neutral point
         max_val: Where "good" color begins
-        actual: Calculated actual value
+        actual: Calculated actual value, or ``None`` when the metric is
+            unavailable (rendered as N/A and excluded from the health score)
         unit: Display unit (%, days, etc.)
         invert_colors: If True, low values are good (green), high are bad (red)
 
@@ -43,7 +47,7 @@ class HedgeHealthMetric:
         min_val: float,
         mid_val: float,
         max_val: float,
-        actual: float,
+        actual: float | None,
         unit: str = "%",
         invert_colors: bool = False,
         label_format: str = "{:.1f}",
@@ -104,6 +108,8 @@ class HedgeHealthDashboard:
         *,
         crash_scenario_pct: float | None = None,
         crash_vol_shock: float = 0.0,
+        target_delta_ratio_pct: float | None = None,
+        market_data: MarketDataProvider | None = None,
     ) -> None:
         """Initialize the Hedge Health Dashboard.
 
@@ -129,12 +135,24 @@ class HedgeHealthDashboard:
                 single-sourced from ``IpsConvexity.crash_vol_shock`` (pass
                 ``ctx.ips_config.convexity.crash_vol_shock``). Used to reprice
                 the crash-convexity gauge. Defaults to ``0.0`` (spot-only).
+            target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
+                single-sourced from ``IpsTriggers.target_delta_ratio_pct`` (pass
+                ``ctx.ips_config.triggers.target_delta_ratio_pct``). When
+                ``None`` (no IPS), the delta-drift gauge reads N/A rather than
+                measure against a hardcoded target.
+            market_data: Optional market-data provider (pass
+                ``ctx.market_data``). When it exposes VIX history, the vol
+                regime gauge shows a **true** percentile; otherwise (or when
+                omitted) the gauge shows an honestly-labelled normalized figure
+                rather than a fabricated percentile.
 
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
         self._crash_scenario_pct = crash_scenario_pct
         self._crash_vol_shock = crash_vol_shock
+        self._target_delta_ratio_pct = target_delta_ratio_pct
+        self._market_data = market_data
 
         # Initialize default configuration
         self.config = self._get_default_config()
@@ -200,12 +218,12 @@ class HedgeHealthDashboard:
                     "invert_colors": False,
                 },
                 "delta_drift": {
-                    "start": -50.0,
-                    "end": 50.0,
-                    "min_val": -20.0,
-                    "mid_val": 0.0,
-                    "max_val": 20.0,
-                    "invert_colors": False,
+                    "start": 0.0,
+                    "end": 30.0,
+                    "min_val": 5.0,
+                    "mid_val": 7.5,
+                    "max_val": 10.0,
+                    "invert_colors": True,
                 },
                 "convexity_cliff": {
                     "start": 0,
@@ -271,7 +289,23 @@ class HedgeHealthDashboard:
             convexity_cliff_days=params["convexity_cliff_days"],
             crash_scenario_pct=self._crash_scenario_pct,
             crash_vol_shock=self._crash_vol_shock,
+            target_delta_ratio_pct=self._target_delta_ratio_pct,
+            vix_history=self._fetch_vix_history(),
         )
+
+    def _fetch_vix_history(self) -> list[float] | None:
+        """Fetch VIX history from the provider, or ``None`` if unavailable.
+
+        A missing provider or any ``MarketDataError`` (e.g. the offline
+        ``StaticProvider`` with no history) yields ``None``, which drives the
+        vol-regime gauge to its honest normalized fallback.
+        """
+        if self._market_data is None:
+            return None
+        try:
+            return self._market_data.get_vix_history()
+        except MarketDataError:
+            return None
 
     # ==========================================================================
     # Metric Configuration
@@ -340,20 +374,38 @@ class HedgeHealthDashboard:
             label_format="{:+.1f}%",
         )
 
-        # 4. Delta Drift (Net delta as % of underlying)
+        # 4. Delta Drift (|deviation| from the target hedge ratio, in pp).
+        #    The gauge is colored by magnitude (inverted: at-target=green,
+        #    far=red); the signed value and direction go in the description.
         c = cfg["delta_drift"]
+        drift = health_data["delta_drift_pct"]
+        if drift is None:
+            drift_actual: float | None = None
+            drift_desc = (
+                "Deviation from target hedge ratio "
+                "(set underlying_quantity to measure)"
+            )
+        else:
+            drift_actual = abs(drift)
+            if drift > 0:
+                direction = "under-hedged"
+            elif drift < 0:
+                direction = "over-hedged"
+            else:
+                direction = "on target"
+            drift_desc = f"{drift:+.1f}pp from target ({direction})"
         metrics["delta_drift"] = HedgeHealthMetric(
             name="Delta Drift",
-            description="Net hedge delta as % of equity delta",
+            description=drift_desc,
             start=c["start"],
             end=c["end"],
             min_val=c["min_val"],
             mid_val=c["mid_val"],
             max_val=c["max_val"],
-            actual=health_data["delta_drift_pct"],
-            unit="",
+            actual=drift_actual,
+            unit=" pp",
             invert_colors=c["invert_colors"],
-            label_format="{:+.1f}%",
+            label_format="{:.1f}",
         )
 
         # 5. Time-to-Convexity Cliff (days until puts in high-gamma)
@@ -375,18 +427,33 @@ class HedgeHealthDashboard:
             label_format="{:.0f}",
         )
 
-        # 6. Volatility Regime (IV percentile)
+        # 6. Volatility Regime — a true percentile vs VIX history when
+        #    available, else a min-max normalized figure labelled honestly
+        #    (never a fabricated percentile).
         c = cfg["vol_regime"]
+        if health_data["vol_regime_basis"] == VolRegimeBasis.PERCENTILE:
+            lookback = health_data["vol_regime_lookback_days"]
+            vol_regime_unit = "th percentile"
+            vol_regime_desc = (
+                f"Current IV percentile vs {lookback}-day VIX history "
+                "(0=cheap, 100=expensive)"
+            )
+        else:
+            vol_regime_unit = ""
+            vol_regime_desc = (
+                "Min-max normalized vol (0.15-0.35) - NOT a percentile "
+                "(no VIX history)"
+            )
         metrics["vol_regime"] = HedgeHealthMetric(
             name="Volatility Regime",
-            description="Current IV percentile (0=cheap, 100=expensive)",
+            description=vol_regime_desc,
             start=c["start"],
             end=c["end"],
             min_val=c["min_val"],
             mid_val=c["mid_val"],
             max_val=c["max_val"],
             actual=health_data["vol_regime_percentile"],
-            unit="th percentile",
+            unit=vol_regime_unit,
             invert_colors=c["invert_colors"],
             label_format="{:.0f}",
         )
@@ -424,6 +491,12 @@ class HedgeHealthDashboard:
             HTML string for the gauge.
 
         """
+        if metric.actual is None:
+            return (
+                '<div style="color:#888; font-size:12px; padding:6px 0;">'
+                "N/A — metric unavailable</div>"
+            )
+
         # Determine colors based on invert_colors flag
         if metric.invert_colors:
             low_color = DEFAULT_PALETTE.positive  # Green for low
@@ -473,7 +546,10 @@ class HedgeHealthDashboard:
 
         """
         # Determine status color based on where actual falls
-        if metric.invert_colors:
+        if metric.actual is None:
+            status_color = DEFAULT_PALETTE.medium_grey
+            status = "N/A"
+        elif metric.invert_colors:
             if metric.actual <= metric.min_val:
                 status_color = DEFAULT_PALETTE.positive
                 status = "Good"
@@ -495,7 +571,11 @@ class HedgeHealthDashboard:
                 status = "Watch"
 
         # Format actual value for display
-        actual_display = metric.label_format.format(metric.actual) + metric.unit
+        actual_display = (
+            "N/A"
+            if metric.actual is None
+            else metric.label_format.format(metric.actual) + metric.unit
+        )
 
         # Assemble the html for the card
         show_description = True
@@ -693,7 +773,9 @@ class HedgeHealthDashboard:
         summary: dict[str, Any] = {}
         for key, metric in self._metrics.items():
             # Determine status
-            if metric.invert_colors:
+            if metric.actual is None:
+                status = "unavailable"
+            elif metric.invert_colors:
                 if metric.actual <= metric.min_val:
                     status = "good"
                 elif metric.actual >= metric.max_val:

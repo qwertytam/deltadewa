@@ -34,6 +34,11 @@ class StaticProvider:
         skew_index: Current CBOE SKEW index level.
         skew_percentile: Fixed percentile rank returned by
             ``get_skew_percentile`` regardless of ``lookback_days``.
+        vix_history: Optional VIX close history in vol points, oldest first.
+            Empty by default — the offline provider carries no history, so
+            ``get_vix_history`` raises and vol-regime callers fall back to a
+            (labelled) normalized figure rather than a fabricated percentile.
+            Tests can inject a series to exercise the true-percentile path.
 
     """
 
@@ -46,6 +51,7 @@ class StaticProvider:
     )
     skew_index: float = 120.0
     skew_percentile: float = 0.5
+    vix_history: list[float] = field(default_factory=list)
 
     @classmethod
     def from_assumptions(
@@ -82,6 +88,19 @@ class StaticProvider:
     def get_vix(self) -> float:
         """Return the current VIX level."""
         return self.vix
+
+    def get_vix_history(self, lookback_days: int = 252) -> list[float]:
+        """Return the last *lookback_days* of injected ``vix_history``.
+
+        Raises:
+            MarketDataUnavailableError: If no ``vix_history`` was registered —
+                the default offline case, which signals vol-regime callers to
+                fall back to a labelled normalized figure.
+
+        """
+        if not self.vix_history:
+            raise MarketDataUnavailableError("No VIX history registered")
+        return list(self.vix_history[-lookback_days:])
 
     def get_vix_term_structure(self) -> dict[str, float]:
         """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name."""

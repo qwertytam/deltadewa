@@ -33,6 +33,7 @@ from deltadewa.formatters.gradients import (
 )
 from deltadewa.formatters.values import format_currency_for_axis
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.monte_carlo import drift_measure_label
 from deltadewa.reporting import ConsoleReporter
 from deltadewa.widgets import GlobalAssumptions
 
@@ -515,7 +516,13 @@ class StressDashboard:
             print(f"   Standard Deviation:      ${std_pnl:>10,.2f}")
 
             print("\n📈 Profit Analysis:")
-            print(f"   Probability of Profit:   {prob_profit:>6.1%}")
+            measure = drift_measure_label(
+                mc_results.get("drift_measure", "risk_neutral"),
+            )
+            print(
+                f"   Probability of Profit:   {prob_profit:>6.1%} "
+                f"({measure} drift)",
+            )
             if len(profits) > 0:
                 print(
                     f"   Average Profit:          ${np.mean(profits):>10,.2f}",

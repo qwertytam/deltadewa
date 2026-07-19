@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import deltadewa.constants as const
+from deltadewa.analysis.health import delta_drift_from_target
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsTriggers
@@ -36,11 +37,15 @@ class HedgeTriggerThresholds:
 
     Parameters
     ----------
+    target_delta_ratio_pct:
+        Intended net-delta-to-equity ratio (%) the book is run at; delta drift
+        is measured as deviation from it (default 90 %).
     delta_drift_warn_pct:
-        Delta drift % at which a MONITOR warning is raised (default 5 %).
+        Drift (pp from target) at which a MONITOR warning is raised (default
+        5 pp).
     delta_drift_action_pct:
-        Delta drift % at which an ACTION REQUIRED alert is raised (default 10
-        %).
+        Drift (pp from target) at which an ACTION REQUIRED alert is raised
+        (default 10 pp).
     expiry_urgent_days:
         Days-to-expiry below which a position is classified as URGENT
         (default 7 days).
@@ -60,6 +65,7 @@ class HedgeTriggerThresholds:
 
     """
 
+    target_delta_ratio_pct: float = 90.0
     delta_drift_warn_pct: float = 5.0
     delta_drift_action_pct: float = 10.0
     expiry_urgent_days: int = 7
@@ -78,6 +84,7 @@ class HedgeTriggerThresholds:
         ``gamma_moderate``) keep this dataclass's literal defaults.
         """
         return cls(
+            target_delta_ratio_pct=triggers.target_delta_ratio_pct,
             delta_drift_warn_pct=triggers.delta_drift_warn_pct,
             delta_drift_action_pct=triggers.delta_drift_action_pct,
             theta_cost_acceptable_pct=triggers.theta_cost_acceptable_pct,
@@ -96,7 +103,9 @@ class HedgeTriggerResult:
     Attributes
     ----------
     delta_drift_pct:
-        Absolute net-delta as a percentage of notional.
+        Signed deviation from the target hedge ratio, in percentage points
+        (0 = at target), or ``None`` when ``underlying_quantity`` is unset and
+        the metric is unavailable.
     days_to_nearest_expiry:
         Calendar days to the nearest position's expiry.
     near_expiry_count:
@@ -111,7 +120,7 @@ class HedgeTriggerResult:
 
     """
 
-    delta_drift_pct: float
+    delta_drift_pct: float | None
     days_to_nearest_expiry: int
     near_expiry_count: int
     theta_cost_pct: float
@@ -133,7 +142,7 @@ def evaluate_hedge_triggers(
 
     Reproduces the five-section "Hedge Decision Triggers" notebook cell:
 
-    1. **Delta hedge effectiveness** — drift vs notional
+    1. **Delta hedge effectiveness** — drift vs the target hedge ratio
     2. **Position expiration status** — nearest expiry and urgent positions
     3. **Time decay cost** — annualised theta as % of portfolio
     4. **Gamma exposure** — portfolio-level gamma risk
@@ -162,10 +171,10 @@ def evaluate_hedge_triggers(
     # --- compute metrics ---
     stats = portfolio.summary_stats()
 
-    delta_drift_pct = (
-        abs(stats["net_delta"]) / abs(stats["underlying_quantity"]) * 100
-        if stats["underlying_quantity"] != 0
-        else 0.0
+    delta_drift_pct = delta_drift_from_target(
+        stats["net_delta"],
+        stats["underlying_quantity"],
+        t.target_delta_ratio_pct,
     )
 
     days_to_nearest_expiry = (
@@ -225,7 +234,7 @@ def evaluate_hedge_triggers(
         total_gamma,
         t,
     )
-    _print_action_summary(actions, reporter)
+    _print_action_summary(actions, reporter, t)
 
     return HedgeTriggerResult(
         delta_drift_pct=delta_drift_pct,
@@ -242,39 +251,68 @@ def evaluate_hedge_triggers(
 # ---------------------------------------------------------------------------
 
 
+def _shares_to_target(
+    stats: dict[str, Any],
+    t: HedgeTriggerThresholds,
+) -> float:
+    """Underlying shares needed to restore the target net-delta ratio.
+
+    Positive = buy, negative = sell. Restores ``net_delta`` to
+    ``target_delta_ratio_pct`` of the equity position (rather than to full
+    neutrality). Equivalent to the option-delta adjustment toward target.
+    """
+    target_net_delta = (
+        t.target_delta_ratio_pct / 100.0 * stats["underlying_quantity"]
+    )
+    return float(target_net_delta - stats["net_delta"])
+
+
 def _print_delta_trigger(
     stats: dict[str, Any],
-    delta_drift_pct: float,
+    delta_drift_pct: float | None,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
 ) -> None:
     print("1️⃣  DELTA HEDGE EFFECTIVENESS:")
     reporter.divider()
-    if delta_drift_pct < t.delta_drift_warn_pct:
-        reporter.success(f"    Delta drift: {delta_drift_pct:.1f}% - EXCELLENT")
-        print("     → Hedge is tracking well, no immediate action needed")
-    elif delta_drift_pct < t.delta_drift_action_pct:
-        reporter.warning(f"    Delta drift: {delta_drift_pct:.1f}% - MONITOR")
+    if delta_drift_pct is None:
+        reporter.warning(
+            "    Delta drift: unavailable - no underlying_quantity set",
+        )
+        print("     → Set the equity position to measure the hedge ratio")
+        print()
+        return
+
+    drift_label = (
+        f"    Delta drift: {delta_drift_pct:+.1f}pp from "
+        f"{t.target_delta_ratio_pct:.0f}% target"
+    )
+    if abs(delta_drift_pct) < t.delta_drift_warn_pct:
+        reporter.success(f"{drift_label} - ON TARGET")
+        print("     → Hedge ratio is at target, no action needed")
+    elif abs(delta_drift_pct) < t.delta_drift_action_pct:
+        direction = "under-hedged" if delta_drift_pct > 0 else "over-hedged"
+        reporter.warning(f"{drift_label} - MONITOR")
         print(
-            f"     → Consider rebalancing if drift exceeds "
-            f"{t.delta_drift_action_pct:.0f}%",
+            f"     → {direction}; rebalance if drift exceeds "
+            f"{t.delta_drift_action_pct:.0f}pp",
         )
         print(
-            f"     → Current exposure: {stats['net_delta']:.0f} "
-            f"delta vs {stats['underlying_quantity']:.0f} notional",
+            f"     → Current net delta: {stats['net_delta']:.0f} "
+            f"vs {stats['underlying_quantity']:.0f} equity",
         )
     else:
-        reporter.error(
-            f"    Delta drift: {delta_drift_pct:.1f}% - ACTION REQUIRED",
-        )
-        print("     → Hedge has drifted significantly!")
+        direction = "under-hedged" if delta_drift_pct > 0 else "over-hedged"
+        shares = _shares_to_target(stats, t)
+        verb = "Buy" if shares > 0 else "Sell"
+        reporter.error(f"{drift_label} - ACTION REQUIRED")
+        print(f"     → Hedge is {direction} vs target!")
         print(
-            f"     → Adjust by {stats['delta_adjustment']:.0f} "
-            f"shares to rebalance",
+            f"     → {verb} {abs(shares):.0f} shares to restore the "
+            f"{t.target_delta_ratio_pct:.0f}% target ratio",
         )
         print(
-            f"     → Or add/remove options with ~"
-            f"{abs(stats['delta_adjustment']):.0f} delta",
+            f"     → Or adjust option delta by ~{abs(shares):.0f} to target",
         )
     print()
 
@@ -412,7 +450,7 @@ def _print_gamma_trigger(
 
 def _build_action_list(
     stats: dict[str, Any],
-    delta_drift_pct: float,
+    delta_drift_pct: float | None,
     near_expiry_positions: list[Any],
     days_to_nearest_expiry: int,
     theta_cost_pct: float,
@@ -431,12 +469,16 @@ def _build_action_list(
                 f"expiring position(s) → Use Section 6",
             ),
         )
-    if delta_drift_pct > t.delta_drift_action_pct:
+    if (
+        delta_drift_pct is not None
+        and abs(delta_drift_pct) > t.delta_drift_action_pct
+    ):
+        shares = _shares_to_target(stats, t)
         actions.append(
             (
                 "🔴 URGENT",
-                f"Rebalance delta (adjust {abs(stats['delta_adjustment']):.0f} "
-                f"shares) → Use Section 7",
+                f"Rebalance delta (adjust {abs(shares):.0f} shares) to restore "
+                f"the {t.target_delta_ratio_pct:.0f}% target ratio",
             ),
         )
 
@@ -451,12 +493,17 @@ def _build_action_list(
                 "Plan rolls for approaching expiration → Review Section 6",
             ),
         )
-    if t.delta_drift_warn_pct < delta_drift_pct <= t.delta_drift_action_pct:
+    if (
+        delta_drift_pct is not None
+        and t.delta_drift_warn_pct
+        < abs(delta_drift_pct)
+        <= t.delta_drift_action_pct
+    ):
         actions.append(
             (
                 "🟡 SOON",
-                f"Monitor delta drift ({delta_drift_pct:.1f}%) → "
-                f"May need adjustment",
+                f"Monitor delta drift ({delta_drift_pct:+.1f}pp from target) "
+                f"→ May need adjustment",
             ),
         )
     if theta_cost_pct > t.theta_cost_acceptable_pct:
@@ -482,6 +529,7 @@ def _build_action_list(
 def _print_action_summary(
     actions: list[tuple[str, str]],
     reporter: ConsoleReporter,
+    t: HedgeTriggerThresholds,
 ) -> None:
     reporter.header("📌 RECOMMENDED ACTIONS (Priority Order)")
     if not actions:
@@ -489,8 +537,14 @@ def _print_action_summary(
             " No immediate actions required - portfolio is well-managed",
         )
         print("\n  Continue monitoring:")
-        print("    • Delta drift (rebalance if >10%)")
-        print("    • Approaching expirations (roll before <7 days)")
+        print(
+            f"    • Delta drift (rebalance if "
+            f">{t.delta_drift_action_pct:.0f}pp from target)",
+        )
+        print(
+            f"    • Approaching expirations (roll before "
+            f"<{t.expiry_urgent_days} days)",
+        )
         print("    • Theta bleed relative to protection value")
     else:
         for i, (priority, action) in enumerate(actions, 1):
