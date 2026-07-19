@@ -64,6 +64,36 @@ class TestStaticProvider:
         assert provider.get_skew_percentile(lookback_days=30) == 0.75
         assert provider.get_skew_percentile(lookback_days=500) == 0.75
 
+    def test_get_vix_history_raises_when_empty(self) -> None:
+        """The default offline provider carries no history -> raises.
+
+        This is the honest fallback signal: vol-regime callers catch it and
+        report a labelled normalized figure, never a fabricated percentile.
+        """
+        with pytest.raises(MarketDataUnavailableError):
+            StaticProvider().get_vix_history()
+
+    def test_get_vix_history_returns_injected_window(self) -> None:
+        """Injected history is returned, trimmed to the lookback window."""
+        provider = StaticProvider(vix_history=[10.0, 20.0, 30.0, 40.0])
+
+        assert provider.get_vix_history(lookback_days=2) == [30.0, 40.0]
+        assert provider.get_vix_history(lookback_days=99) == [
+            10.0,
+            20.0,
+            30.0,
+            40.0,
+        ]
+
+    def test_get_vix_history_returns_a_copy(self) -> None:
+        """Mutating the returned list does not affect provider state."""
+        provider = StaticProvider(vix_history=[10.0, 20.0])
+
+        history = provider.get_vix_history()
+        history.append(-1.0)
+
+        assert provider.get_vix_history() == [10.0, 20.0]
+
     def test_from_assumptions_seeds_spot_price(self) -> None:
         """Test that from_assumptions seeds the spot price from a widget."""
         assumptions = GlobalAssumptions(spot_price=4200.0)

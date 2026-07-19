@@ -127,6 +127,18 @@ class CboeFredProvider:
         )
         return float(series[-1][1])
 
+    def get_vix_history(self, lookback_days: int = 252) -> list[float]:
+        """Return the last *lookback_days* VIXCLS closes, oldest first.
+
+        Reuses the same cached FRED series ``get_vix`` reads — no extra
+        download. Values are in vol points.
+        """
+        series = self._request_with_fallback(
+            "vix_fred",
+            lambda: self._fetch_fred_history("VIXCLS"),
+        )
+        return [float(value) for _, value in series[-lookback_days:]]
+
     def get_vix_term_structure(self) -> dict[str, float]:
         """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name."""
         return {

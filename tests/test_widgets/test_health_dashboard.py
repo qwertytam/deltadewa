@@ -5,6 +5,8 @@ from unittest.mock import Mock
 import ipywidgets as widgets  # type: ignore[import-untyped]
 import pytest
 
+from deltadewa.analysis.health import VOL_REGIME_LOOKBACK_DAYS
+from deltadewa.marketdata import StaticProvider
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.widgets.health_dashboard import (
     HedgeHealthDashboard,
@@ -429,3 +431,49 @@ class TestHedgeHealthDashboard:
         widget = dashboard.display()
 
         assert widget is not None
+
+    def test_vol_regime_labels_normalized_without_history(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """No provider -> the gauge is labelled normalized, not a percentile."""
+        dashboard = HedgeHealthDashboard(mock_portfolio)
+
+        summary = dashboard.get_metrics_summary()
+        vol_regime = summary["vol_regime"]
+
+        assert vol_regime["unit"] == ""
+        assert "normalized" in vol_regime["description"].lower()
+        assert "NOT a percentile" in vol_regime["description"]
+
+    def test_vol_regime_labels_percentile_with_history(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """Provider history -> the gauge is labelled a true percentile."""
+        provider = StaticProvider(
+            vix_history=[10.0, 15.0, 20.0, 25.0, 30.0, 35.0],
+        )
+        dashboard = HedgeHealthDashboard(mock_portfolio, market_data=provider)
+
+        summary = dashboard.get_metrics_summary()
+        vol_regime = summary["vol_regime"]
+
+        assert vol_regime["unit"] == "th percentile"
+        assert "percentile" in vol_regime["description"].lower()
+        assert str(VOL_REGIME_LOOKBACK_DAYS) in vol_regime["description"]
+
+    def test_vol_regime_normalized_when_provider_has_no_history(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """An offline provider (no history) still yields the honest fallback."""
+        dashboard = HedgeHealthDashboard(
+            mock_portfolio,
+            market_data=StaticProvider(),  # empty history -> raises internally
+        )
+
+        summary = dashboard.get_metrics_summary()
+
+        assert summary["vol_regime"]["unit"] == ""
+        assert "NOT a percentile" in summary["vol_regime"]["description"]

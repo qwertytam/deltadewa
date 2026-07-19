@@ -23,6 +23,16 @@ class MarketDataProvider(Protocol):
     def get_vix(self) -> float:
         """Return the current VIX level."""
 
+    def get_vix_history(self, lookback_days: int = 252) -> list[float]:
+        """Return up to the last *lookback_days* VIX closes, oldest first.
+
+        Values are in vol points (e.g. ``20.0``).
+
+        Raises:
+            MarketDataError: If no VIX history is available.
+
+        """
+
     def get_vix_term_structure(self) -> dict[str, float]:
         """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name."""
 
