@@ -21,7 +21,7 @@ EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.yaml"
 
 _VALID_CONFIG: dict[str, Any] = {
     "program": {"name": "SPX tail hedge", "instrument": "SPX"},
-    "pricing": {"exercise_style": "EUROPEAN", "american_use_closed_form": True},
+    "pricing": {"exercise_style": "EUROPEAN"},
     "budget": {"annual_carry_pct": 2.0},
     "convexity": {
         "crash_scenario_pct": -25.0,

@@ -68,7 +68,6 @@ class IpsPricing:
     """Pricing-engine defaults for the program's instrument."""
 
     exercise_style: ExerciseStyle
-    american_use_closed_form: bool = True
 
 
 @dataclass(frozen=True)
@@ -223,10 +222,7 @@ def _parse_pricing(config: dict[str, Any]) -> IpsPricing:
             f"pricing.exercise_style must be one of "
             f"{[s.value for s in ExerciseStyle]}, got '{raw_style}'",
         ) from exc
-    return IpsPricing(
-        exercise_style=exercise_style,
-        american_use_closed_form=section.get("american_use_closed_form", True),
-    )
+    return IpsPricing(exercise_style=exercise_style)
 
 
 def _parse_budget(config: dict[str, Any]) -> IpsBudget:
