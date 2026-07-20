@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime
 from datetime import datetime as dt
 from typing import TYPE_CHECKING
 
@@ -51,13 +50,14 @@ class PositionAgingDisplay:
         """Print the expiration calendar and aging insights.
 
         Args:
-            today: Override the current date for testing (defaults to today).
+            today: Override the as-of date for testing. Defaults to the
+                portfolio's (what-if) valuation date, not the wall clock.
 
         """
         # Position Aging & Expiration Calendar
 
         if today is None:
-            today = dt.now(tz=datetime.UTC)
+            today = self.portfolio.valuation_date
 
         print()
         self._reporter.header("📅 POSITION AGING & EXPIRATION CALENDAR")
@@ -128,7 +128,7 @@ class PositionAgingDisplay:
                         if days_left < 7:
                             print(
                                 "       → ACTION:  Roll this position in "
-                                "Section 6 or close",
+                                "the roll planner or close",
                             )
                         elif days_left < 14:
                             print(

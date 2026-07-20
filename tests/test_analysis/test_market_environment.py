@@ -16,6 +16,7 @@ from deltadewa.analysis.market_environment import (
     forward_vol,
     term_structure_shape,
 )
+from deltadewa.ips_config import IpsMarketEnvironment
 from deltadewa.marketdata._errors import MarketDataError
 
 _CALM_TERM = {
@@ -235,8 +236,12 @@ class TestAssessMarketEnvironment:
         assert env.forward_vol_front_3m is None
         assert env.hedge_cost_verdict is None
 
-    def test_custom_skew_bands_change_the_verdict(self) -> None:
-        """Narrowing skew_bands can flip a FAIR read to CHEAP."""
+    def test_ips_skew_band_changes_the_verdict(self) -> None:
+        """Narrowing the IPS skew band flips a FAIR read to CHEAP.
+
+        One place moves the consumer: the skew percentiles live only in the
+        IPS ``market_environment`` policy, converted to a 0-1 fraction here.
+        """
         provider = _StubProvider(
             vix=18.0,
             term=_CALM_TERM,
@@ -246,14 +251,14 @@ class TestAssessMarketEnvironment:
         default_env = assess_market_environment(provider)
         narrowed_env = assess_market_environment(
             provider,
-            skew_bands=(0.45, 0.70),
+            IpsMarketEnvironment(skew_low_pctile=45.0, skew_high_pctile=70.0),
         )
 
         assert default_env.hedge_cost_verdict == HedgeCostVerdict.FAIR
         assert narrowed_env.hedge_cost_verdict == HedgeCostVerdict.CHEAP
 
-    def test_custom_regime_bands_change_the_verdict(self) -> None:
-        """Narrowing regime_bands can flip a CHEAP read to FAIR."""
+    def test_ips_regime_band_changes_the_verdict(self) -> None:
+        """Narrowing the IPS vol-regime band flips a CHEAP read to FAIR."""
         provider = _StubProvider(
             vix=18.0,
             term=_CALM_TERM,
@@ -263,12 +268,33 @@ class TestAssessMarketEnvironment:
         default_env = assess_market_environment(provider)
         narrowed_env = assess_market_environment(
             provider,
-            regime_bands=(0.10, 0.12),
+            IpsMarketEnvironment(vol_regime_low=0.10, vol_regime_high=0.12),
         )
 
         assert default_env.hedge_cost_verdict == HedgeCostVerdict.CHEAP
         assert narrowed_env.hedge_cost_verdict == HedgeCostVerdict.FAIR
         assert narrowed_env.regime_label == RegimeLabel.HIGH
+
+    def test_ips_term_tolerance_changes_the_shape(self) -> None:
+        """The IPS term-contango tolerance moves the term-structure shape."""
+        # VIX3M - VIX = 0.3 vol points; VIX6M - VIX3M = 0.2.
+        term = {
+            "VIX9D": 14.8,
+            "VIX": 15.0,
+            "VIX3M": 15.3,
+            "VIX6M": 15.5,
+            "VIX1Y": 15.7,
+        }
+        provider = _StubProvider(vix=15.0, term=term)
+
+        # Default tolerance 0.5 > 0.3 slope -> FLAT.
+        assert assess_market_environment(provider).term_shape == TermShape.FLAT
+        # Tolerance 0.1 < 0.3 slope -> now reads as CONTANGO.
+        tight = IpsMarketEnvironment(term_contango_tolerance=0.1)
+        assert (
+            assess_market_environment(provider, tight).term_shape
+            == TermShape.CONTANGO
+        )
 
     def test_skew_lookback_days_passed_through(self) -> None:
         """skew_lookback_days reaches get_skew_percentile unchanged."""
@@ -277,27 +303,6 @@ class TestAssessMarketEnvironment:
         assess_market_environment(provider, skew_lookback_days=504)
 
         assert provider.received_lookback_days == 504
-
-    def test_dashboard_config_overrides_skew_bands(self) -> None:
-        """dashboard_config parameters override the function's own defaults."""
-        # skew=0.40, default bands (0.30, 0.70): NORMAL -> verdict FAIR
-        provider = _StubProvider(
-            vix=18.0,
-            term=_CALM_TERM,
-            skew_percentile=0.40,
-        )
-        default_env = assess_market_environment(provider)
-        assert default_env.hedge_cost_verdict == HedgeCostVerdict.FAIR
-
-        # Raising skew_low_pctile to 45 -> 0.40 < 0.45 -> LOW -> CHEAP
-        config = {
-            "parameters": {"skew_low_pctile": 45, "skew_high_pctile": 75},
-        }
-        config_env = assess_market_environment(
-            provider,
-            dashboard_config=config,
-        )
-        assert config_env.hedge_cost_verdict == HedgeCostVerdict.CHEAP
 
 
 class TestDataQualityStatic:

@@ -9,6 +9,7 @@ style — distinct from ``dashboard_config_*.yaml`` (loaded by
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any, Final
 
@@ -28,6 +29,38 @@ _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 # measured as deviation from this stated net-delta-to-equity ratio rather than
 # distance from full delta-neutrality.
 _DEFAULT_TARGET_DELTA_RATIO_PCT: Final[float] = 90.0
+
+# Defaults for the expiry / theta trigger thresholds that
+# ``HedgeTriggerThresholds`` previously hardcoded. Sourced here so ``from_ips``
+# can map every threshold and no policy value stays on a dataclass literal.
+_DEFAULT_EXPIRY_URGENT_DAYS: Final[int] = 7
+_DEFAULT_EXPIRY_SOON_DAYS: Final[int] = 21
+_DEFAULT_THETA_COST_EXCELLENT_PCT: Final[float] = 1.0
+
+# Gamma-drift bands, in % of the hedged equity that net delta shifts per 1% spot
+# move (``|gamma| * spot / |underlying_quantity|`` — book-size-independent).
+# A tail hedge is deliberately gamma-light: the canonical SPX book reads ~1.3%.
+_DEFAULT_GAMMA_DRIFT_MODERATE_PCT: Final[float] = 2.0
+_DEFAULT_GAMMA_DRIFT_HIGH_PCT: Final[float] = 5.0
+
+# Default portfolio beta vs SPX for hedge sizing (see ``IpsSizing``). 1.0 means
+# the protected book is assumed to move 1:1 with the index — the same implicit
+# assumption the sizing framework carried before beta-adjustment, so a config
+# without a ``sizing`` section reproduces the pre-beta sizing exactly.
+_DEFAULT_PORTFOLIO_BETA: Final[float] = 1.0
+
+# Single source for the market-environment policy bands (see
+# ``IpsMarketEnvironment``). Public because they are consumed across
+# ``analysis.market_environment``, ``analysis.health``,
+# ``analysis.decision_matrix``, and ``widgets.health_dashboard`` — no consumer
+# redefines a band literal. The vol-regime band is decimal implied vol; the skew
+# band is a percentile on 0-100 (converted to a 0-1 fraction at the consumer
+# edge); the term tolerance is in VIX points.
+DEFAULT_VOL_REGIME_LOW: Final[float] = 0.15
+DEFAULT_VOL_REGIME_HIGH: Final[float] = 0.35
+DEFAULT_SKEW_LOW_PCTILE: Final[float] = 25.0
+DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 75.0
+DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
 
 try:
     import yaml
@@ -54,7 +87,30 @@ class IpsPricing:
     """Pricing-engine defaults for the program's instrument."""
 
     exercise_style: ExerciseStyle
-    american_use_closed_form: bool = True
+
+
+@dataclass(frozen=True)
+class IpsMarketEnvironment:
+    """Policy bands that classify the market's hedge-cost environment.
+
+    These drive the ``hedge_cost_verdict`` decision (CHEAP/FAIR/EXPENSIVE) and
+    the vol-regime gauge, so they are policy, not presentation. This is the
+    single source every consumer reads; no module redefines a band literal.
+
+    Units:
+        ``vol_regime_low``/``vol_regime_high`` are decimal implied vol
+        (``0.15`` = 15%), compared against ``VIX / 100``.
+        ``skew_low_pctile``/``skew_high_pctile`` are SKEW percentiles on 0-100,
+        converted to the 0-1 fraction ``get_skew_percentile`` returns once at
+        the ``assess_market_environment`` edge.
+        ``term_contango_tolerance`` is in VIX points; slopes below it read FLAT.
+    """
+
+    vol_regime_low: float = DEFAULT_VOL_REGIME_LOW
+    vol_regime_high: float = DEFAULT_VOL_REGIME_HIGH
+    skew_low_pctile: float = DEFAULT_SKEW_LOW_PCTILE
+    skew_high_pctile: float = DEFAULT_SKEW_HIGH_PCTILE
+    term_contango_tolerance: float = DEFAULT_TERM_CONTANGO_TOLERANCE
 
 
 @dataclass(frozen=True)
@@ -91,6 +147,27 @@ class IpsDrawdown:
 
 
 @dataclass(frozen=True)
+class IpsSizing:
+    """Hedge-sizing policy inputs (handbook §2499 — Beta-Adjusted Sizing).
+
+    ``portfolio_beta`` is the protected book's beta versus SPX. The hedge
+    notional the sizing framework works against is
+    ``book_value * portfolio_beta`` (the SPX-equivalent market exposure), so a
+    beta below 1.0 sizes down the hedge and a beta above 1.0 sizes it up,
+    proportionally.
+
+    ``portfolio_beta`` is a **user input, not estimated** here: the investor
+    recalculates it (handbook: at least annually, or on a >10% position change)
+    and sets it in policy. SPX puts hedge only the systematic (market-beta)
+    component of the book, so they **under-protect idiosyncratic risk** — a
+    concentrated single-name book carries crash exposure this multiplier does
+    not capture (see ``docs/implementation-plan.md``, Phase 3).
+    """
+
+    portfolio_beta: float = _DEFAULT_PORTFOLIO_BETA
+
+
+@dataclass(frozen=True)
 class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
@@ -99,6 +176,15 @@ class IpsTriggers:
     percentage points), and the ``delta_drift_*`` fields are those deviation
     bands. Distinct from ``recommendations``'s ``target_hedge_ratio`` (the
     complement, option-offset framing).
+
+    ``expiry_urgent_days`` / ``expiry_soon_days`` bound the URGENT / SOON
+    expiration windows and ``theta_cost_excellent_pct`` is the EXCELLENT theta
+    cutoff; ``HedgeTriggerThresholds.from_ips`` maps them all so no trigger
+    threshold stays hardcoded.
+
+    ``gamma_drift_moderate_pct`` / ``gamma_drift_high_pct`` band the gamma
+    trigger. It fires on gamma *drift* — the % of the hedged equity that net
+    delta shifts per 1% spot move — not raw gamma, which scales with book size.
     """
 
     delta_drift_warn_pct: float
@@ -110,6 +196,11 @@ class IpsTriggers:
     target_delta_ratio_pct: float = _DEFAULT_TARGET_DELTA_RATIO_PCT
     roll_review_buffer: float = 1.5
     strike_drift_review_fraction: float = 0.75
+    expiry_urgent_days: int = _DEFAULT_EXPIRY_URGENT_DAYS
+    expiry_soon_days: int = _DEFAULT_EXPIRY_SOON_DAYS
+    theta_cost_excellent_pct: float = _DEFAULT_THETA_COST_EXCELLENT_PCT
+    gamma_drift_moderate_pct: float = _DEFAULT_GAMMA_DRIFT_MODERATE_PCT
+    gamma_drift_high_pct: float = _DEFAULT_GAMMA_DRIFT_HIGH_PCT
 
 
 @dataclass(frozen=True)
@@ -138,6 +229,10 @@ class IpsConfig:
     drawdown: IpsDrawdown
     triggers: IpsTriggers
     monetization: IpsMonetization
+    market_environment: IpsMarketEnvironment = dataclass_field(
+        default_factory=IpsMarketEnvironment,
+    )
+    sizing: IpsSizing = dataclass_field(default_factory=IpsSizing)
 
 
 def _require_section(config: dict[str, Any], name: str) -> dict[str, Any]:
@@ -182,10 +277,7 @@ def _parse_pricing(config: dict[str, Any]) -> IpsPricing:
             f"pricing.exercise_style must be one of "
             f"{[s.value for s in ExerciseStyle]}, got '{raw_style}'",
         ) from exc
-    return IpsPricing(
-        exercise_style=exercise_style,
-        american_use_closed_form=section.get("american_use_closed_form", True),
-    )
+    return IpsPricing(exercise_style=exercise_style)
 
 
 def _parse_budget(config: dict[str, Any]) -> IpsBudget:
@@ -250,8 +342,8 @@ def _parse_drawdown(config: dict[str, Any]) -> IpsDrawdown:
 def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
     section = _require_section(config, "triggers")
     fields = {
-        field: _require_field(section, "triggers", field)
-        for field in (
+        key: _require_field(section, "triggers", key)
+        for key in (
             "delta_drift_warn_pct",
             "delta_drift_action_pct",
             "theta_cost_acceptable_pct",
@@ -260,8 +352,8 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             "strike_drift_max_otm_pct",
         )
     }
-    for field, value in fields.items():
-        _require_non_negative(value, f"triggers.{field}")
+    for key, value in fields.items():
+        _require_non_negative(value, f"triggers.{key}")
     if fields["delta_drift_warn_pct"] >= fields["delta_drift_action_pct"]:
         raise IpsConfigError(
             "triggers.delta_drift_warn_pct must be < "
@@ -301,12 +393,135 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         "triggers.target_delta_ratio_pct",
     )
 
+    expiry_urgent_days = section.get(
+        "expiry_urgent_days",
+        _DEFAULT_EXPIRY_URGENT_DAYS,
+    )
+    expiry_soon_days = section.get(
+        "expiry_soon_days",
+        _DEFAULT_EXPIRY_SOON_DAYS,
+    )
+    _require_non_negative(expiry_urgent_days, "triggers.expiry_urgent_days")
+    _require_non_negative(expiry_soon_days, "triggers.expiry_soon_days")
+    if expiry_urgent_days >= expiry_soon_days:
+        raise IpsConfigError(
+            "triggers.expiry_urgent_days must be < expiry_soon_days, got "
+            f"{expiry_urgent_days} >= {expiry_soon_days}",
+        )
+
+    theta_cost_excellent_pct = section.get(
+        "theta_cost_excellent_pct",
+        _DEFAULT_THETA_COST_EXCELLENT_PCT,
+    )
+    _require_non_negative(
+        theta_cost_excellent_pct,
+        "triggers.theta_cost_excellent_pct",
+    )
+    if theta_cost_excellent_pct >= fields["theta_cost_acceptable_pct"]:
+        raise IpsConfigError(
+            "triggers.theta_cost_excellent_pct must be < "
+            "theta_cost_acceptable_pct, got "
+            f"{theta_cost_excellent_pct} >= "
+            f"{fields['theta_cost_acceptable_pct']}",
+        )
+
+    gamma_drift_moderate_pct = section.get(
+        "gamma_drift_moderate_pct",
+        _DEFAULT_GAMMA_DRIFT_MODERATE_PCT,
+    )
+    gamma_drift_high_pct = section.get(
+        "gamma_drift_high_pct",
+        _DEFAULT_GAMMA_DRIFT_HIGH_PCT,
+    )
+    _require_non_negative(
+        gamma_drift_moderate_pct,
+        "triggers.gamma_drift_moderate_pct",
+    )
+    if gamma_drift_moderate_pct >= gamma_drift_high_pct:
+        raise IpsConfigError(
+            "triggers.gamma_drift_moderate_pct must be < gamma_drift_high_pct, "
+            f"got {gamma_drift_moderate_pct} >= {gamma_drift_high_pct}",
+        )
+
     return IpsTriggers(
         **fields,
         target_delta_ratio_pct=target_delta_ratio_pct,
         roll_review_buffer=roll_review_buffer,
         strike_drift_review_fraction=strike_drift_review_fraction,
+        expiry_urgent_days=expiry_urgent_days,
+        expiry_soon_days=expiry_soon_days,
+        theta_cost_excellent_pct=theta_cost_excellent_pct,
+        gamma_drift_moderate_pct=gamma_drift_moderate_pct,
+        gamma_drift_high_pct=gamma_drift_high_pct,
     )
+
+
+def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
+    """Parse the optional ``market_environment`` policy section.
+
+    The section is optional: a missing section (or any missing field) falls back
+    to the ``DEFAULT_*`` module constants — the same single source the dataclass
+    defaults use — so an older ips.yaml keeps working.
+    """
+    section = config.get("market_environment", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'market_environment' section must be a mapping",
+        )
+
+    vol_low = section.get("vol_regime_low", DEFAULT_VOL_REGIME_LOW)
+    vol_high = section.get("vol_regime_high", DEFAULT_VOL_REGIME_HIGH)
+    skew_low = section.get("skew_low_pctile", DEFAULT_SKEW_LOW_PCTILE)
+    skew_high = section.get("skew_high_pctile", DEFAULT_SKEW_HIGH_PCTILE)
+    term_tol = section.get(
+        "term_contango_tolerance",
+        DEFAULT_TERM_CONTANGO_TOLERANCE,
+    )
+
+    if vol_low >= vol_high:
+        raise IpsConfigError(
+            "market_environment.vol_regime_low must be < vol_regime_high, got "
+            f"{vol_low} >= {vol_high}",
+        )
+    if not 0 <= skew_low < skew_high <= 100:
+        raise IpsConfigError(
+            "market_environment skew percentiles must satisfy 0 <= "
+            "skew_low_pctile < skew_high_pctile <= 100, got "
+            f"{skew_low}, {skew_high}",
+        )
+    _require_non_negative(
+        term_tol,
+        "market_environment.term_contango_tolerance",
+    )
+
+    return IpsMarketEnvironment(
+        vol_regime_low=vol_low,
+        vol_regime_high=vol_high,
+        skew_low_pctile=skew_low,
+        skew_high_pctile=skew_high,
+        term_contango_tolerance=term_tol,
+    )
+
+
+def _parse_sizing(config: dict[str, Any]) -> IpsSizing:
+    """Parse the optional ``sizing`` policy section.
+
+    The section is optional: a missing section (or a missing
+    ``portfolio_beta``) falls back to ``_DEFAULT_PORTFOLIO_BETA`` (1.0) — the
+    same value the dataclass default uses — so an older ips.yaml keeps the
+    pre-beta sizing behaviour.
+    """
+    section = config.get("sizing", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError("ips.yaml 'sizing' section must be a mapping")
+
+    portfolio_beta = section.get("portfolio_beta", _DEFAULT_PORTFOLIO_BETA)
+    if portfolio_beta <= 0:
+        raise IpsConfigError(
+            f"sizing.portfolio_beta must be > 0, got {portfolio_beta}",
+        )
+
+    return IpsSizing(portfolio_beta=portfolio_beta)
 
 
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
@@ -381,4 +596,6 @@ def load_ips_config(path: Path) -> IpsConfig:
         drawdown=_parse_drawdown(config),
         triggers=_parse_triggers(config),
         monetization=_parse_monetization(config),
+        market_environment=_parse_market_environment(config),
+        sizing=_parse_sizing(config),
     )

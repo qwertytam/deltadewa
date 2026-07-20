@@ -13,6 +13,12 @@ import yaml
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.health import VolRegimeBasis
 from deltadewa.colours import DEFAULT_PALETTE
+from deltadewa.ips_config import (
+    DEFAULT_VOL_REGIME_HIGH,
+    DEFAULT_VOL_REGIME_LOW,
+    IpsConvexity,
+    IpsMarketEnvironment,
+)
 from deltadewa.marketdata._errors import MarketDataError
 from deltadewa.marketdata._protocols import MarketDataProvider
 from deltadewa.portfolio.core import OptionPortfolio
@@ -101,14 +107,14 @@ class HedgeHealthDashboard:
         self,
         portfolio: OptionPortfolio,
         cumulative_carry_paid: float = 0.0,
-        historical_vol_low: float = 0.15,
-        historical_vol_high: float = 0.35,
+        historical_vol_low: float = DEFAULT_VOL_REGIME_LOW,
+        historical_vol_high: float = DEFAULT_VOL_REGIME_HIGH,
         convexity_cliff_days: int = 180,
         config: dict[str, Any] | None = None,
         *,
-        crash_scenario_pct: float | None = None,
-        crash_vol_shock: float = 0.0,
+        crash_convexity: IpsConvexity | None = None,
         target_delta_ratio_pct: float | None = None,
+        ips_market_environment: IpsMarketEnvironment | None = None,
         market_data: MarketDataProvider | None = None,
     ) -> None:
         """Initialize the Hedge Health Dashboard.
@@ -116,8 +122,13 @@ class HedgeHealthDashboard:
         Args:
             portfolio: OptionPortfolio instance
             cumulative_carry_paid: Running total of carry paid to date
-            historical_vol_low: 25th percentile IV for vol regime assessment
-            historical_vol_high: 75th percentile IV for vol regime assessment
+            historical_vol_low: Low IV band for the vol-regime normalized
+                fallback. Defaults to the IPS single source
+                ``DEFAULT_VOL_REGIME_LOW``; overridden by
+                ``ips_market_environment`` when supplied.
+            historical_vol_high: High IV band for the vol-regime normalized
+                fallback. Defaults to ``DEFAULT_VOL_REGIME_HIGH``; overridden
+                by ``ips_market_environment`` when supplied.
             convexity_cliff_days: Days threshold for high-gamma convexity cliff
             config: Optional presentation config (``parameters``/``metrics``
                 keys, see ``_get_default_config``) merged on top of the
@@ -125,21 +136,21 @@ class HedgeHealthDashboard:
                 ``SessionContext.dashboard_config`` from ``start_session``.
                 ``display_config_loader()`` remains available afterwards
                 for ad hoc overrides on top of this.
-            crash_scenario_pct: Signed crash move as a percent of current spot,
-                single-sourced from ``IpsConvexity.crash_scenario_pct`` (pass
-                ``ctx.ips_config.convexity.crash_scenario_pct``). When ``None``
-                (no IPS), the crash-convexity and hedge-success gauges read
-                ``0.0`` — the crash scenario is policy and is never hardcoded
-                here.
-            crash_vol_shock: Flat additive crash vol bump as a decimal,
-                single-sourced from ``IpsConvexity.crash_vol_shock`` (pass
-                ``ctx.ips_config.convexity.crash_vol_shock``). Used to reprice
-                the crash-convexity gauge. Defaults to ``0.0`` (spot-only).
+            crash_convexity: The IPS crash policy (pass
+                ``ctx.ips_config.convexity``). Bundles the crash scenario and
+                its vol shock so they can never diverge. When ``None`` (no
+                IPS), the crash-convexity and hedge-success gauges are DISABLED
+                and read ``0.0`` — the crash scenario is policy and is never
+                hardcoded here, and the gauge never silently reprices spot-only.
             target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
                 single-sourced from ``IpsTriggers.target_delta_ratio_pct`` (pass
                 ``ctx.ips_config.triggers.target_delta_ratio_pct``). When
                 ``None`` (no IPS), the delta-drift gauge reads N/A rather than
                 measure against a hardcoded target.
+            ips_market_environment: The IPS market-environment policy (pass
+                ``ctx.ips_config.market_environment``). When supplied, its
+                ``vol_regime_low``/``vol_regime_high`` set the vol-regime band
+                (the single source), overriding ``historical_vol_low/high``.
             market_data: Optional market-data provider (pass
                 ``ctx.market_data``). When it exposes VIX history, the vol
                 regime gauge shows a **true** percentile; otherwise (or when
@@ -149,10 +160,15 @@ class HedgeHealthDashboard:
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
-        self._crash_scenario_pct = crash_scenario_pct
-        self._crash_vol_shock = crash_vol_shock
+        self._crash_convexity = crash_convexity
         self._target_delta_ratio_pct = target_delta_ratio_pct
         self._market_data = market_data
+
+        # The vol-regime band is policy: the IPS market-environment section is
+        # the single source. When supplied it wins over the scalar kwargs.
+        if ips_market_environment is not None:
+            historical_vol_low = ips_market_environment.vol_regime_low
+            historical_vol_high = ips_market_environment.vol_regime_high
 
         # Initialize default configuration
         self.config = self._get_default_config()
@@ -188,8 +204,8 @@ class HedgeHealthDashboard:
         """Return the default configuration dictionary."""
         return {
             "parameters": {
-                "historical_vol_low": 0.15,
-                "historical_vol_high": 0.35,
+                "historical_vol_low": DEFAULT_VOL_REGIME_LOW,
+                "historical_vol_high": DEFAULT_VOL_REGIME_HIGH,
                 "convexity_cliff_days": 180,
             },
             "metrics": {
@@ -287,8 +303,7 @@ class HedgeHealthDashboard:
             historical_vol_low=params["historical_vol_low"],
             historical_vol_high=params["historical_vol_high"],
             convexity_cliff_days=params["convexity_cliff_days"],
-            crash_scenario_pct=self._crash_scenario_pct,
-            crash_vol_shock=self._crash_vol_shock,
+            crash=self._crash_convexity,
             target_delta_ratio_pct=self._target_delta_ratio_pct,
             vix_history=self._fetch_vix_history(),
         )
@@ -440,9 +455,11 @@ class HedgeHealthDashboard:
             )
         else:
             vol_regime_unit = ""
+            band_low = self.config["parameters"]["historical_vol_low"]
+            band_high = self.config["parameters"]["historical_vol_high"]
             vol_regime_desc = (
-                "Min-max normalized vol (0.15-0.35) - NOT a percentile "
-                "(no VIX history)"
+                f"Min-max normalized vol ({band_low:.2f}-{band_high:.2f}) - "
+                "NOT a percentile (no VIX history)"
             )
         metrics["vol_regime"] = HedgeHealthMetric(
             name="Volatility Regime",

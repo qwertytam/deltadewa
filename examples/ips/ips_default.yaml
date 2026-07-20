@@ -13,10 +13,13 @@ program:
 
 pricing:
   exercise_style: EUROPEAN   # SPX/XSP = EUROPEAN (cash-settled); SPY/stocks = AMERICAN
-  american_use_closed_form: true   # only relevant when exercise_style = AMERICAN
 
 budget:
-  annual_carry_pct: 2.0      # premium budget, % of portfolio / yr
+  # Premium budget, % of portfolio / yr. Handbook family-office benchmark is
+  # 0.5-1.5%, with 1% "a practical ceiling" — the shipped default sits at that
+  # ceiling, not above it. Raise deliberately in policy if your program runs a
+  # larger carry.
+  annual_carry_pct: 1.0
 
 convexity:
   crash_scenario_pct: -25.0     # single source of truth for the crash move
@@ -28,18 +31,44 @@ convexity:
 drawdown:
   max_tolerance_pct: 20.0
 
+sizing:
+  # Beta-adjusted hedge sizing (handbook §2499). The hedge is sized against the
+  # SPX-equivalent exposure = book value * portfolio_beta. This is a USER INPUT,
+  # not estimated here — recalc it at least annually (or on a >10% position
+  # change) and set it in policy. SPX puts hedge only the systematic (market-
+  # beta) component, so they UNDER-PROTECT idiosyncratic risk on a concentrated
+  # single-name book. 1.0 = protected book assumed to move 1:1 with the index.
+  portfolio_beta: 1.0
+
+market_environment:
+  # Hedge-cost verdict policy (CHEAP/FAIR/EXPENSIVE) — these drive a decision,
+  # not a display, so they live here, not in dashboard.yaml (presentation).
+  vol_regime_low: 0.15         # decimal IV; VIX/100 at/below = cheap-vol regime
+  vol_regime_high: 0.35        # decimal IV; VIX/100 at/above = high-vol regime
+  skew_low_pctile: 25          # SKEW percentile (0-100); below = benign skew
+  skew_high_pctile: 75         # SKEW percentile (0-100); above = stressed skew
+  term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
+
 triggers:
   target_delta_ratio_pct: 90.0   # intended net-delta-to-equity ratio; drift is
                                   # deviation (pp) from this, not from neutrality
   delta_drift_warn_pct: 5.0      # pp of drift from target -> MONITOR
   delta_drift_action_pct: 10.0   # pp of drift from target -> ACTION
-  theta_cost_acceptable_pct: 2.0
+  theta_cost_excellent_pct: 1.0  # annual theta % below this -> EXCELLENT
+  theta_cost_acceptable_pct: 2.0 # ...below this -> ACCEPTABLE, else EXPENSIVE
+  expiry_urgent_days: 7          # DTE below this -> URGENT (roll immediately)
+  expiry_soon_days: 21           # DTE below this -> plan rolls SOON
   roll_time_months: 9.0          # roll when maturity below this
   rally_rebalance_pct: 15.0      # market rally that forces a re-strike review
   strike_drift_max_otm_pct: 45.0
   roll_review_buffer: 1.5        # REVIEW fires within roll_time_months * this
   strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
                                        # of strike_drift_max_otm_pct
+  # Gamma drift = % of the hedged equity that net delta shifts per 1% spot move
+  # (|gamma|*spot/|underlying_qty|); book-size-independent. A tail hedge is
+  # deliberately gamma-light (canonical SPX book ~1.3% -> LOW).
+  gamma_drift_moderate_pct: 2.0  # drift below this -> LOW, above -> MODERATE
+  gamma_drift_high_pct: 5.0      # drift above this -> HIGH (active rebalancing)
 
 monetization:
   schedule:                      # hedge-gain -> fraction to sell

@@ -137,6 +137,24 @@ conformant book; the regime figure is a real percentile or honestly named.
   `crash_scenario_pct is None` path), not silently reprice at a 0.0 shock — same
   fail-loud-not-degrade discipline as `underlying_quantity` above.
 
+- **Canonical example convexity — measured, sizing decision deferred
+  (2026-07-19).** `examples/portfolios/spx_protective_put.yaml` reads **+14.27%**
+  crash convexity under the shipped flat vol bump (`+0.15` every leg) — ~0.7pp
+  under the 15% floor. The flat bump is documented-conservative on the low
+  strikes (methodology §8): under a modest, realistic crash-skew steepening
+  (deep-OTM tail lifted `+0.05` over ATM — the 15%-OTM tranche repriced at
+  `+0.20` vs the flat `+0.15`) the *same* book reads **+15.4%**, inside the band;
+  only `~+0.03` extra at the tail already reaches the floor (14.97%).
+  **Recommendation: refine the shock, do not re-size** — tuning the example to a
+  measure known to understate convexity would over-hedge and mask the modelling
+  gap. No sizing change made; pending sign-off. Motivates the
+  `convexity.skew_steepening` refinement below.
+- **`convexity.skew_steepening` refinement (new, unblocked).** Add an optional
+  IPS-driven skew-aware crash shock (deep-OTM IV lifted more than ATM) to
+  `crash_repricing` — the refinement §8 already names. The flat bump stays the
+  default (zero steepening reproduces today's numbers exactly); the canonical
+  book above is its motivating regression case.
+
 **Acceptance:** what-if valuation dates move trigger/roll logic; no threshold
 defined in two places; the shipped carry default matches its own handbook; a
 supplied crash scenario can never be repriced with a spot-only (`0.0`) vol shock,
@@ -218,6 +236,16 @@ both surfaces are covered by app + report tests.
   single-name **basis/beta** guidance, the §1256 **wash-sale** correction, a
   **cash/margin** section, and quantified **put-spread vs outright** economics.
   Reconcile the Quick Start "1–2%" vs benchmark "0.5–1.5% / 1% ceiling" tension.
+  - **Concentrated single-name crash-beta gap (opened by the §2499 beta
+    multiplier).** M1.4 shipped `IpsSizing.portfolio_beta` — the handbook's
+    beta-adjusted sizing (`hedge notional = book × β`) — but the handbook only
+    covers a *diversified* book with a stable β near 1.0. It gives **no
+    process** for (a) estimating a *crash* beta for a concentrated,
+    single-name-heavy book (betas fan out and rise in a sell-off), nor (b)
+    deciding **when single-name (idiosyncratic) put overlays are warranted**
+    versus index puts alone. The shipped multiplier deliberately does not
+    invent this; index puts under-protect idiosyncratic risk, and this section
+    must supply the missing methodology before that book type is sized here.
 - Add CHANGELOG / CONTRIBUTING / SECURITY; fix the LICENSE author vs repo-owner
   mismatch.
 

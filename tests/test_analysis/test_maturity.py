@@ -109,6 +109,29 @@ class TestMaturityMixin:
             df_with_buckets["maturity_bucket"].iloc[0] == "8-30 days (Monthly)"
         )
 
+    def test_days_to_expiry_uses_valuation_date(self) -> None:
+        """days_to_expiry is measured from the valuation date, not now."""
+        maturity = datetime(2027, 1, 1, tzinfo=UTC)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.2,
+        )
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        # A what-if valuation date exactly 30 days before maturity.
+        portfolio.valuation_date = maturity - timedelta(days=30)
+
+        analyzer = PortfolioAnalyzer(portfolio)
+        df = analyzer.add_maturity_buckets(portfolio.to_dataframe())
+
+        assert df["days_to_expiry"].iloc[0] == 30
+        assert df["maturity_bucket"].iloc[0] == "8-30 days (Monthly)"
+
     def test_add_maturity_buckets_empty(self) -> None:
         """Test add_maturity_buckets with empty DataFrame."""
         portfolio = OptionPortfolio()

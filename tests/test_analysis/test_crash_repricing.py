@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from deltadewa.analysis import classify_portfolio_shape
 from deltadewa.analysis import crash_repricing as cr
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
@@ -84,6 +85,21 @@ def _load_canonical_example() -> OptionPortfolio:
         / "examples"
         / "portfolios"
         / "spx_protective_put.yaml"
+    )
+    result = PortfolioSerializer(Path()).import_from_yaml(
+        path,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    return result["portfolio"]
+
+
+def _load_golden_20m_example() -> OptionPortfolio:
+    """Load examples/portfolios/spx_tail_20m.yaml — the §4 golden book."""
+    path = (
+        Path(__file__).parent.parent.parent
+        / "examples"
+        / "portfolios"
+        / "spx_tail_20m.yaml"
     )
     result = PortfolioSerializer(Path()).import_from_yaml(
         path,
@@ -168,6 +184,47 @@ class TestBand:
 
         assert 15.0 <= ips_row.convexity_pct <= 25.0
         assert ips_row.meets_target is True
+
+
+class TestGoldenExampleFile:
+    """The shipped spx_tail_20m.yaml reproduces the §4 golden book on load.
+
+    Guards the loadable demo/smoke fixture (as opposed to the in-code
+    ``_make_appendix_book``): it must stay conforming and in-band so it can be
+    opened in the monitor as the reference conformant book.
+    """
+
+    def test_example_is_shape_conforming(self) -> None:
+        """Long underlying + long puts — the monitor shows no shape warning."""
+        shape = classify_portfolio_shape(_load_golden_20m_example())
+        assert shape.is_conforming is True
+
+    def test_example_hedge_values_within_tolerance(self) -> None:
+        """Loaded V_today / V_crash sit within ~0.5% of the §4 table."""
+        portfolio = _load_golden_20m_example()
+
+        v_today = cr.hedge_value(portfolio)
+        v_crash = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+        )
+
+        assert v_today == pytest.approx(297_715.0, rel=0.005)
+        assert v_crash == pytest.approx(3_895_901.0, rel=0.005)
+
+    def test_example_convexity_is_in_band(self) -> None:
+        """Loaded book reprices to +18.0% ± epsilon — inside +15..+25%."""
+        portfolio = _load_golden_20m_example()
+
+        convexity = cr.crash_convexity_pct(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+        )
+
+        assert convexity == pytest.approx(18.0, abs=0.5)
+        assert 15.0 <= convexity <= 25.0
 
 
 class TestHedgeOnlyInvariant:

@@ -118,6 +118,25 @@ class TestChangeLogDisplayOutput:
         out = capsys.readouterr().out
         assert len(out) > 0
 
+    def test_empty_hint_drops_stale_section_pointers(
+        self,
+        empty_changelog,
+        capsys,
+    ) -> None:
+        """The no-changes hint cites no stale numbered sections or delta edit.
+
+        The notebooks use named headers, not numbered sections, and there is
+        no delta-adjustment step after M1.3's delta-drift redefinition, so the
+        old "Adjust delta in Section 7" pointer (and its Section 2/6 siblings)
+        must be gone.
+        """
+        ChangeLogDisplay(empty_changelog).display()
+        out = capsys.readouterr().out
+        assert "Section 7" not in out
+        assert "Adjust delta" not in out
+        assert "Section 2" not in out
+        assert "Section 6" not in out
+
 
 # ===========================================================================
 # Summary statistics

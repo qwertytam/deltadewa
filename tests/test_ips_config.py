@@ -7,13 +7,21 @@ import pytest
 import yaml
 
 from deltadewa.constants import ExerciseStyle
-from deltadewa.ips_config import IpsConfigError, load_ips_config
+from deltadewa.ips_config import (
+    DEFAULT_SKEW_HIGH_PCTILE,
+    DEFAULT_SKEW_LOW_PCTILE,
+    DEFAULT_TERM_CONTANGO_TOLERANCE,
+    DEFAULT_VOL_REGIME_HIGH,
+    DEFAULT_VOL_REGIME_LOW,
+    IpsConfigError,
+    load_ips_config,
+)
 
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.yaml"
 
 _VALID_CONFIG: dict[str, Any] = {
     "program": {"name": "SPX tail hedge", "instrument": "SPX"},
-    "pricing": {"exercise_style": "EUROPEAN", "american_use_closed_form": True},
+    "pricing": {"exercise_style": "EUROPEAN"},
     "budget": {"annual_carry_pct": 2.0},
     "convexity": {
         "crash_scenario_pct": -25.0,
@@ -57,7 +65,8 @@ class TestLoadIpsConfig:
 
         assert ips.program.instrument == "SPX"
         assert ips.pricing.exercise_style == ExerciseStyle.EUROPEAN
-        assert ips.budget.annual_carry_pct == 2.0
+        # Handbook family-office carry ceiling is 1% (Mi6); shipped default.
+        assert ips.budget.annual_carry_pct == 1.0
         assert ips.convexity.target_min_pct == 15.0
         assert ips.convexity.target_max_pct == 25.0
         assert ips.convexity.crash_vol_shock == 0.15
@@ -323,3 +332,234 @@ class TestLoadIpsConfig:
 
         with pytest.raises(IpsConfigError, match="target_delta_ratio_pct"):
             load_ips_config(path)
+
+
+class TestMarketEnvironment:
+    """Tests for the ``market_environment`` policy section (Mo2)."""
+
+    def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
+        """A config without the section uses the DEFAULT_* single source."""
+        path = _write_yaml(tmp_path, _VALID_CONFIG)  # no market_environment
+        env = load_ips_config(path).market_environment
+
+        assert env.vol_regime_low == DEFAULT_VOL_REGIME_LOW
+        assert env.vol_regime_high == DEFAULT_VOL_REGIME_HIGH
+        assert env.skew_low_pctile == DEFAULT_SKEW_LOW_PCTILE
+        assert env.skew_high_pctile == DEFAULT_SKEW_HIGH_PCTILE
+        assert env.term_contango_tolerance == DEFAULT_TERM_CONTANGO_TOLERANCE
+
+    def test_example_ips_yaml_market_environment(self) -> None:
+        """The shipped config/ips.yaml carries the policy bands."""
+        env = load_ips_config(EXAMPLE_IPS_YAML).market_environment
+
+        assert env.vol_regime_low == 0.15
+        assert env.vol_regime_high == 0.35
+        assert env.skew_low_pctile == 25
+        assert env.skew_high_pctile == 75
+        assert env.term_contango_tolerance == 0.5
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        """Section values round-trip through the loader unchanged."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "vol_regime_low": 0.12,
+                "vol_regime_high": 0.40,
+                "skew_low_pctile": 20,
+                "skew_high_pctile": 80,
+                "term_contango_tolerance": 1.0,
+            },
+        }
+        env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
+
+        assert env.vol_regime_low == 0.12
+        assert env.vol_regime_high == 0.40
+        assert env.skew_low_pctile == 20
+        assert env.skew_high_pctile == 80
+        assert env.term_contango_tolerance == 1.0
+
+    def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
+        """vol_regime_low >= vol_regime_high raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "vol_regime_low": 0.40,
+                "vol_regime_high": 0.35,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="vol_regime_low"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_skew_low_not_below_high_raises(self, tmp_path: Path) -> None:
+        """skew_low_pctile >= skew_high_pctile raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "skew_low_pctile": 75,
+                "skew_high_pctile": 25,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="skew"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_skew_out_of_percentile_range_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A skew percentile above 100 raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "skew_low_pctile": 25,
+                "skew_high_pctile": 120,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="skew"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_negative_term_tolerance_raises(self, tmp_path: Path) -> None:
+        """A negative term_contango_tolerance raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {"term_contango_tolerance": -0.5},
+        }
+        with pytest.raises(IpsConfigError, match="term_contango_tolerance"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+
+class TestExpiryThetaTriggers:
+    """Tests for the expiry / theta-excellent trigger thresholds (Mo3)."""
+
+    def test_defaults_when_absent(self, tmp_path: Path) -> None:
+        """A triggers section without the new keys uses the defaults."""
+        # _VALID_CONFIG's triggers omit the new keys.
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+        triggers = ips.triggers
+
+        assert triggers.expiry_urgent_days == 7
+        assert triggers.expiry_soon_days == 21
+        assert triggers.theta_cost_excellent_pct == 1.0
+
+    def test_example_ips_yaml_expiry_theta(self) -> None:
+        """The shipped config/ips.yaml carries the new trigger keys."""
+        triggers = load_ips_config(EXAMPLE_IPS_YAML).triggers
+
+        assert triggers.expiry_urgent_days == 7
+        assert triggers.expiry_soon_days == 21
+        assert triggers.theta_cost_excellent_pct == 1.0
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        """Custom expiry / theta-excellent values round-trip."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "expiry_urgent_days": 10,
+                "expiry_soon_days": 40,
+                "theta_cost_excellent_pct": 0.5,
+            },
+        }
+        triggers = load_ips_config(_write_yaml(tmp_path, config)).triggers
+
+        assert triggers.expiry_urgent_days == 10
+        assert triggers.expiry_soon_days == 40
+        assert triggers.theta_cost_excellent_pct == 0.5
+
+    def test_urgent_not_below_soon_raises(self, tmp_path: Path) -> None:
+        """expiry_urgent_days >= expiry_soon_days raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "expiry_urgent_days": 30,
+                "expiry_soon_days": 21,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="expiry_urgent_days"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_theta_excellent_not_below_acceptable_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """theta_cost_excellent_pct >= theta_cost_acceptable_pct raises."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "theta_cost_excellent_pct": 3.0,  # acceptable is 2.0
+            },
+        }
+        with pytest.raises(IpsConfigError, match="theta_cost_excellent_pct"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+
+class TestGammaDriftBands:
+    """Tests for the gamma-drift trigger bands (Mo3)."""
+
+    def test_defaults_when_absent(self, tmp_path: Path) -> None:
+        """A triggers section without the gamma keys uses the defaults."""
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+        triggers = ips.triggers
+
+        assert triggers.gamma_drift_moderate_pct == 2.0
+        assert triggers.gamma_drift_high_pct == 5.0
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        """Custom gamma-drift bands round-trip."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "gamma_drift_moderate_pct": 1.5,
+                "gamma_drift_high_pct": 4.0,
+            },
+        }
+        triggers = load_ips_config(_write_yaml(tmp_path, config)).triggers
+
+        assert triggers.gamma_drift_moderate_pct == 1.5
+        assert triggers.gamma_drift_high_pct == 4.0
+
+    def test_moderate_not_below_high_raises(self, tmp_path: Path) -> None:
+        """gamma_drift_moderate_pct >= gamma_drift_high_pct raises."""
+        config = {
+            **_VALID_CONFIG,
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "gamma_drift_moderate_pct": 5.0,
+                "gamma_drift_high_pct": 2.0,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="gamma_drift_moderate_pct"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+
+class TestSizing:
+    """Tests for the ``sizing`` policy section (beta-adjusted sizing, §2499)."""
+
+    def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
+        """A config without a sizing section defaults portfolio_beta to 1.0."""
+        path = _write_yaml(tmp_path, _VALID_CONFIG)  # no sizing section
+        assert load_ips_config(path).sizing.portfolio_beta == 1.0
+
+    def test_example_ips_yaml_sizing(self) -> None:
+        """The shipped config/ips.yaml carries portfolio_beta 1.0."""
+        assert load_ips_config(EXAMPLE_IPS_YAML).sizing.portfolio_beta == 1.0
+
+    def test_round_trips_custom_value(self, tmp_path: Path) -> None:
+        """A supplied portfolio_beta round-trips through the loader."""
+        config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": 0.85}}
+        sizing = load_ips_config(_write_yaml(tmp_path, config)).sizing
+        assert sizing.portfolio_beta == 0.85
+
+    def test_zero_beta_raises(self, tmp_path: Path) -> None:
+        """A non-positive portfolio_beta raises IpsConfigError."""
+        config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": 0.0}}
+        with pytest.raises(IpsConfigError, match="portfolio_beta"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_negative_beta_raises(self, tmp_path: Path) -> None:
+        """A negative portfolio_beta raises IpsConfigError."""
+        config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": -1.0}}
+        with pytest.raises(IpsConfigError, match="portfolio_beta"):
+            load_ips_config(_write_yaml(tmp_path, config))

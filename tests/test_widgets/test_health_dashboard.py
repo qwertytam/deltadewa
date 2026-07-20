@@ -6,6 +6,7 @@ import ipywidgets as widgets  # type: ignore[import-untyped]
 import pytest
 
 from deltadewa.analysis.health import VOL_REGIME_LOOKBACK_DAYS
+from deltadewa.ips_config import IpsMarketEnvironment
 from deltadewa.marketdata import StaticProvider
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.widgets.health_dashboard import (
@@ -214,6 +215,27 @@ class TestHedgeHealthDashboard:
         assert dashboard.config["parameters"]["historical_vol_low"] == 0.20
         assert dashboard.config["parameters"]["historical_vol_high"] == 0.40
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 200
+
+    def test_ips_market_environment_sets_vol_band(
+        self,
+        mock_portfolio: OptionPortfolio,
+    ) -> None:
+        """The IPS market-environment policy is the single source of the band.
+
+        Editing the IPS ``vol_regime_*`` bands (one place) moves the gauge's
+        normalized band, overriding the scalar kwargs.
+        """
+        dashboard = HedgeHealthDashboard(
+            mock_portfolio,
+            historical_vol_low=0.20,
+            historical_vol_high=0.40,
+            ips_market_environment=IpsMarketEnvironment(
+                vol_regime_low=0.11,
+                vol_regime_high=0.33,
+            ),
+        )
+        assert dashboard.config["parameters"]["historical_vol_low"] == 0.11
+        assert dashboard.config["parameters"]["historical_vol_high"] == 0.33
 
     def test_config_param_applies_on_init(
         self,

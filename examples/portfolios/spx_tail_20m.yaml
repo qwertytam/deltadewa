@@ -1,0 +1,58 @@
+# Portfolio Configuration Example — §4 "golden" book (regression anchor + demo)
+#
+# The conformant $20M book from docs/repricing-methodology.md §4: a long SPX
+# index position protected by a three-rung 20/30/40%-OTM put ladder, 18-month
+# tenor, contract counts weighted ~35/40/25, carry ≈ 1%/yr. European exercise
+# (SPX is cash-settled). This is the methodology's reproducible worked example —
+# an in-band book to open in the monitor for demos and smoke checks.
+#
+# Golden values (§4, flat +0.15 crash vol shock, -25% crash, T = 1.5y):
+#   Hedge value today   ≈ $297,715   (1.49% of $20M, ≈ 0.99%/yr carry)
+#   Hedge value in crash ≈ $3,895,901 (13.1x — repriced, full option value)
+#   Convexity           ≈ +18.0%     -> inside the IPS +15%..+25% band
+#
+# Maturities are relative (maturity_days: 548 ≈ 18 months) so the book stays a
+# stable ~1.5y-tenor fixture whenever it is opened, not a decaying snapshot.
+# Vol is a flat 20% across strikes (illustrative, per §4 — no skew here).
+
+# Market Parameters
+market_parameters:
+  spot_price: 6600.0           # S0 (SPX index level)
+  volatility: 0.20             # 20% ATM IV (flat, illustrative)
+  risk_free_rate: 0.045        # r
+  dividend_yield: 0.015        # q (SPX index dividend yield)
+  underlying_quantity: 3030.0  # 3030 units x 6600 ≈ $20.0M book notional
+  symbol: "SPX"
+  contract_size: 100           # SPX $100 multiplier
+
+# Option Positions — three-rung OTM ladder (20/30/40% OTM)
+positions:
+  # Rung 1 — 20% OTM put (strike 5280), the workhorse convexity leg
+  - option_type: "put"
+    strike_price: 5280.0
+    maturity_days: 548          # ~18 months (keeps T ≈ 1.5y on any open date)
+    quantity: 23                # ~35% of the 65-contract ladder
+    volatility: 0.20            # flat surface (illustrative)
+    exercise_style: "EUROPEAN"  # SPX is cash-settled European
+    entry_spot: 6600.0          # fresh hedge — established at this snapshot
+    entry_premium: 95.39        # §4 price today (cost basis = current mark)
+
+  # Rung 2 — 30% OTM put (strike 4620)
+  - option_type: "put"
+    strike_price: 4620.0
+    maturity_days: 548
+    quantity: 26                # ~40% of the ladder
+    volatility: 0.20
+    exercise_style: "EUROPEAN"
+    entry_spot: 6600.0
+    entry_premium: 27.19
+
+  # Rung 3 — 40% OTM put (strike 3960), the deep tail / gap-risk cover
+  - option_type: "put"
+    strike_price: 3960.0
+    maturity_days: 548
+    quantity: 16                # ~25% of the ladder
+    volatility: 0.20
+    exercise_style: "EUROPEAN"
+    entry_spot: 6600.0
+    entry_premium: 4.77

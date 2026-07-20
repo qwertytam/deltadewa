@@ -3,17 +3,11 @@
 # Allows wider ranges before triggering alerts.
 
 parameters:
-  # Wider volatility regime bands
-  historical_vol_low: 0.18    # 30th percentile
-  historical_vol_high: 0.32   # 70th percentile
-  
   # Shorter convexity cliff warning
   convexity_cliff_days: 120   # Alert only when within 4 months
-
-  # Market environment assessment — wider bands, more tolerant of noisy shape
-  skew_low_pctile: 20          # below = benign skew
-  skew_high_pctile: 80         # above = expensive/stressed skew
-  term_contango_tolerance: 1.0 # VIX points; smaller diffs read FLAT
+  # Vol-regime band + hedge-cost verdict thresholds (skew / term structure)
+  # are policy, not presentation — set them in market_environment in ips.yaml
+  # (an aggressive posture is a policy choice, so it belongs to the IPS).
 
 metrics:
   # Higher carry tolerance

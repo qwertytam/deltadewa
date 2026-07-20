@@ -7,17 +7,19 @@ from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa import constants as const
 from deltadewa.analysis.crash_repricing import crash_convexity_pct
+from deltadewa.ips_config import (
+    DEFAULT_VOL_REGIME_HIGH,
+    DEFAULT_VOL_REGIME_LOW,
+    IpsConvexity,
+)
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
-# Vol-regime normalization band (decimal implied vol) and rank window.
-# NOTE (Mo4 -> M1.4/Mo2): this 0.15/0.35 band is still duplicated in
-# ``market_environment.classify_vix_regime`` and the dashboard config;
-# M1.4/Mo2 hoists it into the IPS (policy vs presentation). This is the single
-# source *inside health.py* until then — do not add a fourth literal copy.
-VOL_REGIME_LOW: Final[float] = 0.15
-VOL_REGIME_HIGH: Final[float] = 0.35
+# Vol-regime rank window. The normalization band (decimal implied vol) is
+# single-sourced from the IPS — ``ips_config.DEFAULT_VOL_REGIME_LOW`` /
+# ``DEFAULT_VOL_REGIME_HIGH`` (surfaced on ``IpsMarketEnvironment``). No band
+# literal lives here; callers pass the policy value in.
 VOL_REGIME_LOOKBACK_DAYS: Final[int] = 252
 
 
@@ -77,8 +79,8 @@ def compute_vol_regime(
     current_vol: float,
     *,
     vix_history: Sequence[float] | None,
-    normalized_low: float = VOL_REGIME_LOW,
-    normalized_high: float = VOL_REGIME_HIGH,
+    normalized_low: float = DEFAULT_VOL_REGIME_LOW,
+    normalized_high: float = DEFAULT_VOL_REGIME_HIGH,
     lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
 ) -> VolRegime:
     """Rank *current_vol* against VIX history, or normalize honestly.
@@ -170,12 +172,14 @@ class HealthMixin:
     if TYPE_CHECKING:
         portfolio: "OptionPortfolio"
 
-    def calculate_net_carry_pct(self) -> float:
+    def calculate_net_carry_pct(self) -> float | None:
         """Calculate net carry (theta) as annualized % of underlying value.
 
         Returns:
-            Annualized theta as percentage of underlying value.
-            Positive = earning carry, Negative = paying carry.
+            Annualized theta as percentage of underlying value (positive =
+            earning carry, negative = paying carry), or ``None`` when the
+            underlying position is unset — the ratio is then undefined and the
+            metric is reported unavailable, never a fabricated ``0.0``.
 
         """
         stats = self.portfolio.summary_stats()
@@ -183,7 +187,7 @@ class HealthMixin:
         underlying_value = abs(stats["total_underlying_value"])
 
         if underlying_value == 0:
-            return 0.0
+            return None
 
         # Annualize and convert to percentage
         annual_theta = daily_theta * const.DAYS_PER_YEAR
@@ -322,8 +326,8 @@ class HealthMixin:
 
     def calculate_vol_regime_percentile(
         self,
-        historical_vol_low: float = VOL_REGIME_LOW,
-        historical_vol_high: float = VOL_REGIME_HIGH,
+        historical_vol_low: float = DEFAULT_VOL_REGIME_LOW,
+        historical_vol_high: float = DEFAULT_VOL_REGIME_HIGH,
         vix_history: Sequence[float] | None = None,
         lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
     ) -> float:
@@ -338,9 +342,9 @@ class HealthMixin:
 
         Args:
             historical_vol_low: Historical low volatility for the normalized
-                fallback (default: :data:`VOL_REGIME_LOW`).
+                fallback (default: :data:`DEFAULT_VOL_REGIME_LOW`).
             historical_vol_high: Historical high volatility for the normalized
-                fallback (default: :data:`VOL_REGIME_HIGH`).
+                fallback (default: :data:`DEFAULT_VOL_REGIME_HIGH`).
             vix_history: Trailing VIX closes in vol points; when non-empty a
                 true percentile is computed. ``None``/empty -> normalized.
             lookback_days: Rank window in trading days (default:
@@ -451,12 +455,11 @@ class HealthMixin:
     def calculate_health_metrics(  # pylint: disable=too-many-arguments  # one metric-config arg per gauge
         self,
         cumulative_carry_paid: float = 0.0,
-        historical_vol_low: float = VOL_REGIME_LOW,
-        historical_vol_high: float = VOL_REGIME_HIGH,
+        historical_vol_low: float = DEFAULT_VOL_REGIME_LOW,
+        historical_vol_high: float = DEFAULT_VOL_REGIME_HIGH,
         convexity_cliff_days: int = 180,
         *,
-        crash_scenario_pct: float | None = None,
-        crash_vol_shock: float = 0.0,
+        crash: IpsConvexity | None = None,
         target_delta_ratio_pct: float | None = None,
         vix_history: Sequence[float] | None = None,
         vol_regime_lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
@@ -466,19 +469,19 @@ class HealthMixin:
         Args:
             cumulative_carry_paid: Total carry paid for the hedge (default: 0.0)
             historical_vol_low: Historical low volatility for the vol-regime
-                normalized fallback (default: :data:`VOL_REGIME_LOW`)
+                normalized fallback (default: :data:`DEFAULT_VOL_REGIME_LOW`)
             historical_vol_high: Historical high volatility for the vol-regime
-                normalized fallback (default: :data:`VOL_REGIME_HIGH`)
+                normalized fallback (default: :data:`DEFAULT_VOL_REGIME_HIGH`)
             convexity_cliff_days: Days threshold for high-gamma region
             (default: 180)
-            crash_scenario_pct: Signed crash move as a percent of current spot,
-                single-sourced from ``IpsConvexity.crash_scenario_pct``. When
-                ``None`` (no IPS supplied), the crash-derived gauges
-                (crash convexity, hedge success) read ``0.0`` rather than
-                fall back to a hardcoded scenario.
-            crash_vol_shock: Flat additive crash vol bump as a decimal,
-                single-sourced from ``IpsConvexity.crash_vol_shock`` and used
-                to reprice the crash-convexity gauge. Defaults to ``0.0``.
+            crash: The IPS crash policy (pass ``ips_config.convexity``). The
+                crash *scenario* and its *vol shock* are bundled here so they
+                can never diverge — supplying a scenario always carries the
+                matching shock. When ``None`` (no IPS supplied), the
+                crash-derived gauges (crash convexity, hedge success) are
+                DISABLED and read ``0.0``, rather than silently reprice
+                spot-only against a fabricated scenario or a defaulted zero
+                shock. Both are single-sourced from ``IpsConvexity``.
             target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
                 single-sourced from ``IpsTriggers.target_delta_ratio_pct``.
                 When ``None`` (no IPS supplied), ``delta_drift_pct`` is ``None``
@@ -492,7 +495,8 @@ class HealthMixin:
 
         Returns:
             Dictionary containing all calculated health metrics:
-            - net_carry_pct: Net carry as % of underlying
+            - net_carry_pct: Net carry as % of underlying, or ``None`` when
+              ``underlying_quantity`` is unset (unavailable)
             - crash_convexity_pct: Hedge P&L at the IPS crash scenario
             - vega_sufficiency_pct: Portfolio % impact per +10 vol
             - delta_drift_pct: Deviation from the target hedge ratio (pp), or
@@ -506,17 +510,17 @@ class HealthMixin:
             - hedge_success_pct: Hedge P&L vs carry paid
 
         """
-        if crash_scenario_pct is None:
+        if crash is None:
             crash_convexity_value = 0.0
             hedge_success_pct = 0.0
         else:
             crash_convexity_value = self.calculate_crash_convexity_pct(
-                crash_scenario_pct,
-                crash_vol_shock,
+                crash.crash_scenario_pct,
+                crash.crash_vol_shock,
             )
             hedge_success_pct = self.calculate_hedge_success_pct(
                 cumulative_carry_paid,
-                crash_scenario_pct,
+                crash.crash_scenario_pct,
             )
 
         if target_delta_ratio_pct is None:
