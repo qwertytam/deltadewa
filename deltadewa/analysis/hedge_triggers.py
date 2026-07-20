@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from deltadewa.reporting import ConsoleReporter
 
 
-def gamma_drift_pct(
+def gamma_drift_from_spot(
     total_gamma: float,
     spot_price: float,
     underlying_quantity: float,
@@ -246,7 +246,7 @@ def evaluate_hedge_triggers(
     )
 
     total_gamma = abs(stats["total_gamma"])
-    gamma_drift = gamma_drift_pct(
+    gamma_drift = gamma_drift_from_spot(
         stats["total_gamma"],
         portfolio.spot_price,
         stats["underlying_quantity"],
@@ -537,7 +537,7 @@ def _build_action_list(
             (
                 "🔴 URGENT",
                 f"Roll {len(near_expiry_positions)} "
-                f"expiring position(s) → Use Section 6",
+                f"expiring position(s) → Use the roll planner",
             ),
         )
     if (
@@ -561,7 +561,7 @@ def _build_action_list(
         actions.append(
             (
                 "🟡 SOON",
-                "Plan rolls for approaching expiration → Review Section 6",
+                "Plan rolls for approaching expiration → Use the roll planner",
             ),
         )
     if (

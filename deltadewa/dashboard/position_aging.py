@@ -128,7 +128,7 @@ class PositionAgingDisplay:
                         if days_left < 7:
                             print(
                                 "       → ACTION:  Roll this position in "
-                                "Section 6 or close",
+                                "the roll planner or close",
                             )
                         elif days_left < 14:
                             print(
