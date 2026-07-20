@@ -34,9 +34,8 @@ class ChangeLogDisplay:
         ):
             self._reporter.warning("No changes recorded in this session.")
             print("\n💡 Changes are tracked when you:")
-            print("  • Add/update/remove positions in Section 2")
-            print("  • Execute rolls in Section 6")
-            print("  • Adjust delta in Section 7")
+            print("  • Add/update/remove positions in the position editor")
+            print("  • Execute rolls in the roll planner")
         else:
             print(
                 f"📊 Total changes this session: "
