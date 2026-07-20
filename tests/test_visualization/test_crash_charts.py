@@ -60,7 +60,7 @@ class TestPlotCrashConvexity:
     def test_returns_figure_with_one_axes(self) -> None:
         """plot_crash_convexity returns a Figure with exactly 1 Axes."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio)
+        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
 
         fig = plot_crash_convexity(result)
         try:
@@ -76,7 +76,11 @@ class TestPlotCrashConvexity:
             target_min_pct=2.0,
             target_max_pct=10.0,
         )
-        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        result = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=ips.crash_vol_shock,
+            ips_convexity=ips,
+        )
 
         fig = plot_crash_convexity(result)
         try:
@@ -96,7 +100,7 @@ class TestPlotCrashConvexity:
     def test_plotted_curve_matches_result(self) -> None:
         """Line x/y data matches result.curve (gross payoff, not ratio)."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio)
+        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
 
         fig = plot_crash_convexity(result)
         try:
@@ -111,7 +115,7 @@ class TestPlotCrashConvexity:
     def test_accepts_existing_axes(self) -> None:
         """When ax is supplied, returned Figure is the axes' own figure."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio)
+        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
 
         fig2, ax2 = plt.subplots()
         try:
@@ -126,7 +130,7 @@ class TestPlotCrashConvexity:
 
         portfolio = _make_long_put_portfolio()
         charts = OptionCharts(portfolio)
-        result = compute_crash_convexity(portfolio)
+        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
 
         fig = charts.plot_crash_convexity(result)
         try:

@@ -29,6 +29,7 @@ from deltadewa.analysis.crash_repricing import (
     crash_hedge_value,
     crash_intrinsic_floor,
 )
+from deltadewa.ips_config import _DEFAULT_CRASH_VOL_SHOCK
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -434,7 +435,7 @@ def crash_scenario_table(
     portfolio: OptionPortfolio,
     *,
     shocks: Sequence[float],
-    ips_convexity: IpsConvexity,
+    ips_convexity: IpsConvexity | None = None,
 ) -> list[CrashScenarioRow]:
     """Return discrete scenario rows; thin wrapper over compute_crash_convexity.
 
@@ -442,17 +443,23 @@ def crash_scenario_table(
         portfolio: Portfolio to evaluate.
         shocks: Signed shock percents (e.g. [-10.0, -25.0]).
             ``ips_convexity.crash_scenario_pct`` is added automatically
-            when not already present.
+            when not already present (if ips_convexity is supplied).
         ips_convexity: IPS convexity config (provides crash_vol_shock for
-            pricing and target band comparison).
+            pricing and target band comparison). When None, uses default
+            crash_vol_shock (0.15).
 
     Returns:
         One ``CrashScenarioRow`` per shock, sorted mild to severe.
 
     """
+    vol_shock = (
+        ips_convexity.crash_vol_shock
+        if ips_convexity is not None
+        else _DEFAULT_CRASH_VOL_SHOCK
+    )
     return compute_crash_convexity(
         portfolio,
-        crash_vol_shock=ips_convexity.crash_vol_shock,
+        crash_vol_shock=vol_shock,
         ips_convexity=ips_convexity,
         scenario_shocks=shocks,
     ).scenario_rows
