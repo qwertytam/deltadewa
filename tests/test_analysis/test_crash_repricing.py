@@ -26,6 +26,7 @@ from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.valuation import OptionValuation
 from deltadewa.widgets.summary import NetHedgeSummary
 
 # §4 worked-example crash state.
@@ -483,3 +484,85 @@ class TestCanonicalExampleInvariants:
                 pos.option.volatility + 0.15,
             )
             assert value > 0.0
+
+
+class TestPerLegExerciseStyleRespected:
+    """Crash repricing respects per-leg European exercise style.
+
+    _reprice_leg() threads position.exercise_style per leg, allowing a
+    mixed-style portfolio (most EUROPEAN, one AMERICAN) to reprice
+    correctly. This test verifies that behavior is respected end-to-end.
+    """
+
+    def test_mixed_style_portfolio_reprices_per_leg(self) -> None:
+        """Mixed EUROPEAN + AMERICAN portfolio reprices with correct styles."""
+        portfolio = _make_appendix_book()
+
+        # Add one AMERICAN leg at same strike as first ladder leg
+        portfolio.add_position(
+            strike_price=5280.0,
+            maturity_date=portfolio.positions[0].option.maturity_date,
+            quantity=23,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.AMERICAN,
+            volatility=0.20,
+        )
+
+        crash_spot = _APPENDIX_SPOT * (1.0 + _APPENDIX_MOVE)  # -25% move
+        crashed_vol = 0.20 + _APPENDIX_VOL_SHOCK
+
+        # Reprice the two same-strike legs
+        first_european = cr._reprice_leg(
+            portfolio.positions[0],  # Original European leg
+            portfolio,
+            crash_spot,
+            crashed_vol,
+        )
+        newly_added_american = cr._reprice_leg(
+            portfolio.positions[-1],  # New American leg
+            portfolio,
+            crash_spot,
+            crashed_vol,
+        )
+
+        # Prices must differ (same strike, qty; different style)
+        assert abs(newly_added_american - first_european) > 1.0
+
+        # American must be >= European (value of early exercise)
+        assert newly_added_american >= first_european
+
+    def test_all_european_book_reprices_to_european_engine(self) -> None:
+        """All-European appendix book reprices via EUROPEAN engine only."""
+        portfolio = _make_appendix_book()
+        crash_spot = _APPENDIX_SPOT * (1.0 + _APPENDIX_MOVE)  # -25% move
+        crashed_vol = 0.20 + _APPENDIX_VOL_SHOCK
+
+        # Reprice via crash_repricing._reprice_leg
+        first_position = portfolio.positions[0]
+        repriced_value = cr._reprice_leg(
+            first_position,
+            portfolio,
+            crash_spot,
+            crashed_vol,
+        )
+
+        # Price the same leg independently with EUROPEAN engine
+        direct_european = OptionValuation(
+            spot_price=crash_spot,
+            strike_price=first_position.option.strike_price,
+            maturity_date=first_position.option.maturity_date,
+            volatility=crashed_vol,
+            risk_free_rate=portfolio.risk_free_rate,
+            dividend_yield=portfolio.dividend_yield,
+            option_type=first_position.option.option_type,
+            valuation_date=portfolio.valuation_date,
+            exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        direct_value = (
+            direct_european.price()
+            * first_position.quantity
+            * first_position.contract_size
+        )
+
+        # Repriced value must match direct European pricing
+        assert repriced_value == pytest.approx(direct_value, rel=1e-9)
