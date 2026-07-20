@@ -137,6 +137,24 @@ conformant book; the regime figure is a real percentile or honestly named.
   `crash_scenario_pct is None` path), not silently reprice at a 0.0 shock — same
   fail-loud-not-degrade discipline as `underlying_quantity` above.
 
+- **Canonical example convexity — measured, sizing decision deferred
+  (2026-07-19).** `examples/portfolios/spx_protective_put.yaml` reads **+14.27%**
+  crash convexity under the shipped flat vol bump (`+0.15` every leg) — ~0.7pp
+  under the 15% floor. The flat bump is documented-conservative on the low
+  strikes (methodology §8): under a modest, realistic crash-skew steepening
+  (deep-OTM tail lifted `+0.05` over ATM — the 15%-OTM tranche repriced at
+  `+0.20` vs the flat `+0.15`) the *same* book reads **+15.4%**, inside the band;
+  only `~+0.03` extra at the tail already reaches the floor (14.97%).
+  **Recommendation: refine the shock, do not re-size** — tuning the example to a
+  measure known to understate convexity would over-hedge and mask the modelling
+  gap. No sizing change made; pending sign-off. Motivates the
+  `convexity.skew_steepening` refinement below.
+- **`convexity.skew_steepening` refinement (new, unblocked).** Add an optional
+  IPS-driven skew-aware crash shock (deep-OTM IV lifted more than ATM) to
+  `crash_repricing` — the refinement §8 already names. The flat bump stays the
+  default (zero steepening reproduces today's numbers exactly); the canonical
+  book above is its motivating regression case.
+
 **Acceptance:** what-if valuation dates move trigger/roll logic; no threshold
 defined in two places; the shipped carry default matches its own handbook; a
 supplied crash scenario can never be repriced with a spot-only (`0.0`) vol shock,
