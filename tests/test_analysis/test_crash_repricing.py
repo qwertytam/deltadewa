@@ -147,7 +147,11 @@ class TestAppendixGoldenValues:
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
         )
 
-        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        result = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            ips_convexity=ips,
+        )
 
         assert result.payoff_ratio is not None
         assert result.payoff_ratio == pytest.approx(13.1, rel=0.02)
@@ -179,7 +183,11 @@ class TestBand:
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
         )
 
-        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        result = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            ips_convexity=ips,
+        )
         ips_row = next(r for r in result.scenario_rows if r.shock_pct == -25.0)
 
         assert 15.0 <= ips_row.convexity_pct <= 25.0
@@ -367,7 +375,11 @@ class TestConsistencyAcrossSurfaces:
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
         )
 
-        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        result = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            ips_convexity=ips,
+        )
         ips_row = next(r for r in result.scenario_rows if r.shock_pct == -25.0)
         gauge = PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,

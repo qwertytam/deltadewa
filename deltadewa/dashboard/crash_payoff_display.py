@@ -184,6 +184,7 @@ class CrashPayoffDisplay:
 
         result = compute_crash_convexity(
             self._portfolio,
+            crash_vol_shock=self._ips_convexity.crash_vol_shock,
             ips_convexity=self._ips_convexity,
             scenario_shocks=self._shocks,
         )

@@ -323,6 +323,7 @@ def _build_scenario_rows(
 def compute_crash_convexity(
     portfolio: OptionPortfolio,
     *,
+    crash_vol_shock: float,
     shock_range: tuple[float, float] = (-40.0, 10.0),
     n_points: int = 51,
     ips_convexity: IpsConvexity | None = None,
@@ -331,7 +332,7 @@ def compute_crash_convexity(
     """Build a repriced-payoff curve once and sample scenario rows from it.
 
     Reprices the long puts at each grid point exactly once (hedge-only, full
-    option value at the crash spot + IPS vol shock), then:
+    option value at the crash spot + flat additive vol shock), then:
 
     - exposes the full fine grid as ``result.curve`` for smooth chart
       rendering;
@@ -341,11 +342,17 @@ def compute_crash_convexity(
 
     Args:
         portfolio: Portfolio to evaluate.
+        crash_vol_shock: Flat additive vol bump (as decimal, e.g. 0.10 for
+            +1000 bps).  Decoupled from policy: explicit parameter forces
+            every caller to state the shock it prices with.  No path reprices
+            spot-only by omission.
         shock_range: (min_shock_pct, max_shock_pct) bounding the grid.
         n_points: Number of evenly-spaced points in the fine grid.
-        ips_convexity: IPS convexity target.  When supplied the IPS
-            crash scenario is guaranteed to appear in both the grid and
-            ``scenario_rows``, and ``payoff_ratio`` is populated.
+        ips_convexity: IPS convexity target (policy, not pricing).  When
+            supplied the IPS crash scenario is guaranteed to appear in both
+            the grid and ``scenario_rows``, and ``payoff_ratio`` is
+            populated.  Used only for ``meets_target`` band comparison,
+            never for repricing.
         scenario_shocks: Explicit shocks to include in
             ``scenario_rows``.  ``None`` uses
             ``_DEFAULT_SCENARIO_SHOCKS`` filtered to ``shock_range``.
@@ -358,10 +365,8 @@ def compute_crash_convexity(
     premium_paid, premium_basis = _premium_with_basis(portfolio)
     long_puts = _long_puts(portfolio)
 
-    # Crash vol shock is policy: single-sourced from the IPS (0.0 = spot-only).
-    vol_shock = (
-        ips_convexity.crash_vol_shock if ips_convexity is not None else 0.0
-    )
+    # Crash vol shock is explicit: decoupled from policy (ips_convexity).
+    vol_shock = crash_vol_shock
 
     # Fine grid (rounded to avoid float-key mismatches).
     lo, hi = shock_range
@@ -429,7 +434,7 @@ def crash_scenario_table(
     portfolio: OptionPortfolio,
     *,
     shocks: Sequence[float],
-    ips_convexity: IpsConvexity | None = None,
+    ips_convexity: IpsConvexity,
 ) -> list[CrashScenarioRow]:
     """Return discrete scenario rows; thin wrapper over compute_crash_convexity.
 
@@ -438,7 +443,8 @@ def crash_scenario_table(
         shocks: Signed shock percents (e.g. [-10.0, -25.0]).
             ``ips_convexity.crash_scenario_pct`` is added automatically
             when not already present.
-        ips_convexity: IPS convexity target; sets ``meets_target`` flags.
+        ips_convexity: IPS convexity config (provides crash_vol_shock for
+            pricing and target band comparison).
 
     Returns:
         One ``CrashScenarioRow`` per shock, sorted mild to severe.
@@ -446,6 +452,7 @@ def crash_scenario_table(
     """
     return compute_crash_convexity(
         portfolio,
+        crash_vol_shock=ips_convexity.crash_vol_shock,
         ips_convexity=ips_convexity,
         scenario_shocks=shocks,
     ).scenario_rows
