@@ -111,6 +111,7 @@ dev = [
 	"jupytext (>=1.19.1,<2.0.0)",
 	"pytest>=7.4.0",
 	"pandas-stubs>=2.3.3.251201",
+	"pytest-cov (>=7.1.0,<8.0.0)",
 ]
 
 [tool.pytest.ini_options]
@@ -166,3 +167,10 @@ max-bool-expr = 6   # analysis/roll_status.py _check_roll_verdict
 min-similarity-lines = 12
 ignore-imports = true     # import blocks appear in every module; skip them
 ignore-docstrings = true  # docstring templates are not logic duplication
+
+[tool.coverage.run]
+source = ["deltadewa"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
