@@ -339,8 +339,10 @@ def setup_dashboard(
         ``portfolio.get_symbol()`` matches ``ips_config.program.instrument``,
         ``portfolio.default_exercise_style`` is set from
         ``ips_config.pricing.exercise_style`` so future ``add_position()``
-        calls without an explicit ``exercise_style`` use it. Non-matching
-        symbols are left untouched (defaulting to ``ExerciseStyle.AMERICAN``).
+        calls without an explicit ``exercise_style`` use it.
+        Non-matching symbols are left untouched (default_exercise_style=None,
+        causing add_position() to raise ValueError for positions without
+        explicit style).
     auto_load_default:
         Forwarded to ``initialize_portfolio``. When ``False``, no default
         demo portfolio is loaded if nothing was imported — the session
