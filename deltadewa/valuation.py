@@ -59,9 +59,9 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
         volatility: float,
         risk_free_rate: float,
         dividend_yield: float,
+        exercise_style: ExerciseStyle,
         option_type: OptionType = OptionType.CALL,
         valuation_date: dt | None = None,
-        exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
         grid_resolution: FDGridResolution = FDGridResolution.STANDARD,
         use_closed_form: bool = False,
     ) -> None:
@@ -74,9 +74,9 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
             volatility: Implied volatility (annualized)
             risk_free_rate: Risk-free interest rate (annualized)
             dividend_yield: Dividend yield (annualized)
+            exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
             option_type: OptionType.CALL or OptionType.PUT
             valuation_date: Date for valuation (defaults to today)
-            exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
             grid_resolution: FDGridResolution for finite difference engine
                 (ignored for European options and when use_closed_form=True)
             use_closed_form: If True, use the Bjerksund-Stensland 2002

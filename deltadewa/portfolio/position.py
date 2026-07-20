@@ -15,9 +15,9 @@ class OptionPosition:
         self,
         option: OptionValuation,
         quantity: int,
+        exercise_style: ExerciseStyle,
         contract_size: int = 100,
         custom_volatility: bool = False,
-        exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
         entry_spot: float | None = None,
         entry_date: dt | None = None,
         entry_premium: float | None = None,
@@ -29,10 +29,10 @@ class OptionPosition:
             option: OptionValuation instance
             quantity: Number of contracts (positive for long, negative for
             short)
+            exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
             contract_size: Number of underlying shares per option
             contract (e.g. 100)
             custom_volatility: Whether this position uses custom volatility
-            exercise_style: ExerciseStyle.AMERICAN or ExerciseStyle.EUROPEAN
             entry_spot: Spot price when this position was entered, or None
             if unknown (e.g. imported from a file predating entry tracking)
             entry_date: Date this position was entered, or None if unknown

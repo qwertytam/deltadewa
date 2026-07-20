@@ -134,17 +134,17 @@ class OptionPortfolioBase:
             volatility=option_volatility,
             risk_free_rate=self.risk_free_rate,
             dividend_yield=self.dividend_yield,
+            exercise_style=exercise_style,
             option_type=option_type,
             valuation_date=self.valuation_date,
-            exercise_style=exercise_style,
             grid_resolution=FDGridResolution.STANDARD,
         )
         position = OptionPosition(
             option,
             quantity,
+            exercise_style=exercise_style,
             contract_size=effective_cs,
             custom_volatility=custom_volatility,
-            exercise_style=exercise_style,
             entry_spot=entry_spot,
             entry_date=entry_date,
         )

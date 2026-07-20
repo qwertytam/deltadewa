@@ -22,6 +22,7 @@ class TestVolatilityQuoteCaching:
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
 
@@ -189,6 +190,7 @@ class TestGreeksCaching:
             volatility=0.20,
             risk_free_rate=0.05,
             dividend_yield=0.02,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
 
