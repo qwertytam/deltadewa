@@ -163,6 +163,8 @@ and a missing IPS disables the crash gauges rather than repricing spot-only.
 
 ### M1.5 — Engine test backfill (Mo6, the part that must precede re-skinning)
 
+*Order within Phase 1: FIX 1 (to green) → M1.5a (exercise-style) → European-parity → health.py → stress.py → approx sweep → close-out. Tests are written against the post-M1.5a signatures.*
+
 - Add the European-parity suite (the SPX-critical path has 3 tests vs 17 for the
   American default), direct tests for `health.py` (the gauge brain), and pin every
   C1–C4 / M1 / M3 behavior. Convert the most fragile `float ==` assertions to
@@ -192,6 +194,11 @@ and a missing IPS disables the crash gauges rather than repricing spot-only.
   (`crash_payoff.py:447`, `dashboard/crash_payoff_display.py:185`) to source the
   shock from `IpsConvexity.crash_vol_shock`. Same fail-loud-not-degrade discipline
   as `calculate_crash_convexity_pct` (M1.2) and `underlying_quantity` (M1.4).
+  **Status: signatures done (commit `33f8fbd`); NOT yet green** — 21 tests still call
+  `compute_crash_convexity()` without the required shock. Updating those call sites is
+  part of this fix, not a follow-up: the PR merges only once the gate is green. Tests
+  that assert a §4 golden must pass the shock that golden was computed with (`0.15`);
+  others pass an explicit realistic value.
 
 **Acceptance:** each fix above is guarded by a test that fails on the old
 behavior; the `stress.py` characterization suite passes unchanged across the M2.1
@@ -199,6 +206,62 @@ extraction; **no crash-repricing entry point retains a defaulted vol shock** —
 pinned by a test asserting `compute_crash_convexity` cannot be called without an
 explicit `crash_vol_shock`, plus a repo-wide check that no `= 0.0` (or otherwise
 defaulted) vol-shock parameter survives in any crash path.
+
+### M1.5a — Remove forbidden American exercise-style defaults (own PR, before the tag)
+
+**Status: signatures drafted, rollout deferred to this milestone.** Surfaced by the
+M1.5 audit. This is a genuine correctness defect, not hygiene, so it gates the tag:
+`ExerciseStyle.AMERICAN` is the silent default at `valuation.py:64`,
+`portfolio/position.py:20`, `portfolio/core.py:40`, `portfolio/factory.py:141`, and
+`persistence.py:352,463,568`, while `README:46-51` states the American approximation
+overstates SPX puts (+2.3–4.8%) and **must not be used**. Forgetting the argument
+selects a forbidden model. M1.1 fixed serialization round-trips but left the
+construction path; the review's own C2 note asked to make the constructor default
+explicit-only. `test_factory.py` currently rides the American default silently.
+
+**Why it needs a strategy.** ~70–90 call sites across 18–20 files (production +
+fixtures). A single giant edit is unreviewable and error-prone. Two design points make
+it tractable and correct:
+
+- **Two layers, two treatments.** Low-level *pricing primitives* (`OptionValuation`,
+  `OptionPosition`) make `exercise_style` **required — no default**; that is where the
+  "impossible to silently get American" guarantee lives. The *config/file boundary*
+  (`OptionPortfolio`, `factory.py`, `persistence.py`) must **resolve the default from
+  the IPS** `default_exercise_style` when a per-position value is absent, and error if
+  neither is present — never fall back to a hardcoded `AMERICAN`. (A portfolio YAML may
+  legitimately omit per-leg style and expect the program default, which for SPX is
+  European.)
+- **Let mypy drive the rollout.** Once a parameter is required, `mypy --strict` names
+  every missing call site precisely — turning "find 70–90 sites" into a mechanical,
+  tool-guided sweep rather than a manual grep. Fix exactly what mypy flags, per layer.
+
+**Sequenced rollout — one commit per layer, gate green after each (never a giant red PR):**
+
+1. **Primitives required.** `exercise_style` required on `OptionValuation` (`valuation.py:64`)
+   and `OptionPosition` (`position.py:20`). Lead with a **fixture sweep**: update the shared
+   test fixtures/`conftest` to construct with explicit style so most test call sites inherit
+   rather than being hand-edited; in particular re-point `test_valuation.py`'s American
+   fixture (~L142) — this dovetails with M1.5's European-parity work below.
+   Commit: `fix(valuation): require explicit exercise style on pricing primitives`
+2. **Boundary resolves from IPS.** `OptionPortfolio` (`core.py:40`), `factory.py:141`,
+   `persistence.py:352,463,568`: replace the hardcoded `AMERICAN` default/fallback with
+   resolution from the IPS `default_exercise_style`; error (fail loud) when neither
+   per-position nor IPS supplies one. Void the "preserve legacy behaviour" comment — no
+   back-compat is required. Commit: `fix(portfolio): resolve exercise style from IPS, no American fallback`
+3. **Structural guard.** A test that constructing a primitive without a style is a
+   parameter/type error, and a repo-wide check that no `= ExerciseStyle.AMERICAN` default
+   survives in any signature. `test_factory.py` and other fixtures now assert the style they
+   actually intend. Commit: `test(valuation): guard against forbidden American defaults`
+
+**Acceptance:** no `= ExerciseStyle.AMERICAN` default survives anywhere; constructing a
+pricing primitive without a style fails (mypy + runtime); the config/file boundary sources
+its default from the IPS and errors when none is available; the full gate is green after
+every commit, not just at the end.
+
+> **Ordering:** M1.5a lands **before** the M1.5 test backfill (B–E) so those tests are
+> written against final constructor signatures, and **before** the tag. FIX 1's 21-test
+> cleanup can land in parallel; M1.5a's fixture sweep and M1.5's European-parity suite
+> touch the same fixtures, so do M1.5a first.
 
 > **Checkpoint:** at the end of Phase 1 the monitor notebook is unchanged but now
 > shows correct numbers. Tag a **"correctness release"** here before touching UI.
