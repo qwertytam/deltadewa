@@ -65,7 +65,8 @@ class TestLoadIpsConfig:
 
         assert ips.program.instrument == "SPX"
         assert ips.pricing.exercise_style == ExerciseStyle.EUROPEAN
-        assert ips.budget.annual_carry_pct == 2.0
+        # Handbook family-office carry ceiling is 1% (Mi6); shipped default.
+        assert ips.budget.annual_carry_pct == 1.0
         assert ips.convexity.target_min_pct == 15.0
         assert ips.convexity.target_max_pct == 25.0
         assert ips.convexity.crash_vol_shock == 0.15

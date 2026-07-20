@@ -15,7 +15,11 @@ pricing:
   exercise_style: EUROPEAN   # SPX/XSP = EUROPEAN (cash-settled); SPY/stocks = AMERICAN
 
 budget:
-  annual_carry_pct: 2.0      # premium budget, % of portfolio / yr
+  # Premium budget, % of portfolio / yr. Handbook family-office benchmark is
+  # 0.5-1.5%, with 1% "a practical ceiling" — the shipped default sits at that
+  # ceiling, not above it. Raise deliberately in policy if your program runs a
+  # larger carry.
+  annual_carry_pct: 1.0
 
 convexity:
   crash_scenario_pct: -25.0     # single source of truth for the crash move
