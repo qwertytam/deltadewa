@@ -13,7 +13,7 @@ from datetime import timedelta
 
 import pytest
 
-from deltadewa.constants import OptionType, PortfolioAction
+from deltadewa.constants import ExerciseStyle, OptionType, PortfolioAction
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.audit import PortfolioLogger
 from deltadewa.reporting.console import ConsoleReporter
@@ -48,13 +48,21 @@ def _make_call(
 @pytest.fixture()
 def empty_portfolio() -> OptionPortfolio:
     """Portfolio with no positions."""
-    return OptionPortfolio(spot_price=100.0, volatility=0.20)
+    return OptionPortfolio(
+        spot_price=100.0,
+        volatility=0.20,
+        default_exercise_style=ExerciseStyle.AMERICAN,
+    )
 
 
 @pytest.fixture()
 def single_position_portfolio() -> OptionPortfolio:
     """Portfolio with exactly one ATM call, 45 days to expiry."""
-    p = OptionPortfolio(spot_price=100.0, volatility=0.20)
+    p = OptionPortfolio(
+        spot_price=100.0,
+        volatility=0.20,
+        default_exercise_style=ExerciseStyle.AMERICAN,
+    )
     _make_call(p)
     return p
 
@@ -62,7 +70,11 @@ def single_position_portfolio() -> OptionPortfolio:
 @pytest.fixture()
 def multi_position_portfolio() -> OptionPortfolio:
     """Portfolio with 3 calls at different strikes / maturities."""
-    p = OptionPortfolio(spot_price=100.0, volatility=0.20)
+    p = OptionPortfolio(
+        spot_price=100.0,
+        volatility=0.20,
+        default_exercise_style=ExerciseStyle.AMERICAN,
+    )
     _make_call(p, strike=95.0, days=10)  # URGENT tier
     _make_call(p, strike=100.0, days=30)  # NORMAL tier
     _make_call(p, strike=105.0, days=60)  # LONG-TERM tier
@@ -76,6 +88,7 @@ def portfolio_with_underlying() -> OptionPortfolio:
         underlying_quantity=1000.0,
         spot_price=100.0,
         volatility=0.20,
+        default_exercise_style=ExerciseStyle.AMERICAN,
     )
     _make_call(p, quantity=-5)
     return p
@@ -84,7 +97,11 @@ def portfolio_with_underlying() -> OptionPortfolio:
 @pytest.fixture()
 def portfolio_with_custom_vol() -> OptionPortfolio:
     """Portfolio where one position carries a custom non-default volatility."""
-    p = OptionPortfolio(spot_price=100.0, volatility=0.20)
+    p = OptionPortfolio(
+        spot_price=100.0,
+        volatility=0.20,
+        default_exercise_style=ExerciseStyle.AMERICAN,
+    )
     p.add_position(
         strike_price=100.0,
         maturity_date=datetime.datetime.now(tz=UTC) + timedelta(days=45),
