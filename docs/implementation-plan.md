@@ -33,6 +33,8 @@ working document: drive Claude Code through it one milestone at a time.
 
 ## Phase 0 — Tooling & memory (do literally first; < 1 session)
 
+**Status: done** — PRs #186, #187, #188.
+
 Highest leverage per line, because it makes every later Claude Code session and
 every gate run more reliable.
 
@@ -55,6 +57,8 @@ the migration unchanged. Maps onto the review's P0 + P1.
 
 ### M1.1 — Stop data loss & silent mispricing (P0)
 
+**Status: done** — PRs #189, #190.
+
 - **C3** — preserve `entry_spot`, `entry_date`, `entry_premium`, `position_id`
   through `update_market_conditions()` (`core.py:471-496`). ~5 lines.
 - **C2 (logic half)** — serialize `exercise_style` in JSON export/import and honor
@@ -73,6 +77,8 @@ tests added.
 
 ### M1.2 — Crash-metric correctness core (P1, the flagship)
 
+**Status: done** — PRs #192, #193. Spec: `docs/repricing-methodology.md`.
+
 - **C1** — reimplement crash convexity per the handbook (line 1628): hedge-only,
   repriced at the crash spot via `BatchPricer`, with a configurable crash-vol
   shock, anchored at the IPS −25%. Remove the `include_underlying=True` /
@@ -83,13 +89,17 @@ tests added.
 - **Mo1** — single-source the crash scenario (−25%) from the IPS; remove the
   −20%/−25% split (`health.py:40` default `0.80`, README, `dashboard.yaml`).
 
-**Acceptance:** regression test reproduces the handbook worked example
-($150k → $1.2M on $10M = 10.5%). On the conformant $20M book, convexity lands in
-the +15–25% band and the payoff ratio reads in multiples (not 1.05×); scenario
-`meets_target` flips true; the `roll_status` convexity trigger stops chronically
-firing.
+**Acceptance (as shipped):** regression tests pin the methodology §4 worked
+example — hedge value today ≈ $297,715, in crash ≈ $3,895,901 (13.1×), convexity
+**+18.0%**, intrinsic floor ≈ $759,000 — on the conformant $20M book, which lands
+inside the +15–25% band with `meets_target` true; the `roll_status` convexity
+trigger stops firing spuriously. The §4 book ships as a loadable example
+(`examples/portfolios/spx_tail_20m.yaml`); the band assertion anchors on it, not on
+`spx_protective_put.yaml` (invariants only there).
 
 ### M1.3 — Decision-layer definitions (P1)
+
+**Status: done** — PR #194.
 
 - **M1** — redefine `delta_drift` as drift of the *hedge's* delta versus a stated
   target hedge ratio (new IPS field), not distance from full neutrality
@@ -109,6 +119,8 @@ firing.
 conformant book; the regime figure is a real percentile or honestly named.
 
 ### M1.4 — Config & trigger hygiene
+
+**Status: done** — PR #195.
 
 - **Mo2** — move the `hedge_cost_verdict` thresholds out of `dashboard.yaml` into
   the IPS (policy vs presentation) (`market_environment.py:284-291`); dedup the
@@ -137,23 +149,12 @@ conformant book; the regime figure is a real percentile or honestly named.
   `crash_scenario_pct is None` path), not silently reprice at a 0.0 shock — same
   fail-loud-not-degrade discipline as `underlying_quantity` above.
 
-- **Canonical example convexity — measured, sizing decision deferred
-  (2026-07-19).** `examples/portfolios/spx_protective_put.yaml` reads **+14.27%**
-  crash convexity under the shipped flat vol bump (`+0.15` every leg) — ~0.7pp
-  under the 15% floor. The flat bump is documented-conservative on the low
-  strikes (methodology §8): under a modest, realistic crash-skew steepening
-  (deep-OTM tail lifted `+0.05` over ATM — the 15%-OTM tranche repriced at
-  `+0.20` vs the flat `+0.15`) the *same* book reads **+15.4%**, inside the band;
-  only `~+0.03` extra at the tail already reaches the floor (14.97%).
-  **Recommendation: refine the shock, do not re-size** — tuning the example to a
-  measure known to understate convexity would over-hedge and mask the modelling
-  gap. No sizing change made; pending sign-off. Motivates the
-  `convexity.skew_steepening` refinement below.
-- **`convexity.skew_steepening` refinement (new, unblocked).** Add an optional
-  IPS-driven skew-aware crash shock (deep-OTM IV lifted more than ATM) to
-  `crash_repricing` — the refinement §8 already names. The flat bump stays the
-  default (zero steepening reproduces today's numbers exactly); the canonical
-  book above is its motivating regression case.
+- **Canonical example convexity — measured, decision made (2026-07-19).**
+  `examples/portfolios/spx_protective_put.yaml` reads **+14.27%** under the shipped
+  flat vol bump — ~0.7pp under the 15% floor. Measured alternative: under a modest
+  crash-skew steepening the *same* book reads **+15.4%** (in band). **Signed off:
+  refine the shock, do not re-size.** No sizing change made. Full rationale and the
+  work itself now live in **M1.6** below.
 
 **Acceptance:** what-if valuation dates move trigger/roll logic; no threshold
 defined in two places; the shipped carry default matches its own handbook; a
@@ -166,12 +167,79 @@ and a missing IPS disables the crash gauges rather than repricing spot-only.
   American default), direct tests for `health.py` (the gauge brain), and pin every
   C1–C4 / M1 / M3 behavior. Convert the most fragile `float ==` assertions to
   `pytest.approx` where crash-repricing introduces small numerical variation.
+- Add characterization tests for `dashboard/stress.py` (~1,440 lines, zero
+  coverage) **before** M2.1 extracts it — grid shapes, monotonicity, real time
+  value via `BatchPricer`, cache-hit reuse reproducing first-pass values exactly,
+  and a small golden grid on `spx_tail_20m.yaml`. These exist to make the
+  extraction a provably pure refactor.
+
+- **Residual from M1.4 — last spot-only degradation path (must land before the
+  tag).** `crash_payoff.compute_crash_convexity` still takes
+  `ips_convexity: IpsConvexity | None = None` and derives
+  `vol_shock = ips_convexity.crash_vol_shock if ... else 0.0` (`crash_payoff.py`
+  ~L363). When `ips_convexity` is omitted the fallback does **not** merely drop the
+  IPS-anchored row: it reprices the **entire curve and every scenario row**
+  spot-only, understating all 51 grid points while still looking plausible. It is
+  documented in a comment rather than surfaced, and the M1.4 tie closed this at
+  `health.calculate_health_metrics` but not here.
+  **Resolution — separate the pricing input from the policy target.** Make
+  `crash_vol_shock` an **explicit required parameter** of
+  `compute_crash_convexity` (and of the `scenario_rows` wrapper at ~L447), so
+  every caller must state the shock it is pricing with and no path can reprice
+  spot-only by omission. Keep `ips_convexity` optional, but **only** for the
+  target-band comparison (`target_min_pct` / `target_max_pct`) — it must no longer
+  carry a pricing input. Update the two call sites
+  (`crash_payoff.py:447`, `dashboard/crash_payoff_display.py:185`) to source the
+  shock from `IpsConvexity.crash_vol_shock`. Same fail-loud-not-degrade discipline
+  as `calculate_crash_convexity_pct` (M1.2) and `underlying_quantity` (M1.4).
 
 **Acceptance:** each fix above is guarded by a test that fails on the old
-behavior.
+behavior; the `stress.py` characterization suite passes unchanged across the M2.1
+extraction; **no crash-repricing entry point retains a defaulted vol shock** —
+pinned by a test asserting `compute_crash_convexity` cannot be called without an
+explicit `crash_vol_shock`, plus a repo-wide check that no `= 0.0` (or otherwise
+defaulted) vol-shock parameter survives in any crash path.
 
 > **Checkpoint:** at the end of Phase 1 the monitor notebook is unchanged but now
 > shows correct numbers. Tag a **"correctness release"** here before touching UI.
+
+### M1.6 — Skew-aware crash shock (deliberately *after* the correctness tag)
+
+**Status: specified, not started.** Sequenced post-tag on purpose: nothing
+currently fails (the canonical book asserts invariants only; the band test anchors
+on the §4 fixture), so there is no urgency, and doing it against a tagged baseline
+gives a clean before/after on a stable reference point.
+
+**Motivation.** The shipped flat bump (`+0.15` on every leg) is documented-
+conservative on the low strikes (methodology §8): crash skew steepening is an
+empirical fact — deep-OTM puts reliably gain more IV than ATM in a sell-off.
+Measured on `spx_protective_put.yaml`: **+14.27%** flat vs **+15.4%** under a
+modest steepening (deep-OTM tail `+0.05` over ATM); `~+0.03` at the tail already
+clears the floor (14.97%).
+
+**Work.** Add an optional `convexity.skew_steepening` to the IPS, consumed by
+`analysis/crash_repricing`, lifting deep-OTM IV more than ATM. Zero steepening is
+the default and must reproduce today's numbers **exactly**.
+
+**Three conditions on how it is done:**
+
+1. **Calibrate independently, never to the band.** The steepening parameter must be
+   derived from historical crash episodes (2008 / 2020 index skew) with sources
+   cited — *then* observe where the canonical book lands. If an honest calibration
+   leaves it under the floor, the example gets re-sized after all. Deriving the
+   parameter from the desired outcome would convert a correctness fix into
+   motivated reasoning — the exact failure mode Phase 1 exists to undo.
+2. **Treat it as a methodology change, not a parameter.** It moves *every* crash
+   number — gauge, payoff ratio, sizing, strike ladder, roll trigger — and
+   invalidates the §4 golden anchors (`+18.0%`, `13.1×`, `$3,895,901`, `$759,000`).
+   Recompute the goldens, rewrite methodology §2 / §4 / §8, and update the
+   regression fixtures in the same change.
+3. **Keep the flat bump shipping until then**, as the documented default.
+
+**Acceptance:** `skew_steepening = 0` reproduces the current §4 goldens exactly
+(no-op proof); the calibration is documented with sources; §4 goldens and the
+appendix are recomputed together; `spx_protective_put.yaml` is re-measured under
+the honest calibration and the re-size decision recorded either way.
 
 ---
 
@@ -273,7 +341,7 @@ both surfaces are covered by app + report tests.
 | M1 | M1.3 | Mi2 | Phase 3 |
 | M2 | M2.4 | Mi3 | M0.2 |
 | M3 | M1.3 | Mi4 | M1.4 |
-| M4 | M1.1 | Mi5 | M1.4 |
+| M4 | M1.1 | Mi5 | M1.3 |
 | M5 | M2.2 (Dash-native) | Mi6 | M1.4 |
 | M6 | M2.2 (Dash-native; notebook version skipped) | Negligibles | Phase 3 / batch with nearest touch |
 | M7 | Phase 3 | #12/#13/#14 | Deferred (data-blocked) |
