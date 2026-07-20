@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -13,7 +13,10 @@ class TestMonteCarloMixin:
 
     def test_run_monte_carlo_simulation(self) -> None:
         """Test run_monte_carlo_simulation method with enriched metrics."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -70,7 +73,11 @@ class TestMonteCarloMixin:
 
     def test_run_monte_carlo_simulation_with_underlying(self) -> None:
         """Test run_monte_carlo_simulation including underlying."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -91,7 +98,10 @@ class TestMonteCarloMixin:
 
     def test_run_monte_carlo_simulation_custom_days(self) -> None:
         """Test run_monte_carlo_simulation with custom days_to_expiry."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -110,7 +120,10 @@ class TestMonteCarloMixin:
 
     def test_run_monte_carlo_simulation_empty_portfolio(self) -> None:
         """Test run_monte_carlo_simulation with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Should still work with no positions
         result = portfolio.run_monte_carlo_simulation(num_simulations=1000)
@@ -122,7 +135,10 @@ class TestMonteCarloMixin:
 
     def test_monte_carlo_results_storage(self) -> None:
         """Test that Monte Carlo results can be stored in portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -142,7 +158,10 @@ class TestMonteCarloMixin:
 
     def test_probability_high_simulations(self) -> None:
         """Test with higher number of simulations."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -161,7 +180,11 @@ class TestMonteCarloMixin:
         """Test that vectorized results are consistent with scalar approach."""
         np.random.seed(42)  # For reproducibility
 
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -213,7 +236,11 @@ class TestMonteCarloMixin:
 
     def test_single_position_portfolio(self) -> None:
         """Test Monte Carlo with single option position."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=105.0,

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -82,6 +82,7 @@ class TestMaturityMixin:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add a position
@@ -116,6 +117,7 @@ class TestMaturityMixin:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
         portfolio.add_position(
             strike_price=105.0,
@@ -134,7 +136,9 @@ class TestMaturityMixin:
 
     def test_add_maturity_buckets_empty(self) -> None:
         """Test add_maturity_buckets with empty DataFrame."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.EUROPEAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         df = portfolio.to_dataframe()

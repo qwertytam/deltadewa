@@ -19,9 +19,15 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
-        position = OptionPosition(option=option, quantity=1, contract_size=100)
+        position = OptionPosition(
+            option=option,
+            quantity=1,
+            exercise_style=ExerciseStyle.AMERICAN,
+            contract_size=100,
+        )
 
         assert position is not None
         assert position.option == option
@@ -40,12 +46,14 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
         entry_date = datetime.now(tz=UTC)
         position = OptionPosition(
             option=option,
             quantity=1,
+            exercise_style=ExerciseStyle.AMERICAN,
             entry_spot=95.0,
             entry_date=entry_date,
         )
@@ -62,10 +70,15 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type=OptionType.CALL,
             exercise_style=ExerciseStyle.AMERICAN,
+            option_type=OptionType.CALL,
         )
-        position = OptionPosition(option=option, quantity=2, contract_size=100)
+        position = OptionPosition(
+            option=option,
+            quantity=2,
+            exercise_style=ExerciseStyle.AMERICAN,
+            contract_size=100,
+        )
 
         # Position value should be option price * quantity * contract_size
         expected_pnl = option.price() * 2 * 100
@@ -80,10 +93,15 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type=OptionType.CALL,
             exercise_style=ExerciseStyle.AMERICAN,
+            option_type=OptionType.CALL,
         )
-        position = OptionPosition(option=option, quantity=2, contract_size=100)
+        position = OptionPosition(
+            option=option,
+            quantity=2,
+            exercise_style=ExerciseStyle.AMERICAN,
+            contract_size=100,
+        )
 
         # Position delta should be option delta * quantity * contract_size
         expected_delta = option.delta() * 2 * 100
@@ -98,10 +116,15 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type=OptionType.CALL,
             exercise_style=ExerciseStyle.AMERICAN,
+            option_type=OptionType.CALL,
         )
-        position = OptionPosition(option=option, quantity=1, contract_size=100)
+        position = OptionPosition(
+            option=option,
+            quantity=1,
+            exercise_style=ExerciseStyle.AMERICAN,
+            contract_size=100,
+        )
 
         # All greeks should be scaled by quantity * contract_size
         assert position.position_gamma() == option.gamma() * 100
@@ -118,10 +141,15 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type=OptionType.CALL,
             exercise_style=ExerciseStyle.AMERICAN,
+            option_type=OptionType.CALL,
         )
-        position = OptionPosition(option=option, quantity=-1, contract_size=100)
+        position = OptionPosition(
+            option=option,
+            quantity=-1,
+            exercise_style=ExerciseStyle.AMERICAN,
+            contract_size=100,
+        )
 
         # Negative quantity should result in negative value and delta
         assert position.position_value() < 0
@@ -136,10 +164,15 @@ class TestOptionPosition:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type=OptionType.PUT,
             exercise_style=ExerciseStyle.AMERICAN,
+            option_type=OptionType.PUT,
         )
-        position = OptionPosition(option=option, quantity=3, contract_size=100)
+        position = OptionPosition(
+            option=option,
+            quantity=3,
+            exercise_style=ExerciseStyle.AMERICAN,
+            contract_size=100,
+        )
 
         pos_dict = position.to_dict()
 
@@ -165,9 +198,12 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.PUT,
         )
-        position = OptionPosition(option=option, quantity=5)
+        position = OptionPosition(
+            option=option, quantity=5, exercise_style=ExerciseStyle.AMERICAN
+        )
         assert position.entry_premium is None
 
     def test_entry_premium_stored_when_given(self) -> None:
@@ -179,11 +215,13 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.PUT,
         )
         position = OptionPosition(
             option=option,
             quantity=5,
+            exercise_style=ExerciseStyle.AMERICAN,
             entry_premium=2.50,
         )
         assert position.entry_premium == 2.50
@@ -198,9 +236,12 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.PUT,
         )
-        position = OptionPosition(option=option, quantity=1)
+        position = OptionPosition(
+            option=option, quantity=1, exercise_style=ExerciseStyle.AMERICAN
+        )
         d = position.to_dict()
         assert "entry_premium" in d
         assert d["entry_premium"] is None
@@ -214,9 +255,12 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
-        position = OptionPosition(option=option, quantity=1)
+        position = OptionPosition(
+            option=option, quantity=1, exercise_style=ExerciseStyle.AMERICAN
+        )
         assert isinstance(position.position_id, str)
         assert position.position_id != ""
 
@@ -230,6 +274,7 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
         option_b = OptionValuation(
@@ -239,10 +284,15 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.PUT,
         )
-        pos_a = OptionPosition(option=option_a, quantity=1)
-        pos_b = OptionPosition(option=option_b, quantity=1)
+        pos_a = OptionPosition(
+            option=option_a, quantity=1, exercise_style=ExerciseStyle.AMERICAN
+        )
+        pos_b = OptionPosition(
+            option=option_b, quantity=1, exercise_style=ExerciseStyle.AMERICAN
+        )
         assert pos_a.position_id != pos_b.position_id
 
     def test_position_id_explicit_restored(self) -> None:
@@ -254,10 +304,16 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
         pid = "fixed-id-for-test"
-        position = OptionPosition(option=option, quantity=1, position_id=pid)
+        position = OptionPosition(
+            option=option,
+            quantity=1,
+            exercise_style=ExerciseStyle.AMERICAN,
+            position_id=pid,
+        )
         assert position.position_id == pid
 
     def test_to_dict_includes_position_id(self) -> None:
@@ -269,9 +325,12 @@ class TestOptionPosition:
             volatility=0.2,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            exercise_style=ExerciseStyle.AMERICAN,
             option_type=OptionType.CALL,
         )
-        position = OptionPosition(option=option, quantity=1)
+        position = OptionPosition(
+            option=option, quantity=1, exercise_style=ExerciseStyle.AMERICAN
+        )
         d = position.to_dict()
         assert "position_id" in d
         assert d["position_id"] == position.position_id
@@ -285,12 +344,13 @@ class TestOptionPosition:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.0,
-            option_type=OptionType.CALL,
             exercise_style=ExerciseStyle.AMERICAN,
+            option_type=OptionType.CALL,
         )
         position = OptionPosition(
             option=option,
             quantity=1,
+            exercise_style=ExerciseStyle.AMERICAN,
             contract_size=100,
             custom_volatility=True,
         )

@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.factory import (
     create_demo_portfolio,
@@ -31,6 +31,7 @@ class TestPortfolioIntegration:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add positions
@@ -85,7 +86,10 @@ class TestPortfolioIntegration:
 
     def test_complex_strategy(self) -> None:
         """Test a complex options strategy (iron condor)."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Iron Condor: Short 95-105 strangle, Long 90-110 strangle
         # Short put spread
@@ -169,7 +173,11 @@ class TestPortfolioIntegration:
 
     def test_custom_volatility_positions(self) -> None:
         """Test portfolio with custom volatility positions."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Add position with portfolio volatility
         portfolio.add_position(
@@ -230,7 +238,10 @@ class TestPortfolioIntegration:
 
     def test_risk_reward_full_analysis(self) -> None:
         """Test complete risk/reward analysis using PortfolioAnalyzer."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,

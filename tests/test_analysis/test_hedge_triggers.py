@@ -8,7 +8,7 @@ from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
     evaluate_hedge_triggers,
 )
-from deltadewa.constants import DAYS_PER_YEAR, OptionType
+from deltadewa.constants import DAYS_PER_YEAR, ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsTriggers, load_ips_config
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -64,6 +64,7 @@ def _asof_portfolio(days_before_maturity: int) -> OptionPortfolio:
         underlying_quantity=100.0,
         spot_price=100.0,
         volatility=0.2,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
     )
     portfolio.add_position(
         strike_price=90.0,
@@ -87,6 +88,7 @@ class TestValuationDateDrivesExpiry:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
         portfolio.add_position(
             strike_price=90.0,

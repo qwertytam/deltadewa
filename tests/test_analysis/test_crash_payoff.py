@@ -86,7 +86,11 @@ class TestPremiumWithBasis:
 
     def test_empty_portfolio_returns_current_basis(self) -> None:
         """No positions -> zero premium, MARK basis."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         premium, basis = _premium_with_basis(portfolio)
         assert premium == pytest.approx(0.0)
         assert basis == PremiumBasis.MARK
@@ -100,6 +104,7 @@ class TestComputeCrashConvexity:
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
             portfolio,
+            crash_vol_shock=0.0,
             shock_range=(-30.0, 0.0),
             n_points=7,
         )
@@ -110,6 +115,7 @@ class TestComputeCrashConvexity:
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
             portfolio,
+            crash_vol_shock=0.0,
             shock_range=(-40.0, 10.0),
             n_points=51,
         )
@@ -121,6 +127,7 @@ class TestComputeCrashConvexity:
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
             portfolio,
+            crash_vol_shock=0.0,
             shock_range=(-40.0, 10.0),
             n_points=51,
         )
@@ -139,7 +146,11 @@ class TestComputeCrashConvexity:
             target_min_pct=0.0,
             target_max_pct=100.0,
         )
-        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        result = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=ips.crash_vol_shock,
+            ips_convexity=ips,
+        )
         shocks_in_rows = {r.shock_pct for r in result.scenario_rows}
         assert -25.0 in shocks_in_rows
 
@@ -151,7 +162,11 @@ class TestComputeCrashConvexity:
             target_min_pct=0.0,
             target_max_pct=100.0,
         )
-        result = compute_crash_convexity(portfolio, ips_convexity=ips)
+        result = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=ips.crash_vol_shock,
+            ips_convexity=ips,
+        )
         assert result.payoff_ratio is not None
         expected_repriced = crash_hedge_value(
             portfolio,
@@ -166,7 +181,7 @@ class TestComputeCrashConvexity:
     def test_payoff_ratio_none_without_ips(self) -> None:
         """payoff_ratio is None when no ips_convexity is supplied."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio)
+        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
         assert result.payoff_ratio is None
         assert result.ips_convexity is None
 
@@ -181,6 +196,7 @@ class TestComputeCrashConvexity:
         )
         result = compute_crash_convexity(
             portfolio,
+            crash_vol_shock=ips.crash_vol_shock,
             ips_convexity=ips,
             scenario_shocks=shocks,
         )
@@ -195,13 +211,13 @@ class TestComputeCrashConvexity:
         """PremiumBasis.PAID when all long puts have entry_premium."""
         portfolio = _make_long_put_portfolio()
         portfolio.positions[0].entry_premium = 2.50
-        result = compute_crash_convexity(portfolio)
+        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
         assert result.premium_basis == PremiumBasis.PAID
 
     def test_premium_basis_current_fallback(self) -> None:
         """PremiumBasis.MARK when no entry_premium set."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio)
+        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
         assert result.premium_basis == PremiumBasis.MARK
 
     def test_single_pricing_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -235,6 +251,7 @@ class TestComputeCrashConvexity:
         n = 11
         compute_crash_convexity(
             portfolio,
+            crash_vol_shock=0.0,
             shock_range=(-40.0, 10.0),
             n_points=n,
         )
@@ -284,7 +301,11 @@ class TestNetProtectivePremium:
 
     def test_empty_portfolio_is_zero(self) -> None:
         """An empty portfolio has zero protective premium."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         assert _net_protective_premium(portfolio) == 0.0
 
 
@@ -365,7 +386,11 @@ class TestCrashPayoffRatio:
 
     def test_zero_premium_is_safe(self) -> None:
         """No long puts -> zero premium -> ratio is 0.0, no division error."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=60),
@@ -392,7 +417,11 @@ class TestCrashPayoffRatio:
 
     def test_empty_portfolio_is_safe(self) -> None:
         """An empty portfolio has zero premium and zero ratio."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         assert (
             crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0) == 0.0
         )
@@ -415,7 +444,11 @@ class TestCrashScenarioTable:
 
     def test_empty_portfolio_rows_are_zero(self) -> None:
         """Rows for an empty portfolio have zero P&L and ratio."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
 
         rows = crash_scenario_table(portfolio, shocks=[-10.0, -25.0])
 

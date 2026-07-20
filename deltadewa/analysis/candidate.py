@@ -107,6 +107,11 @@ def build_put_valuation(
         for ``.price()``, ``.delta()``, or ``.theta()`` calls.
 
     """
+    if portfolio.default_exercise_style is None:
+        raise ValueError(
+            "portfolio.default_exercise_style must be set before evaluating "
+            "candidates. Set it from ips_config.pricing.exercise_style."
+        )
     return OptionValuation(
         spot_price=spot,
         strike_price=strike,
@@ -179,11 +184,16 @@ def evaluate_candidate(
     # Reprice the candidate at the crash state via the shared helper: wrap the
     # today valuation in a one-contract long put and hand it to
     # crash_hedge_value / crash_intrinsic_floor (no duplicated repricing).
+    if portfolio.default_exercise_style is None:
+        raise ValueError(
+            "portfolio.default_exercise_style must be set before evaluating "
+            "candidates. Set it from ips_config.pricing.exercise_style."
+        )
     candidate_leg = OptionPosition(
         option=valuation,
         quantity=1,
-        contract_size=portfolio.contract_size,
         exercise_style=portfolio.default_exercise_style,
+        contract_size=portfolio.contract_size,
     )
     crash_move = crash_pct / 100.0
     per_contract_payoff = crash_hedge_value(

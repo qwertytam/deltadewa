@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from deltadewa.constants import OptionType, PortfolioAction
+from deltadewa.constants import ExerciseStyle, OptionType, PortfolioAction
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.audit import PortfolioChangeTracker, PortfolioLogger
 
@@ -17,6 +17,7 @@ def _make_portfolio() -> OptionPortfolio:
         volatility=0.2,
         risk_free_rate=0.05,
         dividend_yield=0.0,
+        default_exercise_style=ExerciseStyle.AMERICAN,
     )
 
 

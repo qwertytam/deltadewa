@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import matplotlib
 import matplotlib.pyplot as plt
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
 from deltadewa.visualization.convenience import (
@@ -36,7 +36,10 @@ class TestIntegration:
 
     def test_convenience_plot_pnl_diagram(self) -> None:
         """Test plot_pnl_diagram convenience function."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -52,7 +55,10 @@ class TestIntegration:
 
     def test_convenience_plot_pnl_distribution(self) -> None:
         """Test plot_pnl_distribution_with_metrics convenience function."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -68,7 +74,10 @@ class TestIntegration:
 
     def test_convenience_plot_greeks_by_strike(self) -> None:
         """Test plot_greeks_by_strike convenience function."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -84,7 +93,10 @@ class TestIntegration:
 
     def test_convenience_plot_theta_analysis(self) -> None:
         """Test plot_theta_analysis convenience function."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -100,7 +112,10 @@ class TestIntegration:
 
     def test_convenience_plot_greeks_consolidated(self) -> None:
         """Test plot_greeks_consolidated convenience function."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -124,7 +139,10 @@ class TestIntegration:
         strike/maturity) has data to render rather than a "No data"
         placeholder.
         """
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity1 = datetime.now(tz=UTC) + timedelta(days=30)
         maturity2 = datetime.now(tz=UTC) + timedelta(days=60)
 
@@ -178,6 +196,7 @@ class TestIntegration:
             spot_price=100.0,
             underlying_quantity=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add multiple positions

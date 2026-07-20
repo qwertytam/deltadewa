@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -13,7 +13,10 @@ class TestRiskMixin:
 
     def test_get_spot_range(self) -> None:
         """Test _get_spot_range helper method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         # pylint: disable=protected-access
         spot_range = portfolio._get_spot_range(num_points=10)
 
@@ -22,7 +25,10 @@ class TestRiskMixin:
 
     def test_get_spot_range_comprehensive(self) -> None:
         """Test _get_spot_range with comprehensive range."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         # pylint: disable=protected-access
         spot_range = portfolio._get_spot_range(use_comprehensive_range=True)
 
@@ -34,7 +40,10 @@ class TestRiskMixin:
 
     def test_calculate_max_loss_options(self) -> None:
         """Test calculate_max_loss_options method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Long call - limited loss
         portfolio.add_position(
@@ -55,7 +64,10 @@ class TestRiskMixin:
 
     def test_calculate_max_profit_options(self) -> None:
         """Test calculate_max_profit_options method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Long call - unlimited profit
         portfolio.add_position(
@@ -75,7 +87,10 @@ class TestRiskMixin:
 
     def test_calculate_max_loss_short_call(self) -> None:
         """Test calculate_max_loss_options with naked short call."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Short call - unlimited loss
         portfolio.add_position(
@@ -91,7 +106,10 @@ class TestRiskMixin:
 
     def test_calculate_max_profit_short_call(self) -> None:
         """Test calculate_max_profit_options with short call."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Short call - limited profit (premium received)
         portfolio.add_position(
@@ -109,7 +127,11 @@ class TestRiskMixin:
 
     def test_calculate_max_loss_total(self) -> None:
         """Test calculate_max_loss_total with underlying."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         result = portfolio.calculate_max_loss_total()
 
@@ -120,7 +142,11 @@ class TestRiskMixin:
 
     def test_calculate_max_profit_total(self) -> None:
         """Test calculate_max_profit_total with underlying."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         result = portfolio.calculate_max_profit_total()
 
@@ -131,7 +157,10 @@ class TestRiskMixin:
 
     def test_calculate_breakeven_points(self) -> None:
         """Test calculate_breakeven_points method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Long call
         portfolio.add_position(
@@ -149,7 +178,10 @@ class TestRiskMixin:
 
     def test_breakeven_empty_portfolio(self) -> None:
         """Test calculate_breakeven_points with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         breakevens = portfolio.calculate_breakeven_points()
 
@@ -158,7 +190,10 @@ class TestRiskMixin:
 
     def test_check_unlimited_trend(self) -> None:
         """Test _check_unlimited_trend helper method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Long call
         portfolio.add_position(
@@ -190,7 +225,10 @@ class TestRiskMixin:
 
         Tests that the methods produce identical results to scalar approach.
         """
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Create a complex multi-leg position (iron condor)
         portfolio.add_position(

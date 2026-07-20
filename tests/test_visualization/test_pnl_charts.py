@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import matplotlib
 import matplotlib.pyplot as plt
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
 
@@ -17,7 +17,10 @@ class TestPnLChartsMixin:
 
     def test_plot_pnl_diagram_empty_portfolio(self) -> None:
         """Test plot_pnl_diagram with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         charts = OptionCharts(portfolio)
 
         fig = charts.plot_pnl_diagram()
@@ -26,7 +29,10 @@ class TestPnLChartsMixin:
 
     def test_plot_pnl_diagram_with_positions(self) -> None:
         """Test plot_pnl_diagram with positions."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -44,7 +50,11 @@ class TestPnLChartsMixin:
 
     def test_plot_pnl_diagram_with_underlying(self) -> None:
         """Test plot_pnl_diagram with underlying position."""
-        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            underlying_quantity=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -64,7 +74,10 @@ class TestPnLChartsMixin:
 
     def test_plot_pnl_distribution_with_metrics(self) -> None:
         """Test plot_pnl_distribution_with_metrics."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -82,7 +95,10 @@ class TestPnLChartsMixin:
 
     def test_plot_pnl_distribution_custom_params(self) -> None:
         """Test plot_pnl_distribution_with_metrics with custom parameters."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -110,7 +126,10 @@ class TestPnLChartsMixin:
         annotation branch: percentile levels, current spot, breakeven,
         max loss, max profit, and expected value.
         """
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(

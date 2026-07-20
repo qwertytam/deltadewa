@@ -31,6 +31,7 @@ def sample_portfolio() -> OptionPortfolio:
         dividend_yield=0.02,
         underlying_quantity=100.0,
         symbol="TEST",
+        default_exercise_style=ExerciseStyle.AMERICAN,
     )
     maturity = datetime.now(tz=UTC) + timedelta(days=30)
     portfolio.add_position(
@@ -242,6 +243,7 @@ class TestJsonRoundtrip:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.02,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
         portfolio.add_position(
@@ -324,6 +326,7 @@ class TestJsonRoundtrip:
                     "contract_size": 100,
                     "volatility": 0.2,
                     "custom_volatility": False,
+                    "exercise_style": "european",
                 },
             ],
             "risk_metrics": {},
@@ -345,7 +348,11 @@ class TestJsonRoundtrip:
         The old export never wrote exercise_style and the import never read
         it, so a European (SPX) leg silently re-marked to American on reload.
         """
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=90.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=365),
@@ -644,7 +651,11 @@ class TestYamlRoundtrip:
         YAML import already parsed exercise_style, but the shared export
         builder never wrote it, so the round-trip still lost the style.
         """
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=90.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=365),
@@ -687,6 +698,7 @@ class TestYamlRoundtrip:
                     "strike_price": 100.0,
                     "maturity_days": 30,
                     "quantity": 1,
+                    "exercise_style": "european",
                 },
             ],
         }
@@ -730,6 +742,7 @@ class TestYamlRoundtrip:
                     "strike_price": 100.0,
                     "maturity_days": 30,
                     "quantity": 1,
+                    "exercise_style": "european",
                     # deliberately no position_id key
                 },
             ],
@@ -1048,6 +1061,7 @@ class TestEntryPremiumPersistence:
                     "contract_size": 100,
                     "volatility": 0.2,
                     "custom_volatility": False,
+                    "exercise_style": "european",
                 },
             ],
             "session_changelog": [],
@@ -1089,6 +1103,7 @@ class TestContractSizeRoundtrip:
             dividend_yield=0.0,
             symbol="TEST",
             contract_size=contract_size,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
         p.add_position(
             strike_price=100.0,

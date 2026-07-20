@@ -37,6 +37,7 @@ class TestBatchPricerGreeks:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.01,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -82,6 +83,7 @@ class TestBatchPricerGreeks:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -130,6 +132,7 @@ class TestBatchPricerGreeks:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=95.0,
@@ -160,6 +163,7 @@ class TestBatchPricerGreeks:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -193,6 +197,7 @@ class TestBatchPricerGreeks:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -236,6 +241,7 @@ class TestBatchPricerGreeks:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -266,6 +272,7 @@ class TestBatchPricerGreeks:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,

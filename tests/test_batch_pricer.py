@@ -31,6 +31,7 @@ class TestBatchPricer:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.02,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -79,6 +80,7 @@ class TestBatchPricer:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -127,6 +129,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add call option that will be treated as expired
@@ -161,6 +164,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -202,6 +206,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -244,6 +249,7 @@ class TestBatchPricer:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.02,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -293,6 +299,7 @@ class TestBatchPricer:
             underlying_quantity=1000.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # No options, just underlying
@@ -320,6 +327,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Call that will be expired when valued
@@ -380,6 +388,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -414,6 +423,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add 3 positions
@@ -458,6 +468,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -506,6 +517,7 @@ class TestBatchPricer:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add put option that will be treated as expired
@@ -553,6 +565,7 @@ def _make_atm_call_portfolio(
         volatility=vol,
         risk_free_rate=0.05,
         dividend_yield=0.0,
+        default_exercise_style=ExerciseStyle.AMERICAN,
     )
     portfolio.add_position(
         strike_price=spot,
@@ -571,6 +584,7 @@ def _make_multi_position_portfolio(n: int = 4) -> OptionPortfolio:
         volatility=0.25,
         risk_free_rate=0.05,
         dividend_yield=0.0,
+        default_exercise_style=ExerciseStyle.AMERICAN,
     )
     for i in range(n):
         portfolio.add_position(
@@ -653,6 +667,7 @@ class TestBatchPricerClosedForm:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -689,6 +704,7 @@ class TestBatchPricerClosedForm:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -738,6 +754,7 @@ class TestBatchPricerClosedForm:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=95.0,
@@ -822,6 +839,7 @@ class TestClosedFormAccuracyWarning:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -844,6 +862,7 @@ class TestClosedFormAccuracyWarning:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -861,6 +880,7 @@ class TestClosedFormAccuracyWarning:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -878,6 +898,7 @@ class TestClosedFormAccuracyWarning:
             volatility=vol,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=100.0,
@@ -1184,6 +1205,7 @@ class TestBatchPricerThreading:
             underlying_quantity=1000.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         spots = np.array([90.0, 100.0, 110.0])
         par_values = _pricer(portfolio, max_workers=4).portfolio_values_at(
@@ -1199,6 +1221,7 @@ class TestBatchPricerThreading:
             underlying_quantity=0.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=95.0,
@@ -1235,6 +1258,7 @@ class TestBatchPricerThreading:
             volatility=0.25,
             risk_free_rate=0.05,
             dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         for strike in [90.0, 95.0]:
             portfolio.add_position(

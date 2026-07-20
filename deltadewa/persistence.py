@@ -349,7 +349,7 @@ class PortfolioSerializer:
         self,
         filepath: str | Path,
         create_portfolio: bool = True,
-        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        default_exercise_style: ExerciseStyle | None = None,
     ) -> dict[str, Any]:
         """Import portfolio from JSON file.
 
@@ -359,8 +359,10 @@ class PortfolioSerializer:
             default_exercise_style: exercise style applied to positions whose
             entry has no explicit ``exercise_style`` (e.g. files predating
             exercise-style serialization).  Callers should pass the program's
-            IPS style (``ips_config.pricing.exercise_style``); defaults to
-            ``ExerciseStyle.AMERICAN`` to preserve legacy behaviour.
+            IPS style (``ips_config.pricing.exercise_style``). When None,
+            the portfolio will have default_exercise_style=None and
+            add_position() will raise ValueError for positions without an
+            explicit style.
 
         Returns:
             dict with portfolio data (and 'portfolio' key if
@@ -460,7 +462,7 @@ class PortfolioSerializer:
     def import_from_yaml(
         self,
         filepath: str | Path,
-        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        default_exercise_style: ExerciseStyle | None = None,
     ) -> dict[str, Any]:
         """Import portfolio from YAML configuration file.
 
@@ -468,9 +470,10 @@ class PortfolioSerializer:
             filepath: path to YAML file
             default_exercise_style: exercise style applied to positions whose
             config has no explicit ``exercise_style``.  Callers should pass the
-            program's IPS style (``ips_config.pricing.exercise_style``);
-            defaults to ``ExerciseStyle.AMERICAN`` to preserve legacy
-            behaviour.
+            program's IPS style (``ips_config.pricing.exercise_style``).
+            When None, the portfolio will have default_exercise_style=None and
+            add_position() will raise ValueError for positions without an
+            explicit style.
 
         Returns:
             dict with 'portfolio', 'market_params', and 'metadata' keys
@@ -565,7 +568,7 @@ class PortfolioSerializer:
     def import_portfolio(
         self,
         filepath: str | Path,
-        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        default_exercise_style: ExerciseStyle | None = None,
     ) -> dict[str, Any]:
         """Universal import function - auto-detects file format.
 
@@ -574,7 +577,8 @@ class PortfolioSerializer:
             default_exercise_style: exercise style applied to positions with no
             explicit ``exercise_style``; forwarded to the format-specific
             importer.  Callers should pass the IPS style
-            (``ips_config.pricing.exercise_style``).
+            (``ips_config.pricing.exercise_style``). When None, the portfolio
+            will have default_exercise_style=None.
 
         Returns:
             dict with 'portfolio', 'market_params', and 'metadata' keys

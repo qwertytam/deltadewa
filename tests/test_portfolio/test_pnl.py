@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import numpy as np
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -13,7 +13,10 @@ class TestPnLMixin:
 
     def test_calculate_net_debit(self) -> None:
         """Test calculate_net_debit method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -29,7 +32,10 @@ class TestPnLMixin:
 
     def test_calculate_pnl_at_expiry(self) -> None:
         """Test calculate_pnl_at_expiry method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Buy a call at 100 strike
         portfolio.add_position(
@@ -53,7 +59,10 @@ class TestPnLMixin:
 
     def test_calculate_pnl_at_expiry_put(self) -> None:
         """Test calculate_pnl_at_expiry with put option."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Buy a put at 100 strike
         portfolio.add_position(
@@ -75,7 +84,11 @@ class TestPnLMixin:
 
     def test_calculate_pnl_with_underlying(self) -> None:
         """Test calculate_pnl_at_expiry including underlying position."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # No options, just underlying
         pnl_up = portfolio.calculate_pnl_at_expiry(
@@ -94,7 +107,10 @@ class TestPnLMixin:
 
     def test_calculate_pnl_short_option(self) -> None:
         """Test calculate_pnl_at_expiry with short option."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Sell a call at 100 strike
         portfolio.add_position(
@@ -116,7 +132,10 @@ class TestPnLMixin:
 
     def test_calculate_pnl_empty_portfolio(self) -> None:
         """Test calculate_pnl_at_expiry with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         pnl = portfolio.calculate_pnl_at_expiry(110.0)
         # No positions, no P&L
@@ -124,7 +143,10 @@ class TestPnLMixin:
 
     def test_calculate_net_debit_credit(self) -> None:
         """Test calculate_net_debit for credit spread."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Sell OTM put (collect premium)
         portfolio.add_position(
@@ -150,7 +172,10 @@ class TestPnLMixin:
 
     def test_vectorized_pnl_at_expiry(self) -> None:
         """Test vectorized_pnl_at_expiry method."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Buy a call at 100 strike
         portfolio.add_position(
@@ -184,7 +209,11 @@ class TestPnLMixin:
 
     def test_vectorized_pnl_with_underlying(self) -> None:
         """Test vectorized_pnl_at_expiry including underlying position."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         spot_range = np.array([90.0, 100.0, 110.0])
         pnl_array = portfolio.vectorized_pnl_at_expiry(
@@ -202,7 +231,10 @@ class TestPnLMixin:
 
     def test_vectorized_pnl_multi_position(self) -> None:
         """Test vectorized calculation with multiple positions."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Create a bull call spread
         portfolio.add_position(
@@ -238,6 +270,7 @@ class TestPnLMixin:
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
             spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=95.0,
@@ -268,6 +301,7 @@ class TestPnLMixin:
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
             spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=95.0,

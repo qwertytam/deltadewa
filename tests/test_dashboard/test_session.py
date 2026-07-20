@@ -27,7 +27,11 @@ class TestStartSession:
 
     def test_default_exercise_style_is_european_for_spx_symbol(self) -> None:
         """Test default_exercise_style is seeded from ips.pricing for SPX."""
-        spx_portfolio = OptionPortfolio(spot_price=5000.0, symbol="SPX")
+        spx_portfolio = OptionPortfolio(
+            spot_price=5000.0,
+            symbol="SPX",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         spx_portfolio.add_position(
             strike_price=4500.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=90),
@@ -64,7 +68,11 @@ class TestStartSession:
         # Pass an already-imported portfolio so its symbol is stable across
         # setup_dashboard (no default-portfolio swap), letting the seeded
         # StaticProvider resolve it directly with no fallback needed.
-        spx_portfolio = OptionPortfolio(spot_price=5000.0, symbol="SPX")
+        spx_portfolio = OptionPortfolio(
+            spot_price=5000.0,
+            symbol="SPX",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         spx_portfolio.add_position(
             strike_price=4500.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=90),

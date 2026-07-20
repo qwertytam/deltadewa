@@ -49,7 +49,10 @@ class TestRollStatusDisplay:
 
     def test_display_does_not_raise_empty_portfolio(self) -> None:
         """Test display() handles an empty portfolio gracefully."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         display = RollStatusDisplay(portfolio, _make_ips_config())
 
         display.display()
@@ -59,7 +62,10 @@ class TestRollStatusDisplay:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Test display() prints a no-positions message when empty."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         display = RollStatusDisplay(portfolio, _make_ips_config())
 
         display.display()
@@ -72,7 +78,10 @@ class TestRollStatusDisplay:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Test display() shows a ROLL badge for a near-maturity position."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=90.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=5),
@@ -116,7 +125,10 @@ class TestRollStatusDisplay:
             ),
             monetization=IpsMonetization(schedule=()),
         )
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=90.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=200),
@@ -135,7 +147,10 @@ class TestRollStatusDisplay:
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Test display() shows n/a roll-up cost when verdict is HOLD."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=90.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=200),

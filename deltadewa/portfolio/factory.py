@@ -51,6 +51,7 @@ def create_demo_portfolio() -> OptionPortfolio:
         spot_price=100.0,
         volatility=0.25,
         symbol="DEMO",
+        default_exercise_style=ExerciseStyle.EUROPEAN,
     )
 
     today = datetime.now(tz=UTC)
@@ -104,7 +105,9 @@ def create_default_portfolio() -> OptionPortfolio:
         ],
     }
 
-    portfolio = create_empty_portfolio()
+    portfolio = create_empty_portfolio(
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
     market_params = dict(default_config["market_parameters"])
     portfolio.underlying_quantity = market_params["underlying_quantity"]
     portfolio.spot_price = market_params["spot_price"]
@@ -136,9 +139,6 @@ def create_default_portfolio() -> OptionPortfolio:
                 "volatility",
                 market_params.get("volatility"),
             ),
-            exercise_style=pos_config.get(
-                "exercise_style",
-                ExerciseStyle.AMERICAN,
-            ),
+            exercise_style=pos_config["exercise_style"],
         )
     return portfolio

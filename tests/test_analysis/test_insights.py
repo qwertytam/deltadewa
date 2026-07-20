@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -17,6 +17,7 @@ class TestSummaryMixinInsights:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         portfolio.add_position(
@@ -43,6 +44,7 @@ class TestSummaryMixinInsights:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         portfolio.add_position(
@@ -61,7 +63,9 @@ class TestSummaryMixinInsights:
 
     def test_format_risk_summary_empty_portfolio(self) -> None:
         """Test risk summary with empty portfolio."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         summary = analyzer.format_risk_summary()
@@ -77,6 +81,7 @@ class TestSummaryMixinInsights:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         portfolio.add_position(
@@ -100,6 +105,7 @@ class TestSummaryMixinInsights:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Short call has positive theta (positive carry)
@@ -126,6 +132,7 @@ class TestSummaryMixinInsights:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Long call has negative theta (negative carry)
@@ -143,7 +150,9 @@ class TestSummaryMixinInsights:
 
     def test_generate_insights_empty_portfolio(self) -> None:
         """Test insights generation with empty portfolio."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         insights = analyzer.generate_insights()
@@ -158,6 +167,7 @@ class TestSummaryMixinInsights:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add many positions at same strike (concentrated)

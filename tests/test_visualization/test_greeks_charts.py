@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import matplotlib
 import matplotlib.pyplot as plt
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
 
@@ -17,7 +17,10 @@ class TestGreeksChartsMixin:
 
     def test_plot_greeks_by_strike_empty(self) -> None:
         """Test plot_greeks_by_strike with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         charts = OptionCharts(portfolio)
 
         # Empty portfolio will raise KeyError, which is expected behavior
@@ -33,7 +36,10 @@ class TestGreeksChartsMixin:
 
     def test_plot_greeks_by_strike_with_positions(self) -> None:
         """Test plot_greeks_by_strike with positions."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -59,7 +65,10 @@ class TestGreeksChartsMixin:
 
     def test_plot_greeks_by_strike_custom_metrics(self) -> None:
         """Test plot_greeks_by_strike with custom metrics."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -79,7 +88,10 @@ class TestGreeksChartsMixin:
 
     def test_plot_greeks_by_maturity(self) -> None:
         """Test plot_greeks_by_maturity."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity1 = datetime.now(tz=UTC) + timedelta(days=30)
         maturity2 = datetime.now(tz=UTC) + timedelta(days=60)
 
@@ -106,7 +118,10 @@ class TestGreeksChartsMixin:
 
     def test_plot_greeks_by_maturity_custom_metrics(self) -> None:
         """Test plot_greeks_by_maturity with custom metrics."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(

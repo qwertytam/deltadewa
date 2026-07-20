@@ -152,10 +152,12 @@ class TestCrashScenarioSingleSource:
 
         shallow = compute_crash_convexity(
             portfolio,
+            crash_vol_shock=_VOL_SHOCK,
             ips_convexity=_make_ips(_SHALLOW_PCT).convexity,
         )
         deep = compute_crash_convexity(
             portfolio,
+            crash_vol_shock=_VOL_SHOCK,
             ips_convexity=_make_ips(_DEEP_PCT).convexity,
         )
 

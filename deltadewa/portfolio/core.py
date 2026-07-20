@@ -37,7 +37,7 @@ class OptionPortfolioBase:
         dividend_yield: float = 0.0,
         valuation_date: dt | None = None,
         symbol: str = "UNKNOWN",
-        default_exercise_style: ExerciseStyle = ExerciseStyle.AMERICAN,
+        default_exercise_style: ExerciseStyle | None = None,
         contract_size: int = 100,
     ) -> None:
         """Initialize option portfolio.
@@ -50,8 +50,12 @@ class OptionPortfolioBase:
             dividend_yield: Dividend yield
             valuation_date: Valuation date for all options (defaults to now)
             symbol: Underlying symbol or identifier for display/export
-            default_exercise_style: Exercise style used by add_position()
-                when its own exercise_style argument is omitted
+            default_exercise_style: Default exercise style for positions added
+                via add_position() when their own exercise_style argument is
+                omitted. When None, add_position() raises ValueError if a
+                style cannot be resolved from the per-call argument.  Callers
+                should set this from ``ips_config.pricing.exercise_style``
+                before adding positions (e.g. in setup_dashboard).
             contract_size: Number of underlying units per contract; used as
                 the default for positions added via add_position()
 
@@ -120,6 +124,15 @@ class OptionPortfolioBase:
         custom_volatility = volatility is not None
 
         if exercise_style is None:
+            if self.default_exercise_style is None:
+                raise ValueError(
+                    "exercise_style cannot be resolved: neither the "
+                    "add_position() argument nor the portfolio's "
+                    "default_exercise_style is set. Pass exercise_style= "
+                    "explicitly, or set portfolio.default_exercise_style "
+                    "from ips_config.pricing.exercise_style before calling "
+                    "add_position()."
+                )
             exercise_style = self.default_exercise_style
 
         if entry_spot is None:
@@ -134,17 +147,17 @@ class OptionPortfolioBase:
             volatility=option_volatility,
             risk_free_rate=self.risk_free_rate,
             dividend_yield=self.dividend_yield,
+            exercise_style=exercise_style,
             option_type=option_type,
             valuation_date=self.valuation_date,
-            exercise_style=exercise_style,
             grid_resolution=FDGridResolution.STANDARD,
         )
         position = OptionPosition(
             option,
             quantity,
+            exercise_style=exercise_style,
             contract_size=effective_cs,
             custom_volatility=custom_volatility,
-            exercise_style=exercise_style,
             entry_spot=entry_spot,
             entry_date=entry_date,
         )

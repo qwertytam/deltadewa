@@ -15,7 +15,7 @@ import datetime
 from datetime import timedelta
 
 from deltadewa.analysis.volatility import get_volatility_stats
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.dashboard.volatility_profile import VolatilityProfileDisplay
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.console import ConsoleReporter
@@ -136,7 +136,11 @@ class TestVolatilityProfileOutput:
         VolatilityProfileDisplay(multi_position_portfolio).display()
         multi_out = capsys.readouterr().out
 
-        single = OptionPortfolio(spot_price=100.0, volatility=0.20)
+        single = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.20,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         single.add_position(
             strike_price=100.0,
             maturity_date=datetime.datetime.now(tz=datetime.UTC)

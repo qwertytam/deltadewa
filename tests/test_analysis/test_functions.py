@@ -16,7 +16,7 @@ from deltadewa.analysis.functions import (
     quick_carry_analysis,
     quick_risk_concentration,
 )
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.spot_utils import generate_spot_range
 
@@ -175,6 +175,7 @@ class TestGenerateSpotRange:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Test standard range
@@ -226,6 +227,7 @@ class TestModuleLevelFunctions:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -247,6 +249,7 @@ class TestModuleLevelFunctions:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -268,6 +271,7 @@ class TestModuleLevelFunctions:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -325,6 +329,7 @@ class TestCachingFunctions:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         hash1 = get_portfolio_state_hash(portfolio)
@@ -362,6 +367,7 @@ class TestScenarioGridCache:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -394,6 +400,7 @@ class TestScenarioGridCache:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -435,6 +442,7 @@ class TestScenarioGridCache:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -467,6 +475,7 @@ class TestScenarioGridCache:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -501,6 +510,7 @@ class TestScenarioGridCache:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(

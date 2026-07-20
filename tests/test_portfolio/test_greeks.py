@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -11,7 +11,10 @@ class TestGreeksMixin:
 
     def test_total_delta(self) -> None:
         """Test total_delta calculation."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -27,7 +30,10 @@ class TestGreeksMixin:
 
     def test_total_delta_multiple_positions(self) -> None:
         """Test total_delta with multiple positions."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Long call
         portfolio.add_position(
@@ -51,7 +57,10 @@ class TestGreeksMixin:
 
     def test_total_gamma(self) -> None:
         """Test total_gamma calculation."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -66,7 +75,10 @@ class TestGreeksMixin:
 
     def test_total_vega(self) -> None:
         """Test total_vega calculation."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -81,7 +93,10 @@ class TestGreeksMixin:
 
     def test_total_theta(self) -> None:
         """Test total_theta calculation."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -97,7 +112,10 @@ class TestGreeksMixin:
 
     def test_total_rho(self) -> None:
         """Test total_rho calculation."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -111,7 +129,11 @@ class TestGreeksMixin:
 
     def test_net_delta(self) -> None:
         """Test net_delta calculation."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -127,7 +149,11 @@ class TestGreeksMixin:
 
     def test_hedge_ratio(self) -> None:
         """Test hedge_ratio calculation."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -141,7 +167,11 @@ class TestGreeksMixin:
 
     def test_hedge_ratio_no_underlying(self) -> None:
         """Test hedge_ratio with no underlying position."""
-        portfolio = OptionPortfolio(underlying_quantity=0.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=0.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -155,7 +185,11 @@ class TestGreeksMixin:
 
     def test_delta_adjustment_needed(self) -> None:
         """Test delta_adjustment_needed calculation."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0, spot_price=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -170,7 +204,9 @@ class TestGreeksMixin:
 
     def test_greeks_empty_portfolio(self) -> None:
         """Test Greek calculations with empty portfolio."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         assert portfolio.total_delta() == 0.0
         assert portfolio.total_gamma() == 0.0
@@ -185,7 +221,11 @@ class TestAllGreeksBatch:
 
     def test_all_greeks_single_position(self) -> None:
         """Test all_greeks with single position."""
-        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            underlying_quantity=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -214,7 +254,11 @@ class TestAllGreeksBatch:
 
     def test_all_greeks_multiple_positions(self) -> None:
         """Test all_greeks with multiple positions."""
-        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=50.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            underlying_quantity=50.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Long call
         portfolio.add_position(
@@ -243,7 +287,10 @@ class TestAllGreeksBatch:
 
     def test_all_greeks_empty_portfolio(self) -> None:
         """Test all_greeks with empty portfolio."""
-        portfolio = OptionPortfolio(underlying_quantity=100.0)
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         greeks = portfolio.all_greeks()
 
@@ -256,7 +303,11 @@ class TestAllGreeksBatch:
 
     def test_summary_stats_uses_all_greeks(self) -> None:
         """Test that summary_stats uses all_greeks for efficiency."""
-        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            underlying_quantity=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
