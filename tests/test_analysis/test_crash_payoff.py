@@ -86,7 +86,11 @@ class TestPremiumWithBasis:
 
     def test_empty_portfolio_returns_current_basis(self) -> None:
         """No positions -> zero premium, MARK basis."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         premium, basis = _premium_with_basis(portfolio)
         assert premium == pytest.approx(0.0)
         assert basis == PremiumBasis.MARK
@@ -297,7 +301,11 @@ class TestNetProtectivePremium:
 
     def test_empty_portfolio_is_zero(self) -> None:
         """An empty portfolio has zero protective premium."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         assert _net_protective_premium(portfolio) == 0.0
 
 
@@ -378,7 +386,11 @@ class TestCrashPayoffRatio:
 
     def test_zero_premium_is_safe(self) -> None:
         """No long puts -> zero premium -> ratio is 0.0, no division error."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         portfolio.add_position(
             strike_price=105.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=60),
@@ -405,7 +417,11 @@ class TestCrashPayoffRatio:
 
     def test_empty_portfolio_is_safe(self) -> None:
         """An empty portfolio has zero premium and zero ratio."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
         assert (
             crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0) == 0.0
         )
@@ -428,7 +444,11 @@ class TestCrashScenarioTable:
 
     def test_empty_portfolio_rows_are_zero(self) -> None:
         """Rows for an empty portfolio have zero P&L and ratio."""
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
 
         rows = crash_scenario_table(portfolio, shocks=[-10.0, -25.0])
 

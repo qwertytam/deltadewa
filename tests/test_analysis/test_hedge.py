@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -17,6 +17,7 @@ class TestRecommendationsMixinHedge:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add a long call
@@ -57,6 +58,7 @@ class TestRecommendationsMixinHedge:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         portfolio.add_position(
@@ -81,6 +83,7 @@ class TestRecommendationsMixinHedge:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add positions
@@ -116,6 +119,7 @@ class TestRecommendationsMixinHedge:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         portfolio.add_position(
@@ -151,6 +155,7 @@ class TestRecommendationsMixinHedge:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add multiple positions

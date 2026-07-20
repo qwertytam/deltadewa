@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import matplotlib
 import matplotlib.pyplot as plt
 
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.visualization.base import OptionCharts
 
@@ -17,7 +17,10 @@ class TestThetaChartsMixin:
 
     def test_plot_theta_analysis_empty(self) -> None:
         """Test plot_theta_analysis with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         charts = OptionCharts(portfolio)
 
         # Empty portfolio will raise KeyError, which is expected behavior
@@ -33,7 +36,10 @@ class TestThetaChartsMixin:
 
     def test_plot_theta_analysis_with_positions(self) -> None:
         """Test plot_theta_analysis with positions."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -60,7 +66,10 @@ class TestThetaChartsMixin:
 
     def test_plot_theta_analysis_custom_projection(self) -> None:
         """Test plot_theta_analysis with custom projection days."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(
@@ -78,7 +87,10 @@ class TestThetaChartsMixin:
 
     def test_prepare_theta_data(self) -> None:
         """Test _prepare_theta_data."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
 
         portfolio.add_position(

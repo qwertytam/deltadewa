@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -12,7 +12,9 @@ class TestCarryMixin:
 
     def test_calculate_carry_metrics_empty(self) -> None:
         """Test carry metrics on empty portfolio."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         metrics = analyzer.calculate_carry_metrics()
@@ -31,6 +33,7 @@ class TestCarryMixin:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add a short call (should have positive theta)
@@ -60,7 +63,9 @@ class TestCarryMixin:
 
     def test_empty_carry_metrics(self) -> None:
         """Test _empty_carry_metrics returns correct structure."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         # pylint: disable=protected-access
@@ -86,6 +91,7 @@ class TestCarryMixin:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add positions
@@ -121,7 +127,9 @@ class TestCarryMixin:
 
     def test_create_theta_summary_table_empty(self) -> None:
         """Test theta summary table with empty portfolio."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         summary_table = analyzer.create_theta_summary_table()

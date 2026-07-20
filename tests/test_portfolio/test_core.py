@@ -34,7 +34,9 @@ class TestOptionPortfolioBase:
 
     def test_add_position(self) -> None:
         """Test adding a position to the portfolio."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -48,7 +50,9 @@ class TestOptionPortfolioBase:
 
     def test_add_position_with_custom_volatility(self) -> None:
         """Test adding position with custom volatility."""
-        portfolio = OptionPortfolioBase(volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            volatility=0.2, default_exercise_style=ExerciseStyle.AMERICAN
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -68,6 +72,7 @@ class TestOptionPortfolioBase:
         portfolio = OptionPortfolioBase(
             spot_price=123.0,
             valuation_date=valuation_date,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -81,7 +86,10 @@ class TestOptionPortfolioBase:
 
     def test_add_position_explicit_entry_spot_and_date_override(self) -> None:
         """Test explicit entry_spot/entry_date override the portfolio's."""
-        portfolio = OptionPortfolioBase(spot_price=123.0)
+        portfolio = OptionPortfolioBase(
+            spot_price=123.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         entry_date = datetime.now(tz=UTC) - timedelta(days=10)
 
         portfolio.add_position(
@@ -97,7 +105,10 @@ class TestOptionPortfolioBase:
 
     def test_remove_position(self) -> None:
         """Test removing a position."""
-        portfolio = OptionPortfolioBase(symbol="TEST")
+        portfolio = OptionPortfolioBase(
+            symbol="TEST",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -120,7 +131,9 @@ class TestOptionPortfolioBase:
 
     def test_remove_position_invalid_index(self) -> None:
         """Test removing position with invalid index."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         try:
             portfolio.remove_position(0)
@@ -130,7 +143,11 @@ class TestOptionPortfolioBase:
 
     def test_add_position_returns_appended_position(self) -> None:
         """add_position returns the object that was appended to positions."""
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         returned = portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
@@ -143,7 +160,10 @@ class TestOptionPortfolioBase:
 
     def test_update_position(self) -> None:
         """Test updating a position."""
-        portfolio = OptionPortfolioBase(symbol="TEST")
+        portfolio = OptionPortfolioBase(
+            symbol="TEST",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -167,7 +187,11 @@ class TestOptionPortfolioBase:
         table (to_dict) to show the old value, and update_market_conditions to
         silently revert the change when it recreated OptionValuation instances.
         """
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -206,13 +230,16 @@ class TestOptionPortfolioBase:
             "exercise_style reverted after update_market_conditions"
         )
         assert pos.option.exercise_style == ExerciseStyle.EUROPEAN, (
-            "OptionValuation.exercise_style reverted after "
-            "update_market_conditions"
+            "Valuation.exercise_style reverted after update_market_conditions"
         )
 
     def test_update_position_preserves_position_id(self) -> None:
         """update_position keeps same object; position_id is stable."""
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
@@ -232,7 +259,10 @@ class TestOptionPortfolioBase:
 
     def test_clear_positions(self) -> None:
         """Test clearing all positions."""
-        portfolio = OptionPortfolioBase(symbol="TEST")
+        portfolio = OptionPortfolioBase(
+            symbol="TEST",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -255,7 +285,10 @@ class TestOptionPortfolioBase:
 
     def test_total_value(self) -> None:
         """Test total_value calculation."""
-        portfolio = OptionPortfolioBase(spot_price=100.0)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -281,6 +314,7 @@ class TestOptionPortfolioBase:
         portfolio = OptionPortfolioBase(
             underlying_quantity=100,
             spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -298,7 +332,9 @@ class TestOptionPortfolioBase:
 
     def test_get_positions(self) -> None:
         """Test get_positions returns proper format."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -314,7 +350,9 @@ class TestOptionPortfolioBase:
 
     def test_to_dataframe(self) -> None:
         """Test to_dataframe conversion."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -330,14 +368,18 @@ class TestOptionPortfolioBase:
 
     def test_to_dataframe_empty(self) -> None:
         """Test to_dataframe with empty portfolio."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         df = portfolio.to_dataframe()
         assert len(df) == 0
 
     def test_summary_stats(self) -> None:
         """Test summary_stats returns all required fields."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -362,7 +404,9 @@ class TestOptionPortfolioBase:
 
     def test_summary(self) -> None:
         """Test summary string generation."""
-        portfolio = OptionPortfolio(symbol="TEST")
+        portfolio = OptionPortfolio(
+            symbol="TEST", default_exercise_style=ExerciseStyle.AMERICAN
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -378,7 +422,10 @@ class TestOptionPortfolioBase:
 
     def test_summary_market(self) -> None:
         """Test summary_market string generation."""
-        portfolio = OptionPortfolioBase(symbol="TEST")
+        portfolio = OptionPortfolioBase(
+            symbol="TEST",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         summary = portfolio.summary_market()
         assert isinstance(summary, str)
@@ -392,6 +439,7 @@ class TestOptionPortfolioBase:
             spot_price=100.0,
             volatility=0.2,
             symbol="TEST",
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -411,7 +459,10 @@ class TestOptionPortfolioBase:
 
     def test_set_volatility(self) -> None:
         """Test set_volatility method."""
-        portfolio = OptionPortfolioBase(volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         portfolio.add_position(
             strike_price=100.0,
@@ -433,7 +484,11 @@ class TestOptionPortfolioBase:
         returned the value at the *previous* vol.
         """
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
@@ -443,7 +498,11 @@ class TestOptionPortfolioBase:
         price_before = portfolio.positions[0].option.price()
 
         # Reference leg built directly at the higher vol for comparison.
-        reference = OptionPortfolioBase(spot_price=100.0, volatility=0.5)
+        reference = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.5,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         reference.add_position(
             strike_price=100.0,
             maturity_date=maturity,
@@ -467,7 +526,11 @@ class TestOptionPortfolioBase:
         its vol quote and its price when the portfolio vol moves.
         """
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=maturity,
@@ -493,7 +556,11 @@ class TestOptionPortfolioBase:
         OptionPosition; the old rebuild dropped entry_spot/date/premium and
         minted a fresh position_id, silently losing cost basis and identity.
         """
-        portfolio = OptionPortfolioBase(spot_price=100.0, volatility=0.2)
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         entry_date = datetime(2026, 1, 2, tzinfo=UTC)
         portfolio.add_position(
             strike_price=100.0,
@@ -518,7 +585,9 @@ class TestOptionPortfolioBase:
 
     def test_get_symbol(self) -> None:
         """Test get_symbol method."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         # Empty portfolio
         assert portfolio.get_symbol() == "UNKNOWN"
@@ -538,7 +607,9 @@ class TestOptionPortfolioBase:
 
     def test_monte_carlo_results_property(self) -> None:
         """Test monte_carlo_results property."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         assert portfolio.monte_carlo_results is None
 
@@ -549,7 +620,9 @@ class TestOptionPortfolioBase:
 
     def test_repr(self) -> None:
         """Test __repr__ method."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         repr_str = repr(portfolio)
         assert isinstance(repr_str, str)
@@ -561,7 +634,9 @@ class TestDefaultExerciseStyle:
 
     def test_defaults_to_american(self) -> None:
         """Test that default_exercise_style defaults to AMERICAN."""
-        portfolio = OptionPortfolioBase()
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
         assert portfolio.default_exercise_style == ExerciseStyle.AMERICAN
 
@@ -643,7 +718,11 @@ class TestPortfolioCore(unittest.TestCase):
     def setUp(self) -> None:
         """Set up a basic portfolio for testing."""
         # Initialize with explicit Symbol
-        self.portfolio = OptionPortfolio(symbol="TSLA", spot_price=200.0)
+        self.portfolio = OptionPortfolio(
+            symbol="TSLA",
+            spot_price=200.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
 
     def test_portfolio_symbol_storage(self) -> None:
         """Test that symbol is stored at portfolio level."""

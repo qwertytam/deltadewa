@@ -195,7 +195,11 @@ class TestSetupDashboardIpsConfig:
 
     def test_matching_instrument_sets_default_exercise_style(self) -> None:
         """Test that a matching symbol seeds default_exercise_style."""
-        portfolio = OptionPortfolio(spot_price=5000.0, symbol="SPX")
+        portfolio = OptionPortfolio(
+            spot_price=5000.0,
+            symbol="SPX",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         ips = _make_ips_config("SPX", ExerciseStyle.EUROPEAN)
         globals_dict = {"portfolio": _with_position(portfolio)}
 
@@ -217,7 +221,11 @@ class TestSetupDashboardIpsConfig:
 
     def test_non_matching_instrument_leaves_default_american(self) -> None:
         """Test that a non-matching symbol leaves the AMERICAN default."""
-        portfolio = OptionPortfolio(spot_price=400.0, symbol="SPY")
+        portfolio = OptionPortfolio(
+            spot_price=400.0,
+            symbol="SPY",
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         ips = _make_ips_config("SPX", ExerciseStyle.EUROPEAN)
         globals_dict = {"portfolio": _with_position(portfolio)}
 

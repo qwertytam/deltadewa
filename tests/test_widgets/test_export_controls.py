@@ -24,6 +24,7 @@ positions:
     strike_price: 95.0
     maturity_days: 30
     quantity: 50
+    exercise_style: "european"
 """
 
 

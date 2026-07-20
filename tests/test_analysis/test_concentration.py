@@ -6,7 +6,7 @@
 from datetime import UTC, datetime, timedelta
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -15,7 +15,9 @@ class TestRecommendationsMixinConcentration:
 
     def test_analyze_risk_concentration_empty(self) -> None:
         """Test concentration analysis on empty portfolio."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         result = analyzer.analyze_risk_concentration()
@@ -33,6 +35,7 @@ class TestRecommendationsMixinConcentration:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add positions at same strike (concentrated)
@@ -72,6 +75,7 @@ class TestRecommendationsMixinConcentration:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -94,6 +98,7 @@ class TestRecommendationsMixinConcentration:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add positions at different strikes
@@ -114,7 +119,9 @@ class TestRecommendationsMixinConcentration:
 
     def test_empty_concentration(self) -> None:
         """Test _empty_concentration returns correct structure."""
-        portfolio = OptionPortfolio()
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         # pylint: disable=protected-access

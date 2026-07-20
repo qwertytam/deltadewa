@@ -8,7 +8,7 @@ from deltadewa.analysis.volatility import (
     get_volatility_stats,
     restore_volatilities,
 )
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -32,6 +32,7 @@ class TestCalculatePortfolioAvgVolatility:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         portfolio.add_position(
@@ -52,6 +53,7 @@ class TestCalculatePortfolioAvgVolatility:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add positions with different volatilities and vegas
@@ -82,6 +84,7 @@ class TestCalculatePortfolioAvgVolatility:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add long and short positions with same strike/maturity
@@ -112,6 +115,7 @@ class TestCalculatePortfolioAvgVolatility:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         # Add deep ITM position (very low vega)
@@ -139,6 +143,7 @@ class TestApplyProportionalVolatilityShift:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -188,6 +193,7 @@ class TestApplyProportionalVolatilityShift:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -227,6 +233,7 @@ class TestApplyProportionalVolatilityShift:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.01,  # Very small but non-zero to avoid QuantLib issues
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -256,6 +263,7 @@ class TestApplyProportionalVolatilityShift:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -287,6 +295,7 @@ class TestRestoreVolatilities:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -339,6 +348,7 @@ class TestRestoreVolatilities:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -363,6 +373,7 @@ class TestRestoreVolatilities:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -402,6 +413,7 @@ class TestGetVolatilityStats:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -433,6 +445,7 @@ class TestGetVolatilityStats:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -459,6 +472,7 @@ class TestGetVolatilityStats:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -500,6 +514,7 @@ class TestGetVolatilityStats:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(

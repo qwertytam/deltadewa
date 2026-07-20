@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -18,6 +18,7 @@ class TestRiskRewardMixin:
             spot_price=100.0,
             volatility=0.3,
             risk_free_rate=0.05,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -55,6 +56,7 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -78,6 +80,7 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -101,6 +104,7 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
@@ -141,7 +145,9 @@ class TestRiskRewardMixin:
 
     def test_risk_reward_analysis_empty_portfolio(self) -> None:
         """Test risk_reward_analysis with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0, default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         analysis = analyzer.risk_reward_analysis(num_simulations=100)
@@ -156,6 +162,7 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -181,6 +188,7 @@ class TestRiskRewardMixin:
             spot_price=100.0,
             volatility=0.3,
             underlying_quantity=100.0,  # Add underlying for total section
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -203,7 +211,9 @@ class TestRiskRewardMixin:
 
     def test_format_risk_reward_summary_empty_portfolio(self) -> None:
         """Test format_risk_reward_summary with empty portfolio."""
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0, default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         summary = analyzer.format_risk_reward_summary()
@@ -217,6 +227,7 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -242,6 +253,7 @@ class TestRiskRewardMixin:
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
         portfolio.add_position(
@@ -277,7 +289,11 @@ class TestFormatRiskRewardSummaryCharacterization:
         total section: net_debit > 0 so the loss line gets a pct
         suffix; profit is unlimited so no risk/reward ratio line.
         """
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.3)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=100.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
@@ -316,7 +332,11 @@ class TestFormatRiskRewardSummaryCharacterization:
         """Unlimited loss ('naked short positions'), bounded profit
         with no pct suffix since net_debit < 0 (net credit).
         """
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.3)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
@@ -363,6 +383,7 @@ class TestFormatRiskRewardSummaryCharacterization:
             spot_price=100.0,
             volatility=0.3,
             underlying_quantity=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
         portfolio.add_position(
@@ -422,6 +443,7 @@ class TestFormatRiskRewardSummaryCharacterization:
             spot_price=100.0,
             volatility=0.3,
             underlying_quantity=-50.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         analyzer = PortfolioAnalyzer(portfolio)
 
@@ -469,6 +491,7 @@ class TestFormatRiskRewardSummaryCharacterization:
             spot_price=100.0,
             volatility=0.3,
             underlying_quantity=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
         )
         portfolio.add_position(
             strike_price=95.0,
@@ -519,7 +542,11 @@ class TestFormatRiskRewardSummaryCharacterization:
         (profit unlimited comes from the long call leg), net_debit < 0.
         """
         maturity = datetime.now(tz=UTC) + timedelta(days=30)
-        portfolio = OptionPortfolio(spot_price=100.0, volatility=0.3)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=maturity,
@@ -563,7 +590,9 @@ class TestFormatRiskRewardSummaryCharacterization:
         """Empty portfolio: net_debit is 0 (credit branch), no
         breakevens, no total section, no ratio section.
         """
-        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio = OptionPortfolio(
+            spot_price=100.0, default_exercise_style=ExerciseStyle.AMERICAN
+        )
         analyzer = PortfolioAnalyzer(portfolio)
 
         summary = analyzer.format_risk_reward_summary()

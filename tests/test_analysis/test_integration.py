@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.constants import OptionType
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
 # pylint: disable=protected-access
@@ -23,6 +23,7 @@ class TestPortfolioAnalyzerIntegration:
             volatility=0.3,
             risk_free_rate=0.05,
             dividend_yield=0.01,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add diverse positions
@@ -111,6 +112,7 @@ class TestPortfolioAnalyzerIntegration:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
@@ -150,6 +152,7 @@ class TestPortfolioAnalyzerIntegration:
             underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.3,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Add positions at different maturities
@@ -190,6 +193,7 @@ class TestPortfolioAnalyzerIntegration:
             spot_price=150.0,
             volatility=0.25,
             risk_free_rate=0.04,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
         # Build a covered call + protective put strategy
