@@ -103,7 +103,48 @@ class LadderRung:
 
 
 StrikeLadder = list[LadderRung]
-"""A list of :class:`LadderRung` objects, one per (delta, maturity) cell."""
+"""List of :class:`LadderRung`, one per solved (delta, maturity) cell."""
+
+
+@dataclass(frozen=True)
+class UnsolvableRung:
+    """A requested (target_delta, maturity) cell with no solvable strike.
+
+    Surfaced explicitly — never silently dropped — so a rung whose target
+    delta falls outside the solvable OTM range (e.g. ``target_delta >= 0.5``,
+    which is ATM/ITM and outside the ``[spot * 0.40, spot * 0.9999]`` solver
+    bracket) is visible in the ladder output with a reason, rather than just
+    missing from the table.
+
+    Attributes:
+        target_delta: Requested put-delta magnitude that could not be solved.
+        maturity_years: Requested maturity for the cell, in years.
+        reason: Human-readable explanation of why no strike was found.
+
+    """
+
+    target_delta: float
+    maturity_years: float
+    reason: str
+
+
+@dataclass(frozen=True)
+class StrikeLadderResult:
+    """The outcome of :func:`build_strike_ladder`.
+
+    Separates the solved rungs from the cells that could not be solved so the
+    latter are surfaced explicitly instead of being dropped without a trace.
+
+    Attributes:
+        rungs: Solved rungs, one per (delta, maturity) cell whose strike was
+            found, in delta-major order.
+        unsolvable: Cells whose strike could not be solved, in the same
+            delta-major order. Empty when every requested cell solved.
+
+    """
+
+    rungs: StrikeLadder
+    unsolvable: list[UnsolvableRung]
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +243,7 @@ def build_strike_ladder(
     target_deltas: Sequence[float],
     maturities_years: Sequence[float],
     vol: float | None = None,
-) -> StrikeLadder:
+) -> StrikeLadderResult:
     """Build a full strike/maturity ladder sized against the IPS risk budget.
 
     For every ``(delta, maturity)`` pair (outer loop: *target_deltas*; inner
@@ -229,9 +270,11 @@ def build_strike_ladder(
             ``portfolio.volatility`` when ``None``.
 
     Returns:
-        :data:`StrikeLadder` — a flat list of :class:`LadderRung` in
-        delta-major order (all maturities for the first delta, then all for
-        the second, etc.).
+        :class:`StrikeLadderResult` — ``rungs`` is a flat list of
+        :class:`LadderRung` in delta-major order (all maturities for the first
+        delta, then all for the second, etc.) for every cell whose strike
+        solved; ``unsolvable`` lists the cells whose strike could not be solved
+        (surfaced explicitly, never silently dropped).
 
     Raises:
         ValueError: When the book notional is 0 (no underlying position);
@@ -260,6 +303,7 @@ def build_strike_ladder(
     conv = ips_config.convexity
 
     rungs: StrikeLadder = []
+    unsolvable: list[UnsolvableRung] = []
     for delta, maturity in itertools.product(target_deltas, maturities_years):
         strike = strike_for_delta(
             portfolio,
@@ -268,6 +312,18 @@ def build_strike_ladder(
             vol=vol,
         )
         if strike is None:
+            unsolvable.append(
+                UnsolvableRung(
+                    target_delta=delta,
+                    maturity_years=maturity,
+                    reason=(
+                        f"no OTM strike solves to |put delta| "
+                        f"{delta:.2f} at {maturity:.2f}y — target is "
+                        f"outside the solvable (0, 0.5) delta range "
+                        f"(>= 0.5 is ATM/ITM, off the solver bracket)"
+                    ),
+                ),
+            )
             continue
         metrics = evaluate_candidate(
             portfolio,
@@ -315,4 +371,4 @@ def build_strike_ladder(
                 ),
             ),
         )
-    return rungs
+    return StrikeLadderResult(rungs=rungs, unsolvable=unsolvable)

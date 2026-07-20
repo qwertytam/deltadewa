@@ -16,6 +16,7 @@ from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
+    IpsConvexity,
     IpsMarketEnvironment,
 )
 from deltadewa.marketdata._errors import MarketDataError
@@ -111,8 +112,7 @@ class HedgeHealthDashboard:
         convexity_cliff_days: int = 180,
         config: dict[str, Any] | None = None,
         *,
-        crash_scenario_pct: float | None = None,
-        crash_vol_shock: float = 0.0,
+        crash_convexity: IpsConvexity | None = None,
         target_delta_ratio_pct: float | None = None,
         ips_market_environment: IpsMarketEnvironment | None = None,
         market_data: MarketDataProvider | None = None,
@@ -136,16 +136,12 @@ class HedgeHealthDashboard:
                 ``SessionContext.dashboard_config`` from ``start_session``.
                 ``display_config_loader()`` remains available afterwards
                 for ad hoc overrides on top of this.
-            crash_scenario_pct: Signed crash move as a percent of current spot,
-                single-sourced from ``IpsConvexity.crash_scenario_pct`` (pass
-                ``ctx.ips_config.convexity.crash_scenario_pct``). When ``None``
-                (no IPS), the crash-convexity and hedge-success gauges read
-                ``0.0`` — the crash scenario is policy and is never hardcoded
-                here.
-            crash_vol_shock: Flat additive crash vol bump as a decimal,
-                single-sourced from ``IpsConvexity.crash_vol_shock`` (pass
-                ``ctx.ips_config.convexity.crash_vol_shock``). Used to reprice
-                the crash-convexity gauge. Defaults to ``0.0`` (spot-only).
+            crash_convexity: The IPS crash policy (pass
+                ``ctx.ips_config.convexity``). Bundles the crash scenario and
+                its vol shock so they can never diverge. When ``None`` (no
+                IPS), the crash-convexity and hedge-success gauges are DISABLED
+                and read ``0.0`` — the crash scenario is policy and is never
+                hardcoded here, and the gauge never silently reprices spot-only.
             target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
                 single-sourced from ``IpsTriggers.target_delta_ratio_pct`` (pass
                 ``ctx.ips_config.triggers.target_delta_ratio_pct``). When
@@ -164,8 +160,7 @@ class HedgeHealthDashboard:
         """
         self.portfolio = portfolio
         self.cumulative_carry_paid = cumulative_carry_paid
-        self._crash_scenario_pct = crash_scenario_pct
-        self._crash_vol_shock = crash_vol_shock
+        self._crash_convexity = crash_convexity
         self._target_delta_ratio_pct = target_delta_ratio_pct
         self._market_data = market_data
 
@@ -308,8 +303,7 @@ class HedgeHealthDashboard:
             historical_vol_low=params["historical_vol_low"],
             historical_vol_high=params["historical_vol_high"],
             convexity_cliff_days=params["convexity_cliff_days"],
-            crash_scenario_pct=self._crash_scenario_pct,
-            crash_vol_shock=self._crash_vol_shock,
+            crash=self._crash_convexity,
             target_delta_ratio_pct=self._target_delta_ratio_pct,
             vix_history=self._fetch_vix_history(),
         )

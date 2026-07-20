@@ -295,7 +295,7 @@ class TestCrashPayoffRatio:
         """Ratio matches the repriced long-put value / premium directly.
 
         Uses the shared crash-repricing helper as the oracle — the repriced
-        hedge value of the long puts (hedge-only, no vol shock by default),
+        hedge value of the long puts (hedge-only, spot-only vol_shock=0.0),
         over the mark-fallback premium.
         """
         portfolio = _make_long_put_portfolio()
@@ -308,7 +308,7 @@ class TestCrashPayoffRatio:
             positions=_long_puts(portfolio),
         )
 
-        ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0)
+        ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0)
 
         assert ratio == pytest.approx(expected_repriced / expected_premium)
 
@@ -317,8 +317,16 @@ class TestCrashPayoffRatio:
         unhedged_book = _make_long_put_portfolio(underlying_quantity=0.0)
         hedged_book = _make_long_put_portfolio(underlying_quantity=5000.0)
 
-        ratio_no_book = crash_payoff_ratio(unhedged_book, crash_pct=-25.0)
-        ratio_with_book = crash_payoff_ratio(hedged_book, crash_pct=-25.0)
+        ratio_no_book = crash_payoff_ratio(
+            unhedged_book,
+            crash_pct=-25.0,
+            vol_shock=0.0,
+        )
+        ratio_with_book = crash_payoff_ratio(
+            hedged_book,
+            crash_pct=-25.0,
+            vol_shock=0.0,
+        )
 
         assert ratio_no_book == pytest.approx(ratio_with_book)
 
@@ -346,7 +354,12 @@ class TestCrashPayoffRatio:
             positions=_long_puts(portfolio),
         )
 
-        ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0, premium=500.0)
+        ratio = crash_payoff_ratio(
+            portfolio,
+            crash_pct=-25.0,
+            vol_shock=0.0,
+            premium=500.0,
+        )
 
         assert ratio == pytest.approx(expected_repriced / 500.0)
 
@@ -360,20 +373,41 @@ class TestCrashPayoffRatio:
             option_type=OptionType.CALL,
         )
 
-        assert crash_payoff_ratio(portfolio, crash_pct=-25.0) == 0.0
+        assert (
+            crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0) == 0.0
+        )
 
     def test_negative_explicit_premium_is_safe(self) -> None:
         """A negative explicit premium also returns 0.0, not a sign flip."""
         portfolio = _make_long_put_portfolio()
 
-        ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0, premium=-1.0)
+        ratio = crash_payoff_ratio(
+            portfolio,
+            crash_pct=-25.0,
+            vol_shock=0.0,
+            premium=-1.0,
+        )
 
         assert ratio == 0.0
 
     def test_empty_portfolio_is_safe(self) -> None:
         """An empty portfolio has zero premium and zero ratio."""
         portfolio = OptionPortfolio(spot_price=100.0, volatility=0.2)
-        assert crash_payoff_ratio(portfolio, crash_pct=-25.0) == 0.0
+        assert (
+            crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0) == 0.0
+        )
+
+    def test_vol_shock_is_required(self) -> None:
+        """vol_shock has no default — it can't silently diverge to spot-only.
+
+        Regression for the diverging-knobs trap: the crash scenario is always
+        supplied (``crash_pct`` is required), so the vol shock must be too —
+        pass ``0.0`` explicitly for a spot-only crash. Omitting it is a
+        ``TypeError``, never a silent spot-only reprice.
+        """
+        portfolio = _make_long_put_portfolio()
+        with pytest.raises(TypeError):
+            crash_payoff_ratio(portfolio, crash_pct=-25.0)
 
 
 class TestCrashScenarioTable:

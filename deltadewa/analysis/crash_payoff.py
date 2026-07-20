@@ -191,8 +191,8 @@ def crash_payoff_ratio(
     portfolio: OptionPortfolio,
     *,
     crash_pct: float,
+    vol_shock: float,
     premium: float | None = None,
-    vol_shock: float = 0.0,
 ) -> float:
     """Repriced hedge payoff at a crash shock, as a multiple of premium paid.
 
@@ -203,11 +203,13 @@ def crash_payoff_ratio(
         portfolio: Portfolio to evaluate.
         crash_pct: Signed shock percent (e.g. -25.0 for a 25% decline).
             Converted internally to a spot multiplier (-25.0 -> 0.75).
+        vol_shock: Flat additive crash vol bump as a decimal. **Required** —
+            single-sourced from ``IpsConvexity.crash_vol_shock`` so it can
+            never silently diverge from the crash scenario; pass ``0.0``
+            explicitly for a spot-only crash when no IPS shock applies.
         premium: Premium paid for the hedge in dollars.  Defaults to
             ``_premium_with_basis(portfolio)`` (entry cost when available,
             current mark otherwise) when not supplied.
-        vol_shock: Flat additive crash vol bump as a decimal (default 0.0),
-            single-sourced from ``IpsConvexity.crash_vol_shock``.
 
     Returns:
         repriced_payoff / premium, or 0.0 if premium is zero or negative —

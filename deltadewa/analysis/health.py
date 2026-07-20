@@ -10,6 +10,7 @@ from deltadewa.analysis.crash_repricing import crash_convexity_pct
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
+    IpsConvexity,
 )
 
 if TYPE_CHECKING:
@@ -458,8 +459,7 @@ class HealthMixin:
         historical_vol_high: float = DEFAULT_VOL_REGIME_HIGH,
         convexity_cliff_days: int = 180,
         *,
-        crash_scenario_pct: float | None = None,
-        crash_vol_shock: float = 0.0,
+        crash: IpsConvexity | None = None,
         target_delta_ratio_pct: float | None = None,
         vix_history: Sequence[float] | None = None,
         vol_regime_lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
@@ -474,14 +474,14 @@ class HealthMixin:
                 normalized fallback (default: :data:`DEFAULT_VOL_REGIME_HIGH`)
             convexity_cliff_days: Days threshold for high-gamma region
             (default: 180)
-            crash_scenario_pct: Signed crash move as a percent of current spot,
-                single-sourced from ``IpsConvexity.crash_scenario_pct``. When
-                ``None`` (no IPS supplied), the crash-derived gauges
-                (crash convexity, hedge success) read ``0.0`` rather than
-                fall back to a hardcoded scenario.
-            crash_vol_shock: Flat additive crash vol bump as a decimal,
-                single-sourced from ``IpsConvexity.crash_vol_shock`` and used
-                to reprice the crash-convexity gauge. Defaults to ``0.0``.
+            crash: The IPS crash policy (pass ``ips_config.convexity``). The
+                crash *scenario* and its *vol shock* are bundled here so they
+                can never diverge — supplying a scenario always carries the
+                matching shock. When ``None`` (no IPS supplied), the
+                crash-derived gauges (crash convexity, hedge success) are
+                DISABLED and read ``0.0``, rather than silently reprice
+                spot-only against a fabricated scenario or a defaulted zero
+                shock. Both are single-sourced from ``IpsConvexity``.
             target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
                 single-sourced from ``IpsTriggers.target_delta_ratio_pct``.
                 When ``None`` (no IPS supplied), ``delta_drift_pct`` is ``None``
@@ -510,17 +510,17 @@ class HealthMixin:
             - hedge_success_pct: Hedge P&L vs carry paid
 
         """
-        if crash_scenario_pct is None:
+        if crash is None:
             crash_convexity_value = 0.0
             hedge_success_pct = 0.0
         else:
             crash_convexity_value = self.calculate_crash_convexity_pct(
-                crash_scenario_pct,
-                crash_vol_shock,
+                crash.crash_scenario_pct,
+                crash.crash_vol_shock,
             )
             hedge_success_pct = self.calculate_hedge_success_pct(
                 cumulative_carry_paid,
-                crash_scenario_pct,
+                crash.crash_scenario_pct,
             )
 
         if target_delta_ratio_pct is None:

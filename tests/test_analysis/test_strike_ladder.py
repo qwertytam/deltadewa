@@ -6,6 +6,8 @@ import pytest
 
 from deltadewa.analysis.strike_ladder import (
     LadderRung,
+    StrikeLadderResult,
+    UnsolvableRung,
     build_strike_ladder,
     strike_for_delta,
 )
@@ -203,8 +205,8 @@ class TestStrikeForDelta:
 class TestBuildStrikeLadder:
     """Tests for build_strike_ladder."""
 
-    def test_returns_strike_ladder_type(self) -> None:
-        """build_strike_ladder returns a list (StrikeLadder)."""
+    def test_returns_strike_ladder_result_type(self) -> None:
+        """build_strike_ladder returns a StrikeLadderResult (rungs + gaps)."""
         portfolio = _make_spx_portfolio()
         ips = _make_ips()
         result = build_strike_ladder(
@@ -213,12 +215,14 @@ class TestBuildStrikeLadder:
             target_deltas=[0.10],
             maturities_years=[0.25],
         )
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert isinstance(result[0], LadderRung)
+        assert isinstance(result, StrikeLadderResult)
+        assert isinstance(result.rungs, list)
+        assert len(result.rungs) == 1
+        assert isinstance(result.rungs[0], LadderRung)
+        assert result.unsolvable == []
 
     def test_length_equals_product_of_inputs(self) -> None:
-        """Result length == len(target_deltas) * len(maturities_years)."""
+        """Solved-rung count == len(target_deltas) * len(maturities_years)."""
         portfolio = _make_spx_portfolio()
         ips = _make_ips()
         deltas = [0.05, 0.10, 0.15]
@@ -228,7 +232,7 @@ class TestBuildStrikeLadder:
             ips,
             target_deltas=deltas,
             maturities_years=maturities,
-        )
+        ).rungs
         assert len(result) == len(deltas) * len(maturities)
 
     def test_rung_target_delta_matches_input(self) -> None:
@@ -241,7 +245,7 @@ class TestBuildStrikeLadder:
             ips,
             target_deltas=deltas,
             maturities_years=[0.25],
-        )
+        ).rungs
         assert result[0].target_delta == pytest.approx(0.05)
         assert result[1].target_delta == pytest.approx(0.10)
 
@@ -255,7 +259,7 @@ class TestBuildStrikeLadder:
             ips,
             target_deltas=[0.10],
             maturities_years=maturities,
-        )
+        ).rungs
         assert result[0].maturity_years == pytest.approx(0.25)
         assert result[1].maturity_years == pytest.approx(0.50)
 
@@ -269,7 +273,7 @@ class TestBuildStrikeLadder:
             ips,
             target_deltas=deltas,
             maturities_years=[0.25],
-        )
+        ).rungs
         for rung in result:
             assert abs(rung.metrics.put_delta) == pytest.approx(
                 rung.target_delta,
@@ -285,7 +289,7 @@ class TestBuildStrikeLadder:
             ips,
             target_deltas=[0.05, 0.10, 0.15],
             maturities_years=[0.25, 0.50],
-        )
+        ).rungs
         for rung in result:
             expected = rung.within_budget and rung.meets_convexity
             assert rung.meets_target_within_budget == expected
@@ -298,8 +302,8 @@ class TestBuildStrikeLadder:
             "target_deltas": [0.10],
             "maturities_years": [0.25],
         }
-        r1 = build_strike_ladder(portfolio, ips, **kwargs)
-        r2 = build_strike_ladder(portfolio, ips, **kwargs)
+        r1 = build_strike_ladder(portfolio, ips, **kwargs).rungs
+        r2 = build_strike_ladder(portfolio, ips, **kwargs).rungs
         assert r1[0].metrics.strike == pytest.approx(r2[0].metrics.strike)
         assert r1[0].contracts_needed == r2[0].contracts_needed
 
@@ -312,7 +316,7 @@ class TestBuildStrikeLadder:
             ips,
             target_deltas=[0.10],
             maturities_years=[0.25],
-        )
+        ).rungs
         expected_budget = 2.0 / 100.0 * (5000.0 * 100.0)
         assert result[0].carry_budget == pytest.approx(expected_budget)
 
@@ -335,7 +339,7 @@ class TestBuildStrikeLadder:
             ips,
             target_deltas=[0.10],
             maturities_years=[0.25],
-        )
+        ).rungs
         assert len(result) == 1
         rung = result[0]
 
@@ -369,8 +373,13 @@ class TestBuildStrikeLadder:
         assert rung.within_budget == sizing.within_budget
         assert rung.carry_headroom == pytest.approx(sizing.carry_headroom)
 
-    def test_no_solution_rung_skipped(self) -> None:
-        """Unsolvable target_delta produces no rung — no raise."""
+    def test_unsolvable_rung_surfaced_not_dropped(self) -> None:
+        """An unsolvable target_delta is surfaced explicitly, not dropped.
+
+        A 0.50 delta is ATM (outside the OTM solver bracket), so no strike
+        solves. It must appear in ``unsolvable`` with its (delta, maturity)
+        and a reason — never silently vanish from the ladder.
+        """
         portfolio = _make_spx_portfolio()
         ips = _make_ips()
         result = build_strike_ladder(
@@ -379,7 +388,35 @@ class TestBuildStrikeLadder:
             target_deltas=[0.50],
             maturities_years=[0.25],
         )
-        assert result == []
+        assert result.rungs == []
+        assert len(result.unsolvable) == 1
+        gap = result.unsolvable[0]
+        assert isinstance(gap, UnsolvableRung)
+        assert gap.target_delta == pytest.approx(0.50)
+        assert gap.maturity_years == pytest.approx(0.25)
+        assert gap.reason
+
+    def test_solvable_and_unsolvable_partition(self) -> None:
+        """Mixed request: solvable cells rung, unsolvable ones surfaced.
+
+        Every requested (delta, maturity) cell lands in exactly one of the two
+        buckets — none is dropped.
+        """
+        portfolio = _make_spx_portfolio()
+        ips = _make_ips()
+        deltas = [0.10, 0.50]  # 0.10 solvable, 0.50 ATM/unsolvable
+        maturities = [0.25, 0.50]
+        result = build_strike_ladder(
+            portfolio,
+            ips,
+            target_deltas=deltas,
+            maturities_years=maturities,
+        )
+        assert len(result.rungs) + len(result.unsolvable) == (
+            len(deltas) * len(maturities)
+        )
+        assert {r.target_delta for r in result.rungs} == {0.10}
+        assert {u.target_delta for u in result.unsolvable} == {0.50}
 
     def test_zero_notional_portfolio_raises(self) -> None:
         """No underlying position fails loud — never a fabricated ladder."""
@@ -405,7 +442,7 @@ class TestBetaAdjustment:
             _make_ips(portfolio_beta=1.0),
             target_deltas=[0.10],
             maturities_years=[0.25],
-        )
+        ).rungs
         rung = result[0]
         assert rung.portfolio_beta == pytest.approx(1.0)
         assert rung.beta_adjusted_notional == pytest.approx(500_000.0)
@@ -418,13 +455,13 @@ class TestBetaAdjustment:
             _make_ips(portfolio_beta=1.0),
             target_deltas=[0.10],
             maturities_years=[0.25],
-        )[0]
+        ).rungs[0]
         scaled = build_strike_ladder(
             portfolio,
             _make_ips(portfolio_beta=2.0),
             target_deltas=[0.10],
             maturities_years=[0.25],
-        )[0]
+        ).rungs[0]
         assert scaled.beta_adjusted_notional == pytest.approx(
             2.0 * base.beta_adjusted_notional,
         )
@@ -440,11 +477,11 @@ class TestBetaAdjustment:
             _make_ips(portfolio_beta=1.0),
             target_deltas=[0.10],
             maturities_years=[0.25],
-        )[0]
+        ).rungs[0]
         scaled = build_strike_ladder(
             portfolio,
             _make_ips(portfolio_beta=2.0),
             target_deltas=[0.10],
             maturities_years=[0.25],
-        )[0]
+        ).rungs[0]
         assert scaled.carry_budget == pytest.approx(base.carry_budget)

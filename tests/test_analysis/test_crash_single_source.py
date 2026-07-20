@@ -114,15 +114,37 @@ class TestCrashScenarioSingleSource:
 
         shallow = analyzer.calculate_health_metrics(
             cumulative_carry_paid=1_000.0,
-            crash_scenario_pct=_SHALLOW_PCT,
+            crash=_make_ips(_SHALLOW_PCT).convexity,
         )
         deep = analyzer.calculate_health_metrics(
             cumulative_carry_paid=1_000.0,
-            crash_scenario_pct=_DEEP_PCT,
+            crash=_make_ips(_DEEP_PCT).convexity,
         )
 
         assert shallow["crash_convexity_pct"] != deep["crash_convexity_pct"]
         assert shallow["hedge_success_pct"] != deep["hedge_success_pct"]
+
+    def test_health_metrics_apply_the_bundled_vol_shock(self) -> None:
+        """The bundled crash vol shock reaches the gauge (never zeroed).
+
+        Regression for the diverging-knobs trap: before the fix a caller could
+        pass a crash scenario while ``crash_vol_shock`` silently defaulted to
+        ``0.0``, understating convexity with no signal. The scenario and its
+        vol shock now travel together in one ``IpsConvexity``, so at the same
+        scenario a larger shock must move the gauge.
+        """
+        analyzer = PortfolioAnalyzer(_make_hedged_book())
+
+        spot_only = analyzer.calculate_health_metrics(
+            crash=_make_ips(_DEEP_PCT, crash_vol_shock=0.0).convexity,
+        )
+        shocked = analyzer.calculate_health_metrics(
+            crash=_make_ips(_DEEP_PCT, crash_vol_shock=0.30).convexity,
+        )
+
+        assert (
+            spot_only["crash_convexity_pct"] != shocked["crash_convexity_pct"]
+        )
 
     def test_scenario_table_moves_with_scenario(self) -> None:
         """The scenario table's IPS-anchored payoff ratio tracks the move."""
@@ -149,12 +171,12 @@ class TestCrashScenarioSingleSource:
         assert shallow[0].crash_convexity_pct != deep[0].crash_convexity_pct
 
     def test_missing_scenario_degrades_to_zero_not_a_literal(self) -> None:
-        """With no IPS scenario the crash gauges read 0.0 (never hardcoded)."""
+        """With no IPS the crash gauges are disabled (0.0, never hardcoded)."""
         analyzer = PortfolioAnalyzer(_make_hedged_book())
 
         metrics = analyzer.calculate_health_metrics(
             cumulative_carry_paid=1_000.0,
-            crash_scenario_pct=None,
+            crash=None,
         )
 
         assert metrics["crash_convexity_pct"] == 0.0

@@ -74,6 +74,8 @@ from deltadewa.analysis.sizing import (
 from deltadewa.analysis.strike_ladder import (
     LadderRung,
     StrikeLadder,
+    StrikeLadderResult,
+    UnsolvableRung,
     build_strike_ladder,
     strike_for_delta,
 )
@@ -105,7 +107,9 @@ __all__ = [
     "RollVerdict",
     "ScenarioGridCache",
     "StrikeLadder",
+    "StrikeLadderResult",
     "TermShape",
+    "UnsolvableRung",
     "assess_market_environment",
     "beta_adjusted_notional",
     "build_monetization_plan",
