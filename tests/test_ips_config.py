@@ -70,6 +70,7 @@ class TestLoadIpsConfig:
         assert ips.convexity.target_min_pct == 15.0
         assert ips.convexity.target_max_pct == 25.0
         assert ips.convexity.crash_vol_shock == 0.15
+        assert ips.convexity.skew_steepening == 0.0
         assert ips.convexity.crash_floor_reported is True
         assert ips.drawdown.max_tolerance_pct == 20.0
         assert ips.triggers.target_delta_ratio_pct == 90.0
@@ -162,6 +163,7 @@ class TestLoadIpsConfig:
         ips = load_ips_config(path)
 
         assert ips.convexity.crash_vol_shock == 0.15
+        assert ips.convexity.skew_steepening == 0.0
         assert ips.convexity.crash_floor_reported is True
 
     def test_crash_knobs_round_trip_when_set(self, tmp_path: Path) -> None:
@@ -173,6 +175,7 @@ class TestLoadIpsConfig:
                 "target_min_pct": 15.0,
                 "target_max_pct": 25.0,
                 "crash_vol_shock": 0.20,
+                "skew_steepening": 0.30,
                 "crash_floor_reported": False,
             },
         }
@@ -181,6 +184,7 @@ class TestLoadIpsConfig:
         ips = load_ips_config(path)
 
         assert ips.convexity.crash_vol_shock == 0.20
+        assert ips.convexity.skew_steepening == 0.30
         assert ips.convexity.crash_floor_reported is False
 
     def test_negative_crash_vol_shock_raises(self, tmp_path: Path) -> None:
@@ -197,6 +201,22 @@ class TestLoadIpsConfig:
         path = _write_yaml(tmp_path, config)
 
         with pytest.raises(IpsConfigError, match="crash_vol_shock"):
+            load_ips_config(path)
+
+    def test_negative_skew_steepening_raises(self, tmp_path: Path) -> None:
+        """A negative skew_steepening raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "skew_steepening": -0.05,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="skew_steepening"):
             load_ips_config(path)
 
     def test_negative_budget_raises(self, tmp_path: Path) -> None:

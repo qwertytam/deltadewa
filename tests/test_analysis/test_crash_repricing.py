@@ -11,6 +11,7 @@ the summary crash-convexity ladder.
 from __future__ import annotations
 
 import inspect
+import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -76,6 +77,33 @@ def _make_appendix_book(
             option_type=OptionType.PUT,
             volatility=0.20,
         )
+    return portfolio
+
+
+def _make_call_book() -> OptionPortfolio:
+    """A long-call book with no OTM put — the skew knob has no wing to anchor.
+
+    Returns:
+        A portfolio holding a single OTM call at the appendix spot/tenor.
+    """
+    valuation_date = datetime(2026, 1, 2, tzinfo=UTC)
+    maturity = valuation_date + timedelta(days=round(1.5 * 365))
+    portfolio = OptionPortfolio(
+        spot_price=_APPENDIX_SPOT,
+        volatility=0.20,
+        risk_free_rate=0.045,
+        dividend_yield=0.015,
+        underlying_quantity=_APPENDIX_BOOK / _APPENDIX_SPOT,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+        valuation_date=valuation_date,
+    )
+    portfolio.add_position(
+        strike_price=7260.0,
+        maturity_date=maturity,
+        quantity=10,
+        option_type=OptionType.CALL,
+        volatility=0.20,
+    )
     return portfolio
 
 
@@ -169,6 +197,164 @@ class TestAppendixGoldenValues:
             crash_move=_APPENDIX_MOVE,
             vol_shock=_APPENDIX_VOL_SHOCK,
         )
+
+
+class TestSkewSteepeningNoOp:
+    """M1.6 — the optional skew_steepening knob is a no-op when ``0.0``.
+
+    Proves the refactor changes nothing while disabled: an explicit
+    ``skew_steepening=0.0`` reproduces the parameter-omitted call byte-for-byte,
+    and every §4 golden anchor still lands. This must hold before any golden is
+    recomputed under a positive steepening (M1.6 sequencing).
+    """
+
+    def test_crash_hedge_value_noop(self) -> None:
+        """``$3,895,901`` V_crash is unchanged by ``skew_steepening=0.0``."""
+        portfolio = _make_appendix_book()
+
+        base = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+        )
+        with_knob = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=0.0,
+        )
+
+        assert with_knob == base
+        assert with_knob == pytest.approx(3_895_901.0, rel=0.005)
+
+    def test_crash_convexity_pct_noop(self) -> None:
+        """``+18.0%`` convexity is unchanged by ``skew_steepening=0.0``."""
+        portfolio = _make_appendix_book()
+
+        base = cr.crash_convexity_pct(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+        )
+        with_knob = cr.crash_convexity_pct(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=0.0,
+        )
+
+        assert with_knob == base
+        assert with_knob == pytest.approx(18.0, abs=0.5)
+
+    def test_payoff_ratio_unchanged(self) -> None:
+        """The ``13.1x`` payoff anchor is untouched by the knob."""
+        portfolio = _make_appendix_book()
+        ips = IpsConvexity(
+            crash_scenario_pct=-25.0,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+        )
+
+        result = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            ips_convexity=ips,
+        )
+
+        assert result.payoff_ratio == pytest.approx(13.1, rel=0.02)
+
+    def test_intrinsic_floor_is_vol_independent(self) -> None:
+        """The ``$759,000`` intrinsic floor is vol-independent."""
+        portfolio = _make_appendix_book()
+
+        floor = cr.crash_intrinsic_floor(portfolio, crash_move=_APPENDIX_MOVE)
+
+        assert floor == pytest.approx(759_000.0, rel=0.005)
+
+
+class TestSkewSteepeningBehaviour:
+    """M1.6 — a positive skew_steepening lifts deep-OTM put vol above ATM."""
+
+    def test_steepening_raises_crash_hedge_value(self) -> None:
+        """Long OTM puts gain IV under steepening, so V_crash rises."""
+        portfolio = _make_appendix_book()
+
+        flat = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+        )
+        steepened = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=0.10,
+        )
+
+        assert steepened > flat
+
+    def test_weights_are_linear_in_log_moneyness(self) -> None:
+        """V_crash matches the leg vols rebuilt from the log-moneyness form.
+
+        Independently reconstructs each leg's shocked vol as
+        ``0.20 + vol_shock + skew * w`` with ``w = ln(S/K) / ln(S/K_tail)``,
+        prices with the public engine, and requires an exact match — pinning
+        the interpolation to log-moneyness with the deepest OTM put as anchor.
+        """
+        portfolio = _make_appendix_book()
+        skew = 0.10
+
+        got = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=skew,
+        )
+
+        crash_spot = _APPENDIX_SPOT * (1.0 + _APPENDIX_MOVE)
+        deepest_strike = min(strike for strike, _ in _APPENDIX_LEGS)
+        tail_log_moneyness = math.log(_APPENDIX_SPOT / deepest_strike)
+        expected = 0.0
+        for position in portfolio.positions:
+            strike = position.option.strike_price
+            weight = min(
+                1.0,
+                math.log(_APPENDIX_SPOT / strike) / tail_log_moneyness,
+            )
+            vol = 0.20 + _APPENDIX_VOL_SHOCK + skew * weight
+            leg = OptionValuation(
+                spot_price=crash_spot,
+                strike_price=strike,
+                maturity_date=position.option.maturity_date,
+                volatility=vol,
+                risk_free_rate=portfolio.risk_free_rate,
+                dividend_yield=portfolio.dividend_yield,
+                option_type=position.option.option_type,
+                valuation_date=portfolio.valuation_date,
+                exercise_style=position.exercise_style,
+            )
+            expected += leg.price() * position.quantity * position.contract_size
+
+        assert got == pytest.approx(expected, rel=1e-9)
+
+    def test_no_otm_put_means_no_steepening(self) -> None:
+        """With no OTM put to anchor the wing, the knob is inert."""
+        portfolio = _make_call_book()
+
+        flat = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+        )
+        steepened = cr.crash_hedge_value(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=0.10,
+        )
+
+        assert steepened == flat
 
 
 class TestBand:
