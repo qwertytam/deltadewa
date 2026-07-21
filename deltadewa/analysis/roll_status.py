@@ -223,12 +223,14 @@ def evaluate_roll_status(
     roll_window_days = triggers.roll_time_months * const.CALENDAR_DAYS_PER_MONTH
 
     analyzer = PortfolioAnalyzer(portfolio)
-    # Source the crash vol shock from the IPS so the roll trigger's convexity
-    # matches the health gauge / scenario table exactly; passing spot-only
-    # (vol_shock=0) understated convexity and biased the roll toward firing.
+    # Source the crash vol shock AND skew steepening from the IPS so the roll
+    # trigger's convexity matches the health gauge / scenario table exactly;
+    # passing spot-only (vol_shock=0) understated convexity and biased the roll
+    # toward firing.
     crash_convexity_pct = analyzer.calculate_crash_convexity_pct(
         crash_scenario_pct=convexity.crash_scenario_pct,
         crash_vol_shock=convexity.crash_vol_shock,
+        skew_steepening=convexity.skew_steepening,
     )
 
     # Measure DTE against the portfolio's (what-if) valuation date, not the

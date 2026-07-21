@@ -52,6 +52,7 @@ class NetHedgeSummary:
         portfolio: "OptionPortfolio",
         *,
         crash_vol_shock: float = 0.0,
+        skew_steepening: float = 0.0,
     ) -> None:
         """Initialize net hedge summary widget.
 
@@ -61,10 +62,16 @@ class NetHedgeSummary:
                 single-sourced from ``IpsConvexity.crash_vol_shock`` (pass
                 ``ctx.ips_config.convexity.crash_vol_shock``). Used to reprice
                 the hedge-only crash-convexity ladder. Defaults to ``0.0``.
+            skew_steepening: Optional deep-OTM skew steepening added on top of
+                ``crash_vol_shock`` at the tail (M1.6), single-sourced from
+                ``IpsConvexity.skew_steepening`` (pass
+                ``ctx.ips_config.convexity.skew_steepening``) so the ladder
+                shares the gauge's basis exactly. Defaults to ``0.0``.
 
         """
         self.portfolio = portfolio
         self._crash_vol_shock = crash_vol_shock
+        self._skew_steepening = skew_steepening
         self.widget = None
         self._create_widget()
 
@@ -83,6 +90,7 @@ class NetHedgeSummary:
                     self.portfolio,
                     crash_move=shock / 100.0,
                     vol_shock=self._crash_vol_shock,
+                    skew_steepening=self._skew_steepening,
                 ),
             )
             for shock in self._CRASH_RUNG_SHOCKS

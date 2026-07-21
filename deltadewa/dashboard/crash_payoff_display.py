@@ -187,9 +187,15 @@ class CrashPayoffDisplay:
             if self._ips_convexity is not None
             else 0.15
         )
+        skew_steepening = (
+            self._ips_convexity.skew_steepening
+            if self._ips_convexity is not None
+            else 0.0
+        )
         result = compute_crash_convexity(
             self._portfolio,
             crash_vol_shock=crash_vol_shock,
+            skew_steepening=skew_steepening,
             ips_convexity=self._ips_convexity,
             scenario_shocks=self._shocks,
         )
