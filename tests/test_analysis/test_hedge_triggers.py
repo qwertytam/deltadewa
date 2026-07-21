@@ -4,6 +4,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
     evaluate_hedge_triggers,
@@ -206,7 +208,9 @@ class TestIpsThresholdsMoveTriggers:
 
         assert thresholds.expiry_urgent_days == 9
         assert thresholds.expiry_soon_days == 40
-        assert thresholds.theta_cost_excellent_pct == 0.5
+        assert thresholds.theta_cost_excellent_pct == pytest.approx(
+            0.5, rel=1e-4
+        )
 
     def test_expiry_soon_days_moves_the_soon_action(self) -> None:
         """A wider soon window turns a 25-DTE book into a SOON action."""
@@ -294,7 +298,9 @@ class TestGammaDriftTrigger:
 
         result = evaluate_hedge_triggers(portfolio, reporter)
 
-        assert result.gamma_drift_pct == 1.0  # 1.0 * 100 / 100
+        assert result.gamma_drift_pct == pytest.approx(
+            1.0, rel=1e-4
+        )  # 1.0 * 100 / 100
         assert "LOW RISK" in _reporter_text(reporter)
         assert not self._gamma_action_present(result)
 
@@ -313,7 +319,7 @@ class TestGammaDriftTrigger:
 
         result = evaluate_hedge_triggers(portfolio, reporter)
 
-        assert result.gamma_drift_pct == 6.0
+        assert result.gamma_drift_pct == pytest.approx(6.0, rel=1e-4)
         assert "HIGH RISK" in _reporter_text(reporter)
         assert self._gamma_action_present(result)
 
@@ -400,7 +406,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == 0.0
+        assert result.delta_drift_pct == pytest.approx(0.0, abs=1e-9)
         assert "delta" not in _action_text(result.actions).lower()
 
     def test_within_warn_holds(self) -> None:
@@ -411,7 +417,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == 3.0
+        assert result.delta_drift_pct == pytest.approx(3.0, rel=1e-4)
         assert "delta" not in _action_text(result.actions).lower()
 
     def test_monitor_band_raises_soon(self) -> None:
@@ -422,7 +428,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == 7.0
+        assert result.delta_drift_pct == pytest.approx(7.0, rel=1e-4)
         text = _action_text(result.actions)
         assert "Monitor delta drift" in text
         assert "🟡 SOON" in {label for label, _ in result.actions}
@@ -441,7 +447,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == 15.0
+        assert result.delta_drift_pct == pytest.approx(15.0, rel=1e-4)
         text = _action_text(result.actions)
         assert "🔴 URGENT" in {label for label, _ in result.actions}
         assert "Rebalance delta (adjust 15 shares)" in text
@@ -456,7 +462,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == -12.0
+        assert result.delta_drift_pct == pytest.approx(-12.0, rel=1e-4)
         assert "🔴 URGENT" in {label for label, _ in result.actions}
 
     def test_unset_underlying_is_unavailable(self) -> None:
@@ -490,5 +496,5 @@ class TestEvaluateDeltaDriftTrigger:
 
         assert monitor.delta_drift_pct == 7.0
         assert "🟡 SOON" in {label for label, _ in monitor.actions}
-        assert action.delta_drift_pct == 12.0
+        assert action.delta_drift_pct == pytest.approx(12.0, rel=1e-4)
         assert "🔴 URGENT" in {label for label, _ in action.actions}

@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from deltadewa.analysis.volatility import (
     apply_proportional_volatility_shift,
     calculate_portfolio_avg_volatility,
@@ -24,7 +26,7 @@ class TestCalculatePortfolioAvgVolatility:
         )
 
         avg_vol = calculate_portfolio_avg_volatility(portfolio)
-        assert avg_vol == 0.25
+        assert avg_vol == pytest.approx(0.25, rel=1e-4)
 
     def test_single_position(self) -> None:
         """Test vega-weighted average with single position."""
@@ -45,7 +47,7 @@ class TestCalculatePortfolioAvgVolatility:
 
         avg_vol = calculate_portfolio_avg_volatility(portfolio)
         # With single position, average should equal position volatility
-        assert abs(avg_vol - 0.30) < 0.001
+        assert avg_vol == pytest.approx(0.30, abs=0.001)
 
     def test_multi_position_weighted_average(self) -> None:
         """Test vega-weighted average with multiple positions."""
@@ -107,7 +109,7 @@ class TestCalculatePortfolioAvgVolatility:
         avg_vol = calculate_portfolio_avg_volatility(portfolio)
 
         # Both should contribute equally (abs vega), so average should be 0.25
-        assert abs(avg_vol - 0.25) < 0.01
+        assert avg_vol == pytest.approx(0.25, abs=0.01)
 
     def test_zero_vega_positions_fallback(self) -> None:
         """Test fallback when all positions have zero vega."""
@@ -180,7 +182,7 @@ class TestApplyProportionalVolatilityShift:
             portfolio.positions[0].option.volatility
             / portfolio.positions[1].option.volatility
         )
-        assert abs(original_ratio - new_ratio) < 0.01
+        assert original_ratio == pytest.approx(new_ratio, abs=0.01)
 
         # Check original vols were stored
         assert len(original_vols) == 2
@@ -221,11 +223,11 @@ class TestApplyProportionalVolatilityShift:
 
         # All positions should now be at target
         for position in portfolio.positions:
-            assert abs(position.option.volatility - 0.35) < 0.001
+            assert position.option.volatility == pytest.approx(0.35, abs=0.001)
 
         # Original vols should be stored
-        assert original_vols[0] == 0.30
-        assert original_vols[1] == 0.20
+        assert original_vols[0] == pytest.approx(0.30, rel=1e-4)
+        assert original_vols[1] == pytest.approx(0.20, rel=1e-4)
 
     def test_zero_avg_vol_edge_case(self) -> None:
         """Test handling when current average volatility is near zero."""
@@ -255,7 +257,7 @@ class TestApplyProportionalVolatilityShift:
         assert (
             portfolio.positions[0].option.volatility > 0.20
         )  # Should be scaled up
-        assert original_vols[0] == 0.01
+        assert original_vols[0] == pytest.approx(0.01, rel=1e-4)
 
     def test_returns_original_volatilities_dict(self) -> None:
         """Test that function returns dict of original volatilities."""
@@ -283,7 +285,7 @@ class TestApplyProportionalVolatilityShift:
         # Check return value structure
         assert isinstance(original_vols, dict)
         assert 0 in original_vols
-        assert original_vols[0] == 0.30
+        assert original_vols[0] == pytest.approx(0.30, rel=1e-4)
 
 
 class TestRestoreVolatilities:
@@ -365,7 +367,9 @@ class TestRestoreVolatilities:
         # Should not crash, should restore position 0 and skip 5
         restore_volatilities(portfolio, original_vols)
 
-        assert abs(portfolio.positions[0].option.volatility - 0.30) < 0.001
+        assert portfolio.positions[0].option.volatility == pytest.approx(
+            0.30, abs=0.001
+        )
 
     def test_empty_restore_dict(self) -> None:
         """Test restore with empty dict does nothing."""
@@ -460,11 +464,11 @@ class TestGetVolatilityStats:
 
         assert stats["num_positions"] == 1
         assert stats["num_custom_vol"] == 1
-        assert abs(stats["min_volatility"] - 0.30) < 0.001
-        assert abs(stats["max_volatility"] - 0.30) < 0.001
+        assert stats["min_volatility"] == pytest.approx(0.30, abs=0.001)
+        assert stats["max_volatility"] == pytest.approx(0.30, abs=0.001)
         assert abs(stats["volatility_range"]) < 0.001
-        assert stats["std_volatility"] == 0.0
-        assert abs(stats["portfolio_volatility"] - 0.25) < 0.001
+        assert stats["std_volatility"] == pytest.approx(0.0, rel=1e-4)
+        assert stats["portfolio_volatility"] == pytest.approx(0.25, abs=0.001)
 
     def test_multiple_positions_stats(self) -> None:
         """Test stats with multiple positions."""
@@ -502,11 +506,11 @@ class TestGetVolatilityStats:
 
         assert stats["num_positions"] == 3
         assert stats["num_custom_vol"] == 2  # Two positions with custom vol
-        assert abs(stats["min_volatility"] - 0.20) < 0.001
-        assert abs(stats["max_volatility"] - 0.30) < 0.001
-        assert abs(stats["volatility_range"] - 0.10) < 0.001
+        assert stats["min_volatility"] == pytest.approx(0.20, abs=0.001)
+        assert stats["max_volatility"] == pytest.approx(0.30, abs=0.001)
+        assert stats["volatility_range"] == pytest.approx(0.10, abs=0.001)
         assert stats["std_volatility"] > 0  # Should have some variation
-        assert abs(stats["portfolio_volatility"] - 0.25) < 0.001
+        assert stats["portfolio_volatility"] == pytest.approx(0.25, abs=0.001)
 
     def test_avg_volatility_is_vega_weighted(self) -> None:
         """Test that avg_volatility uses vega weighting."""
@@ -529,4 +533,4 @@ class TestGetVolatilityStats:
 
         # avg_volatility should call calculate_portfolio_avg_volatility
         manual_avg = calculate_portfolio_avg_volatility(portfolio)
-        assert abs(stats["avg_volatility"] - manual_avg) < 0.001
+        assert stats["avg_volatility"] == pytest.approx(manual_avg, abs=0.001)

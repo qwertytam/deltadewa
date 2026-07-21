@@ -9,6 +9,8 @@ delta-neutrality. Unset ``underlying_quantity`` reports the metric unavailable
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.health import delta_drift_from_target
 
@@ -106,7 +108,7 @@ class TestCalculateHealthMetricsThreadsTarget:
         metrics = _analyzer(95.0, 100.0).calculate_health_metrics(
             target_delta_ratio_pct=90.0,
         )
-        assert metrics["delta_drift_pct"] == 5.0
+        assert metrics["delta_drift_pct"] == pytest.approx(5.0, rel=1e-4)
 
     def test_none_target_reads_unavailable(self) -> None:
         """Without a target (no IPS), delta_drift_pct is None."""

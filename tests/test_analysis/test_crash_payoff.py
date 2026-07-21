@@ -362,7 +362,7 @@ class TestCrashPayoffRatio:
             crash_scenario_pct=-25.0,
             crash_vol_shock=0.0,
         )
-        assert convexity_no_book == 0.0
+        assert convexity_no_book == pytest.approx(0.0, rel=1e-4)
         assert convexity_with_book != 0.0
 
     def test_explicit_premium_overrides_computed_premium(self) -> None:
@@ -413,7 +413,7 @@ class TestCrashPayoffRatio:
             premium=-1.0,
         )
 
-        assert ratio == 0.0
+        assert ratio == pytest.approx(0.0, rel=1e-4)
 
     def test_empty_portfolio_is_safe(self) -> None:
         """An empty portfolio has zero premium and zero ratio."""

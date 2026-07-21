@@ -406,10 +406,10 @@ class TestHedgeHealthDashboard:
         dashboard = HedgeHealthDashboard(mock_portfolio)
         cfg = dashboard._get_default_config()["metrics"]["delta_drift"]  # pylint: disable=W0212
 
-        assert cfg["start"] == 0.0
-        assert cfg["end"] == 30.0
-        assert cfg["min_val"] == 5.0
-        assert cfg["max_val"] == 10.0
+        assert cfg["start"] == pytest.approx(0.0, rel=1e-4)
+        assert cfg["end"] == pytest.approx(30.0, rel=1e-4)
+        assert cfg["min_val"] == pytest.approx(5.0, rel=1e-4)
+        assert cfg["max_val"] == pytest.approx(10.0, rel=1e-4)
         assert cfg["invert_colors"] is True
 
     def test_delta_drift_unavailable_without_target(

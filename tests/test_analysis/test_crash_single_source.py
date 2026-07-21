@@ -181,8 +181,8 @@ class TestCrashScenarioSingleSource:
             crash=None,
         )
 
-        assert metrics["crash_convexity_pct"] == 0.0
-        assert metrics["hedge_success_pct"] == 0.0
+        assert metrics["crash_convexity_pct"] == pytest.approx(0.0, rel=1e-4)
+        assert metrics["hedge_success_pct"] == pytest.approx(0.0, rel=1e-4)
 
     def test_no_crash_scenario_literal_in_health_source(self) -> None:
         """grep guard: no hardcoded crash move survives in health.py."""
