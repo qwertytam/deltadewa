@@ -232,6 +232,7 @@ class TestComputeCrashConvexity:
             *,
             crash_move: float,
             vol_shock: float,
+            skew_steepening: float = 0.0,
             positions: object = None,
         ) -> float:
             calls.append(round(crash_move * 100.0, 6))
@@ -239,6 +240,7 @@ class TestComputeCrashConvexity:
                 portfolio,
                 crash_move=crash_move,
                 vol_shock=vol_shock,
+                skew_steepening=skew_steepening,
                 positions=positions,
             )
 

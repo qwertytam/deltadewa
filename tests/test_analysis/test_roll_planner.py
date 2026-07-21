@@ -108,6 +108,7 @@ def _patch_convexity(
         self: object,
         crash_scenario_pct: float,
         crash_vol_shock: float,
+        skew_steepening: float = 0.0,
     ) -> float:
         return value
 

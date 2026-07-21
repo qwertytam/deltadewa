@@ -70,7 +70,8 @@ class TestLoadIpsConfig:
         assert ips.convexity.target_min_pct == 15.0
         assert ips.convexity.target_max_pct == 25.0
         assert ips.convexity.crash_vol_shock == 0.15
-        assert ips.convexity.skew_steepening == 0.0
+        # M1.6: the shipped default adopts the skew-calibrated crash shock.
+        assert ips.convexity.skew_steepening == 0.10
         assert ips.convexity.crash_floor_reported is True
         assert ips.drawdown.max_tolerance_pct == 20.0
         assert ips.triggers.target_delta_ratio_pct == 90.0

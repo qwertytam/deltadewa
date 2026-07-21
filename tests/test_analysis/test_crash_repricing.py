@@ -35,6 +35,9 @@ _APPENDIX_SPOT = 6600.0
 _APPENDIX_BOOK = 20_000_000.0
 _APPENDIX_MOVE = -0.25
 _APPENDIX_VOL_SHOCK = 0.15
+# Shipped deep-OTM skew steepening (M1.6): extra vol at the deepest tail over
+# ATM, linear in log-moneyness. The §4 worked example is now skew-aware.
+_APPENDIX_SKEW = 0.10
 # (strike, contract count) for the 20/30/40%-OTM three-rung ladder.
 _APPENDIX_LEGS = ((5280.0, 23), (4620.0, 26), (3960.0, 16))
 
@@ -138,10 +141,15 @@ def _load_golden_20m_example() -> OptionPortfolio:
 
 
 class TestAppendixGoldenValues:
-    """§7.1 — the §4 worked example reprices to the published figures."""
+    """§7.1 — the §4 worked example reprices to the published figures.
+
+    The shipped shock is skew-aware (``_APPENDIX_SKEW``); these anchors are the
+    post-M1.6 §4 goldens. The flat-bump baseline (``+18.0%`` / ``13.1x``) is
+    pinned separately by :class:`TestSkewSteepeningNoOp` at ``skew=0.0``.
+    """
 
     def test_hedge_values_within_tolerance(self) -> None:
-        """V_today and V_crash sit within ~0.5% of the §4 table."""
+        """V_today and V_crash sit within ~0.5% of the skew-aware §4 table."""
         portfolio = _make_appendix_book()
 
         v_today = cr.hedge_value(portfolio)
@@ -149,41 +157,46 @@ class TestAppendixGoldenValues:
             portfolio,
             crash_move=_APPENDIX_MOVE,
             vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
+        # V_today is skew-free (skew is a crash-state effect only).
         assert v_today == pytest.approx(297_715.0, rel=0.005)
-        assert v_crash == pytest.approx(3_895_901.0, rel=0.005)
+        assert v_crash == pytest.approx(4_788_166.0, rel=0.005)
 
-    def test_convexity_is_plus_18_pct(self) -> None:
-        """Crash convexity is +18.0% ± epsilon — inside the IPS band."""
+    def test_convexity_is_plus_22_pct(self) -> None:
+        """Crash convexity is +22.5% ± epsilon — inside the IPS band."""
         portfolio = _make_appendix_book()
 
         convexity = cr.crash_convexity_pct(
             portfolio,
             crash_move=_APPENDIX_MOVE,
             vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
-        assert convexity == pytest.approx(18.0, abs=0.5)
+        assert convexity == pytest.approx(22.5, abs=0.5)
 
-    def test_payoff_ratio_is_about_13x(self) -> None:
-        """The repriced headline payoff ratio is ~13x (not the 2.5x floor)."""
+    def test_payoff_ratio_is_about_16x(self) -> None:
+        """The repriced headline payoff ratio is ~16x (not the 2.5x floor)."""
         portfolio = _make_appendix_book()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
         result = compute_crash_convexity(
             portfolio,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
             ips_convexity=ips,
         )
 
         assert result.payoff_ratio is not None
-        assert result.payoff_ratio == pytest.approx(13.1, rel=0.02)
+        assert result.payoff_ratio == pytest.approx(16.1, rel=0.02)
 
     def test_intrinsic_floor_is_the_conservative_759k(self) -> None:
         """The intrinsic floor (~$759k) is far below the repriced value."""
@@ -191,11 +204,13 @@ class TestAppendixGoldenValues:
 
         floor = cr.crash_intrinsic_floor(portfolio, crash_move=_APPENDIX_MOVE)
 
+        # The floor is vol/skew-independent (pure intrinsic at the crash spot).
         assert floor == pytest.approx(759_000.0, rel=0.005)
         assert floor < cr.crash_hedge_value(
             portfolio,
             crash_move=_APPENDIX_MOVE,
             vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
 
@@ -368,11 +383,13 @@ class TestBand:
             target_min_pct=15.0,
             target_max_pct=25.0,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
         result = compute_crash_convexity(
             portfolio,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
             ips_convexity=ips,
         )
         ips_row = next(r for r in result.scenario_rows if r.shock_pct == -25.0)
@@ -403,22 +420,24 @@ class TestGoldenExampleFile:
             portfolio,
             crash_move=_APPENDIX_MOVE,
             vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
         assert v_today == pytest.approx(297_715.0, rel=0.005)
-        assert v_crash == pytest.approx(3_895_901.0, rel=0.005)
+        assert v_crash == pytest.approx(4_788_166.0, rel=0.005)
 
     def test_example_convexity_is_in_band(self) -> None:
-        """Loaded book reprices to +18.0% ± epsilon — inside +15..+25%."""
+        """Loaded book reprices to +22.5% ± epsilon — inside +15..+25%."""
         portfolio = _load_golden_20m_example()
 
         convexity = cr.crash_convexity_pct(
             portfolio,
             crash_move=_APPENDIX_MOVE,
             vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
-        assert convexity == pytest.approx(18.0, abs=0.5)
+        assert convexity == pytest.approx(22.5, abs=0.5)
         assert 15.0 <= convexity <= 25.0
 
 
@@ -528,25 +547,36 @@ class TestRepricedInvariant:
 
 
 class TestConsistencyAcrossSurfaces:
-    """§7.5 — one basis: gauge == scenario table == summary ladder."""
+    """§7.5 — one basis: gauge == scenario table == summary ladder.
+
+    Exercised under the shipped skew-aware shock (``_APPENDIX_SKEW``): every
+    surface reads the same ``IpsConvexity.skew_steepening`` and the same book
+    tail, so the deep-OTM steepening must reach them identically.
+    """
 
     def test_summary_rung_equals_health_gauge_and_helper(self) -> None:
         """The summary -20% rung equals the gauge and the helper exactly."""
         portfolio = _make_appendix_book()
         vol_shock = _APPENDIX_VOL_SHOCK
 
-        summary = NetHedgeSummary(portfolio, crash_vol_shock=vol_shock)
+        summary = NetHedgeSummary(
+            portfolio,
+            crash_vol_shock=vol_shock,
+            skew_steepening=_APPENDIX_SKEW,
+        )
         rungs = dict(summary._crash_convexity_rungs())
 
         analyzer = PortfolioAnalyzer(portfolio)
         gauge = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=-20.0,
             crash_vol_shock=vol_shock,
+            skew_steepening=_APPENDIX_SKEW,
         )
         helper = cr.crash_convexity_pct(
             portfolio,
             crash_move=-0.20,
             vol_shock=vol_shock,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
         assert rungs[-20.0] == pytest.approx(gauge)
@@ -560,17 +590,20 @@ class TestConsistencyAcrossSurfaces:
             target_min_pct=15.0,
             target_max_pct=25.0,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
         result = compute_crash_convexity(
             portfolio,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
             ips_convexity=ips,
         )
         ips_row = next(r for r in result.scenario_rows if r.shock_pct == -25.0)
         gauge = PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
         )
 
         assert ips_row.convexity_pct == pytest.approx(gauge)
