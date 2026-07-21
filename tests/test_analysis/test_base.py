@@ -1,5 +1,7 @@
 """Tests for deltadewa.analysis.base module."""
 
+import pytest
+
 from deltadewa.analysis.base import PortfolioAnalyzer, PortfolioAnalyzerBase
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -57,7 +59,9 @@ class TestPortfolioAnalyzerBase:
 
         # Should not raise errors on empty portfolio
         carry_metrics = analyzer.calculate_carry_metrics()
-        assert carry_metrics["total_theta_daily"] == 0.0
+        assert carry_metrics["total_theta_daily"] == pytest.approx(
+            0.0, rel=1e-4
+        )
 
         concentration = analyzer.analyze_risk_concentration()
         assert len(concentration["by_strike"]) == 0

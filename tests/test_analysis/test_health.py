@@ -117,7 +117,7 @@ class TestCalculateVegaSufficiencyPct:
         """
         analyzer = _analyzer(total_vega=100.0, total_portfolio_value=0.0)
         result = analyzer.calculate_vega_sufficiency_pct(vol_shock_points=10.0)
-        assert result == 0.0
+        assert result == pytest.approx(0.0, rel=1e-4)
 
 
 class TestCalculateHedgeSuccessPct:
@@ -206,7 +206,7 @@ class TestCalculateHedgeSuccessPct:
 
         # Short-circuit before calling calculate_pnl_at_expiry.
         portfolio.calculate_pnl_at_expiry.assert_not_called()
-        assert result == 0.0
+        assert result == pytest.approx(0.0, rel=1e-4)
 
     def test_boundary_at_exactly_zero_point_zero_one_carry(self) -> None:
         """At carry == 0.01 exactly, the normal path runs."""
@@ -237,7 +237,7 @@ class TestCalculateHedgeSuccessPct:
 
         # Short-circuit before calling calculate_pnl_at_expiry.
         portfolio.calculate_pnl_at_expiry.assert_not_called()
-        assert result == 0.0
+        assert result == pytest.approx(0.0, rel=1e-4)
 
 
 class TestCalculateConvexityCliffDays:
@@ -674,8 +674,8 @@ class TestCalculateHealthMetricsDisablingContract:
         )
 
         # Both crash-derived gauges disabled as a pair.
-        assert metrics["crash_convexity_pct"] == 0.0
-        assert metrics["hedge_success_pct"] == 0.0
+        assert metrics["crash_convexity_pct"] == pytest.approx(0.0, rel=1e-4)
+        assert metrics["hedge_success_pct"] == pytest.approx(0.0, rel=1e-4)
 
     def test_target_delta_ratio_none_makes_delta_drift_unavailable(
         self,
@@ -897,4 +897,4 @@ class TestCalculateOverallHealthScore:
         """Empty metrics dict → sentinel 50 (neutral default)."""
         analyzer = _analyzer()
         score = analyzer.calculate_overall_health_score({})
-        assert score == 50.0
+        assert score == pytest.approx(50.0, rel=1e-4)

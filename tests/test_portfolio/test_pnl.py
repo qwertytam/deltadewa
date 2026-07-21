@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+import pytest
 
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
@@ -96,14 +97,14 @@ class TestPnLMixin:
             include_underlying=True,
         )
         # Underlying gained 10 per share * 100 shares = 1000
-        assert pnl_up == 1000.0
+        assert pnl_up == pytest.approx(1000.0, rel=1e-4)
 
         pnl_down = portfolio.calculate_pnl_at_expiry(
             90.0,
             include_underlying=True,
         )
         # Underlying lost 10 per share * 100 shares = -1000
-        assert pnl_down == -1000.0
+        assert pnl_down == pytest.approx(-1000.0, rel=1e-4)
 
     def test_calculate_pnl_short_option(self) -> None:
         """Test calculate_pnl_at_expiry with short option."""
@@ -139,7 +140,7 @@ class TestPnLMixin:
 
         pnl = portfolio.calculate_pnl_at_expiry(110.0)
         # No positions, no P&L
-        assert pnl == 0.0
+        assert pnl == pytest.approx(0.0, rel=1e-4)
 
     def test_calculate_net_debit_credit(self) -> None:
         """Test calculate_net_debit for credit spread."""

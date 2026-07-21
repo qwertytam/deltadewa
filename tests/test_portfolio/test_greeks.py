@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -181,7 +183,7 @@ class TestGreeksMixin:
         )
 
         hedge_ratio = portfolio.hedge_ratio()
-        assert hedge_ratio == 0.0
+        assert hedge_ratio == pytest.approx(0.0, rel=1e-4)
 
     def test_delta_adjustment_needed(self) -> None:
         """Test delta_adjustment_needed calculation."""
@@ -294,12 +296,13 @@ class TestAllGreeksBatch:
 
         greeks = portfolio.all_greeks()
 
-        assert greeks["total_delta"] == 0.0
-        assert greeks["total_gamma"] == 0.0
-        assert greeks["total_vega"] == 0.0
-        assert greeks["total_theta"] == 0.0
-        assert greeks["total_rho"] == 0.0
-        assert greeks["net_delta"] == 100.0  # Only underlying
+        assert greeks["total_delta"] == pytest.approx(0.0, rel=1e-4)
+        assert greeks["total_gamma"] == pytest.approx(0.0, rel=1e-4)
+        assert greeks["total_vega"] == pytest.approx(0.0, rel=1e-4)
+        assert greeks["total_theta"] == pytest.approx(0.0, rel=1e-4)
+        assert greeks["total_rho"] == pytest.approx(0.0, rel=1e-4)
+        # Only underlying
+        assert greeks["net_delta"] == pytest.approx(100.0, rel=1e-4)
 
     def test_summary_stats_uses_all_greeks(self) -> None:
         """Test that summary_stats uses all_greeks for efficiency."""

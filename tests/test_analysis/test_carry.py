@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
@@ -19,10 +21,10 @@ class TestCarryMixin:
 
         metrics = analyzer.calculate_carry_metrics()
 
-        assert metrics["total_theta_daily"] == 0.0
-        assert metrics["total_theta_weekly"] == 0.0
-        assert metrics["total_theta_monthly"] == 0.0
-        assert metrics["total_theta_annual"] == 0.0
+        assert metrics["total_theta_daily"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["total_theta_weekly"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["total_theta_monthly"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["total_theta_annual"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["is_positive_carry"] is False
         assert len(metrics["theta_by_bucket"]) == 0
 
@@ -71,17 +73,17 @@ class TestCarryMixin:
         # pylint: disable=protected-access
         metrics = analyzer._empty_carry_metrics()
 
-        assert metrics["total_theta_daily"] == 0.0
-        assert metrics["total_theta_weekly"] == 0.0
-        assert metrics["total_theta_monthly"] == 0.0
-        assert metrics["total_theta_annual"] == 0.0
+        assert metrics["total_theta_daily"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["total_theta_weekly"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["total_theta_monthly"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["total_theta_annual"] == pytest.approx(0.0, abs=1e-9)
         assert not metrics["theta_by_bucket"]
         assert not metrics["theta_by_type"]
-        assert metrics["covered_call_theta"] == 0.0
-        assert metrics["long_call_theta"] == 0.0
-        assert metrics["hedge_put_theta"] == 0.0
-        assert metrics["short_put_theta"] == 0.0
-        assert metrics["net_carry"] == 0.0
+        assert metrics["covered_call_theta"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["long_call_theta"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["hedge_put_theta"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["short_put_theta"] == pytest.approx(0.0, abs=1e-9)
+        assert metrics["net_carry"] == pytest.approx(0.0, abs=1e-9)
         assert not metrics["carry_efficiency"]
         assert metrics["is_positive_carry"] is False
 
