@@ -97,6 +97,11 @@ trigger stops firing spuriously. The §4 book ships as a loadable example
 (`examples/portfolios/spx_tail_20m.yaml`); the band assertion anchors on it, not on
 `spx_protective_put.yaml` (invariants only there).
 
+> **Superseded by M1.6.** The skew-aware shock recomputed these §4 anchors to
+> crash ≈ $4,788,166 (16.1×), convexity **+22.5%** (still in-band); V_today
+> ($297,715) and the intrinsic floor ($759,000) are unchanged. The flat values
+> above (+18.0% / 13.1×) are now pinned as the `skew=0.0` no-op proof.
+
 ### M1.3 — Decision-layer definitions (P1)
 
 **Status: done** — PR #194.
@@ -268,17 +273,47 @@ every commit, not just at the end.
 
 ### M1.6 — Skew-aware crash shock (deliberately *after* the correctness tag)
 
-**Status: specified, not started.** Sequenced post-tag on purpose: nothing
-currently fails (the canonical book asserts invariants only; the band test anchors
-on the §4 fixture), so there is no urgency, and doing it against a tagged baseline
-gives a clean before/after on a stable reference point.
+**Status: DONE (2026-07-21).** Landed on `feat/skew-aware-crash-shock` in two
+commits: `a639199` (mechanism, default off, byte-for-byte no-op proof) and
+`b29d750` (adopt `0.10`, wire the four book-convexity surfaces, recompute the §4
+goldens + methodology). Sequenced post-tag on purpose: nothing failed beforehand
+(the canonical book asserts invariants only; the band test anchors on the §4
+fixture), so doing it against a tagged baseline gave a clean before/after on a
+stable reference point.
+
+**Resolution (auditable close-out).**
+- **Calibration — signed off, from history alone.** `skew_steepening = 0.10`:
+  extra vol at the deepest OTM tail over ATM, weight **linear in log-moneyness**
+  `ln(S/K)` (0 at ATM → 1 at the deepest held put). Anchored on 2008/2020
+  index-put skew, where the ≈10-delta wing steepened **15+ vol points** over ATM at
+  the peak; 0.10 is a conservative central estimate (range 0.05–0.20), derived
+  before observing where the book lands (condition 1). See
+  `docs/repricing-methodology.md` §2/§5.
+- **Recomputed §4 goldens (skew-aware):** convexity **+18.0% → +22.5%**, payoff
+  **13.1× → 16.1×**, V_crash **$3,895,901 → $4,788,166**. V_today ($297,715) and
+  the intrinsic floor ($759,000) are unchanged — skew is a crash-state effect only.
+  The flat baseline is still pinned as the `skew=0.0` no-op proof.
+- **Canonical book re-measured — NO re-size.** `spx_protective_put.yaml` reads
+  **+16.55%** at −25% under the adopted shock (`crash_vol_shock` +0.15,
+  `skew_steepening` +0.10), **+1.55 pp above the +15% floor** — vs **+14.27%**
+  under the old flat bump (0.73 pp under). The honestly-calibrated shock lifts it
+  into band with margin, so the book is conformant and **no sizing change is made**
+  (honors the 2026-07-19 sign-off, "refine the shock, do not re-size").
+- **Deferred (documented follow-up):** sizing / strike-ladder / candidate stay on
+  the flat bump — they price *standalone* candidate strikes, where each candidate
+  would be its own tail and receive the full steepening (overstating shallow
+  payoffs → undersizing the hedge); wiring them needs a per-strike skew anchor.
+  Also deferred: the shock's **term structure** (M1.6 ships one cross-sectional
+  log-moneyness slope; tenor-dependence not modelled — methodology §8).
 
 **Motivation.** The shipped flat bump (`+0.15` on every leg) is documented-
 conservative on the low strikes (methodology §8): crash skew steepening is an
 empirical fact — deep-OTM puts reliably gain more IV than ATM in a sell-off.
 Measured on `spx_protective_put.yaml`: **+14.27%** flat vs **+15.4%** under a
 modest steepening (deep-OTM tail `+0.05` over ATM); `~+0.03` at the tail already
-clears the floor (14.97%).
+clears the floor (14.97%). *(These were exploratory sensitivities; the calibration
+signed off from 2008/2020 history was `+0.10`, under which the book reads **+16.55%**
+— see the Resolution block above.)*
 
 **Work.** Add an optional `convexity.skew_steepening` to the IPS, consumed by
 `analysis/crash_repricing`, lifting deep-OTM IV more than ATM. Zero steepening is
