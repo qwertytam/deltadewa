@@ -267,7 +267,7 @@ every commit, not just at the end.
 > written against final constructor signatures, and **before** the tag. FIX 1's 21-test
 > cleanup can land in parallel; M1.5a's fixture sweep and M1.5's European-parity suite
 > touch the same fixtures, so do M1.5a first.
-
+>
 > **Checkpoint:** at the end of Phase 1 the monitor notebook is unchanged but now
 > shows correct numbers. Tag a **"correctness release"** here before touching UI.
 
@@ -282,6 +282,7 @@ fixture), so doing it against a tagged baseline gave a clean before/after on a
 stable reference point.
 
 **Resolution (auditable close-out).**
+
 - **Calibration — signed off, from history alone.** `skew_steepening = 0.10`:
   extra vol at the deepest OTM tail over ATM, weight **linear in log-moneyness**
   `ln(S/K)` (0 at ATM → 1 at the deepest held put). Anchored on 2008/2020
@@ -299,7 +300,7 @@ stable reference point.
   under the old flat bump (0.73 pp under). The honestly-calibrated shock lifts it
   into band with margin, so the book is conformant and **no sizing change is made**
   (honors the 2026-07-19 sign-off, "refine the shock, do not re-size").
-- **Deferred (documented follow-up):** sizing / strike-ladder / candidate stay on
+- **Deferred → now tracked as M1.7 below:** sizing / strike-ladder / candidate stay on
   the flat bump — they price *standalone* candidate strikes, where each candidate
   would be its own tail and receive the full steepening (overstating shallow
   payoffs → undersizing the hedge); wiring them needs a per-strike skew anchor.
@@ -340,6 +341,48 @@ appendix are recomputed together; `spx_protective_put.yaml` is re-measured under
 the honest calibration and the re-size decision recorded either way.
 
 ---
+
+### M1.7 — Unify the crash-shock skew across book and candidate surfaces
+
+**Status: open (follow-up from M1.6).** Promoted from M1.6's deferred sub-bullet
+because it is a cross-surface inconsistency with a directional bias, not a cosmetic
+gap. Sequence **before M2.3 surfaces the sizing workbench** in Dash (or before the
+next release), so book and workbench cannot disagree in front of a user.
+
+**The problem, one root.** M1.6 anchors the skew weight to the book's deepest held
+put (`_tail_log_moneyness` = `ln(S / min(otm_put_strikes))`). Two consequences:
+
+- **Book vs workbench split.** The four book surfaces price crash convexity with
+  skew (§4 book payoff 13.1× → 16.1×); sizing / strike-ladder / candidate stay on
+  the flat bump because a standalone candidate has no book tail. Net effect: sizing
+  on the lower flat payoffs **over-hedges relative to the skew gauge** — ≈ 23% more
+  carry in the §4 case. Conservative (over-protect, not under-protect), but a real
+  inconsistency and a real carry cost.
+- **Book-composition dependence.** Because the anchor is the deepest *held* put, the
+  steepening applied to a fixed leg changes when the book's deepest strike changes —
+  market skew at a strike is not a function of what else is held.
+
+**Key design decision (the deeper exploration — resolve before implementing).**
+Two shapes:
+
+- **(A) Re-anchor to absolute moneyness** — steepening as a slope in vol-points per
+  unit `ln(S/K)` (or anchored to a fixed reference wing, e.g. the N-delta strike),
+  calibrated from history. Book legs and candidates then use one identical function
+  of their own moneyness: the candidate deferral dissolves and the composition
+  dependence goes with it. Requires re-deriving the calibration in slope terms and
+  recomputing the §4 goldens again.
+- **(B) Per-strike skew anchor on the candidate path only** — keep the book-relative
+  model, give the candidate evaluator a fixed reference tail so it stops treating
+  each candidate as its own deepest strike. Smaller change; leaves the
+  composition-dependence in the book surfaces.
+Recommendation: (A) — it fixes both consequences at one root and keeps a single
+skew function everywhere. Confirm the calibration can be expressed as an absolute
+slope consistent with the signed-off `0.10`-at-the-tail figure before committing.
+
+**Acceptance:** one skew function drives book and candidate surfaces; a fixed leg's
+crash vol is independent of book composition; the sizing payoff ratio and the gauge
+convexity agree at equal depth on the §4 book; goldens and methodology recomputed
+together; `skew = 0` still a byte-for-byte no-op.
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 
@@ -430,21 +473,21 @@ both surfaces are covered by app + report tests.
 
 ## Finding → milestone index (coverage check)
 
-| Finding | Milestone | Finding | Milestone |
-|---|---|---|---|
-| C1 | M1.2 | Mo5 | M2.3 (Dash; notebook version skipped) |
-| C2 | M1.1 (logic) + M2.3 (editor default) | Mo6 | M1.5 + M2.1 |
-| C3 | M1.1 | Mo7 | M2.3 (reactive UI; notebook version skipped) |
-| C4 | M1.2 | Mi1 | M0.1 (`CLAUDE.md`) + Phase 3 (rest) |
-| M1 | M1.3 | Mi2 | Phase 3 |
-| M2 | M2.4 | Mi3 | M0.2 |
-| M3 | M1.3 | Mi4 | M1.4 |
-| M4 | M1.1 | Mi5 | M1.3 |
-| M5 | M2.2 (Dash-native) | Mi6 | M1.4 |
-| M6 | M2.2 (Dash-native; notebook version skipped) | Negligibles | Phase 3 / batch with nearest touch |
-| M7 | Phase 3 | #12/#13/#14 | Deferred (data-blocked) |
-| M8 | M2.5 | | |
-| Mo1 | M1.2 | | |
-| Mo2 | M1.4 | | |
-| Mo3 | M1.4 (logic) + M2.3 (UI inputs) | | |
-| Mo4 | M1.3 | | |
+| Finding | Milestone                                    | Finding     | Milestone                                    |
+| ------- | -------------------------------------------- | ----------- | -------------------------------------------- |
+| C1      | M1.2                                         | Mo5         | M2.3 (Dash; notebook version skipped)        |
+| C2      | M1.1 (logic) + M2.3 (editor default)         | Mo6         | M1.5 + M2.1                                  |
+| C3      | M1.1                                         | Mo7         | M2.3 (reactive UI; notebook version skipped) |
+| C4      | M1.2                                         | Mi1         | M0.1 (`CLAUDE.md`) + Phase 3 (rest)          |
+| M1      | M1.3                                         | Mi2         | Phase 3                                      |
+| M2      | M2.4                                         | Mi3         | M0.2                                         |
+| M3      | M1.3                                         | Mi4         | M1.4                                         |
+| M4      | M1.1                                         | Mi5         | M1.3                                         |
+| M5      | M2.2 (Dash-native)                           | Mi6         | M1.4                                         |
+| M6      | M2.2 (Dash-native; notebook version skipped) | Negligibles | Phase 3 / batch with nearest touch           |
+| M7      | Phase 3                                      | #12/#13/#14 | Deferred (data-blocked)                      |
+| M8      | M2.5                                         |             |                                              |
+| Mo1     | M1.2                                         |             |                                              |
+| Mo2     | M1.4                                         |             |                                              |
+| Mo3     | M1.4 (logic) + M2.3 (UI inputs)              |             |                                              |
+| Mo4     | M1.3                                         |             |                                              |
