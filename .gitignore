@@ -238,3 +238,6 @@ __marimo__/
 test_fixes.py
 test_*.png
 tests/benchmark_*.py
+
+# Disposable decision-support harnesses
+scratch/
