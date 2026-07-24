@@ -27,6 +27,7 @@ from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
 from deltadewa.widgets.summary import NetHedgeSummary
 
@@ -35,9 +36,11 @@ _APPENDIX_SPOT = 6600.0
 _APPENDIX_BOOK = 20_000_000.0
 _APPENDIX_MOVE = -0.25
 _APPENDIX_VOL_SHOCK = 0.15
-# Shipped deep-OTM skew steepening (M1.6): extra vol at the deepest tail over
-# ATM, linear in log-moneyness. The §4 worked example is now skew-aware.
+# Shipped deep-OTM skew steepening (M1.6/M1.7): extra vol reached at each leg's
+# own ~10-delta wing, capped there and interpolated (in log-moneyness) below it.
+# The §4 worked example is skew-aware; the anchor is per-leg, not book-relative.
 _APPENDIX_SKEW = 0.10
+_APPENDIX_SKEW_ANCHOR = 0.10
 # (strike, contract count) for the 20/30/40%-OTM three-rung ladder.
 _APPENDIX_LEGS = ((5280.0, 23), (4620.0, 26), (3960.0, 16))
 
@@ -140,12 +143,38 @@ def _load_golden_20m_example() -> OptionPortfolio:
     return result["portfolio"]
 
 
+def _leg_extra_crash_vol(
+    portfolio: OptionPortfolio,
+    position: OptionPosition,
+    *,
+    skew: float = _APPENDIX_SKEW,
+    anchor: float = _APPENDIX_SKEW_ANCHOR,
+) -> float:
+    """Per-leg crash-vol steepening above ``vol_i + vol_shock`` (test helper).
+
+    Drives the production per-leg helper with the portfolio's market snapshot
+    and returns the add-on the wing steepening applies to this leg alone.
+    """
+    crash_vol = cr._leg_crash_vol(
+        position,
+        spot=portfolio.spot_price,
+        risk_free_rate=portfolio.risk_free_rate,
+        dividend_yield=portfolio.dividend_yield,
+        valuation_date=portfolio.valuation_date,
+        vol_shock=_APPENDIX_VOL_SHOCK,
+        skew_steepening=skew,
+        skew_reference_delta=anchor,
+    )
+    return crash_vol - (position.option.volatility + _APPENDIX_VOL_SHOCK)
+
+
 class TestAppendixGoldenValues:
     """§7.1 — the §4 worked example reprices to the published figures.
 
-    The shipped shock is skew-aware (``_APPENDIX_SKEW``); these anchors are the
-    post-M1.6 §4 goldens. The flat-bump baseline (``+18.0%`` / ``13.1x``) is
-    pinned separately by :class:`TestSkewSteepeningNoOp` at ``skew=0.0``.
+    The shipped shock is skew-aware (``_APPENDIX_SKEW``), anchored per-leg to
+    each leg's own ~10-delta wing (M1.7); these anchors are the post-M1.7 §4
+    goldens. The flat-bump baseline (``+18.0%`` / ``13.1x``) is pinned
+    separately by :class:`TestSkewSteepeningNoOp` at ``skew=0.0``.
     """
 
     def test_hedge_values_within_tolerance(self) -> None:
@@ -162,10 +191,10 @@ class TestAppendixGoldenValues:
 
         # V_today is skew-free (skew is a crash-state effect only).
         assert v_today == pytest.approx(297_715.0, rel=0.005)
-        assert v_crash == pytest.approx(4_788_166.0, rel=0.005)
+        assert v_crash == pytest.approx(5_226_004.0, rel=0.005)
 
-    def test_convexity_is_plus_22_pct(self) -> None:
-        """Crash convexity is +22.5% ± epsilon — inside the IPS band."""
+    def test_convexity_is_in_band_near_ceiling(self) -> None:
+        """Crash convexity is +24.6% ± epsilon — inside the IPS band."""
         portfolio = _make_appendix_book()
 
         convexity = cr.crash_convexity_pct(
@@ -175,10 +204,11 @@ class TestAppendixGoldenValues:
             skew_steepening=_APPENDIX_SKEW,
         )
 
-        assert convexity == pytest.approx(22.5, abs=0.5)
+        assert convexity == pytest.approx(24.64, abs=0.1)
+        assert 15.0 <= convexity <= 25.0
 
-    def test_payoff_ratio_is_about_16x(self) -> None:
-        """The repriced headline payoff ratio is ~16x (not the 2.5x floor)."""
+    def test_payoff_ratio_is_about_17x(self) -> None:
+        """The repriced headline payoff ratio is ~17.5x (not the 2.5x floor)."""
         portfolio = _make_appendix_book()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
@@ -196,7 +226,7 @@ class TestAppendixGoldenValues:
         )
 
         assert result.payoff_ratio is not None
-        assert result.payoff_ratio == pytest.approx(16.1, rel=0.02)
+        assert result.payoff_ratio == pytest.approx(17.53, rel=0.02)
 
     def test_intrinsic_floor_is_the_conservative_759k(self) -> None:
         """The intrinsic floor (~$759k) is far below the repriced value."""
@@ -309,35 +339,50 @@ class TestSkewSteepeningBehaviour:
 
         assert steepened > flat
 
-    def test_weights_are_linear_in_log_moneyness(self) -> None:
-        """V_crash matches the leg vols rebuilt from the log-moneyness form.
+    def test_crash_vol_matches_per_leg_wing_formula(self) -> None:
+        """V_crash matches the leg vols rebuilt from the per-leg wing form.
 
-        Independently reconstructs each leg's shocked vol as
-        ``0.20 + vol_shock + skew * w`` with ``w = ln(S/K) / ln(S/K_tail)``,
-        prices with the public engine, and requires an exact match — pinning
-        the interpolation to log-moneyness with the deepest OTM put as anchor.
+        Independently reconstructs each put leg's shocked vol as
+        ``0.20 + vol_shock + min(skew, slope * ln(S/K))`` with
+        ``slope = skew / ln(S / K_ref)`` and ``K_ref`` the leg's own ~10-delta
+        wing, prices with the public engine, and requires an exact match —
+        pinning the crash vol to the per-leg wing anchor and the cap (M1.7),
+        not the old book-relative deepest-put anchor.
         """
         portfolio = _make_appendix_book()
-        skew = 0.10
+        skew = _APPENDIX_SKEW
 
         got = cr.crash_hedge_value(
             portfolio,
             crash_move=_APPENDIX_MOVE,
             vol_shock=_APPENDIX_VOL_SHOCK,
             skew_steepening=skew,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
         )
 
         crash_spot = _APPENDIX_SPOT * (1.0 + _APPENDIX_MOVE)
-        deepest_strike = min(strike for strike, _ in _APPENDIX_LEGS)
-        tail_log_moneyness = math.log(_APPENDIX_SPOT / deepest_strike)
         expected = 0.0
         for position in portfolio.positions:
             strike = position.option.strike_price
-            weight = min(
-                1.0,
-                math.log(_APPENDIX_SPOT / strike) / tail_log_moneyness,
+            is_otm_put = (
+                position.option.option_type == OptionType.PUT
+                and strike < _APPENDIX_SPOT
             )
-            vol = 0.20 + _APPENDIX_VOL_SHOCK + skew * weight
+            if is_otm_put:
+                k_ref = cr._solve_wing_strike(
+                    spot=_APPENDIX_SPOT,
+                    maturity_date=position.option.maturity_date,
+                    volatility=position.option.volatility,
+                    risk_free_rate=portfolio.risk_free_rate,
+                    dividend_yield=portfolio.dividend_yield,
+                    valuation_date=portfolio.valuation_date,
+                    anchor_delta=_APPENDIX_SKEW_ANCHOR,
+                )
+                slope = skew / math.log(_APPENDIX_SPOT / k_ref)
+                extra = min(skew, slope * math.log(_APPENDIX_SPOT / strike))
+            else:
+                extra = 0.0
+            vol = 0.20 + _APPENDIX_VOL_SHOCK + extra
             leg = OptionValuation(
                 spot_price=crash_spot,
                 strike_price=strike,
@@ -370,6 +415,129 @@ class TestSkewSteepeningBehaviour:
         )
 
         assert steepened == flat
+
+
+class TestPerLegWingAnchor:
+    """M1.7 — the skew is a pure per-leg function of the leg's own wing.
+
+    Pins the re-anchoring this milestone exists to make: the extra crash vol on
+    each leg is ``min(skew, slope * ln(S/K))`` against that leg's own ~10-delta
+    wing, capped there, and independent of what else the book holds. The values
+    match ``scratch/skew_anchor_sweep.py`` rule (e), the signed-off calibration.
+    """
+
+    def test_per_leg_extra_vol_matches_sweep_canonical(self) -> None:
+        """Canonical legs steepen to their own wing: K5200 +5.77, K4900 +7.67.
+
+        Both legs are shallower than their own ~10-delta wing, so neither is
+        capped — the extra interpolates below +10 vol pts.
+        """
+        portfolio = _load_canonical_example()
+        extras = {
+            pos.option.strike_price: _leg_extra_crash_vol(portfolio, pos)
+            for pos in portfolio.positions
+            if pos.option.option_type == OptionType.PUT
+        }
+
+        assert extras[5200.0] == pytest.approx(0.0577, abs=0.0015)
+        assert extras[4900.0] == pytest.approx(0.0767, abs=0.0015)
+        # Neither shallow leg reaches the cap.
+        assert extras[5200.0] < _APPENDIX_SKEW
+        assert extras[4900.0] < _APPENDIX_SKEW
+
+    def test_per_leg_extra_vol_matches_sweep_appendix(self) -> None:
+        """§4 legs: K5280 +9.46, K4620 and K3960 pinned at the +10 cap."""
+        portfolio = _make_appendix_book()
+        extras = {
+            pos.option.strike_price: _leg_extra_crash_vol(portfolio, pos)
+            for pos in portfolio.positions
+        }
+
+        assert extras[5280.0] == pytest.approx(0.0946, abs=0.0015)
+        assert extras[5280.0] < _APPENDIX_SKEW
+        # The two deeper legs sit at or beyond their wing -> capped at skew.
+        assert extras[4620.0] == pytest.approx(_APPENDIX_SKEW, abs=1e-9)
+        assert extras[3960.0] == pytest.approx(_APPENDIX_SKEW, abs=1e-9)
+
+    def test_crash_vol_independent_of_book_composition(self) -> None:
+        """Adding a deeper put leaves a shallower leg's crash vol unchanged.
+
+        The M1.7 acceptance criterion: market skew at a strike is not a function
+        of what else is held. Under the old book-relative anchor the shallow
+        leg's steepening tracked the *deepest held* put; here it tracks the
+        leg's own wing, so a new, deeper leg cannot move it.
+        """
+        portfolio = _make_appendix_book()  # deepest held put is K3960
+        shallow = next(
+            pos
+            for pos in portfolio.positions
+            if pos.option.strike_price == 5280.0
+        )
+
+        before = _leg_extra_crash_vol(portfolio, shallow)
+
+        # Add a leg deeper than the existing deepest (K3960 -> K3000).
+        portfolio.add_position(
+            strike_price=3000.0,
+            maturity_date=shallow.option.maturity_date,
+            quantity=5,
+            option_type=OptionType.PUT,
+            volatility=0.20,
+        )
+        after = _leg_extra_crash_vol(portfolio, shallow)
+
+        # The shallow leg's crash vol does not move.
+        assert after == before
+        # ...and it is the own-wing value, not the book-relative (deepest-put)
+        # weight the old model would have produced.
+        book_relative = _APPENDIX_SKEW * (
+            math.log(_APPENDIX_SPOT / 5280.0)
+            / math.log(_APPENDIX_SPOT / 3960.0)
+        )
+        assert before == pytest.approx(0.0946, abs=0.0015)
+        assert before != pytest.approx(book_relative, abs=0.001)
+
+    def test_cap_binds_at_and_beyond_the_wing(self) -> None:
+        """Extra vol == skew at/beyond the wing; interpolates below it."""
+        portfolio = _make_appendix_book()
+        maturity = portfolio.positions[0].option.maturity_date
+        k_wing = cr._solve_wing_strike(
+            spot=_APPENDIX_SPOT,
+            maturity_date=maturity,
+            volatility=0.20,
+            risk_free_rate=portfolio.risk_free_rate,
+            dividend_yield=portfolio.dividend_yield,
+            valuation_date=portfolio.valuation_date,
+            anchor_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        # Three probe puts: shallower than the wing, at it, and deeper than it.
+        probe = OptionPortfolio(
+            spot_price=_APPENDIX_SPOT,
+            volatility=0.20,
+            risk_free_rate=0.045,
+            dividend_yield=0.015,
+            underlying_quantity=1000.0,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            valuation_date=portfolio.valuation_date,
+        )
+        for strike in (k_wing * 1.1, k_wing, k_wing * 0.85):
+            probe.add_position(
+                strike_price=strike,
+                maturity_date=maturity,
+                quantity=1,
+                option_type=OptionType.PUT,
+                volatility=0.20,
+            )
+        shallow_extra, at_wing_extra, deep_extra = (
+            _leg_extra_crash_vol(probe, pos) for pos in probe.positions
+        )
+
+        # Exactly the cap at the wing, and still capped beyond it.
+        assert at_wing_extra == pytest.approx(_APPENDIX_SKEW, abs=1e-9)
+        assert deep_extra == pytest.approx(_APPENDIX_SKEW, abs=1e-9)
+        # Below the wing the steepening interpolates strictly under the cap.
+        assert 0.0 < shallow_extra < _APPENDIX_SKEW
 
 
 class TestBand:
@@ -424,10 +592,10 @@ class TestGoldenExampleFile:
         )
 
         assert v_today == pytest.approx(297_715.0, rel=0.005)
-        assert v_crash == pytest.approx(4_788_166.0, rel=0.005)
+        assert v_crash == pytest.approx(5_226_004.0, rel=0.005)
 
     def test_example_convexity_is_in_band(self) -> None:
-        """Loaded book reprices to +22.5% ± epsilon — inside +15..+25%."""
+        """Loaded book reprices to +24.6% ± epsilon — inside +15..+25%."""
         portfolio = _load_golden_20m_example()
 
         convexity = cr.crash_convexity_pct(
@@ -437,7 +605,7 @@ class TestGoldenExampleFile:
             skew_steepening=_APPENDIX_SKEW,
         )
 
-        assert convexity == pytest.approx(22.5, abs=0.5)
+        assert convexity == pytest.approx(24.64, abs=0.1)
         assert 15.0 <= convexity <= 25.0
 
 
