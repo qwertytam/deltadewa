@@ -830,12 +830,14 @@ class TestNoLegacyBasisInConvexityPaths:
 
 
 class TestCanonicalExampleInvariants:
-    """§7 — invariants only on spx_protective_put.yaml (not the band).
+    """§7 — invariants on spx_protective_put.yaml, plus the in-band re-golden.
 
-    Measured corrected convexity at the IPS scenario (-25%, vol_shock 0.15) is
-    ~+14.3% of the ~$5.8M book — positive, hedge-only, and repriced, but a
-    touch below the +15..+25% band floor. That marginal under-sizing is an
-    M1.4 (Mo3) re-sizing item; it is deliberately not re-sized here.
+    Under the *flat* bump the corrected convexity at the IPS scenario (-25%,
+    vol_shock 0.15) is ~+14.3% of the ~$5.8M book — positive, hedge-only, and
+    repriced, but a touch below the +15..+25% floor. The shipped per-leg skew
+    shock (M1.7) lifts it to ~+16.1%, comfortably in-band, so the book is
+    conformant and **not re-sized** — asserted in
+    :meth:`test_canonical_in_band_under_skew_not_resized`.
     """
 
     def test_convexity_is_positive(self) -> None:
@@ -871,6 +873,37 @@ class TestCanonicalExampleInvariants:
                 pos.option.volatility + 0.15,
             )
             assert value > 0.0
+
+    def test_canonical_in_band_under_skew_not_resized(self) -> None:
+        """Per-leg skew lifts the canonical to ~+16.1% — in-band, not re-sized.
+
+        The flat bump left it just under the +15% floor (~+14.3%); the
+        honestly-calibrated per-leg wing steepening (M1.7) reads ~+16.1%,
+        comfortably in the +15..+25% band, so no re-size is needed. The fixture
+        carries an *absolute* maturity, so the valuation date is pinned here to
+        keep the golden stable against day-to-day theta drift.
+        """
+        portfolio = _load_canonical_example()
+        portfolio.valuation_date = datetime(2026, 7, 25, tzinfo=UTC)
+
+        convexity = cr.crash_convexity_pct(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        assert convexity == pytest.approx(16.1, abs=0.1)
+        # In-band => the conformance conclusion is "no re-size needed".
+        assert 15.0 <= convexity <= 25.0
+        # ...and the fixture itself is unchanged: two puts, same strikes/counts.
+        puts = {
+            (pos.option.strike_price, pos.quantity)
+            for pos in portfolio.positions
+            if pos.option.option_type == OptionType.PUT
+        }
+        assert puts == {(5200.0, 5), (4900.0, 5)}
 
 
 class TestPerLegExerciseStyleRespected:

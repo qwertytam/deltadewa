@@ -375,8 +375,16 @@ Dash, so book and workbench cannot disagree in front of a user.
   (methodology §8).
 - **Notebook crash-panel wiring** — `NetHedgeSummary`'s skew param and
   `compute_crash_convexity`'s shock argument (Dash-migration scope).
-- **Methodology doc re-golden** — `docs/repricing-methodology.md` §2/§4/§7/§8 still
-  carry M1.6 framing; recompute alongside the Dash cut.
+
+**Resolved since (auditable close-out):**
+
+- **Methodology doc re-golden — RESOLVED** (`feat(crash): re-golden §4 …`).
+  `docs/repricing-methodology.md` §2/§4/§5/§7/§8 rewritten under the capped
+  per-leg ~10-delta anchor — the numbers `b1f4e3d` moved (the split the policy
+  forbids, now closed in one commit): §4 = **+24.64% / 17.5× / $5.23M** (V_today
+  and the intrinsic floor unchanged); canonical **asserted in-band at ~+16.1%**
+  and not re-sized; §8 marks composition-dependence and the book/candidate split
+  resolved, leaving the shock's term structure as the remaining simplification.
 
 **The problem, one root.** M1.6 anchors the skew weight to the book's deepest held
 put (`_tail_log_moneyness` = `ln(S / min(otm_put_strikes))`). Two consequences:
