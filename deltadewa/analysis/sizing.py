@@ -266,6 +266,12 @@ def size_hedge(
     pricing to :func:`~deltadewa.analysis.candidate.evaluate_candidate`, then
     calls :func:`size_from_unit` for the scalar arithmetic.
 
+    The per-contract payoff is priced with the **same crash skew** the book
+    surfaces use — ``crash_vol_shock`` plus the per-leg ``skew_steepening``
+    anchored to each candidate's own ``skew_reference_delta`` wing, all sourced
+    from ``ips_config.convexity`` (M1.7). Sizing therefore no longer
+    under-states payoffs on the flat bump and over-hedges relative to the gauge.
+
     Sizing operates on the **beta-adjusted (SPX-equivalent) notional**
     ``book_notional * ips_config.sizing.portfolio_beta`` (handbook §2499): the
     crash offset and achieved convexity are measured against it, so a book beta
@@ -320,6 +326,8 @@ def size_hedge(
         maturity_years=candidate_maturity_years,
         crash_pct=crash_pct,
         crash_vol_shock=ips_config.convexity.crash_vol_shock,
+        skew_steepening=ips_config.convexity.skew_steepening,
+        skew_reference_delta=ips_config.convexity.skew_reference_delta,
         vol=vol,
     )
 

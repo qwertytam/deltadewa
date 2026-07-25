@@ -344,10 +344,39 @@ the honest calibration and the re-size decision recorded either way.
 
 ### M1.7 — Unify the crash-shock skew across book and candidate surfaces
 
-**Status: open (follow-up from M1.6).** Promoted from M1.6's deferred sub-bullet
-because it is a cross-surface inconsistency with a directional bias, not a cosmetic
-gap. Sequence **before M2.3 surfaces the sizing workbench** in Dash (or before the
-next release), so book and workbench cannot disagree in front of a user.
+**Status: DONE** (per-leg re-anchor + candidate wiring). Promoted from M1.6's
+deferred sub-bullet because it is a cross-surface inconsistency with a directional
+bias, not a cosmetic gap — and closed before M2.3 surfaces the sizing workbench in
+Dash, so book and workbench cannot disagree in front of a user.
+
+**Resolution.** Landed in two commits, full gate green after each:
+
+- **`b1f4e3d` — per-leg wing re-anchor.** `_leg_crash_vol` anchors each leg's
+  steepening to its own ~10-delta wing (`skew_reference_delta`, IPS-configurable,
+  default 0.10), capped there; `_tail_log_moneyness` / `_skew_weight` deleted. The
+  function takes no book context, so a leg's crash vol is composition-independent.
+  §4 re-goldened in place at **+24.64%** (17.5×, `V_crash` ≈ $5.23M); canonical
+  **+16.11%**, neither re-sized; `skew = 0.0` still a byte-for-byte no-op.
+- **`fix(sizing)` — candidate wiring (this commit).** `evaluate_candidate` takes
+  the skew as **required** params; `size_hedge` and `build_strike_ladder` source
+  them from `ips_config.convexity`. The flat-bump split is gone: a candidate at a
+  held strike reproduces that leg's per-contract crash value exactly, and the
+  sizing payoff agrees with the gauge at equal depth.
+
+**Still-deferred follow-ups (tracked; not blocking M1.7 acceptance):**
+
+- **Book surfaces source `skew_reference_delta` from the IPS.** `crash_payoff` /
+  `health` / `roll_status` forward `skew_steepening` but inherit
+  `crash_hedge_value`'s 0.10 default for the anchor — **no observable difference at
+  the shipped 0.10 default**. Threading it as a third scalar is pylint-arity-blocked
+  (`_build_scenario_rows` is already at `max-args = 8`); the value-object bundle
+  that would unblock it was declined, so this waits on that refactor.
+- **Crash-shock term structure** — one cross-sectional slope, no tenor dependence
+  (methodology §8).
+- **Notebook crash-panel wiring** — `NetHedgeSummary`'s skew param and
+  `compute_crash_convexity`'s shock argument (Dash-migration scope).
+- **Methodology doc re-golden** — `docs/repricing-methodology.md` §2/§4/§7/§8 still
+  carry M1.6 framing; recompute alongside the Dash cut.
 
 **The problem, one root.** M1.6 anchors the skew weight to the book's deepest held
 put (`_tail_log_moneyness` = `ln(S / min(otm_put_strikes))`). Two consequences:
@@ -379,10 +408,11 @@ Recommendation: (A) — it fixes both consequences at one root and keeps a singl
 skew function everywhere. Confirm the calibration can be expressed as an absolute
 slope consistent with the signed-off `0.10`-at-the-tail figure before committing.
 
-**Acceptance:** one skew function drives book and candidate surfaces; a fixed leg's
-crash vol is independent of book composition; the sizing payoff ratio and the gauge
-convexity agree at equal depth on the §4 book; goldens and methodology recomputed
-together; `skew = 0` still a byte-for-byte no-op.
+**Acceptance (all met):** one skew function drives book and candidate surfaces; a
+fixed leg's crash vol is independent of book composition; the sizing payoff ratio
+and the gauge convexity agree at equal depth on the §4 book; goldens recomputed
+(methodology doc re-golden tracked as a follow-up above); `skew = 0` still a
+byte-for-byte no-op.
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 

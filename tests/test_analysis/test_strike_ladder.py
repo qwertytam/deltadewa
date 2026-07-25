@@ -58,6 +58,8 @@ def _make_ips(
     target_min_pct: float = 5.0,
     target_max_pct: float = 30.0,
     portfolio_beta: float = 1.0,
+    skew_steepening: float = 0.0,
+    skew_reference_delta: float = 0.10,
 ) -> IpsConfig:
     return IpsConfig(
         program=IpsProgram(name="Test", instrument="SPX"),
@@ -67,6 +69,8 @@ def _make_ips(
             crash_scenario_pct=crash_scenario_pct,
             target_min_pct=target_min_pct,
             target_max_pct=target_max_pct,
+            skew_steepening=skew_steepening,
+            skew_reference_delta=skew_reference_delta,
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=max_tolerance_pct),
         triggers=IpsTriggers(
@@ -121,6 +125,9 @@ class TestStrikeForDelta:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=0.15,
+            # put_delta is a today value — skew choice is irrelevant here.
+            skew_steepening=0.0,
+            skew_reference_delta=0.10,
         )
         assert abs(metrics.put_delta) == pytest.approx(target, abs=1e-4)
 
@@ -353,6 +360,8 @@ class TestBuildStrikeLadder:
             maturity_years=0.25,
             crash_pct=crash_pct,
             crash_vol_shock=ips.convexity.crash_vol_shock,
+            skew_steepening=ips.convexity.skew_steepening,
+            skew_reference_delta=ips.convexity.skew_reference_delta,
         )
         offset = required_crash_offset(book_notional, crash_pct, 20.0)
         sizing = size_from_unit(
@@ -372,6 +381,33 @@ class TestBuildStrikeLadder:
         )
         assert rung.within_budget == sizing.within_budget
         assert rung.carry_headroom == pytest.approx(sizing.carry_headroom)
+
+    def test_skew_on_raises_payoff_not_more_contracts(self) -> None:
+        """A skew-on ladder rung pays more and needs no more contracts.
+
+        With ``skew_steepening > 0`` the per-leg wing steepening lifts each
+        rung's repriced payoff above the flat bump, so the same (delta,
+        maturity) cell needs no more contracts to cover the offset — sizing on
+        the unified skew no longer over-hedges (M1.7).
+        """
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        flat = build_strike_ladder(
+            portfolio,
+            _make_ips(skew_steepening=0.0),
+            target_deltas=[0.10],
+            maturities_years=[1.0],
+        ).rungs[0]
+        skewed = build_strike_ladder(
+            portfolio,
+            _make_ips(skew_steepening=0.10),
+            target_deltas=[0.10],
+            maturities_years=[1.0],
+        ).rungs[0]
+        assert (
+            skewed.metrics.per_contract_payoff
+            > flat.metrics.per_contract_payoff
+        )
+        assert skewed.contracts_needed <= flat.contracts_needed
 
     def test_unsolvable_rung_surfaced_not_dropped(self) -> None:
         """An unsolvable target_delta is surfaced explicitly, not dropped.

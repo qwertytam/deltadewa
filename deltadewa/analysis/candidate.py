@@ -136,6 +136,8 @@ def evaluate_candidate(
     maturity_years: float,
     crash_pct: float,
     crash_vol_shock: float,
+    skew_steepening: float,
+    skew_reference_delta: float,
     vol: float | None = None,
 ) -> CandidateMetrics:
     """Price one candidate put and return per-contract economics.
@@ -149,6 +151,12 @@ def evaluate_candidate(
     :func:`~deltadewa.analysis.crash_repricing.crash_intrinsic_floor` helpers —
     no repricing logic is duplicated here.
 
+    The crash payoff carries the **same per-leg skew** the book surfaces use
+    (M1.7): the candidate's steepening is anchored to *its own*
+    ``skew_reference_delta`` wing, so evaluating a candidate at a strike the
+    book already holds yields the held leg's per-contract crash value exactly —
+    book and workbench cannot disagree at equal depth.
+
     Args:
         portfolio: Live portfolio supplying spot, vol, rate, div, exercise
             style, and valuation date.
@@ -161,6 +169,16 @@ def evaluate_candidate(
             from ``IpsConvexity.crash_vol_shock``.  Applied to the candidate's
             own vol when repricing at the crash spot, so every panel shares one
             crash basis (required — no silent divergence).
+        skew_steepening: Deep-OTM skew steepening added on top of
+            *crash_vol_shock*, capped at the candidate's own
+            ``skew_reference_delta`` wing (M1.7), from
+            ``IpsConvexity.skew_steepening``.  **Required** — no defaulted
+            ``0.0`` so the candidate can never silently revert to the flat bump
+            the book surfaces have moved off. ``0.0`` keeps the flat bump.
+        skew_reference_delta: Put-delta magnitude of the wing the steepening is
+            anchored to (e.g. ``0.10``), from
+            ``IpsConvexity.skew_reference_delta``.
+            **Required.**  Only used when *skew_steepening* is non-zero.
         vol: Implied volatility override (annualised fraction).  Defaults to
             ``portfolio.volatility`` when ``None``.
 
@@ -200,6 +218,8 @@ def evaluate_candidate(
         portfolio,
         crash_move=crash_move,
         vol_shock=crash_vol_shock,
+        skew_steepening=skew_steepening,
+        skew_reference_delta=skew_reference_delta,
         positions=[candidate_leg],
     )
     per_contract_intrinsic_floor = crash_intrinsic_floor(
