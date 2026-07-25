@@ -26,9 +26,11 @@ convexity:
   target_min_pct: 15.0
   target_max_pct: 25.0
   crash_vol_shock: 0.15         # flat additive vol bump at the crash spot (M1.2)
-  skew_steepening: 0.10         # extra vol at the deep-OTM tail over ATM, linear
-                                # in log-moneyness (M1.6; methodology §2). 0.0
-                                # keeps the flat bump.
+  skew_steepening: 0.10         # extra vol reached at each leg's own ~10-delta
+                                # wing, capped there and interpolated below it
+                                # (M1.7; methodology §2). 0.0 keeps the flat bump.
+  skew_reference_delta: 0.10    # put-delta magnitude of that wing (the anchor the
+                                # steepening is calibrated to). Range (0, 0.5).
   crash_floor_reported: true    # surface the intrinsic-floor column
 
 drawdown:

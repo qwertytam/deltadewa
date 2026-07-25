@@ -7,12 +7,14 @@
 # an in-band book to open in the monitor for demos and smoke checks.
 #
 # Golden values (§4, skew-aware crash shock, -25% crash, T = 1.5y): flat +0.15
-# vol bump at ATM plus a +0.10 deep-OTM skew steepening linear in log-moneyness,
-# so crash vols run 39.4% / 42.0% / 45.0% across the 20/30/40%-OTM rungs (M1.6):
+# vol bump at ATM plus a +0.10 skew steepening capped at each leg's own ~10-delta
+# wing (M1.7), so crash vols run 44.5% / 45.0% / 45.0% across the 20/30/40%-OTM
+# rungs (the two deeper rungs sit at/beyond their wing, so both hit the +0.10 cap):
 #   Hedge value today   ≈ $297,715   (1.49% of $20M, ≈ 0.99%/yr carry)
-#   Hedge value in crash ≈ $4,788,166 (16.1x — repriced, full option value)
-#   Convexity           ≈ +22.5%     -> inside the IPS +15%..+25% band
-# (Under the pre-M1.6 flat +0.15 bump this book read +18.0% / 13.1x.)
+#   Hedge value in crash ≈ $5,226,004 (17.6x — repriced, full option value)
+#   Convexity           ≈ +24.6%     -> inside the IPS +15%..+25% band
+# (Under the pre-M1.6 flat +0.15 bump this book read +18.0% / 13.1x; under the
+#  M1.6 book-relative anchor, +22.5% / 16.1x.)
 #
 # Maturities are relative (maturity_days: 548 ≈ 18 months) so the book stays a
 # stable ~1.5y-tenor fixture whenever it is opened, not a decaying snapshot.

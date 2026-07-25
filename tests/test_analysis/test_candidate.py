@@ -20,6 +20,12 @@ from deltadewa.portfolio.core import OptionPortfolio
 # not otherwise care about its exact value.
 _CRASH_VOL_SHOCK = 0.15
 
+# Crash skew knobs (IpsConvexity defaults). Since M1.7 the candidate path is
+# priced on the same per-leg skew as the book surfaces, so evaluate_candidate
+# requires both — no silent flat-bump fallback.
+_SKEW_STEEPENING = 0.10
+_SKEW_REFERENCE_DELTA = 0.10
+
 # §4 worked-example crash state (docs/repricing-methodology.md): spot 6600,
 # 18-month European puts, 20% flat today-vol, +15% crash vol shock, -25% crash.
 _APX_SPOT = 6600.0
@@ -90,6 +96,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert isinstance(result, CandidateMetrics)
 
@@ -103,6 +111,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.pct_otm == pytest.approx(5.0)
 
@@ -115,6 +125,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.put_delta < 0.0
 
@@ -135,6 +147,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_intrinsic_floor == pytest.approx(100_000.0)
         assert result.per_contract_payoff > 0.0
@@ -154,6 +168,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_intrinsic_floor == pytest.approx(0.0)
         assert result.per_contract_payoff > 0.0
@@ -167,6 +183,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_carry > 0.0
 
@@ -179,6 +197,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.premium > 0.0
 
@@ -191,6 +211,8 @@ class TestEvaluateCandidate:
             maturity_years=0.50,
             crash_pct=-30.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.strike == pytest.approx(4600.0)
 
@@ -203,6 +225,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
             vol=0.15,
         )
         r_high = evaluate_candidate(
@@ -211,6 +235,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
             vol=0.30,
         )
         assert r_high.premium > r_low.premium
@@ -228,6 +254,8 @@ class TestEvaluateCandidate:
             "strike": 3500.0,  # OTM at the -25% crash → time value only
             "maturity_years": 0.5,
             "crash_pct": -25.0,
+            "skew_steepening": _SKEW_STEEPENING,
+            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
         }
         r_low = evaluate_candidate(portfolio, **kwargs, crash_vol_shock=0.05)
         r_high = evaluate_candidate(portfolio, **kwargs, crash_vol_shock=0.25)
@@ -242,6 +270,8 @@ class TestEvaluateCandidate:
             maturity_years=0.25,
             crash_pct=-25.0,
             crash_vol_shock=_CRASH_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_carry > 0.0
 
@@ -258,6 +288,8 @@ class TestCandidateContractSizeScaling:
             "maturity_years": 0.25,
             "crash_pct": -25.0,
             "crash_vol_shock": _CRASH_VOL_SHOCK,
+            "skew_steepening": _SKEW_STEEPENING,
+            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
         }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
@@ -272,6 +304,8 @@ class TestCandidateContractSizeScaling:
             "maturity_years": 0.25,
             "crash_pct": -25.0,
             "crash_vol_shock": _CRASH_VOL_SHOCK,
+            "skew_steepening": _SKEW_STEEPENING,
+            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
         }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
@@ -288,6 +322,8 @@ class TestCandidateContractSizeScaling:
             "maturity_years": 0.25,
             "crash_pct": -25.0,
             "crash_vol_shock": _CRASH_VOL_SHOCK,
+            "skew_steepening": _SKEW_STEEPENING,
+            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
         }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
@@ -304,6 +340,8 @@ class TestCandidateContractSizeScaling:
             "maturity_years": 0.25,
             "crash_pct": -25.0,
             "crash_vol_shock": _CRASH_VOL_SHOCK,
+            "skew_steepening": _SKEW_STEEPENING,
+            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
         }
         assert evaluate_candidate(p100, **kwargs).pct_otm == pytest.approx(
             evaluate_candidate(p50, **kwargs).pct_otm,
@@ -328,6 +366,8 @@ class TestCrashRepricingBasis:
                 maturity_years=_APX_MATURITY_YEARS,
                 crash_pct=_APX_CRASH_PCT,
                 crash_vol_shock=_APX_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
             )
             assert result.per_contract_payoff > 0.0
             assert result.per_contract_intrinsic_floor == pytest.approx(0.0)
@@ -349,6 +389,8 @@ class TestCrashRepricingBasis:
             maturity_years=_APX_MATURITY_YEARS,
             crash_pct=_APX_CRASH_PCT,
             crash_vol_shock=_APX_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_intrinsic_floor == pytest.approx(33_000.0)
         assert result.per_contract_intrinsic_floor < result.per_contract_payoff
@@ -382,12 +424,16 @@ class TestCrashRepricingBasis:
             maturity_years=_APX_MATURITY_YEARS,
             crash_pct=_APX_CRASH_PCT,
             crash_vol_shock=_APX_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         ips = IpsConvexity(
             crash_scenario_pct=_APX_CRASH_PCT,
             target_min_pct=15.0,
             target_max_pct=25.0,
             crash_vol_shock=_APX_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         rows = crash_scenario_table(
             portfolio,
@@ -396,6 +442,115 @@ class TestCrashRepricingBasis:
         )
         row = next(r for r in rows if r.shock_pct == _APX_CRASH_PCT)
         assert candidate.per_contract_payoff == pytest.approx(row.hedge_pnl)
+
+
+class TestBookCandidateParity:
+    """M1.7 — one skew function drives book legs and standalone candidates."""
+
+    def test_book_equals_candidate_at_equal_depth(self) -> None:
+        """A candidate equals the held leg's per-contract crash value.
+
+        The headline guard: evaluating a candidate at a strike/tenor the book
+        already holds must reproduce that held leg's repriced per-contract crash
+        value exactly.  Both flow through the per-leg skew in crash_hedge_value,
+        anchored to the leg's own wing, so book and workbench cannot disagree at
+        equal depth.
+        """
+        from deltadewa.analysis.crash_repricing import crash_hedge_value
+
+        strike = _APX_STRIKE_30_OTM
+        quantity = 7  # > 1 so the per-contract division is exercised
+        portfolio = _make_appendix_portfolio()
+        maturity_date = portfolio.valuation_date + datetime.timedelta(
+            days=round(_APX_MATURITY_YEARS * const.DAYS_PER_YEAR),
+        )
+        portfolio.add_position(
+            strike_price=strike,
+            maturity_date=maturity_date,
+            quantity=quantity,
+            option_type=OptionType.PUT,
+            volatility=_APX_VOL,
+        )
+        held_leg = portfolio.positions[0]
+
+        held_total = crash_hedge_value(
+            portfolio,
+            crash_move=_APX_CRASH_PCT / 100.0,
+            vol_shock=_APX_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            positions=[held_leg],
+        )
+        held_per_contract = held_total / quantity
+
+        candidate = evaluate_candidate(
+            portfolio,
+            strike=strike,
+            maturity_years=_APX_MATURITY_YEARS,
+            crash_pct=_APX_CRASH_PCT,
+            crash_vol_shock=_APX_VOL_SHOCK,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
+        )
+        assert candidate.per_contract_payoff == pytest.approx(held_per_contract)
+
+    def test_candidate_payoff_rises_vs_flat_bump(self) -> None:
+        """Skew-on lifts the candidate payoff above the old flat bump.
+
+        The per-leg steepening adds vol on top of ``crash_vol_shock`` for an OTM
+        put, so the repriced payoff is strictly larger than the flat-bump value
+        the candidate path produced before M1.7 (the ~23% under-statement is
+        gone).
+        """
+        portfolio = _make_appendix_portfolio()
+        common = {
+            "strike": _APX_STRIKE_30_OTM,
+            "maturity_years": _APX_MATURITY_YEARS,
+            "crash_pct": _APX_CRASH_PCT,
+            "crash_vol_shock": _APX_VOL_SHOCK,
+            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
+        }
+        flat = evaluate_candidate(portfolio, **common, skew_steepening=0.0)
+        skewed = evaluate_candidate(
+            portfolio,
+            **common,
+            skew_steepening=_SKEW_STEEPENING,
+        )
+        assert skewed.per_contract_payoff > flat.per_contract_payoff
+
+    def test_candidate_payoff_independent_of_book_composition(self) -> None:
+        """A candidate's payoff does not change when the book changes.
+
+        The candidate is priced in isolation on its own wing (no book context),
+        so adding a deeper held put to the portfolio must not move its payoff —
+        the M1.7 composition-independence guarantee, on the candidate path.
+        """
+        kwargs = {
+            "strike": _APX_STRIKE_20_OTM,
+            "maturity_years": _APX_MATURITY_YEARS,
+            "crash_pct": _APX_CRASH_PCT,
+            "crash_vol_shock": _APX_VOL_SHOCK,
+            "skew_steepening": _SKEW_STEEPENING,
+            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
+        }
+        empty_book = _make_appendix_portfolio()
+        before = evaluate_candidate(empty_book, **kwargs)
+
+        with_deeper = _make_appendix_portfolio()
+        maturity_date = with_deeper.valuation_date + datetime.timedelta(
+            days=round(_APX_MATURITY_YEARS * const.DAYS_PER_YEAR),
+        )
+        with_deeper.add_position(
+            strike_price=_APX_STRIKE_40_OTM,
+            maturity_date=maturity_date,
+            quantity=50,
+            option_type=OptionType.PUT,
+            volatility=_APX_VOL,
+        )
+        after = evaluate_candidate(with_deeper, **kwargs)
+        assert after.per_contract_payoff == pytest.approx(
+            before.per_contract_payoff,
+        )
 
 
 # ---------------------------------------------------------------------------

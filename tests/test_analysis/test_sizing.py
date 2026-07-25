@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import datetime
 import sys
 
 import pytest
 
+from deltadewa import constants as const
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
     UnitSizingResult,
@@ -14,7 +16,7 @@ from deltadewa.analysis.sizing import (
     size_from_unit,
     size_hedge,
 )
-from deltadewa.constants import ExerciseStyle
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
     IpsConfig,
@@ -42,6 +44,8 @@ def _make_ips(
     target_min_pct: float = 5.0,
     target_max_pct: float = 30.0,
     portfolio_beta: float = 1.0,
+    skew_steepening: float = 0.0,
+    skew_reference_delta: float = 0.10,
 ) -> IpsConfig:
     return IpsConfig(
         program=IpsProgram(name="Test", instrument="SPX"),
@@ -51,6 +55,8 @@ def _make_ips(
             crash_scenario_pct=crash_scenario_pct,
             target_min_pct=target_min_pct,
             target_max_pct=target_max_pct,
+            skew_steepening=skew_steepening,
+            skew_reference_delta=skew_reference_delta,
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=max_tolerance_pct),
         triggers=IpsTriggers(
@@ -469,3 +475,69 @@ class TestBetaAdjustedSizing:
         assert result.beta_adjusted_notional == pytest.approx(
             result.book_notional * ips.sizing.portfolio_beta,
         )
+
+    def test_sizing_payoff_agrees_with_gauge_at_equal_depth(self) -> None:
+        """size_hedge per-contract payoff equals the book gauge at equal depth.
+
+        The M1.7 acceptance criterion: a candidate sized by the workbench and a
+        held leg priced by the book gauge run through one skew function, so at
+        the same strike/tenor their per-contract crash value is identical — the
+        workbench can no longer under-state payoffs relative to the gauge.
+        """
+        from deltadewa.analysis.crash_repricing import crash_hedge_value
+
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        ips = _make_ips(skew_steepening=0.10, crash_scenario_pct=-25.0)
+        pct_otm = 30.0
+        maturity_years = 1.5
+
+        sized = size_hedge(
+            portfolio,
+            ips,
+            candidate_pct_otm=pct_otm,
+            candidate_maturity_years=maturity_years,
+        )
+
+        # Book gauge basis: a held leg at the same strike/tenor priced through
+        # the same crash_hedge_value with the IPS skew.
+        strike = portfolio.spot_price * (1.0 - pct_otm / 100.0)
+        maturity_date = portfolio.valuation_date + datetime.timedelta(
+            days=round(maturity_years * const.DAYS_PER_YEAR),
+        )
+        portfolio.add_position(
+            strike_price=strike,
+            maturity_date=maturity_date,
+            quantity=1,
+            option_type=OptionType.PUT,
+            volatility=portfolio.volatility,
+        )
+        gauge_per_contract = crash_hedge_value(
+            portfolio,
+            crash_move=ips.convexity.crash_scenario_pct / 100.0,
+            vol_shock=ips.convexity.crash_vol_shock,
+            skew_steepening=ips.convexity.skew_steepening,
+            skew_reference_delta=ips.convexity.skew_reference_delta,
+            positions=[portfolio.positions[0]],
+        )
+        assert sized.per_contract_payoff == pytest.approx(gauge_per_contract)
+
+    def test_skew_on_raises_payoff_and_not_more_contracts(self) -> None:
+        """Skew-on sizing lifts the payoff and needs no more contracts.
+
+        Turning ``skew_steepening`` on raises the per-contract payoff versus the
+        flat bump, so covering the same crash offset needs no more contracts —
+        the workbench stops over-hedging relative to the gauge (M1.7).
+        """
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+        kwargs = {
+            "candidate_pct_otm": 30.0,
+            "candidate_maturity_years": 1.5,
+        }
+        flat = size_hedge(portfolio, _make_ips(skew_steepening=0.0), **kwargs)
+        skewed = size_hedge(
+            portfolio,
+            _make_ips(skew_steepening=0.10),
+            **kwargs,
+        )
+        assert skewed.per_contract_payoff > flat.per_contract_payoff
+        assert skewed.contracts_needed <= flat.contracts_needed

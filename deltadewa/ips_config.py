@@ -18,10 +18,12 @@ from deltadewa.constants import ExerciseStyle
 # Defaults for the crash-repricing knobs that live alongside
 # ``crash_scenario_pct`` in the ``convexity`` section. The crash *move* itself
 # is single-sourced from ``crash_scenario_pct`` (never duplicated here); these
-# knobs are the flat vol-bump magnitude, the deep-OTM skew steepening (M1.6),
-# and the intrinsic-floor toggle used by the M1.2 crash-repricing metric.
+# knobs are the flat vol-bump magnitude, the deep-OTM skew steepening and the
+# put-delta wing it is anchored to (M1.6/M1.7), and the intrinsic-floor toggle
+# used by the M1.2 crash-repricing metric.
 _DEFAULT_CRASH_VOL_SHOCK: Final[float] = 0.15
 _DEFAULT_SKEW_STEEPENING: Final[float] = 0.0
+_DEFAULT_SKEW_REFERENCE_DELTA: Final[float] = 0.10
 _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 
 # Default for the delta-drift target that lives alongside the delta_drift
@@ -127,11 +129,14 @@ class IpsConvexity:
 
     ``crash_scenario_pct`` is the single source of truth for the crash *move*
     (a signed percent, e.g. ``-25.0``) across every panel. ``crash_vol_shock``,
-    ``skew_steepening`` and ``crash_floor_reported`` are the crash-repricing
-    knobs co-located here (see ``docs/repricing-methodology.md`` §5): the flat
-    additive volatility bump applied at the crash spot, an optional deep-OTM
-    skew steepening added on top of that bump at the tail (M1.6; ``0.0`` keeps
-    the flat bump), and whether the intrinsic-floor column is surfaced.
+    ``skew_steepening``, ``skew_reference_delta`` and ``crash_floor_reported``
+    are the crash-repricing knobs co-located here (see
+    ``docs/repricing-methodology.md`` §5): the flat additive volatility bump
+    applied at the crash spot, an optional deep-OTM skew steepening added on top
+    of that bump and capped at each leg's own ~10-delta wing (M1.6/M1.7; ``0.0``
+    keeps the flat bump), the put-delta magnitude of that wing (the anchor the
+    steepening is calibrated to, e.g. ``0.10``), and whether the intrinsic-floor
+    column is surfaced.
     """
 
     crash_scenario_pct: float
@@ -139,6 +144,7 @@ class IpsConvexity:
     target_max_pct: float
     crash_vol_shock: float = _DEFAULT_CRASH_VOL_SHOCK
     skew_steepening: float = _DEFAULT_SKEW_STEEPENING
+    skew_reference_delta: float = _DEFAULT_SKEW_REFERENCE_DELTA
     crash_floor_reported: bool = _DEFAULT_CRASH_FLOOR_REPORTED
 
 
@@ -323,6 +329,15 @@ def _parse_convexity(config: dict[str, Any]) -> IpsConvexity:
         _DEFAULT_SKEW_STEEPENING,
     )
     _require_non_negative(skew_steepening, "convexity.skew_steepening")
+    skew_reference_delta = section.get(
+        "skew_reference_delta",
+        _DEFAULT_SKEW_REFERENCE_DELTA,
+    )
+    if not 0 < skew_reference_delta < 0.5:
+        raise IpsConfigError(
+            "convexity.skew_reference_delta must be in (0, 0.5), got "
+            f"{skew_reference_delta}",
+        )
     crash_floor_reported = bool(
         section.get("crash_floor_reported", _DEFAULT_CRASH_FLOOR_REPORTED),
     )
@@ -333,6 +348,7 @@ def _parse_convexity(config: dict[str, Any]) -> IpsConvexity:
         target_max_pct=target_max_pct,
         crash_vol_shock=crash_vol_shock,
         skew_steepening=skew_steepening,
+        skew_reference_delta=skew_reference_delta,
         crash_floor_reported=crash_floor_reported,
     )
 

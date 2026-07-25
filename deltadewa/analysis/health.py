@@ -197,7 +197,7 @@ class HealthMixin:
         self,
         crash_scenario_pct: float,
         crash_vol_shock: float,
-        skew_steepening: float = 0.0,
+        skew_steepening: float,
     ) -> float:
         """Calculate crash convexity, hedge-only and repriced (§1-3).
 
@@ -221,12 +221,13 @@ class HealthMixin:
                 caller (the gauge, the scenario table, and the roll trigger) so
                 no site can silently reprice at a different vol. Pass ``0.0``
                 explicitly for a spot-only crash when no IPS shock applies.
-            skew_steepening: Optional extra vol added at the deep-OTM tail on
-                top of ``crash_vol_shock``, interpolated linearly in
-                log-moneyness from ``0`` at ATM to the full value at the deepest
-                OTM put (M1.6). Single-sourced from
-                ``IpsConvexity.skew_steepening``; ``0.0`` (the default) keeps
-                the flat bump.
+            skew_steepening: Extra vol added at the deep-OTM tail on top of
+                ``crash_vol_shock``, capped at each leg's own ~10-delta wing and
+                interpolated (in log-moneyness) below it (M1.7). **Required** —
+                single-sourced from ``IpsConvexity.skew_steepening`` by every
+                caller (the gauge, the scenario table, and the roll trigger) so
+                no site can silently reprice a flat bump by omission. Pass
+                ``0.0`` explicitly for a flat bump when no skew applies.
 
         Returns:
             Hedge-only crash convexity as a percentage of the protected book
