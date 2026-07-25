@@ -20,11 +20,23 @@ import pytest
 from deltadewa.analysis import classify_portfolio_shape
 from deltadewa.analysis import crash_repricing as cr
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_payoff import compute_crash_convexity
+from deltadewa.analysis.crash_payoff import (
+    compute_crash_convexity,
+    crash_scenario_table,
+)
 from deltadewa.analysis.health import HealthMixin
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.constants import ExerciseStyle, OptionType
-from deltadewa.ips_config import IpsConvexity
+from deltadewa.ips_config import (
+    IpsBudget,
+    IpsConfig,
+    IpsConvexity,
+    IpsDrawdown,
+    IpsMonetization,
+    IpsPricing,
+    IpsProgram,
+    IpsTriggers,
+)
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
@@ -168,6 +180,39 @@ def _leg_extra_crash_vol(
     return crash_vol - (position.option.volatility + _APPENDIX_VOL_SHOCK)
 
 
+def _make_appendix_ips(*, crash_scenario_pct: float) -> IpsConfig:
+    """Full IpsConfig at the appendix crash knobs, parameterised on depth.
+
+    Carries the shipped skew-aware shock (``_APPENDIX_VOL_SHOCK`` /
+    ``_APPENDIX_SKEW`` / ``_APPENDIX_SKEW_ANCHOR``) so every surface driven from
+    this one config shares a single crash basis. Only ``crash_scenario_pct``
+    varies, so the roll trigger evaluates convexity at the chosen depth.
+    """
+    return IpsConfig(
+        program=IpsProgram(name="appendix", instrument="SPX"),
+        pricing=IpsPricing(exercise_style=ExerciseStyle.EUROPEAN),
+        budget=IpsBudget(annual_carry_pct=2.0),
+        convexity=IpsConvexity(
+            crash_scenario_pct=crash_scenario_pct,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        ),
+        drawdown=IpsDrawdown(max_tolerance_pct=20.0),
+        triggers=IpsTriggers(
+            delta_drift_warn_pct=5.0,
+            delta_drift_action_pct=10.0,
+            theta_cost_acceptable_pct=2.0,
+            roll_time_months=1.0,
+            rally_rebalance_pct=15.0,
+            strike_drift_max_otm_pct=45.0,
+        ),
+        monetization=IpsMonetization(schedule=()),
+    )
+
+
 class TestAppendixGoldenValues:
     """§7.1 — the §4 worked example reprices to the published figures.
 
@@ -194,7 +239,18 @@ class TestAppendixGoldenValues:
         assert v_crash == pytest.approx(5_226_004.0, rel=0.005)
 
     def test_convexity_is_in_band_near_ceiling(self) -> None:
-        """Crash convexity is +24.6% ± epsilon — inside the IPS band."""
+        """§4 reprices to +24.64% — the VALUE anchor, riding just under +25%.
+
+        This value assertion (not the ``meets_target`` boolean in
+        :class:`TestBand`) is the §4 regression anchor. §4 is a deliberately
+        deep 20/30/40 ladder, so a faithful crash model correctly places it near
+        the top of the +15..+25% band — it rides only 0.36pp under the +25% IPS
+        ceiling by design. Pinning the value (not the boolean) makes any future
+        re-calibration that nudges §4 surface as a visible number change
+        demanding a deliberate decision, never a silent ``meets_target`` flip
+        that would masquerade as a regression while the fixture just hugs the
+        rail.
+        """
         portfolio = _make_appendix_book()
 
         convexity = cr.crash_convexity_pct(
@@ -206,6 +262,8 @@ class TestAppendixGoldenValues:
 
         assert convexity == pytest.approx(24.64, abs=0.1)
         assert 15.0 <= convexity <= 25.0
+        # Rides 0.36pp under the +25% IPS ceiling (target_max_pct) by design.
+        assert 25.0 - convexity == pytest.approx(0.36, abs=0.1)
 
     def test_payoff_ratio_is_about_17x(self) -> None:
         """The repriced headline payoff ratio is ~17.5x (not the 2.5x floor)."""
@@ -316,6 +374,32 @@ class TestSkewSteepeningNoOp:
         floor = cr.crash_intrinsic_floor(portfolio, crash_move=_APPENDIX_MOVE)
 
         assert floor == pytest.approx(759_000.0, rel=0.005)
+
+    def test_leg_crash_vol_noop_is_byte_for_byte(self) -> None:
+        """skew=0.0 returns the flat bump exactly, per leg (solves no wing).
+
+        The tightest no-op guard, at the primitive: an explicit
+        ``skew_steepening=0.0`` returns ``vol_i + vol_shock`` byte-for-byte for
+        every leg — including the two deep rungs that WOULD cap under a positive
+        steepening — because the disabled knob short-circuits before any wing is
+        solved. Pins the flat-baseline reproduction the aggregate no-ops need.
+        """
+        portfolio = _make_appendix_book()
+
+        for position in portfolio.positions:
+            flat = position.option.volatility + _APPENDIX_VOL_SHOCK
+            got = cr._leg_crash_vol(
+                position,
+                spot=portfolio.spot_price,
+                risk_free_rate=portfolio.risk_free_rate,
+                dividend_yield=portfolio.dividend_yield,
+                valuation_date=portfolio.valuation_date,
+                vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            )
+
+            assert got == flat
 
 
 class TestSkewSteepeningBehaviour:
@@ -540,6 +624,51 @@ class TestPerLegWingAnchor:
         assert 0.0 < shallow_extra < _APPENDIX_SKEW
 
 
+class TestCompositionInvariance:
+    """M1.7 — a leg's crash vol is a pure function of its own wing.
+
+    First-class guard (not a sub-assertion): market skew at a strike is not a
+    function of what else the book holds, so adding, removing, or reshuffling
+    other legs must leave every existing leg's crash vol byte-for-byte
+    unchanged. This is the property the per-leg anchor (``b1f4e3d``) exists to
+    provide; the old book-relative anchor, which tracked the deepest held put,
+    failed it.
+    """
+
+    def test_no_leg_crash_vol_depends_on_book_composition(self) -> None:
+        """Every original leg's crash vol is identical after adding others."""
+        portfolio = _make_appendix_book()
+        maturity = portfolio.positions[0].option.maturity_date
+        before = {
+            pos.option.strike_price: _leg_extra_crash_vol(portfolio, pos)
+            for pos in portfolio.positions
+        }
+
+        # Add unrelated legs on both sides of the ladder and a call: none is an
+        # input to any existing leg's own-wing steepening.
+        for strike, opt in (
+            (3000.0, OptionType.PUT),  # deeper than the deepest held put
+            (6000.0, OptionType.PUT),  # shallower than the shallowest
+            (7260.0, OptionType.CALL),  # a call — no wing at all
+        ):
+            portfolio.add_position(
+                strike_price=strike,
+                maturity_date=maturity,
+                quantity=5,
+                option_type=opt,
+                volatility=0.20,
+            )
+
+        after = {
+            pos.option.strike_price: _leg_extra_crash_vol(portfolio, pos)
+            for pos in portfolio.positions
+            if pos.option.strike_price in before
+        }
+
+        # Byte-for-byte: the added legs moved nothing.
+        assert after == before
+
+
 class TestBand:
     """§7.2 (D3) — the band test anchors on the §4 fixture, not the example."""
 
@@ -563,6 +692,10 @@ class TestBand:
         ips_row = next(r for r in result.scenario_rows if r.shock_pct == -25.0)
 
         assert 15.0 <= ips_row.convexity_pct <= 25.0
+        # This exercises the band-comparison mechanics; the §4 regression is
+        # anchored on the convexity VALUE (TestAppendixGoldenValues), not on
+        # this boolean, so a re-calibration reads as a number change there
+        # rather than a silent flip here (§4 rides 0.36pp under the ceiling).
         assert ips_row.meets_target is True
 
 
@@ -607,6 +740,8 @@ class TestGoldenExampleFile:
 
         assert convexity == pytest.approx(24.64, abs=0.1)
         assert 15.0 <= convexity <= 25.0
+        # Rides 0.36pp under the +25% IPS ceiling (target_max_pct) by design.
+        assert 25.0 - convexity == pytest.approx(0.36, abs=0.1)
 
 
 class TestHedgeOnlyInvariant:
@@ -776,6 +911,57 @@ class TestConsistencyAcrossSurfaces:
 
         assert ips_row.convexity_pct == pytest.approx(gauge)
 
+    def test_all_four_surfaces_agree_at_equal_depth(self) -> None:
+        """Gauge == roll trigger == summary ladder == scenario table at -20%.
+
+        The full single-basis contract under the shipped skew-aware shock:
+        driven from one IPS, the health gauge, the roll trigger's convexity,
+        the summary ladder's -20% rung, and the crash_payoff scenario table's
+        -20% row must all agree at the same crash depth. -20% is the one depth
+        present in every surface (the summary ladder gridpoints, the
+        scenario-table defaults, the gauge, and — via ``crash_scenario_pct`` —
+        the roll trigger).
+        """
+        portfolio = _make_appendix_book()
+        ips = _make_appendix_ips(crash_scenario_pct=-20.0)
+        vol_shock = _APPENDIX_VOL_SHOCK
+        skew = _APPENDIX_SKEW
+
+        gauge = PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
+            crash_scenario_pct=-20.0,
+            crash_vol_shock=vol_shock,
+            skew_steepening=skew,
+        )
+        roll = evaluate_roll_status(portfolio, ips)[0].crash_convexity_pct
+        summary = NetHedgeSummary(
+            portfolio,
+            crash_vol_shock=vol_shock,
+            skew_steepening=skew,
+        )
+        rung = dict(summary._crash_convexity_rungs())[-20.0]
+        table = compute_crash_convexity(
+            portfolio,
+            crash_vol_shock=vol_shock,
+            skew_steepening=skew,
+            ips_convexity=ips.convexity,
+        )
+        table_row = next(r for r in table.scenario_rows if r.shock_pct == -20.0)
+
+        # All four surfaces read the same convexity at the same depth.
+        assert roll == pytest.approx(gauge)
+        assert rung == pytest.approx(gauge)
+        assert table_row.convexity_pct == pytest.approx(gauge)
+        # ...and the skew-aware path is actually exercised: a flat bump at this
+        # book/depth is a materially different (lower) number, so the agreement
+        # is not a trivial flat-path coincidence.
+        flat = cr.crash_convexity_pct(
+            portfolio,
+            crash_move=-0.20,
+            vol_shock=vol_shock,
+            skew_steepening=0.0,
+        )
+        assert gauge != pytest.approx(flat)
+
 
 class TestNoLegacyBasisInConvexityPaths:
     """§7.5 grep guard — the equity-netted expiry basis is gone (scoped).
@@ -827,6 +1013,33 @@ class TestNoLegacyBasisInConvexityPaths:
         source = inspect.getsource(evaluate_roll_status)
 
         assert "crash_vol_shock=convexity.crash_vol_shock" in source
+
+    def test_skew_steepening_is_required_on_the_gauge(self) -> None:
+        """skew_steepening has no default — every caller must pass it.
+
+        The M1.7 fail-loud guard, mirroring ``crash_vol_shock`` (M1.4/M1.5):
+        with no default, a site that omits the skew cannot silently reprice a
+        flat bump (+18% at §4 instead of +24.6%) and under-report deep-tail
+        convexity. ``skew_reference_delta`` defaults to ``0.10`` (a wing, not a
+        defaulted ``0.0``) and is out of this guard's scope.
+        """
+        param = inspect.signature(
+            HealthMixin.calculate_crash_convexity_pct,
+        ).parameters["skew_steepening"]
+
+        assert param.default is inspect.Parameter.empty
+
+    def test_roll_status_sources_skew_from_ips(self) -> None:
+        """The roll trigger passes the IPS skew, matching the gauge basis."""
+        source = inspect.getsource(evaluate_roll_status)
+
+        assert "skew_steepening=convexity.skew_steepening" in source
+
+    def test_scenario_table_sources_skew_from_ips(self) -> None:
+        """The scenario table sources skew from the IPS, not a flat default."""
+        source = inspect.getsource(crash_scenario_table)
+
+        assert "ips_convexity.skew_steepening" in source
 
 
 class TestCanonicalExampleInvariants:

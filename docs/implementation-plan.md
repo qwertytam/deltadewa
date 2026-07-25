@@ -370,7 +370,9 @@ Dash, so book and workbench cannot disagree in front of a user.
   `crash_hedge_value`'s 0.10 default for the anchor — **no observable difference at
   the shipped 0.10 default**. Threading it as a third scalar is pylint-arity-blocked
   (`_build_scenario_rows` is already at `max-args = 8`); the value-object bundle
-  that would unblock it was declined, so this waits on that refactor.
+  that would unblock it was declined, so this waits on that refactor. (Untouched by
+  the Prompt E fail-loud guard: the anchor's default is `0.10`, a wing — not a
+  defaulted `0.0` — so it is out of that guard's scope.)
 - **Crash-shock term structure** — one cross-sectional slope, no tenor dependence
   (methodology §8).
 - **Notebook crash-panel wiring** — `NetHedgeSummary`'s skew param and
@@ -385,6 +387,19 @@ Dash, so book and workbench cannot disagree in front of a user.
   and the intrinsic floor unchanged); canonical **asserted in-band at ~+16.1%**
   and not re-sized; §8 marks composition-dependence and the book/candidate split
   resolved, leaving the shock's term structure as the remaining simplification.
+- **Structural regression guards — RESOLVED**
+  (`test(crash): guard skew consistency, composition invariance, and ceiling
+  proximity`). Five load-bearing M1.7 properties are now pinned so a future
+  re-calibration can't silently break them: (1) §4 anchored on the **convexity
+  value** (+24.64%, riding 0.36pp under the +25% ceiling by design), not the
+  `meets_target` boolean; (2) health gauge == roll trigger == summary ladder ==
+  crash_payoff scenario table at equal depth under the skew-aware shock; (3)
+  **composition invariance** as a first-class byte-for-byte test (no leg's crash
+  vol depends on what else the book holds); (4) **no-op** — `skew_steepening=0.0`
+  reproduces the flat baseline byte-for-byte at the primitive; (5) **fail-loud** —
+  `skew_steepening` is now required (no default) on the health gauge, mirroring
+  `crash_vol_shock` (M1.4/M1.5), with source guards confirming the roll trigger and
+  scenario table source it from the IPS.
 
 **The problem, one root.** M1.6 anchors the skew weight to the book's deepest held
 put (`_tail_log_moneyness` = `ln(S / min(otm_put_strikes))`). Two consequences:

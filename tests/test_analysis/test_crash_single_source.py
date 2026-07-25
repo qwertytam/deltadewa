@@ -100,10 +100,12 @@ class TestCrashScenarioSingleSource:
         shallow = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=_SHALLOW_PCT,
             crash_vol_shock=_VOL_SHOCK,
+            skew_steepening=0.0,
         )
         deep = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=_DEEP_PCT,
             crash_vol_shock=_VOL_SHOCK,
+            skew_steepening=0.0,
         )
 
         assert shallow != deep
@@ -204,6 +206,7 @@ class TestRollMatchesGauge:
         return PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
             crash_scenario_pct=ips.convexity.crash_scenario_pct,
             crash_vol_shock=ips.convexity.crash_vol_shock,
+            skew_steepening=ips.convexity.skew_steepening,
         )
 
     def test_roll_convexity_equals_gauge_for_same_book(self) -> None:

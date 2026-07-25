@@ -359,10 +359,12 @@ class TestCrashPayoffRatio:
         convexity_no_book = analyzer_no_book.calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
             crash_vol_shock=0.0,
+            skew_steepening=0.0,
         )
         convexity_with_book = analyzer_with_book.calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
             crash_vol_shock=0.0,
+            skew_steepening=0.0,
         )
         assert convexity_no_book == pytest.approx(0.0, rel=1e-4)
         assert convexity_with_book != 0.0
@@ -521,10 +523,12 @@ class TestCrashScenarioTable:
         convexity_25 = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
             crash_vol_shock=vol_shock,
+            skew_steepening=0.0,
         )
         convexity_10 = analyzer.calculate_crash_convexity_pct(
             crash_scenario_pct=-10.0,
             crash_vol_shock=vol_shock,
+            skew_steepening=0.0,
         )
         assert convexity_10 != pytest.approx(convexity_25)
 
