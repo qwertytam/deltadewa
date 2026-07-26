@@ -11,6 +11,7 @@ from deltadewa.analysis.crash_payoff import (
     PremiumBasis,
     compute_crash_convexity,
 )
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.portfolio.core import OptionPortfolio
@@ -60,7 +61,15 @@ class TestPlotCrashConvexity:
     def test_returns_figure_with_one_axes(self) -> None:
         """plot_crash_convexity returns a Figure with exactly 1 Axes."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
 
         fig = plot_crash_convexity(result)
         try:
@@ -78,7 +87,12 @@ class TestPlotCrashConvexity:
         )
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=ips.crash_vol_shock,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=ips.crash_vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             ips_convexity=ips,
         )
 
@@ -100,7 +114,15 @@ class TestPlotCrashConvexity:
     def test_plotted_curve_matches_result(self) -> None:
         """Line x/y data matches result.curve (gross payoff, not ratio)."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
 
         fig = plot_crash_convexity(result)
         try:
@@ -115,7 +137,15 @@ class TestPlotCrashConvexity:
     def test_accepts_existing_axes(self) -> None:
         """When ax is supplied, returned Figure is the axes' own figure."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
 
         fig2, ax2 = plt.subplots()
         try:
@@ -130,7 +160,15 @@ class TestPlotCrashConvexity:
 
         portfolio = _make_long_put_portfolio()
         charts = OptionCharts(portfolio)
-        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
 
         fig = charts.plot_crash_convexity(result)
         try:

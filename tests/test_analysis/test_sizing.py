@@ -8,6 +8,7 @@ import sys
 import pytest
 
 from deltadewa import constants as const
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
     UnitSizingResult,
@@ -517,10 +518,12 @@ class TestBetaAdjustedSizing:
         )
         gauge_per_contract = crash_hedge_value(
             portfolio,
-            crash_move=ips.convexity.crash_scenario_pct / 100.0,
-            vol_shock=ips.convexity.crash_vol_shock,
-            skew_steepening=ips.convexity.skew_steepening,
-            skew_reference_delta=ips.convexity.skew_reference_delta,
+            shock=CrashShock(
+                crash_scenario_pct=ips.convexity.crash_scenario_pct,
+                crash_vol_shock=ips.convexity.crash_vol_shock,
+                skew_steepening=ips.convexity.skew_steepening,
+                skew_reference_delta=ips.convexity.skew_reference_delta,
+            ),
             positions=[portfolio.positions[0]],
         )
         assert sized.per_contract_payoff == pytest.approx(gauge_per_contract)

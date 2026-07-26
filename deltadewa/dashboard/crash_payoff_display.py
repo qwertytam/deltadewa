@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING
 import pandas as pd
 from IPython.display import display
 
-from deltadewa.analysis.crash_payoff import compute_crash_convexity
+from deltadewa.analysis.crash_payoff import (
+    compute_crash_convexity,
+    default_crash_shock,
+)
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.dataframes import apply_table_preset
 
@@ -182,20 +186,14 @@ class CrashPayoffDisplay:
             print("No positions in portfolio yet.")
             return
 
-        crash_vol_shock = (
-            self._ips_convexity.crash_vol_shock
+        shock = (
+            CrashShock.from_ips(self._ips_convexity)
             if self._ips_convexity is not None
-            else 0.15
-        )
-        skew_steepening = (
-            self._ips_convexity.skew_steepening
-            if self._ips_convexity is not None
-            else 0.0
+            else default_crash_shock()
         )
         result = compute_crash_convexity(
             self._portfolio,
-            crash_vol_shock=crash_vol_shock,
-            skew_steepening=skew_steepening,
+            shock=shock,
             ips_convexity=self._ips_convexity,
             scenario_shocks=self._shocks,
         )

@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from deltadewa import constants as const
 from deltadewa.analysis.crash_repricing import (
+    CrashShock,
     crash_hedge_value,
     crash_intrinsic_floor,
 )
@@ -213,18 +214,20 @@ def evaluate_candidate(
         exercise_style=portfolio.default_exercise_style,
         contract_size=portfolio.contract_size,
     )
-    crash_move = crash_pct / 100.0
-    per_contract_payoff = crash_hedge_value(
-        portfolio,
-        crash_move=crash_move,
-        vol_shock=crash_vol_shock,
+    shock = CrashShock(
+        crash_scenario_pct=crash_pct,
+        crash_vol_shock=crash_vol_shock,
         skew_steepening=skew_steepening,
         skew_reference_delta=skew_reference_delta,
+    )
+    per_contract_payoff = crash_hedge_value(
+        portfolio,
+        shock=shock,
         positions=[candidate_leg],
     )
     per_contract_intrinsic_floor = crash_intrinsic_floor(
         portfolio,
-        crash_move=crash_move,
+        crash_move=shock.crash_move,
         positions=[candidate_leg],
     )
 

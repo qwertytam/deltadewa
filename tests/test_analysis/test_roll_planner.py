@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deltadewa.analysis import roll_status
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.roll_planner import (
     RollAction,
     RollPlanRecord,
@@ -104,12 +105,7 @@ def _patch_convexity(
     monkeypatch: pytest.MonkeyPatch,
     value: float,
 ) -> None:
-    def _fake(
-        self: object,
-        crash_scenario_pct: float,
-        crash_vol_shock: float,
-        skew_steepening: float = 0.0,
-    ) -> float:
+    def _fake(self: object, shock: CrashShock) -> float:
         return value
 
     monkeypatch.setattr(

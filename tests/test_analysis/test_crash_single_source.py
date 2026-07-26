@@ -18,6 +18,7 @@ import pytest
 from deltadewa.analysis import health as health_module
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
@@ -98,14 +99,20 @@ class TestCrashScenarioSingleSource:
         analyzer = PortfolioAnalyzer(_make_hedged_book())
 
         shallow = analyzer.calculate_crash_convexity_pct(
-            crash_scenario_pct=_SHALLOW_PCT,
-            crash_vol_shock=_VOL_SHOCK,
-            skew_steepening=0.0,
+            CrashShock(
+                crash_scenario_pct=_SHALLOW_PCT,
+                crash_vol_shock=_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
         deep = analyzer.calculate_crash_convexity_pct(
-            crash_scenario_pct=_DEEP_PCT,
-            crash_vol_shock=_VOL_SHOCK,
-            skew_steepening=0.0,
+            CrashShock(
+                crash_scenario_pct=_DEEP_PCT,
+                crash_vol_shock=_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
 
         assert shallow != deep
@@ -154,12 +161,22 @@ class TestCrashScenarioSingleSource:
 
         shallow = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             ips_convexity=_make_ips(_SHALLOW_PCT).convexity,
         )
         deep = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             ips_convexity=_make_ips(_DEEP_PCT).convexity,
         )
 
@@ -204,9 +221,7 @@ class TestRollMatchesGauge:
     def _gauge(portfolio: OptionPortfolio, ips: IpsConfig) -> float:
         """The health-gauge convexity at the IPS scenario and vol shock."""
         return PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
-            crash_scenario_pct=ips.convexity.crash_scenario_pct,
-            crash_vol_shock=ips.convexity.crash_vol_shock,
-            skew_steepening=ips.convexity.skew_steepening,
+            CrashShock.from_ips(ips.convexity),
         )
 
     def test_roll_convexity_equals_gauge_for_same_book(self) -> None:

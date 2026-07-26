@@ -15,7 +15,7 @@ from deltadewa.analysis.crash_payoff import (
     crash_payoff_ratio,
     crash_scenario_table,
 )
-from deltadewa.analysis.crash_repricing import crash_hedge_value
+from deltadewa.analysis.crash_repricing import CrashShock, crash_hedge_value
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.portfolio.core import OptionPortfolio
@@ -104,7 +104,12 @@ class TestComputeCrashConvexity:
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             shock_range=(-30.0, 0.0),
             n_points=7,
         )
@@ -115,7 +120,12 @@ class TestComputeCrashConvexity:
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             shock_range=(-40.0, 10.0),
             n_points=51,
         )
@@ -127,7 +137,12 @@ class TestComputeCrashConvexity:
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             shock_range=(-40.0, 10.0),
             n_points=51,
         )
@@ -148,7 +163,12 @@ class TestComputeCrashConvexity:
         )
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=ips.crash_vol_shock,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=ips.crash_vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             ips_convexity=ips,
         )
         shocks_in_rows = {r.shock_pct for r in result.scenario_rows}
@@ -164,14 +184,23 @@ class TestComputeCrashConvexity:
         )
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=ips.crash_vol_shock,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=ips.crash_vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             ips_convexity=ips,
         )
         assert result.payoff_ratio is not None
         expected_repriced = crash_hedge_value(
             portfolio,
-            crash_move=-0.25,
-            vol_shock=ips.crash_vol_shock,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=ips.crash_vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             positions=_long_puts(portfolio),
         )
         assert result.payoff_ratio == pytest.approx(
@@ -181,7 +210,15 @@ class TestComputeCrashConvexity:
     def test_payoff_ratio_none_without_ips(self) -> None:
         """payoff_ratio is None when no ips_convexity is supplied."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
         assert result.payoff_ratio is None
         assert result.ips_convexity is None
 
@@ -196,7 +233,12 @@ class TestComputeCrashConvexity:
         )
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=ips.crash_vol_shock,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=ips.crash_vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             ips_convexity=ips,
             scenario_shocks=shocks,
         )
@@ -211,13 +253,29 @@ class TestComputeCrashConvexity:
         """PremiumBasis.PAID when all long puts have entry_premium."""
         portfolio = _make_long_put_portfolio()
         portfolio.positions[0].entry_premium = 2.50
-        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
         assert result.premium_basis == PremiumBasis.PAID
 
     def test_premium_basis_current_fallback(self) -> None:
         """PremiumBasis.MARK when no entry_premium set."""
         portfolio = _make_long_put_portfolio()
-        result = compute_crash_convexity(portfolio, crash_vol_shock=0.0)
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
         assert result.premium_basis == PremiumBasis.MARK
 
     def test_single_pricing_pass(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -230,19 +288,11 @@ class TestComputeCrashConvexity:
         def counting_hedge_value(
             portfolio: OptionPortfolio,
             *,
-            crash_move: float,
-            vol_shock: float,
-            skew_steepening: float = 0.0,
+            shock: CrashShock,
             positions: object = None,
         ) -> float:
-            calls.append(round(crash_move * 100.0, 6))
-            return original(
-                portfolio,
-                crash_move=crash_move,
-                vol_shock=vol_shock,
-                skew_steepening=skew_steepening,
-                positions=positions,
-            )
+            calls.append(round(shock.crash_scenario_pct, 6))
+            return original(portfolio, shock=shock, positions=positions)
 
         monkeypatch.setattr(_cp, "crash_hedge_value", counting_hedge_value)
 
@@ -253,7 +303,12 @@ class TestComputeCrashConvexity:
         n = 11
         compute_crash_convexity(
             portfolio,
-            crash_vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             shock_range=(-40.0, 10.0),
             n_points=n,
         )
@@ -330,12 +385,24 @@ class TestCrashPayoffRatio:
         expected_premium = pos.position_value()  # mark fallback
         expected_repriced = crash_hedge_value(
             portfolio,
-            crash_move=-0.25,
-            vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             positions=_long_puts(portfolio),
         )
 
-        ratio = crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0)
+        ratio = crash_payoff_ratio(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+        )
 
         assert ratio == pytest.approx(expected_repriced / expected_premium)
 
@@ -346,13 +413,21 @@ class TestCrashPayoffRatio:
 
         ratio_no_book = crash_payoff_ratio(
             unhedged_book,
-            crash_pct=-25.0,
-            vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
         ratio_with_book = crash_payoff_ratio(
             hedged_book,
-            crash_pct=-25.0,
-            vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
 
         assert ratio_no_book == pytest.approx(ratio_with_book)
@@ -361,14 +436,20 @@ class TestCrashPayoffRatio:
         analyzer_no_book = PortfolioAnalyzer(unhedged_book)
         analyzer_with_book = PortfolioAnalyzer(hedged_book)
         convexity_no_book = analyzer_no_book.calculate_crash_convexity_pct(
-            crash_scenario_pct=-25.0,
-            crash_vol_shock=0.0,
-            skew_steepening=0.0,
+            CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
         convexity_with_book = analyzer_with_book.calculate_crash_convexity_pct(
-            crash_scenario_pct=-25.0,
-            crash_vol_shock=0.0,
-            skew_steepening=0.0,
+            CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
         assert convexity_no_book == pytest.approx(0.0, rel=1e-8)
         assert convexity_with_book != pytest.approx(0.0, rel=1e-8)
@@ -378,15 +459,23 @@ class TestCrashPayoffRatio:
         portfolio = _make_long_put_portfolio()
         expected_repriced = crash_hedge_value(
             portfolio,
-            crash_move=-0.25,
-            vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             positions=_long_puts(portfolio),
         )
 
         ratio = crash_payoff_ratio(
             portfolio,
-            crash_pct=-25.0,
-            vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             premium=500.0,
         )
 
@@ -407,7 +496,13 @@ class TestCrashPayoffRatio:
         )
 
         assert crash_payoff_ratio(
-            portfolio, crash_pct=-25.0, vol_shock=0.0
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         ) == pytest.approx(0.0, rel=1e-8)
 
     def test_negative_explicit_premium_is_safe(self) -> None:
@@ -416,8 +511,12 @@ class TestCrashPayoffRatio:
 
         ratio = crash_payoff_ratio(
             portfolio,
-            crash_pct=-25.0,
-            vol_shock=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
             premium=-1.0,
         )
 
@@ -431,20 +530,27 @@ class TestCrashPayoffRatio:
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
         assert crash_payoff_ratio(
-            portfolio, crash_pct=-25.0, vol_shock=0.0
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.0,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         ) == pytest.approx(0.0, rel=1e-8)
 
-    def test_vol_shock_is_required(self) -> None:
-        """vol_shock has no default — it can't silently diverge to spot-only.
+    def test_shock_is_required(self) -> None:
+        """The crash basis has no default — it can't diverge by omission.
 
-        Regression for the diverging-knobs trap: the crash scenario is always
-        supplied (``crash_pct`` is required), so the vol shock must be too —
-        pass ``0.0`` explicitly for a spot-only crash. Omitting it is a
-        ``TypeError``, never a silent spot-only reprice.
+        Regression for the diverging-knobs trap: the whole basis (depth, vol
+        shock, skew, and its anchor) arrives as one required argument, so a
+        caller cannot supply a scenario and silently inherit someone else's
+        vol. Pass an explicit ``CrashShock`` with zeros for a spot-only crash;
+        omitting it is a ``TypeError``, never a silent reprice.
         """
         portfolio = _make_long_put_portfolio()
         with pytest.raises(TypeError):
-            crash_payoff_ratio(portfolio, crash_pct=-25.0)
+            crash_payoff_ratio(portfolio)  # type: ignore[call-arg]
 
 
 class TestCrashScenarioTable:
@@ -525,14 +631,20 @@ class TestCrashScenarioTable:
         vol_shock = 0.0
         analyzer = PortfolioAnalyzer(portfolio)
         convexity_25 = analyzer.calculate_crash_convexity_pct(
-            crash_scenario_pct=-25.0,
-            crash_vol_shock=vol_shock,
-            skew_steepening=0.0,
+            CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
         convexity_10 = analyzer.calculate_crash_convexity_pct(
-            crash_scenario_pct=-10.0,
-            crash_vol_shock=vol_shock,
-            skew_steepening=0.0,
+            CrashShock(
+                crash_scenario_pct=-10.0,
+                crash_vol_shock=vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
         )
         assert convexity_10 != pytest.approx(convexity_25)
 

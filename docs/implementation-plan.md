@@ -368,14 +368,9 @@ front of a user.
 
 **Still-deferred follow-ups (tracked; not blocking M1.7 acceptance):**
 
-- **Book surfaces source `skew_reference_delta` from the IPS.** `crash_payoff` /
-  `health` / `roll_status` forward `skew_steepening` but inherit
-  `crash_hedge_value`'s 0.10 default for the anchor — **no observable difference at
-  the shipped 0.10 default**. Threading it as a third scalar is pylint-arity-blocked
-  (`_build_scenario_rows` is already at `max-args = 8`); the value-object bundle
-  that would unblock it was declined, so this waits on that refactor. (Untouched by
-  the Prompt E fail-loud guard: the anchor's default is `0.10`, a wing — not a
-  defaulted `0.0` — so it is out of that guard's scope.)
+- ~~**Book surfaces source `skew_reference_delta` from the IPS.**~~ **RESOLVED in
+  M1.8 below** — the value-object bundle landed and the anchor now reaches every
+  book surface.
 - **Crash-shock term structure** — one cross-sectional slope, no tenor dependence
   (methodology §8).
 - **Notebook crash-panel wiring** — `NetHedgeSummary`'s skew param and
@@ -499,6 +494,81 @@ fixed leg's crash vol is independent of book composition; the sizing payoff rati
 and the gauge convexity agree at equal depth on the §4 book; goldens recomputed
 (methodology doc re-golden tracked as a follow-up above); `skew = 0` still a
 byte-for-byte no-op.
+
+### M1.8 — `CrashShock`: thread the crash pricing basis as one value object
+
+**Status: DONE (closed 2026-07-26).** Closes the first M1.7 deferred follow-up.
+
+**The defect.** `IpsConvexity` carries four crash *pricing* knobs. M1.7 wired all
+four into the candidate surfaces but left the book surfaces
+(`health.calculate_crash_convexity_pct`, `crash_payoff.*`, `roll_status`) forwarding
+only three — `skew_reference_delta` fell to `crash_hedge_value`'s own `0.10`. At the
+shipped anchor the two agree, so nothing was visibly wrong; **move the IPS anchor and
+the sizing workbench followed while the gauges did not**, silently re-opening the
+book-vs-candidate divergence M1.7 closed. Threading it as a fourth scalar was
+arity-blocked: `_build_scenario_rows`, `_leg_crash_vol`, and `evaluate_candidate`
+each sat at exactly `max-args = 8`.
+
+**Resolution.** A frozen `CrashShock` (`crash_scenario_pct`, `crash_vol_shock`,
+`skew_steepening`, `skew_reference_delta`) in `analysis/crash_repricing.py`, with
+`from_ips(IpsConvexity)`, a derived `crash_move`, and `at_pct()` for depth sweeps.
+It is **required with no default** on `crash_hedge_value`, `crash_convexity_pct`,
+the health gauge, and every `crash_payoff` entry point — extending M1.7's fail-loud
+rule from `skew_steepening` to the whole basis. Arity cleared everywhere
+(`_leg_crash_vol` 8→6, `_build_scenario_rows` 8→7, `crash_hedge_value` 6→3).
+
+**Pricing and policy stay separate (M1.5).** `CrashShock` carries **no** band
+fields; `compute_crash_convexity` keeps `ips_convexity` as its own argument for
+`meets_target`, and `roll_status` reads `target_min_pct` / `target_max_pct` straight
+off `IpsConvexity`. Two tests pin this structurally.
+
+**Decisions.**
+
+- **D1 — the depth is bundled, with `at_pct()` for sweeps.** The alternative (keep
+  `crash_move` a separate parameter) leaves the scenario un-single-sourced and lets a
+  call site price a depth unrelated to the IPS.
+- **D2 — every field required.** `from_ips` is the intended construction path, so no
+  surface can half-state the crash and inherit the rest — the precise mechanism by
+  which the anchor went missing.
+- **D3 — `evaluate_candidate` keeps its scalar signature.** Scoped to the book
+  surfaces; it builds a `CrashShock` inline at its `crash_hedge_value` call, leaving
+  `sizing.py`, `strike_ladder.py`, and their tests untouched. Converting it (8→5
+  args) is a clean follow-up.
+- **D4 — `crash_intrinsic_floor` unchanged.** Takes no vol or skew input, so it is
+  structurally outside the defect.
+- **D5 — `hedge_value` drops through to `_reprice_leg`.** Today's value has no crash
+  state; routing it through `crash_hedge_value` would mean fabricating a zero shock
+  whose anchor is never read — reintroducing the very default being removed.
+  Numerically identical to the old `crash_move=0, vol_shock=0` call.
+
+**Value-neutral by construction — goldens unchanged, not re-goldened.** Verified by
+diffing engine output before and after: **byte-identical**.
+
+| Property | Confirmed |
+| --- | --- |
+| §4 book convexity | **+24.639527%** (V_today $298,098.88 → V_crash **$5,226,004.24**, **17.5311×**) |
+| Canonical (`spx_protective_put.yaml`) | **+16.098902%** — in-band, not re-sized |
+| `spx_tail_20m.yaml` | **+24.641991%** |
+| K5280 per-contract | **$109,754.308967** on both book and candidate paths |
+| Per-leg crash vols | K5280 `0.4446183769`; K4620/K3960 capped at `0.4500000000` |
+| `skew = 0` no-op | V_crash `3897393.1217789161`, unchanged |
+
+**Regression guards (8 new).** The load-bearing ones move the IPS anchor to `0.05`
+and require the health gauge, scenario table, and roll trigger to follow, plus
+book==candidate parity at that non-default anchor. **Verified to fail against a
+reproduced defect** (a plugin pinning the book path's anchor back to `0.10`): 4 of 5
+fail, three with byte-identical before/after values — the silent-no-op signature. The
+fifth (cross-surface consistency) passes under the defect *by design*, because the
+old code dropped the anchor uniformly; its docstring says so, and it guards against a
+future **partial** re-threading instead. Also pinned: `from_ips` field round-trip,
+`at_pct` preserving the vol basis, `CrashShock` having no field defaults, and its
+carrying no band fields.
+
+**Gate at close-out:** pytest **1340 passed / 2 xfailed**, mypy clean, ruff check +
+format clean, pylint **10.00/10** (the arity gate that blocked the scalar approach).
+
+**Still deferred:** crash-shock term structure (methodology §8); notebook crash-panel
+wiring (below).
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 

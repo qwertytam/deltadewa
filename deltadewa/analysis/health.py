@@ -6,7 +6,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa import constants as const
-from deltadewa.analysis.crash_repricing import crash_convexity_pct
+from deltadewa.analysis.crash_repricing import CrashShock, crash_convexity_pct
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
@@ -193,12 +193,7 @@ class HealthMixin:
         annual_theta = daily_theta * const.DAYS_PER_YEAR
         return float((annual_theta / underlying_value) * 100)
 
-    def calculate_crash_convexity_pct(
-        self,
-        crash_scenario_pct: float,
-        crash_vol_shock: float,
-        skew_steepening: float,
-    ) -> float:
+    def calculate_crash_convexity_pct(self, shock: CrashShock) -> float:
         """Calculate crash convexity, hedge-only and repriced (§1-3).
 
         Repriced, hedge-only value change of the option legs at the crash
@@ -211,23 +206,12 @@ class HealthMixin:
         A positive value means the hedge gains value in a crash.
 
         Args:
-            crash_scenario_pct: Signed crash move as a percent of current spot
-                (e.g. ``-25.0`` for a 25% decline). Single-sourced from
-                ``IpsConvexity.crash_scenario_pct``; there is no hardcoded
-                default.
-            crash_vol_shock: Flat additive vol bump as a decimal (e.g.
-                ``0.15``) applied to every leg's own today-vol. **Required**
-                — single-sourced from ``IpsConvexity.crash_vol_shock`` by every
-                caller (the gauge, the scenario table, and the roll trigger) so
-                no site can silently reprice at a different vol. Pass ``0.0``
-                explicitly for a spot-only crash when no IPS shock applies.
-            skew_steepening: Extra vol added at the deep-OTM tail on top of
-                ``crash_vol_shock``, capped at each leg's own ~10-delta wing and
-                interpolated (in log-moneyness) below it (M1.7). **Required** —
-                single-sourced from ``IpsConvexity.skew_steepening`` by every
-                caller (the gauge, the scenario table, and the roll trigger) so
-                no site can silently reprice a flat bump by omission. Pass
-                ``0.0`` explicitly for a flat bump when no skew applies.
+            shock: The crash basis — depth, flat vol bump, and wing steepening
+                with its anchor. **Required, with no default**, and every
+                caller (this gauge, the scenario table, and the roll trigger)
+                builds it with ``CrashShock.from_ips`` so no site can reprice
+                against a different crash state than the others. Note the
+                target band is *not* on it: read that from ``IpsConvexity``.
 
         Returns:
             Hedge-only crash convexity as a percentage of the protected book
@@ -235,12 +219,7 @@ class HealthMixin:
             empty, since the ratio is then undefined.
 
         """
-        return crash_convexity_pct(
-            self.portfolio,
-            crash_move=crash_scenario_pct / 100.0,
-            vol_shock=crash_vol_shock,
-            skew_steepening=skew_steepening,
-        )
+        return crash_convexity_pct(self.portfolio, shock=shock)
 
     def calculate_vega_sufficiency_pct(
         self,
@@ -524,9 +503,7 @@ class HealthMixin:
             hedge_success_pct = 0.0
         else:
             crash_convexity_value = self.calculate_crash_convexity_pct(
-                crash.crash_scenario_pct,
-                crash.crash_vol_shock,
-                crash.skew_steepening,
+                CrashShock.from_ips(crash),
             )
             hedge_success_pct = self.calculate_hedge_success_pct(
                 cumulative_carry_paid,

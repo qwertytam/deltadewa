@@ -10,10 +10,11 @@ import ipywidgets as widgets
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_repricing import crash_convexity_pct
+from deltadewa.analysis.crash_repricing import CrashShock, crash_convexity_pct
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.html import format_html_badge, format_html_metric
+from deltadewa.ips_config import _DEFAULT_SKEW_REFERENCE_DELTA
 from deltadewa.portfolio.monte_carlo import drift_measure_label
 
 if TYPE_CHECKING:
@@ -53,6 +54,7 @@ class NetHedgeSummary:
         *,
         crash_vol_shock: float = 0.0,
         skew_steepening: float = 0.0,
+        skew_reference_delta: float = _DEFAULT_SKEW_REFERENCE_DELTA,
     ) -> None:
         """Initialize net hedge summary widget.
 
@@ -67,11 +69,18 @@ class NetHedgeSummary:
                 ``IpsConvexity.skew_steepening`` (pass
                 ``ctx.ips_config.convexity.skew_steepening``) so the ladder
                 shares the gauge's basis exactly. Defaults to ``0.0``.
+            skew_reference_delta: Put-delta magnitude of the wing the
+                steepening is anchored to, single-sourced from
+                ``IpsConvexity.skew_reference_delta``. Only read when
+                *skew_steepening* is non-zero. Carried as its own knob rather
+                than pinned inside the ladder so tuning the IPS anchor moves
+                these rungs with the gauge.
 
         """
         self.portfolio = portfolio
         self._crash_vol_shock = crash_vol_shock
         self._skew_steepening = skew_steepening
+        self._skew_reference_delta = skew_reference_delta
         self.widget = None
         self._create_widget()
 
@@ -88,9 +97,12 @@ class NetHedgeSummary:
                 shock,
                 crash_convexity_pct(
                     self.portfolio,
-                    crash_move=shock / 100.0,
-                    vol_shock=self._crash_vol_shock,
-                    skew_steepening=self._skew_steepening,
+                    shock=CrashShock(
+                        crash_scenario_pct=shock,
+                        crash_vol_shock=self._crash_vol_shock,
+                        skew_steepening=self._skew_steepening,
+                        skew_reference_delta=self._skew_reference_delta,
+                    ),
                 ),
             )
             for shock in self._CRASH_RUNG_SHOCKS

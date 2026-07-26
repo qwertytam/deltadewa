@@ -12,6 +12,7 @@ from deltadewa.analysis.candidate import (
     build_put_valuation,
     evaluate_candidate,
 )
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsConvexity
 from deltadewa.portfolio.core import OptionPortfolio
@@ -475,10 +476,12 @@ class TestBookCandidateParity:
 
         held_total = crash_hedge_value(
             portfolio,
-            crash_move=_APX_CRASH_PCT / 100.0,
-            vol_shock=_APX_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            shock=CrashShock(
+                crash_scenario_pct=_APX_CRASH_PCT,
+                crash_vol_shock=_APX_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             positions=[held_leg],
         )
         held_per_contract = held_total / quantity

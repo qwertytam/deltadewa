@@ -181,6 +181,20 @@ further netted the equity loss on top, which is how a conformant book once read 
 | `ips.crash.skew_reference_delta` | `0.10` | Put-delta magnitude of the wing the steepening anchors to — the per-leg reference at which the steepening reaches full $\kappa$ (M1.7). |
 | `ips.crash.floor_reported` | `true` | Whether to surface the intrinsic-floor column. |
 
+**How these reach the pricer (M1.8).** The four *pricing* keys above travel as one
+frozen `CrashShock` value object (`analysis/crash_repricing.py`), built with
+`CrashShock.from_ips(ips_config.convexity)`. Every crash-pricing entry point takes
+one, **required and with no default**, so a surface cannot state part of the crash
+basis and silently inherit the rest — which is exactly how `skew_reference_delta`
+came to be honoured by the sizing workbench but dropped by the book gauges before
+M1.8. Sweeping surfaces (the shock grid, the payoff ladder) change depth through
+`shock.at_pct(...)`, which carries the vol basis along by construction.
+
+`floor_reported` is presentation and stays off the object. So does the **target band**
+(`target_min_pct` / `target_max_pct`), which remains on `IpsConvexity` and travels its
+own path: pricing and policy are deliberately separable, so omitting policy can never
+quietly change what is priced.
+
 **Calibration note for `vol_shock`.** In 2008 and 2020, index-put implied vols
 expanded roughly **+20 to +40 points** at the peak. **+15** is a deliberately
 conservative, mid-cycle ATM baseline — set it to your own crash-vol view. It is a
@@ -259,13 +273,17 @@ errs toward less apparent protection, the safe direction for a tail program.
     anchor a candidate steepens against its own wing exactly as a held leg does, so
     both now price the crash on one skew function — a candidate at a held strike
     reproduces that leg's per-contract crash value exactly.
+  - **Anchor not reaching the book surfaces — RESOLVED (M1.8, `CrashShock`).** The
+    book gauges forwarded `skew_steepening` but dropped `skew_reference_delta`,
+    falling back to the pricer's own `0.10`. Invisible at the shipped default and
+    divergent the moment the IPS anchor moved — the candidate path honoured it and
+    the gauges did not. All four pricing inputs now travel as one required
+    `CrashShock` (§5), so the basis cannot be partially stated.
   What remains is the shock's **term structure**: one cross-sectional
   linear-in-log-moneyness slope $\kappa$. The *per-leg tenor* is already captured
   (each leg's wing is solved at its own tenor and today-vol), so the open item is
   narrower than before — how the slope itself varies **across** tenors, not the
-  per-leg tenor — a natural next refinement. (A second tracked follow-up: the book
-  surfaces still consume `skew_reference_delta`'s 0.10 default rather than sourcing
-  it from the IPS — no observable difference at that default.)
+  per-leg tenor — a natural next refinement.
 - **Rates / dividends held constant.** Rates typically fall in a crash; the effect
   is second-order for long puts and is out of scope for this baseline.
 - **Single instantaneous horizon.** The crash is modelled as one jump at $t_0$; the
