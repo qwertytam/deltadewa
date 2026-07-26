@@ -181,14 +181,23 @@ further netted the equity loss on top, which is how a conformant book once read 
 | `ips.crash.skew_reference_delta` | `0.10` | Put-delta magnitude of the wing the steepening anchors to — the per-leg reference at which the steepening reaches full $\kappa$ (M1.7). |
 | `ips.crash.floor_reported` | `true` | Whether to surface the intrinsic-floor column. |
 
-**How these reach the pricer (M1.8).** The four *pricing* keys above travel as one
-frozen `CrashShock` value object (`analysis/crash_repricing.py`), built with
+**How these reach the pricer (M1.8/M1.9).** The four *pricing* keys above travel as
+one frozen `CrashShock` value object (`analysis/crash_repricing.py`), built with
 `CrashShock.from_ips(ips_config.convexity)`. Every crash-pricing entry point takes
 one, **required and with no default**, so a surface cannot state part of the crash
 basis and silently inherit the rest — which is exactly how `skew_reference_delta`
 came to be honoured by the sizing workbench but dropped by the book gauges before
-M1.8. Sweeping surfaces (the shock grid, the payoff ladder) change depth through
-`shock.at_pct(...)`, which carries the vol basis along by construction.
+M1.8. Sweeping surfaces (the shock grid, the payoff ladder, the summary rungs)
+change depth through `shock.at_pct(...)`, which carries the vol basis along by
+construction.
+
+Since M1.9 that is true of **every** surface — book gauges, scenario table, sizing
+workbench, strike ladder, and the summary widget all take the object and all build
+it the same way, so there is one construction path as well as one skew function.
+No pricing signature accepts an individual crash scalar, and no `CrashShock`
+parameter is optional (an optional one would let a caller reprice spot-only by
+omission). Structural guards in `tests/test_analysis/test_crash_repricing.py` pin
+all three properties.
 
 `floor_reported` is presentation and stays off the object. So does the **target band**
 (`target_min_pct` / `target_max_pct`), which remains on `IpsConvexity` and travels its

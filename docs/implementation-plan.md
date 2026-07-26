@@ -567,8 +567,66 @@ carrying no band fields.
 **Gate at close-out:** pytest **1340 passed / 2 xfailed**, mypy clean, ruff check +
 format clean, pylint **10.00/10** (the arity gate that blocked the scalar approach).
 
-**Still deferred:** crash-shock term structure (methodology §8); notebook crash-panel
-wiring (below).
+### M1.9 — One pricing-input object everywhere (candidate path + widget)
+
+**Status: DONE (closed 2026-07-26).** Completes M1.8: after this there is a
+single crash pricing-input object and a single construction path
+(`CrashShock.from_ips`) across every surface.
+
+M1.8 converted the book surfaces (and, as a forced consequence, all of
+`crash_payoff`). Three callers were left threading the scalars:
+
+- **`evaluate_candidate`** took the four scalars and bundled them internally
+  (M1.8 decision D3, deliberately deferred). It now takes `shock: CrashShock`
+  — **8 args → 5** — and `sizing.size_hedge` / `strike_ladder.build_strike_ladder`
+  build it with `CrashShock.from_ips(ips_config.convexity)`, the same call the
+  book surfaces make. Both keep a local read of `shock.crash_scenario_pct` for
+  `required_crash_offset` (drawdown-tolerance policy maths, not pricing) so the
+  depth has one source within each function.
+- **`NetHedgeSummary`** carried `crash_vol_shock=0.0`, `skew_steepening=0.0`,
+  `skew_reference_delta=0.10` as ctor defaults. Both notebooks passed only the
+  first, so **the summary's crash-convexity ladder priced on a flat bump while
+  the health gauge priced it skew-aware** — a live divergence, and the last
+  `crash_vol_shock` default on a pricing path. Replaced by a required
+  `shock: CrashShock`; the rungs use `shock.at_pct(...)`.
+- **Notebook crash cells** (both notebooks) now pass the shock. This also
+  fixes the pre-existing `TypeError` in the `compute_crash_convexity` cells,
+  which had been calling it without its required kwarg since M1.4 — nbqa mypy
+  on the notebooks drops **17 → 15** errors (the remaining 15 are unrelated
+  and pre-existing).
+
+**Audit (the acceptance criterion).** After the change:
+
+- no caller threads the crash scalars individually — the only remaining
+  `crash_vol_shock=` / `skew_steepening=` / `skew_reference_delta=` sites are
+  `CrashShock.from_ips` itself, `ips_config`'s YAML parse into `IpsConvexity`,
+  and `default_crash_shock()`;
+- **no parameter default for any crash pricing scalar survives** outside
+  `IpsConvexity`'s own field defaults, where they belong;
+- **no `CrashShock` parameter is optional or defaulted** anywhere — an optional
+  one would reopen the M1.5 spot-only bug.
+
+Pinned by three new structural guards: no pricing entry point accepts a crash
+scalar in its signature; every one requires `shock` with no default; and both
+candidate surfaces construct via `CrashShock.from_ips`.
+
+**Pricing and policy still separate.** `compute_crash_convexity` keeps
+`ips_convexity` as its own optional argument for `meets_target` only, and
+`build_strike_ladder` reads the band off `IpsConvexity` on its own path.
+
+**Value-neutral.** Goldens byte-identical to the pre-M1.8 baseline: §4
+**+24.639527%** / V_crash **$5,226,004.24** / **17.5311×**; canonical
+**+16.098902%**; K5280 per-contract **$109,754.308967** on both paths;
+`skew = 0` V_crash **3897393.1217789161**.
+
+**Gate:** pytest **1343 passed / 2 xfailed**, mypy clean, ruff check + format
+clean, pylint **10.00/10**, nbqa ruff clean on both notebooks.
+
+**Still deferred:** crash-shock term structure (methodology §8);
+`default_crash_shock()` — the no-IPS fallback still prices `0.15 / 0.0 / 0.10`
+when `ips_convexity is None`, kept deliberately so the pre-IPS crash panel can
+render at all (a named, documented fallback rather than a silent parameter
+default); `_shock_to_multiplier` in `crash_payoff.py` is production-dead.
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 

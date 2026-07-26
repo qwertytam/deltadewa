@@ -24,11 +24,14 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.candidate import evaluate_candidate
 from deltadewa.analysis.crash_payoff import (
     compute_crash_convexity,
+    crash_payoff_ratio,
     crash_scenario_table,
 )
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.health import HealthMixin
 from deltadewa.analysis.roll_status import evaluate_roll_status
+from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.strike_ladder import build_strike_ladder
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
@@ -960,8 +963,12 @@ class TestConsistencyAcrossSurfaces:
 
         summary = NetHedgeSummary(
             portfolio,
-            crash_vol_shock=vol_shock,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=vol_shock,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         rungs = dict(summary._crash_convexity_rungs())
 
@@ -1051,8 +1058,12 @@ class TestConsistencyAcrossSurfaces:
         roll = evaluate_roll_status(portfolio, ips)[0].crash_convexity_pct
         summary = NetHedgeSummary(
             portfolio,
-            crash_vol_shock=vol_shock,
-            skew_steepening=skew,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=vol_shock,
+                skew_steepening=skew,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         rung = dict(summary._crash_convexity_rungs())[-20.0]
         table = compute_crash_convexity(
@@ -1313,12 +1324,14 @@ class TestSkewReferenceDeltaReachesBookSurfaces:
 
         candidate = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=conv.crash_scenario_pct,
+                crash_vol_shock=conv.crash_vol_shock,
+                skew_steepening=conv.skew_steepening,
+                skew_reference_delta=conv.skew_reference_delta,
+            ),
             strike=strike,
             maturity_years=(maturity - valuation_date).days / 365.0,
-            crash_pct=conv.crash_scenario_pct,
-            crash_vol_shock=conv.crash_vol_shock,
-            skew_steepening=conv.skew_steepening,
-            skew_reference_delta=conv.skew_reference_delta,
         )
 
         assert candidate.per_contract_payoff == pytest.approx(
@@ -1408,6 +1421,64 @@ class TestNoLegacyBasisInConvexityPaths:
         source = inspect.getsource(crash_scenario_table)
 
         assert "CrashShock.from_ips(ips_convexity)" in source
+
+    def test_no_crash_scalar_survives_on_a_pricing_signature(self) -> None:
+        """M1.8 — every crash-pricing entry point takes the object, not parts.
+
+        The structural end-state: one pricing-input object everywhere. A
+        function that still accepted, say, ``crash_vol_shock`` alongside a
+        ``shock`` could be handed a half-stated basis, which is the failure
+        mode this whole refactor exists to remove.
+        """
+        scalars = {
+            "crash_pct",
+            "crash_scenario_pct",
+            "crash_vol_shock",
+            "vol_shock",
+            "skew_steepening",
+            "skew_reference_delta",
+        }
+        entry_points = (
+            cr.crash_hedge_value,
+            cr.crash_convexity_pct,
+            HealthMixin.calculate_crash_convexity_pct,
+            compute_crash_convexity,
+            crash_payoff_ratio,
+            evaluate_candidate,
+            NetHedgeSummary.__init__,
+        )
+
+        for fn in entry_points:
+            params = set(inspect.signature(fn).parameters)
+            assert not (params & scalars), f"{fn.__qualname__}: {params}"
+
+    def test_pricing_entry_points_require_the_shock(self) -> None:
+        """None of them defaults ``shock`` — a basis is always stated."""
+        entry_points = (
+            cr.crash_hedge_value,
+            cr.crash_convexity_pct,
+            HealthMixin.calculate_crash_convexity_pct,
+            compute_crash_convexity,
+            crash_payoff_ratio,
+            evaluate_candidate,
+            NetHedgeSummary.__init__,
+        )
+
+        for fn in entry_points:
+            param = inspect.signature(fn).parameters["shock"]
+            assert param.default is inspect.Parameter.empty, fn.__qualname__
+
+    def test_candidate_surfaces_source_whole_basis_from_ips(self) -> None:
+        """Sizing and the ladder build the basis the way the book does.
+
+        M1.7 gave both sides one skew *function*; this pins one *construction
+        path* as well, so neither can assemble a basis the other would not.
+        """
+        for fn in (size_hedge, build_strike_ladder):
+            source = inspect.getsource(fn)
+            assert "CrashShock.from_ips(ips_config.convexity)" in source, (
+                fn.__qualname__
+            )
 
 
 class TestCanonicalExampleInvariants:

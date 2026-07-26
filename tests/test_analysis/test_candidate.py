@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 
 import pytest
@@ -93,12 +94,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio()
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert isinstance(result, CandidateMetrics)
 
@@ -108,12 +111,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio(spot=5000.0)
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.pct_otm == pytest.approx(5.0)
 
@@ -122,12 +127,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio()
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.put_delta < 0.0
 
@@ -144,12 +151,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio(spot=5000.0)
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_intrinsic_floor == pytest.approx(100_000.0)
         assert result.per_contract_payoff > 0.0
@@ -165,12 +174,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio(spot=5000.0)
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=3000.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_intrinsic_floor == pytest.approx(0.0)
         assert result.per_contract_payoff > 0.0
@@ -180,12 +191,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio()
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_carry > 0.0
 
@@ -194,12 +207,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio()
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.premium > 0.0
 
@@ -208,12 +223,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio()
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-30.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4600.0,
             maturity_years=0.50,
-            crash_pct=-30.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.strike == pytest.approx(4600.0)
 
@@ -222,22 +239,26 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio(vol=0.20)
         r_low = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
             vol=0.15,
         )
         r_high = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
             vol=0.30,
         )
         assert r_high.premium > r_low.premium
@@ -254,12 +275,19 @@ class TestEvaluateCandidate:
         kwargs = {
             "strike": 3500.0,  # OTM at the -25% crash → time value only
             "maturity_years": 0.5,
-            "crash_pct": -25.0,
-            "skew_steepening": _SKEW_STEEPENING,
-            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
         }
-        r_low = evaluate_candidate(portfolio, **kwargs, crash_vol_shock=0.05)
-        r_high = evaluate_candidate(portfolio, **kwargs, crash_vol_shock=0.25)
+        base = CrashShock(
+            crash_scenario_pct=-25.0,
+            crash_vol_shock=0.05,
+            skew_steepening=_SKEW_STEEPENING,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
+        )
+        r_low = evaluate_candidate(portfolio, shock=base, **kwargs)
+        r_high = evaluate_candidate(
+            portfolio,
+            shock=dataclasses.replace(base, crash_vol_shock=0.25),
+            **kwargs,
+        )
         assert r_high.per_contract_payoff > r_low.per_contract_payoff
 
     def test_european_exercise_no_error(self) -> None:
@@ -267,12 +295,14 @@ class TestEvaluateCandidate:
         portfolio = _make_spx_portfolio(exercise_style=ExerciseStyle.EUROPEAN)
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=4750.0,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=_CRASH_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_carry > 0.0
 
@@ -287,10 +317,12 @@ class TestCandidateContractSizeScaling:
         kwargs = {
             "strike": 4750.0,
             "maturity_years": 0.25,
-            "crash_pct": -25.0,
-            "crash_vol_shock": _CRASH_VOL_SHOCK,
-            "skew_steepening": _SKEW_STEEPENING,
-            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
+            "shock": CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
         }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
@@ -303,10 +335,12 @@ class TestCandidateContractSizeScaling:
         kwargs = {
             "strike": 4750.0,
             "maturity_years": 0.25,
-            "crash_pct": -25.0,
-            "crash_vol_shock": _CRASH_VOL_SHOCK,
-            "skew_steepening": _SKEW_STEEPENING,
-            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
+            "shock": CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
         }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
@@ -321,10 +355,12 @@ class TestCandidateContractSizeScaling:
         kwargs = {
             "strike": 4750.0,
             "maturity_years": 0.25,
-            "crash_pct": -25.0,
-            "crash_vol_shock": _CRASH_VOL_SHOCK,
-            "skew_steepening": _SKEW_STEEPENING,
-            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
+            "shock": CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
         }
         r100 = evaluate_candidate(p100, **kwargs)
         r50 = evaluate_candidate(p50, **kwargs)
@@ -339,10 +375,12 @@ class TestCandidateContractSizeScaling:
         kwargs = {
             "strike": 4750.0,
             "maturity_years": 0.25,
-            "crash_pct": -25.0,
-            "crash_vol_shock": _CRASH_VOL_SHOCK,
-            "skew_steepening": _SKEW_STEEPENING,
-            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
+            "shock": CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_CRASH_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
         }
         assert evaluate_candidate(p100, **kwargs).pct_otm == pytest.approx(
             evaluate_candidate(p50, **kwargs).pct_otm,
@@ -363,12 +401,14 @@ class TestCrashRepricingBasis:
         for strike in (_APX_STRIKE_30_OTM, _APX_STRIKE_40_OTM):
             result = evaluate_candidate(
                 portfolio,
+                shock=CrashShock(
+                    crash_scenario_pct=_APX_CRASH_PCT,
+                    crash_vol_shock=_APX_VOL_SHOCK,
+                    skew_steepening=_SKEW_STEEPENING,
+                    skew_reference_delta=_SKEW_REFERENCE_DELTA,
+                ),
                 strike=strike,
                 maturity_years=_APX_MATURITY_YEARS,
-                crash_pct=_APX_CRASH_PCT,
-                crash_vol_shock=_APX_VOL_SHOCK,
-                skew_steepening=_SKEW_STEEPENING,
-                skew_reference_delta=_SKEW_REFERENCE_DELTA,
             )
             assert result.per_contract_payoff > 0.0
             assert result.per_contract_intrinsic_floor == pytest.approx(0.0)
@@ -386,12 +426,14 @@ class TestCrashRepricingBasis:
         portfolio = _make_appendix_portfolio()
         result = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=_APX_CRASH_PCT,
+                crash_vol_shock=_APX_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=_APX_STRIKE_20_OTM,
             maturity_years=_APX_MATURITY_YEARS,
-            crash_pct=_APX_CRASH_PCT,
-            crash_vol_shock=_APX_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert result.per_contract_intrinsic_floor == pytest.approx(33_000.0)
         assert result.per_contract_intrinsic_floor < result.per_contract_payoff
@@ -421,12 +463,14 @@ class TestCrashRepricingBasis:
 
         candidate = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=_APX_CRASH_PCT,
+                crash_vol_shock=_APX_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=strike,
             maturity_years=_APX_MATURITY_YEARS,
-            crash_pct=_APX_CRASH_PCT,
-            crash_vol_shock=_APX_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         ips = IpsConvexity(
             crash_scenario_pct=_APX_CRASH_PCT,
@@ -488,12 +532,14 @@ class TestBookCandidateParity:
 
         candidate = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=_APX_CRASH_PCT,
+                crash_vol_shock=_APX_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
             strike=strike,
             maturity_years=_APX_MATURITY_YEARS,
-            crash_pct=_APX_CRASH_PCT,
-            crash_vol_shock=_APX_VOL_SHOCK,
-            skew_steepening=_SKEW_STEEPENING,
-            skew_reference_delta=_SKEW_REFERENCE_DELTA,
         )
         assert candidate.per_contract_payoff == pytest.approx(held_per_contract)
 
@@ -509,15 +555,21 @@ class TestBookCandidateParity:
         common = {
             "strike": _APX_STRIKE_30_OTM,
             "maturity_years": _APX_MATURITY_YEARS,
-            "crash_pct": _APX_CRASH_PCT,
-            "crash_vol_shock": _APX_VOL_SHOCK,
-            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
         }
-        flat = evaluate_candidate(portfolio, **common, skew_steepening=0.0)
+        flat_shock = CrashShock(
+            crash_scenario_pct=_APX_CRASH_PCT,
+            crash_vol_shock=_APX_VOL_SHOCK,
+            skew_steepening=0.0,
+            skew_reference_delta=_SKEW_REFERENCE_DELTA,
+        )
+        flat = evaluate_candidate(portfolio, shock=flat_shock, **common)
         skewed = evaluate_candidate(
             portfolio,
+            shock=dataclasses.replace(
+                flat_shock,
+                skew_steepening=_SKEW_STEEPENING,
+            ),
             **common,
-            skew_steepening=_SKEW_STEEPENING,
         )
         assert skewed.per_contract_payoff > flat.per_contract_payoff
 
@@ -531,10 +583,12 @@ class TestBookCandidateParity:
         kwargs = {
             "strike": _APX_STRIKE_20_OTM,
             "maturity_years": _APX_MATURITY_YEARS,
-            "crash_pct": _APX_CRASH_PCT,
-            "crash_vol_shock": _APX_VOL_SHOCK,
-            "skew_steepening": _SKEW_STEEPENING,
-            "skew_reference_delta": _SKEW_REFERENCE_DELTA,
+            "shock": CrashShock(
+                crash_scenario_pct=_APX_CRASH_PCT,
+                crash_vol_shock=_APX_VOL_SHOCK,
+                skew_steepening=_SKEW_STEEPENING,
+                skew_reference_delta=_SKEW_REFERENCE_DELTA,
+            ),
         }
         empty_book = _make_appendix_portfolio()
         before = evaluate_candidate(empty_book, **kwargs)
