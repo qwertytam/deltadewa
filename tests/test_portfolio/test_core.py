@@ -24,11 +24,11 @@ class TestOptionPortfolioBase:
         )
 
         assert portfolio is not None
-        assert portfolio.underlying_quantity == 100.0
-        assert portfolio.spot_price == 100.0
-        assert portfolio.volatility == 0.2
-        assert portfolio.risk_free_rate == 0.05
-        assert portfolio.dividend_yield == 0.0
+        assert portfolio.underlying_quantity == pytest.approx(100.0, rel=1e-5)
+        assert portfolio.spot_price == pytest.approx(100.0, rel=1e-5)
+        assert portfolio.volatility == pytest.approx(0.2, rel=1e-4)
+        assert portfolio.risk_free_rate == pytest.approx(0.05, rel=1e-9)
+        assert portfolio.dividend_yield == pytest.approx(0.0, rel=1e-8)
         assert portfolio.symbol == "TEST"
         assert len(portfolio.positions) == 0
 
@@ -64,7 +64,9 @@ class TestOptionPortfolioBase:
 
         assert len(portfolio.positions) == 1
         assert portfolio.positions[0].custom_volatility is True
-        assert portfolio.positions[0].option.volatility == 0.3
+        assert portfolio.positions[0].option.volatility == pytest.approx(
+            0.3, rel=1e-4
+        )
 
     def test_add_position_auto_captures_entry_spot_and_date(self) -> None:
         """Test add_position captures current spot/date as entry by default."""
@@ -81,7 +83,9 @@ class TestOptionPortfolioBase:
             quantity=1,
         )
 
-        assert portfolio.positions[0].entry_spot == 123.0
+        assert portfolio.positions[0].entry_spot == pytest.approx(
+            123.0, rel=1e-4
+        )
         assert portfolio.positions[0].entry_date == valuation_date
 
     def test_add_position_explicit_entry_spot_and_date_override(self) -> None:
@@ -100,7 +104,9 @@ class TestOptionPortfolioBase:
             entry_date=entry_date,
         )
 
-        assert portfolio.positions[0].entry_spot == 110.0
+        assert portfolio.positions[0].entry_spot == pytest.approx(
+            110.0, rel=1e-4
+        )
         assert portfolio.positions[0].entry_date == entry_date
 
     def test_remove_position(self) -> None:
@@ -126,7 +132,9 @@ class TestOptionPortfolioBase:
         assert len(portfolio.positions) == 2
         portfolio.remove_position(0)
         assert len(portfolio.positions) == 1
-        assert portfolio.positions[0].option.strike_price == 105.0
+        assert portfolio.positions[0].option.strike_price == pytest.approx(
+            105.0, rel=1e-4
+        )
         assert portfolio.symbol == "TEST"
 
     def test_remove_position_invalid_index(self) -> None:
@@ -307,7 +315,9 @@ class TestOptionPortfolioBase:
             spot_price=50.0,
         )
 
-        assert portfolio.total_underlying_value() == 5000.0
+        assert portfolio.total_underlying_value() == pytest.approx(
+            5000.0, rel=1e-4
+        )
 
     def test_total_portfolio_value(self) -> None:
         """Test total_portfolio_value calculation."""
@@ -346,7 +356,7 @@ class TestOptionPortfolioBase:
         positions = portfolio.get_positions()
         assert len(positions) == 1
         assert positions[0]["option_type"] == OptionType.CALL
-        assert positions[0]["strike"] == 100.0
+        assert positions[0]["strike"] == pytest.approx(100.0, rel=1e-5)
 
     def test_to_dataframe(self) -> None:
         """Test to_dataframe conversion."""
@@ -453,8 +463,8 @@ class TestOptionPortfolioBase:
 
         portfolio.update_market_conditions(spot_price=110.0, volatility=0.3)
 
-        assert portfolio.spot_price == 110.0
-        assert portfolio.volatility == 0.3
+        assert portfolio.spot_price == pytest.approx(110.0, rel=1e-5)
+        assert portfolio.volatility == pytest.approx(0.3, rel=1e-4)
         assert portfolio.symbol == "TEST"
 
     def test_set_volatility(self) -> None:
@@ -473,8 +483,10 @@ class TestOptionPortfolioBase:
 
         portfolio.set_volatility(0.3)
 
-        assert portfolio.volatility == 0.3
-        assert portfolio.positions[0].option.volatility == 0.3
+        assert portfolio.volatility == pytest.approx(0.3, rel=1e-4)
+        assert portfolio.positions[0].option.volatility == pytest.approx(
+            0.3, rel=1e-4
+        )
 
     def test_set_volatility_reprices_leg(self) -> None:
         """Regression (M4): set_volatility must reprice, not just set the attr.
@@ -544,7 +556,7 @@ class TestOptionPortfolioBase:
 
         portfolio.set_volatility(0.5)
 
-        assert custom_leg.option.volatility == 0.3
+        assert custom_leg.option.volatility == pytest.approx(0.3, rel=1e-4)
         assert custom_leg.option.price() == pytest.approx(price_before)
 
     def test_update_market_conditions_rate_change_preserves_identity(
@@ -578,7 +590,7 @@ class TestOptionPortfolioBase:
         portfolio.update_market_conditions(risk_free_rate=0.06)
 
         rebuilt = portfolio.positions[0]
-        assert rebuilt.entry_spot == 98.0
+        assert rebuilt.entry_spot == pytest.approx(98.0, rel=1e-4)
         assert rebuilt.entry_date == entry_date
         assert rebuilt.entry_premium == pytest.approx(4.25)
         assert rebuilt.position_id == original_id
@@ -709,7 +721,7 @@ class TestOptionPortfolio:
         )
 
         assert portfolio is not None
-        assert portfolio.spot_price == 100.0
+        assert portfolio.spot_price == pytest.approx(100.0, rel=1e-5)
 
 
 class TestPortfolioCore(unittest.TestCase):

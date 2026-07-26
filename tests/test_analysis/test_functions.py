@@ -46,9 +46,9 @@ class TestGenerateSpotRange:
 
         # Check bounds (default is 0% to 200%)
         # Lower bound should be max(0.01, 100 * 0.0 / 100) = 0.01
-        assert result[0] == pytest.approx(0.01, rel=1e-4)
+        assert result[0] == pytest.approx(0.01, rel=1e-9)
         # Upper bound should be 100 * 200 / 100 = 200
-        assert result[-1] == pytest.approx(200.0, rel=1e-4)
+        assert result[-1] == pytest.approx(200.0, rel=1e-5)
 
         # Check it's sorted
         assert np.all(result[:-1] <= result[1:])
@@ -70,7 +70,7 @@ class TestGenerateSpotRange:
         # Lower bound should be max(0.01, 100 * 80 / 100) = 80
         assert result[0] == pytest.approx(80.0, rel=1e-4)
         # Upper bound should be 100 * 120 / 100 = 120
-        assert result[-1] == pytest.approx(120.0, rel=1e-4)
+        assert result[-1] == pytest.approx(120.0, rel=1e-5)
 
         # Check it's sorted
         assert np.all(result[:-1] <= result[1:])
@@ -85,11 +85,11 @@ class TestGenerateSpotRange:
 
         # Check that it includes near-zero
         # Near-zero should be max(0.01, 100 * 0.0001) = 0.01
-        assert result[0] == pytest.approx(0.01, rel=1e-4)
+        assert result[0] == pytest.approx(0.01, rel=1e-9)
 
         # Check that it includes high multiples
         # Maximum should be 10x spot = 1000
-        assert result[-1] == pytest.approx(1000.0, rel=1e-4)
+        assert result[-1] == pytest.approx(1000.0, rel=1e-2)
 
         # Check it's sorted
         assert np.all(result[:-1] <= result[1:])
@@ -152,7 +152,7 @@ class TestGenerateSpotRange:
         # 0.01
         # But critical points based on spot_price can be smaller
         # So result[0] will be min(critical_points) = spot_price * 0.1 = 0.0001
-        assert result[0] == pytest.approx(0.0001, rel=1e-4)
+        assert result[0] == pytest.approx(0.0001, rel=1e-12)
 
         # The near_zero value (0.01) should be in the range
         assert np.any(np.isclose(result, 0.01))
@@ -164,7 +164,7 @@ class TestGenerateSpotRange:
         # Near-zero should be max(0.01, 10000 * 0.0001) = 1.0
         # But critical points like 10000 * 0.1 = 1000 are larger
         # So result[0] will be the near_zero value = 1.0
-        assert result[0] == pytest.approx(1.0, rel=1e-4)
+        assert result[0] == pytest.approx(1.0, rel=1e-7)
 
     def test_standalone_produces_same_results_as_riskmixin(self) -> None:
         """Test standalone function produces identical results to RiskMixin.

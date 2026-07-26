@@ -4,7 +4,7 @@ Minimal, hand-maintained typing stubs for the QuantLib symbols used in this
 project.
 """
 
-# ruff: noqa: N802, UP037
+# ruff: file-ignore[invalid-function-name, quoted-annotation]
 # pylint: disable=unused-argument missing-class-docstring missing-function-docstring, invalid-name
 from typing import Any
 
@@ -13,7 +13,7 @@ from typing import Any
 class Settings:
     """QuantLib global settings."""
 
-    evaluationDate: Date  # noqa: N815
+    evaluationDate: Date  # ruff: ignore[mixed-case-variable-in-class-scope]
 
     @staticmethod
     def instance() -> "Settings": ...

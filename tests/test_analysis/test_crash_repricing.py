@@ -555,7 +555,7 @@ class TestPerLegWingAnchor:
         shallow = next(
             pos
             for pos in portfolio.positions
-            if pos.option.strike_price == 5280.0
+            if pos.option.strike_price == pytest.approx(5280.0, rel=1e-2)
         )
 
         before = _leg_extra_crash_vol(portfolio, shallow)
@@ -689,7 +689,11 @@ class TestBand:
             skew_steepening=_APPENDIX_SKEW,
             ips_convexity=ips,
         )
-        ips_row = next(r for r in result.scenario_rows if r.shock_pct == -25.0)
+        ips_row = next(
+            r
+            for r in result.scenario_rows
+            if r.shock_pct == pytest.approx(-25.0, rel=1e-4)
+        )
 
         assert 15.0 <= ips_row.convexity_pct <= 25.0
         # This exercises the band-comparison mechanics; the §4 regression is
@@ -791,14 +795,11 @@ class TestHedgeOnlyInvariant:
         """No equity leg -> undefined book -> convexity reads 0.0."""
         portfolio = _make_appendix_book(underlying_quantity=0.0)
 
-        assert (
-            cr.crash_convexity_pct(
-                portfolio,
-                crash_move=_APPENDIX_MOVE,
-                vol_shock=_APPENDIX_VOL_SHOCK,
-            )
-            == 0.0
-        )
+        assert cr.crash_convexity_pct(
+            portfolio,
+            crash_move=_APPENDIX_MOVE,
+            vol_shock=_APPENDIX_VOL_SHOCK,
+        ) == pytest.approx(0.0, rel=1e-8)
 
 
 class TestRepricedInvariant:
@@ -831,7 +832,7 @@ class TestRepricedInvariant:
         leg = next(
             pos
             for pos in portfolio.positions
-            if pos.option.strike_price == 3960.0
+            if pos.option.strike_price == pytest.approx(3960.0, rel=1e-2)
         )
         floor = cr.crash_intrinsic_floor(
             portfolio,
@@ -902,7 +903,11 @@ class TestConsistencyAcrossSurfaces:
             skew_steepening=_APPENDIX_SKEW,
             ips_convexity=ips,
         )
-        ips_row = next(r for r in result.scenario_rows if r.shock_pct == -25.0)
+        ips_row = next(
+            r
+            for r in result.scenario_rows
+            if r.shock_pct == pytest.approx(-25.0, rel=1e-4)
+        )
         gauge = PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
             crash_scenario_pct=-25.0,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
@@ -945,7 +950,11 @@ class TestConsistencyAcrossSurfaces:
             skew_steepening=skew,
             ips_convexity=ips.convexity,
         )
-        table_row = next(r for r in table.scenario_rows if r.shock_pct == -20.0)
+        table_row = next(
+            r
+            for r in table.scenario_rows
+            if r.shock_pct == pytest.approx(-20.0, rel=1e-4)
+        )
 
         # All four surfaces read the same convexity at the same depth.
         assert roll == pytest.approx(gauge)

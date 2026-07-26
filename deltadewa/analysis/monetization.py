@@ -7,6 +7,7 @@ output is advisory.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -122,7 +123,7 @@ def compute_hedge_gain_pct(portfolio: OptionPortfolio) -> float | None:
         for p in legs
         if (ep := p.entry_premium) is not None
     )
-    if total_cost == 0.0:
+    if math.isclose(total_cost, 0.0, abs_tol=1e-9):
         return None
     total_mark = sum(p.position_value() for p in legs)
     return (total_mark - total_cost) / total_cost * 100.0

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -39,7 +40,7 @@ class TestScenariosMixin:
         )
 
         assert isinstance(value, float)
-        assert value != 0.0
+        assert value != pytest.approx(0.0, rel=1e-8)
 
     def test_calculate_pnl_at_expiry_vectorized(self) -> None:
         """Test _calculate_pnl_at_expiry_vectorized method."""

@@ -1,5 +1,7 @@
 """Tests for deltadewa.portfolio.factory module."""
 
+import pytest
+
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.factory import (
@@ -27,9 +29,9 @@ class TestFactoryFunctions:
             underlying_quantity=200.0,
         )
 
-        assert portfolio.spot_price == 150.0
-        assert portfolio.volatility == 0.3
-        assert portfolio.underlying_quantity == 200.0
+        assert portfolio.spot_price == pytest.approx(150.0, rel=1e-5)
+        assert portfolio.volatility == pytest.approx(0.3, rel=1e-4)
+        assert portfolio.underlying_quantity == pytest.approx(200.0, rel=1e-5)
 
     def test_create_demo_portfolio(self) -> None:
         """Test create_demo_portfolio function."""
@@ -48,13 +50,13 @@ class TestFactoryFunctions:
 
         # Check first position (call)
         pos1 = portfolio.positions[0]
-        assert pos1.option.strike_price == 100.0
+        assert pos1.option.strike_price == pytest.approx(100.0, rel=1e-5)
         assert pos1.option.option_type == OptionType.CALL
         assert pos1.quantity == 1
 
         # Check second position (put)
         pos2 = portfolio.positions[1]
-        assert pos2.option.strike_price == 95.0
+        assert pos2.option.strike_price == pytest.approx(95.0, rel=1e-4)
         assert pos2.option.option_type == OptionType.PUT
         assert pos2.quantity == 1
 
@@ -62,8 +64,8 @@ class TestFactoryFunctions:
         """Test demo portfolio has expected market conditions."""
         portfolio = create_demo_portfolio()
 
-        assert portfolio.spot_price == 100.0
-        assert portfolio.volatility == 0.25
+        assert portfolio.spot_price == pytest.approx(100.0, rel=1e-5)
+        assert portfolio.volatility == pytest.approx(0.25, rel=1e-4)
         assert portfolio.underlying_quantity == 0
 
     def test_create_empty_portfolio_returns_full_portfolio(self) -> None:
@@ -95,5 +97,5 @@ class TestFactoryFunctions:
             dividend_yield=0.02,
         )
 
-        assert portfolio.risk_free_rate == 0.03
-        assert portfolio.dividend_yield == 0.02
+        assert portfolio.risk_free_rate == pytest.approx(0.03, rel=1e-9)
+        assert portfolio.dividend_yield == pytest.approx(0.02, rel=1e-9)

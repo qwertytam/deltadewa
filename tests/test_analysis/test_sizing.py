@@ -118,11 +118,15 @@ class TestRequiredCrashOffset:
 
     def test_zero_notional(self) -> None:
         """Zero book notional → zero offset regardless of crash."""
-        assert required_crash_offset(0.0, -30.0, 10.0) == 0.0
+        assert required_crash_offset(0.0, -30.0, 10.0) == pytest.approx(
+            0.0, rel=1e-4
+        )
 
     def test_negative_notional_treated_as_zero(self) -> None:
         """Negative notional (invalid) → zero offset (defensive guard)."""
-        assert required_crash_offset(-500_000.0, -25.0, 20.0) == 0.0
+        assert required_crash_offset(-500_000.0, -25.0, 20.0) == pytest.approx(
+            0.0, rel=1e-4
+        )
 
 
 # ---------------------------------------------------------------------------

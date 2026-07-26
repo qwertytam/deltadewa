@@ -8,6 +8,7 @@ Generator so it is reproducible without perturbing the global np.random state.
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+import pytest
 
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
@@ -40,7 +41,7 @@ class TestDriftMeasure:
         """No expected_return -> risk-neutral drift labelled on the result."""
         res = _book().run_monte_carlo_simulation(num_simulations=500)
         assert res["drift_measure"] == "risk_neutral"
-        assert res["expected_return_annual"] == 0.045
+        assert res["expected_return_annual"] == pytest.approx(0.045, rel=1e-4)
 
     def test_expected_return_makes_it_real_world(self) -> None:
         """A supplied return relabels the result and shifts expected P&L."""
@@ -53,7 +54,7 @@ class TestDriftMeasure:
         )
 
         assert rw["drift_measure"] == "real_world"
-        assert rw["expected_return_annual"] == 0.10
+        assert rw["expected_return_annual"] == pytest.approx(0.10, rel=1e-8)
         # Same seed, only the drift differs: a higher drift lifts terminal
         # spots, so a net-long book's expected P&L rises.
         assert rw["expected_pnl"] > rn["expected_pnl"]
@@ -66,7 +67,7 @@ class TestDriftMeasure:
             expected_return=0.08,
         )
         assert res["drift_measure"] == "real_world"
-        assert res["expected_return_annual"] == 0.08
+        assert res["expected_return_annual"] == pytest.approx(0.08, rel=1e-9)
 
     def test_drift_measure_label(self) -> None:
         """Label helper maps measures to display strings; passes rest."""

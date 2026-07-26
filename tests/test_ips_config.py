@@ -66,18 +66,22 @@ class TestLoadIpsConfig:
         assert ips.program.instrument == "SPX"
         assert ips.pricing.exercise_style == ExerciseStyle.EUROPEAN
         # Handbook family-office carry ceiling is 1% (Mi6); shipped default.
-        assert ips.budget.annual_carry_pct == 1.0
-        assert ips.convexity.target_min_pct == 15.0
-        assert ips.convexity.target_max_pct == 25.0
-        assert ips.convexity.crash_vol_shock == 0.15
+        assert ips.budget.annual_carry_pct == pytest.approx(1.0, rel=1e-7)
+        assert ips.convexity.target_min_pct == pytest.approx(15.0, rel=1e-4)
+        assert ips.convexity.target_max_pct == pytest.approx(25.0, rel=1e-4)
+        assert ips.convexity.crash_vol_shock == pytest.approx(0.15, rel=1e-4)
         # M1.6: the shipped default adopts the skew-calibrated crash shock.
-        assert ips.convexity.skew_steepening == 0.10
+        assert ips.convexity.skew_steepening == pytest.approx(0.10, rel=1e-8)
         # M1.7: the steepening is anchored to each leg's ~10-delta wing.
-        assert ips.convexity.skew_reference_delta == 0.10
+        assert ips.convexity.skew_reference_delta == pytest.approx(
+            0.10, rel=1e-8
+        )
         assert ips.convexity.crash_floor_reported is True
-        assert ips.drawdown.max_tolerance_pct == 20.0
-        assert ips.triggers.target_delta_ratio_pct == 90.0
-        assert ips.triggers.delta_drift_warn_pct == 5.0
+        assert ips.drawdown.max_tolerance_pct == pytest.approx(20.0, rel=1e-4)
+        assert ips.triggers.target_delta_ratio_pct == pytest.approx(
+            90.0, rel=1e-4
+        )
+        assert ips.triggers.delta_drift_warn_pct == pytest.approx(5.0, rel=1e-7)
         assert len(ips.monetization.schedule) == 3
         assert ips.monetization.schedule[0].gain_pct == 100
 
@@ -165,9 +169,11 @@ class TestLoadIpsConfig:
 
         ips = load_ips_config(path)
 
-        assert ips.convexity.crash_vol_shock == 0.15
-        assert ips.convexity.skew_steepening == 0.0
-        assert ips.convexity.skew_reference_delta == 0.10
+        assert ips.convexity.crash_vol_shock == pytest.approx(0.15, rel=1e-4)
+        assert ips.convexity.skew_steepening == pytest.approx(0.0, rel=1e-8)
+        assert ips.convexity.skew_reference_delta == pytest.approx(
+            0.10, rel=1e-8
+        )
         assert ips.convexity.crash_floor_reported is True
 
     def test_crash_knobs_round_trip_when_set(self, tmp_path: Path) -> None:
@@ -188,9 +194,11 @@ class TestLoadIpsConfig:
 
         ips = load_ips_config(path)
 
-        assert ips.convexity.crash_vol_shock == 0.20
-        assert ips.convexity.skew_steepening == 0.30
-        assert ips.convexity.skew_reference_delta == 0.15
+        assert ips.convexity.crash_vol_shock == pytest.approx(0.20, rel=1e-8)
+        assert ips.convexity.skew_steepening == pytest.approx(0.30, rel=1e-8)
+        assert ips.convexity.skew_reference_delta == pytest.approx(
+            0.15, rel=1e-4
+        )
         assert ips.convexity.crash_floor_reported is False
 
     def test_negative_crash_vol_shock_raises(self, tmp_path: Path) -> None:
@@ -279,8 +287,10 @@ class TestLoadIpsConfig:
 
         ips = load_ips_config(path)
 
-        assert ips.triggers.roll_review_buffer == 1.5
-        assert ips.triggers.strike_drift_review_fraction == 0.75
+        assert ips.triggers.roll_review_buffer == pytest.approx(1.5, rel=1e-7)
+        assert ips.triggers.strike_drift_review_fraction == pytest.approx(
+            0.75, rel=1e-4
+        )
 
     def test_review_buffers_round_trip_when_set(self, tmp_path: Path) -> None:
         """Test that explicit REVIEW buffer values are loaded as given."""
@@ -296,8 +306,10 @@ class TestLoadIpsConfig:
 
         ips = load_ips_config(path)
 
-        assert ips.triggers.roll_review_buffer == 2.0
-        assert ips.triggers.strike_drift_review_fraction == 0.5
+        assert ips.triggers.roll_review_buffer == pytest.approx(2.0, rel=1e-7)
+        assert ips.triggers.strike_drift_review_fraction == pytest.approx(
+            0.5, rel=1e-4
+        )
 
     def test_roll_review_buffer_must_exceed_one(self, tmp_path: Path) -> None:
         """Test that roll_review_buffer <= 1.0 raises IpsConfigError."""
@@ -343,7 +355,9 @@ class TestLoadIpsConfig:
 
         ips = load_ips_config(path)
 
-        assert ips.triggers.target_delta_ratio_pct == 90.0
+        assert ips.triggers.target_delta_ratio_pct == pytest.approx(
+            90.0, rel=1e-4
+        )
 
     def test_target_delta_ratio_round_trip_when_set(
         self,
@@ -361,7 +375,9 @@ class TestLoadIpsConfig:
 
         ips = load_ips_config(path)
 
-        assert ips.triggers.target_delta_ratio_pct == 80.0
+        assert ips.triggers.target_delta_ratio_pct == pytest.approx(
+            80.0, rel=1e-4
+        )
 
     def test_negative_target_delta_ratio_raises(
         self,
@@ -399,11 +415,11 @@ class TestMarketEnvironment:
         """The shipped config/ips.yaml carries the policy bands."""
         env = load_ips_config(EXAMPLE_IPS_YAML).market_environment
 
-        assert env.vol_regime_low == 0.15
-        assert env.vol_regime_high == 0.35
+        assert env.vol_regime_low == pytest.approx(0.15, rel=1e-4)
+        assert env.vol_regime_high == pytest.approx(0.35, rel=1e-4)
         assert env.skew_low_pctile == 25
         assert env.skew_high_pctile == 75
-        assert env.term_contango_tolerance == 0.5
+        assert env.term_contango_tolerance == pytest.approx(0.5, rel=1e-4)
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Section values round-trip through the loader unchanged."""
@@ -419,11 +435,11 @@ class TestMarketEnvironment:
         }
         env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
 
-        assert env.vol_regime_low == 0.12
-        assert env.vol_regime_high == 0.40
+        assert env.vol_regime_low == pytest.approx(0.12, rel=1e-4)
+        assert env.vol_regime_high == pytest.approx(0.40, rel=1e-8)
         assert env.skew_low_pctile == 20
         assert env.skew_high_pctile == 80
-        assert env.term_contango_tolerance == 1.0
+        assert env.term_contango_tolerance == pytest.approx(1.0, rel=1e-7)
 
     def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
         """vol_regime_low >= vol_regime_high raises IpsConfigError."""
@@ -485,7 +501,7 @@ class TestExpiryThetaTriggers:
 
         assert triggers.expiry_urgent_days == 7
         assert triggers.expiry_soon_days == 21
-        assert triggers.theta_cost_excellent_pct == 1.0
+        assert triggers.theta_cost_excellent_pct == pytest.approx(1.0, rel=1e-7)
 
     def test_example_ips_yaml_expiry_theta(self) -> None:
         """The shipped config/ips.yaml carries the new trigger keys."""
@@ -493,7 +509,7 @@ class TestExpiryThetaTriggers:
 
         assert triggers.expiry_urgent_days == 7
         assert triggers.expiry_soon_days == 21
-        assert triggers.theta_cost_excellent_pct == 1.0
+        assert triggers.theta_cost_excellent_pct == pytest.approx(1.0, rel=1e-7)
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Custom expiry / theta-excellent values round-trip."""
@@ -510,7 +526,7 @@ class TestExpiryThetaTriggers:
 
         assert triggers.expiry_urgent_days == 10
         assert triggers.expiry_soon_days == 40
-        assert triggers.theta_cost_excellent_pct == 0.5
+        assert triggers.theta_cost_excellent_pct == pytest.approx(0.5, rel=1e-4)
 
     def test_urgent_not_below_soon_raises(self, tmp_path: Path) -> None:
         """expiry_urgent_days >= expiry_soon_days raises IpsConfigError."""
@@ -549,8 +565,8 @@ class TestGammaDriftBands:
         ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
         triggers = ips.triggers
 
-        assert triggers.gamma_drift_moderate_pct == 2.0
-        assert triggers.gamma_drift_high_pct == 5.0
+        assert triggers.gamma_drift_moderate_pct == pytest.approx(2.0, rel=1e-7)
+        assert triggers.gamma_drift_high_pct == pytest.approx(5.0, rel=1e-7)
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Custom gamma-drift bands round-trip."""
@@ -564,8 +580,8 @@ class TestGammaDriftBands:
         }
         triggers = load_ips_config(_write_yaml(tmp_path, config)).triggers
 
-        assert triggers.gamma_drift_moderate_pct == 1.5
-        assert triggers.gamma_drift_high_pct == 4.0
+        assert triggers.gamma_drift_moderate_pct == pytest.approx(1.5, rel=1e-7)
+        assert triggers.gamma_drift_high_pct == pytest.approx(4.0, rel=1e-7)
 
     def test_moderate_not_below_high_raises(self, tmp_path: Path) -> None:
         """gamma_drift_moderate_pct >= gamma_drift_high_pct raises."""
@@ -587,17 +603,21 @@ class TestSizing:
     def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
         """A config without a sizing section defaults portfolio_beta to 1.0."""
         path = _write_yaml(tmp_path, _VALID_CONFIG)  # no sizing section
-        assert load_ips_config(path).sizing.portfolio_beta == 1.0
+        assert load_ips_config(path).sizing.portfolio_beta == pytest.approx(
+            1.0, rel=1e-4
+        )
 
     def test_example_ips_yaml_sizing(self) -> None:
         """The shipped config/ips.yaml carries portfolio_beta 1.0."""
-        assert load_ips_config(EXAMPLE_IPS_YAML).sizing.portfolio_beta == 1.0
+        assert load_ips_config(
+            EXAMPLE_IPS_YAML
+        ).sizing.portfolio_beta == pytest.approx(1.0, rel=1e-7)
 
     def test_round_trips_custom_value(self, tmp_path: Path) -> None:
         """A supplied portfolio_beta round-trips through the loader."""
         config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": 0.85}}
         sizing = load_ips_config(_write_yaml(tmp_path, config)).sizing
-        assert sizing.portfolio_beta == 0.85
+        assert sizing.portfolio_beta == pytest.approx(0.85, rel=1e-4)
 
     def test_zero_beta_raises(self, tmp_path: Path) -> None:
         """A non-positive portfolio_beta raises IpsConfigError."""

@@ -319,7 +319,7 @@ class TestGammaDriftTrigger:
 
         result = evaluate_hedge_triggers(portfolio, reporter)
 
-        assert result.gamma_drift_pct == pytest.approx(6.0, rel=1e-4)
+        assert result.gamma_drift_pct == pytest.approx(6.0, rel=1e-7)
         assert "HIGH RISK" in _reporter_text(reporter)
         assert self._gamma_action_present(result)
 
@@ -417,7 +417,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == pytest.approx(3.0, rel=1e-4)
+        assert result.delta_drift_pct == pytest.approx(3.0, rel=1e-7)
         assert "delta" not in _action_text(result.actions).lower()
 
     def test_monitor_band_raises_soon(self) -> None:
@@ -428,7 +428,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == pytest.approx(7.0, rel=1e-4)
+        assert result.delta_drift_pct == pytest.approx(7.0, rel=1e-7)
         text = _action_text(result.actions)
         assert "Monitor delta drift" in text
         assert "🟡 SOON" in {label for label, _ in result.actions}
@@ -494,7 +494,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(target=85.0),
         )
 
-        assert monitor.delta_drift_pct == 7.0
+        assert monitor.delta_drift_pct == pytest.approx(7.0, rel=1e-7)
         assert "🟡 SOON" in {label for label, _ in monitor.actions}
         assert action.delta_drift_pct == pytest.approx(12.0, rel=1e-4)
         assert "🔴 URGENT" in {label for label, _ in action.actions}

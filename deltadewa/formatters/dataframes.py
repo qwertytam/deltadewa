@@ -14,7 +14,7 @@ All functions work with pandas DataFrames and Styler objects.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Hashable, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -121,7 +121,7 @@ def apply_gradient_style(
         columns = [columns]
 
     return styler.background_gradient(
-        subset=columns,
+        subset=cast("list[Hashable]", columns),
         cmap=cmap,
         vmin=vmin,
         vmax=vmax,
@@ -544,7 +544,10 @@ def highlight_negative_values(
             return ""
 
     if columns:
-        return styler.apply(lambda col: col.map(highlight_neg), subset=columns)
+        return styler.apply(
+            lambda col: col.map(highlight_neg),
+            subset=cast("list[Hashable]", columns),
+        )
     return styler.apply(lambda col: col.map(highlight_neg))
 
 
@@ -710,7 +713,7 @@ def to_excel_styled(
         # Fallback to CSV
         csv_path = filepath.replace(".xlsx", ".csv")
         df.to_csv(csv_path)
-        print(f"ℹ️  Exported to CSV instead: {csv_path}")  # noqa: RUF001
+        print(f"ℹ️  Exported to CSV instead: {csv_path}")  # ruff: ignore[ambiguous-unicode-character-string]
 
 
 def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10) -> None:

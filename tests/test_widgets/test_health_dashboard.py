@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock
 
-import ipywidgets as widgets  # type: ignore[import-untyped]
+import ipywidgets as widgets
 import pytest
 
 from deltadewa.analysis.health import VOL_REGIME_LOOKBACK_DAYS
@@ -35,12 +35,12 @@ class TestHedgeHealthMetric:
         assert metric is not None
         assert metric.name == "Test Metric"
         assert metric.description == "A test metric"
-        assert metric.start == 0.0
-        assert metric.end == 1.0
-        assert metric.min_val == 0.3
-        assert metric.mid_val == 0.5
-        assert metric.max_val == 0.7
-        assert metric.actual == 0.75
+        assert metric.start == pytest.approx(0.0, rel=1e-8)
+        assert metric.end == pytest.approx(1.0, rel=1e-7)
+        assert metric.min_val == pytest.approx(0.3, rel=1e-4)
+        assert metric.mid_val == pytest.approx(0.5, rel=1e-4)
+        assert metric.max_val == pytest.approx(0.7, rel=1e-4)
+        assert metric.actual == pytest.approx(0.75, rel=1e-4)
         assert metric.unit == "%"
         assert metric.invert_colors is False
 
@@ -176,7 +176,7 @@ class TestHedgeHealthDashboard:
             mock_portfolio,
             cumulative_carry_paid=100.0,
         )
-        assert dashboard.cumulative_carry_paid == 100.0
+        assert dashboard.cumulative_carry_paid == pytest.approx(100.0, rel=1e-5)
         widget = dashboard.display()
         assert widget is not None
 
@@ -212,8 +212,12 @@ class TestHedgeHealthDashboard:
             historical_vol_high=0.40,
             convexity_cliff_days=200,
         )
-        assert dashboard.config["parameters"]["historical_vol_low"] == 0.20
-        assert dashboard.config["parameters"]["historical_vol_high"] == 0.40
+        assert dashboard.config["parameters"][
+            "historical_vol_low"
+        ] == pytest.approx(0.20, rel=1e-4)
+        assert dashboard.config["parameters"][
+            "historical_vol_high"
+        ] == pytest.approx(0.40, rel=1e-4)
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 200
 
     def test_ips_market_environment_sets_vol_band(
@@ -234,8 +238,12 @@ class TestHedgeHealthDashboard:
                 vol_regime_high=0.33,
             ),
         )
-        assert dashboard.config["parameters"]["historical_vol_low"] == 0.11
-        assert dashboard.config["parameters"]["historical_vol_high"] == 0.33
+        assert dashboard.config["parameters"][
+            "historical_vol_low"
+        ] == pytest.approx(0.11, rel=1e-4)
+        assert dashboard.config["parameters"][
+            "historical_vol_high"
+        ] == pytest.approx(0.33, rel=1e-4)
 
     def test_config_param_applies_on_init(
         self,
@@ -250,8 +258,12 @@ class TestHedgeHealthDashboard:
             },
         )
 
-        assert dashboard.config["parameters"]["historical_vol_low"] == 0.5
-        assert dashboard.config["metrics"]["net_carry"]["max_val"] == 99.0
+        assert dashboard.config["parameters"][
+            "historical_vol_low"
+        ] == pytest.approx(0.5, rel=1e-4)
+        assert dashboard.config["metrics"]["net_carry"][
+            "max_val"
+        ] == pytest.approx(99.0, rel=1e-4)
 
     def test_config_none_uses_defaults(
         self,
@@ -275,8 +287,12 @@ class TestHedgeHealthDashboard:
         assert "metrics" in config
 
         # Check parameters
-        assert config["parameters"]["historical_vol_low"] == 0.15
-        assert config["parameters"]["historical_vol_high"] == 0.35
+        assert config["parameters"]["historical_vol_low"] == pytest.approx(
+            0.15, rel=1e-4
+        )
+        assert config["parameters"]["historical_vol_high"] == pytest.approx(
+            0.35, rel=1e-4
+        )
         assert config["parameters"]["convexity_cliff_days"] == 180
 
         # Check metrics exist
@@ -314,8 +330,12 @@ class TestHedgeHealthDashboard:
 
         dashboard.load_config(new_config)
 
-        assert dashboard.config["parameters"]["historical_vol_low"] == 0.18
-        assert dashboard.config["parameters"]["historical_vol_high"] == 0.38
+        assert dashboard.config["parameters"][
+            "historical_vol_low"
+        ] == pytest.approx(0.18, rel=1e-4)
+        assert dashboard.config["parameters"][
+            "historical_vol_high"
+        ] == pytest.approx(0.38, rel=1e-4)
         # convexity_cliff_days should remain unchanged
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 180
 
@@ -336,12 +356,22 @@ class TestHedgeHealthDashboard:
 
         dashboard.load_config(new_config)
 
-        assert dashboard.config["metrics"]["net_carry"]["start"] == -15.0
-        assert dashboard.config["metrics"]["net_carry"]["end"] == 15.0
-        assert dashboard.config["metrics"]["net_carry"]["min_val"] == -8.0
-        assert dashboard.config["metrics"]["net_carry"]["max_val"] == 4.0
+        assert dashboard.config["metrics"]["net_carry"][
+            "start"
+        ] == pytest.approx(-15.0, rel=1e-4)
+        assert dashboard.config["metrics"]["net_carry"]["end"] == pytest.approx(
+            15.0, rel=1e-4
+        )
+        assert dashboard.config["metrics"]["net_carry"][
+            "min_val"
+        ] == pytest.approx(-8.0, rel=1e-4)
+        assert dashboard.config["metrics"]["net_carry"][
+            "max_val"
+        ] == pytest.approx(4.0, rel=1e-4)
         # mid_val should remain unchanged
-        assert dashboard.config["metrics"]["net_carry"]["mid_val"] == 0.0
+        assert dashboard.config["metrics"]["net_carry"][
+            "mid_val"
+        ] == pytest.approx(0.0, rel=1e-4)
 
     def test_load_config_full(self, mock_portfolio: OptionPortfolio) -> None:
         """Test loading full configuration with both parameters and metrics."""
@@ -367,12 +397,18 @@ class TestHedgeHealthDashboard:
         dashboard.load_config(new_config)
 
         # Check parameters
-        assert dashboard.config["parameters"]["historical_vol_low"] == 0.12
+        assert dashboard.config["parameters"][
+            "historical_vol_low"
+        ] == pytest.approx(0.12, rel=1e-4)
         assert dashboard.config["parameters"]["convexity_cliff_days"] == 150
 
         # Check metrics
-        assert dashboard.config["metrics"]["crash_convexity"]["start"] == -40.0
-        assert dashboard.config["metrics"]["crash_convexity"]["end"] == 40.0
+        assert dashboard.config["metrics"]["crash_convexity"][
+            "start"
+        ] == pytest.approx(-40.0, rel=1e-4)
+        assert dashboard.config["metrics"]["crash_convexity"][
+            "end"
+        ] == pytest.approx(40.0, rel=1e-4)
         assert dashboard.config["metrics"]["vol_regime"]["min_val"] == 20
         assert dashboard.config["metrics"]["vol_regime"]["max_val"] == 80
 
@@ -406,9 +442,9 @@ class TestHedgeHealthDashboard:
         dashboard = HedgeHealthDashboard(mock_portfolio)
         cfg = dashboard._get_default_config()["metrics"]["delta_drift"]  # pylint: disable=W0212
 
-        assert cfg["start"] == pytest.approx(0.0, rel=1e-4)
+        assert cfg["start"] == pytest.approx(0.0, rel=1e-8)
         assert cfg["end"] == pytest.approx(30.0, rel=1e-4)
-        assert cfg["min_val"] == pytest.approx(5.0, rel=1e-4)
+        assert cfg["min_val"] == pytest.approx(5.0, rel=1e-7)
         assert cfg["max_val"] == pytest.approx(10.0, rel=1e-4)
         assert cfg["invert_colors"] is True
 
@@ -440,7 +476,7 @@ class TestHedgeHealthDashboard:
         summary = dashboard.get_metrics_summary()
 
         # drift = 97/100*100 - 90 = +7 -> magnitude 7.0, within (warn, action).
-        assert summary["delta_drift"]["value"] == 7.0
+        assert summary["delta_drift"]["value"] == pytest.approx(7.0, rel=1e-7)
         assert summary["delta_drift"]["status"] == "watch"
 
     def test_dashboard_renders_with_unavailable_drift(

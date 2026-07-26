@@ -80,7 +80,7 @@ class GreeksCache:
 
     @property
     def cache_stats(self) -> dict[str, Any]:
-        """Return cache statistics for monitoring/debugging."""
+        """Cache statistics for monitoring/debugging."""
         with self._lock:
             return {
                 "registered": list(self._compute_funcs.keys()),

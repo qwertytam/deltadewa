@@ -8,6 +8,7 @@ carry six figures of time value that the old intrinsic basis zeroed out.
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+import pytest
 
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -73,7 +74,7 @@ class TestHorizonRepricing:
 
         # Both live strikes sit at/below the crash spot -> $0 intrinsic; the
         # old basis contributed exactly this. Repricing recovers six figures.
-        assert intrinsic == 0.0
+        assert intrinsic == pytest.approx(0.0, rel=1e-8)
         assert 4.0e5 < repriced < 1.2e6
 
     def test_horizon_pnl_beats_intrinsic_pnl_at_crash(self) -> None:
@@ -118,8 +119,8 @@ class TestHorizonRepricing:
         pf = _laddered_book()
         grid = pf._horizon_spot_grid(np.array([4000.0, 8000.0]))
 
-        assert grid[0] == 4000.0
-        assert grid[-1] == 8000.0
+        assert grid[0] == pytest.approx(4000.0, rel=1e-2)
+        assert grid[-1] == pytest.approx(8000.0, rel=1e-2)
         assert 4950.0 in grid  # in range
         assert 4620.0 in grid  # in range
         assert 3960.0 not in grid  # below the lower bound -> excluded

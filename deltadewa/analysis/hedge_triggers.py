@@ -536,8 +536,10 @@ def _build_action_list(
         actions.append(
             (
                 "🔴 URGENT",
-                f"Roll {len(near_expiry_positions)} "
-                f"expiring position(s) → Use the roll planner",
+                (
+                    f"Roll {len(near_expiry_positions)} "
+                    "expiring position(s) → Use the roll planner"
+                ),
             ),
         )
     if (
@@ -548,8 +550,10 @@ def _build_action_list(
         actions.append(
             (
                 "🔴 URGENT",
-                f"Rebalance delta (adjust {abs(shares):.0f} shares) to restore "
-                f"the {t.target_delta_ratio_pct:.0f}% target ratio",
+                (
+                    f"Rebalance delta (adjust {abs(shares):.0f} shares) to "
+                    f"restore the {t.target_delta_ratio_pct:.0f}% target ratio"
+                ),
             ),
         )
 
@@ -573,8 +577,10 @@ def _build_action_list(
         actions.append(
             (
                 "🟡 SOON",
-                f"Monitor delta drift ({delta_drift_pct:+.1f}pp from target) "
-                f"→ May need adjustment",
+                (
+                    f"Monitor delta drift ({delta_drift_pct:+.1f}pp from "
+                    "target) → May need adjustment"
+                ),
             ),
         )
     if (

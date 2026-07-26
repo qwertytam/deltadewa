@@ -350,7 +350,7 @@ def get_currency_axis_formatter(compact: bool = True) -> FuncFormatter:
     if compact:
         return FUNC_FORMATTER(format_currency_for_axis)
     return FUNC_FORMATTER(
-        lambda x, pos: format_currency(x, compact=False, precision=0),  # noqa: ARG005
+        lambda x, pos: format_currency(x, compact=False, precision=0),  # ruff: ignore[unused-lambda-argument]
     )
 
 
@@ -370,7 +370,7 @@ def get_percentage_axis_formatter(from_decimal: bool = True) -> FuncFormatter:
     if from_decimal:
         return FUNC_FORMATTER(format_percentage_for_axis)
     return FUNC_FORMATTER(
-        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),  # noqa: ARG005
+        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),  # ruff: ignore[unused-lambda-argument]
     )
 
 

@@ -226,8 +226,8 @@ class TestApplyProportionalVolatilityShift:
             assert position.option.volatility == pytest.approx(0.35, abs=0.001)
 
         # Original vols should be stored
-        assert original_vols[0] == pytest.approx(0.30, rel=1e-4)
-        assert original_vols[1] == pytest.approx(0.20, rel=1e-4)
+        assert original_vols[0] == pytest.approx(0.30, rel=1e-8)
+        assert original_vols[1] == pytest.approx(0.20, rel=1e-8)
 
     def test_zero_avg_vol_edge_case(self) -> None:
         """Test handling when current average volatility is near zero."""
@@ -257,7 +257,7 @@ class TestApplyProportionalVolatilityShift:
         assert (
             portfolio.positions[0].option.volatility > 0.20
         )  # Should be scaled up
-        assert original_vols[0] == pytest.approx(0.01, rel=1e-4)
+        assert original_vols[0] == pytest.approx(0.01, rel=1e-9)
 
     def test_returns_original_volatilities_dict(self) -> None:
         """Test that function returns dict of original volatilities."""
@@ -285,7 +285,7 @@ class TestApplyProportionalVolatilityShift:
         # Check return value structure
         assert isinstance(original_vols, dict)
         assert 0 in original_vols
-        assert original_vols[0] == pytest.approx(0.30, rel=1e-4)
+        assert original_vols[0] == pytest.approx(0.30, rel=1e-8)
 
 
 class TestRestoreVolatilities:
@@ -467,7 +467,7 @@ class TestGetVolatilityStats:
         assert stats["min_volatility"] == pytest.approx(0.30, abs=0.001)
         assert stats["max_volatility"] == pytest.approx(0.30, abs=0.001)
         assert abs(stats["volatility_range"]) < 0.001
-        assert stats["std_volatility"] == pytest.approx(0.0, rel=1e-4)
+        assert stats["std_volatility"] == pytest.approx(0.0, rel=1e-8)
         assert stats["portfolio_volatility"] == pytest.approx(0.25, abs=0.001)
 
     def test_multiple_positions_stats(self) -> None:

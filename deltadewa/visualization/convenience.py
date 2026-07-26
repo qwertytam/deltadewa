@@ -41,14 +41,14 @@ def _annotate_no_data(ax: Axes) -> None:
 @overload
 def plot_pnl_diagram(
     portfolio: OptionPortfolio,
-    **kwargs: Any,  # noqa: ANN401  # matplotlib **kwargs passthrough
+    **kwargs: Any,  # ruff: ignore[any-type]  # matplotlib **kwargs passthrough
 ) -> Figure: ...
 
 
 @overload
 def plot_pnl_diagram(
     portfolio: OptionPortfolioBase,
-    **kwargs: Any,  # noqa: ANN401  # matplotlib **kwargs passthrough
+    **kwargs: Any,  # ruff: ignore[any-type]  # matplotlib **kwargs passthrough
 ) -> Figure: ...
 
 
@@ -73,14 +73,14 @@ def plot_pnl_diagram(
 @overload
 def plot_pnl_distribution_with_metrics(
     portfolio: OptionPortfolio,
-    **kwargs: Any,  # noqa: ANN401  # matplotlib **kwargs passthrough
+    **kwargs: Any,  # ruff: ignore[any-type]  # matplotlib **kwargs passthrough
 ) -> Figure: ...
 
 
 @overload
 def plot_pnl_distribution_with_metrics(
     portfolio: OptionPortfolioBase,
-    **kwargs: Any,  # noqa: ANN401  # matplotlib **kwargs passthrough
+    **kwargs: Any,  # ruff: ignore[any-type]  # matplotlib **kwargs passthrough
 ) -> Figure: ...
 
 
@@ -104,7 +104,7 @@ def plot_pnl_distribution_with_metrics(
 
 def plot_greeks_by_strike(
     portfolio: OptionPortfolio | OptionPortfolioBase,
-    **kwargs: Any,  # noqa: ANN401  # matplotlib **kwargs passthrough
+    **kwargs: Any,  # ruff: ignore[any-type]  # matplotlib **kwargs passthrough
 ) -> Figure:
     """Plot Greeks by strike - convenience function.
 
@@ -122,7 +122,7 @@ def plot_greeks_by_strike(
 
 def plot_theta_analysis(
     portfolio: OptionPortfolio | OptionPortfolioBase,
-    **kwargs: Any,  # noqa: ANN401  # matplotlib **kwargs passthrough
+    **kwargs: Any,  # ruff: ignore[any-type]  # matplotlib **kwargs passthrough
 ) -> Figure:
     """Plot theta analysis - convenience function.
 

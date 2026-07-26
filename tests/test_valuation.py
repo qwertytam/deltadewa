@@ -34,7 +34,7 @@ class TestVolatilityQuoteCaching:
         """Verify vol_quote is created during initialization."""
         assert hasattr(option, "vol_quote")
         assert option.vol_quote is not None
-        assert option.vol_quote.value() == 0.20
+        assert option.vol_quote.value() == pytest.approx(0.20, rel=1e-8)
 
     def test_vol_handle_initialized(self, option: OptionValuation) -> None:
         """Verify vol_handle is created during initialization."""
@@ -48,8 +48,8 @@ class TestVolatilityQuoteCaching:
         """Verify update_volatility modifies the SimpleQuote."""
         option.update_volatility(0.30)
 
-        assert option.volatility == 0.30
-        assert option.vol_quote.value() == 0.30
+        assert option.volatility == pytest.approx(0.30, rel=1e-8)
+        assert option.vol_quote.value() == pytest.approx(0.30, rel=1e-8)
 
     def test_update_volatility_affects_price(
         self,
@@ -121,10 +121,10 @@ class TestVolatilityQuoteCaching:
         option.update_volatility(0.30)
         option.update_spot_price(110.0)
 
-        assert option.volatility == 0.30
-        assert option.vol_quote.value() == 0.30
-        assert option.spot_price == 110.0
-        assert option.spot_quote.value() == 110.0
+        assert option.volatility == pytest.approx(0.30, rel=1e-8)
+        assert option.vol_quote.value() == pytest.approx(0.30, rel=1e-8)
+        assert option.spot_price == pytest.approx(110.0, rel=1e-5)
+        assert option.spot_quote.value() == pytest.approx(110.0, rel=1e-5)
 
         # Price should be calculable
         price = option.price()
@@ -482,7 +482,9 @@ class TestRiskFreeRateUpdate:
         """Verify risk_free_rate_quote is created during init."""
         assert hasattr(option, "risk_free_rate_quote")
         assert option.risk_free_rate_quote is not None
-        assert option.risk_free_rate_quote.value() == 0.05
+        assert option.risk_free_rate_quote.value() == pytest.approx(
+            0.05, rel=1e-9
+        )
 
     def test_update_rate_changes_quote(
         self,
@@ -491,8 +493,10 @@ class TestRiskFreeRateUpdate:
         """Verify update_risk_free_rate modifies the SimpleQuote."""
         option.update_risk_free_rate(0.10)
 
-        assert option.risk_free_rate == 0.10
-        assert option.risk_free_rate_quote.value() == 0.10
+        assert option.risk_free_rate == pytest.approx(0.10, rel=1e-8)
+        assert option.risk_free_rate_quote.value() == pytest.approx(
+            0.10, rel=1e-8
+        )
 
     def test_update_rate_affects_call_price(
         self,

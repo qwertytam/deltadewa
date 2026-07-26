@@ -117,7 +117,7 @@ class TestCalculateVegaSufficiencyPct:
         """
         analyzer = _analyzer(total_vega=100.0, total_portfolio_value=0.0)
         result = analyzer.calculate_vega_sufficiency_pct(vol_shock_points=10.0)
-        assert result == pytest.approx(0.0, rel=1e-4)
+        assert result == pytest.approx(0.0, rel=1e-8)
 
 
 class TestCalculateHedgeSuccessPct:
@@ -206,7 +206,7 @@ class TestCalculateHedgeSuccessPct:
 
         # Short-circuit before calling calculate_pnl_at_expiry.
         portfolio.calculate_pnl_at_expiry.assert_not_called()
-        assert result == pytest.approx(0.0, rel=1e-4)
+        assert result == pytest.approx(0.0, rel=1e-8)
 
     def test_boundary_at_exactly_zero_point_zero_one_carry(self) -> None:
         """At carry == 0.01 exactly, the normal path runs."""
@@ -237,7 +237,7 @@ class TestCalculateHedgeSuccessPct:
 
         # Short-circuit before calling calculate_pnl_at_expiry.
         portfolio.calculate_pnl_at_expiry.assert_not_called()
-        assert result == pytest.approx(0.0, rel=1e-4)
+        assert result == pytest.approx(0.0, rel=1e-8)
 
 
 class TestCalculateConvexityCliffDays:
@@ -586,7 +586,7 @@ class TestComputeVolRegimeBoundaries:
             normalized_low=DEFAULT_VOL_REGIME_LOW,
             normalized_high=DEFAULT_VOL_REGIME_HIGH,
         )
-        assert result.value == 0.0
+        assert result.value == pytest.approx(0.0, rel=1e-8)
         assert result.basis == VolRegimeBasis.NORMALIZED
 
     def test_normalized_clamp_at_high_boundary(self) -> None:
@@ -597,7 +597,7 @@ class TestComputeVolRegimeBoundaries:
             normalized_low=DEFAULT_VOL_REGIME_LOW,
             normalized_high=DEFAULT_VOL_REGIME_HIGH,
         )
-        assert result.value == 100.0
+        assert result.value == pytest.approx(100.0, rel=1e-5)
         assert result.basis == VolRegimeBasis.NORMALIZED
 
     def test_normalized_below_low_boundary(self) -> None:
@@ -608,7 +608,7 @@ class TestComputeVolRegimeBoundaries:
             normalized_low=DEFAULT_VOL_REGIME_LOW,
             normalized_high=DEFAULT_VOL_REGIME_HIGH,
         )
-        assert result.value == 0.0
+        assert result.value == pytest.approx(0.0, rel=1e-8)
         assert result.basis == VolRegimeBasis.NORMALIZED
 
     def test_normalized_above_high_boundary(self) -> None:
@@ -619,7 +619,7 @@ class TestComputeVolRegimeBoundaries:
             normalized_low=DEFAULT_VOL_REGIME_LOW,
             normalized_high=DEFAULT_VOL_REGIME_HIGH,
         )
-        assert result.value == 100.0
+        assert result.value == pytest.approx(100.0, rel=1e-5)
         assert result.basis == VolRegimeBasis.NORMALIZED
 
     def test_vix_history_none_selects_normalized(self) -> None:
@@ -674,8 +674,8 @@ class TestCalculateHealthMetricsDisablingContract:
         )
 
         # Both crash-derived gauges disabled as a pair.
-        assert metrics["crash_convexity_pct"] == pytest.approx(0.0, rel=1e-4)
-        assert metrics["hedge_success_pct"] == pytest.approx(0.0, rel=1e-4)
+        assert metrics["crash_convexity_pct"] == pytest.approx(0.0, rel=1e-8)
+        assert metrics["hedge_success_pct"] == pytest.approx(0.0, rel=1e-8)
 
     def test_target_delta_ratio_none_makes_delta_drift_unavailable(
         self,

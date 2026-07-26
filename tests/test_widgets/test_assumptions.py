@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from deltadewa.widgets.assumptions import GlobalAssumptions
 
 
@@ -12,10 +14,10 @@ class TestGlobalAssumptions:
         """Test GlobalAssumptions can be instantiated with defaults."""
         assumptions = GlobalAssumptions()
         assert assumptions is not None
-        assert assumptions.spot_price.value == 100.0
-        assert assumptions.volatility.value == 0.25
-        assert assumptions.risk_free_rate.value == 0.05
-        assert assumptions.dividend_yield.value == 0.0
+        assert assumptions.spot_price.value == pytest.approx(100.0, rel=1e-5)
+        assert assumptions.volatility.value == pytest.approx(0.25, rel=1e-4)
+        assert assumptions.risk_free_rate.value == pytest.approx(0.05, rel=1e-9)
+        assert assumptions.dividend_yield.value == pytest.approx(0.0, rel=1e-8)
 
     def test_initialization_custom_values(self) -> None:
         """Test GlobalAssumptions with custom initial values."""
@@ -27,10 +29,10 @@ class TestGlobalAssumptions:
             dividend_yield=0.02,
             valuation_date=val_date,
         )
-        assert assumptions.spot_price.value == 420.0
-        assert assumptions.volatility.value == 0.30
-        assert assumptions.risk_free_rate.value == 0.03
-        assert assumptions.dividend_yield.value == 0.02
+        assert assumptions.spot_price.value == pytest.approx(420.0, rel=1e-5)
+        assert assumptions.volatility.value == pytest.approx(0.30, rel=1e-8)
+        assert assumptions.risk_free_rate.value == pytest.approx(0.03, rel=1e-9)
+        assert assumptions.dividend_yield.value == pytest.approx(0.02, rel=1e-9)
         assert assumptions.valuation_date.value == val_date.date()
 
     def test_widgets_exist(self) -> None:
@@ -89,8 +91,8 @@ class TestGlobalAssumptions:
         params = assumptions.to_dict()
 
         assert isinstance(params, dict)
-        assert params["spot_price"] == 150.0
-        assert params["volatility"] == 0.35
+        assert params["spot_price"] == pytest.approx(150.0, rel=1e-5)
+        assert params["volatility"] == pytest.approx(0.35, rel=1e-4)
         assert "risk_free_rate" in params
         assert "dividend_yield" in params
         assert "valuation_date" in params

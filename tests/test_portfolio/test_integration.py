@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
+import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -168,7 +169,7 @@ class TestPortfolioIntegration:
         original_spot = portfolio.spot_price
         portfolio.update_market_conditions(spot_price=110.0)
 
-        assert portfolio.spot_price == 110.0
+        assert portfolio.spot_price == pytest.approx(110.0, rel=1e-5)
         assert portfolio.spot_price != original_spot
 
     def test_custom_volatility_positions(self) -> None:
@@ -203,8 +204,12 @@ class TestPortfolioIntegration:
         portfolio.set_volatility(0.25)
 
         # First position should update, second shouldn't
-        assert portfolio.positions[0].option.volatility == 0.25
-        assert portfolio.positions[1].option.volatility == 0.3
+        assert portfolio.positions[0].option.volatility == pytest.approx(
+            0.25, rel=1e-4
+        )
+        assert portfolio.positions[1].option.volatility == pytest.approx(
+            0.3, rel=1e-4
+        )
 
     def test_dataframe_export(self) -> None:
         """Test exporting portfolio to DataFrame."""
@@ -276,12 +281,12 @@ class TestPortfolioIntegration:
         """Test that operations work on empty portfolio."""
         portfolio = create_empty_portfolio()
 
-        assert portfolio.total_value() == 0.0
-        assert portfolio.total_delta() == 0.0
-        assert portfolio.total_gamma() == 0.0
+        assert portfolio.total_value() == pytest.approx(0.0, rel=1e-8)
+        assert portfolio.total_delta() == pytest.approx(0.0, rel=1e-8)
+        assert portfolio.total_gamma() == pytest.approx(0.0, rel=1e-8)
 
         pnl = portfolio.calculate_pnl_at_expiry(100.0)
-        assert pnl == 0.0
+        assert pnl == pytest.approx(0.0, rel=1e-8)
 
         breakevens = portfolio.calculate_breakeven_points()
         assert len(breakevens) == 0

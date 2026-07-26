@@ -229,8 +229,10 @@ def _format_probability_section(analysis: dict[str, Any]) -> list[str]:
     return [
         "PROBABILITY ANALYSIS:",
         f"  Chance of Profit: {prob * 100:.1f}% ({measure} drift)",
-        f"  Expected Value: ${analysis['expected_pnl']:,.2f} "
-        f"(probabilistic weighted average)",
+        (
+            f"  Expected Value: ${analysis['expected_pnl']:,.2f} "
+            f"(probabilistic weighted average)"
+        ),
         "",
     ]
 
@@ -385,7 +387,7 @@ class SummaryMixin:
         if abs(stats["total_gamma"]) > 0.1:
             direction = "long" if stats["total_gamma"] > 0 else "short"
             insights.append(
-                f"ℹ High {direction} gamma ({abs(stats['total_gamma']):.4f}) - "  # noqa: RUF001
+                f"ℹ High {direction} gamma ({abs(stats['total_gamma']):.4f}) - "  # ruff: ignore[ambiguous-unicode-character-string]
                 "delta will change significantly with spot moves",
             )
 
@@ -395,7 +397,7 @@ class SummaryMixin:
                 "benefits from" if stats["total_vega"] > 0 else "hurt by"
             )
             insights.append(
-                f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f})"  # noqa: RUF001
+                f"ℹ Significant vega exposure ({abs(stats['total_vega']):.0f})"  # ruff: ignore[ambiguous-unicode-character-string]
                 f" - portfolio {direction} volatility increases",
             )
 

@@ -299,7 +299,9 @@ class TestNetProtectivePremium:
             quantity=-10,
             option_type=OptionType.CALL,
         )
-        assert _net_protective_premium(portfolio) == 0.0
+        assert _net_protective_premium(portfolio) == pytest.approx(
+            0.0, rel=1e-4
+        )
 
     def test_empty_portfolio_is_zero(self) -> None:
         """An empty portfolio has zero protective premium."""
@@ -308,7 +310,9 @@ class TestNetProtectivePremium:
             volatility=0.2,
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
-        assert _net_protective_premium(portfolio) == 0.0
+        assert _net_protective_premium(portfolio) == pytest.approx(
+            0.0, rel=1e-4
+        )
 
 
 class TestCrashPayoffRatio:
@@ -366,8 +370,8 @@ class TestCrashPayoffRatio:
             crash_vol_shock=0.0,
             skew_steepening=0.0,
         )
-        assert convexity_no_book == pytest.approx(0.0, rel=1e-4)
-        assert convexity_with_book != 0.0
+        assert convexity_no_book == pytest.approx(0.0, rel=1e-8)
+        assert convexity_with_book != pytest.approx(0.0, rel=1e-8)
 
     def test_explicit_premium_overrides_computed_premium(self) -> None:
         """An explicit premium= bypasses _premium_with_basis."""
@@ -402,9 +406,9 @@ class TestCrashPayoffRatio:
             option_type=OptionType.CALL,
         )
 
-        assert (
-            crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0) == 0.0
-        )
+        assert crash_payoff_ratio(
+            portfolio, crash_pct=-25.0, vol_shock=0.0
+        ) == pytest.approx(0.0, rel=1e-8)
 
     def test_negative_explicit_premium_is_safe(self) -> None:
         """A negative explicit premium also returns 0.0, not a sign flip."""
@@ -417,7 +421,7 @@ class TestCrashPayoffRatio:
             premium=-1.0,
         )
 
-        assert ratio == pytest.approx(0.0, rel=1e-4)
+        assert ratio == pytest.approx(0.0, rel=1e-8)
 
     def test_empty_portfolio_is_safe(self) -> None:
         """An empty portfolio has zero premium and zero ratio."""
@@ -426,9 +430,9 @@ class TestCrashPayoffRatio:
             volatility=0.2,
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
-        assert (
-            crash_payoff_ratio(portfolio, crash_pct=-25.0, vol_shock=0.0) == 0.0
-        )
+        assert crash_payoff_ratio(
+            portfolio, crash_pct=-25.0, vol_shock=0.0
+        ) == pytest.approx(0.0, rel=1e-8)
 
     def test_vol_shock_is_required(self) -> None:
         """vol_shock has no default — it can't silently diverge to spot-only.
@@ -458,8 +462,8 @@ class TestCrashScenarioTable:
 
         assert len(rows) == 2
         for row in rows:
-            assert row.hedge_pnl == 0.0
-            assert row.payoff_ratio == 0.0
+            assert row.hedge_pnl == pytest.approx(0.0, rel=1e-8)
+            assert row.payoff_ratio == pytest.approx(0.0, rel=1e-8)
 
     def test_no_ips_convexity_means_no_target_met(self) -> None:
         """Without an ips_convexity band, every row's meets_target is False."""

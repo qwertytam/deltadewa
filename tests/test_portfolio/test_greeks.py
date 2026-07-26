@@ -183,7 +183,7 @@ class TestGreeksMixin:
         )
 
         hedge_ratio = portfolio.hedge_ratio()
-        assert hedge_ratio == pytest.approx(0.0, rel=1e-4)
+        assert hedge_ratio == pytest.approx(0.0, rel=1e-8)
 
     def test_delta_adjustment_needed(self) -> None:
         """Test delta_adjustment_needed calculation."""
@@ -210,12 +210,12 @@ class TestGreeksMixin:
             default_exercise_style=ExerciseStyle.AMERICAN,
         )
 
-        assert portfolio.total_delta() == 0.0
-        assert portfolio.total_gamma() == 0.0
-        assert portfolio.total_vega() == 0.0
-        assert portfolio.total_theta() == 0.0
-        assert portfolio.total_rho() == 0.0
-        assert portfolio.net_delta() == 0.0
+        assert portfolio.total_delta() == pytest.approx(0.0, rel=1e-8)
+        assert portfolio.total_gamma() == pytest.approx(0.0, rel=1e-8)
+        assert portfolio.total_vega() == pytest.approx(0.0, rel=1e-8)
+        assert portfolio.total_theta() == pytest.approx(0.0, rel=1e-8)
+        assert portfolio.total_rho() == pytest.approx(0.0, rel=1e-8)
+        assert portfolio.net_delta() == pytest.approx(0.0, rel=1e-8)
 
 
 class TestAllGreeksBatch:
@@ -285,7 +285,9 @@ class TestAllGreeksBatch:
         assert greeks["net_delta"] == portfolio.net_delta()
 
         # Net delta should include underlying
-        assert greeks["net_delta"] == greeks["total_delta"] + 50.0
+        assert greeks["net_delta"] == pytest.approx(
+            greeks["total_delta"] + 50.0, rel=1e-4
+        )
 
     def test_all_greeks_empty_portfolio(self) -> None:
         """Test all_greeks with empty portfolio."""
@@ -296,13 +298,13 @@ class TestAllGreeksBatch:
 
         greeks = portfolio.all_greeks()
 
-        assert greeks["total_delta"] == pytest.approx(0.0, rel=1e-4)
-        assert greeks["total_gamma"] == pytest.approx(0.0, rel=1e-4)
-        assert greeks["total_vega"] == pytest.approx(0.0, rel=1e-4)
-        assert greeks["total_theta"] == pytest.approx(0.0, rel=1e-4)
-        assert greeks["total_rho"] == pytest.approx(0.0, rel=1e-4)
+        assert greeks["total_delta"] == pytest.approx(0.0, rel=1e-8)
+        assert greeks["total_gamma"] == pytest.approx(0.0, rel=1e-8)
+        assert greeks["total_vega"] == pytest.approx(0.0, rel=1e-8)
+        assert greeks["total_theta"] == pytest.approx(0.0, rel=1e-8)
+        assert greeks["total_rho"] == pytest.approx(0.0, rel=1e-8)
         # Only underlying
-        assert greeks["net_delta"] == pytest.approx(100.0, rel=1e-4)
+        assert greeks["net_delta"] == pytest.approx(100.0, rel=1e-5)
 
     def test_summary_stats_uses_all_greeks(self) -> None:
         """Test that summary_stats uses all_greeks for efficiency."""

@@ -227,7 +227,9 @@ from deltadewa.analysis import get_volatility_stats
 
 stats = get_volatility_stats(ctx.portfolio)
 print(f"Vega-weighted avg: {stats['avg_volatility']:.2%}")
-print(f"Vol range:         {stats['min_volatility']:.2%} – {stats['max_volatility']:.2%}")
+print(
+    f"Vol range:         {stats['min_volatility']:.2%} – {stats['max_volatility']:.2%}"
+)
 ```
 
 ## Configuration

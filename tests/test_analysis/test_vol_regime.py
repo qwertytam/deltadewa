@@ -109,13 +109,21 @@ class TestComputeVolRegimeNormalizedFallback:
         low, high = DEFAULT_VOL_REGIME_LOW, DEFAULT_VOL_REGIME_HIGH
         mid = (low + high) / 2
 
-        assert compute_vol_regime(low - 0.05, vix_history=None).value == 0.0
-        assert compute_vol_regime(low, vix_history=None).value == 0.0
+        assert compute_vol_regime(
+            low - 0.05, vix_history=None
+        ).value == pytest.approx(0.0, rel=1e-4)
+        assert compute_vol_regime(low, vix_history=None).value == pytest.approx(
+            0.0, rel=1e-4
+        )
         assert compute_vol_regime(mid, vix_history=None).value == pytest.approx(
             50.0,
         )
-        assert compute_vol_regime(high, vix_history=None).value == 100.0
-        assert compute_vol_regime(high + 0.05, vix_history=None).value == 100.0
+        assert compute_vol_regime(
+            high, vix_history=None
+        ).value == pytest.approx(100.0, rel=1e-5)
+        assert compute_vol_regime(
+            high + 0.05, vix_history=None
+        ).value == pytest.approx(100.0, rel=1e-5)
 
 
 class TestVolRegimeTypes:

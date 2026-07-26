@@ -137,7 +137,7 @@ To pull live end-of-day data, set the toggle near the top of the setup
 cell before running `start_session`:
 
 ```python
-_USE_LIVE = True   # set True for live CBOE/FRED market data (needs internet)
+_USE_LIVE = True  # set True for live CBOE/FRED market data (needs internet)
 ```
 
 ### Endpoints
