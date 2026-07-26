@@ -27,6 +27,7 @@ from deltadewa.analysis.candidate import (
     build_put_valuation,
     evaluate_candidate,
 )
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.sizing import (
     beta_adjusted_notional,
     required_crash_offset,
@@ -294,12 +295,17 @@ def build_strike_ladder(
     portfolio_beta = ips_config.sizing.portfolio_beta
     beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
     carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
-    crash_pct = ips_config.convexity.crash_scenario_pct
+    # One crash basis for every rung, built the same way the book surfaces
+    # build theirs; the depth is read back off it so the drawdown maths and
+    # the repricing cannot drift apart.
+    shock = CrashShock.from_ips(ips_config.convexity)
     offset = required_crash_offset(
         beta_adj_notional,
-        crash_pct,
+        shock.crash_scenario_pct,
         ips_config.drawdown.max_tolerance_pct,
     )
+    # Policy, on its own path: `shock` prices the rungs, `conv` only judges
+    # them against the band (M1.5 — the two never travel as one object).
     conv = ips_config.convexity
 
     rungs: StrikeLadder = []
@@ -329,10 +335,7 @@ def build_strike_ladder(
             portfolio,
             strike=strike,
             maturity_years=maturity,
-            crash_pct=crash_pct,
-            crash_vol_shock=conv.crash_vol_shock,
-            skew_steepening=conv.skew_steepening,
-            skew_reference_delta=conv.skew_reference_delta,
+            shock=shock,
             vol=vol,
         )
         sizing = size_from_unit(

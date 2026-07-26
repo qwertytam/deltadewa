@@ -6,8 +6,18 @@ from unittest.mock import Mock
 import pytest
 
 from deltadewa import create_empty_portfolio
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.formatters.html import format_html_metric
 from deltadewa.widgets.summary import NetHedgeSummary
+
+# The ladder's crash basis is required now (no partial-basis default),
+# so the widget tests state one explicitly.
+_SHOCK = CrashShock(
+    crash_scenario_pct=-25.0,
+    crash_vol_shock=0.15,
+    skew_steepening=0.10,
+    skew_reference_delta=0.10,
+)
 
 
 class TestNetHedgeSummary:
@@ -93,31 +103,31 @@ class TestNetHedgeSummary:
 
     def test_initialization(self, mock_portfolio: Mock) -> None:
         """Test NetHedgeSummary can be instantiated."""
-        summary = NetHedgeSummary(mock_portfolio)
+        summary = NetHedgeSummary(mock_portfolio, shock=_SHOCK)
         assert summary is not None
         assert summary.portfolio == mock_portfolio
 
     def test_attributes_exist(self, mock_portfolio: Mock) -> None:
         """Test all expected attributes are created."""
-        summary = NetHedgeSummary(mock_portfolio)
+        summary = NetHedgeSummary(mock_portfolio, shock=_SHOCK)
         # Should have widget attributes
         assert hasattr(summary, "widget")
         assert summary.widget is not None
 
     def test_update_method_exists(self, mock_portfolio: Mock) -> None:
         """Test update method can be called."""
-        summary = NetHedgeSummary(mock_portfolio)
+        summary = NetHedgeSummary(mock_portfolio, shock=_SHOCK)
         summary.update()
 
     def test_display_returns_widget(self, mock_portfolio: Mock) -> None:
         """Test display method returns a widget."""
-        summary = NetHedgeSummary(mock_portfolio)
+        summary = NetHedgeSummary(mock_portfolio, shock=_SHOCK)
         widget = summary.display()
         assert widget is not None
 
     def test_widget_attribute(self, mock_portfolio: Mock) -> None:
         """Test widget attribute is a widget with children."""
-        summary = NetHedgeSummary(mock_portfolio)
+        summary = NetHedgeSummary(mock_portfolio, shock=_SHOCK)
         assert hasattr(summary.widget, "children")
 
     def test_update_does_not_raise_for_empty_portfolio(self) -> None:
@@ -135,7 +145,7 @@ class TestNetHedgeSummary:
         """
         portfolio = create_empty_portfolio()
 
-        summary = NetHedgeSummary(portfolio)
+        summary = NetHedgeSummary(portfolio, shock=_SHOCK)
 
         # vol section: Vega-W.Avg Vol uses .get("avg_volatility", 0.0);
         # the exact badge should match what format_html_metric produces for 0.0.

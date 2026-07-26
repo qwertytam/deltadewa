@@ -20,6 +20,11 @@ The crash state (§2):
 * the underlying / equity leg is **excluded** — convexity is a hedge-only
   metric.
 
+Those four pricing inputs travel together as a :class:`CrashShock`, built from
+policy with :meth:`CrashShock.from_ips`. The band (``target_min_pct`` /
+``target_max_pct``) is deliberately *not* on it — policy and pricing stay
+separable, so omitting the band can never quietly change what is priced.
+
 Legs are repriced with the existing
 :class:`~deltadewa.valuation.OptionValuation` engine (European exercise uses the
 analytic Black-Scholes engine); no new pricer is introduced.
@@ -27,6 +32,7 @@ analytic Black-Scholes engine); no new pricer is introduced.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import math
 from typing import TYPE_CHECKING
@@ -34,13 +40,13 @@ from typing import TYPE_CHECKING
 from scipy.optimize import brentq
 
 from deltadewa.constants import ExerciseStyle, OptionType
-from deltadewa.ips_config import _DEFAULT_SKEW_REFERENCE_DELTA
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from datetime import datetime
 
+    from deltadewa.ips_config import IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
 
@@ -49,6 +55,97 @@ if TYPE_CHECKING:
 # inside this range at every supported tenor.
 _WING_STRIKE_LO_FRAC = 0.05
 _WING_STRIKE_HI_FRAC = 0.9999
+
+
+@dataclasses.dataclass(frozen=True)
+class CrashShock:
+    """The four crash-state **pricing** inputs, travelling as one value.
+
+    Bundles the crash basis so it cannot be split up en route to the pricer:
+    every surface that reprices at the crash state takes one of these, and
+    :meth:`from_ips` is the intended way to build it. Before this object the
+    scalars were threaded individually and ``skew_reference_delta`` was quietly
+    dropped by the book surfaces, which then priced against the primitive's own
+    ``0.10`` default — so tuning the IPS anchor moved the sizing workbench and
+    not the gauges.
+
+    **Pricing only — deliberately not the IPS target band.** ``target_min_pct``
+    / ``target_max_pct`` stay on :class:`~deltadewa.ips_config.IpsConvexity` and
+    travel their own path (M1.5): a caller that omits policy must fail the band
+    comparison outright, never silently reprice at a different crash state.
+
+    Every field is required. There is no default anywhere on this object, so no
+    surface can reprice against a fabricated crash basis by omission — the
+    fail-loud discipline ``crash_vol_shock`` has had since M1.4/M1.5, now
+    covering the whole basis.
+
+    Attributes:
+        crash_scenario_pct: Signed crash move as a percent of spot (e.g.
+            ``-25.0`` for a 25% decline).
+        crash_vol_shock: Flat additive vol bump as a decimal (e.g. ``0.15``),
+            applied to every leg's own today-vol.
+        skew_steepening: Extra vol reached at the deep-OTM wing on top of
+            ``crash_vol_shock`` (M1.6/M1.7). ``0.0`` keeps the flat bump.
+        skew_reference_delta: Put-delta magnitude of the wing the steepening is
+            anchored to (e.g. ``0.10``). Only consulted when
+            ``skew_steepening`` is non-zero.
+
+    """
+
+    crash_scenario_pct: float
+    crash_vol_shock: float
+    skew_steepening: float
+    skew_reference_delta: float
+
+    @property
+    def crash_move(self) -> float:
+        """Signed crash move as a decimal — ``crash_scenario_pct / 100``.
+
+        Returns:
+            The multiplier offset the crash spot is built from, e.g. ``-0.25``.
+
+        """
+        return self.crash_scenario_pct / 100.0
+
+    @classmethod
+    def from_ips(cls, convexity: IpsConvexity) -> CrashShock:
+        """Extract the crash pricing basis from IPS policy.
+
+        A pure projection of the four pricing fields — the target band is
+        deliberately left behind.
+
+        Args:
+            convexity: The program's ``IpsConvexity`` policy block.
+
+        Returns:
+            The crash basis every surface should price against.
+
+        """
+        return cls(
+            crash_scenario_pct=convexity.crash_scenario_pct,
+            crash_vol_shock=convexity.crash_vol_shock,
+            skew_steepening=convexity.skew_steepening,
+            skew_reference_delta=convexity.skew_reference_delta,
+        )
+
+    def at_pct(self, crash_scenario_pct: float) -> CrashShock:
+        """Re-aim this same vol basis at a different crash depth.
+
+        For shock sweeps and payoff ladders, which price many depths against
+        one basis. Carrying the vol knobs along by construction is the point:
+        walking the grid cannot silently drop the skew.
+
+        Args:
+            crash_scenario_pct: Signed crash move as a percent of spot.
+
+        Returns:
+            A copy at the new depth, vol shock and skew unchanged.
+
+        """
+        return dataclasses.replace(
+            self,
+            crash_scenario_pct=crash_scenario_pct,
+        )
 
 
 def _reprice_leg(
@@ -161,14 +258,12 @@ def _leg_crash_vol(
     risk_free_rate: float,
     dividend_yield: float,
     valuation_date: datetime,
-    vol_shock: float,
-    skew_steepening: float,
-    skew_reference_delta: float,
+    shock: CrashShock,
 ) -> float:
     """Shocked crash vol for one leg: flat bump plus a capped wing steepening.
 
-    ``sigma_i + vol_shock`` for calls and ATM/ITM puts. For an OTM put the crash
-    vol adds ``min(skew_steepening, slope * ln(S/K))`` where
+    ``sigma_i + crash_vol_shock`` for calls and ATM/ITM puts. For an OTM put the
+    crash vol adds ``min(skew_steepening, slope * ln(S/K))`` where
     ``slope = skew_steepening / ln(S / K_ref)`` and ``K_ref`` is the leg's own
     ~``skew_reference_delta`` wing (:func:`_solve_wing_strike`). The extra vol
     is thus ``skew_steepening`` exactly at the wing and interpolates linearly
@@ -176,10 +271,10 @@ def _leg_crash_vol(
     (the cap). The anchor is per-leg, so a leg's crash vol never depends on what
     else the book holds.
 
-    When ``skew_steepening`` is ``0.0`` this returns exactly
-    ``position.option.volatility + vol_shock`` — the flat-bump expression — and
-    solves no wing, so the disabled knob reproduces every prior value
-    bit-for-bit.
+    When ``shock.skew_steepening`` is ``0.0`` this returns exactly
+    ``position.option.volatility + shock.crash_vol_shock`` — the flat-bump
+    expression — and solves no wing, so the disabled knob reproduces every prior
+    value bit-for-bit.
 
     Args:
         position: Option leg to shock.
@@ -187,16 +282,15 @@ def _leg_crash_vol(
         risk_free_rate: Portfolio risk-free rate (for the wing solve).
         dividend_yield: Portfolio dividend yield (for the wing solve).
         valuation_date: Portfolio valuation date (for the wing solve).
-        vol_shock: Flat additive vol bump applied to every leg.
-        skew_steepening: Extra vol added at the leg's own wing (``0.0`` = off).
-        skew_reference_delta: Put-delta magnitude of that wing (e.g. ``0.10``).
+        shock: The crash basis. Only its vol fields are read here — the depth
+            (``crash_scenario_pct``) moves the spot, not the vol.
 
     Returns:
         The leg's shocked volatility as a decimal.
 
     """
-    base = position.option.volatility + vol_shock
-    if math.isclose(skew_steepening, 0.0, abs_tol=1e-9):
+    base = position.option.volatility + shock.crash_vol_shock
+    if math.isclose(shock.skew_steepening, 0.0, abs_tol=1e-9):
         return base
     if position.option.option_type != OptionType.PUT:
         return base
@@ -210,20 +304,17 @@ def _leg_crash_vol(
         risk_free_rate=risk_free_rate,
         dividend_yield=dividend_yield,
         valuation_date=valuation_date,
-        anchor_delta=skew_reference_delta,
+        anchor_delta=shock.skew_reference_delta,
     )
-    slope = skew_steepening / math.log(spot / k_ref)
-    extra = min(skew_steepening, slope * math.log(spot / strike))
+    slope = shock.skew_steepening / math.log(spot / k_ref)
+    extra = min(shock.skew_steepening, slope * math.log(spot / strike))
     return base + extra
 
 
 def crash_hedge_value(
     portfolio: OptionPortfolio,
     *,
-    crash_move: float,
-    vol_shock: float,
-    skew_steepening: float = 0.0,
-    skew_reference_delta: float = _DEFAULT_SKEW_REFERENCE_DELTA,
+    shock: CrashShock,
     positions: Sequence[OptionPosition] | None = None,
 ) -> float:
     """Hedge-only value of the option legs repriced at the crash state (§2-3).
@@ -233,19 +324,10 @@ def crash_hedge_value(
 
     Args:
         portfolio: Portfolio to evaluate.
-        crash_move: Signed crash move as a decimal (e.g. ``-0.25``). The crash
-            spot is ``portfolio.spot_price * (1 + crash_move)``.
-        vol_shock: Flat additive vol bump as a decimal (e.g. ``+0.15``) applied
-            to every leg's own today-vol.
-        skew_steepening: Optional extra vol added at the deep-OTM tail on top of
-            ``vol_shock``, capped at this value at each leg's own
-            ``skew_reference_delta`` wing and interpolated (in log-moneyness)
-            below it (M1.7). ``0.0`` (the default) keeps the flat bump and
-            reproduces prior values exactly.
-        skew_reference_delta: Put-delta magnitude of the wing the steepening is
-            anchored to (e.g. ``0.10``), sourced from
-            ``IpsConvexity.skew_reference_delta``. Only consulted when
-            ``skew_steepening`` is non-zero.
+        shock: The crash basis — depth, flat vol bump, and wing steepening with
+            its anchor. **Required, with no default**: the crash state is never
+            inferred, so no surface can reprice against a basis it did not
+            state. Build it with :meth:`CrashShock.from_ips`.
         positions: Legs to price. Defaults to every position in the portfolio;
             pass a subset (e.g. the long puts) to value part of the book.
 
@@ -254,7 +336,7 @@ def crash_hedge_value(
 
     """
     legs = portfolio.positions if positions is None else positions
-    crash_spot = portfolio.spot_price * (1.0 + crash_move)
+    crash_spot = portfolio.spot_price * (1.0 + shock.crash_move)
     return float(
         sum(
             _reprice_leg(
@@ -267,9 +349,7 @@ def crash_hedge_value(
                     risk_free_rate=portfolio.risk_free_rate,
                     dividend_yield=portfolio.dividend_yield,
                     valuation_date=portfolio.valuation_date,
-                    vol_shock=vol_shock,
-                    skew_steepening=skew_steepening,
-                    skew_reference_delta=skew_reference_delta,
+                    shock=shock,
                 ),
             )
             for position in legs
@@ -284,8 +364,13 @@ def hedge_value(
 ) -> float:
     """Today's hedge-only option-leg value (no crash move, no vol shock).
 
-    Equivalent to :func:`crash_hedge_value` at ``crash_move=0``,
-    ``vol_shock=0`` — the ``V_today`` term of the convexity ratio.
+    The ``V_today`` term of the convexity ratio: each leg at today's spot and
+    its own today-vol. Deliberately does **not** route through
+    :func:`crash_hedge_value` — there is no crash state here, and manufacturing
+    a zero :class:`CrashShock` would mean inventing a ``skew_reference_delta``
+    that is never read. Numerically identical to the old
+    ``crash_move=0, vol_shock=0`` call: a zero move leaves the spot alone and a
+    zero shock with no steepening leaves each leg on its own vol.
 
     Args:
         portfolio: Portfolio to evaluate.
@@ -295,21 +380,24 @@ def hedge_value(
         Summed repriced value of the selected legs at today's spot and vol.
 
     """
-    return crash_hedge_value(
-        portfolio,
-        crash_move=0.0,
-        vol_shock=0.0,
-        positions=positions,
+    legs = portfolio.positions if positions is None else positions
+    return float(
+        sum(
+            _reprice_leg(
+                position,
+                portfolio,
+                portfolio.spot_price,
+                position.option.volatility,
+            )
+            for position in legs
+        ),
     )
 
 
 def crash_convexity_pct(
     portfolio: OptionPortfolio,
     *,
-    crash_move: float,
-    vol_shock: float,
-    skew_steepening: float = 0.0,
-    skew_reference_delta: float = _DEFAULT_SKEW_REFERENCE_DELTA,
+    shock: CrashShock,
 ) -> float:
     """Crash convexity: hedge-only value change as % of the protected book (§1).
 
@@ -320,16 +408,9 @@ def crash_convexity_pct(
 
     Args:
         portfolio: Portfolio to evaluate.
-        crash_move: Signed crash move as a decimal (e.g. ``-0.25``).
-        vol_shock: Flat additive vol bump as a decimal (e.g. ``+0.15``).
-        skew_steepening: Optional deep-OTM skew steepening applied to the crash
-            leg only, capped at each leg's own ``skew_reference_delta`` wing
-            (M1.7). ``0.0`` (the default) keeps the flat bump. The today-value
-            ``V_today`` is always skew-free — steepening is a crash-state
-            effect.
-        skew_reference_delta: Put-delta magnitude of the wing the steepening is
-            anchored to (e.g. ``0.10``). Only consulted when ``skew_steepening``
-            is non-zero.
+        shock: The crash basis (see :func:`crash_hedge_value`). Applies to the
+            crash leg only — ``V_today`` is always shock-free, since the
+            steepening is a crash-state effect.
 
     Returns:
         Crash convexity as a percentage of the protected book. ``0.0`` when the
@@ -340,13 +421,7 @@ def crash_convexity_pct(
     if book == 0:
         return 0.0
     v_today = hedge_value(portfolio)
-    v_crash = crash_hedge_value(
-        portfolio,
-        crash_move=crash_move,
-        vol_shock=vol_shock,
-        skew_steepening=skew_steepening,
-        skew_reference_delta=skew_reference_delta,
-    )
+    v_crash = crash_hedge_value(portfolio, shock=shock)
     return (v_crash - v_today) / book * 100.0
 
 

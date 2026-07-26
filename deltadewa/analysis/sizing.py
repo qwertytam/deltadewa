@@ -31,6 +31,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from deltadewa.analysis.candidate import evaluate_candidate
+from deltadewa.analysis.crash_repricing import CrashShock
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
@@ -312,10 +313,13 @@ def size_hedge(
     beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
     carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
 
-    crash_pct = ips_config.convexity.crash_scenario_pct  # negative
+    # One crash basis for the whole function, built the same way the book
+    # surfaces build theirs — the depth below is read back off it so the
+    # drawdown maths and the repricing cannot drift apart.
+    shock = CrashShock.from_ips(ips_config.convexity)
     offset = required_crash_offset(
         beta_adj_notional,
-        crash_pct,
+        shock.crash_scenario_pct,  # negative
         ips_config.drawdown.max_tolerance_pct,
     )
 
@@ -324,10 +328,7 @@ def size_hedge(
         portfolio,
         strike=strike,
         maturity_years=candidate_maturity_years,
-        crash_pct=crash_pct,
-        crash_vol_shock=ips_config.convexity.crash_vol_shock,
-        skew_steepening=ips_config.convexity.skew_steepening,
-        skew_reference_delta=ips_config.convexity.skew_reference_delta,
+        shock=shock,
         vol=vol,
     )
 

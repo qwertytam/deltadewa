@@ -10,6 +10,7 @@ the summary crash-convexity ladder.
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 import math
 from datetime import UTC, datetime, timedelta
@@ -20,12 +21,17 @@ import pytest
 from deltadewa.analysis import classify_portfolio_shape
 from deltadewa.analysis import crash_repricing as cr
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.candidate import evaluate_candidate
 from deltadewa.analysis.crash_payoff import (
     compute_crash_convexity,
+    crash_payoff_ratio,
     crash_scenario_table,
 )
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.health import HealthMixin
 from deltadewa.analysis.roll_status import evaluate_roll_status
+from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.strike_ladder import build_strike_ladder
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
@@ -47,6 +53,8 @@ from deltadewa.widgets.summary import NetHedgeSummary
 _APPENDIX_SPOT = 6600.0
 _APPENDIX_BOOK = 20_000_000.0
 _APPENDIX_MOVE = -0.25
+# Same crash depth in the signed-percent form CrashShock carries.
+_APPENDIX_PCT = -25.0
 _APPENDIX_VOL_SHOCK = 0.15
 # Shipped deep-OTM skew steepening (M1.6/M1.7): extra vol reached at each leg's
 # own ~10-delta wing, capped there and interpolated (in log-moneyness) below it.
@@ -173,20 +181,29 @@ def _leg_extra_crash_vol(
         risk_free_rate=portfolio.risk_free_rate,
         dividend_yield=portfolio.dividend_yield,
         valuation_date=portfolio.valuation_date,
-        vol_shock=_APPENDIX_VOL_SHOCK,
-        skew_steepening=skew,
-        skew_reference_delta=anchor,
+        shock=CrashShock(
+            crash_scenario_pct=0.0,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=skew,
+            skew_reference_delta=anchor,
+        ),
     )
     return crash_vol - (position.option.volatility + _APPENDIX_VOL_SHOCK)
 
 
-def _make_appendix_ips(*, crash_scenario_pct: float) -> IpsConfig:
+def _make_appendix_ips(
+    *,
+    crash_scenario_pct: float,
+    skew_reference_delta: float = _APPENDIX_SKEW_ANCHOR,
+) -> IpsConfig:
     """Full IpsConfig at the appendix crash knobs, parameterised on depth.
 
     Carries the shipped skew-aware shock (``_APPENDIX_VOL_SHOCK`` /
     ``_APPENDIX_SKEW`` / ``_APPENDIX_SKEW_ANCHOR``) so every surface driven from
-    this one config shares a single crash basis. Only ``crash_scenario_pct``
-    varies, so the roll trigger evaluates convexity at the chosen depth.
+    this one config shares a single crash basis. ``crash_scenario_pct`` varies
+    so the roll trigger evaluates convexity at the chosen depth, and
+    ``skew_reference_delta`` varies so the anchor-propagation guards can move
+    the wing off its shipped 0.10.
     """
     return IpsConfig(
         program=IpsProgram(name="appendix", instrument="SPX"),
@@ -198,7 +215,7 @@ def _make_appendix_ips(*, crash_scenario_pct: float) -> IpsConfig:
             target_max_pct=25.0,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
             skew_steepening=_APPENDIX_SKEW,
-            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            skew_reference_delta=skew_reference_delta,
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=20.0),
         triggers=IpsTriggers(
@@ -229,9 +246,12 @@ class TestAppendixGoldenValues:
         v_today = cr.hedge_value(portfolio)
         v_crash = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         # V_today is skew-free (skew is a crash-state effect only).
@@ -255,9 +275,12 @@ class TestAppendixGoldenValues:
 
         convexity = cr.crash_convexity_pct(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert convexity == pytest.approx(24.64, abs=0.1)
@@ -278,8 +301,12 @@ class TestAppendixGoldenValues:
 
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
             ips_convexity=ips,
         )
 
@@ -296,9 +323,12 @@ class TestAppendixGoldenValues:
         assert floor == pytest.approx(759_000.0, rel=0.005)
         assert floor < cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
 
@@ -317,14 +347,21 @@ class TestSkewSteepeningNoOp:
 
         base = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         with_knob = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert with_knob == base
@@ -336,14 +373,21 @@ class TestSkewSteepeningNoOp:
 
         base = cr.crash_convexity_pct(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         with_knob = cr.crash_convexity_pct(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert with_knob == base
@@ -361,7 +405,12 @@ class TestSkewSteepeningNoOp:
 
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
             ips_convexity=ips,
         )
 
@@ -394,9 +443,12 @@ class TestSkewSteepeningNoOp:
                 risk_free_rate=portfolio.risk_free_rate,
                 dividend_yield=portfolio.dividend_yield,
                 valuation_date=portfolio.valuation_date,
-                vol_shock=_APPENDIX_VOL_SHOCK,
-                skew_steepening=0.0,
-                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+                shock=CrashShock(
+                    crash_scenario_pct=0.0,
+                    crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                    skew_steepening=0.0,
+                    skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+                ),
             )
 
             assert got == flat
@@ -411,14 +463,21 @@ class TestSkewSteepeningBehaviour:
 
         flat = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         steepened = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=0.10,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.10,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert steepened > flat
@@ -438,10 +497,12 @@ class TestSkewSteepeningBehaviour:
 
         got = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=skew,
-            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=skew,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         crash_spot = _APPENDIX_SPOT * (1.0 + _APPENDIX_MOVE)
@@ -488,14 +549,21 @@ class TestSkewSteepeningBehaviour:
 
         flat = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         steepened = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=0.10,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.10,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert steepened == flat
@@ -685,8 +753,12 @@ class TestBand:
 
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
             ips_convexity=ips,
         )
         ips_row = next(
@@ -723,9 +795,12 @@ class TestGoldenExampleFile:
         v_today = cr.hedge_value(portfolio)
         v_crash = cr.crash_hedge_value(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert v_today == pytest.approx(297_715.0, rel=0.005)
@@ -737,9 +812,12 @@ class TestGoldenExampleFile:
 
         convexity = cr.crash_convexity_pct(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert convexity == pytest.approx(24.64, abs=0.1)
@@ -761,13 +839,21 @@ class TestHedgeOnlyInvariant:
         assert cr.hedge_value(doubled) == pytest.approx(cr.hedge_value(base))
         assert cr.crash_hedge_value(
             doubled,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         ) == pytest.approx(
             cr.crash_hedge_value(
                 base,
-                crash_move=_APPENDIX_MOVE,
-                vol_shock=_APPENDIX_VOL_SHOCK,
+                shock=CrashShock(
+                    crash_scenario_pct=_APPENDIX_PCT,
+                    crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                    skew_steepening=0.0,
+                    skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+                ),
             ),
         )
 
@@ -780,13 +866,21 @@ class TestHedgeOnlyInvariant:
 
         conv_base = cr.crash_convexity_pct(
             base,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         conv_doubled = cr.crash_convexity_pct(
             doubled,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert conv_doubled == pytest.approx(conv_base / 2.0)
@@ -797,8 +891,12 @@ class TestHedgeOnlyInvariant:
 
         assert cr.crash_convexity_pct(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         ) == pytest.approx(0.0, rel=1e-8)
 
 
@@ -865,22 +963,32 @@ class TestConsistencyAcrossSurfaces:
 
         summary = NetHedgeSummary(
             portfolio,
-            crash_vol_shock=vol_shock,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=vol_shock,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         rungs = dict(summary._crash_convexity_rungs())
 
         analyzer = PortfolioAnalyzer(portfolio)
         gauge = analyzer.calculate_crash_convexity_pct(
-            crash_scenario_pct=-20.0,
-            crash_vol_shock=vol_shock,
-            skew_steepening=_APPENDIX_SKEW,
+            CrashShock(
+                crash_scenario_pct=-20.0,
+                crash_vol_shock=vol_shock,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         helper = cr.crash_convexity_pct(
             portfolio,
-            crash_move=-0.20,
-            vol_shock=vol_shock,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=-20.0,
+                crash_vol_shock=vol_shock,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert rungs[-20.0] == pytest.approx(gauge)
@@ -899,8 +1007,12 @@ class TestConsistencyAcrossSurfaces:
 
         result = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
             ips_convexity=ips,
         )
         ips_row = next(
@@ -909,9 +1021,12 @@ class TestConsistencyAcrossSurfaces:
             if r.shock_pct == pytest.approx(-25.0, rel=1e-4)
         )
         gauge = PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
-            crash_scenario_pct=-25.0,
-            crash_vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
+            CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert ips_row.convexity_pct == pytest.approx(gauge)
@@ -933,21 +1048,32 @@ class TestConsistencyAcrossSurfaces:
         skew = _APPENDIX_SKEW
 
         gauge = PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
-            crash_scenario_pct=-20.0,
-            crash_vol_shock=vol_shock,
-            skew_steepening=skew,
+            CrashShock(
+                crash_scenario_pct=-20.0,
+                crash_vol_shock=vol_shock,
+                skew_steepening=skew,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         roll = evaluate_roll_status(portfolio, ips)[0].crash_convexity_pct
         summary = NetHedgeSummary(
             portfolio,
-            crash_vol_shock=vol_shock,
-            skew_steepening=skew,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=vol_shock,
+                skew_steepening=skew,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         rung = dict(summary._crash_convexity_rungs())[-20.0]
         table = compute_crash_convexity(
             portfolio,
-            crash_vol_shock=vol_shock,
-            skew_steepening=skew,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=vol_shock,
+                skew_steepening=skew,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
             ips_convexity=ips.convexity,
         )
         table_row = next(
@@ -965,11 +1091,253 @@ class TestConsistencyAcrossSurfaces:
         # is not a trivial flat-path coincidence.
         flat = cr.crash_convexity_pct(
             portfolio,
-            crash_move=-0.20,
-            vol_shock=vol_shock,
-            skew_steepening=0.0,
+            shock=CrashShock(
+                crash_scenario_pct=-20.0,
+                crash_vol_shock=vol_shock,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
         assert gauge != pytest.approx(flat)
+
+
+class TestCrashShockValueObject:
+    """M1.8 — the four pricing inputs travel as one object, intact.
+
+    ``from_ips`` is the only construction path production code uses, and
+    ``at_pct`` is how the sweeping surfaces change depth. Both must preserve
+    the basis exactly, or the divergence this object exists to prevent creeps
+    back in through the helpers themselves.
+    """
+
+    def test_from_ips_carries_all_four_pricing_fields(self) -> None:
+        """Every pricing knob is projected off IpsConvexity, none dropped."""
+        convexity = IpsConvexity(
+            crash_scenario_pct=-30.0,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+            crash_vol_shock=0.17,
+            skew_steepening=0.08,
+            skew_reference_delta=0.07,
+        )
+
+        shock = CrashShock.from_ips(convexity)
+
+        assert shock.crash_scenario_pct == pytest.approx(-30.0)
+        assert shock.crash_vol_shock == pytest.approx(0.17)
+        assert shock.skew_steepening == pytest.approx(0.08)
+        assert shock.skew_reference_delta == pytest.approx(0.07)
+
+    def test_crash_move_is_the_decimal_form_of_the_percent(self) -> None:
+        """The pricer's decimal move is derived, never separately supplied."""
+        shock = CrashShock(-25.0, 0.15, 0.10, 0.10)
+
+        assert shock.crash_move == pytest.approx(-0.25)
+
+    def test_at_pct_changes_only_the_depth(self) -> None:
+        """Re-aiming the depth carries the whole vol basis along.
+
+        The guard that makes bundling the scenario safe: the shock grid walks
+        depths through this helper, so if it dropped the skew or the anchor the
+        ladder would silently price flat below the first rung.
+        """
+        shock = CrashShock(-25.0, 0.15, 0.10, 0.07)
+
+        moved = shock.at_pct(-40.0)
+
+        assert moved.crash_scenario_pct == pytest.approx(-40.0)
+        assert moved.crash_vol_shock == pytest.approx(shock.crash_vol_shock)
+        assert moved.skew_steepening == pytest.approx(shock.skew_steepening)
+        assert moved.skew_reference_delta == pytest.approx(
+            shock.skew_reference_delta,
+        )
+        # Frozen: re-aiming yields a new value, never a mutation in place.
+        assert shock.crash_scenario_pct == pytest.approx(-25.0)
+
+
+class TestSkewReferenceDeltaReachesBookSurfaces:
+    """M1.8 — the IPS wing anchor moves the BOOK gauges, not just candidates.
+
+    Before the ``CrashShock`` bundle, ``crash_payoff`` / ``health`` /
+    ``roll_status`` forwarded ``skew_steepening`` but silently dropped
+    ``skew_reference_delta``, so those surfaces always priced against
+    ``crash_hedge_value``'s own ``0.10``. Sizing and the strike ladder honoured
+    the IPS value, so tuning the anchor re-opened the book-vs-candidate split
+    M1.7 closed — invisibly, because at the shipped 0.10 the two agree.
+
+    These tests move the anchor off 0.10 and require the book surfaces to
+    follow. Every one of them passes vacuously before the bundle.
+    """
+
+    # Far enough from the shipped 0.10 to clear solver tolerance on both sides.
+    _TIGHT_ANCHOR = 0.05
+
+    def _gauge_at(self, anchor: float) -> float:
+        """Book convexity gauge at *anchor*, everything else held fixed."""
+        portfolio = _make_appendix_book()
+        ips = _make_appendix_ips(
+            crash_scenario_pct=_APPENDIX_PCT,
+            skew_reference_delta=anchor,
+        )
+        return PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
+            CrashShock.from_ips(ips.convexity),
+        )
+
+    def test_anchor_moves_the_health_gauge(self) -> None:
+        """A tighter wing anchor changes the book convexity gauge."""
+        shipped = self._gauge_at(_APPENDIX_SKEW_ANCHOR)
+        tightened = self._gauge_at(self._TIGHT_ANCHOR)
+
+        assert shipped != pytest.approx(tightened, abs=0.05)
+
+    def test_anchor_moves_the_scenario_table(self) -> None:
+        """The crash_payoff scenario rows follow the IPS anchor too."""
+        portfolio = _make_appendix_book()
+
+        def _row_convexity(anchor: float) -> float:
+            ips = _make_appendix_ips(
+                crash_scenario_pct=_APPENDIX_PCT,
+                skew_reference_delta=anchor,
+            )
+            rows = crash_scenario_table(
+                portfolio,
+                shocks=[_APPENDIX_PCT],
+                ips_convexity=ips.convexity,
+            )
+            return next(
+                r.convexity_pct
+                for r in rows
+                if r.shock_pct == pytest.approx(_APPENDIX_PCT)
+            )
+
+        shipped = _row_convexity(_APPENDIX_SKEW_ANCHOR)
+        tightened = _row_convexity(self._TIGHT_ANCHOR)
+
+        assert shipped != pytest.approx(tightened, abs=0.05)
+
+    def test_anchor_moves_the_roll_trigger(self) -> None:
+        """The roll trigger's convexity follows the IPS anchor."""
+        portfolio = _make_appendix_book()
+
+        def _roll_convexity(anchor: float) -> float:
+            ips = _make_appendix_ips(
+                crash_scenario_pct=_APPENDIX_PCT,
+                skew_reference_delta=anchor,
+            )
+            return evaluate_roll_status(portfolio, ips)[0].crash_convexity_pct
+
+        shipped = _roll_convexity(_APPENDIX_SKEW_ANCHOR)
+        tightened = _roll_convexity(self._TIGHT_ANCHOR)
+
+        assert shipped != pytest.approx(tightened, abs=0.05)
+
+    def test_book_surfaces_agree_with_each_other_off_default(self) -> None:
+        """Gauge, roll trigger, and scenario table stay equal off 0.10.
+
+        M1.7 pinned this equality only at the shipped anchor. It held under
+        the old code too — the book surfaces dropped the anchor *uniformly*,
+        so they agreed with each other while all three were wrong together;
+        that consistency is precisely why the defect stayed invisible. What
+        this adds is protection against a **partial** regression: a future
+        change that re-threads the anchor through some book surfaces and not
+        others breaks here. The correctness half is
+        :meth:`test_book_equals_candidate_at_a_non_default_anchor`.
+        """
+        portfolio = _make_appendix_book()
+        ips = _make_appendix_ips(
+            crash_scenario_pct=_APPENDIX_PCT,
+            skew_reference_delta=self._TIGHT_ANCHOR,
+        )
+
+        gauge = PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(
+            CrashShock.from_ips(ips.convexity),
+        )
+        roll = evaluate_roll_status(portfolio, ips)[0].crash_convexity_pct
+        row = next(
+            r.convexity_pct
+            for r in crash_scenario_table(
+                portfolio,
+                shocks=[_APPENDIX_PCT],
+                ips_convexity=ips.convexity,
+            )
+            if r.shock_pct == pytest.approx(_APPENDIX_PCT)
+        )
+
+        assert roll == pytest.approx(gauge)
+        assert row == pytest.approx(gauge)
+
+    def test_book_equals_candidate_at_a_non_default_anchor(self) -> None:
+        """A candidate matches the book *surface* at a non-default anchor.
+
+        The correctness guard, and the one that actually reproduces the M1.7
+        split. It reads the book side off ``compute_crash_convexity`` — a real
+        panel surface, not the pricing primitive — because the primitive was
+        never the thing that dropped the anchor; the surfaces calling it were.
+        The candidate path has honoured the IPS anchor since M1.7, so at an
+        anchor away from ``0.10`` the two agree only once the book surface
+        threads it too.
+
+        Uses a single-leg book so the surface's summed ``hedge_pnl`` is one
+        contract's crash value times quantity, directly comparable to the
+        candidate's per-contract figure.
+        """
+        strike = 5280.0
+        quantity = 23
+        valuation_date = datetime(2026, 1, 2, tzinfo=UTC)
+        maturity = valuation_date + timedelta(days=round(1.5 * 365))
+        portfolio = OptionPortfolio(
+            spot_price=_APPENDIX_SPOT,
+            volatility=0.20,
+            risk_free_rate=0.045,
+            dividend_yield=0.015,
+            underlying_quantity=_APPENDIX_BOOK / _APPENDIX_SPOT,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            valuation_date=valuation_date,
+        )
+        portfolio.add_position(
+            strike_price=strike,
+            maturity_date=maturity,
+            quantity=quantity,
+            option_type=OptionType.PUT,
+            volatility=0.20,
+        )
+        ips = _make_appendix_ips(
+            crash_scenario_pct=_APPENDIX_PCT,
+            skew_reference_delta=self._TIGHT_ANCHOR,
+        )
+        conv = ips.convexity
+
+        surface = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock.from_ips(conv),
+            ips_convexity=conv,
+            scenario_shocks=[_APPENDIX_PCT],
+        )
+        book_per_contract = (
+            next(
+                r.hedge_pnl
+                for r in surface.scenario_rows
+                if r.shock_pct == pytest.approx(_APPENDIX_PCT)
+            )
+            / quantity
+        )
+
+        candidate = evaluate_candidate(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=conv.crash_scenario_pct,
+                crash_vol_shock=conv.crash_vol_shock,
+                skew_steepening=conv.skew_steepening,
+                skew_reference_delta=conv.skew_reference_delta,
+            ),
+            strike=strike,
+            maturity_years=(maturity - valuation_date).days / 365.0,
+        )
+
+        assert candidate.per_contract_payoff == pytest.approx(
+            book_per_contract,
+            rel=1e-6,
+        )
 
 
 class TestNoLegacyBasisInConvexityPaths:
@@ -1005,50 +1373,112 @@ class TestNoLegacyBasisInConvexityPaths:
         assert "include_underlying" not in source
         assert "calculate_pnl_at_expiry" not in source
 
-    def test_crash_vol_shock_is_required_on_the_gauge(self) -> None:
-        """crash_vol_shock has no default — every caller must pass it.
+    def test_shock_is_required_on_the_gauge(self) -> None:
+        """The gauge's crash basis has no default — callers must pass one.
 
-        Making it required is the enforcement point: no site (gauge, roll
-        trigger, summary ladder) can silently reprice spot-only by omission.
+        The enforcement point, inherited from ``crash_vol_shock`` (M1.4/M1.5)
+        and ``skew_steepening`` (M1.7) and now covering the whole basis: no
+        site (gauge, roll trigger, summary ladder) can reprice spot-only, flat,
+        or against a stand-in wing by omission.
         """
         param = inspect.signature(
             HealthMixin.calculate_crash_convexity_pct,
-        ).parameters["crash_vol_shock"]
+        ).parameters["shock"]
 
         assert param.default is inspect.Parameter.empty
 
-    def test_roll_status_sources_vol_shock_from_ips(self) -> None:
-        """The roll trigger passes the IPS vol shock, matching the gauge."""
-        source = inspect.getsource(evaluate_roll_status)
+    def test_crash_shock_has_no_field_defaults(self) -> None:
+        """No ``CrashShock`` field may default — the whole basis is explicit.
 
-        assert "crash_vol_shock=convexity.crash_vol_shock" in source
-
-    def test_skew_steepening_is_required_on_the_gauge(self) -> None:
-        """skew_steepening has no default — every caller must pass it.
-
-        The M1.7 fail-loud guard, mirroring ``crash_vol_shock`` (M1.4/M1.5):
-        with no default, a site that omits the skew cannot silently reprice a
-        flat bump (+18% at §4 instead of +24.6%) and under-report deep-tail
-        convexity. ``skew_reference_delta`` defaults to ``0.10`` (a wing, not a
-        defaulted ``0.0``) and is out of this guard's scope.
+        The structural form of the fail-loud rule. A default on any field
+        would let a surface half-state the crash and quietly inherit the rest,
+        which is exactly how ``skew_reference_delta`` came to be dropped by the
+        book gauges while the candidate surfaces honoured it.
         """
-        param = inspect.signature(
-            HealthMixin.calculate_crash_convexity_pct,
-        ).parameters["skew_steepening"]
+        for field in dataclasses.fields(CrashShock):
+            assert field.default is dataclasses.MISSING, field.name
+            assert field.default_factory is dataclasses.MISSING, field.name
 
-        assert param.default is inspect.Parameter.empty
+    def test_crash_shock_carries_no_target_band(self) -> None:
+        """Pricing and policy stay on separate objects (M1.5).
 
-    def test_roll_status_sources_skew_from_ips(self) -> None:
-        """The roll trigger passes the IPS skew, matching the gauge basis."""
+        The band lives on ``IpsConvexity``. Folding it in here would mean a
+        caller that omits policy silently changes what gets priced.
+        """
+        names = {f.name for f in dataclasses.fields(CrashShock)}
+
+        assert "target_min_pct" not in names
+        assert "target_max_pct" not in names
+
+    def test_roll_status_sources_whole_basis_from_ips(self) -> None:
+        """The roll trigger prices on the IPS basis, matching the gauge."""
         source = inspect.getsource(evaluate_roll_status)
 
-        assert "skew_steepening=convexity.skew_steepening" in source
+        assert "CrashShock.from_ips(convexity)" in source
 
-    def test_scenario_table_sources_skew_from_ips(self) -> None:
-        """The scenario table sources skew from the IPS, not a flat default."""
+    def test_scenario_table_sources_whole_basis_from_ips(self) -> None:
+        """The scenario table prices on the IPS basis, not a stand-in."""
         source = inspect.getsource(crash_scenario_table)
 
-        assert "ips_convexity.skew_steepening" in source
+        assert "CrashShock.from_ips(ips_convexity)" in source
+
+    def test_no_crash_scalar_survives_on_a_pricing_signature(self) -> None:
+        """M1.8 — every crash-pricing entry point takes the object, not parts.
+
+        The structural end-state: one pricing-input object everywhere. A
+        function that still accepted, say, ``crash_vol_shock`` alongside a
+        ``shock`` could be handed a half-stated basis, which is the failure
+        mode this whole refactor exists to remove.
+        """
+        scalars = {
+            "crash_pct",
+            "crash_scenario_pct",
+            "crash_vol_shock",
+            "vol_shock",
+            "skew_steepening",
+            "skew_reference_delta",
+        }
+        entry_points = (
+            cr.crash_hedge_value,
+            cr.crash_convexity_pct,
+            HealthMixin.calculate_crash_convexity_pct,
+            compute_crash_convexity,
+            crash_payoff_ratio,
+            evaluate_candidate,
+            NetHedgeSummary.__init__,
+        )
+
+        for fn in entry_points:
+            params = set(inspect.signature(fn).parameters)
+            assert not (params & scalars), f"{fn.__qualname__}: {params}"
+
+    def test_pricing_entry_points_require_the_shock(self) -> None:
+        """None of them defaults ``shock`` — a basis is always stated."""
+        entry_points = (
+            cr.crash_hedge_value,
+            cr.crash_convexity_pct,
+            HealthMixin.calculate_crash_convexity_pct,
+            compute_crash_convexity,
+            crash_payoff_ratio,
+            evaluate_candidate,
+            NetHedgeSummary.__init__,
+        )
+
+        for fn in entry_points:
+            param = inspect.signature(fn).parameters["shock"]
+            assert param.default is inspect.Parameter.empty, fn.__qualname__
+
+    def test_candidate_surfaces_source_whole_basis_from_ips(self) -> None:
+        """Sizing and the ladder build the basis the way the book does.
+
+        M1.7 gave both sides one skew *function*; this pins one *construction
+        path* as well, so neither can assemble a basis the other would not.
+        """
+        for fn in (size_hedge, build_strike_ladder):
+            source = inspect.getsource(fn)
+            assert "CrashShock.from_ips(ips_config.convexity)" in source, (
+                fn.__qualname__
+            )
 
 
 class TestCanonicalExampleInvariants:
@@ -1068,8 +1498,12 @@ class TestCanonicalExampleInvariants:
 
         convexity = cr.crash_convexity_pct(
             portfolio,
-            crash_move=-0.25,
-            vol_shock=0.15,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.15,
+                skew_steepening=0.0,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert convexity > 0.0
@@ -1110,10 +1544,12 @@ class TestCanonicalExampleInvariants:
 
         convexity = cr.crash_convexity_pct(
             portfolio,
-            crash_move=_APPENDIX_MOVE,
-            vol_shock=_APPENDIX_VOL_SHOCK,
-            skew_steepening=_APPENDIX_SKEW,
-            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            shock=CrashShock(
+                crash_scenario_pct=_APPENDIX_PCT,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
         )
 
         assert convexity == pytest.approx(16.1, abs=0.1)

@@ -10,7 +10,7 @@ import ipywidgets as widgets
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_repricing import crash_convexity_pct
+from deltadewa.analysis.crash_repricing import CrashShock, crash_convexity_pct
 from deltadewa.analysis.volatility import get_volatility_stats
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.html import format_html_badge, format_html_metric
@@ -51,27 +51,24 @@ class NetHedgeSummary:
         self,
         portfolio: "OptionPortfolio",
         *,
-        crash_vol_shock: float = 0.0,
-        skew_steepening: float = 0.0,
+        shock: CrashShock,
     ) -> None:
         """Initialize net hedge summary widget.
 
         Args:
             portfolio: OptionPortfolio instance
-            crash_vol_shock: Flat additive crash vol bump as a decimal,
-                single-sourced from ``IpsConvexity.crash_vol_shock`` (pass
-                ``ctx.ips_config.convexity.crash_vol_shock``). Used to reprice
-                the hedge-only crash-convexity ladder. Defaults to ``0.0``.
-            skew_steepening: Optional deep-OTM skew steepening added on top of
-                ``crash_vol_shock`` at the tail (M1.6), single-sourced from
-                ``IpsConvexity.skew_steepening`` (pass
-                ``ctx.ips_config.convexity.skew_steepening``) so the ladder
-                shares the gauge's basis exactly. Defaults to ``0.0``.
+            shock: The crash basis the convexity ladder reprices against, built
+                with ``CrashShock.from_ips(ctx.ips_config.convexity)``.
+                **Required, with no default.** The three scalars this replaced
+                defaulted to ``0.0`` / ``0.0``, so a caller that passed only the
+                vol shock — as both notebooks did — priced these rungs on a flat
+                bump while the health gauge priced them skew-aware. The ladder's
+                whole purpose is to equal the gauge at equal depth, so the basis
+                is now stated in full or not at all.
 
         """
         self.portfolio = portfolio
-        self._crash_vol_shock = crash_vol_shock
-        self._skew_steepening = skew_steepening
+        self._shock = shock
         self.widget = None
         self._create_widget()
 
@@ -82,18 +79,19 @@ class NetHedgeSummary:
         same hedge-only repriced basis (crash spot + IPS vol shock, underlying
         excluded) as the health convexity gauge, so a rung equals the gauge
         exactly at an equal crash depth. See ``docs/repricing-methodology.md``.
+
+        Each rung re-aims the one basis with ``at_pct``, so the depth varies
+        down the ladder while the vol shock and skew cannot.
         """
         return [
             (
-                shock,
+                shock_pct,
                 crash_convexity_pct(
                     self.portfolio,
-                    crash_move=shock / 100.0,
-                    vol_shock=self._crash_vol_shock,
-                    skew_steepening=self._skew_steepening,
+                    shock=self._shock.at_pct(shock_pct),
                 ),
             )
-            for shock in self._CRASH_RUNG_SHOCKS
+            for shock_pct in self._CRASH_RUNG_SHOCKS
         ]
 
     def _format_large_block(

@@ -18,7 +18,9 @@ from deltadewa.analysis.crash_payoff import (
     compute_crash_convexity,
     crash_payoff_ratio,
     crash_scenario_table,
+    default_crash_shock,
 )
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.decision_matrix import (
     DecisionResult,
     DecisionVerdict,
@@ -85,6 +87,7 @@ __all__ = [
     "CandidateMetrics",
     "CrashConvexityResult",
     "CrashScenarioRow",
+    "CrashShock",
     "DataQuality",
     "DecisionResult",
     "DecisionVerdict",
@@ -122,6 +125,7 @@ __all__ = [
     "crash_payoff_ratio",
     "crash_scenario_table",
     "decision_matrix",
+    "default_crash_shock",
     "entry_timing_tree",
     "evaluate_candidate",
     "evaluate_hedge_triggers",

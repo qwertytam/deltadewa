@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from deltadewa import constants as const
 from deltadewa.analysis.crash_repricing import (
+    CrashShock,
     crash_hedge_value,
     crash_intrinsic_floor,
 )
@@ -134,10 +135,7 @@ def evaluate_candidate(
     *,
     strike: float,
     maturity_years: float,
-    crash_pct: float,
-    crash_vol_shock: float,
-    skew_steepening: float,
-    skew_reference_delta: float,
+    shock: CrashShock,
     vol: float | None = None,
 ) -> CandidateMetrics:
     """Price one candidate put and return per-contract economics.
@@ -155,30 +153,20 @@ def evaluate_candidate(
     (M1.7): the candidate's steepening is anchored to *its own*
     ``skew_reference_delta`` wing, so evaluating a candidate at a strike the
     book already holds yields the held leg's per-contract crash value exactly —
-    book and workbench cannot disagree at equal depth.
+    book and workbench cannot disagree at equal depth. Since M1.9 both sides
+    also *build* that basis the same way, from
+    :meth:`~deltadewa.analysis.crash_repricing.CrashShock.from_ips`, so there is
+    one construction path as well as one skew function.
 
     Args:
         portfolio: Live portfolio supplying spot, vol, rate, div, exercise
             style, and valuation date.
         strike: Absolute strike price of the candidate put.
         maturity_years: Time to expiry in years (e.g. ``0.25`` for ~3 months).
-        crash_pct: Signed crash scenario percent (e.g. ``-25.0`` for a 25 %
-            decline), from ``IpsConvexity.crash_scenario_pct``.  Sets the crash
-            spot at which the candidate is repriced.
-        crash_vol_shock: Flat additive vol bump as a decimal (e.g. ``+0.15``),
-            from ``IpsConvexity.crash_vol_shock``.  Applied to the candidate's
-            own vol when repricing at the crash spot, so every panel shares one
-            crash basis (required — no silent divergence).
-        skew_steepening: Deep-OTM skew steepening added on top of
-            *crash_vol_shock*, capped at the candidate's own
-            ``skew_reference_delta`` wing (M1.7), from
-            ``IpsConvexity.skew_steepening``.  **Required** — no defaulted
-            ``0.0`` so the candidate can never silently revert to the flat bump
-            the book surfaces have moved off. ``0.0`` keeps the flat bump.
-        skew_reference_delta: Put-delta magnitude of the wing the steepening is
-            anchored to (e.g. ``0.10``), from
-            ``IpsConvexity.skew_reference_delta``.
-            **Required.**  Only used when *skew_steepening* is non-zero.
+        shock: The crash basis — depth, flat vol bump, and wing steepening with
+            its anchor. **Required, with no default**, and built by callers with
+            ``CrashShock.from_ips(ips_config.convexity)``, so a candidate can
+            never be priced against a different crash state than the book.
         vol: Implied volatility override (annualised fraction).  Defaults to
             ``portfolio.volatility`` when ``None``.
 
@@ -213,18 +201,14 @@ def evaluate_candidate(
         exercise_style=portfolio.default_exercise_style,
         contract_size=portfolio.contract_size,
     )
-    crash_move = crash_pct / 100.0
     per_contract_payoff = crash_hedge_value(
         portfolio,
-        crash_move=crash_move,
-        vol_shock=crash_vol_shock,
-        skew_steepening=skew_steepening,
-        skew_reference_delta=skew_reference_delta,
+        shock=shock,
         positions=[candidate_leg],
     )
     per_contract_intrinsic_floor = crash_intrinsic_floor(
         portfolio,
-        crash_move=crash_move,
+        crash_move=shock.crash_move,
         positions=[candidate_leg],
     )
 

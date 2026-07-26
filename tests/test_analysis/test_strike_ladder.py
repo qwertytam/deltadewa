@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.strike_ladder import (
     LadderRung,
     StrikeLadderResult,
@@ -121,13 +122,15 @@ class TestStrikeForDelta:
         assert strike is not None
         metrics = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=-25.0,
+                crash_vol_shock=0.15,
+                skew_steepening=0.0,
+                skew_reference_delta=0.10,
+            ),
+            # put_delta is a today value — the crash basis is irrelevant here.
             strike=strike,
             maturity_years=0.25,
-            crash_pct=-25.0,
-            crash_vol_shock=0.15,
-            # put_delta is a today value — skew choice is irrelevant here.
-            skew_steepening=0.0,
-            skew_reference_delta=0.10,
         )
         assert abs(metrics.put_delta) == pytest.approx(target, abs=1e-4)
 
@@ -356,12 +359,14 @@ class TestBuildStrikeLadder:
         crash_pct = -25.0
         metrics = evaluate_candidate(
             portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=crash_pct,
+                crash_vol_shock=ips.convexity.crash_vol_shock,
+                skew_steepening=ips.convexity.skew_steepening,
+                skew_reference_delta=ips.convexity.skew_reference_delta,
+            ),
             strike=rung.metrics.strike,
             maturity_years=0.25,
-            crash_pct=crash_pct,
-            crash_vol_shock=ips.convexity.crash_vol_shock,
-            skew_steepening=ips.convexity.skew_steepening,
-            skew_reference_delta=ips.convexity.skew_reference_delta,
         )
         offset = required_crash_offset(book_notional, crash_pct, 20.0)
         sizing = size_from_unit(

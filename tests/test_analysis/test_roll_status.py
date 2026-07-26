@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deltadewa.analysis import roll_status
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.roll_status import (
     RollVerdict,
     compute_moneyness_drift,
@@ -287,9 +288,7 @@ class TestEvaluateRollStatus:
     ) -> None:
         def _fake_calculate_crash_convexity_pct(
             self,
-            crash_scenario_pct: float,
-            crash_vol_shock: float,
-            skew_steepening: float = 0.0,
+            shock: CrashShock,
         ) -> float:
             return value
 

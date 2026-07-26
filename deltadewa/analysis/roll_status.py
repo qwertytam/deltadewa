@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.constants import OptionType
 from deltadewa.valuation import OptionValuation
 
@@ -223,14 +224,13 @@ def evaluate_roll_status(
     roll_window_days = triggers.roll_time_months * const.CALENDAR_DAYS_PER_MONTH
 
     analyzer = PortfolioAnalyzer(portfolio)
-    # Source the crash vol shock AND skew steepening from the IPS so the roll
-    # trigger's convexity matches the health gauge / scenario table exactly;
-    # passing spot-only (vol_shock=0) understated convexity and biased the roll
-    # toward firing.
+    # Source the whole crash basis from the IPS so the roll trigger's convexity
+    # matches the health gauge / scenario table exactly; passing spot-only
+    # (vol_shock=0) understated convexity and biased the roll toward firing.
+    # The band below is read straight off `convexity` — pricing and policy
+    # travel separately by design.
     crash_convexity_pct = analyzer.calculate_crash_convexity_pct(
-        crash_scenario_pct=convexity.crash_scenario_pct,
-        crash_vol_shock=convexity.crash_vol_shock,
-        skew_steepening=convexity.skew_steepening,
+        CrashShock.from_ips(convexity),
     )
 
     # Measure DTE against the portfolio's (what-if) valuation date, not the

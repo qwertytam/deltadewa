@@ -26,11 +26,13 @@ import numpy as np
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_repricing import (
+    CrashShock,
     crash_hedge_value,
     crash_intrinsic_floor,
 )
 from deltadewa.ips_config import (
     _DEFAULT_CRASH_VOL_SHOCK,
+    _DEFAULT_SKEW_REFERENCE_DELTA,
     _DEFAULT_SKEW_STEEPENING,
 )
 
@@ -43,6 +45,31 @@ if TYPE_CHECKING:
 
 
 _DEFAULT_SCENARIO_SHOCKS: tuple[float, ...] = (-10.0, -20.0, -30.0, -40.0)
+
+
+def default_crash_shock() -> CrashShock:
+    """Build the crash basis for surfaces reached before any IPS is loaded.
+
+    Not a pricing default in disguise: :class:`CrashShock` itself has none, and
+    every configured path builds one with ``CrashShock.from_ips``. This is the
+    basis an unconfigured ``IpsConvexity`` would yield, kept in one place so the
+    no-IPS panels can't drift apart from each other (they previously each
+    inlined their own ``0.15``).
+
+    ``crash_scenario_pct`` is ``0.0`` because callers of this helper supply the
+    depth per grid point via :meth:`CrashShock.at_pct`; there is no IPS
+    scenario to stand in for it.
+
+    Returns:
+        The unconfigured-policy crash basis.
+
+    """
+    return CrashShock(
+        crash_scenario_pct=0.0,
+        crash_vol_shock=_DEFAULT_CRASH_VOL_SHOCK,
+        skew_steepening=_DEFAULT_SKEW_STEEPENING,
+        skew_reference_delta=_DEFAULT_SKEW_REFERENCE_DELTA,
+    )
 
 
 class PremiumBasis(StrEnum):
@@ -194,9 +221,7 @@ def _net_protective_premium(portfolio: OptionPortfolio) -> float:
 def crash_payoff_ratio(
     portfolio: OptionPortfolio,
     *,
-    crash_pct: float,
-    vol_shock: float,
-    skew_steepening: float = 0.0,
+    shock: CrashShock,
     premium: float | None = None,
 ) -> float:
     """Repriced hedge payoff at a crash shock, as a multiple of premium paid.
@@ -206,16 +231,10 @@ def crash_payoff_ratio(
 
     Args:
         portfolio: Portfolio to evaluate.
-        crash_pct: Signed shock percent (e.g. -25.0 for a 25% decline).
-            Converted internally to a spot multiplier (-25.0 -> 0.75).
-        vol_shock: Flat additive crash vol bump as a decimal. **Required** —
-            single-sourced from ``IpsConvexity.crash_vol_shock`` so it can
-            never silently diverge from the crash scenario; pass ``0.0``
-            explicitly for a spot-only crash when no IPS shock applies.
-        skew_steepening: Optional deep-OTM skew steepening added on top of
-            ``vol_shock`` at the tail (M1.6), single-sourced from
-            ``IpsConvexity.skew_steepening``. ``0.0`` (the default) keeps the
-            flat bump.
+        shock: The crash basis — depth, flat vol bump, and wing steepening with
+            its anchor. **Required, with no default**, and built from
+            ``IpsConvexity`` via ``CrashShock.from_ips`` so this ratio can never
+            diverge from the crash state the gauges price at.
         premium: Premium paid for the hedge in dollars.  Defaults to
             ``_premium_with_basis(portfolio)`` (entry cost when available,
             current mark otherwise) when not supplied.
@@ -231,9 +250,7 @@ def crash_payoff_ratio(
         return 0.0
     repriced = crash_hedge_value(
         portfolio,
-        crash_move=crash_pct / 100.0,
-        vol_shock=vol_shock,
-        skew_steepening=skew_steepening,
+        shock=shock,
         positions=_long_puts(portfolio),
     )
     return repriced / premium
@@ -243,8 +260,7 @@ def _reprice_shock_grid(
     portfolio: OptionPortfolio,
     positions: list[OptionPosition],
     shocks: set[float],
-    vol_shock: float,
-    skew_steepening: float,
+    shock: CrashShock,
 ) -> tuple[dict[float, float], dict[float, float]]:
     """Reprice each shock exactly once: ``(repriced, intrinsic_floor)`` maps.
 
@@ -252,9 +268,9 @@ def _reprice_shock_grid(
         portfolio: Portfolio to evaluate.
         positions: Legs to price (typically the long puts).
         shocks: Unique signed shock percents to price.
-        vol_shock: Flat additive crash vol bump as a decimal.
-        skew_steepening: Deep-OTM skew steepening added at the tail (M1.6);
-            ``0.0`` keeps the flat bump.
+        shock: The crash basis. Its own depth is ignored — each grid point is
+            priced at ``shock.at_pct(...)``, which re-aims the same vol shock
+            and skew at that depth so walking the grid cannot drop them.
 
     Returns:
         Two dicts keyed by shock percent: the repriced hedge value and the
@@ -263,18 +279,16 @@ def _reprice_shock_grid(
     """
     repriced: dict[float, float] = {}
     floor: dict[float, float] = {}
-    for shock in shocks:
-        move = shock / 100.0
-        repriced[shock] = crash_hedge_value(
+    for shock_pct in shocks:
+        at_depth = shock.at_pct(shock_pct)
+        repriced[shock_pct] = crash_hedge_value(
             portfolio,
-            crash_move=move,
-            vol_shock=vol_shock,
-            skew_steepening=skew_steepening,
+            shock=at_depth,
             positions=positions,
         )
-        floor[shock] = crash_intrinsic_floor(
+        floor[shock_pct] = crash_intrinsic_floor(
             portfolio,
-            crash_move=move,
+            crash_move=at_depth.crash_move,
             positions=positions,
         )
     return repriced, floor
@@ -287,8 +301,7 @@ def _build_scenario_rows(
     repriced: dict[float, float],
     floor: dict[float, float],
     premium_paid: float,
-    vol_shock: float,
-    skew_steepening: float,
+    shock: CrashShock,
     ips_convexity: IpsConvexity | None,
 ) -> list[CrashScenarioRow]:
     """Assemble scenario rows from the pre-priced grid, sorted mild to severe.
@@ -299,10 +312,10 @@ def _build_scenario_rows(
         repriced: Repriced hedge value keyed by shock percent.
         floor: Intrinsic floor keyed by shock percent.
         premium_paid: Premium denominator for the payoff ratio (dollars).
-        vol_shock: Flat additive crash vol bump as a decimal.
-        skew_steepening: Deep-OTM skew steepening added at the tail (M1.6);
-            ``0.0`` keeps the flat bump.
-        ips_convexity: IPS convexity target, or ``None``.
+        shock: The crash basis, re-aimed per row with ``at_pct`` so each row's
+            convexity is gauged at that row's depth on the same vol basis.
+        ips_convexity: IPS convexity target, or ``None``. Supplies the band
+            only — never the pricing, which comes from *shock*.
 
     Returns:
         One ``CrashScenarioRow`` per shock, sorted severe to mild.
@@ -314,9 +327,7 @@ def _build_scenario_rows(
         hedge_pnl = repriced[shock_pct]
         ratio = hedge_pnl / premium_paid if premium_paid > 0 else 0.0
         convexity_pct = analyzer.calculate_crash_convexity_pct(
-            crash_scenario_pct=shock_pct,
-            crash_vol_shock=vol_shock,
-            skew_steepening=skew_steepening,
+            shock.at_pct(shock_pct),
         )
         meets_target = (
             ips_convexity.target_min_pct
@@ -341,8 +352,7 @@ def _build_scenario_rows(
 def compute_crash_convexity(
     portfolio: OptionPortfolio,
     *,
-    crash_vol_shock: float,
-    skew_steepening: float = 0.0,
+    shock: CrashShock,
     shock_range: tuple[float, float] = (-40.0, 10.0),
     n_points: int = 51,
     ips_convexity: IpsConvexity | None = None,
@@ -361,21 +371,19 @@ def compute_crash_convexity(
 
     Args:
         portfolio: Portfolio to evaluate.
-        crash_vol_shock: Flat additive vol bump (as decimal, e.g. 0.10 for
-            +1000 bps).  Decoupled from policy: explicit parameter forces
-            every caller to state the shock it prices with.  No path reprices
-            spot-only by omission.
-        skew_steepening: Optional deep-OTM skew steepening added on top of
-            ``crash_vol_shock`` at the tail (M1.6), single-sourced from
-            ``IpsConvexity.skew_steepening``. ``0.0`` (the default) keeps the
-            flat bump.
+        shock: The crash basis every grid point is priced against — flat vol
+            bump plus the wing steepening and its anchor. **Required, with no
+            default**, so no path reprices spot-only or flat by omission. Its
+            own depth is unused: the grid supplies each point's depth via
+            ``at_pct``.
         shock_range: (min_shock_pct, max_shock_pct) bounding the grid.
         n_points: Number of evenly-spaced points in the fine grid.
         ips_convexity: IPS convexity target (policy, not pricing).  When
             supplied the IPS crash scenario is guaranteed to appear in both
             the grid and ``scenario_rows``, and ``payoff_ratio`` is
             populated.  Used only for ``meets_target`` band comparison,
-            never for repricing.
+            never for repricing — that is *shock*'s job, and the two stay
+            separate arguments so policy cannot quietly move the pricing.
         scenario_shocks: Explicit shocks to include in
             ``scenario_rows``.  ``None`` uses
             ``_DEFAULT_SCENARIO_SHOCKS`` filtered to ``shock_range``.
@@ -387,9 +395,6 @@ def compute_crash_convexity(
     """
     premium_paid, premium_basis = _premium_with_basis(portfolio)
     long_puts = _long_puts(portfolio)
-
-    # Crash vol shock is explicit: decoupled from policy (ips_convexity).
-    vol_shock = crash_vol_shock
 
     # Fine grid (rounded to avoid float-key mismatches).
     lo, hi = shock_range
@@ -419,8 +424,7 @@ def compute_crash_convexity(
         portfolio,
         long_puts,
         all_shocks,
-        vol_shock,
-        skew_steepening,
+        shock,
     )
 
     # Curve — fine grid only, sorted ascending (severe left to mild right).
@@ -435,8 +439,7 @@ def compute_crash_convexity(
         repriced=repriced,
         floor=floor,
         premium_paid=premium_paid,
-        vol_shock=vol_shock,
-        skew_steepening=skew_steepening,
+        shock=shock,
         ips_convexity=ips_convexity,
     )
 
@@ -468,28 +471,22 @@ def crash_scenario_table(
         shocks: Signed shock percents (e.g. [-10.0, -25.0]).
             ``ips_convexity.crash_scenario_pct`` is added automatically
             when not already present (if ips_convexity is supplied).
-        ips_convexity: IPS convexity config (provides crash_vol_shock and
-            skew_steepening for pricing, and the target band comparison). When
-            None, uses default crash_vol_shock (0.15) and skew_steepening (0.0).
+        ips_convexity: IPS convexity config (supplies the crash pricing basis
+            and, separately, the target band comparison). When None, prices
+            against :func:`default_crash_shock`.
 
     Returns:
         One ``CrashScenarioRow`` per shock, sorted mild to severe.
 
     """
-    vol_shock = (
-        ips_convexity.crash_vol_shock
+    shock = (
+        CrashShock.from_ips(ips_convexity)
         if ips_convexity is not None
-        else _DEFAULT_CRASH_VOL_SHOCK
-    )
-    skew_steepening = (
-        ips_convexity.skew_steepening
-        if ips_convexity is not None
-        else _DEFAULT_SKEW_STEEPENING
+        else default_crash_shock()
     )
     return compute_crash_convexity(
         portfolio,
-        crash_vol_shock=vol_shock,
-        skew_steepening=skew_steepening,
+        shock=shock,
         ips_convexity=ips_convexity,
         scenario_shocks=shocks,
     ).scenario_rows
