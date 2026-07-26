@@ -119,7 +119,9 @@ class TestCrashPayoffDisplayMethod:
         # that this scenario is guaranteed to fall inside.
         oracle_rows = crash_scenario_table(portfolio, shocks=shocks)
         convexity_20 = next(
-            row.convexity_pct for row in oracle_rows if row.shock_pct == -20.0
+            row.convexity_pct
+            for row in oracle_rows
+            if row.shock_pct == pytest.approx(-20.0, rel=1e-4)
         )
         ips_convexity = _make_ips_convexity(
             crash_scenario_pct=-20.0,
@@ -141,7 +143,9 @@ class TestCrashPayoffDisplayMethod:
         shocks = (-10.0, -20.0, -30.0, -40.0)
         oracle_rows = crash_scenario_table(portfolio, shocks=shocks)
         convexity_20 = next(
-            row.convexity_pct for row in oracle_rows if row.shock_pct == -20.0
+            row.convexity_pct
+            for row in oracle_rows
+            if row.shock_pct == pytest.approx(-20.0, rel=1e-4)
         )
         # A band that excludes the actual convexity_pct value.
         ips_convexity = _make_ips_convexity(

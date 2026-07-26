@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.dashboard import session as session_module
 from deltadewa.dashboard.session import SessionContext, start_session
@@ -177,7 +179,9 @@ class TestStartSession:
         ctx = start_session(globals_dict={}, dashboard_path=config_path)
 
         assert ctx.dashboard_config is not None
-        assert ctx.dashboard_config["parameters"]["historical_vol_low"] == 0.42
+        assert ctx.dashboard_config["parameters"][
+            "historical_vol_low"
+        ] == pytest.approx(0.42, rel=1e-4)
 
     def test_dashboard_config_none_when_missing(self, tmp_path: Path) -> None:
         """Test a missing dashboard_path falls back to None, no raise."""

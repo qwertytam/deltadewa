@@ -5,7 +5,7 @@ Provides interactive configuration widgets and default settings management.
 
 import platform
 import shutil
-import subprocess  # noqa: S404
+import subprocess  # ruff: ignore[suspicious-subprocess-import]
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -16,12 +16,12 @@ import ipywidgets as widgets
 class ExportDirVBox(widgets.VBox):  # type: ignore[misc]  # pylint: disable=too-many-ancestors  # ipywidgets MRO depth; not our code
     """Custom VBox to hold export directory configuration and metadata."""
 
-    def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:  # noqa: ANN401  # super().__init__ passthrough; ipywidgets VBox args are untyped
+    def __init__(self, *args: Any, export_dir: Path, **kwargs: Any) -> None:  # ruff: ignore[any-type]  # super().__init__ passthrough; ipywidgets VBox args are untyped
         """Initialize ExportDirVBox with export_dir metadata."""
         super().__init__(*args, **kwargs)
         self.export_dir: Path = export_dir
 
-    def __copy__(self, **kwargs: Any) -> "ExportDirVBox":  # noqa: ANN401  # __copy__ protocol; kwargs forwarded to parent
+    def __copy__(self, **kwargs: Any) -> "ExportDirVBox":  # ruff: ignore[any-type]  # __copy__ protocol; kwargs forwarded to parent
         """Create a copy of the widget while preserving export_dir."""
         new_widget = cast("ExportDirVBox", super().__copy__(**kwargs))
         new_widget.export_dir = self.export_dir
@@ -121,7 +121,7 @@ def create_export_dir_widget(  # pylint: disable=too-many-statements
                         'Export Directory")'
                     ),
                 ]
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
                     cmd,
                     capture_output=True,
                     text=True,
@@ -141,7 +141,7 @@ def create_export_dir_widget(  # pylint: disable=too-many-statements
                     raise RuntimeError(
                         "PowerShell not found on PATH",
                     )
-                result = subprocess.run(  # noqa: S603
+                result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
                     [pwsh, "-Command", ps_script],
                     capture_output=True,
                     text=True,
@@ -219,11 +219,11 @@ def create_export_dir_widget(  # pylint: disable=too-many-statements
 
             # We trust the export_dir value since it was created by our own code
             if platform.system() == "Darwin":
-                subprocess.run(["open", str(export_dir)], check=False)  # noqa: S603, S607
+                subprocess.run(["open", str(export_dir)], check=False)  # ruff: ignore[subprocess-without-shell-equals-true, start-process-with-partial-path]
             elif platform.system() == "Windows":
-                subprocess.run(["explorer", str(export_dir)], check=False)  # noqa: S603, S607
+                subprocess.run(["explorer", str(export_dir)], check=False)  # ruff: ignore[subprocess-without-shell-equals-true, start-process-with-partial-path]
             else:
-                subprocess.run(["xdg-open", str(export_dir)], check=False)  # noqa: S603, S607
+                subprocess.run(["xdg-open", str(export_dir)], check=False)  # ruff: ignore[subprocess-without-shell-equals-true, start-process-with-partial-path]
         except Exception as e:  # pylint: disable=broad-exception-caught
             with status_output:
                 print(f"⚠️  Could not open:  {e}")

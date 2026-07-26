@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from deltadewa import constants as const
+from deltadewa.utils import abs_sum
 
 if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
@@ -111,7 +112,7 @@ class CarryMixin:
         bucket_summary = df.groupby("maturity_bucket").agg(
             {
                 "position_theta": "sum",
-                "position_value": lambda x: x.abs().sum(),
+                "position_value": abs_sum,
             },
         )
         bucket_summary["carry_efficiency_pct"] = (

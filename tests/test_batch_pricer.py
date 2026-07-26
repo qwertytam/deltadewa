@@ -793,8 +793,8 @@ class TestBatchPricerClosedForm:
         assert len(pricer_fd._cache) == 1
         assert len(pricer_cf._cache) == 1
         # The cached OptionValuation objects are distinct instances
-        fd_opt = list(pricer_fd._cache.values())[0]  # noqa: RUF015
-        cf_opt = list(pricer_cf._cache.values())[0]  # noqa: RUF015
+        fd_opt = list(pricer_fd._cache.values())[0]  # ruff: ignore[unnecessary-iterable-allocation-for-first-element]
+        cf_opt = list(pricer_cf._cache.values())[0]  # ruff: ignore[unnecessary-iterable-allocation-for-first-element]
         assert fd_opt is not cf_opt
         assert fd_opt.use_closed_form is False
         assert cf_opt.use_closed_form is True

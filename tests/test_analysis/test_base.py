@@ -23,7 +23,7 @@ class TestPortfolioAnalyzerBase:
 
         assert analyzer is not None
         assert analyzer.portfolio is portfolio
-        assert analyzer.portfolio.spot_price == 100.0
+        assert analyzer.portfolio.spot_price == pytest.approx(100.0, rel=1e-5)
 
     def test_portfolio_analyzer_composition(self) -> None:
         """Test PortfolioAnalyzer includes all mixins."""
@@ -60,7 +60,7 @@ class TestPortfolioAnalyzerBase:
         # Should not raise errors on empty portfolio
         carry_metrics = analyzer.calculate_carry_metrics()
         assert carry_metrics["total_theta_daily"] == pytest.approx(
-            0.0, rel=1e-4
+            0.0, rel=1e-8
         )
 
         concentration = analyzer.analyze_risk_concentration()

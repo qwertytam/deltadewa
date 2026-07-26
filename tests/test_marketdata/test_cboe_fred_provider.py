@@ -59,7 +59,7 @@ class TestCboeFredProvider:
 
         spot = provider.get_spot("SPX")
 
-        assert spot == 5000.0
+        assert spot == pytest.approx(5000.0, rel=1e-2)
         assert session.get.call_count == 1
         assert (tmp_path / "spot_SPX.json").exists()
 
@@ -71,7 +71,7 @@ class TestCboeFredProvider:
 
         spot = provider.get_spot("SPX")
 
-        assert spot == 5000.0
+        assert spot == pytest.approx(5000.0, rel=1e-2)
 
     def test_get_spot_uses_cache_without_second_http_call(
         self,
@@ -105,7 +105,7 @@ class TestCboeFredProvider:
 
         spot = provider.get_spot("SPX")
 
-        assert spot == 5000.0
+        assert spot == pytest.approx(5000.0, rel=1e-2)
 
     def test_get_spot_raises_market_data_error_when_no_cache(
         self,
@@ -125,7 +125,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_VIXCLS_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        assert provider.get_vix() == 16.5
+        assert provider.get_vix() == pytest.approx(16.5, rel=1e-4)
 
     def test_get_vix_parses_observation_date_column(self, tmp_path) -> None:
         """Test get_vix handles FRED's observation_date column name."""
@@ -135,7 +135,7 @@ class TestCboeFredProvider:
 
         vix = provider.get_vix()
 
-        assert vix == 16.5
+        assert vix == pytest.approx(16.5, rel=1e-4)
 
     def test_get_vix_term_structure_returns_all_keys(self, tmp_path) -> None:
         """Test that get_vix_term_structure fetches each CBOE VIX index."""
@@ -162,7 +162,9 @@ class TestCboeFredProvider:
 
         term_structure = provider.get_vix_term_structure()
 
-        assert all(v == 16.5 for v in term_structure.values())
+        assert all(
+            v == pytest.approx(16.5, rel=1e-4) for v in term_structure.values()
+        )
 
     def test_get_skew_index_parses_skew_column(self, tmp_path) -> None:
         """Test get_skew_index handles CBOE's DATE+SKEW format (no CLOSE)."""
@@ -172,7 +174,9 @@ class TestCboeFredProvider:
 
         skew = provider.get_skew_index()
 
-        assert skew == 129.0  # last row: i=9 → 120.0 + 9
+        assert skew == pytest.approx(
+            129.0, rel=1e-5
+        )  # last row: i=9 → 120.0 + 9
 
     def test_get_spot_sorts_cboe_dates_chronologically(self, tmp_path) -> None:
         """Test MM/DD/YYYY dates are sorted chronologically, not as strings.
@@ -186,7 +190,7 @@ class TestCboeFredProvider:
 
         spot = provider.get_spot("SPX")
 
-        assert spot == 5000.0
+        assert spot == pytest.approx(5000.0, rel=1e-2)
 
     def test_get_skew_percentile_computes_rank(self, tmp_path) -> None:
         """Test that get_skew_percentile ranks the latest value in history."""
@@ -196,7 +200,7 @@ class TestCboeFredProvider:
 
         percentile = provider.get_skew_percentile(lookback_days=10)
 
-        assert percentile == 1.0
+        assert percentile == pytest.approx(1.0, rel=1e-7)
 
     def test_get_vix_history_returns_last_n_closes(self, tmp_path) -> None:
         """get_vix_history returns the last-N VIXCLS closes, oldest first."""

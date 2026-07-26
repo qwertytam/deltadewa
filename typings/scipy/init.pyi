@@ -5,7 +5,7 @@ project.
 """
 
 # pylint: disable=missing-function-docstring, unused-argument, invalid-name
-# ruff: noqa: UP037 N801
+# ruff: file-ignore[quoted-annotation, invalid-class-name]
 
 class stats:
     """scipy stats class."""

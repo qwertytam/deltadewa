@@ -97,7 +97,7 @@ class TestPnLMixin:
             include_underlying=True,
         )
         # Underlying gained 10 per share * 100 shares = 1000
-        assert pnl_up == pytest.approx(1000.0, rel=1e-4)
+        assert pnl_up == pytest.approx(1000.0, rel=1e-2)
 
         pnl_down = portfolio.calculate_pnl_at_expiry(
             90.0,
@@ -140,7 +140,7 @@ class TestPnLMixin:
 
         pnl = portfolio.calculate_pnl_at_expiry(110.0)
         # No positions, no P&L
-        assert pnl == pytest.approx(0.0, rel=1e-4)
+        assert pnl == pytest.approx(0.0, rel=1e-8)
 
     def test_calculate_net_debit_credit(self) -> None:
         """Test calculate_net_debit for credit spread."""

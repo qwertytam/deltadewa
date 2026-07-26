@@ -41,22 +41,34 @@ class TestDashboardPackageImports:
         )
 
     def test_carry_display_importable(self) -> None:
-        from deltadewa.dashboard import CarryDisplay  # noqa: F401
+        from deltadewa.dashboard import (
+            CarryDisplay,  # ruff: ignore[unused-import]
+        )
 
     def test_changelog_display_importable(self) -> None:
-        from deltadewa.dashboard import ChangeLogDisplay  # noqa: F401
+        from deltadewa.dashboard import (
+            ChangeLogDisplay,  # ruff: ignore[unused-import]
+        )
 
     def test_monte_carlo_staleness_widget_importable(self) -> None:
-        from deltadewa.dashboard import MonteCarloStalenessWidget  # noqa: F401
+        from deltadewa.dashboard import (
+            MonteCarloStalenessWidget,  # ruff: ignore[unused-import]
+        )
 
     def test_position_aging_display_importable(self) -> None:
-        from deltadewa.dashboard import PositionAgingDisplay  # noqa: F401
+        from deltadewa.dashboard import (
+            PositionAgingDisplay,  # ruff: ignore[unused-import]
+        )
 
     def test_position_detail_display_importable(self) -> None:
-        from deltadewa.dashboard import PositionDetailDisplay  # noqa: F401
+        from deltadewa.dashboard import (
+            PositionDetailDisplay,  # ruff: ignore[unused-import]
+        )
 
     def test_volatility_profile_display_importable(self) -> None:
-        from deltadewa.dashboard import VolatilityProfileDisplay  # noqa: F401
+        from deltadewa.dashboard import (
+            VolatilityProfileDisplay,  # ruff: ignore[unused-import]
+        )
 
 
 # ===========================================================================

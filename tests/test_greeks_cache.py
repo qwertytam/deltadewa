@@ -26,11 +26,11 @@ class TestGreeksCache:
         assert call_count == 0  # Not computed yet
 
         result = cache.get("delta")
-        assert result == 0.5
+        assert result == pytest.approx(0.5, rel=1e-4)
         assert call_count == 1  # Computed once
 
         result = cache.get("delta")
-        assert result == 0.5
+        assert result == pytest.approx(0.5, rel=1e-4)
         assert call_count == 1  # Still 1, used cache
 
     def test_invalidation(self) -> None:
@@ -66,9 +66,9 @@ class TestGreeksCache:
         assert "delta" in result
         assert "gamma" in result
         assert "vega" in result
-        assert result["delta"] == 0.5
-        assert result["gamma"] == 0.1
-        assert result["vega"] == 0.2
+        assert result["delta"] == pytest.approx(0.5, rel=1e-4)
+        assert result["gamma"] == pytest.approx(0.1, rel=1e-4)
+        assert result["vega"] == pytest.approx(0.2, rel=1e-4)
 
     def test_thread_safety(self) -> None:
         """Verify concurrent access doesn't cause issues."""
@@ -79,7 +79,7 @@ class TestGreeksCache:
 
         def get_delta() -> None:
             for _ in range(100):
-                results.append(cache.get("delta"))  # noqa: PERF401
+                results.append(cache.get("delta"))  # ruff: ignore[manual-list-comprehension]
 
         threads = [threading.Thread(target=get_delta) for _ in range(10)]
         for t in threads:
@@ -88,7 +88,7 @@ class TestGreeksCache:
             t.join()
 
         assert len(results) == 1000
-        assert all(r == 0.5 for r in results)
+        assert all(r == pytest.approx(0.5, rel=1e-4) for r in results)
 
     def test_is_cached(self) -> None:
         """Verify is_cached reports correct state."""

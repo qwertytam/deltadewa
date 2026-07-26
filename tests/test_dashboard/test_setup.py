@@ -3,6 +3,8 @@
 import datetime
 from unittest.mock import MagicMock
 
+import pytest
+
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.dashboard.setup import (
     build_global_assumptions,
@@ -80,8 +82,12 @@ class TestBuildGlobalAssumptions:
             market_data=provider,
         )
 
-        assert global_assumptions.spot_price.value == 123.0
-        assert global_assumptions.volatility.value == 0.20
+        assert global_assumptions.spot_price.value == pytest.approx(
+            123.0, rel=1e-4
+        )
+        assert global_assumptions.volatility.value == pytest.approx(
+            0.20, rel=1e-4
+        )
 
     def test_falls_back_on_provider_error(
         self,
@@ -125,8 +131,12 @@ class TestSetupDashboard:
         )
 
         global_assumptions = context["global_assumptions"]
-        assert global_assumptions.spot_price.value == 250.0
-        assert global_assumptions.volatility.value == 0.18
+        assert global_assumptions.spot_price.value == pytest.approx(
+            250.0, rel=1e-4
+        )
+        assert global_assumptions.volatility.value == pytest.approx(
+            0.18, rel=1e-4
+        )
 
     def test_auto_load_default_false_leaves_portfolio_empty(
         self,

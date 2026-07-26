@@ -55,7 +55,7 @@ class _DiskCache:
         except (json.JSONDecodeError, OSError):
             return None
 
-    def get(self, key: str) -> Any | None:  # noqa: ANN401  # cache stores heterogeneous values (float, dict, str)
+    def get(self, key: str) -> Any | None:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
         """Return the cached value for *key* if present and within TTL."""
         entry = self._read(key)
         if entry is None:
@@ -65,12 +65,12 @@ class _DiskCache:
             return None
         return entry["value"]
 
-    def get_stale(self, key: str) -> Any | None:  # noqa: ANN401  # cache stores heterogeneous values (float, dict, str)
+    def get_stale(self, key: str) -> Any | None:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
         """Return the cached value for *key* regardless of TTL."""
         entry = self._read(key)
         return None if entry is None else entry["value"]
 
-    def set(self, key: str, value: Any) -> None:  # noqa: ANN401  # cache stores heterogeneous values (float, dict, str)
+    def set(self, key: str, value: Any) -> None:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
         """Write *value* for *key*, stamped with the current time."""
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         entry = {
@@ -206,7 +206,7 @@ class CboeFredProvider:
         self,
         cache_key: str,
         fetch: Callable[[], Any],
-    ) -> Any:  # noqa: ANN401  # strategy result dispatched at runtime; type not statically known
+    ) -> Any:  # ruff: ignore[any-type]  # strategy result dispatched at runtime; type not statically known
         """Try a live fetch, then cache, then fall back to a stale value."""
         cached = self._cache.get(cache_key)
         if cached is not None:

@@ -39,7 +39,7 @@ class ExportControlsMixin:
 
     @property
     def export_dir(self) -> Path:
-        """Get the current export directory."""
+        """The current export directory."""
         if self.serializer.export_dir is None:
             raise ValueError("Export directory is not set")
         return self.serializer.export_dir

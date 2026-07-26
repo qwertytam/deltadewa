@@ -1,5 +1,7 @@
 """Tests for deltadewa.widgets.gauges module."""
 
+import pytest
+
 from deltadewa.widgets.gauges import GaugeConfig, GaugeIndicator
 
 
@@ -48,7 +50,7 @@ class TestGaugeIndicator:
         """Test update method changes gauge value."""
         gauge = GaugeIndicator(actual=50.0)
         gauge.update(actual=80.0)
-        assert gauge.actual == 80.0
+        assert gauge.actual == pytest.approx(80.0, rel=1e-4)
 
     def test_display_returns_widget(self) -> None:
         """Test display method returns a widget."""
@@ -86,7 +88,7 @@ class TestGaugeIndicator:
         )  # Should accept it, display logic clamps visual marker
         gauge.update(actual=-50.0)  # Should accept it
 
-        assert gauge.actual == -50.0
+        assert gauge.actual == pytest.approx(-50.0, rel=1e-4)
 
     def test_with_label(self) -> None:
         """Test gauge with label."""

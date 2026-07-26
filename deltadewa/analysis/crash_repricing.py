@@ -196,7 +196,7 @@ def _leg_crash_vol(
 
     """
     base = position.option.volatility + vol_shock
-    if skew_steepening == 0.0:
+    if math.isclose(skew_steepening, 0.0, abs_tol=1e-9):
         return base
     if position.option.option_type != OptionType.PUT:
         return base

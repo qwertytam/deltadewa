@@ -308,7 +308,7 @@ class StressDashboard:
             PortfolioWidgets as _PfW,  # local import to avoid hard dep
         )
 
-        _pw_stub = _PfW.__new__(_PfW)  # noqa: RUF052
+        _pw_stub = _PfW.__new__(_PfW)  # ruff: ignore[used-dummy-variable]
         _pw_stub.portfolio = portfolio
 
         # date selector via PortfolioWidgets helper
@@ -1121,7 +1121,7 @@ class StressDashboard:
     @staticmethod
     def _make_status_widget(
         status_type: str,
-        **kwargs: Any,  # noqa: ANN401  # ipywidgets **kwargs passthrough
+        **kwargs: Any,  # ruff: ignore[any-type]  # ipywidgets **kwargs passthrough
     ) -> widgets.HTML:
         """Return a styled HTML status indicator widget."""
         styles = {

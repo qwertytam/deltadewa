@@ -34,7 +34,7 @@ put = AmericanOption(
     volatility=0.25,
     risk_free_rate=0.05,
     dividend_yield=0.02,
-    option_type="put"
+    option_type="put",
 )
 
 # Get price and Greeks
@@ -56,7 +56,7 @@ portfolio = OptionPortfolio(
     spot_price=100.0,
     volatility=0.25,
     risk_free_rate=0.05,
-    dividend_yield=0.02
+    dividend_yield=0.02,
 )
 
 # Add protective puts
@@ -87,11 +87,11 @@ time_points = [portfolio.valuation_date]
 scenario_df = analyzer.scenario_grid(
     spot_scenarios=spot_range,
     time_points=time_points,
-    metric='pnl',
+    metric="pnl",
 )
 
 # View results
-print(scenario_df[['spot_price', 'value']])
+print(scenario_df[["spot_price", "value"]])
 ```
 
 ### Example 4: Interactive Dashboards
@@ -156,8 +156,8 @@ print(f"Net cost: ${stats['total_value']:.2f}")
 # Check hedge effectiveness
 stats = portfolio.summary_stats()
 
-if abs(stats['net_delta']) > 10:
-    if stats['delta_adjustment'] > 0:
+if abs(stats["net_delta"]) > 10:
+    if stats["delta_adjustment"] > 0:
         print(f"BUY {stats['delta_adjustment']:.0f} shares")
     else:
         print(f"SELL {abs(stats['delta_adjustment']):.0f} shares")
@@ -170,7 +170,7 @@ else:
 ```python
 # Check daily theta
 stats = portfolio.summary_stats()
-annual_theta = stats['total_theta'] * 365  # Calendar days (industry standard)
+annual_theta = stats["total_theta"] * 365  # Calendar days (industry standard)
 
 print(f"Daily time decay: ${stats['total_theta']:.2f}")
 print(f"Annual time decay: ${annual_theta:.2f}")

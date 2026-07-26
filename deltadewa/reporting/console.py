@@ -45,7 +45,7 @@ class ConsoleReporter:
     def key_value(
         self,
         key: str,
-        value: Any,  # noqa: ANN401  # {value:>N} format spec depends on runtime type; object won't work
+        value: Any,  # ruff: ignore[any-type]  # {value:>N} format spec depends on runtime type; object won't work
         width: int = 40,
         align: str = "left",
     ) -> None:
@@ -103,14 +103,14 @@ class ConsoleReporter:
         """
         print(f"{prefix} {message}")
 
-    def info(self, message: str, prefix: str = "ℹ️") -> None:  # noqa: RUF001
+    def info(self, message: str, prefix: str = "ℹ️") -> None:  # ruff: ignore[ambiguous-unicode-character-string]
         """Print an informational message.
 
         Args:
             message: Informational message text
             prefix: Prefix symbol (default: 'ℹ️')
 
-        """  # noqa: RUF002
+        """  # ruff: ignore[ambiguous-unicode-character-docstring]
         print(f"{prefix}  {message}")
 
     def table_row(

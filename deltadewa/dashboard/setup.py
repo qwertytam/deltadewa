@@ -114,7 +114,7 @@ def initialize_portfolio(
         ``False`` if the default portfolio was loaded or skipped.
 
     """
-    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
+    _reporter = reporter or ConsoleReporter(width=100)  # ruff: ignore[used-dummy-variable]
 
     portfolio_imported = False
     try:
@@ -174,7 +174,7 @@ def print_portfolio_summary(
         ``ConsoleReporter`` for output.
 
     """
-    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
+    _reporter = reporter or ConsoleReporter(width=100)  # ruff: ignore[used-dummy-variable]
 
     vol_stats = get_volatility_stats(portfolio)
     portfolio.set_volatility(
@@ -268,7 +268,7 @@ def build_global_assumptions(
         they need to unregister the callback later.
 
     """
-    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
+    _reporter = reporter or ConsoleReporter(width=100)  # ruff: ignore[used-dummy-variable]
 
     spot_price, volatility = _seed_market_values(
         portfolio,
@@ -358,7 +358,7 @@ def setup_dashboard(
         ``export_dir`` (Path).
 
     """
-    _reporter = reporter or ConsoleReporter(width=100)  # noqa: RUF052
+    _reporter = reporter or ConsoleReporter(width=100)  # ruff: ignore[used-dummy-variable]
 
     configure_display_defaults()
 
@@ -383,7 +383,7 @@ def setup_dashboard(
         reporter=_reporter,
     )
 
-    _export_dir = Path(export_dir) if export_dir else Path.cwd() / "exports"  # noqa: RUF052
+    _export_dir = Path(export_dir) if export_dir else Path.cwd() / "exports"  # ruff: ignore[used-dummy-variable]
 
     return {
         "portfolio_imported": portfolio_imported,

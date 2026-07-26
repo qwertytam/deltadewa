@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
@@ -58,7 +60,7 @@ class TestOptionPosition:
             entry_date=entry_date,
         )
 
-        assert position.entry_spot == 95.0
+        assert position.entry_spot == pytest.approx(95.0, rel=1e-4)
         assert position.entry_date == entry_date
 
     def test_position_value(self) -> None:
@@ -177,14 +179,14 @@ class TestOptionPosition:
         pos_dict = position.to_dict()
 
         assert pos_dict["option_type"] == OptionType.PUT
-        assert pos_dict["strike"] == 105.0
+        assert pos_dict["strike"] == pytest.approx(105.0, rel=1e-5)
         assert pos_dict["quantity"] == 3
         assert pos_dict["contract_size"] == 100
         assert "price" in pos_dict
         assert "position_value" in pos_dict
         assert "delta" in pos_dict
         assert "position_delta" in pos_dict
-        assert pos_dict["volatility"] == 0.25
+        assert pos_dict["volatility"] == pytest.approx(0.25, rel=1e-4)
         assert pos_dict["custom_volatility"] is False
         assert pos_dict["entry_spot"] is None
         assert pos_dict["entry_date"] is None
@@ -224,8 +226,10 @@ class TestOptionPosition:
             exercise_style=ExerciseStyle.AMERICAN,
             entry_premium=2.50,
         )
-        assert position.entry_premium == 2.50
-        assert position.to_dict()["entry_premium"] == 2.50
+        assert position.entry_premium == pytest.approx(2.50, rel=1e-7)
+        assert position.to_dict()["entry_premium"] == pytest.approx(
+            2.50, rel=1e-7
+        )
 
     def test_entry_premium_none_in_to_dict_for_legacy(self) -> None:
         """to_dict includes entry_premium key with None for legacy positions."""

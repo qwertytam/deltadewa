@@ -182,7 +182,7 @@ class OptionPortfolioBase:
 
     @property
     def monte_carlo_results(self) -> dict[str, Any] | None:
-        """Get Monte Carlo simulation results if available.
+        """Monte Carlo simulation results if available.
 
         Returns:
             Dictionary containing Monte Carlo analysis results, or None if not

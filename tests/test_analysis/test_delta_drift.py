@@ -40,15 +40,21 @@ class TestDeltaDriftFromTarget:
 
     def test_at_target_reads_zero(self) -> None:
         """A book at exactly the target has zero drift."""
-        assert delta_drift_from_target(90.0, 100.0, 90.0) == 0.0
+        assert delta_drift_from_target(90.0, 100.0, 90.0) == pytest.approx(
+            0.0, rel=1e-4
+        )
 
     def test_under_hedged_is_positive(self) -> None:
         """More net long than target (less hedged) reads positive."""
-        assert delta_drift_from_target(95.0, 100.0, 90.0) == 5.0
+        assert delta_drift_from_target(95.0, 100.0, 90.0) == pytest.approx(
+            5.0, rel=1e-4
+        )
 
     def test_over_hedged_is_negative(self) -> None:
         """Less net long than target (more hedged) reads negative."""
-        assert delta_drift_from_target(80.0, 100.0, 90.0) == -10.0
+        assert delta_drift_from_target(80.0, 100.0, 90.0) == pytest.approx(
+            -10.0, rel=1e-4
+        )
 
     def test_unset_underlying_is_none(self) -> None:
         """No equity position -> unavailable, never a fabricated 0.0."""
@@ -56,8 +62,12 @@ class TestDeltaDriftFromTarget:
 
     def test_target_shifts_drift(self) -> None:
         """Same book, different target moves the drift by the difference."""
-        assert delta_drift_from_target(97.0, 100.0, 90.0) == 7.0
-        assert delta_drift_from_target(97.0, 100.0, 85.0) == 12.0
+        assert delta_drift_from_target(97.0, 100.0, 90.0) == pytest.approx(
+            7.0, rel=1e-4
+        )
+        assert delta_drift_from_target(97.0, 100.0, 85.0) == pytest.approx(
+            12.0, rel=1e-4
+        )
 
 
 class TestCalculateDeltaDriftPct:
@@ -65,11 +75,15 @@ class TestCalculateDeltaDriftPct:
 
     def test_measures_deviation_from_target(self) -> None:
         """Drift is the ratio minus the target, in percentage points."""
-        assert _analyzer(95.0, 100.0).calculate_delta_drift_pct(90.0) == 5.0
+        assert _analyzer(95.0, 100.0).calculate_delta_drift_pct(
+            90.0
+        ) == pytest.approx(5.0, rel=1e-4)
 
     def test_at_target_reads_zero(self) -> None:
         """A book at target reads exactly 0.0."""
-        assert _analyzer(90.0, 100.0).calculate_delta_drift_pct(90.0) == 0.0
+        assert _analyzer(90.0, 100.0).calculate_delta_drift_pct(
+            90.0
+        ) == pytest.approx(0.0, rel=1e-4)
 
     def test_unset_underlying_is_none(self) -> None:
         """Unset underlying_quantity returns None (unavailable)."""
@@ -108,7 +122,7 @@ class TestCalculateHealthMetricsThreadsTarget:
         metrics = _analyzer(95.0, 100.0).calculate_health_metrics(
             target_delta_ratio_pct=90.0,
         )
-        assert metrics["delta_drift_pct"] == pytest.approx(5.0, rel=1e-4)
+        assert metrics["delta_drift_pct"] == pytest.approx(5.0, rel=1e-7)
 
     def test_none_target_reads_unavailable(self) -> None:
         """Without a target (no IPS), delta_drift_pct is None."""
@@ -136,7 +150,9 @@ class TestOverallHealthScoreSkipsUnavailable:
                 invert_colors=False,
             ),
         }
-        assert analyzer.calculate_overall_health_score(metrics) == 100.0
+        assert analyzer.calculate_overall_health_score(
+            metrics
+        ) == pytest.approx(100.0, rel=1e-5)
 
     def test_all_unavailable_returns_neutral(self) -> None:
         """With no scorable metrics the score falls back to neutral 50."""

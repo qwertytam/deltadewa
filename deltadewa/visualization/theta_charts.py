@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 
 from deltadewa import constants as const
 from deltadewa.colours import DEFAULT_PALETTE
+from deltadewa.utils import abs_sum
 
 if TYPE_CHECKING:
     from deltadewa.visualization._protocols import _VisualizationProtocol
@@ -255,7 +256,7 @@ class ThetaChartsMixin:
             .agg(
                 {
                     "position_theta": "sum",
-                    "position_value": lambda x: x.abs().sum(),
+                    "position_value": abs_sum,
                 },
             )
             .reset_index()
@@ -330,7 +331,7 @@ class ThetaChartsMixin:
 
         bucket_summary = (
             df_carry.groupby("maturity_bucket")
-            .agg({"position_theta": "sum", "quantity": lambda x: x.abs().sum()})
+            .agg({"position_theta": "sum", "quantity": abs_sum})
             .reset_index()
         )
 

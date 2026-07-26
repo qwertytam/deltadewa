@@ -528,8 +528,10 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         val_date = self.portfolio.valuation_date
         date_options = [
             (
-                f"Day {d}: "
-                f"{(val_date + timedelta(days=d)).strftime('%Y-%m-%d')}",
+                (
+                    f"Day {d}: "
+                    f"{(val_date + timedelta(days=d)).strftime('%Y-%m-%d')}"
+                ),
                 d,
             )
             for d in date_range_days

@@ -48,17 +48,17 @@ class TestGetUrgencyCategory:
     @pytest.mark.parametrize(
         "days, expected_fragment",
         [
-            # URGENT: 0 - 6  # noqa: ERA001
+            # URGENT: 0 - 6  # ruff: ignore[commented-out-code]
             (0, "URGENT"),
             (1, "URGENT"),
             (6, "URGENT"),
-            # SOON: 7 - 13  # noqa: ERA001
+            # SOON: 7 - 13  # ruff: ignore[commented-out-code]
             (7, "SOON"),
             (13, "SOON"),
-            # APPROACHING: 14 - 20  # noqa: ERA001
+            # APPROACHING: 14 - 20  # ruff: ignore[commented-out-code]
             (14, "APPROACHING"),
             (20, "APPROACHING"),
-            # NORMAL: 21 - 44  # noqa: ERA001
+            # NORMAL: 21 - 44  # ruff: ignore[commented-out-code]
             (21, "NORMAL"),
             (44, "NORMAL"),
             # LONG-TERM: 45+

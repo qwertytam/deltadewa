@@ -67,9 +67,9 @@ class ChangeLogDisplay:
 
                 # Color code by action type
                 if action in ["ADD", "ROLL"]:
-                    symbol = "➕"  # noqa: RUF001
+                    symbol = "➕"  # ruff: ignore[ambiguous-unicode-character-string]
                 elif action == "REMOVE":
-                    symbol = "➖"  # noqa: RUF001
+                    symbol = "➖"  # ruff: ignore[ambiguous-unicode-character-string]
                 elif action == "UPDATE":
                     symbol = "✏️"
                 elif action == "REBALANCE":

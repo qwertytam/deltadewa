@@ -173,7 +173,7 @@ class TestPositionDetailDataFrame:
         """Maturity dates should already be formatted as strings
         by to_dataframe()."""
         df = single_position_portfolio.to_dataframe()
-        assert df["maturity"].dtype == object
+        assert pd.api.types.is_string_dtype(df["maturity"])
         # Should be parseable as a date string
 
         pd.to_datetime(df["maturity"].iloc[0])
