@@ -10,7 +10,6 @@ from deltadewa.analysis.crash_payoff import (
     _long_puts,
     _net_protective_premium,
     _premium_with_basis,
-    _shock_to_multiplier,
     compute_crash_convexity,
     crash_payoff_ratio,
     crash_scenario_table,
@@ -314,18 +313,6 @@ class TestComputeCrashConvexity:
         )
         assert len(calls) == n
         assert len(set(calls)) == n
-
-
-class TestShockToMultiplier:
-    """Tests for _shock_to_multiplier."""
-
-    def test_negative_25_pct_is_075_multiplier(self) -> None:
-        """-25.0 (a 25% decline) converts to a 0.75 spot multiplier."""
-        assert _shock_to_multiplier(-25.0) == pytest.approx(0.75)
-
-    def test_zero_pct_is_identity_multiplier(self) -> None:
-        """0.0 converts to a 1.0 spot multiplier (no shock)."""
-        assert _shock_to_multiplier(0.0) == pytest.approx(1.0)
 
 
 class TestNetProtectivePremium:

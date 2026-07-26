@@ -143,11 +143,6 @@ class CrashScenarioRow:
     intrinsic_floor: float
 
 
-def _shock_to_multiplier(shock_pct: float) -> float:
-    """Convert a signed shock percent (e.g. -25.0) to a spot multiplier."""
-    return 1 + shock_pct / 100
-
-
 def _long_puts(portfolio: OptionPortfolio) -> list[OptionPosition]:
     """Return the long put legs — the crash-protection positions.
 
