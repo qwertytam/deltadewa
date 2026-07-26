@@ -528,6 +528,66 @@ class TestBetaAdjustedSizing:
         )
         assert sized.per_contract_payoff == pytest.approx(gauge_per_contract)
 
+    def test_sizing_payoff_follows_the_ips_wing_anchor(self) -> None:
+        """Tuning ``skew_reference_delta`` moves the sized payoff (M1.8/M1.9).
+
+        The candidate half of the anchor-propagation guard. Its book twin lives
+        in ``test_crash_repricing.py``
+        (``TestSkewReferenceDeltaReachesBookSurfaces``); both must move, and by
+        the same construction path, or book and workbench drift apart the
+        moment anyone tunes the wing. Before the ``CrashShock`` bundle only
+        this side responded — which is precisely what made the defect
+        invisible at the shipped ``0.10``.
+
+        The candidate sits at **20% OTM, inside the wing**. That matters: the
+        M1.7 cap holds the steepening at ``skew_steepening`` for anything
+        deeper than the anchor's own wing (~21.6% OTM at 0.10, ~28.3% at 0.05
+        for this fixture), so a deep-enough candidate is *correctly*
+        anchor-independent and would make this assertion fail for the right
+        reason. Only strikes inside the wing carry the anchor's signal.
+        """
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+
+        def _payoff_at(anchor: float) -> float:
+            return size_hedge(
+                portfolio,
+                _make_ips(
+                    skew_steepening=0.10,
+                    crash_scenario_pct=-25.0,
+                    skew_reference_delta=anchor,
+                ),
+                candidate_pct_otm=20.0,
+                candidate_maturity_years=1.5,
+            ).per_contract_payoff
+
+        assert _payoff_at(0.10) != pytest.approx(_payoff_at(0.05), rel=1e-6)
+
+    def test_sizing_payoff_is_anchor_independent_past_the_wing(self) -> None:
+        """Past the wing the cap takes over — and that is correct (M1.7 D5).
+
+        The complement of the test above, pinned so the boundary is not
+        mistaken for a propagation failure later: beyond the calibrated wing
+        the steepening is held flat at ``skew_steepening`` rather than
+        extrapolated, so moving the anchor cannot change a deep candidate's
+        payoff. Without this, someone re-checking anchor propagation on a
+        40%-OTM candidate would read the cap as a regression.
+        """
+        portfolio = _make_spx_portfolio(spot=5000.0, qty=100.0)
+
+        def _payoff_at(anchor: float) -> float:
+            return size_hedge(
+                portfolio,
+                _make_ips(
+                    skew_steepening=0.10,
+                    crash_scenario_pct=-25.0,
+                    skew_reference_delta=anchor,
+                ),
+                candidate_pct_otm=40.0,
+                candidate_maturity_years=1.5,
+            ).per_contract_payoff
+
+        assert _payoff_at(0.10) == pytest.approx(_payoff_at(0.05))
+
     def test_skew_on_raises_payoff_and_not_more_contracts(self) -> None:
         """Skew-on sizing lifts the payoff and needs no more contracts.
 

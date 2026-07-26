@@ -197,7 +197,11 @@ it the same way, so there is one construction path as well as one skew function.
 No pricing signature accepts an individual crash scalar, and no `CrashShock`
 parameter is optional (an optional one would let a caller reprice spot-only by
 omission). Structural guards in `tests/test_analysis/test_crash_repricing.py` pin
-all three properties.
+all three properties, and `tests/test_crash_pricing_contract.py` enforces the
+underlying rule package-wide by AST scan: **no crash-pricing input may carry a
+default anywhere**, so a future entry point cannot reintroduce the defect. The
+defaults that legitimately exist are `IpsConvexity`'s own fields — policy
+declaring its fallbacks, which is where they belong.
 
 `floor_reported` is presentation and stays off the object. So does the **target band**
 (`target_min_pct` / `target_max_pct`), which remains on `IpsConvexity` and travels its
