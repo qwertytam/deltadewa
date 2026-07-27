@@ -61,6 +61,11 @@ _APPENDIX_VOL_SHOCK = 0.15
 # The §4 worked example is skew-aware; the anchor is per-leg, not book-relative.
 _APPENDIX_SKEW = 0.10
 _APPENDIX_SKEW_ANCHOR = 0.10
+# As-of date for the YAML fixture loads below. This is the date on which the
+# published canonical golden (+16.098902%) was measured. The canonical fixture
+# carries an *absolute* maturity, so without a pin its time-to-expiry — and
+# every number derived from it — walks with the calendar.
+_FIXTURE_AS_OF = datetime(2026, 7, 26, tzinfo=UTC)
 # (strike, contract count) for the 20/30/40%-OTM three-rung ladder.
 _APPENDIX_LEGS = ((5280.0, 23), (4620.0, 26), (3960.0, 16))
 
@@ -134,7 +139,7 @@ def _make_call_book() -> OptionPortfolio:
 
 
 def _load_canonical_example() -> OptionPortfolio:
-    """Load examples/portfolios/spx_protective_put.yaml (European)."""
+    """Load examples/portfolios/spx_protective_put.yaml (European), pinned."""
     path = (
         Path(__file__).parent.parent.parent
         / "examples"
@@ -144,12 +149,19 @@ def _load_canonical_example() -> OptionPortfolio:
     result = PortfolioSerializer(Path()).import_from_yaml(
         path,
         default_exercise_style=ExerciseStyle.EUROPEAN,
+        valuation_date=_FIXTURE_AS_OF,
     )
     return result["portfolio"]
 
 
 def _load_golden_20m_example() -> OptionPortfolio:
-    """Load examples/portfolios/spx_tail_20m.yaml — the §4 golden book."""
+    """Load examples/portfolios/spx_tail_20m.yaml — the §4 golden book.
+
+    Pinned for consistency with the canonical loader. This fixture's maturities
+    are *relative* (``maturity_days``), so its numbers are date-invariant either
+    way — see
+    :meth:`TestFixtureValuationDatePins.test_golden_20m_is_valuation_date_invariant`.
+    """
     path = (
         Path(__file__).parent.parent.parent
         / "examples"
@@ -159,6 +171,7 @@ def _load_golden_20m_example() -> OptionPortfolio:
     result = PortfolioSerializer(Path()).import_from_yaml(
         path,
         default_exercise_style=ExerciseStyle.EUROPEAN,
+        valuation_date=_FIXTURE_AS_OF,
     )
     return result["portfolio"]
 
@@ -824,6 +837,59 @@ class TestGoldenExampleFile:
         assert 15.0 <= convexity <= 25.0
         # Rides 0.36pp under the +25% IPS ceiling (target_max_pct) by design.
         assert 25.0 - convexity == pytest.approx(0.36, abs=0.1)
+
+
+class TestFixtureValuationDatePins:
+    """The YAML goldens above are reproducible on any calendar date.
+
+    Two different mechanisms, so two different guards. The canonical fixture
+    carries an *absolute* ``maturity_date``, so it is only deterministic
+    because the load is pinned — drop the pin and the golden walks (measured:
+    +16.85% in Jan 2026 down to +15.07% a year later). The §4 fixture uses
+    *relative* ``maturity_days``, so its tenor is constant by construction.
+    """
+
+    def test_canonical_fixture_is_valuation_date_pinned(self) -> None:
+        """The canonical loads as-of the date its golden was measured."""
+        assert _load_canonical_example().valuation_date == _FIXTURE_AS_OF
+
+    def test_golden_20m_is_valuation_date_invariant(self) -> None:
+        """Relative maturities => identical values at far-apart as-ofs.
+
+        Records the property rather than the number: if that YAML is ever
+        switched to an absolute ``maturity_date``, this fails loudly instead of
+        the §4 golden quietly drifting.
+        """
+        path = (
+            Path(__file__).parent.parent.parent
+            / "examples"
+            / "portfolios"
+            / "spx_tail_20m.yaml"
+        )
+        shock = CrashShock(
+            crash_scenario_pct=_APPENDIX_PCT,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        def measure(as_of: datetime) -> tuple[float, float, float]:
+            portfolio = PortfolioSerializer(Path()).import_from_yaml(
+                path,
+                default_exercise_style=ExerciseStyle.EUROPEAN,
+                valuation_date=as_of,
+            )["portfolio"]
+            return (
+                cr.hedge_value(portfolio),
+                cr.crash_hedge_value(portfolio, shock=shock),
+                cr.crash_convexity_pct(portfolio, shock=shock),
+            )
+
+        # Spans two leap years.
+        early = measure(datetime(2026, 1, 2, tzinfo=UTC))
+        late = measure(datetime(2029, 11, 3, tzinfo=UTC))
+
+        assert early == late
 
 
 class TestHedgeOnlyInvariant:
@@ -1535,12 +1601,11 @@ class TestCanonicalExampleInvariants:
 
         The flat bump left it just under the +15% floor (~+14.3%); the
         honestly-calibrated per-leg wing steepening (M1.7) reads ~+16.1%,
-        comfortably in the +15..+25% band, so no re-size is needed. The fixture
-        carries an *absolute* maturity, so the valuation date is pinned here to
-        keep the golden stable against day-to-day theta drift.
+        comfortably in the +15..+25% band, so no re-size is needed. The load is
+        pinned to ``_FIXTURE_AS_OF`` (the fixture carries an absolute maturity),
+        so this is an exact golden rather than a moving target.
         """
         portfolio = _load_canonical_example()
-        portfolio.valuation_date = datetime(2026, 7, 25, tzinfo=UTC)
 
         convexity = cr.crash_convexity_pct(
             portfolio,
@@ -1552,7 +1617,9 @@ class TestCanonicalExampleInvariants:
             ),
         )
 
-        assert convexity == pytest.approx(16.1, abs=0.1)
+        # Pinned load => exact golden. A loose tolerance here would re-admit
+        # the theta drift the pin exists to remove.
+        assert convexity == pytest.approx(16.0989, abs=0.001)
         # In-band => the conformance conclusion is "no re-size needed".
         assert 15.0 <= convexity <= 25.0
         # ...and the fixture itself is unchanged: two puts, same strikes/counts.

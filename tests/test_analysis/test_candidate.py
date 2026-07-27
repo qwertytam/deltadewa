@@ -46,6 +46,12 @@ _APX_STRIKE_40_OTM = 3960.0
 # ---------------------------------------------------------------------------
 
 
+# Tenor for the build_put_valuation tests, applied to the portfolio's *own*
+# valuation date. A hardcoded absolute maturity would age into expiry as the
+# calendar moves, silently turning these into assertions about a dead option.
+_PUT_VALUATION_TENOR = datetime.timedelta(days=66)
+
+
 def _make_spx_portfolio(
     *,
     spot: float = 5000.0,
@@ -623,28 +629,28 @@ class TestBuildPutValuation:
         from deltadewa.valuation import OptionValuation
 
         portfolio = _make_spx_portfolio()
-        maturity_dt = datetime.datetime(2026, 10, 1, tzinfo=datetime.UTC)
+        maturity_dt = portfolio.valuation_date + _PUT_VALUATION_TENOR
         v = build_put_valuation(5000.0, 4750.0, maturity_dt, 0.20, portfolio)
         assert isinstance(v, OptionValuation)
 
     def test_delta_is_negative(self) -> None:
         """Put delta returned by the valuation is negative for an OTM put."""
         portfolio = _make_spx_portfolio()
-        maturity_dt = datetime.datetime(2026, 10, 1, tzinfo=datetime.UTC)
+        maturity_dt = portfolio.valuation_date + _PUT_VALUATION_TENOR
         v = build_put_valuation(5000.0, 4750.0, maturity_dt, 0.20, portfolio)
         assert v.delta() < 0.0
 
     def test_price_is_positive(self) -> None:
         """Put price is a positive value."""
         portfolio = _make_spx_portfolio()
-        maturity_dt = datetime.datetime(2026, 10, 1, tzinfo=datetime.UTC)
+        maturity_dt = portfolio.valuation_date + _PUT_VALUATION_TENOR
         v = build_put_valuation(5000.0, 4750.0, maturity_dt, 0.20, portfolio)
         assert v.price() > 0.0
 
     def test_vol_override_changes_price(self) -> None:
         """Higher vol produces a higher put price."""
         portfolio = _make_spx_portfolio()
-        maturity_dt = datetime.datetime(2026, 10, 1, tzinfo=datetime.UTC)
+        maturity_dt = portfolio.valuation_date + _PUT_VALUATION_TENOR
         v_low = build_put_valuation(
             5000.0, 4750.0, maturity_dt, 0.15, portfolio
         )
@@ -659,7 +665,7 @@ class TestBuildPutValuation:
 
         p_eu = _make_spx_portfolio(exercise_style=ExerciseStyle.EUROPEAN)
         p_am = _make_spx_portfolio(exercise_style=ExerciseStyle.AMERICAN)
-        maturity_dt = datetime.datetime(2026, 10, 1, tzinfo=datetime.UTC)
+        maturity_dt = p_eu.valuation_date + _PUT_VALUATION_TENOR
         # Both must price without error; American ≥ European for a put.
         v_eu = build_put_valuation(5000.0, 4750.0, maturity_dt, 0.20, p_eu)
         v_am = build_put_valuation(5000.0, 4750.0, maturity_dt, 0.20, p_am)
