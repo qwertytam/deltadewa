@@ -789,12 +789,57 @@ unshifted branch and catch a `CLOCK_SHIFT_DAYS` left set in someone's shell.
 | Canary negative control (probe not loaded, `CLOCK_SHIFT_DAYS=90`) | both tests fail — a probe that stops shifting cannot pass silently |
 | Gate | pytest **1361 / 2 xfailed**, mypy clean, ruff clean, **pylint 10.00/10**, nbqa ruff clean |
 
-**Known gap, not addressed here.** Local runs are on Python **3.14**; both
-workflows pin **3.11**. The type-substitution and C-extension import-order
-behaviour is version-sensitive, so a green local matrix is not evidence about
-3.11 and vice versa. Relevant when reading a red nightly that will not reproduce
-locally. (Phase 0's M0.2 listed the 3.14-cache-vs-3.11-pin mismatch as resolved;
-`.mypy_cache/3.14/` says otherwise. Left alone rather than reopened here.)
+**Verified on the pinned interpreter (2026-07-27).** Everything above was first
+measured on local Python **3.14** while both workflows pin **3.11** — and the
+probe's mechanism (a `datetime.datetime` subclass swapped in around the
+`numpy`/`pandas`/`QuantLib` imports) is exactly the kind of thing that is
+version- and wheel-sensitive, so that green was not evidence about the
+interpreter CI actually runs. Both legs were therefore re-run **in CI**, on
+`ubuntu-latest` + `actions/setup-python@v6` → **CPython 3.11.15** with manylinux
+wheels, dispatched at `clockshift.yml`:
+
+| Leg | Ref | Run | Result |
+| --- | --- | --- | --- |
+| Full matrix, clean env | `main` @ `6fb7f61` | [30299949442](https://github.com/qwertytam/deltadewa/actions/runs/30299949442) | **all four shifts green** — `1361 passed, 2 xfailed` at +0, +90, +1000, +3000 |
+| Bites proof, #205 bomb restored | throwaway branch @ `a147534` | [30300061144](https://github.com/qwertytam/deltadewa/actions/runs/30300061144) | **+0 green** (`1361 passed`); **+90/+1000/+3000 red, exactly 4 failures**, all in `TestBuildPutValuation` |
+
+The four, with the assertion each produced once the option had aged past its
+hardcoded `2026-10-01` expiry: `test_delta_is_negative` (`assert 0.0 < 0.0`),
+`test_price_is_positive` (`assert 0 > 0.0`), `test_vol_override_changes_price`
+(`assert 0 > 0`), and `test_exercise_style_from_portfolio` (`RuntimeError:
+earliest > latest exercise date`). The fifth restored call site,
+`test_returns_option_valuation`, correctly does **not** fail — it asserts
+`isinstance`, which is time-independent. That is the shape of the original #205
+finding, reproduced on 3.11.
+
+No segfault, and no silent no-op: a failure at +90 requires
+`portfolio.valuation_date` to have genuinely moved 90 days *inside library
+code*, and the canary would have failed the matrix leg if the shift had stopped
+landing. CI-on-3.11 is also stronger evidence than a locally built 3.11 — the
+C-extension hazard lives in the wheels, and a macOS/arm64 build would have
+swapped the version variable while introducing a platform one. The bomb branch
+was deleted from `origin` as soon as the run was read; `main` is the restored
+state, and the matrix leg above *is* that restore.
+
+*Runtime on CI:* ~16.4s per shift, so the matrix is ~65s of test time. The
+~8s/~30s figures quoted above are a local machine. Neither is the reason the
+probe stays out of the gate.
+
+**Two things noted while verifying, neither fixed here.**
+
+1. Both workflows run `pytest -q`, and `-q` suppresses `pytest_report_header` —
+   so the plugin's `clockshift: +N days` line, whose whole job is to make a run
+   self-describing, never reaches the CI log. The step name carries the shift
+   instead. Harmless until someone reads a log without it.
+2. `.mypy_cache/3.14/` is **not** stale — this section previously said it was,
+   and that was wrong. `[tool.mypy]` sets no `python_version`, so mypy targets
+   the running interpreter and `3.14/` is simply what a 3.14 venv produces.
+   Pinning `python_version = "3.11"` would be worse, not better:
+   `mypy --python-version 3.11 deltadewa` dies on `numpy/__init__.pyi:737: Type
+   statement is only supported in Python 3.12 and greater`, because the numpy
+   resolved *for a 3.14 venv* ships stubs needing ≥3.12. The only honest way to
+   type-check against 3.11 is to be on 3.11, which the gate does on every push.
+   **M0.2 stays closed.**
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 
