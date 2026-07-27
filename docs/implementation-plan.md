@@ -568,8 +568,8 @@ diffing engine output before and after: **byte-identical**.
 | Property | Confirmed |
 | --- | --- |
 | §4 book convexity | **+24.639527%** (V_today $298,098.88 → V_crash **$5,226,004.24**, **17.5311×**) |
-| Canonical (`spx_protective_put.yaml`) | **+16.098902%** — in-band, not re-sized |
-| `spx_tail_20m.yaml` | **+24.641991%** |
+| Canonical (`spx_protective_put.yaml`) | **+16.098902%** — in-band, not re-sized (as-of **2026-07-26**; absolute maturity, so the load is pinned) |
+| `spx_tail_20m.yaml` | **+24.641991%** (as-of-invariant: relative `maturity_days`) |
 | K5280 per-contract | **$109,754.308967** on both book and candidate paths |
 | Per-leg crash vols | K5280 `0.4446183769`; K4620/K3960 capped at `0.4500000000` |
 | `skew = 0` no-op | V_crash `3897393.1217789161`, unchanged |
@@ -707,7 +707,7 @@ changed how parameters travel, never what is computed.
 | --- | --- |
 | **Crash-shock term structure** — one cross-sectional slope, no tenor dependence | Open (methodology §8) |
 | **`default_crash_shock()`** — prices `0.15 / 0.0 / 0.10` when `ips_convexity is None` | Open by decision: a named, documented fallback so the pre-IPS crash panel renders at all. Not a parameter default, so out of the new guard's scope. Removing it would change public behaviour of `crash_scenario_table` and `CrashPayoffDisplay`. |
-| **`_shock_to_multiplier`** (`crash_payoff.py`) — defined and tested, called nowhere | Open: production-dead, unrelated to this refactor |
+| **`_shock_to_multiplier`** (`crash_payoff.py`) — defined and tested, called nowhere | ✅ Closed: function and its test deleted in `4ed97bf` |
 | **Tier-4 metrics** #12 Liquidity Risk, #13 Delta Drift, #14 Vega Term Exposure | Open: data-blocked (see `part-x-coverage.md`) |
 
 **Ledger — judgment calls made beyond the brief.** Recorded because each
@@ -721,7 +721,7 @@ changed the shape of the fix, not just its wording:
 | J-4 | `crash_payoff_display`'s hardcoded `0.15` folded into `default_crash_shock()` | Was a silent duplicate of `_DEFAULT_CRASH_VOL_SHOCK`; consolidating it is what created the tracked `default_crash_shock()` item above. |
 | J-5 | `crash_payoff` converted in M1.8 rather than M1.9 | Forced, not discretionary: it calls both converted primitives. |
 | J-6 | Two M1.8 guards rewritten after they passed against a reproduced defect | A guard that cannot fail proves nothing; one compared against the pricing primitive rather than a book surface. |
-| J-7 | Canonical golden recorded as **+16.0989** | The brief cited +16.12; the engine reads +16.0989 (valuation-date sensitive, asserted at `abs=0.1` so all readings pass). Confirmed from the engine rather than pinned to a new literal. |
+| J-7 | Canonical golden recorded as **+16.0989** | The brief cited +16.12; the engine reads +16.0989. Originally asserted at `abs=0.1` because the reading was valuation-date sensitive; the load is now pinned to **2026-07-26** (the date that figure was measured) and asserted at `abs=0.001`. Confirmed from the engine rather than pinned to a new literal. |
 | J-8 | `sizing` / `strike_ladder` read depth back off `shock.crash_scenario_pct` for `required_crash_offset` | That is drawdown policy maths, not pricing, but it should not re-read the config separately. |
 | J-9 | Fixed the adjacent broken `compute_crash_convexity` notebook cells | Same one-line pattern in the same cells being edited; leaving a known `TypeError` two cells away would be strange. Scope extension beyond the brief. |
 | J-10 | Added a companion test asserting the cap **is** anchor-independent past the wing | The first draft of the candidate propagation test used a 30%-OTM strike and failed — correctly, because of the cap. Pinning both sides stops that being misread later. |

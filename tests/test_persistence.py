@@ -721,6 +721,104 @@ class TestYamlRoundtrip:
         ).total_seconds() / 86400
         assert time_to_maturity == pytest.approx(30, abs=1)
 
+    def test_yaml_valuation_date_pins_portfolio_and_relative_maturity(
+        self,
+        tmp_path,
+    ) -> None:
+        """An explicit as-of sets the valuation date *and* anchors maturities.
+
+        Both halves matter: pinning only the portfolio's valuation date would
+        leave ``maturity_days`` anchored on wall-clock now, so a fixture's
+        time-to-expiry would still stretch by a day per day.
+        """
+        as_of = datetime(2026, 7, 26, tzinfo=UTC)
+        config = {
+            "market_parameters": {
+                "spot_price": 100.0,
+                "volatility": 0.3,
+                "risk_free_rate": 0.05,
+                "dividend_yield": 0.02,
+                "underlying_quantity": 100.0,
+                "symbol": "TEST",
+                "contract_size": 100,
+            },
+            "positions": [
+                {
+                    "option_type": OptionType.PUT.value,
+                    "strike_price": 90.0,
+                    "maturity_days": 548,
+                    "quantity": 1,
+                    "exercise_style": "european",
+                },
+                {
+                    "option_type": OptionType.PUT.value,
+                    "strike_price": 80.0,
+                    "maturity_date": "2027-06-17",
+                    "quantity": 1,
+                    "exercise_style": "european",
+                },
+            ],
+        }
+        yaml_path = tmp_path / "pinned.yaml"
+        with Path.open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        portfolio = PortfolioSerializer(tmp_path).import_from_yaml(
+            yaml_path,
+            valuation_date=as_of,
+        )["portfolio"]
+
+        assert portfolio.valuation_date == as_of
+        relative, absolute = portfolio.positions
+        # Relative maturity is anchored on the pin, not on today.
+        assert relative.option.maturity_date == as_of + timedelta(days=548)
+        # Absolute maturities are untouched by the pin.
+        assert absolute.option.maturity_date == datetime(
+            2027,
+            6,
+            17,
+            tzinfo=UTC,
+        )
+
+    def test_yaml_valuation_date_defaults_to_now(self, tmp_path) -> None:
+        """Omitting the as-of keeps the production behaviour: load as of now."""
+        config = {
+            "market_parameters": {
+                "spot_price": 100.0,
+                "volatility": 0.3,
+                "risk_free_rate": 0.05,
+                "dividend_yield": 0.02,
+                "underlying_quantity": 100.0,
+                "symbol": "TEST",
+                "contract_size": 100,
+            },
+            "positions": [
+                {
+                    "option_type": OptionType.PUT.value,
+                    "strike_price": 90.0,
+                    "maturity_days": 30,
+                    "quantity": 1,
+                    "exercise_style": "european",
+                },
+            ],
+        }
+        yaml_path = tmp_path / "unpinned.yaml"
+        with Path.open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f)
+
+        portfolio = PortfolioSerializer(tmp_path).import_from_yaml(yaml_path)[
+            "portfolio"
+        ]
+
+        drift = abs(
+            (portfolio.valuation_date - datetime.now(tz=UTC)).total_seconds(),
+        )
+        assert drift < 60
+        # And the relative maturity is anchored on that same as-of.
+        assert portfolio.positions[
+            0
+        ].option.maturity_date == portfolio.valuation_date + timedelta(days=30)
+
     def test_yaml_import_without_position_id_gets_fresh_uuid(
         self,
         tmp_path,

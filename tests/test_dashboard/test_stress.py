@@ -36,6 +36,10 @@ from deltadewa.widgets.assumptions import GlobalAssumptions
 # Use Agg backend for headless testing (from test_crash_charts.py pattern)
 matplotlib.use("Agg")
 
+# As-of for the §4 golden load; matches test_crash_repricing._FIXTURE_AS_OF so
+# both files assert the same book.
+_GOLDEN_AS_OF = datetime(2026, 7, 26, tzinfo=UTC)
+
 
 # ============================================================================
 # Helpers & Fixtures
@@ -87,11 +91,11 @@ def _make_put_portfolio(
 def _load_golden_book() -> OptionPortfolio:
     """Load the §4 golden book from examples/portfolios/spx_tail_20m.yaml.
 
-    Mirrors test_crash_repricing.py:97-109. Maturities are relative
-    (maturity_days), so the loaded portfolio always reflects ~18-month tenor
-    from wall-clock "now", independent of calendar date. This is fine because
-    BS pricing depends only on time-to-maturity, not absolute date, so the
-    documented golden figures (hedge value ≈$297,715) still apply.
+    Pinned to the same as-of as the crash-repricing goldens, so the documented
+    figures (hedge value ≈$297,715) are reproducible on any calendar date. This
+    fixture's maturities are relative (maturity_days), so its tenor — and hence
+    its value — is constant regardless; the pin makes that explicit rather than
+    relying on it.
 
     Returns:
         Real OptionPortfolio with 3 European puts (20/30/40% OTM ladder).
@@ -105,6 +109,7 @@ def _load_golden_book() -> OptionPortfolio:
     result = PortfolioSerializer(Path()).import_from_yaml(
         path,
         default_exercise_style=ExerciseStyle.EUROPEAN,
+        valuation_date=_GOLDEN_AS_OF,
     )
     return result["portfolio"]
 

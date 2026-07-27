@@ -463,6 +463,8 @@ class PortfolioSerializer:
         self,
         filepath: str | Path,
         default_exercise_style: ExerciseStyle | None = None,
+        *,
+        valuation_date: dt | None = None,
     ) -> dict[str, Any]:
         """Import portfolio from YAML configuration file.
 
@@ -474,6 +476,12 @@ class PortfolioSerializer:
             When None, the portfolio will have default_exercise_style=None and
             add_position() will raise ValueError for positions without an
             explicit style.
+            valuation_date: as-of date for the load.  Sets the portfolio's
+            ``valuation_date`` *and* anchors any relative ``maturity_days``
+            entries, so a pinned load is reproducible in both.  Defaults to
+            now, which is what production wants; tests asserting values that
+            depend on time-to-expiry should pass an explicit date, or they
+            will drift as the calendar moves.
 
         Returns:
             dict with 'portfolio', 'market_params', and 'metadata' keys
@@ -493,6 +501,11 @@ class PortfolioSerializer:
         # Determine underlying quantity
         underlying_qty = market_params.get("underlying_quantity", 0.0)
 
+        # One as-of for the whole load: the portfolio's valuation date and the
+        # anchor for relative maturities must agree, or a load straddling
+        # midnight would price a 548-day tenor as 549/365.
+        as_of = valuation_date or dt.now(tz=datetime.UTC)
+
         # Create new portfolio
         imported_portfolio = OptionPortfolio(
             underlying_quantity=underlying_qty,
@@ -500,20 +513,19 @@ class PortfolioSerializer:
             volatility=market_params["volatility"],
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
-            valuation_date=dt.now(tz=datetime.UTC),
+            valuation_date=as_of,
             symbol=market_params.get("symbol", "UNKNOWN"),
             default_exercise_style=default_exercise_style,
             contract_size=market_params["contract_size"],
         )
 
         # Add positions
-        today = dt.now(tz=datetime.UTC)
         for pos_config in config["positions"]:
             # Determine maturity date
             if "maturity_date" in pos_config:
                 maturity = dt.fromisoformat(pos_config["maturity_date"])
             elif "maturity_days" in pos_config:
-                maturity = today + timedelta(days=pos_config["maturity_days"])
+                maturity = as_of + timedelta(days=pos_config["maturity_days"])
             else:
                 continue
 
