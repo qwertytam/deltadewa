@@ -84,7 +84,10 @@ with a test — not in a widget or a notebook cell.
 ## Testing
 
 - Tests live in `tests/`, mirroring the package (`tests/test_portfolio/`,
-  `tests/test_dashboard/`, `tests/test_visualization/`). 78 files / 1,009 tests today.
+  `tests/test_dashboard/`, `tests/test_visualization/`). For the current size run
+  `poetry run pytest --co -q | tail -1` — don't write the number down here. A
+  literal has rotted twice already (M0.1 corrected it once, to a figure that was
+  wrong again within the phase) and nothing in the gate can catch it.
 - Add or extend tests for every behaviour change. Pricing/metric logic must have
   unit tests with crafted inputs; UI widgets get lighter smoke tests.
 - Prefer deterministic tests — no live network calls (mock HTTP; use static/offline
