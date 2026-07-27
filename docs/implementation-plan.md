@@ -26,7 +26,8 @@ working document: drive Claude Code through it one milestone at a time.
 - **One PR per milestone**, small conventional commits.
 - **The gate must be green before "done":** `ruff check .`, `pylint deltadewa`
   (10.00), `mypy deltadewa` (strict), `pytest`. Until the notebooks are retired,
-  also `nbqa ruff` + headless notebook execution.
+  also `nbqa ruff` + headless notebook execution. The clock-shift probe (M1.11)
+  is deliberately **outside** this list — see there for why.
 - Read the sibling module before adding to it; match its style.
 
 ---
@@ -725,6 +726,75 @@ changed the shape of the fix, not just its wording:
 | J-8 | `sizing` / `strike_ladder` read depth back off `shock.crash_scenario_pct` for `required_crash_offset` | That is drawdown policy maths, not pricing, but it should not re-read the config separately. |
 | J-9 | Fixed the adjacent broken `compute_crash_convexity` notebook cells | Same one-line pattern in the same cells being edited; leaving a known `TypeError` two cells away would be strange. Scope extension beyond the brief. |
 | J-10 | Added a companion test asserting the cap **is** anchor-independent past the wing | The first draft of the candidate propagation test used a 30%-OTM strike and failed — correctly, because of the cap. Pinning both sides stops that being misread later. |
+
+### M1.11 — Clock-shift determinism probe (last thing before Phase 2)
+
+**Status: DONE (closed 2026-07-27).** Phase 2 rebuilds the UI on top of this
+suite, so the suite has to be trustworthy in a way that a green run today does
+not by itself demonstrate: a test asserting a wall-clock-dependent value passes
+until the calendar reaches it, then fails as mystery breakage on an unrelated
+branch months later.
+
+**What it caught.** `tests/clockshift_plugin.py` is a pytest plugin that moves
+`datetime.now()` / `today()` by *N* days for the whole suite. It found four such
+tests in `TestBuildPutValuation` (#205, fixed in `962010a`) — a hardcoded
+`2026-10-01` expiry priced against a `now()` valuation date, which would have
+started failing in **October 2026**.
+
+**Three load-bearing invariants**, each discovered by a wrong answer and each
+carrying a `DO NOT REMOVE` comment, because all three read like tidy-uppable
+noise:
+
+| # | Invariant | What breaks without it |
+| --- | --- | --- |
+| 1 | `numpy`/`pandas`/`QuantLib` are imported *before* the type swap | pandas caches a pointer to `datetime.datetime` in its C layer at import; importing after the swap segfaults in `nattype.__pyx_tp_traverse` — no traceback, no output |
+| 2 | The patch is unconditional, **including at shift 0** | `ShiftedDatetime` subclasses the real `datetime`, so once `datetime.date` is patched `isinstance(a_datetime, datetime.date)` is `False`. A green +0 **control** is the only thing separating that type-identity breakage from real date drift |
+| 3 | Loaded via `-p`, never a conftest fixture | `-p` imports before conftest and before any test or `deltadewa` module, so import-time constants bind the shifted clock. Patching after collection shifts the library while leaving the test module feeding it unshifted — that once reported **23** broken tests when only **4** were real |
+
+**Where it runs, and why not in the gate.** The probe substitutes a type that C
+extensions hold pointers to, so a dependency bump can crash it in a way that has
+nothing to do with the code under review. Blast radius, not runtime, is why it
+stays out — the suite is ~8s, so the full matrix is ~30s.
+
+- **Nightly, authoritative** — `.github/workflows/clockshift.yml`, the full
+  `+0/+90/+1000/+3000` matrix against `main`, `fail-fast: false` so a `+1000`
+  failure cannot cancel the `+0` control.
+- **Per-PR, advisory** — `clockshift-advisory` in `ci.yml`, `+0/+1000`, with
+  `continue-on-error: true`. The author gets the signal in minutes; a probe
+  crash can never block the merge. **It must not become a required check.**
+- **Locally** — `make test-clockshift` (override `CLOCK_SHIFT_MATRIX` to scope).
+
+**Honest limit.** A *scheduled* workflow runs against `main` and therefore
+cannot be a required check. What the nightly delivers is a red run on `main` and
+a failure notification within a day of the commit that introduced the drift —
+early enough to be attributed, not early enough to be prevented. The advisory
+per-PR job is what closes that window, at the cost of not being able to enforce.
+
+**The probe has its own meta-guard.** Same principle as ledger row **J-6** — a
+guard that cannot fail proves nothing. `tests/test_clockshift_canary.py` is two
+tests, live at *every* shift including 0, with deliberately no `skipif`, no
+inverted exit code and no hardcoded golden (a golden inside a determinism canary
+would itself drift). They assert the shift reaches **library** code, and that a
+DTE-sensitive price moves under it — self-calibrating against one day of theta
+rather than a fixed number. They run in the default gate too, where they pin the
+unshifted branch and catch a `CLOCK_SHIFT_DAYS` left set in someone's shell.
+
+**Verification at close-out.**
+
+| Check | Result |
+| --- | --- |
+| Bites proof — #205 bomb reintroduced | default gate **green** (the bomb is invisible today; that is the point) |
+| Bites proof — same bomb under the matrix | **red at +90** on exactly the four `TestBuildPutValuation` tests, **+0 control green** |
+| Bites proof — bomb reverted | all four shifts green, `make` exit 0 |
+| Canary negative control (probe not loaded, `CLOCK_SHIFT_DAYS=90`) | both tests fail — a probe that stops shifting cannot pass silently |
+| Gate | pytest **1361 / 2 xfailed**, mypy clean, ruff clean, **pylint 10.00/10**, nbqa ruff clean |
+
+**Known gap, not addressed here.** Local runs are on Python **3.14**; both
+workflows pin **3.11**. The type-substitution and C-extension import-order
+behaviour is version-sensitive, so a green local matrix is not evidence about
+3.11 and vice versa. Relevant when reading a red nightly that will not reproduce
+locally. (Phase 0's M0.2 listed the 3.14-cache-vs-3.11-pin mismatch as resolved;
+`.mypy_cache/3.14/` says otherwise. Left alone rather than reopened here.)
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 
