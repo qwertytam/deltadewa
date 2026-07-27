@@ -64,3 +64,46 @@ jobs:
           poetry run jupyter nbconvert --to notebook --execute \
             --ExecutePreprocessor.timeout=600 \
             hedge_design.ipynb
+
+  # ADVISORY ONLY — DO NOT add this to branch protection's required checks.
+  #
+  # The authoritative clock-shift run is the nightly matrix in clockshift.yml.
+  # This job exists so a PR author sees a newly-introduced date dependency in
+  # minutes rather than the next morning on main.
+  #
+  # DO NOT REMOVE continue-on-error. The probe swaps datetime.datetime for a
+  # subclass that C extensions hold pointers to; a pandas/numpy/QuantLib bump
+  # can segfault the interpreter here with no traceback and no test output.
+  # That is a failure of the probe, not of the code under review, and it must
+  # never be able to block a merge. The blast radius is the reason this is
+  # advisory — not the runtime, which is ~8s per shift.
+  clockshift-advisory:
+    name: Clock-shift probe (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Poetry
+        run: pipx install "poetry>=2.0,<3"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: poetry
+
+      - name: Configure in-project virtualenv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      # DO NOT drop the leading 0 — see the DO NOT REMOVE note in the Makefile.
+      # +0 is the control: it runs *with* the type substitution active, so a
+      # green +0 next to a red +1000 is what tells real date drift apart from
+      # type-identity breakage. Without it a red advisory job is unactionable.
+      - name: Pytest under a +0 (control) and +1000 day clock
+        run: make test-clockshift CLOCK_SHIFT_MATRIX="0 1000"

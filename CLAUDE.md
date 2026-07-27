@@ -28,6 +28,13 @@ Python `>=3.11,<4.0`, managed with **Poetry**. Run everything through `poetry ru
   complexity limits; `tests/` and notebooks are intentionally out of scope for now
 - Format: `poetry run ruff format .` — **line length is 80**
 - Lint/type-check notebooks: `poetry run nbqa ruff <notebook>` / `poetry run nbqa mypy <notebook>`
+- Clock-shift determinism probe: `make test-clockshift` — runs the suite under a +0/+90/+1000/+3000
+  day clock to catch tests that assert wall-clock-dependent values. **Not part of the gate**: it
+  swaps `datetime.datetime` for a subclass that C extensions hold pointers to, so a dependency bump
+  can segfault it — that must never block a merge. Cost is not the reason (the suite is ~8s, so the
+  matrix is ~30s). CI runs it twice: the full matrix nightly against `main`
+  (`.github/workflows/clockshift.yml`, the authoritative run) and an advisory `+0/+1000` job on
+  every PR (`clockshift-advisory` in `ci.yml`, `continue-on-error`).
 
 Before considering any change done: `poetry run pytest` and `poetry run mypy deltadewa` must both be
 green, `poetry run ruff check .` must be clean, and `poetry run pylint deltadewa` must exit 0.
