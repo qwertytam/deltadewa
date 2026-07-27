@@ -28,6 +28,9 @@ Python `>=3.11,<4.0`, managed with **Poetry**. Run everything through `poetry ru
   complexity limits; `tests/` and notebooks are intentionally out of scope for now
 - Format: `poetry run ruff format .` — **line length is 80**
 - Lint/type-check notebooks: `poetry run nbqa ruff <notebook>` / `poetry run nbqa mypy <notebook>`
+- Clock-shift determinism probe: `make test-clockshift` — runs the suite under a +0/+90/+1000/+3000
+  day clock to catch tests that assert wall-clock-dependent values. **Not part of the gate**
+  (it runs the suite four times); it runs nightly against `main` via `.github/workflows/clockshift.yml`.
 
 Before considering any change done: `poetry run pytest` and `poetry run mypy deltadewa` must both be
 green, `poetry run ruff check .` must be clean, and `poetry run pylint deltadewa` must exit 0.

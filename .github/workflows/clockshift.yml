@@ -1,0 +1,56 @@
+name: Clock-shift determinism
+
+# Deliberately NOT part of the per-commit gate (see ci.yml): this runs the
+# whole suite once per shift and swaps datetime.datetime for a subclass, which
+# is visible to C extensions. Nightly against main catches a newly-introduced
+# time bomb within a day of landing, rather than when the calendar reaches it.
+#
+# A scheduled workflow runs against main and cannot block a merge. What it
+# gives you is a red run on main plus GitHub's failure notification, attached
+# to the commit that introduced the drift while it is still fresh.
+on:
+  schedule:
+    # 03:17 UTC daily. Off the hour on purpose — Actions queues are congested
+    # at :00 and a nightly job has no reason to sit in that queue.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clockshift:
+    name: "+${{ matrix.shift }}d"
+    runs-on: ubuntu-latest
+
+    strategy:
+      # DO NOT REMOVE. A failure at +1000 must not cancel the +0 control:
+      # the control is the one result you need to interpret the failure, and
+      # fail-fast would throw away exactly that.
+      fail-fast: false
+      matrix:
+        # 0 is the control — the probe still substitutes the type there.
+        shift: [0, 90, 1000, 3000]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Poetry
+        run: pipx install "poetry>=2.0,<3"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: poetry
+
+      - name: Configure in-project virtualenv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Pytest under a +${{ matrix.shift }} day clock
+        env:
+          CLOCK_SHIFT_DAYS: ${{ matrix.shift }}
+        run: poetry run pytest -q -p tests.clockshift_plugin
