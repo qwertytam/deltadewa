@@ -22,6 +22,9 @@ jobs:
   clockshift:
     name: "+${{ matrix.shift }}d"
     runs-on: ubuntu-latest
+    # A segfault under the swapped type is instant, but a hang is plausible.
+    # Bound it rather than let a stuck runner burn the nightly budget.
+    timeout-minutes: 15
 
     strategy:
       # DO NOT REMOVE. A failure at +1000 must not cancel the +0 control:
