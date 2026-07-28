@@ -825,21 +825,80 @@ state, and the matrix leg above *is* that restore.
 ~8s/~30s figures quoted above are a local machine. Neither is the reason the
 probe stays out of the gate.
 
-**Two things noted while verifying, neither fixed here.**
+**Two loose ends, closed 2026-07-28.**
 
-1. Both workflows run `pytest -q`, and `-q` suppresses `pytest_report_header` —
-   so the plugin's `clockshift: +N days` line, whose whole job is to make a run
-   self-describing, never reaches the CI log. The step name carries the shift
-   instead. Harmless until someone reads a log without it.
-2. `.mypy_cache/3.14/` is **not** stale — this section previously said it was,
-   and that was wrong. `[tool.mypy]` sets no `python_version`, so mypy targets
-   the running interpreter and `3.14/` is simply what a 3.14 venv produces.
-   Pinning `python_version = "3.11"` would be worse, not better:
-   `mypy --python-version 3.11 deltadewa` dies on `numpy/__init__.pyi:737: Type
-   statement is only supported in Python 3.12 and greater`, because the numpy
-   resolved *for a 3.14 venv* ships stubs needing ≥3.12. The only honest way to
-   type-check against 3.11 is to be on 3.11, which the gate does on every push.
-   **M0.2 stays closed.**
+**1. The applied shift now reaches the log — and is enforced, not just
+printed.** Every caller runs `pytest -q` (the nightly matrix directly, the
+advisory job and local runs via `Makefile:17`), and `-q` suppresses
+`pytest_report_header`. So the plugin's `clockshift: +N days` line never
+reached a CI log and the step name was the only record of the shift — a label
+the run never had to live up to. Worse, that header echoed `CLOCK_SHIFT_DAYS`
+back: even visible, it was the shift *requested*, never the shift *applied*.
+
+`pytest_report_header` is therefore replaced by a `trylast` `pytest_configure`
+in `tests/clockshift_plugin.py` that (a) **measures** the offset in force —
+`datetime.datetime.now()` looked up through the module attribute, the same
+lookup library code makes, minus the real clock — and writes it through the
+terminal reporter, which is not verbosity-gated; and (b) raises `UsageError`
+if the substitution is not live, or if the measured offset is not the
+requested one. `trylast` is required: `-p` plugins register after the builtins
+and `pytest_configure` runs last-registered-first, so at default order the
+terminal reporter does not exist yet.
+
+The fix is in the plugin, not the workflows, deliberately. Dropping `-q` would
+have been two edits in two files, and any future `-q` would silently undo it —
+the same shape of rot as the hardcoded test count. One plugin edit covers the
+nightly, the advisory job and `make test-clockshift` at once.
+
+Confirmed on the pinned interpreter by dispatching the matrix at
+`ci/clockshift-applied-shift-in-log`
+([30368957981](https://github.com/qwertytam/deltadewa/actions/runs/30368957981)),
+all four legs green at `1361 passed, 2 xfailed`, each logging its own shift
+under `-q`:
+
+```text
++0d     clockshift: requested +0 days,     applied +0 days     (Python 3.11.15)
++90d    clockshift: requested +90 days,    applied +90 days    (Python 3.11.15)
++1000d  clockshift: requested +1000 days,  applied +1000 days  (Python 3.11.15)
++3000d  clockshift: requested +3000 days,  applied +3000 days  (Python 3.11.15)
+```
+
+The guard is a **fast fail, not a new claim** —
+`test_probe_moves_the_library_clock` already asserted the same property one
+hook later. What it adds is a clear message before collection instead of an
+assertion failure, and coverage if the canary is ever removed. Both branches
+were shown to fire (row **J-6** again — a guard that cannot fail proves
+nothing): with the swap deleted, all four legs exit 4 **including the +0
+control**, which is why the type-identity check is there and not just the
+offset check; with the swap live but `now()` no longer adding `SHIFT`, +1000
+exits 4 reporting `requested +1000 days, measured 0:00:00.000184`. At +0 that
+second branch is vacuous by construction — a zero offset is the correct answer
+there — so the +0 control's guard is the type-identity one.
+
+**2. `.mypy_cache/3.14/` — instruction to delete it recorded as a deliberate
+no-op.** It is **not** deleted, and still on disk. The instruction rested on a
+false premise, mine: this section once said the directory was stale, and that
+was wrong. `[tool.mypy]` sets no `python_version`, so mypy targets the running
+interpreter — `3.14/` is simply what a 3.14 venv produces, and it regenerates
+on the next run. Pinning `python_version = "3.11"` would be worse, not better:
+`mypy --python-version 3.11 deltadewa` dies on `numpy/__init__.pyi:737: Type
+statement is only supported in Python 3.12 and greater`, because the numpy
+resolved *for a 3.14 venv* ships stubs needing ≥3.12. The only honest way to
+type-check against 3.11 is to be on 3.11, which the gate does on every push.
+**M0.2 stays closed.**
+
+The invariant that actually matters is the ignore, and it holds:
+`.gitignore:186` is `.mypy_cache/` — a **directory-level** entry, so no
+version subdir can ever be committed, not merely the one that exists today.
+
+```console
+$ git check-ignore -v .mypy_cache/3.11/foo .mypy_cache/3.14/bar .mypy_cache/anything
+.gitignore:186:.mypy_cache/   .mypy_cache/3.11/foo
+.gitignore:186:.mypy_cache/   .mypy_cache/3.14/bar
+.gitignore:186:.mypy_cache/   .mypy_cache/anything
+$ git ls-files .mypy_cache | wc -l
+0
+```
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 
