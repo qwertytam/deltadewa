@@ -28,9 +28,17 @@ from __future__ import annotations
 
 import datetime as _datetime
 import os
+import platform
 from typing import Any
 
+import pytest
+
 SHIFT = _datetime.timedelta(days=int(os.environ.get("CLOCK_SHIFT_DAYS", "0")))
+
+# The applied shift is measured from two now() reads microseconds apart, so
+# the observed offset is SHIFT plus jitter. Anything past a second is not
+# jitter, it is the probe not doing what it was asked.
+_SHIFT_TOLERANCE = _datetime.timedelta(seconds=1)
 
 _real_datetime = _datetime.datetime
 _real_date = _datetime.date
@@ -112,7 +120,67 @@ _datetime.date = ShiftedDate  # type: ignore[misc]
 # ---------------------------------------------------------------------------
 
 
-def pytest_report_header(config: Any) -> str:
-    """Announce the shift so a run's output is self-describing."""
-    del config
-    return f"clockshift: {SHIFT.days:+d} days"
+def _applied_shift() -> _datetime.timedelta:
+    """Measure the offset actually in force, not the one requested.
+
+    Looks ``datetime.datetime`` up through the module attribute — the same
+    lookup library code makes — so what comes back is what the swap did,
+    rather than ``CLOCK_SHIFT_DAYS`` read back to us.
+    """
+    before = _real_datetime.now(_datetime.UTC)
+    return _datetime.datetime.now(_datetime.UTC) - before
+
+
+# ---------------------------------------------------------------------------
+# DO NOT convert this back to `pytest_report_header`.
+#
+# That was the original mechanism, and every caller runs `pytest -q`: the
+# nightly matrix, the per-PR advisory job via the Makefile, and every local
+# `make test-clockshift`. `-q` suppresses the report header, so the shift
+# never reached a log and the CI step name was the only record of it —
+# a label, unverified against what the plugin actually did. A line written
+# through the terminal reporter is not verbosity-gated, and putting it here
+# rather than in the callers means no future `-q` can silently undo it.
+#
+# `trylast` is load-bearing too. `-p` plugins register after the builtins and
+# `pytest_configure` is called last-registered-first, so at default hook order
+# this fires *before* the terminal plugin creates the reporter and
+# `get_plugin("terminalreporter")` returns None.
+# ---------------------------------------------------------------------------
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config: Any) -> None:
+    """Announce the applied shift, and abort if it is not the requested one.
+
+    Turns a silent non-propagation — a lost ``-p``, a rename, an import-order
+    regression — into an immediate error rather than a green suite that
+    proves nothing. This is a fast fail with a clear message, not a new
+    claim: ``tests/test_clockshift_canary.py`` remains the check that the
+    shift reaches *library* code.
+    """
+    applied = _applied_shift()
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    line = (
+        f"clockshift: requested {SHIFT.days:+d} days, "
+        f"applied {round(applied.total_seconds() / 86400):+d} days "
+        f"(Python {platform.python_version()})"
+    )
+    if reporter is None:
+        print(line)
+    else:
+        reporter.write_line(line)
+
+    substituted = (
+        _datetime.datetime is ShiftedDatetime and _datetime.date is ShiftedDate
+    )
+    if not substituted:
+        raise pytest.UsageError(
+            "clock-shift probe: the datetime substitution is not live. "
+            "Every leg, including the +0 control, must run with it — see "
+            "the DO NOT REMOVE note on the unconditional patch.",
+        )
+    if abs(applied - SHIFT) > _SHIFT_TOLERANCE:
+        raise pytest.UsageError(
+            f"clock-shift probe applied no usable shift: requested "
+            f"{SHIFT.days:+d} days, measured {applied}. The suite would "
+            f"otherwise have reported a meaningless green.",
+        )
