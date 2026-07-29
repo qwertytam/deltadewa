@@ -25,6 +25,7 @@ from matplotlib.axes import Axes
 from matplotlib.ticker import FuncFormatter
 
 from deltadewa.analysis import PortfolioAnalyzer, ScenarioGridCache
+from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.volatility import calculate_portfolio_avg_volatility
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.gradients import (
@@ -894,17 +895,15 @@ class StressDashboard:
                             f"{valuation_date.strftime('%Y-%m-%d')}",
                         )
 
-                original_calc_date = self.portfolio.valuation_date
-                self.portfolio.valuation_date = valuation_date
-
                 result_df = self.cache.get_or_calculate_spot_vol(
                     portfolio=self.portfolio,
                     analyzer=self.analyzer,
                     spot_scenarios=spot_scenarios,
                     vol_scenarios=vol_scenarios,
+                    vol_mapping=proportional_vol,
                     metric=metric_type,
                     baseline_value=baseline_value,
-                    proportional_vol_scaling=True,
+                    days_forward=days_forward,
                 )
 
                 elapsed_time = time.time() - start_time
@@ -916,8 +915,6 @@ class StressDashboard:
                         elapsed_time=elapsed_time,
                     ),
                 )
-
-                self.portfolio.valuation_date = original_calc_date
 
                 result_matrix = (
                     result_df.pivot(

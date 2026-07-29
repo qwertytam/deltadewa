@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.repricing import VolMapping
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -41,6 +42,8 @@ def create_spot_vol_cache_key(
     vol_scenarios: np.ndarray[Any, np.dtype[Any]],
     metric: str,
     portfolio_state_hash: str,
+    vol_mapping: VolMapping,
+    days_forward: int,
 ) -> tuple[Any, ...]:
     """Create hashable cache key for spot x vol scenario grid results.
 
@@ -49,6 +52,16 @@ def create_spot_vol_cache_key(
         vol_scenarios: Array of volatilities
         metric: Metric being calculated
         portfolio_state_hash: Hash representing portfolio state
+        vol_mapping: The vol-shock -> sigma' rule the grid was built with.
+            Two grids under different mappings (e.g. crash-skew vs.
+            proportional) must never collide, so this is part of the key —
+            a plain function is hashable by identity; a mapping built by a
+            factory (e.g. ``crash_skew_vol``) is a frozen dataclass, hashable
+            and equal by its configuration.
+        days_forward: Calendar days forward the grid was priced at. Once the
+            state leak (M1.5) stopped smuggling this through a mutated
+            ``valuation_date``, a T+0 and a T+60 grid would otherwise hash
+            identically and collide.
 
     Returns:
         tuple suitable for use as dictionary key
@@ -63,7 +76,15 @@ def create_spot_vol_cache_key(
     spot_tuple = tuple(np.round(spot_scenarios, 6).tolist())
     vol_tuple = tuple(np.round(vol_scenarios, 6).tolist())
 
-    return ("spot_vol", spot_tuple, vol_tuple, metric, portfolio_state_hash)
+    return (
+        "spot_vol",
+        spot_tuple,
+        vol_tuple,
+        metric,
+        portfolio_state_hash,
+        vol_mapping,
+        days_forward,
+    )
 
 
 def get_portfolio_state_hash(portfolio: OptionPortfolio) -> str:
@@ -212,9 +233,11 @@ class ScenarioGridCache:
         analyzer: PortfolioAnalyzer,
         spot_scenarios: np.ndarray[Any, np.dtype[Any]],
         vol_scenarios: np.ndarray[Any, np.dtype[Any]],
+        *,
+        vol_mapping: VolMapping,
         metric: str = "pnl",
         baseline_value: float | None = None,
-        proportional_vol_scaling: bool = True,
+        days_forward: int = 0,
     ) -> pd.DataFrame:
         """Get cached spot x vol result or calculate if not available.
 
@@ -224,11 +247,15 @@ class ScenarioGridCache:
             portfolio: OptionPortfolio instance
             analyzer: PortfolioAnalyzer instance
             spot_scenarios: Array of spot prices
-            vol_scenarios: Array of volatilities
+            vol_scenarios: Array of *absolute target average volatility
+                levels* (see
+                :meth:`~deltadewa.analysis.scenarios.ScenariosMixin.scenario_grid_spot_vol`).
+            vol_mapping: **Required.** The per-leg vol-shock -> sigma' rule.
+                Never defaulted — see :mod:`deltadewa.analysis.repricing`.
             metric: Metric to calculate
             baseline_value: Portfolio value for P&L baseline
-            proportional_vol_scaling: If True, scale position vols
-            proportionally
+            days_forward: Calendar days forward from the portfolio's
+                valuation date. Defaults to ``0`` (today).
 
         Returns:
             DataFrame with scenario grid results (columns: spot_price,
@@ -242,6 +269,8 @@ class ScenarioGridCache:
             vol_scenarios,
             metric,
             portfolio_hash,
+            vol_mapping,
+            days_forward,
         )
 
         # Check cache
@@ -256,9 +285,10 @@ class ScenarioGridCache:
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=vol_mapping,
             metric=metric,
             baseline_value=baseline_value,
-            proportional_vol_scaling=proportional_vol_scaling,
+            days_forward=days_forward,
         )
 
         # Store in cache with LRU eviction
