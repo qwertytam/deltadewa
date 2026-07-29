@@ -20,7 +20,7 @@ from deltadewa.analysis.crash_payoff import (
     crash_scenario_table,
     default_crash_shock,
 )
-from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.analysis.crash_repricing import CrashShock, crash_skew_vol
 from deltadewa.analysis.decision_matrix import (
     DecisionResult,
     DecisionVerdict,
@@ -54,6 +54,17 @@ from deltadewa.analysis.monetization import (
 from deltadewa.analysis.portfolio_shape import (
     PortfolioShape,
     classify_portfolio_shape,
+)
+from deltadewa.analysis.repricing import (
+    MarketShock,
+    MarketState,
+    VolMapping,
+    flat_bump_vol,
+    proportional_vol,
+    reprice_leg,
+    reprice_legs_at,
+    reprice_portfolio,
+    shocked_leg_option,
 )
 from deltadewa.analysis.roll_planner import (
     RollAction,
@@ -99,6 +110,8 @@ __all__ = [
     "HedgeTriggerThresholds",
     "LadderRung",
     "MarketEnvironment",
+    "MarketShock",
+    "MarketState",
     "MonetizationPlan",
     "MonetizationStepStatus",
     "PortfolioAnalyzer",
@@ -113,6 +126,7 @@ __all__ = [
     "StrikeLadderResult",
     "TermShape",
     "UnsolvableRung",
+    "VolMapping",
     "assess_market_environment",
     "beta_adjusted_notional",
     "build_monetization_plan",
@@ -124,17 +138,24 @@ __all__ = [
     "compute_hedge_gain_pct",
     "crash_payoff_ratio",
     "crash_scenario_table",
+    "crash_skew_vol",
     "decision_matrix",
     "default_crash_shock",
     "entry_timing_tree",
     "evaluate_candidate",
     "evaluate_hedge_triggers",
     "evaluate_roll_status",
+    "flat_bump_vol",
     "forward_vol",
     "gamma_theta_delay",
     "get_volatility_stats",
     "new_strike_for_entry_otm",
+    "proportional_vol",
+    "reprice_leg",
+    "reprice_legs_at",
+    "reprice_portfolio",
     "required_crash_offset",
+    "shocked_leg_option",
     "size_from_unit",
     "size_hedge",
     "strike_for_delta",

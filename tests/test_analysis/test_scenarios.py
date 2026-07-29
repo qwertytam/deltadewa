@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -164,6 +165,7 @@ class TestScenariosMixin:
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=proportional_vol,
             metric="pnl",
         )
 
@@ -196,6 +198,7 @@ class TestScenariosMixin:
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=proportional_vol,
             metric="vega",
         )
 

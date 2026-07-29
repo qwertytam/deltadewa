@@ -58,6 +58,14 @@ _PRICING_PARAMS = frozenset(
 # reopen the same hole at the object level.
 _SHOCK_PARAM = "shock"
 
+# M2.1's pluggable vol-shock -> sigma' rule. Required on every generic
+# repricing entry point (reprice_portfolio, the grid, the heatmap) for the
+# same reason ``shock`` is: a defaulted mapping is the skew_reference_delta
+# foot-gun class one level up — a caller that forgets to pass the
+# crash-conditional mapping would silently render the general model and
+# disagree with its own gauge by 25%.
+_MAPPING_PARAM = "vol_mapping"
+
 
 def _iter_function_defs() -> list[tuple[Path, ast.FunctionDef]]:
     """Every function and method defined anywhere in the package.
@@ -163,6 +171,43 @@ class TestCrashPricingInputsAreNeverDefaulted:
         from deltadewa.analysis.crash_repricing import CrashShock
 
         for field in dataclasses.fields(CrashShock):
+            assert field.default is dataclasses.MISSING, field.name
+            assert field.default_factory is dataclasses.MISSING, field.name
+
+    def test_no_vol_mapping_parameter_carries_a_default(self) -> None:
+        """The M2.1 guard: no generic entry point may default its mapping.
+
+        Mirrors ``test_no_crash_shock_parameter_carries_a_default`` — a
+        defaulted ``vol_mapping`` would let a caller reprice against a
+        pricing model it never stated, exactly as an optional ``shock``
+        would.
+        """
+        offenders = _offenders({_MAPPING_PARAM})
+
+        assert not offenders, (
+            "`vol_mapping` must never default; found:\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_market_shock_declares_no_defaults_on_its_pricing_fields(
+        self,
+    ) -> None:
+        """The bundle cannot be half-constructed either (M2.1's MarketShock).
+
+        Scoped to ``spot_shock``/``vol_shock`` only — unlike ``CrashShock``,
+        ``MarketShock`` has a third field, ``days_forward``, which
+        legitimately defaults to ``0``: "absent" is unambiguously
+        instantaneous, not a fabricated pricing claim the way an unstated
+        vol or spot shock would be.
+        """
+        import dataclasses
+
+        from deltadewa.analysis.repricing import MarketShock
+
+        pricing_fields = {"spot_shock", "vol_shock"}
+        for field in dataclasses.fields(MarketShock):
+            if field.name not in pricing_fields:
+                continue
             assert field.default is dataclasses.MISSING, field.name
             assert field.default_factory is dataclasses.MISSING, field.name
 

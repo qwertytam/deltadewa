@@ -6,9 +6,11 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from deltadewa.analysis.volatility import (
-    apply_proportional_volatility_shift,
-    restore_volatilities,
+from deltadewa.analysis.repricing import (
+    MarketShock,
+    MarketState,
+    VolMapping,
+    shocked_leg_option,
 )
 from deltadewa.batch_pricer import BatchPricer
 from deltadewa.constants import FDGridResolution
@@ -20,6 +22,21 @@ if TYPE_CHECKING:
 # "net_delta" maps to "delta" because BatchPricer.portfolio_greeks_at()
 # already includes the underlying position in the "delta" array.
 _METRIC_TO_GREEK: dict[str, str] = {
+    "delta": "delta",
+    "net_delta": "delta",
+    "gamma": "gamma",
+    "vega": "vega",
+    "theta": "theta",
+    "rho": "rho",
+}
+
+# Maps scenario_grid_spot_vol() metric names to the OptionValuation method
+# each leg is repriced through. "pnl" and "value" both price the leg
+# ("pnl" post-processes the summed value below); "net_delta" reads the same
+# per-leg delta as "delta" and adds underlying_quantity afterwards.
+_SPOT_VOL_METRIC_TO_ATTR: dict[str, str] = {
+    "pnl": "price",
+    "value": "price",
     "delta": "delta",
     "net_delta": "delta",
     "gamma": "gamma",
@@ -255,58 +272,101 @@ class ScenariosMixin:
 
         return pd.DataFrame(results)
 
-    def scenario_grid_spot_vol(  # pylint: disable=too-many-branches
+    def scenario_grid_spot_vol(
         self,
         spot_scenarios: np.ndarray[Any, np.dtype[Any]],
         vol_scenarios: np.ndarray[Any, np.dtype[Any]],
+        *,
+        vol_mapping: VolMapping,
         metric: str = "pnl",
         baseline_value: float | None = None,
-        proportional_vol_scaling: bool = True,
+        days_forward: int = 0,
     ) -> pd.DataFrame:
         """Calculate metrics across 2D grid of spot prices and volatilities.
 
-        For P&L at expiry (intrinsic value), uses vectorized calculation for
-        maximum performance. For other metrics requiring repricing, uses
-        iterative approach with proportional vol scaling.
+        Pure — never mutates the portfolio (M2.1). Every cell reprices
+        through fresh, scratch ``OptionValuation`` objects
+        (:func:`~deltadewa.analysis.repricing.shocked_leg_option`) against
+        one base :class:`~deltadewa.analysis.repricing.MarketState`
+        snapshotted once at the top of this call, so there is no
+        mutate-then-restore window in which a concurrent read of the
+        portfolio (or an exception mid-sweep) could observe a shocked value.
+
+        For P&L at expiry (intrinsic value), uses a vectorized calculation
+        for maximum performance — volatility doesn't affect intrinsic value,
+        so this shortcut is valid under any ``vol_mapping``.
 
         Args:
-            spot_scenarios: Array of spot prices to test
-            vol_scenarios: Array of volatilities to test
-            metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta'
-            'gamma', 'vega', 'theta', 'rho')
-            baseline_value: Portfolio value for P&L baseline (default: current
-            value)
-            proportional_vol_scaling: If True, scale position vols
-            proportionally
+            spot_scenarios: Array of spot prices to test.
+            vol_scenarios: Array of *absolute target average volatility
+                levels* to test — not a bump. Each level is converted to a
+                per-mapping ``vol_shock`` (``level - state.avg_volatility``,
+                the base vega-weighted average) once per vol slice; that
+                level-to-bump conversion is what previously hid a 25% gap
+                against the crash-conditional mapping on a skewed book.
+            vol_mapping: **Required.** The per-leg vol-shock -> sigma' rule
+                — e.g.
+                :func:`~deltadewa.analysis.repricing.proportional_vol` for
+                the general grid, or
+                :func:`~deltadewa.analysis.crash_repricing.crash_skew_vol`
+                to match the crash gauge exactly. Never defaulted: a caller
+                that forgets it would silently render a different pricing
+                model than intended, and disagree with whatever surface it
+                was meant to match.
+            metric: Metric to calculate ('pnl', 'value', 'delta', 'net_delta',
+                'gamma', 'vega', 'theta', 'rho').
+            baseline_value: Portfolio value for P&L baseline (default:
+                current options-only value).
+            days_forward: Calendar days forward from the portfolio's
+                valuation date. Defaults to ``0`` (today) — genuinely
+                neutral, unlike the vol/spot dials.
 
         Returns:
-            DataFrame with columns: spot_price, volatility, value
+            DataFrame with columns: spot_price, volatility, value.
+
+        Raises:
+            ValueError: *metric* is not one of the supported names.
 
         """
-        results: list[dict[str, Any]] = []
-        original_spot = self.portfolio.spot_price
-        original_vol = self.portfolio.volatility
-        original_date = self.portfolio.valuation_date
+        if metric not in _SPOT_VOL_METRIC_TO_ATTR:
+            raise ValueError(
+                f"Unsupported metric: {metric}. "
+                f"Supported: pnl, value, delta, net_delta, "
+                f"gamma, vega, theta, rho",
+            )
+
+        state = MarketState.from_portfolio(self.portfolio)
+        positions = self.portfolio.positions
+        underlying_quantity = self.portfolio.underlying_quantity
 
         if baseline_value is None:
             baseline_value = self.portfolio.total_value()
 
-        # Optimization: Vectorized PnL at expiry check
+        # days_forward alone determines the shocked date; it does not vary
+        # per cell, so resolve it once via a throwaway shock rather than
+        # duplicating MarketShock.shocked_valuation_date's arithmetic here.
+        shocked_date = MarketShock(
+            spot_shock=0.0,
+            vol_shock=0.0,
+            days_forward=days_forward,
+        ).shocked_valuation_date(state)
+
+        results: list[dict[str, Any]] = []
+
+        # Optimization: vectorized PnL at expiry, valid under any mapping.
         if metric == "pnl":
             # Check if all positions are at expiry (days_to_maturity == 0)
-            # We check for exactly 0 to avoid issues with historical valuations
+            # at the SHOCKED date, not today's — a days_forward grid that
+            # lands on expiry gets the same shortcut a today grid would.
             all_at_expiry = all(
-                (pos.option.maturity_date - original_date).days == 0
-                for pos in self.portfolio.positions
+                (pos.option.maturity_date - shocked_date).days == 0
+                for pos in positions
             )
             if all_at_expiry:
-                # Use vectorized calculation for maximum speed
-                # Volatility doesn't affect intrinsic value at expiry
                 pnl_values = self._calculate_pnl_at_expiry_vectorized(
                     spot_scenarios,
                     include_underlying=True,
                 )
-                # Expand to full grid
                 for vol in vol_scenarios:
                     for j, spot in enumerate(spot_scenarios):
                         results.append(
@@ -318,82 +378,55 @@ class ScenariosMixin:
                         )
                 return pd.DataFrame(results)
 
-        # Store original position vols
-        original_position_vols = {
-            i: pos.option.volatility
-            for i, pos in enumerate(self.portfolio.positions)
-        }
-
-        # Initialize BatchPricer for Non-Greek calculations if applicable
-        # Note: Volatility changes require deep updates, so BatchPricer usage
-        # here is tricky unless we rebuild it per vol-slice.
-        # For now, we rely on the portfolio update mechanism which is robust.
+        attr = _SPOT_VOL_METRIC_TO_ATTR[metric]
 
         for vol in vol_scenarios:
-            # Apply Volatility Shift
-            if proportional_vol_scaling:
-                apply_proportional_volatility_shift(
-                    self.portfolio,
-                    vol,
-                    preserve_structure=True,
-                )
-            else:
-                for pos in self.portfolio.positions:
-                    pos.option.volatility = vol
+            vol_shock = float(vol) - state.avg_volatility
 
-            # Inner Loop: Spot Prices
             for spot in spot_scenarios:
-                self.portfolio.update_market_conditions(
-                    spot_price=spot,
-                    valuation_date=original_date,
+                # spot_shock is carried on the shock for mappings that may
+                # want it (introspection, future dials); pricing below uses
+                # *spot* directly rather than re-deriving it via
+                # shock.shocked_spot(state) — one division-then-
+                # multiplication round trip per cell is a needless source of
+                # floating-point noise when the exact value is already in
+                # hand.
+                shock = MarketShock(
+                    spot_shock=float(spot) / state.spot_price - 1.0,
+                    vol_shock=vol_shock,
+                    days_forward=days_forward,
                 )
 
-                if metric == "pnl":
-                    current_value = self.portfolio.total_value()
-                    # Manual underlying PnL calc
-                    underlying_pnl = (
-                        spot - original_spot
-                    ) * self.portfolio.underlying_quantity
-                    metric_value = (
-                        current_value - baseline_value
-                    ) + underlying_pnl
-                elif metric == "value":
-                    metric_value = self.portfolio.total_value()
-                elif metric == "delta":
-                    metric_value = self.portfolio.total_delta()
-                elif metric == "net_delta":
-                    metric_value = self.portfolio.net_delta()
-                elif metric == "gamma":
-                    metric_value = self.portfolio.total_gamma()
-                elif metric == "vega":
-                    metric_value = self.portfolio.total_vega()
-                elif metric == "theta":
-                    metric_value = self.portfolio.total_theta()
-                elif metric == "rho":
-                    metric_value = self.portfolio.total_rho()
-                else:
-                    raise ValueError(
-                        f"Unsupported metric: {metric}. "
-                        f"Supported: pnl, value, delta, net_delta, "
-                        f"gamma, vega, theta, rho",
+                total = 0.0
+                for position in positions:
+                    volatility = vol_mapping(position, state, shock)
+                    option = shocked_leg_option(
+                        position,
+                        state,
+                        spot=float(spot),
+                        volatility=volatility,
+                        valuation_date=shocked_date,
                     )
+                    total += (
+                        getattr(option, attr)()
+                        * position.quantity
+                        * position.contract_size
+                    )
+
+                if metric == "net_delta":
+                    total += underlying_quantity
+                elif metric == "pnl":
+                    underlying_pnl = (
+                        spot - state.spot_price
+                    ) * underlying_quantity
+                    total = (total - baseline_value) + underlying_pnl
 
                 results.append(
                     {
                         "spot_price": spot,
                         "volatility": vol,
-                        "value": metric_value,
+                        "value": total,
                     },
                 )
-
-            # Reset Volatility for next loop iteration
-            restore_volatilities(self.portfolio, original_position_vols)
-
-        # Restore everything
-        self.portfolio.update_market_conditions(
-            spot_price=original_spot,
-            volatility=original_vol,
-            valuation_date=original_date,
-        )
 
         return pd.DataFrame(results)

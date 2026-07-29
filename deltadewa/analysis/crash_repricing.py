@@ -28,6 +28,15 @@ separable, so omitting the band can never quietly change what is priced.
 Legs are repriced with the existing
 :class:`~deltadewa.valuation.OptionValuation` engine (European exercise uses the
 analytic Black-Scholes engine); no new pricer is introduced.
+
+As of M2.1, the actual per-leg repricing and the crash-skew vol-shock mapping
+live in :mod:`deltadewa.analysis.repricing` and :func:`crash_skew_vol` — the
+same primitive and pluggable-mapping vocabulary the general 2D scenario grid
+(``scenarios.py::scenario_grid_spot_vol``) now shares, so a shared shock
+config (:meth:`CrashShock.to_shock` / :meth:`CrashShock.vol_mapping`)
+reprices identically through either path. This module now supplies the
+crash-conditional *mapping* and the policy-facing :class:`CrashShock`
+adapter; it is no longer a second repricing engine.
 """
 
 from __future__ import annotations
@@ -39,6 +48,14 @@ from typing import TYPE_CHECKING
 
 from scipy.optimize import brentq
 
+from deltadewa.analysis.repricing import (
+    MarketShock,
+    MarketState,
+    VolMapping,
+    flat_bump_vol,
+    reprice_leg,
+    reprice_portfolio,
+)
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.valuation import OptionValuation
 
@@ -147,6 +164,44 @@ class CrashShock:
             crash_scenario_pct=crash_scenario_pct,
         )
 
+    def to_shock(self, *, days_forward: int = 0) -> MarketShock:
+        """Project this basis onto the general :class:`MarketShock` dials.
+
+        Args:
+            days_forward: Calendar days forward from today. Defaults to
+                ``0`` — an instantaneous crash, matching this basis's own
+                assumption (§2: "rates, dividends, and time-to-maturity held
+                at today's values").
+
+        Returns:
+            The spot and vol dials this basis implies. Pair with
+            :meth:`vol_mapping` to reproduce :func:`crash_hedge_value`
+            exactly through the general primitive
+            (:func:`~deltadewa.analysis.repricing.reprice_portfolio`).
+
+        """
+        return MarketShock(
+            spot_shock=self.crash_move,
+            vol_shock=self.crash_vol_shock,
+            days_forward=days_forward,
+        )
+
+    def vol_mapping(self) -> VolMapping:
+        """Return the skew-aware vol mapping this basis's calibration implies.
+
+        Returns:
+            :func:`crash_skew_vol` built from this basis's skew fields. Pair
+            with :meth:`to_shock` — the gauge and any surface reproducing it
+            (e.g. the monitor's crash-anchored explorer) construct literally
+            the same pair, which is what makes agreement structural rather
+            than conventional.
+
+        """
+        return crash_skew_vol(
+            skew_steepening=self.skew_steepening,
+            skew_reference_delta=self.skew_reference_delta,
+        )
+
 
 def _reprice_leg(
     position: OptionPosition,
@@ -156,10 +211,14 @@ def _reprice_leg(
 ) -> float:
     """Total value of one option leg repriced at *spot* and *volatility*.
 
-    Builds a fresh :class:`OptionValuation` at the given crash state — holding
-    the portfolio's rate, dividend, valuation date, and the leg's own strike,
-    maturity, type, and exercise style — and scales the per-share price by
-    signed contract quantity and contract size. Does not mutate portfolio state.
+    Original-signature shim over
+    :func:`~deltadewa.analysis.repricing.reprice_leg` (M2.1). The general,
+    mapping-agnostic primitive now lives in
+    :mod:`deltadewa.analysis.repricing`; :func:`hedge_value` and
+    :func:`crash_hedge_value` call it directly. This wrapper exists only so
+    ``tests/test_analysis/test_crash_repricing.py``, which calls this
+    private helper directly, is unaffected by the extraction. Does not
+    mutate portfolio state.
 
     Args:
         position: Option leg to reprice.
@@ -171,18 +230,14 @@ def _reprice_leg(
         ``price * quantity * contract_size`` in dollars (signed by quantity).
 
     """
-    option = OptionValuation(
-        spot_price=spot,
-        strike_price=position.option.strike_price,
-        maturity_date=position.option.maturity_date,
+    state = MarketState.from_portfolio(portfolio)
+    return reprice_leg(
+        position,
+        state,
+        spot=spot,
         volatility=volatility,
-        risk_free_rate=portfolio.risk_free_rate,
-        dividend_yield=portfolio.dividend_yield,
-        option_type=position.option.option_type,
         valuation_date=portfolio.valuation_date,
-        exercise_style=position.exercise_style,
     )
-    return option.price() * position.quantity * position.contract_size
 
 
 @functools.cache
@@ -251,6 +306,118 @@ def _solve_wing_strike(
     return float(brentq(_abs_put_delta_gap, lo, hi, xtol=0.01, maxiter=100))
 
 
+@dataclasses.dataclass(frozen=True)
+class _CrashSkewVolMapping:
+    """:data:`VolMapping` capturing the M1.6/M1.7 skew calibration.
+
+    ``sigma_i + vol_shock`` for calls and ATM/ITM puts. For an OTM put the
+    crash vol adds ``min(skew_steepening, slope * ln(S/K))`` where
+    ``slope = skew_steepening / ln(S / K_ref)`` and ``K_ref`` is the leg's own
+    ~``skew_reference_delta`` wing (:func:`_solve_wing_strike`). The extra vol
+    is thus ``skew_steepening`` exactly at the wing and interpolates linearly
+    (in log-moneyness) below it — never extrapolated past the calibrated wing
+    (the cap). The anchor is per-leg, so a leg's crash vol never depends on what
+    else the book holds.
+
+    When ``skew_steepening`` is ``0.0`` this returns exactly
+    ``position.option.volatility + shock.vol_shock`` — the flat-bump
+    expression (identical to
+    :func:`~deltadewa.analysis.repricing.flat_bump_vol`) — and solves no wing,
+    so the disabled knob reproduces every prior value bit-for-bit.
+
+    Always anchors the wing at *state*'s spot and valuation date — i.e. at
+    today's surface, even when the shock carries a nonzero ``days_forward``.
+    The skew calibration is a property of today's market, not of the scenario
+    being explored.
+
+    Attributes:
+        skew_steepening: Extra vol reached at the deep-OTM wing on top of
+            ``vol_shock``. ``0.0`` keeps the flat bump.
+        skew_reference_delta: Put-delta magnitude of the wing the steepening
+            is anchored to. Only consulted when ``skew_steepening`` is
+            non-zero.
+
+    """
+
+    skew_steepening: float
+    skew_reference_delta: float
+
+    def __call__(
+        self,
+        position: OptionPosition,
+        state: MarketState,
+        shock: MarketShock,
+    ) -> float:
+        """Shocked crash vol for one leg. See the class docstring.
+
+        Args:
+            position: Option leg to shock.
+            state: The base (pre-shock) market state — spot and valuation
+                date the moneyness and wing solve are measured against.
+            shock: The shock being applied; only ``vol_shock`` is read (the
+                spot dial moves the spot, not the vol).
+
+        Returns:
+            The leg's shocked volatility as a decimal.
+
+        """
+        base = position.option.volatility + shock.vol_shock
+        if math.isclose(self.skew_steepening, 0.0, abs_tol=1e-9):
+            return base
+        if position.option.option_type != OptionType.PUT:
+            return base
+        strike = position.option.strike_price
+        if strike >= state.spot_price:
+            return base
+        k_ref = _solve_wing_strike(
+            spot=state.spot_price,
+            maturity_date=position.option.maturity_date,
+            volatility=position.option.volatility,
+            risk_free_rate=state.risk_free_rate,
+            dividend_yield=state.dividend_yield,
+            valuation_date=state.valuation_date,
+            anchor_delta=self.skew_reference_delta,
+        )
+        slope = self.skew_steepening / math.log(state.spot_price / k_ref)
+        extra = min(
+            self.skew_steepening,
+            slope * math.log(state.spot_price / strike),
+        )
+        return base + extra
+
+
+def crash_skew_vol(
+    *,
+    skew_steepening: float,
+    skew_reference_delta: float,
+) -> VolMapping:
+    """Build the crash-conditional vol mapping (M1.6/M1.7/M2.1).
+
+    A factory, not a ready singleton like
+    :func:`~deltadewa.analysis.repricing.flat_bump_vol` /
+    :func:`~deltadewa.analysis.repricing.proportional_vol`, because it
+    carries runtime configuration — the skew calibration. Returns a frozen
+    dataclass rather than a closure so two mappings built from the same
+    calibration are equal and equally hashable, which the scenario cache
+    relies on for correct cache keys across independent renders.
+
+    Args:
+        skew_steepening: Extra vol reached at the deep-OTM wing on top of the
+            shock's flat bump. ``0.0`` keeps the flat bump.
+        skew_reference_delta: Put-delta magnitude of the wing the steepening
+            is anchored to.
+
+    Returns:
+        A :data:`~deltadewa.analysis.repricing.VolMapping` implementing the
+        skew-aware crash vol.
+
+    """
+    return _CrashSkewVolMapping(
+        skew_steepening=skew_steepening,
+        skew_reference_delta=skew_reference_delta,
+    )
+
+
 def _leg_crash_vol(
     position: OptionPosition,
     *,
@@ -262,19 +429,10 @@ def _leg_crash_vol(
 ) -> float:
     """Shocked crash vol for one leg: flat bump plus a capped wing steepening.
 
-    ``sigma_i + crash_vol_shock`` for calls and ATM/ITM puts. For an OTM put the
-    crash vol adds ``min(skew_steepening, slope * ln(S/K))`` where
-    ``slope = skew_steepening / ln(S / K_ref)`` and ``K_ref`` is the leg's own
-    ~``skew_reference_delta`` wing (:func:`_solve_wing_strike`). The extra vol
-    is thus ``skew_steepening`` exactly at the wing and interpolates linearly
-    (in log-moneyness) below it — never extrapolated past the calibrated wing
-    (the cap). The anchor is per-leg, so a leg's crash vol never depends on what
-    else the book holds.
-
-    When ``shock.skew_steepening`` is ``0.0`` this returns exactly
-    ``position.option.volatility + shock.crash_vol_shock`` — the flat-bump
-    expression — and solves no wing, so the disabled knob reproduces every prior
-    value bit-for-bit.
+    Original-signature shim over the extracted :func:`crash_skew_vol` mapping
+    (M2.1); kept so ``tests/test_analysis/test_crash_repricing.py``, which
+    calls this private helper directly, is unaffected by the extraction. The
+    real implementation is :class:`_CrashSkewVolMapping`.
 
     Args:
         position: Option leg to shock.
@@ -289,26 +447,22 @@ def _leg_crash_vol(
         The leg's shocked volatility as a decimal.
 
     """
-    base = position.option.volatility + shock.crash_vol_shock
-    if math.isclose(shock.skew_steepening, 0.0, abs_tol=1e-9):
-        return base
-    if position.option.option_type != OptionType.PUT:
-        return base
-    strike = position.option.strike_price
-    if strike >= spot:
-        return base
-    k_ref = _solve_wing_strike(
-        spot=spot,
-        maturity_date=position.option.maturity_date,
-        volatility=position.option.volatility,
+    state = MarketState(
+        spot_price=spot,
         risk_free_rate=risk_free_rate,
         dividend_yield=dividend_yield,
         valuation_date=valuation_date,
-        anchor_delta=shock.skew_reference_delta,
+        avg_volatility=0.0,  # crash_skew_vol never reads avg_volatility
     )
-    slope = shock.skew_steepening / math.log(spot / k_ref)
-    extra = min(shock.skew_steepening, slope * math.log(spot / strike))
-    return base + extra
+    mapping = crash_skew_vol(
+        skew_steepening=shock.skew_steepening,
+        skew_reference_delta=shock.skew_reference_delta,
+    )
+    return mapping(
+        position,
+        state,
+        MarketShock(spot_shock=0.0, vol_shock=shock.crash_vol_shock),
+    )
 
 
 def crash_hedge_value(
@@ -321,6 +475,13 @@ def crash_hedge_value(
 
     Excludes the underlying / equity position. Full repriced option value —
     not intrinsic, not value at expiry.
+
+    Routes through the shared, mapping-agnostic
+    :func:`~deltadewa.analysis.repricing.reprice_portfolio` primitive, paired
+    with *shock*'s own :meth:`CrashShock.to_shock` /
+    :meth:`CrashShock.vol_mapping` — the same pair any surface reproducing
+    this value (e.g. the monitor's crash-anchored explorer) must construct
+    for the two to agree structurally rather than by convention.
 
     Args:
         portfolio: Portfolio to evaluate.
@@ -335,25 +496,11 @@ def crash_hedge_value(
         Summed repriced value of the selected option legs, in dollars.
 
     """
-    legs = portfolio.positions if positions is None else positions
-    crash_spot = portfolio.spot_price * (1.0 + shock.crash_move)
-    return float(
-        sum(
-            _reprice_leg(
-                position,
-                portfolio,
-                crash_spot,
-                _leg_crash_vol(
-                    position,
-                    spot=portfolio.spot_price,
-                    risk_free_rate=portfolio.risk_free_rate,
-                    dividend_yield=portfolio.dividend_yield,
-                    valuation_date=portfolio.valuation_date,
-                    shock=shock,
-                ),
-            )
-            for position in legs
-        ),
+    return reprice_portfolio(
+        portfolio,
+        shock=shock.to_shock(),
+        vol_mapping=shock.vol_mapping(),
+        positions=positions,
     )
 
 
@@ -368,9 +515,12 @@ def hedge_value(
     its own today-vol. Deliberately does **not** route through
     :func:`crash_hedge_value` — there is no crash state here, and manufacturing
     a zero :class:`CrashShock` would mean inventing a ``skew_reference_delta``
-    that is never read. Numerically identical to the old
-    ``crash_move=0, vol_shock=0`` call: a zero move leaves the spot alone and a
-    zero shock with no steepening leaves each leg on its own vol.
+    that is never read. Instead builds an explicit, genuinely-neutral
+    :class:`~deltadewa.analysis.repricing.MarketShock` (both dials ``0.0``,
+    stated rather than defaulted) under
+    :func:`~deltadewa.analysis.repricing.flat_bump_vol`. Numerically identical
+    to the old ``crash_move=0, vol_shock=0`` call: a zero move leaves the spot
+    alone and a zero bump with no steepening leaves each leg on its own vol.
 
     Args:
         portfolio: Portfolio to evaluate.
@@ -380,17 +530,11 @@ def hedge_value(
         Summed repriced value of the selected legs at today's spot and vol.
 
     """
-    legs = portfolio.positions if positions is None else positions
-    return float(
-        sum(
-            _reprice_leg(
-                position,
-                portfolio,
-                portfolio.spot_price,
-                position.option.volatility,
-            )
-            for position in legs
-        ),
+    return reprice_portfolio(
+        portfolio,
+        shock=MarketShock(spot_shock=0.0, vol_shock=0.0),
+        vol_mapping=flat_bump_vol,
+        positions=positions,
     )
 
 
