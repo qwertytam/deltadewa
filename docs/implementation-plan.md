@@ -902,47 +902,130 @@ $ git ls-files .mypy_cache | wc -l
 
 ## Phase 2 — Dash rebuild (build on the trusted engine)
 
-### M2.1 — Split `dashboard/stress.py`
+**Locked decisions (from the UX/deployment discussion):**
 
-Extract the repricing + heatmap-grid construction (the analytics the review
-praises) into `analysis/stress.py` with tests; leave only rendering for the UI
-layer. Prereq for both the port and Mo6; fixes the 1,440-line untested-UI smell.
+- **Audience & purpose.** The monitor's job is *understanding / shared decisions*
+  for a non-technical partner reviewing every month or two — not reassurance, not
+  idiot-proofing, and **not** the you're-not-around continuity case (explicitly out
+  of scope; if the operator is gone the hedge may lapse). Horizon is **months, not
+  years** — bias to the fastest correct path, skip long-durability polish.
+- **Monitor content.** Organized around the three questions a person asks —
+  *what does it cost / what do we get / what are we doing* — **leading with the
+  crash** (the partner's focus). A **two-knob scenario explorer** (spot move, vol
+  move) with live repricing is the interactive heart of the "what do we get"
+  section. Principle: **legible cold, every time** — re-teach as it shows, because
+  the reader returns after weeks with no context loaded.
+- **Design tool.** Stays a dense expert workshop (used together, ~monthly). No
+  simplification budget spent here — it all goes to the monitor.
+- **App shape.** **One Dash app, two pages** (`/monitor`, `/design`) sharing the
+  engine and data layer.
+- **Deployment.** DigitalOcean **VPS** + **Docker Compose** + **Tailscale** for all
+  access (MFA via the tailnet sign-in; no public exposure, no login page to build).
+  Deploy the *thin* app early (M2.3) so the surfaces are built against the real
+  environment.
+- **Report.** Emailed monthly heartbeat. Stale-data policy: **send anyway, stamped
+  stale, staleness impossible to miss** — never silently skips, never silently
+  prices on old data.
+- **Backup.** Cheap version: nightly `git commit && push` of `exports/` to a private
+  **offsite** repo (Codeberg — free/private/EU, and *not* DigitalOcean, so a VPS loss
+  can't take the backup with it). Optional `age` encryption if desired.
+- **Model & sub-agent usage.** See CLAUDE.md's "Model & sub-agent usage" section: tier
+  by step (Haiku for orient/verify/sweep, Opus for M2.1 compute-API design and M2.4 the
+  monitor, Sonnet for implementation), and delegate to the read-only agents —
+  `fast-processor` (orient), `gate-runner` (code gate), `dash-smoke-runner` (app smoke),
+  `doc-sync-checker` (doc drift).
 
-### M2.2 — Dash skeleton + shared layer
+**Sequencing note.** Two deliberate choices: deployment sits *in the middle* (M2.3),
+not at the end, so the monitor and design surfaces are built against the deployed
+environment rather than guessing at it; and the **monitor (M2.4) comes before the
+design tool (M2.5)** because it is the harder design problem with the real
+(least-expert) reader, so it gets fresh attention rather than Phase-2 fatigue.
 
-Multi-page Dash (`/design`, `/monitor`). Server-side session/state store — **this
-is where M6 lands:** real session persistence, dirty-flag autosave under
-`exports/`, import-overwrite guard, confirm-on-remove, built once. Shared
-data-provider wrapper that surfaces as-of timestamps and an unmissable
-**STATIC / STALE** banner (**M5**). App-level smoke tests (Dash testing harness /
-Playwright — already a dependency) to replace the notebook-execution CI gate for
-migrated surfaces.
+### M2.1 — Extract the compute layer
 
-### M2.3 — `hedge_design` → Dash workbench
+Pull the repricing + scenario logic out of `dashboard/stress.py` (and wherever else
+it's tangled with notebook display) into clean `analysis/` functions with tests —
+organized around **what the surfaces need**, not what the notebook cells call today.
+The heart is a *"reprice the hedge at spot −X%, vol +Y%"* function that takes an
+**arbitrary set of shocks** (so exposing a third dial later is a UI change, not an
+engine change); both the monitor's crash story and the design tool consume it.
 
-Position editor gains the missing **`entry_premium`** and **`underlying_quantity`**
-inputs (Mo3/Mo7). Reactive panels eliminate the Mo7 stale-panel / re-run-cells
-problem entirely. Sizing / ladder / monetization / roll planners run on the
-corrected engine. No red primary buttons; no leaked tracebacks or `DEBUG:` prints
-(`stress.py:628-632`, `export_controls.py:541`). Import/export via the guarded
-session layer (supersedes **Mo5**).
+**Fix-then-extract** the two `stress.py` xfail bugs from M1.5 first (the
+`valuation_date` state-leak at `stress.py:897`, and the `get_portfolio_state_hash`
+cache-key gap omitting `underlying_quantity`/`contract_size`/`exercise_style`), then
+extract — so the extraction is a provably pure refactor. Pure Python, no Dash yet.
+Closes **Mo6**'s stress-coverage gap.
 
-### M2.4 — `monitor` → live view
+### M2.2 — Dash skeleton + shared layer (thin app)
 
-Read-mostly Tiers 1–4 on the corrected engine, with as-of stamps and staleness
-banners everywhere. Resolve **M2**: wire hedge-success from the audit trail / entry
-data, or omit it — recommend omit until realized tracking exists rather than ship a
-permanently-inert gauge.
+The app shell, thin but real: the two-page structure (`/monitor`, `/design`), a
+shared data-provider wrapper that surfaces as-of timestamps and an unmissable
+**STATIC / STALE** banner (**M5**), and server-side session/state — real session
+persistence, dirty-flag autosave under `exports/`, import-overwrite guard,
+confirm-on-remove (**M6**, built once). App-level smoke tests (Dash testing harness /
+Playwright — already a dependency) begin replacing the notebook-execution CI gate.
+A running app with plumbing, before either surface is fleshed out.
 
-### M2.5 — Headless report artifact
+### M2.3 — Deploy the thin app (the "Phase 2.5", brought forward)
 
-Part VII board report as a parametrized, schedulable entrypoint (papermill or a
-plain Python module) rendering deterministic PDF/HTML. **M8** content: return
-framing from tracked start/end book values, realized monetization, and an as-of
-stamp. Golden-file regression test. Retire the notebook-execution CI steps once
-both surfaces are covered by app + report tests.
+Stand up the box *now*, while the app is thin, so M2.4/M2.5 are built and tested
+against the real runtime. Provision the DigitalOcean VPS; a `Dockerfile` pinning
+Python + QuantLib + every wheel and a `compose.yaml` defining the app, the mounted
+`exports/` state dir, and restart policy; install Tailscale on the box and each
+laptop; bind Dash to the tailnet. Success = the skeleton reachable by **bookmark**
+from the partner's laptop over the tailnet, no public port. Write a one-page
+**RUNBOOK stub** (fresh-box recovery: install Docker + Tailscale → clone → restore
+`exports/` → `docker compose up -d`); finalise it in Phase 3.
 
-> **Checkpoint:** notebooks retired; CI green on the new (app + report) gate.
+### M2.4 — The monitor (lead with the crash)
+
+The partner's surface, and the highest-care work in Phase 2. Three sections, each
+answering one question:
+
+- **What is this costing us?** — the carry story: why we pay, how much, that it's
+  the price of protection, not a loss.
+- **What do we get for it?** — the payoff story, and the interactive heart. The
+  **two-knob scenario explorer** (spot move, vol move) lives here, **leading with
+  the crash**: the first screen is essentially "here's what happens if it crashes,"
+  with live repricing and a clear before/after. Engine takes arbitrary shocks
+  (M2.1); the monitor **exposes two**, with room for a third later.
+- **What are we doing about it, and why?** — the roll/monetization verdicts with
+  their **reasoning surfaced** ("holding because convexity is in band and we're
+  outside the roll window," not just a green light).
+
+Through-line: **legible cold, every time** — plain-language framing on every panel,
+bands drawn so "in range" is obvious without recalling the threshold; optimise for
+the smart reader returning after eight weeks, not the daily expert. As-of stamps and
+STALE banners everywhere (**M5**). Resolve **M2** (the inert hedge-success gauge):
+omit it until realized-carry tracking exists rather than ship a permanently-neutral
+gauge.
+
+### M2.5 — The design workbench
+
+The dense expert tool migrated to Dash — sizing / ladder / monetization / roll
+planners on the corrected engine. Position editor gains the missing
+**`entry_premium`** and **`underlying_quantity`** inputs (**Mo3/Mo7**); reactive
+panels eliminate the stale-panel / re-run-cells problem (**Mo7**); the C2 editor
+exercise-style default (deferred from M1.5a) lands here, defaulting from the IPS. No
+red primary buttons; no leaked tracebacks or `DEBUG:` prints. Import/export via the
+guarded session layer (supersedes **Mo5**). Less design agonising — the reader is the
+operator.
+
+### M2.6 — Headless report + cron + backup (the heartbeat)
+
+The Part VII board report as a parametrised, schedulable entrypoint rendering
+deterministic HTML/PDF, with **M8** content: return framing from tracked start/end
+book values, realized monetization, and an as-of stamp. Golden-file regression test.
+**Stale-data policy: send stamped-stale, impossible to miss.** Host cron drives three
+jobs: market-data refresh, the monthly report email, and the `exports/` backup
+push. Backup goes to a private **offsite** repo (Codeberg; optional `age`
+encryption). The **email-delivery mechanism** (own SMTP vs a transactional free tier
+like Postmark/SendGrid) is decided here. Retire the notebook-execution CI steps once
+app + report tests cover both surfaces.
+
+> **Checkpoint:** notebooks retired; the app is live on the VPS behind Tailscale,
+> reachable by the partner without the operator; the monthly report emails; CI green
+> on the new (app + report) gate.
 
 ---
 
@@ -991,9 +1074,9 @@ both surfaces are covered by app + report tests.
 
 | Finding | Milestone                                    | Finding     | Milestone                                    |
 | ------- | -------------------------------------------- | ----------- | -------------------------------------------- |
-| C1      | M1.2                                         | Mo5         | M2.3 (Dash; notebook version skipped)        |
-| C2      | M1.1 (logic) + M2.3 (editor default)         | Mo6         | M1.5 + M2.1                                  |
-| C3      | M1.1                                         | Mo7         | M2.3 (reactive UI; notebook version skipped) |
+| C1      | M1.2                                         | Mo5         | M2.5 (Dash; notebook version skipped)        |
+| C2      | M1.1 (logic) + M2.5 (editor default)         | Mo6         | M1.5 + M2.1                                  |
+| C3      | M1.1                                         | Mo7         | M2.5 (reactive UI; notebook version skipped) |
 | C4      | M1.2                                         | Mi1         | M0.1 (`CLAUDE.md`) + Phase 3 (rest)          |
 | M1      | M1.3                                         | Mi2         | Phase 3                                      |
 | M2      | M2.4                                         | Mi3         | M0.2                                         |
@@ -1002,8 +1085,8 @@ both surfaces are covered by app + report tests.
 | M5      | M2.2 (Dash-native)                           | Mi6         | M1.4                                         |
 | M6      | M2.2 (Dash-native; notebook version skipped) | Negligibles | Phase 3 / batch with nearest touch           |
 | M7      | Phase 3                                      | #12/#13/#14 | Deferred (data-blocked)                      |
-| M8      | M2.5                                         |             |                                              |
+| M8      | M2.6                                         |             |                                              |
 | Mo1     | M1.2                                         |             |                                              |
 | Mo2     | M1.4                                         |             |                                              |
-| Mo3     | M1.4 (logic) + M2.3 (UI inputs)              |             |                                              |
+| Mo3     | M1.4 (logic) + M2.5 (UI inputs)              |             |                                              |
 | Mo4     | M1.3                                         |             |                                              |

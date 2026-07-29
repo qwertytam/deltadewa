@@ -129,4 +129,36 @@ yet (see "Outstanding Tier-4 items" in `docs/part-x-coverage.md`).
   before editing, and wait for approval.
 - Make small, reviewable commits with conventional-commit messages.
 - Read the relevant existing module before adding a sibling — match its style.
+
+## Model & sub-agent usage
+
+Match the model to the *step*, not the milestone — every task mixes cheap and
+expensive work, so routing the whole task to one tier wastes the most on the parts
+that need it least.
+
+- **Haiku** — read-only and mechanical steps: the orient/inventory opener ("read X,
+  report, wait"), verification, doc sweeps. Delegate these to the sub-agents below so
+  raw file contents and command output stay out of the main thread's context.
+- **Opus** — the judgment: plan-mode design decisions, API and UX shape, the session
+  model. In Phase 2 the reasoning concentrates in **M2.1's compute-API design** and
+  **M2.4 (the monitor)** — spend Opus there. **M2.3 (deploy)** and the cron/backup
+  parts of **M2.6** are cheap; don't run Opus on them.
+- **Sonnet** — well-specified implementation once the design is approved.
+
+Sub-agents live in `.claude/agents/` — all Haiku, all read-only (they report, they
+don't fix):
+
+- **fast-processor** — quick lookups, symbol searches, module summaries. Use for the
+  "orient" step so file contents don't fill the main context.
+- **gate-runner** — the code gate: ruff, format, mypy, pytest, nbqa. Use after an
+  implementation step.
+- **dash-smoke-runner** — the app/integration gate: brings the Dash app up headless
+  and runs the app-level smoke / Playwright suite. Use after a UI step. Distinct from
+  gate-runner — a green code gate does not imply the live app renders.
+- **doc-sync-checker** — audits CLAUDE.md / README / `docs/implementation-plan.md`
+  against the repo and flags drift (test counts, version, milestone status, dead
+  references). Run before a milestone and after a merge.
+
+`.claude/` is gitignored, so the agent *files* aren't versioned — **this section is
+the versioned record of the convention.** Keep it current if the agents change.
   
