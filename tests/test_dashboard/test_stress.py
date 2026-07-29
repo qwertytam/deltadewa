@@ -548,27 +548,19 @@ class TestSpotVolHeatmapGrid:
 
 
 class TestScenarioGridCacheInvalidationGap:
-    """Pin the cache-hash omission of underlying_quantity (cache.py:82-102).
+    """Pin the fixed cache-hash coverage of underlying_quantity (cache.py).
 
-    get_portfolio_state_hash hashes spot/vol/rate/div/date/positions but
-    omits underlying_quantity, contract_size, exercise_style. Resizing the
+    get_portfolio_state_hash now hashes portfolio-level state (including
+    underlying_quantity) and every position's quantity, strike, maturity,
+    type, volatility, contract_size, and exercise_style. Resizing the
     underlying leg between two get_or_calculate calls on the same cache
-    instance silently returns the stale pre-resize grid.
+    instance must invalidate and recompute, not return a stale grid.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Cache gap: get_portfolio_state_hash omits underlying_quantity, "
-            "contract_size, exercise_style. Changing underlying_quantity "
-            "without position details changes → same cache key, resized hedge "
-            "returns stale grid."
-        ),
-    )
     def test_cache_miss_on_underlying_quantity_change(self) -> None:
         """Resize portfolio.underlying_quantity between two
-        get_or_calculate calls. Currently the cache returns the stale
-        pre-resize grid (bug). Should invalidate and recompute."""
+        get_or_calculate calls. The cache must invalidate and recompute,
+        not return the stale pre-resize grid."""
         portfolio = _make_put_portfolio(days_to_maturity=45)
         analyzer = PortfolioAnalyzer(portfolio)
         cache = ScenarioGridCache()

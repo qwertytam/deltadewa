@@ -70,7 +70,10 @@ def get_portfolio_state_hash(portfolio: OptionPortfolio) -> str:
     """Generate a hash representing the current portfolio state.
 
     This is used for cache invalidation - if the portfolio changes,
-    the hash changes and cached scenario grids are invalidated.
+    the hash changes and cached scenario grids are invalidated. Covers
+    portfolio-level market state and underlying notional, plus every
+    position's quantity, strike, maturity, type, volatility, contract
+    size, and exercise style - anything a reprice depends on.
 
     Args:
         portfolio: OptionPortfolio instance
@@ -86,6 +89,7 @@ def get_portfolio_state_hash(portfolio: OptionPortfolio) -> str:
         str(portfolio.risk_free_rate),
         str(portfolio.dividend_yield),
         str(portfolio.valuation_date.isoformat()),
+        str(portfolio.underlying_quantity),
         str(len(portfolio.positions)),
     ]
 
@@ -98,6 +102,8 @@ def get_portfolio_state_hash(portfolio: OptionPortfolio) -> str:
                 str(pos.option.maturity_date.isoformat()),
                 pos.option.option_type,
                 str(pos.option.volatility),
+                str(pos.contract_size),
+                str(pos.exercise_style),
             ],
         )
 
