@@ -14,6 +14,8 @@ now fixed:
   it to leak from.
 
 Key behavioural pins (from stress.py code audit):
+- Time x Price grid: axes via linspace + np.unique(astype(int)), so actual
+  column count < requested num_time_steps for short-dated portfolios.
 - Spot x Vol grid: pure as of M2.1 — every cell reprices through fresh,
   scratch OptionValuation objects; the portfolio is never mutated.
 
