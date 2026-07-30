@@ -51,6 +51,13 @@ The package is layered. Put logic in the lower layers; keep widgets dumb.
 - `analysis/` — metrics and decision logic: `health.py`, `hedge_triggers.py`,
   `carry.py`, `volatility.py`. **New metric/decision code goes here, UI-free.**
 - `dashboard/` + `widgets/` — Jupyter UI only. `setup.py` wires a session together.
+- `app/` — the Dash app (Phase 2 rebuild). `factory.py` builds the two-page
+  (`/monitor`, `/design`) app over the shared `state.ProgramState`; `chrome.py`
+  is the provenance banner shared by both pages; `pages/` holds page layouts.
+  Distinct from `dashboard/`/`widgets/`, which stay Jupyter-only.
+- `state.py` — `ProgramState`, the single shared server-side portfolio + IPS
+  state backing the Dash app (dirty-flag autosave to `exports/`, confirm-gated
+  destructive ops/import). Not per-session — one hedge program, one instance.
 - `visualization/` — chart builders.
 - `persistence.py` — portfolio load/save (YAML/JSON). Round-trip new fields here.
 - `reporting/` — console/text output.

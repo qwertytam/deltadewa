@@ -141,6 +141,69 @@ class TestCboeFredProvider:
 
         assert vix == pytest.approx(16.5, rel=1e-4)
 
+
+class TestReadOnlyMode:
+    """read_only=True never issues a live fetch — the Dash app's contract."""
+
+    def test_fresh_cache_returns_cached_without_fetch(self, tmp_path) -> None:
+        """A fresh cache hit is CACHED, and no HTTP call is attempted."""
+        warm_session = MagicMock(spec=requests.Session)
+        warm_session.get.return_value = _mock_response(_SPX_CSV)
+        CboeFredProvider(cache_dir=tmp_path, session=warm_session).get_spot(
+            "SPX",
+        )
+
+        read_only_session = MagicMock(spec=requests.Session)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=read_only_session,
+            read_only=True,
+        )
+
+        observation = provider.get_spot("SPX")
+
+        assert observation.value == pytest.approx(5000.0, rel=1e-2)
+        assert observation.source is Source.CACHED
+        assert read_only_session.get.call_count == 0
+
+    def test_aged_cache_returns_stale_without_fetch(self, tmp_path) -> None:
+        """A cache entry past its TTL is STALE, never triggering a fetch."""
+        warm_session = MagicMock(spec=requests.Session)
+        warm_session.get.return_value = _mock_response(_SPX_CSV)
+        CboeFredProvider(
+            cache_dir=tmp_path,
+            ttl=timedelta(seconds=0),
+            session=warm_session,
+        ).get_spot("SPX")
+
+        read_only_session = MagicMock(spec=requests.Session)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            ttl=timedelta(seconds=0),
+            session=read_only_session,
+            read_only=True,
+        )
+
+        observation = provider.get_spot("SPX")
+
+        assert observation.value == pytest.approx(5000.0, rel=1e-2)
+        assert observation.source is Source.STALE
+        assert read_only_session.get.call_count == 0
+
+    def test_no_cache_raises_without_fetch(self, tmp_path) -> None:
+        """No cache at all raises, and no HTTP call is attempted either."""
+        session = MagicMock(spec=requests.Session)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=session,
+            read_only=True,
+        )
+
+        with pytest.raises(MarketDataError):
+            provider.get_spot("SPX")
+
+        assert session.get.call_count == 0
+
     def test_get_vix_term_structure_returns_all_keys(self, tmp_path) -> None:
         """Test that get_vix_term_structure fetches each CBOE VIX index."""
         session = MagicMock(spec=requests.Session)

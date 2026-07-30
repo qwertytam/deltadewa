@@ -169,6 +169,8 @@ class CboeFredProvider:
         ttl: timedelta = timedelta(minutes=15),
         session: requests.Session | None = None,
         fred_api_key: str | None = None,
+        *,
+        read_only: bool = False,
     ) -> None:
         """Initialize the provider.
 
@@ -180,6 +182,13 @@ class CboeFredProvider:
                 custom transport config). Defaults to a new ``Session``.
             fred_api_key: Reserved for future use of FRED's JSON API; the
                 CSV endpoint used here does not require a key.
+            read_only: When ``True``, never issues a live fetch — a fresh
+                cache hit is still ``CACHED``, otherwise the last cached
+                value is returned as ``STALE`` regardless of age, and
+                ``MarketDataError`` is raised only if no cache exists at
+                all. For a process (the Dash app) that must never depend
+                on network reachability; a separate cron job is what's
+                expected to keep the cache warm.
 
         """
         if cache_dir is None:
@@ -187,6 +196,7 @@ class CboeFredProvider:
         self._cache = _DiskCache(cache_dir=cache_dir, ttl=ttl)
         self._session = session or requests.Session()
         self._fred_api_key = fred_api_key
+        self._read_only = read_only
 
     def get_spot(self, symbol: str) -> Observation[float]:
         """Return the latest spot price for *symbol* from CBOE."""
@@ -314,6 +324,19 @@ class CboeFredProvider:
                 series=_as_series(cached.value),
                 source=Source.CACHED,
                 fetched_at=cached.fetched_at,
+            )
+
+        if self._read_only:
+            stale = self._cache.get_stale(cache_key)
+            if stale is not None:
+                return _Fetched(
+                    series=_as_series(stale.value),
+                    source=Source.STALE,
+                    fetched_at=stale.fetched_at,
+                )
+            raise MarketDataError(
+                f"No cached value for '{cache_key}' and read_only=True"
+                " forbids a live fetch",
             )
 
         try:
