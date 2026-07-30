@@ -262,9 +262,17 @@ class ScenariosMixin:
                     for j, spot in enumerate(spot_scenarios)
                 )
 
-        # ALWAYS Restore original state
-        # Likely this is now dead code, but kept for safety and future-proofing
-        # if we add any stateful calculations later.
+        # Not dead code: this is restore-only (it never sets a shocked
+        # value, so there is no window where a mid-loop read observes a
+        # wrong portfolio state, unlike the M1.5 stress.py:897 bug). It is
+        # still required, though — BatchPricer prices via scratch
+        # OptionValuation objects (analysis/scenarios.py never mutates
+        # self.portfolio during the loop above), but constructing one of
+        # those writes the *global* QuantLib Settings.instance()
+        # .evaluationDate singleton (valuation.py:214). Without this call
+        # that global is left dirty at the last time_point swept, even
+        # though every position object this analyzer owns still reports
+        # its own correct, untouched valuation_date.
         self.portfolio.update_market_conditions(
             spot_price=original_spot,
             valuation_date=original_date,

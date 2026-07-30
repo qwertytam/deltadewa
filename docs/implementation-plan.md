@@ -943,6 +943,10 @@ design tool (M2.5)** because it is the harder design problem with the real
 
 ### M2.1 — Extract the compute layer
 
+**Status: done** — commits `550d3f1`, `9ba6a54`, `3d2a1df` on
+`m2.1-extract-compute-layer` (PR: "M2.1 — extract the compute layer behind a
+shock-driven primitive with a pluggable vol mapping").
+
 Pull the repricing + scenario logic out of `dashboard/stress.py` (and wherever else
 it's tangled with notebook display) into clean `analysis/` functions with tests —
 organized around **what the surfaces need**, not what the notebook cells call today.
@@ -955,6 +959,67 @@ engine change); both the monitor's crash story and the design tool consume it.
 cache-key gap omitting `underlying_quantity`/`contract_size`/`exercise_style`), then
 extract — so the extraction is a provably pure refactor. Pure Python, no Dash yet.
 Closes **Mo6**'s stress-coverage gap.
+
+**Findings:**
+
+- **(a) The primitive was never the fork — the vol mapping was.** Before this
+  milestone three repricing paths had grown independently: the crash gauge
+  (`crash_repricing.py`), the 2D spot/vol grid (`scenarios.py::scenario_grid_spot_vol`),
+  and the dashboard's heatmap orchestration. Measured on the §4 golden book at the
+  crash overlap point, the naive grid knob underreported the crash-repriced hedge
+  value by **25.4%**. Spot-only reprices agreed to the cent — the pricing primitive
+  itself was already unified. The entire gap was which vol-shock → sigma' rule was
+  applied. This is what `analysis/repricing.py` (`MarketState`, `MarketShock`,
+  `VolMapping`) and `crash_repricing.py`'s `crash_skew_vol` now share as one
+  vocabulary, per their module docstrings.
+- **(b) `days_forward` as the third dial designs out the state-leak, rather than
+  patching it.** The M1.5 bug (`stress.py:897`) mutated `portfolio.valuation_date`
+  to a shocked value and restored it afterward — a window in which a mid-loop read
+  or an exception could observe the shocked state. Making the date shift a plain
+  field on `MarketShock` (defaulting to `0`, i.e. "absent is unambiguously
+  instantaneous") means every reprice derives its shocked date from the shock
+  object and prices through a fresh, scratch `OptionValuation` — there is no
+  portfolio mutation to forget to restore. Guarded by
+  `TestNoMutationSurvivesInTheScenarioPath` (`test_repricing.py`), which AST-checks
+  that neither `scenarios.py` nor `_render_spot_vol_heatmap` ever assigns
+  `.valuation_date`.
+  - **Residual, deliberately not removed:** `scenario_grid()` (the *time/price*
+    grid behind the time-heatmap panel — a separate, older function from
+    `scenario_grid_spot_vol`) still ends with a restore-only
+    `portfolio.update_market_conditions(...)` call. It never sets a shocked value
+    (so it doesn't reintroduce the M1.5 hazard), but it is a real, still-present
+    mutation: it exists because `BatchPricer` prices via scratch objects whose
+    construction writes QuantLib's *global* `Settings.instance().evaluationDate`
+    singleton, which would otherwise leak the last-swept `time_point` into
+    unrelated later pricing. Documented in place (`scenarios.py`, at the call
+    site) rather than removed.
+- **(c) Cross-surface vol-mapping decision (binding for M2.4/M2.5).** `/monitor` is
+  **crash-skew throughout** — the health gauge, the two-knob scenario explorer, and
+  any heatmap on that page all price through `crash_skew_vol`, so everything on one
+  screen agrees with everything else on it. `/design` (the workbench,
+  `StressDashboard`) uses `proportional_vol`. The two surfaces differ only because
+  they answer different questions — "what does the crash story look like" vs. "how
+  does this book behave under a generic vol move" — not because of an accidental
+  default. `VolMapping` is **required, never defaulted**, at every entry point
+  (`scenario_grid_spot_vol`, `get_or_calculate_spot_vol`, `reprice_legs_at`,
+  `reprice_portfolio`) specifically so a caller can't silently fall back to the
+  wrong surface's model.
+- **(d) The unit-mismatch trap.** Grid `vol_scenarios` are *absolute target average
+  volatility levels*; `CrashShock.crash_vol_shock` is *additive*. The two only
+  disagree once a book has enough skew for the difference between "shift every leg
+  to level L" and "bump every leg by δ" to matter — which is invisible on a flat
+  book (both collapse to the same number) and is why mapping-agreement tests must
+  use a skewed fixture (`TestMappingsDistinguishOnASkewedBook`), not the flat §4
+  golden alone.
+
+**Verified at close-out:** both former M1.5 xfails now pass for real
+(`TestSpotVolHeatmapGrid::test_valuation_date_and_engines_unaffected_by_spot_vol_render`,
+`TestScenarioGridCacheInvalidationGap::test_cache_miss_on_underlying_quantity_change`);
+`TestReprisePortfolioAgreesWithCrashHedgeValue::test_agrees_to_the_cent_at_the_ips_crash_point`
+(explorer == crash gauge at the IPS point) and
+`TestMappingsDistinguishOnASkewedBook::test_three_mappings_give_three_different_values`
+both hold; the M1.5 `stress.py` heatmap characterization suite is unchanged; full
+gate green (`ruff`, `mypy` strict, `pylint` 10.00/10, `pytest` — 1394 passed).
 
 ### M2.2 — Dash skeleton + shared layer (thin app)
 

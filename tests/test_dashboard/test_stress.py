@@ -18,6 +18,13 @@ Key behavioural pins (from stress.py code audit):
   column count < requested num_time_steps for short-dated portfolios.
 - Spot x Vol grid: pure as of M2.1 — every cell reprices through fresh,
   scratch OptionValuation objects; the portfolio is never mutated.
+
+A later M2.1 pass moved the remaining compute inside StressDashboard itself
+(grid orchestration, time-heatmap grid construction, Monte Carlo
+concentration/histogram/CDF statistics) into analysis/stress.py, leaving
+StressDashboard as thin matplotlib/ipywidgets rendering. Those functions are
+unit-tested directly in tests/test_analysis/test_stress.py; this file keeps
+only the tests that exercise the dashboard/analyzer/cache layer end to end.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -161,9 +168,9 @@ def _dashboard(
 class TestTimeHeatmapGrid:
     """Pin Time x Price grid shape, monotonicity, repricing, and cache hits.
 
-    Tests the engine-level _render_time_heatmap logic (stress.py:645-843)
-    and the underlying scenario_grid (scenarios.py:135-256), which builds
-    one BatchPricer and calls portfolio_values_at per time point.
+    Tests the engine-level _render_time_heatmap logic and the underlying
+    scenario_grid (scenarios.py), which builds one BatchPricer and calls
+    portfolio_values_at per time point.
     """
 
     def test_grid_shape_rows_desc_cols_asc(self) -> None:
@@ -193,21 +200,6 @@ class TestTimeHeatmapGrid:
         assert list(pivot.index) == [110.0, 100.0, 90.0]
         # Columns ascending: day 0 first
         assert list(pivot.columns) == [0, 10]
-
-    def test_time_axis_truncation_dedup_shortens_columns(self) -> None:
-        """np.unique(astype(int)) truncates, producing fewer columns than
-        num_time_steps for short-dated portfolios (stress.py:682-686)."""
-        days_to_max = 3
-        num_time_steps = 10  # Request 10 steps, get ~4 unique days
-
-        time_days = np.unique(
-            np.linspace(0, days_to_max, num_time_steps).astype(int)
-        )
-
-        # astype(int) truncates 0, 0.33→0, 0.66→0, 1.0→1, 1.33→1, ... 3.0→3
-        # After unique, we get only 4 distinct values: [0, 1, 2, 3]
-        assert len(time_days) < num_time_steps
-        assert len(time_days) == 4
 
     def test_put_value_monotonic_increasing_as_spot_decreases(self) -> None:
         """For a fixed time point, put value strictly increases as spot
@@ -397,12 +389,11 @@ class TestTimeHeatmapGrid:
 class TestSpotVolHeatmapGrid:
     """Pin Spot x Vol grid shape, monotonicity, and repricing.
 
-    Tests _render_spot_vol_heatmap (stress.py:844-1116) and
-    scenario_grid_spot_vol (scenarios.py:275-432). As of M2.1 both are pure
-    — no mutate/restore of portfolio.valuation_date — designing out the
-    former state-leak bug (see
-    test_spotted_valuation_date_state_leak_after_spot_vol_render below)
-    rather than patching it.
+    Tests _render_spot_vol_heatmap and scenario_grid_spot_vol
+    (scenarios.py). As of M2.1 both are pure — no mutate/restore of
+    portfolio.valuation_date — designing out the former state-leak bug
+    (see test_spotted_valuation_date_state_leak_after_spot_vol_render
+    below) rather than patching it.
     """
 
     def test_grid_shape_square_vol_asc_spot_asc(self) -> None:
@@ -700,12 +691,13 @@ class TestGoldenGridSpxTail20m:
 
 
 class TestDisplayRiskRewardSummarySmoke:
-    """Pin display_risk_reward_summary (stress.py:423-639) behaviour:
+    """Pin display_risk_reward_summary behaviour:
     - Real mc_results dict (produced by run_monte_carlo_simulation)
     - None guard
     - Empty dict guard (current KeyError outside try/except)
     - < 20 finite P&Ls guard
-    - Concentration recompute override
+    - Concentration recompute override (delegated to
+      analysis.stress.recompute_concentration as of M2.1)
     """
 
     def test_real_mc_results_displays_without_error(self, capsys) -> None:
@@ -733,8 +725,7 @@ class TestDisplayRiskRewardSummarySmoke:
         )
 
     def test_mc_results_none_returns_cleanly(self, capsys) -> None:
-        """mc_results=None should return cleanly (error path at
-        stress.py:446-448)."""
+        """mc_results=None should return cleanly (the leading None guard)."""
         portfolio = _make_put_portfolio()
         dashboard = _dashboard(portfolio)
 
@@ -758,8 +749,8 @@ class TestDisplayRiskRewardSummarySmoke:
             dashboard.display_risk_reward_summary({})
 
     def test_mc_results_less_than_20_finite_pnls_error(self, capsys) -> None:
-        """Fewer than 20 finite P&L values should trigger an error (stress.py:
-        474-479: if len(pnls_clean) < 20: error + return)."""
+        """Fewer than 20 finite P&L values should trigger an error
+        (the `if len(pnls_clean) < 20: error + return` guard)."""
         portfolio = _make_put_portfolio()
         dashboard = _dashboard(portfolio)
 
@@ -792,7 +783,6 @@ class TestDisplayRiskRewardSummarySmoke:
 
         captured = capsys.readouterr()
         # Should print an error via reporter.error or similar
-        # The function prints "P&L data has fewer than 20..." at stress.py:477
         output = captured.out + captured.err
         assert (
             "fewer than 20" in output.lower()
@@ -804,9 +794,10 @@ class TestDisplayRiskRewardSummarySmoke:
         self,
         capsys,
     ) -> None:
-        """Feed is_concentrated=False but data that recomputes to True
-        (via stress.py:485-489: len(unique(round(pnls, 2))) < len(pnls)/100).
-        Pin that the recomputed value wins in the report."""
+        """Feed is_concentrated=False but data that recomputes to True (via
+        analysis.stress.recompute_concentration's
+        len(unique(round(pnls, 2))) < len(pnls)/100 rule). Pin that the
+        recomputed value wins in the report."""
         portfolio = _make_put_portfolio()
         dashboard = _dashboard(portfolio)
 
@@ -846,10 +837,12 @@ class TestDisplayRiskRewardSummarySmoke:
 
 
 class TestPlotMcDistributionSmoke:
-    """Pin _plot_mc_distribution (stress.py:1192-1447) smoke-level:
+    """Pin _plot_mc_distribution smoke-level:
     - Returns None (plots via side effect)
     - Creates 2 axes (PDF + CDF)
-    - Bin count rule
+
+    The bin-count rule itself is unit-tested directly against
+    compute_pnl_histogram in tests/test_analysis/test_stress.py.
     """
 
     def test_plot_mc_distribution_creates_two_axes(self) -> None:
@@ -880,21 +873,6 @@ class TestPlotMcDistributionSmoke:
             assert len(fig.axes) == 2, "Should have 2 axes (PDF + CDF)"
         finally:
             plt.close(fig)
-
-    def test_bin_count_concentrated_vs_spread(self) -> None:
-        """Bin count logic: is_concentrated=True → 30 bins fixed;
-        is_concentrated=False → min(50, max(20, len(pnls)//100)).
-
-        This is purely logic (stress.py:1212-1214), so we just verify
-        the expected bin counts would be computed correctly (actual bins
-        are created inside matplotlib, hard to inspect post-hoc)."""
-        # Concentrated case
-        n_bins_conc = 30  # Fixed for concentrated
-        assert n_bins_conc == 30
-
-        # Spread case: 1000 P&Ls → 1000//100=10 → max(20,10)=20 → min(50,20)=20
-        n_bins_spread = min(50, max(20, 1000 // 100))
-        assert 20 <= n_bins_spread <= 50
 
 
 class TestMakeStatusWidget:
