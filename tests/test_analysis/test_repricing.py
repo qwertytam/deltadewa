@@ -420,9 +420,21 @@ class TestCacheKeyingCoversMappingAndDaysForward:
 
 
 class TestNoMutationSurvivesInTheScenarioPath:
-    """M2.1 deleted the mutate-then-restore path entirely; guard against a
-    regression reintroducing a portfolio.valuation_date assignment in
-    either the pure grid or the dashboard render it backs.
+    """M2.1 deleted the *shocked-then-restore* pattern (M1.5's
+    stress.py:897 bug: mutate to a shocked value, restore afterward,
+    leaving a window where a mid-loop read or an exception could observe
+    the shocked state). Guard against a regression reintroducing a direct
+    ``.valuation_date = ...`` assignment in either the pure spot/vol grid
+    or the dashboard render it backs.
+
+    Scope note: this AST check only catches literal attribute-assignment
+    syntax. It does NOT — and is not meant to — catch
+    ``scenario_grid()``'s (the time/price grid) trailing, restore-only
+    ``portfolio.update_market_conditions(...)`` call, which is a different,
+    still-present, and necessary mutation (see the comment at its call
+    site): it never sets a shocked value, only cleans up QuantLib's global
+    ``Settings.instance().evaluationDate`` singleton after a scratch-object
+    sweep.
     """
 
     @staticmethod
