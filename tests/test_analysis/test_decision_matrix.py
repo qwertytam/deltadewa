@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from deltadewa.analysis.decision_matrix import (
@@ -23,6 +24,8 @@ from deltadewa.analysis.monetization import (
 )
 from deltadewa.ips_config import IpsConvexity
 
+_AS_OF = datetime(2026, 7, 24, tzinfo=UTC)
+
 # ── Shared helpers ────────────────────────────────────────────────────
 
 
@@ -39,6 +42,7 @@ def _make_env(**kwargs: Any) -> MarketEnvironment:
         "forward_vol_front_3m": 19.0,
         "hedge_cost_verdict": HedgeCostVerdict.FAIR,
         "data_quality": DataQuality.LIVE,
+        "as_of": _AS_OF,
     }
     return MarketEnvironment(**{**defaults, **kwargs})
 
@@ -469,3 +473,60 @@ class TestEntryTimingTreeFullPath:
         result = entry_timing_tree(env)
         assert result.should_enter is True
         assert "aggressively" in result.steps[1].recommendation.lower()
+
+
+class TestDataQualityGate:
+    """Which data qualities may support a market-environment verdict."""
+
+    def test_cached_still_yields_a_verdict(self) -> None:
+        """A within-TTL cache hit is the normal path, not a degraded one.
+
+        The values are the ones the live fetch just wrote, so blocking here
+        would make INSUFFICIENT_DATA the common case rather than the alarm.
+        """
+        result = decision_matrix(
+            market_env=_make_env(data_quality=DataQuality.CACHED),
+            convexity_now_pct=20.0,
+            ips_convexity=_IPS,
+        )
+
+        assert result.verdict is not DecisionVerdict.INSUFFICIENT_DATA
+        assert result.cost_verdict is not None
+
+    def test_stale_is_refused(self) -> None:
+        """Old numbers must not produce a verdict, only a report."""
+        result = decision_matrix(
+            market_env=_make_env(data_quality=DataQuality.STALE),
+            convexity_now_pct=20.0,
+            ips_convexity=_IPS,
+        )
+
+        assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
+        assert result.cost_verdict is None
+        assert "STALE" in result.data_quality_note
+
+    def test_stale_still_reports_hedge_adequacy(self) -> None:
+        """Adequacy needs no market data, so it survives the refusal."""
+        result = decision_matrix(
+            market_env=_make_env(data_quality=DataQuality.STALE),
+            convexity_now_pct=20.0,
+            ips_convexity=_IPS,
+        )
+
+        assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
+
+    def test_entry_timing_accepts_cached(self) -> None:
+        """The entry-timing tree uses the same gate as the matrix."""
+        result = entry_timing_tree(
+            _make_env(data_quality=DataQuality.CACHED),
+        )
+
+        assert result.recommendation != "INSUFFICIENT_DATA"
+
+    def test_entry_timing_refuses_stale(self) -> None:
+        """A stale environment cannot time an entry."""
+        result = entry_timing_tree(
+            _make_env(data_quality=DataQuality.STALE),
+        )
+
+        assert result.recommendation == "INSUFFICIENT_DATA"

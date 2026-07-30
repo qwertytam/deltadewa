@@ -108,6 +108,7 @@ def _make_market_env(regime: RegimeLabel) -> MarketEnvironment:
         forward_vol_front_3m=None,
         hedge_cost_verdict=None,
         data_quality=DataQuality.LIVE,
+        as_of=datetime.datetime(2026, 7, 24, tzinfo=datetime.UTC),
     )
 
 

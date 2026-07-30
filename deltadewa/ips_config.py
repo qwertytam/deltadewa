@@ -65,6 +65,11 @@ DEFAULT_SKEW_LOW_PCTILE: Final[float] = 25.0
 DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 75.0
 DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
 
+# How long a fetched market data value stays trustworthy. This is the boundary
+# between a CACHED reading (good enough for a verdict) and a STALE one (not),
+# so it is policy, not a provider implementation detail.
+DEFAULT_DATA_TTL_MINUTES: Final[float] = 15.0
+
 try:
     import yaml
 
@@ -107,6 +112,9 @@ class IpsMarketEnvironment:
         converted to the 0-1 fraction ``get_skew_percentile`` returns once at
         the ``assess_market_environment`` edge.
         ``term_contango_tolerance`` is in VIX points; slopes below it read FLAT.
+        ``data_ttl_minutes`` is how long a fetched value stays trustworthy —
+        the CACHED/STALE boundary, and so a policy decision about how old data
+        may be before it stops supporting a verdict.
     """
 
     vol_regime_low: float = DEFAULT_VOL_REGIME_LOW
@@ -114,6 +122,7 @@ class IpsMarketEnvironment:
     skew_low_pctile: float = DEFAULT_SKEW_LOW_PCTILE
     skew_high_pctile: float = DEFAULT_SKEW_HIGH_PCTILE
     term_contango_tolerance: float = DEFAULT_TERM_CONTANGO_TOLERANCE
+    data_ttl_minutes: float = DEFAULT_DATA_TTL_MINUTES
 
 
 @dataclass(frozen=True)
@@ -502,6 +511,7 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         "term_contango_tolerance",
         DEFAULT_TERM_CONTANGO_TOLERANCE,
     )
+    data_ttl = section.get("data_ttl_minutes", DEFAULT_DATA_TTL_MINUTES)
 
     if vol_low >= vol_high:
         raise IpsConfigError(
@@ -518,6 +528,11 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         term_tol,
         "market_environment.term_contango_tolerance",
     )
+    if data_ttl <= 0:
+        raise IpsConfigError(
+            "market_environment.data_ttl_minutes must be > 0, got "
+            f"{data_ttl} — a zero TTL would mark every cache hit STALE",
+        )
 
     return IpsMarketEnvironment(
         vol_regime_low=vol_low,
@@ -525,6 +540,7 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         skew_low_pctile=skew_low,
         skew_high_pctile=skew_high,
         term_contango_tolerance=term_tol,
+        data_ttl_minutes=data_ttl,
     )
 
 

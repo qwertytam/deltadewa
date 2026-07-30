@@ -7,17 +7,18 @@ actionable ``DecisionVerdict`` (BUY / MAINTAIN / AVOID / MONETIZE /
 INSUFFICIENT_DATA) and a three-step entry-timing recommendation
 (VIX → skew percentile → term structure).
 
-Never fabricates a verdict when ``data_quality`` is not ``LIVE``; returns
-``INSUFFICIENT_DATA`` with a clear explanation instead, while still
-reporting the hedge-adequacy classification (which depends only on IPS
-config and portfolio convexity, not on live market data).
+Never fabricates a verdict on untrustworthy data: unless ``data_quality``
+is ``LIVE`` or ``CACHED``, returns ``INSUFFICIENT_DATA`` with a clear
+explanation instead, while still reporting the hedge-adequacy
+classification (which depends only on IPS config and portfolio convexity,
+not on live market data).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from deltadewa.analysis.market_environment import (
     DataQuality,
@@ -33,6 +34,16 @@ if TYPE_CHECKING:
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import MonetizationPlan
     from deltadewa.ips_config import IpsConvexity
+
+
+# Data good enough to issue a market-environment verdict on. A within-TTL
+# cache hit is the normal path, not a degraded one — the values are the same
+# ones the live fetch just wrote. STALE, STATIC and UNAVAILABLE are not here:
+# each means the numbers are old or invented, and a verdict on those is the
+# failure mode this gate exists to prevent.
+_VERDICT_QUALITIES: Final[frozenset[DataQuality]] = frozenset(
+    {DataQuality.LIVE, DataQuality.CACHED},
+)
 
 
 class DecisionVerdict(StrEnum):
@@ -243,7 +254,7 @@ def decision_matrix(
         monetization_plan is not None and monetization_plan.value_to_harvest > 0
     )
 
-    if market_env.data_quality is not DataQuality.LIVE:
+    if market_env.data_quality not in _VERDICT_QUALITIES:
         note = (
             f"data_quality is {market_env.data_quality}"
             " — enable live data for an environment verdict"
@@ -251,9 +262,9 @@ def decision_matrix(
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
             rationale=(
-                "Market environment is not LIVE"
+                "Market environment data is not LIVE or CACHED"
                 " — hedge adequacy reported; environment verdict"
-                " requires live data"
+                " requires trustworthy data"
             ),
             data_quality_note=note,
             hedge_adequacy=adequacy,
@@ -265,7 +276,9 @@ def decision_matrix(
     if cost is None:
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
-            rationale=("hedge_cost_verdict is None despite LIVE data quality"),
+            rationale=(
+                "hedge_cost_verdict is None despite usable data quality"
+            ),
             data_quality_note=(
                 "MarketEnvironment.hedge_cost_verdict is None"
                 " — provider may be missing skew or term-structure data"
@@ -338,7 +351,7 @@ def entry_timing_tree(
         a ``should_enter`` flag, and the steps taken.
 
     """
-    if market_env.data_quality is not DataQuality.LIVE:
+    if market_env.data_quality not in _VERDICT_QUALITIES:
         note = (
             f"data_quality is {market_env.data_quality}"
             " — enable live data for an entry-timing recommendation"

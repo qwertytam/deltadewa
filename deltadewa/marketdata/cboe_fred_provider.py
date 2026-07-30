@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import pandas as pd
 import requests
 
 from deltadewa.marketdata._errors import MarketDataError
+from deltadewa.marketdata._observation import Observation, Source
 
 _CBOE_HISTORY_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 _FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
@@ -31,6 +32,63 @@ _VIX_TERM_STRUCTURE_SYMBOLS = {
 _CBOE_OHLCV_SYMBOLS: frozenset[str] = frozenset(_VIX_TERM_STRUCTURE_SYMBOLS)
 
 _REQUEST_TIMEOUT_SECONDS = 10
+
+# A fetched series: (observation date as written by the source, value).
+_Series = list[tuple[str, float]]
+
+T = TypeVar("T")
+
+
+def _as_series(cached: Any) -> _Series:  # ruff: ignore[any-type]  # JSON round-trip erases the tuple type
+    """Coerce a JSON-round-tripped cache payload back into a ``_Series``.
+
+    ``json`` writes tuples as lists, so a cached series reads back as
+    ``list[list[...]]``.
+    """
+    return [(str(row[0]), float(row[1])) for row in cached]
+
+
+def _parse_as_of(raw: str) -> datetime:
+    """Parse a source-supplied observation date into a UTC datetime.
+
+    CBOE writes MM/DD/YYYY and FRED writes YYYY-MM-DD; both parse here.
+    """
+    return pd.Timestamp(raw).to_pydatetime().replace(tzinfo=UTC)
+
+
+@dataclass(frozen=True)
+class _CacheHit:
+    """A cached value together with when it was written.
+
+    ``value`` is whatever JSON round-tripped out of the cache file; callers
+    narrow it (see ``_as_series``).
+    """
+
+    value: Any
+    fetched_at: datetime
+
+
+@dataclass(frozen=True)
+class _Fetched:
+    """A resolved series plus the provenance of how it was obtained."""
+
+    series: _Series
+    source: Source
+    fetched_at: datetime
+
+    def observe(self, value: T, rows: _Series) -> Observation[T]:
+        """Stamp *value* with this fetch's provenance, dated from *rows*.
+
+        ``as_of`` comes from the last row of *rows* — the observation date of
+        the datum itself, which for a daily close is routinely older than
+        ``fetched_at``.
+        """
+        return Observation(
+            value=value,
+            source=self.source,
+            as_of=_parse_as_of(rows[-1][0]),
+            fetched_at=self.fetched_at,
+        )
 
 
 @dataclass
@@ -55,29 +113,41 @@ class _DiskCache:
         except (json.JSONDecodeError, OSError):
             return None
 
-    def get(self, key: str) -> Any | None:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
-        """Return the cached value for *key* if present and within TTL."""
+    def get(self, key: str) -> _CacheHit | None:
+        """Return the cached entry for *key* if present and within TTL."""
+        hit = self.get_stale(key)
+        if hit is None:
+            return None
+        if datetime.now(tz=UTC) - hit.fetched_at > self.ttl:
+            return None
+        return hit
+
+    def get_stale(self, key: str) -> _CacheHit | None:
+        """Return the cached entry for *key* regardless of TTL."""
         entry = self._read(key)
         if entry is None:
             return None
-        fetched_at = datetime.fromisoformat(entry["fetched_at"])
-        if datetime.now(tz=UTC) - fetched_at > self.ttl:
-            return None
-        return entry["value"]
+        return _CacheHit(
+            value=entry["value"],
+            fetched_at=datetime.fromisoformat(entry["fetched_at"]),
+        )
 
-    def get_stale(self, key: str) -> Any | None:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
-        """Return the cached value for *key* regardless of TTL."""
-        entry = self._read(key)
-        return None if entry is None else entry["value"]
+    def set(self, key: str, value: Any) -> datetime:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
+        """Write *value* for *key*, stamped with the current time.
 
-    def set(self, key: str, value: Any) -> None:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
-        """Write *value* for *key*, stamped with the current time."""
+        Returns:
+            The timestamp written, so the caller can stamp the same instant
+            onto the observation it is about to return.
+
+        """
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        fetched_at = datetime.now(tz=UTC)
         entry = {
             "value": value,
-            "fetched_at": datetime.now(tz=UTC).isoformat(),
+            "fetched_at": fetched_at.isoformat(),
         }
         self._path(key).write_text(json.dumps(entry))
+        return fetched_at
 
 
 class CboeFredProvider:
@@ -86,9 +156,12 @@ class CboeFredProvider:
     Caches each successful response to disk with a short TTL. On request
     failure, falls back to the last cached value (regardless of TTL); if no
     cached value exists, raises ``MarketDataError``.
-    """
 
-    is_live: bool = True
+    Every returned ``Observation`` is labelled with which of those three
+    branches produced it (``LIVE``/``CACHED``/``STALE``), and carries the
+    source series' own observation date as ``as_of`` — which for a daily
+    close is routinely older than the fetch.
+    """
 
     def __init__(
         self,
@@ -115,58 +188,80 @@ class CboeFredProvider:
         self._session = session or requests.Session()
         self._fred_api_key = fred_api_key
 
-    def get_spot(self, symbol: str) -> float:
+    def get_spot(self, symbol: str) -> Observation[float]:
         """Return the latest spot price for *symbol* from CBOE."""
         return self._get_cboe_spot(symbol)
 
-    def get_vix(self) -> float:
+    def get_vix(self) -> Observation[float]:
         """Return the latest VIX level from FRED's VIXCLS series."""
-        series = self._request_with_fallback(
-            "vix_fred",
-            lambda: self._fetch_fred_history("VIXCLS"),
-        )
-        return float(series[-1][1])
+        fetched = self._request_vix()
+        rows = fetched.series
+        return fetched.observe(float(rows[-1][1]), rows)
 
-    def get_vix_history(self, lookback_days: int = 252) -> list[float]:
+    def get_vix_history(
+        self,
+        lookback_days: int = 252,
+    ) -> Observation[list[float]]:
         """Return the last *lookback_days* VIXCLS closes, oldest first.
 
         Reuses the same cached FRED series ``get_vix`` reads — no extra
-        download. Values are in vol points.
+        download, and consistent provenance between the two. Values are in
+        vol points.
         """
-        series = self._request_with_fallback(
-            "vix_fred",
-            lambda: self._fetch_fred_history("VIXCLS"),
-        )
-        return [float(value) for _, value in series[-lookback_days:]]
+        fetched = self._request_vix()
+        rows = fetched.series[-lookback_days:]
+        return fetched.observe([value for _, value in rows], rows)
 
-    def get_vix_term_structure(self) -> dict[str, float]:
-        """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name."""
-        return {
+    def get_vix_term_structure(self) -> Observation[dict[str, float]]:
+        """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name.
+
+        Fans out over five separate series, so the combined reading takes the
+        weakest source and the oldest as-of among them.
+        """
+        legs = {
             name: self._get_cboe_spot(symbol)
             for name, symbol in _VIX_TERM_STRUCTURE_SYMBOLS.items()
         }
-
-    def _get_cboe_spot(self, symbol: str) -> float:
-        series = self._request_with_fallback(
-            f"spot_{symbol}",
-            lambda: self._fetch_cboe_history(symbol),
+        return Observation.combine(
+            {name: leg.value for name, leg in legs.items()},
+            legs.values(),
         )
-        return float(series[-1][1])
 
-    def get_skew_index(self) -> float:
-        """Return the current CBOE SKEW index level."""
-        return self._get_cboe_spot("SKEW")
+    def _request_vix(self) -> _Fetched:
+        return self._request_with_fallback(
+            "vix_fred",
+            lambda: self._fetch_fred_history("VIXCLS"),
+        )
 
-    def get_skew_percentile(self, lookback_days: int = 252) -> float:
-        """Return the SKEW index's percentile rank over *lookback_days*."""
-        series = self._request_with_fallback(
+    def _request_skew(self) -> _Fetched:
+        return self._request_with_fallback(
             "spot_SKEW",
             lambda: self._fetch_cboe_history("SKEW"),
         )
-        values = [value for _, value in series[-lookback_days:]]
+
+    def _get_cboe_spot(self, symbol: str) -> Observation[float]:
+        fetched = self._request_with_fallback(
+            f"spot_{symbol}",
+            lambda: self._fetch_cboe_history(symbol),
+        )
+        rows = fetched.series
+        return fetched.observe(float(rows[-1][1]), rows)
+
+    def get_skew_index(self) -> Observation[float]:
+        """Return the current CBOE SKEW index level."""
+        return self._get_cboe_spot("SKEW")
+
+    def get_skew_percentile(
+        self,
+        lookback_days: int = 252,
+    ) -> Observation[float]:
+        """Return the SKEW index's percentile rank over *lookback_days*."""
+        fetched = self._request_skew()
+        rows = fetched.series[-lookback_days:]
+        values = [value for _, value in rows]
         latest = values[-1]
         rank = sum(1 for value in values if value <= latest)
-        return rank / len(values)
+        return fetched.observe(rank / len(values), rows)
 
     def _fetch_cboe_history(self, symbol: str) -> list[tuple[str, float]]:
         url = _CBOE_HISTORY_URL.format(symbol=symbol)
@@ -205,22 +300,39 @@ class CboeFredProvider:
     def _request_with_fallback(
         self,
         cache_key: str,
-        fetch: Callable[[], Any],
-    ) -> Any:  # ruff: ignore[any-type]  # strategy result dispatched at runtime; type not statically known
-        """Try a live fetch, then cache, then fall back to a stale value."""
+        fetch: Callable[[], _Series],
+    ) -> _Fetched:
+        """Try a live fetch, then cache, then fall back to a stale value.
+
+        Each branch is labelled with the ``Source`` it actually represents,
+        rather than the provider's type — a stale-cache fallback must not be
+        indistinguishable from a fresh download at the return.
+        """
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return cached
+            return _Fetched(
+                series=_as_series(cached.value),
+                source=Source.CACHED,
+                fetched_at=cached.fetched_at,
+            )
 
         try:
             value = fetch()
         except requests.RequestException as exc:
             stale = self._cache.get_stale(cache_key)
             if stale is not None:
-                return stale
+                return _Fetched(
+                    series=_as_series(stale.value),
+                    source=Source.STALE,
+                    fetched_at=stale.fetched_at,
+                )
             raise MarketDataError(
                 f"Could not fetch '{cache_key}' and no cached value exists",
             ) from exc
 
-        self._cache.set(cache_key, value)
-        return value
+        fetched_at = self._cache.set(cache_key, value)
+        return _Fetched(
+            series=value,
+            source=Source.LIVE,
+            fetched_at=fetched_at,
+        )

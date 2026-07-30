@@ -318,7 +318,7 @@ class HedgeHealthDashboard:
         if self._market_data is None:
             return None
         try:
-            return self._market_data.get_vix_history()
+            return self._market_data.get_vix_history().value
         except MarketDataError:
             return None
 
