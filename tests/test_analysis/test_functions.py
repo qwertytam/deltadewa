@@ -17,6 +17,7 @@ from deltadewa.analysis.functions import (
     quick_carry_analysis,
     quick_risk_concentration,
 )
+from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.spot_utils import generate_spot_range
@@ -319,6 +320,8 @@ class TestCachingFunctions:
             vol_scenarios,
             metric,
             portfolio_hash,
+            proportional_vol,
+            0,
         )
 
         assert isinstance(key, tuple)
@@ -464,7 +467,8 @@ class TestScenarioGridCache:
             analyzer,
             spot_scenarios,
             vol_scenarios,
-            "pnl",
+            vol_mapping=proportional_vol,
+            metric="pnl",
         )
 
         assert result is not None

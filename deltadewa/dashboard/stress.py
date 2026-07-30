@@ -25,7 +25,16 @@ from matplotlib.axes import Axes
 from matplotlib.ticker import FuncFormatter
 
 from deltadewa.analysis import PortfolioAnalyzer, ScenarioGridCache
-from deltadewa.analysis.volatility import calculate_portfolio_avg_volatility
+from deltadewa.analysis.repricing import proportional_vol
+from deltadewa.analysis.stress import (
+    build_spot_vol_grid_spec,
+    build_time_price_grid_spec,
+    compute_empirical_cdf,
+    compute_pnl_histogram,
+    days_to_max_maturity,
+    percentile_of_value,
+    recompute_concentration,
+)
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.formatters.gradients import (
     apply_financial_gradient_2d,
@@ -69,8 +78,9 @@ class StressDashboard:
     Parameters
     ----------
     portfolio : OptionPortfolio
-        Live portfolio object (shared reference; state is read and temporarily
-        mutated for scenario calculations, then restored).
+        Live portfolio object (shared reference; scenario calculations read
+        its state and never mutate it — every shocked point reprices through
+        a fresh, scratch valuation).
     analyzer : PortfolioAnalyzer
         Portfolio analyser used by the scenario cache.
     cache : ScenarioGridCache
@@ -137,10 +147,7 @@ class StressDashboard:
 
         original_spot: float = self.global_assumptions.spot_price.value
         original_date: datetime = portfolio.valuation_date
-        max_maturity = max(
-            pos.option.maturity_date for pos in portfolio.positions
-        )
-        days_to_max_maturity = (max_maturity - original_date).days
+        max_days_to_maturity = days_to_max_maturity(portfolio)
 
         # --- widgets ---
         metric_selector = widgets.Dropdown(
@@ -194,7 +201,7 @@ class StressDashboard:
                 num_price_steps=n_price,
                 original_spot=original_spot,
                 original_date=original_date,
-                days_to_max_maturity=days_to_max_maturity,
+                max_days_to_maturity=max_days_to_maturity,
             )
 
         def _on_change(_change: object) -> None:
@@ -278,28 +285,24 @@ class StressDashboard:
         vol_shock_pct: float = self.global_assumptions.vol_shock_pct.value
         grid_resolution: int = self.global_assumptions.grid_resolution.value
 
-        original_spot: float = portfolio.spot_price
         original_val_date: datetime = portfolio.valuation_date
-        baseline_value: float = portfolio.total_value()
 
-        avg_vol: float = calculate_portfolio_avg_volatility(portfolio)
-
-        # Scenario grids
-        spot_min = original_spot * (1 - spot_shock_pct)
-        spot_max = original_spot * (1 + spot_shock_pct)
-        spot_scenarios = np.linspace(spot_min, spot_max, grid_resolution)
-
-        vol_min = max(avg_vol * (1 - vol_shock_pct), 0.05)
-        vol_max = min(avg_vol * (1 + vol_shock_pct), 3.0)
-        vol_scenarios = np.linspace(vol_min, vol_max, grid_resolution)
-
-        if portfolio.positions:
-            max_maturity = max(
-                pos.option.maturity_date for pos in portfolio.positions
-            )
-            max_days = (max_maturity - portfolio.valuation_date).days
-        else:
-            max_days = 90
+        grid_spec = build_spot_vol_grid_spec(
+            portfolio,
+            spot_shock_pct=spot_shock_pct,
+            vol_shock_pct=vol_shock_pct,
+            grid_resolution=grid_resolution,
+        )
+        original_spot = grid_spec.original_spot
+        baseline_value = grid_spec.baseline_value
+        avg_vol = grid_spec.avg_vol
+        spot_min = grid_spec.spot_min
+        spot_max = grid_spec.spot_max
+        spot_scenarios = grid_spec.spot_scenarios
+        vol_min = grid_spec.vol_min
+        vol_max = grid_spec.vol_max
+        vol_scenarios = grid_spec.vol_scenarios
+        max_days = grid_spec.max_days
 
         # PortfolioWidgets helpers are not available here; build widgets
         # directly
@@ -484,10 +487,11 @@ class StressDashboard:
             losses = pnls_clean[pnls_clean < 0]
 
             unique_rounded = np.unique(np.round(pnls_clean, 2))
-            is_concentrated = len(unique_rounded) < (len(pnls_clean) / 100)
-
-            if is_concentrated and most_common_pnl is not None:
-                concentration_pct = most_common_pnl[1] / len(pnls_clean) * 100
+            is_concentrated, concentration_pct = recompute_concentration(
+                pnls_clean,
+                most_common_pnl,
+                concentration_pct,
+            )
 
             # ---- textual summary ----
             print("\n📊 Distribution Summary:")
@@ -652,7 +656,7 @@ class StressDashboard:
         num_price_steps: int,
         original_spot: float,
         original_date: datetime,
-        days_to_max_maturity: int,
+        max_days_to_maturity: int,
     ) -> None:
         """Render (or re-render) the Time vs Price styled table.
 
@@ -671,22 +675,19 @@ class StressDashboard:
         with output_widget:
             output_widget.clear_output(wait=True)
             try:
-                spot_min = original_spot * (1 - spot_range_pct)
-                spot_max = original_spot * (1 + spot_range_pct)
-                spot_scenarios = np.linspace(
-                    spot_min,
-                    spot_max,
-                    num_price_steps,
+                grid_spec = build_time_price_grid_spec(
+                    spot_range_pct=spot_range_pct,
+                    num_time_steps=num_time_steps,
+                    num_price_steps=num_price_steps,
+                    original_spot=original_spot,
+                    original_date=original_date,
+                    max_days_to_maturity=max_days_to_maturity,
                 )
-
-                time_days = np.unique(
-                    np.linspace(0, days_to_max_maturity, num_time_steps).astype(
-                        int,
-                    ),
-                )
-                time_points = [
-                    original_date + timedelta(days=int(d)) for d in time_days
-                ]
+                spot_min = grid_spec.spot_min
+                spot_max = grid_spec.spot_max
+                spot_scenarios = grid_spec.spot_scenarios
+                time_days = grid_spec.time_days
+                time_points = grid_spec.time_points
 
                 result_df = self.cache.get_or_calculate(
                     portfolio=self.portfolio,
@@ -894,17 +895,15 @@ class StressDashboard:
                             f"{valuation_date.strftime('%Y-%m-%d')}",
                         )
 
-                original_calc_date = self.portfolio.valuation_date
-                self.portfolio.valuation_date = valuation_date
-
                 result_df = self.cache.get_or_calculate_spot_vol(
                     portfolio=self.portfolio,
                     analyzer=self.analyzer,
                     spot_scenarios=spot_scenarios,
                     vol_scenarios=vol_scenarios,
+                    vol_mapping=proportional_vol,
                     metric=metric_type,
                     baseline_value=baseline_value,
-                    proportional_vol_scaling=True,
+                    days_forward=days_forward,
                 )
 
                 elapsed_time = time.time() - start_time
@@ -916,8 +915,6 @@ class StressDashboard:
                         elapsed_time=elapsed_time,
                     ),
                 )
-
-                self.portfolio.valuation_date = original_calc_date
 
                 result_matrix = (
                     result_df.pivot(
@@ -1230,20 +1227,15 @@ class StressDashboard:
         ax2.patch.set_alpha(0.0)
 
         # ---- LEFT: PDF histogram ----
-        n_bins = (
-            30 if is_concentrated else min(50, max(20, len(pnls_clean) // 100))
+        histogram = compute_pnl_histogram(
+            pnls_clean,
+            min_pnl=min_pnl,
+            max_pnl=max_pnl,
+            is_concentrated=is_concentrated,
         )
-        bin_edges = np.linspace(min_pnl, max_pnl, n_bins + 1)
-        bin_edges[-1] += 1e-10
-        counts, bin_edges = np.histogram(pnls_clean, bins=bin_edges)
-        bin_width = bin_edges[1] - bin_edges[0]
-        total_count = counts.sum()
-        density = (
-            (counts / (total_count * bin_width))
-            if (total_count > 0 and bin_width > 0)
-            else counts.astype(float)
-        )
-        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        bin_centers = histogram.bin_centers
+        density = histogram.density
+        bin_width = histogram.bin_width
 
         colors = [
             DEFAULT_PALETTE.negative if bc < 0 else "steelblue"
@@ -1351,8 +1343,9 @@ class StressDashboard:
             )
 
         # ---- RIGHT: CDF ----
-        sorted_pnls = np.sort(pnls_clean)
-        cdf = np.arange(1, len(sorted_pnls) + 1) / len(sorted_pnls)
+        empirical_cdf = compute_empirical_cdf(pnls_clean)
+        sorted_pnls = empirical_cdf.sorted_pnls
+        cdf = empirical_cdf.cdf
 
         ax2.plot(
             sorted_pnls,
@@ -1397,10 +1390,7 @@ class StressDashboard:
             zorder=5,
         )
 
-        idx_exp = np.searchsorted(sorted_pnls, expected_pnl)
-        cdf_at_exp = (
-            idx_exp / len(sorted_pnls) if idx_exp < len(sorted_pnls) else 1.0
-        )
+        cdf_at_exp = percentile_of_value(empirical_cdf, expected_pnl)
         ax2.axvline(
             expected_pnl,
             color=DEFAULT_PALETTE.medium_background,

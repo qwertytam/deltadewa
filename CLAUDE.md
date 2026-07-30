@@ -129,6 +129,7 @@ yet (see "Outstanding Tier-4 items" in `docs/part-x-coverage.md`).
   before editing, and wait for approval.
 - Make small, reviewable commits with conventional-commit messages.
 - Read the relevant existing module before adding a sibling — match its style.
+- Always create/checkout a feature branch before making changes; never commit directly to `main`
 
 ## Model & sub-agent usage
 

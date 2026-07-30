@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -93,6 +94,7 @@ class TestPortfolioAnalyzerIntegration:
         spot_vol_result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=proportional_vol,
             metric="pnl",
         )
         assert len(spot_vol_result) > 0

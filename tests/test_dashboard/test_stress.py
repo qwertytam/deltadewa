@@ -1,16 +1,28 @@
 """Characterization tests for deltadewa.dashboard.stress module.
 
-This module tests the current behaviour of the stress-grid analytics before
-M2.1 extracts the repricing/grid logic into analysis/. These tests pin both
-correct behavior and known bugs/oddities so extraction will be provably safe.
+This module pins the behaviour of the stress-grid analytics across M2.1,
+which extracted the repricing/grid logic into analysis/repricing.py and
+analysis/scenarios.py. Both M1.5 bugs this file originally characterized are
+now fixed:
+
+- Cache-key gap (cache.py) — get_portfolio_state_hash now covers
+  underlying_quantity, contract_size, and exercise_style (fixed in the
+  cache-key commit preceding M2.1).
+- Spot x Vol state leak (former stress.py:897-920) — designed out rather
+  than patched: scenario_grid_spot_vol (scenarios.py) no longer mutates
+  portfolio.valuation_date at all, so there is no mutate/restore window for
+  it to leak from.
 
 Key behavioural pins (from stress.py code audit):
-- Time x Price grid: axes via linspace + np.unique(astype(int)), so actual
-  column count < requested num_time_steps for short-dated portfolios.
-- Spot x Vol grid: state-leak bug (stress.py:897-920, scenarios.py:289) —
-  QuantLib engines left pricing at shocked date after render.
-- Cache: portfolio_state_hash (cache.py:82-102) omits underlying_quantity,
-  contract_size, exercise_style — a real invalidation gap.
+- Spot x Vol grid: pure as of M2.1 — every cell reprices through fresh,
+  scratch OptionValuation objects; the portfolio is never mutated.
+
+A later M2.1 pass moved the remaining compute inside StressDashboard itself
+(grid orchestration, time-heatmap grid construction, Monte Carlo
+concentration/histogram/CDF statistics) into analysis/stress.py, leaving
+StressDashboard as thin matplotlib/ipywidgets rendering. Those functions are
+unit-tested directly in tests/test_analysis/test_stress.py; this file keeps
+only the tests that exercise the dashboard/analyzer/cache layer end to end.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -25,6 +37,7 @@ import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.cache import ScenarioGridCache
+from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.batch_pricer import BatchPricer, FDGridResolution
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.dashboard.stress import StressDashboard
@@ -153,9 +166,9 @@ def _dashboard(
 class TestTimeHeatmapGrid:
     """Pin Time x Price grid shape, monotonicity, repricing, and cache hits.
 
-    Tests the engine-level _render_time_heatmap logic (stress.py:645-843)
-    and the underlying scenario_grid (scenarios.py:135-256), which builds
-    one BatchPricer and calls portfolio_values_at per time point.
+    Tests the engine-level _render_time_heatmap logic and the underlying
+    scenario_grid (scenarios.py), which builds one BatchPricer and calls
+    portfolio_values_at per time point.
     """
 
     def test_grid_shape_rows_desc_cols_asc(self) -> None:
@@ -185,21 +198,6 @@ class TestTimeHeatmapGrid:
         assert list(pivot.index) == [110.0, 100.0, 90.0]
         # Columns ascending: day 0 first
         assert list(pivot.columns) == [0, 10]
-
-    def test_time_axis_truncation_dedup_shortens_columns(self) -> None:
-        """np.unique(astype(int)) truncates, producing fewer columns than
-        num_time_steps for short-dated portfolios (stress.py:682-686)."""
-        days_to_max = 3
-        num_time_steps = 10  # Request 10 steps, get ~4 unique days
-
-        time_days = np.unique(
-            np.linspace(0, days_to_max, num_time_steps).astype(int)
-        )
-
-        # astype(int) truncates 0, 0.33→0, 0.66→0, 1.0→1, 1.33→1, ... 3.0→3
-        # After unique, we get only 4 distinct values: [0, 1, 2, 3]
-        assert len(time_days) < num_time_steps
-        assert len(time_days) == 4
 
     def test_put_value_monotonic_increasing_as_spot_decreases(self) -> None:
         """For a fixed time point, put value strictly increases as spot
@@ -387,11 +385,13 @@ class TestTimeHeatmapGrid:
 
 
 class TestSpotVolHeatmapGrid:
-    """Pin Spot x Vol grid shape, monotonicity, repricing, and state-leak bug.
+    """Pin Spot x Vol grid shape, monotonicity, and repricing.
 
-    Tests _render_spot_vol_heatmap (stress.py:844-1116) and
-    scenario_grid_spot_vol (scenarios.py:258-399). State-leak bug:
-    stress.py:897-920.
+    Tests _render_spot_vol_heatmap and scenario_grid_spot_vol
+    (scenarios.py). As of M2.1 both are pure — no mutate/restore of
+    portfolio.valuation_date — designing out the former state-leak bug
+    (see test_spotted_valuation_date_state_leak_after_spot_vol_render
+    below) rather than patching it.
     """
 
     def test_grid_shape_square_vol_asc_spot_asc(self) -> None:
@@ -407,6 +407,7 @@ class TestSpotVolHeatmapGrid:
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=proportional_vol,
             metric="value",
         )
 
@@ -433,6 +434,7 @@ class TestSpotVolHeatmapGrid:
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=proportional_vol,
             metric="value",
         )
 
@@ -454,6 +456,7 @@ class TestSpotVolHeatmapGrid:
         result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=proportional_vol,
             metric="value",
         )
 
@@ -468,8 +471,10 @@ class TestSpotVolHeatmapGrid:
 
     def test_grid_cell_matches_batchpricer_after_vol_shift(self) -> None:
         """One grid cell (spot, vol) cross-check against direct portfolio
-        repricing at the same point (via scenario_grid_spot_vol's internal
-        apply_proportional_volatility_shift + update_market_conditions)."""
+        repricing at the same point. On this single-leg book the
+        vega-weighted average is that leg's own vol, so
+        proportional_vol's scaling lands exactly on target_vol, matching
+        a direct update_market_conditions repricing bit-for-bit."""
         portfolio = _make_put_portfolio(days_to_maturity=45)
         analyzer = PortfolioAnalyzer(portfolio)
 
@@ -481,6 +486,7 @@ class TestSpotVolHeatmapGrid:
         grid_result = analyzer.scenario_grid_spot_vol(
             spot_scenarios=spot_scenarios,
             vol_scenarios=vol_scenarios,
+            vol_mapping=proportional_vol,
             metric="value",
         )
         grid_value = grid_result["value"].values[0]
@@ -499,29 +505,20 @@ class TestSpotVolHeatmapGrid:
 
         assert np.isclose(grid_value, direct_value, rtol=1e-4)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "State-leak bug: _render_spot_vol_heatmap sets "
-            "portfolio.valuation_date directly (stress.py:897-898), not via "
-            "update_market_conditions. scenario_grid_spot_vol reads that "
-            "already-shocked date as original_date (scenarios.py:289), so its "
-            "final update_market_conditions restore (scenarios.py:393-397) "
-            "rebuilds QuantLib engines at the *shocked* date, not the "
-            "original. _render_spot_vol_heatmap then restores only the plain "
-            "attribute (stress.py:920), leaving engines pricing at the shocked "
-            "date. portfolio.total_value() called immediately after the "
-            "render will silently reflect stale, wrong-date pricing until "
-            "update_market_conditions is called again."
-        ),
-    )
-    def test_spotted_valuation_date_state_leak_after_spot_vol_render(
+    def test_valuation_date_and_engines_unaffected_by_spot_vol_render(
         self,
     ) -> None:
-        """After create_spot_vol_heatmap render with days_forward != 0, the
-        portfolio's QuantLib engines are left pricing at the shocked date,
-        not the original. This is a violation of the DI container's
-        invariant."""
+        """M2.1 designs out the former state-leak bug rather than patching
+        it: _render_spot_vol_heatmap no longer sets portfolio.valuation_date
+        at all (the old stress.py:897-898/920 mutate-then-restore is
+        deleted), and scenario_grid_spot_vol reprices every cell through
+        fresh, scratch OptionValuation objects at a shocked date derived
+        from days_forward (scenarios.py) rather than by touching the
+        portfolio. A create_spot_vol_heatmap render at days_forward != 0
+        must therefore leave both portfolio.valuation_date and every
+        pre-existing QuantLib engine untouched — there is no
+        mutate/restore window in which either could be left stale, not even
+        transiently or on an exception mid-render."""
         portfolio = _make_put_portfolio(days_to_maturity=90)
         dashboard = _dashboard(portfolio)
 
@@ -529,46 +526,37 @@ class TestSpotVolHeatmapGrid:
         baseline_value = portfolio.total_value()
         baseline_date = portfolio.valuation_date
 
-        # Render Spot x Vol heatmap at days_forward=60 (different date)
-        # This mutates portfolio state internally
+        # Render Spot x Vol heatmap at days_forward=60 (different date).
+        # Pure as of M2.1: must not touch portfolio state at all.
         _ = dashboard.create_spot_vol_heatmap(
             metric="value",
             days_forward=60,
         )
 
-        # After render, valuation_date attribute should be restored
         assert portfolio.valuation_date == baseline_date
 
-        # But the QuantLib engines are still pricing at day 60 (the bug)
-        # So total_value() at the baseline date should still match
+        # The former bug: engines silently left pricing at day 60. Now
+        # there is nothing to leave stale — total_value() at the baseline
+        # date matches immediately, no update_market_conditions call needed.
         after_render_value = portfolio.total_value()
 
-        # This assertion fails because the engines are stale
         assert np.isclose(baseline_value, after_render_value, rtol=1e-4)
 
 
 class TestScenarioGridCacheInvalidationGap:
-    """Pin the cache-hash omission of underlying_quantity (cache.py:82-102).
+    """Pin the fixed cache-hash coverage of underlying_quantity (cache.py).
 
-    get_portfolio_state_hash hashes spot/vol/rate/div/date/positions but
-    omits underlying_quantity, contract_size, exercise_style. Resizing the
+    get_portfolio_state_hash now hashes portfolio-level state (including
+    underlying_quantity) and every position's quantity, strike, maturity,
+    type, volatility, contract_size, and exercise_style. Resizing the
     underlying leg between two get_or_calculate calls on the same cache
-    instance silently returns the stale pre-resize grid.
+    instance must invalidate and recompute, not return a stale grid.
     """
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Cache gap: get_portfolio_state_hash omits underlying_quantity, "
-            "contract_size, exercise_style. Changing underlying_quantity "
-            "without position details changes → same cache key, resized hedge "
-            "returns stale grid."
-        ),
-    )
     def test_cache_miss_on_underlying_quantity_change(self) -> None:
         """Resize portfolio.underlying_quantity between two
-        get_or_calculate calls. Currently the cache returns the stale
-        pre-resize grid (bug). Should invalidate and recompute."""
+        get_or_calculate calls. The cache must invalidate and recompute,
+        not return the stale pre-resize grid."""
         portfolio = _make_put_portfolio(days_to_maturity=45)
         analyzer = PortfolioAnalyzer(portfolio)
         cache = ScenarioGridCache()
@@ -701,12 +689,13 @@ class TestGoldenGridSpxTail20m:
 
 
 class TestDisplayRiskRewardSummarySmoke:
-    """Pin display_risk_reward_summary (stress.py:423-639) behaviour:
+    """Pin display_risk_reward_summary behaviour:
     - Real mc_results dict (produced by run_monte_carlo_simulation)
     - None guard
     - Empty dict guard (current KeyError outside try/except)
     - < 20 finite P&Ls guard
-    - Concentration recompute override
+    - Concentration recompute override (delegated to
+      analysis.stress.recompute_concentration as of M2.1)
     """
 
     def test_real_mc_results_displays_without_error(self, capsys) -> None:
@@ -734,8 +723,7 @@ class TestDisplayRiskRewardSummarySmoke:
         )
 
     def test_mc_results_none_returns_cleanly(self, capsys) -> None:
-        """mc_results=None should return cleanly (error path at
-        stress.py:446-448)."""
+        """mc_results=None should return cleanly (the leading None guard)."""
         portfolio = _make_put_portfolio()
         dashboard = _dashboard(portfolio)
 
@@ -759,8 +747,8 @@ class TestDisplayRiskRewardSummarySmoke:
             dashboard.display_risk_reward_summary({})
 
     def test_mc_results_less_than_20_finite_pnls_error(self, capsys) -> None:
-        """Fewer than 20 finite P&L values should trigger an error (stress.py:
-        474-479: if len(pnls_clean) < 20: error + return)."""
+        """Fewer than 20 finite P&L values should trigger an error
+        (the `if len(pnls_clean) < 20: error + return` guard)."""
         portfolio = _make_put_portfolio()
         dashboard = _dashboard(portfolio)
 
@@ -793,7 +781,6 @@ class TestDisplayRiskRewardSummarySmoke:
 
         captured = capsys.readouterr()
         # Should print an error via reporter.error or similar
-        # The function prints "P&L data has fewer than 20..." at stress.py:477
         output = captured.out + captured.err
         assert (
             "fewer than 20" in output.lower()
@@ -805,9 +792,10 @@ class TestDisplayRiskRewardSummarySmoke:
         self,
         capsys,
     ) -> None:
-        """Feed is_concentrated=False but data that recomputes to True
-        (via stress.py:485-489: len(unique(round(pnls, 2))) < len(pnls)/100).
-        Pin that the recomputed value wins in the report."""
+        """Feed is_concentrated=False but data that recomputes to True (via
+        analysis.stress.recompute_concentration's
+        len(unique(round(pnls, 2))) < len(pnls)/100 rule). Pin that the
+        recomputed value wins in the report."""
         portfolio = _make_put_portfolio()
         dashboard = _dashboard(portfolio)
 
@@ -847,10 +835,12 @@ class TestDisplayRiskRewardSummarySmoke:
 
 
 class TestPlotMcDistributionSmoke:
-    """Pin _plot_mc_distribution (stress.py:1192-1447) smoke-level:
+    """Pin _plot_mc_distribution smoke-level:
     - Returns None (plots via side effect)
     - Creates 2 axes (PDF + CDF)
-    - Bin count rule
+
+    The bin-count rule itself is unit-tested directly against
+    compute_pnl_histogram in tests/test_analysis/test_stress.py.
     """
 
     def test_plot_mc_distribution_creates_two_axes(self) -> None:
@@ -881,21 +871,6 @@ class TestPlotMcDistributionSmoke:
             assert len(fig.axes) == 2, "Should have 2 axes (PDF + CDF)"
         finally:
             plt.close(fig)
-
-    def test_bin_count_concentrated_vs_spread(self) -> None:
-        """Bin count logic: is_concentrated=True → 30 bins fixed;
-        is_concentrated=False → min(50, max(20, len(pnls)//100)).
-
-        This is purely logic (stress.py:1212-1214), so we just verify
-        the expected bin counts would be computed correctly (actual bins
-        are created inside matplotlib, hard to inspect post-hoc)."""
-        # Concentrated case
-        n_bins_conc = 30  # Fixed for concentrated
-        assert n_bins_conc == 30
-
-        # Spread case: 1000 P&Ls → 1000//100=10 → max(20,10)=20 → min(50,20)=20
-        n_bins_spread = min(50, max(20, 1000 // 100))
-        assert 20 <= n_bins_spread <= 50
 
 
 class TestMakeStatusWidget:
