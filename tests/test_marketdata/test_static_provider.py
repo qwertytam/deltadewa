@@ -120,6 +120,10 @@ class TestStaticProvider:
 
         assert provider.get_spot("SPX").source is Source.STATIC
 
+    def test_is_read_only_is_always_true(self) -> None:
+        """StaticProvider performs no I/O, so it is trivially read-only."""
+        assert StaticProvider().is_read_only is True
+
 
 class TestStaticProviderProvenance:
     """Every StaticProvider reading is STATIC and carries no timestamps."""
