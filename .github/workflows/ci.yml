@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
+      - name: Install Playwright browser (Chromium)
+        run: poetry run playwright install --with-deps chromium
+
       - name: Ruff lint
         run: poetry run ruff check .
 
@@ -100,6 +103,9 @@ jobs:
 
       - name: Install dependencies
         run: poetry install --no-interaction
+
+      - name: Install Playwright browser (Chromium)
+        run: poetry run playwright install --with-deps chromium
 
       # DO NOT drop the leading 0 — see the DO NOT REMOVE note in the Makefile.
       # +0 is the control: it runs *with* the type substitution active, so a

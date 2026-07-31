@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from deltadewa.marketdata._errors import MarketDataUnavailableError
+from deltadewa.marketdata._observation import Observation
 
 if TYPE_CHECKING:
     from deltadewa.widgets.assumptions import GlobalAssumptions
@@ -24,8 +25,10 @@ class StaticProvider:
     """No-network ``MarketDataProvider`` backed by explicit values.
 
     Default provider for tests and offline/notebook use — fully
-    deterministic, performs no I/O.  ``assess_market_environment``
-    returns ``DataQuality.STATIC`` for this provider (``is_live = False``).
+    deterministic, performs no I/O. Every value is returned as a
+    ``Source.STATIC`` ``Observation`` with no timestamps: a synthetic number
+    has no observation date, and saying so is the honest answer rather than a
+    gap that could read as "unknown but probably fine".
 
     Attributes:
         spot_prices: Mapping of symbol to spot price.
@@ -41,8 +44,6 @@ class StaticProvider:
             Tests can inject a series to exercise the true-percentile path.
 
     """
-
-    is_live: bool = False
 
     spot_prices: dict[str, float] = field(default_factory=dict)
     vix: float = 16.0
@@ -71,7 +72,7 @@ class StaticProvider:
         """
         return cls(spot_prices={symbol: assumptions.spot_price.value})
 
-    def get_spot(self, symbol: str) -> float:
+    def get_spot(self, symbol: str) -> Observation[float]:
         """Return the spot price registered for *symbol*.
 
         Raises:
@@ -79,17 +80,20 @@ class StaticProvider:
 
         """
         try:
-            return self.spot_prices[symbol]
+            return Observation.static(self.spot_prices[symbol])
         except KeyError as exc:
             raise MarketDataUnavailableError(
                 f"No spot price registered for symbol '{symbol}'",
             ) from exc
 
-    def get_vix(self) -> float:
+    def get_vix(self) -> Observation[float]:
         """Return the current VIX level."""
-        return self.vix
+        return Observation.static(self.vix)
 
-    def get_vix_history(self, lookback_days: int = 252) -> list[float]:
+    def get_vix_history(
+        self,
+        lookback_days: int = 252,
+    ) -> Observation[list[float]]:
         """Return the last *lookback_days* of injected ``vix_history``.
 
         Raises:
@@ -100,21 +104,24 @@ class StaticProvider:
         """
         if not self.vix_history:
             raise MarketDataUnavailableError("No VIX history registered")
-        return list(self.vix_history[-lookback_days:])
+        return Observation.static(list(self.vix_history[-lookback_days:]))
 
-    def get_vix_term_structure(self) -> dict[str, float]:
+    def get_vix_term_structure(self) -> Observation[dict[str, float]]:
         """Return VIX9D/VIX/VIX3M/VIX6M/VIX1Y levels keyed by index name."""
-        return dict(self.vix_term_structure)
+        return Observation.static(dict(self.vix_term_structure))
 
-    def get_skew_index(self) -> float:
+    def get_skew_index(self) -> Observation[float]:
         """Return the current CBOE SKEW index level."""
-        return self.skew_index
+        return Observation.static(self.skew_index)
 
-    def get_skew_percentile(self, lookback_days: int = 252) -> float:
+    def get_skew_percentile(
+        self,
+        lookback_days: int = 252,
+    ) -> Observation[float]:
         """Return the fixed ``skew_percentile`` value.
 
         ``lookback_days`` is accepted for ``MarketDataProvider`` parity but
         is unused — ``StaticProvider`` holds a single static value.
         """
         _ = lookback_days
-        return self.skew_percentile
+        return Observation.static(self.skew_percentile)

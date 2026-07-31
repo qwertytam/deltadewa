@@ -1023,6 +1023,10 @@ gate green (`ruff`, `mypy` strict, `pylint` 10.00/10, `pytest` — 1394 passed).
 
 ### M2.2 — Dash skeleton + shared layer (thin app)
 
+**Status: done** — commits `2020cbd`, `1c3ab2f`, `0a9034d`, `c2f8bfe` on
+`feat/m2.2a-observation-provenance` (PR: "M2.2 — Dash skeleton and shared
+provenance/session layer").
+
 The app shell, thin but real: the two-page structure (`/monitor`, `/design`), a
 shared data-provider wrapper that surfaces as-of timestamps and an unmissable
 **STATIC / STALE** banner (**M5**), and server-side session/state — real session
@@ -1030,6 +1034,47 @@ persistence, dirty-flag autosave under `exports/`, import-overwrite guard,
 confirm-on-remove (**M6**, built once). App-level smoke tests (Dash testing harness /
 Playwright — already a dependency) begin replacing the notebook-execution CI gate.
 A running app with plumbing, before either surface is fleshed out.
+
+**Findings:**
+
+- **(a) M5 needed a `Protocol` return-type change, not a wrapper.** Every
+  `MarketDataProvider` method returns `Observation[T]` rather than a bare
+  value with a parallel provenance-only accessor alongside it. A wrapper
+  approach would let a caller reach past it and read the unwrapped value
+  directly, silently dropping provenance by omission; making
+  `Observation[T]` the *only* return type means skipping it is a type
+  error, not a quiet choice a caller can make without noticing.
+- **(b) One shared `ProgramState`, not per-session.** There is one hedge
+  program and one book, so `state.py` builds a single server-side instance
+  (constructed once via `ProgramState.load(...)`, threaded through
+  `create_app`) rather than a per-browser-session copy. Saves are atomic —
+  write to a temp file under `exports/` and rename over the target — so a
+  crash mid-write can never leave a half-written file that the next load
+  silently trusts.
+- **(c) The app is a pure reader.** `CboeFredProvider(read_only=True)`
+  (added this milestone) never issues a live fetch: a fresh cache hit is
+  still `CACHED`, anything else falls back to the last cached value as
+  `STALE`, and only a totally empty cache raises. A cron job (later
+  milestone) is what's expected to keep the cache warm — a feed outage
+  degrades the chrome banner to an honest STALE rather than taking the
+  dashboard down.
+- **(d) The app-test path for `dash-smoke-runner`.** Lives at
+  `tests/test_app/` — already exactly what the agent's own instructions
+  expect, no agent-file change needed. `dash.testing`'s own browser/runner
+  fixtures need `selenium` and `multiprocess`, neither a project
+  dependency; the harness (`tests/test_app/conftest.py`,
+  `test_app_smoke.py`) instead drives Playwright directly against a
+  `werkzeug.serving.make_server` instance. This is the *beginning* of the
+  app-level replacement for the notebook-execution CI step, not the end of
+  it — that step is retired in **M2.6**; the notebooks still execute today.
+
+**Verified at close-out:** `dash-smoke-runner`'s first real invocation
+reports **SMOKE PASSED** (both pages boot and render with no client-side
+error, no leaked traceback); full gate green (`ruff`, `mypy deltadewa`
+strict, `ruff format`, `pylint` 10.00/10, `pytest` — 1473 passed); both
+`monitor_dashboard.ipynb` and `hedge_design.ipynb` still execute cleanly via
+`jupyter nbconvert --execute` — confirming M2.6, not M2.2, is what retires
+that CI step.
 
 ### M2.3 — Deploy the thin app (the "Phase 2.5", brought forward)
 

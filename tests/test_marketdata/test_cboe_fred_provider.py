@@ -1,12 +1,16 @@
 """Tests for deltadewa.marketdata.cboe_fred_provider."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
 import requests
 
-from deltadewa.marketdata import CboeFredProvider, MarketDataError
+from deltadewa.marketdata import (
+    CboeFredProvider,
+    MarketDataError,
+    Source,
+)
 
 # Real CBOE SPX format: DATE + symbol-name column (no OHLCV).
 # Dates are MM/DD/YYYY — must not be sorted as strings or December rows
@@ -57,7 +61,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_SPX_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        spot = provider.get_spot("SPX")
+        spot = provider.get_spot("SPX").value
 
         assert spot == pytest.approx(5000.0, rel=1e-2)
         assert session.get.call_count == 1
@@ -69,7 +73,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_SPX_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        spot = provider.get_spot("SPX")
+        spot = provider.get_spot("SPX").value
 
         assert spot == pytest.approx(5000.0, rel=1e-2)
 
@@ -103,7 +107,7 @@ class TestCboeFredProvider:
 
         session.get.side_effect = requests.ConnectionError("offline")
 
-        spot = provider.get_spot("SPX")
+        spot = provider.get_spot("SPX").value
 
         assert spot == pytest.approx(5000.0, rel=1e-2)
 
@@ -125,7 +129,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_VIXCLS_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        assert provider.get_vix() == pytest.approx(16.5, rel=1e-4)
+        assert provider.get_vix().value == pytest.approx(16.5, rel=1e-4)
 
     def test_get_vix_parses_observation_date_column(self, tmp_path) -> None:
         """Test get_vix handles FRED's observation_date column name."""
@@ -133,9 +137,72 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_VIXCLS_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        vix = provider.get_vix()
+        vix = provider.get_vix().value
 
         assert vix == pytest.approx(16.5, rel=1e-4)
+
+
+class TestReadOnlyMode:
+    """read_only=True never issues a live fetch — the Dash app's contract."""
+
+    def test_fresh_cache_returns_cached_without_fetch(self, tmp_path) -> None:
+        """A fresh cache hit is CACHED, and no HTTP call is attempted."""
+        warm_session = MagicMock(spec=requests.Session)
+        warm_session.get.return_value = _mock_response(_SPX_CSV)
+        CboeFredProvider(cache_dir=tmp_path, session=warm_session).get_spot(
+            "SPX",
+        )
+
+        read_only_session = MagicMock(spec=requests.Session)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=read_only_session,
+            read_only=True,
+        )
+
+        observation = provider.get_spot("SPX")
+
+        assert observation.value == pytest.approx(5000.0, rel=1e-2)
+        assert observation.source is Source.CACHED
+        assert read_only_session.get.call_count == 0
+
+    def test_aged_cache_returns_stale_without_fetch(self, tmp_path) -> None:
+        """A cache entry past its TTL is STALE, never triggering a fetch."""
+        warm_session = MagicMock(spec=requests.Session)
+        warm_session.get.return_value = _mock_response(_SPX_CSV)
+        CboeFredProvider(
+            cache_dir=tmp_path,
+            ttl=timedelta(seconds=0),
+            session=warm_session,
+        ).get_spot("SPX")
+
+        read_only_session = MagicMock(spec=requests.Session)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            ttl=timedelta(seconds=0),
+            session=read_only_session,
+            read_only=True,
+        )
+
+        observation = provider.get_spot("SPX")
+
+        assert observation.value == pytest.approx(5000.0, rel=1e-2)
+        assert observation.source is Source.STALE
+        assert read_only_session.get.call_count == 0
+
+    def test_no_cache_raises_without_fetch(self, tmp_path) -> None:
+        """No cache at all raises, and no HTTP call is attempted either."""
+        session = MagicMock(spec=requests.Session)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=session,
+            read_only=True,
+        )
+
+        with pytest.raises(MarketDataError):
+            provider.get_spot("SPX")
+
+        assert session.get.call_count == 0
 
     def test_get_vix_term_structure_returns_all_keys(self, tmp_path) -> None:
         """Test that get_vix_term_structure fetches each CBOE VIX index."""
@@ -143,7 +210,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_VIX_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        term_structure = provider.get_vix_term_structure()
+        term_structure = provider.get_vix_term_structure().value
 
         assert set(term_structure) == {
             "VIX9D",
@@ -160,7 +227,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_VIX_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        term_structure = provider.get_vix_term_structure()
+        term_structure = provider.get_vix_term_structure().value
 
         assert all(
             v == pytest.approx(16.5, rel=1e-4) for v in term_structure.values()
@@ -172,7 +239,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_SKEW_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        skew = provider.get_skew_index()
+        skew = provider.get_skew_index().value
 
         assert skew == pytest.approx(
             129.0, rel=1e-5
@@ -188,7 +255,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_SPX_CSV_MULTIROW)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        spot = provider.get_spot("SPX")
+        spot = provider.get_spot("SPX").value
 
         assert spot == pytest.approx(5000.0, rel=1e-2)
 
@@ -198,7 +265,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_SKEW_CSV)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        percentile = provider.get_skew_percentile(lookback_days=10)
+        percentile = provider.get_skew_percentile(lookback_days=10).value
 
         assert percentile == pytest.approx(1.0, rel=1e-7)
 
@@ -208,7 +275,7 @@ class TestCboeFredProvider:
         session.get.return_value = _mock_response(_VIXCLS_CSV_MULTIROW)
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        history = provider.get_vix_history(lookback_days=3)
+        history = provider.get_vix_history(lookback_days=3).value
 
         # Last three rows of 12.0..21.0 are 19.0, 20.0, 21.0 (chronological).
         assert history == [19.0, 20.0, 21.0]
@@ -223,3 +290,119 @@ class TestCboeFredProvider:
         provider.get_vix_history()
 
         assert session.get.call_count == 1
+
+
+class TestCboeFredProviderProvenance:
+    """Each fetch path must label itself for what it actually did."""
+
+    def test_live_fetch_is_labelled_live(self, tmp_path) -> None:
+        """A successful network fetch reports Source.LIVE."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_SPX_CSV)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        assert provider.get_spot("SPX").source is Source.LIVE
+
+    def test_within_ttl_cache_hit_is_labelled_cached(self, tmp_path) -> None:
+        """A second call inside the TTL reports CACHED, not LIVE."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_SPX_CSV)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        provider.get_spot("SPX")
+        second = provider.get_spot("SPX")
+
+        assert second.source is Source.CACHED
+        assert session.get.call_count == 1
+
+    def test_stale_fallback_is_labelled_stale(self, tmp_path) -> None:
+        """The regression this exists to stop: a stale fallback said LIVE.
+
+        Previously the value came back bare and the environment was stamped
+        from the provider's ``is_live`` class attribute, so a cache entry
+        served after a failed fetch was indistinguishable from a fresh one.
+        """
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_SPX_CSV)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            ttl=timedelta(seconds=0),
+            session=session,
+        )
+        provider.get_spot("SPX")
+        session.get.side_effect = requests.ConnectionError("offline")
+
+        stale = provider.get_spot("SPX")
+
+        assert stale.source is Source.STALE
+        assert stale.value == pytest.approx(5000.0, rel=1e-2)
+
+    def test_as_of_is_the_observation_date_not_the_fetch_time(
+        self,
+        tmp_path,
+    ) -> None:
+        """A daily close is older than its download the moment it arrives.
+
+        ``_SPX_CSV``'s only row is dated 2026-06-15. A fetch today is LIVE
+        and ``fetched_at`` is now, but the datum itself is weeks old — the
+        distinction a staleness banner has to show.
+        """
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_SPX_CSV)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        spot = provider.get_spot("SPX")
+
+        assert spot.as_of == datetime(2026, 6, 15, tzinfo=UTC)
+        assert spot.fetched_at is not None
+        assert spot.as_of < spot.fetched_at
+
+    def test_fred_as_of_parses_iso_dates(self, tmp_path) -> None:
+        """FRED writes YYYY-MM-DD; CBOE writes MM/DD/YYYY. Both parse."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_VIXCLS_CSV)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        assert provider.get_vix().as_of == datetime(2026, 6, 15, tzinfo=UTC)
+
+    def test_vix_history_as_of_tracks_the_window_it_returned(
+        self,
+        tmp_path,
+    ) -> None:
+        """The as-of belongs to the last row actually returned."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_VIXCLS_CSV_MULTIROW)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        history = provider.get_vix_history(lookback_days=3)
+
+        # Rows run 2026-01-01..2026-10-01; the last is the tenth.
+        assert history.as_of == datetime(2026, 10, 1, tzinfo=UTC)
+
+    def test_vix_and_history_share_provenance(self, tmp_path) -> None:
+        """Sharing the vix_fred cache key must mean sharing the as-of."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_VIXCLS_CSV)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        vix = provider.get_vix()
+        history = provider.get_vix_history()
+
+        assert history.as_of == vix.as_of
+
+    def test_term_structure_takes_the_worst_leg(self, tmp_path) -> None:
+        """One stale leg makes the whole curve stale."""
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_VIX_CSV)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            ttl=timedelta(seconds=0),
+            session=session,
+        )
+        provider.get_vix_term_structure()
+        session.get.side_effect = requests.ConnectionError("offline")
+
+        term = provider.get_vix_term_structure()
+
+        assert term.source is Source.STALE
+        assert set(term.value) == {"VIX9D", "VIX", "VIX3M", "VIX6M", "VIX1Y"}

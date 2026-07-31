@@ -159,6 +159,33 @@ class TestJsonRoundtrip:
         assert output_path.suffix == ".json"
         assert output_path.name == "test.json"
 
+    def test_export_to_json_leaves_no_partial_file_on_interruption(
+        self,
+        tmp_path,
+        sample_portfolio,
+        monkeypatch,
+    ) -> None:
+        """A write interrupted mid-dump must not corrupt or half-write.
+
+        Simulates a crash inside ``json.dump`` — the destination must be
+        left exactly as it was (absent, on a first write), and no stray
+        temp file should remain.
+        """
+        serializer = PortfolioSerializer(tmp_path)
+        changelog = PortfolioLogger()
+        output_path = tmp_path / "test.json"
+
+        def _boom(*_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("simulated crash mid-write")
+
+        monkeypatch.setattr(json, "dump", _boom)
+
+        with pytest.raises(RuntimeError, match="simulated crash"):
+            serializer.export_to_json(sample_portfolio, changelog, "test.json")
+
+        assert not output_path.exists()
+        assert not output_path.with_suffix(".json.tmp").exists()
+
     def test_json_roundtrip_preserves_market_params(
         self,
         tmp_path,

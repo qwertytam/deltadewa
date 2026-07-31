@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+from datetime import UTC, datetime
+from typing import TypeVar
 
 import pytest
 
@@ -17,7 +19,11 @@ from deltadewa.analysis.market_environment import (
     term_structure_shape,
 )
 from deltadewa.ips_config import IpsMarketEnvironment
+from deltadewa.marketdata import Observation, Source
 from deltadewa.marketdata._errors import MarketDataError
+
+_AS_OF = datetime(2026, 7, 24, tzinfo=UTC)
+_FETCHED = datetime(2026, 7, 30, 14, 5, tzinfo=UTC)
 
 _CALM_TERM = {
     "VIX9D": 14.0,
@@ -42,10 +48,27 @@ _NEAR_FLAT_TERM = {
 }
 
 
+_T = TypeVar("_T")
+
+
+def _obs(
+    value: _T,
+    source: Source = Source.LIVE,
+    as_of: datetime | None = None,
+) -> Observation[_T]:
+    """Wrap *value* as an observation, defaulting to a LIVE reading."""
+    if source is Source.STATIC:
+        return Observation.static(value)
+    return Observation(
+        value=value,
+        source=source,
+        as_of=as_of if as_of is not None else _AS_OF,
+        fetched_at=_FETCHED,
+    )
+
+
 class _StubProvider:
     """Canned-value MarketDataProvider stand-in, no network."""
-
-    is_live: bool = True
 
     def __init__(
         self,
@@ -53,48 +76,56 @@ class _StubProvider:
         term: dict[str, float] | None = None,
         skew_index: float = 120.0,
         skew_percentile: float = 0.5,
+        source: Source = Source.LIVE,
+        vix_as_of: datetime | None = None,
     ) -> None:
         self.vix = vix
         self.term = term if term is not None else dict(_CALM_TERM)
         self.skew_index = skew_index
         self.skew_percentile = skew_percentile
+        self.source = source
+        self.vix_as_of = vix_as_of
         self.received_lookback_days: int | None = None
 
-    def get_spot(self, symbol: str) -> float:
+    def get_spot(self, symbol: str) -> Observation[float]:
         raise NotImplementedError(symbol)
 
-    def get_vix(self) -> float:
-        return self.vix
+    def get_vix(self) -> Observation[float]:
+        return _obs(self.vix, self.source, self.vix_as_of)
 
-    def get_vix_term_structure(self) -> dict[str, float]:
-        return dict(self.term)
+    def get_vix_term_structure(self) -> Observation[dict[str, float]]:
+        return _obs(dict(self.term), self.source)
 
-    def get_skew_index(self) -> float:
-        return self.skew_index
+    def get_skew_index(self) -> Observation[float]:
+        return _obs(self.skew_index, self.source)
 
-    def get_skew_percentile(self, lookback_days: int = 252) -> float:
+    def get_skew_percentile(
+        self,
+        lookback_days: int = 252,
+    ) -> Observation[float]:
         self.received_lookback_days = lookback_days
-        return self.skew_percentile
+        return _obs(self.skew_percentile, self.source)
 
 
 class _FailingProvider:
     """MarketDataProvider stand-in where every call raises."""
 
-    is_live: bool = True
-
-    def get_spot(self, symbol: str) -> float:
+    def get_spot(self, symbol: str) -> Observation[float]:
         raise MarketDataError(symbol)
 
-    def get_vix(self) -> float:
+    def get_vix(self) -> Observation[float]:
         raise MarketDataError("vix unavailable")
 
-    def get_vix_term_structure(self) -> dict[str, float]:
+    def get_vix_term_structure(self) -> Observation[dict[str, float]]:
         raise MarketDataError("term structure unavailable")
 
-    def get_skew_index(self) -> float:
+    def get_skew_index(self) -> Observation[float]:
         raise MarketDataError("skew unavailable")
 
-    def get_skew_percentile(self, lookback_days: int = 252) -> float:
+    def get_skew_percentile(
+        self,
+        lookback_days: int = 252,
+    ) -> Observation[float]:
         _ = lookback_days
         raise MarketDataError("skew percentile unavailable")
 
@@ -306,7 +337,7 @@ class TestAssessMarketEnvironment:
 
 
 class TestDataQualityStatic:
-    """DataQuality is set via provider.is_live, not duck-typed hints."""
+    """DataQuality follows the observations' Source, not provider type."""
 
     def test_static_member_exists(self) -> None:
         """DataQuality.STATIC is a valid member with value 'STATIC'."""
@@ -320,17 +351,13 @@ class TestDataQualityStatic:
         assert env.data_quality == DataQuality.STATIC
 
     def test_live_stub_yields_live(self) -> None:
-        """A provider with is_live=True returns DataQuality.LIVE."""
+        """All-LIVE observations return DataQuality.LIVE."""
         env = assess_market_environment(_StubProvider())
         assert env.data_quality == DataQuality.LIVE
 
-    def test_non_live_stub_yields_static(self) -> None:
-        """A provider with is_live=False returns DataQuality.STATIC."""
-
-        class _NonLiveStub(_StubProvider):
-            is_live: bool = False
-
-        env = assess_market_environment(_NonLiveStub())
+    def test_static_observations_yield_static(self) -> None:
+        """Synthetic observations return DataQuality.STATIC."""
+        env = assess_market_environment(_StubProvider(source=Source.STATIC))
         assert env.data_quality == DataQuality.STATIC
 
     def test_erroring_stub_yields_unavailable(self) -> None:
@@ -345,3 +372,68 @@ class TestDataQualityStatic:
         env = assess_market_environment(StaticProvider())
         assert env.vix is not None
         assert env.regime_label is not None
+
+
+class _MixedSourceProvider(_StubProvider):
+    """Stub whose VIX reading is weaker/older than the rest."""
+
+    def __init__(
+        self,
+        vix_source: Source = Source.STALE,
+        vix_as_of: datetime | None = None,
+    ) -> None:
+        super().__init__()
+        self.vix_source = vix_source
+        self.vix_as_of = vix_as_of
+
+    def get_vix(self) -> Observation[float]:
+        return _obs(self.vix, self.vix_source, self.vix_as_of)
+
+
+class TestDataQualityAggregation:
+    """The snapshot is only as good — and as fresh — as its weakest input."""
+
+    def test_one_stale_reading_makes_the_snapshot_stale(self) -> None:
+        """Three LIVE readings do not launder one STALE one."""
+        env = assess_market_environment(_MixedSourceProvider())
+
+        assert env.data_quality == DataQuality.STALE
+
+    def test_one_cached_reading_downgrades_live(self) -> None:
+        """A cache hit among live readings reports CACHED."""
+        env = assess_market_environment(
+            _MixedSourceProvider(vix_source=Source.CACHED),
+        )
+
+        assert env.data_quality == DataQuality.CACHED
+
+    def test_one_static_reading_makes_the_snapshot_static(self) -> None:
+        """A single invented number contaminates the whole reading."""
+        env = assess_market_environment(
+            _MixedSourceProvider(vix_source=Source.STATIC),
+        )
+
+        assert env.data_quality == DataQuality.STATIC
+
+    def test_as_of_is_the_oldest_reading(self) -> None:
+        """The banner must show the stalest input, not the freshest."""
+        older = datetime(2026, 7, 1, tzinfo=UTC)
+
+        env = assess_market_environment(
+            _MixedSourceProvider(vix_source=Source.LIVE, vix_as_of=older),
+        )
+
+        assert env.as_of == older
+
+    def test_static_snapshot_has_no_as_of(self) -> None:
+        """Synthetic values have no observation date to report."""
+        env = assess_market_environment(_StubProvider(source=Source.STATIC))
+
+        assert env.as_of is None
+
+    def test_unavailable_snapshot_has_no_as_of(self) -> None:
+        """A failed provider reports no timestamp either."""
+        env = assess_market_environment(_FailingProvider())
+
+        assert env.data_quality == DataQuality.UNAVAILABLE
+        assert env.as_of is None

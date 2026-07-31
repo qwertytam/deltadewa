@@ -85,7 +85,7 @@ class TestStartSession:
         ctx = start_session(globals_dict={"portfolio": spx_portfolio})
 
         assert isinstance(ctx.market_data, StaticProvider)
-        assert ctx.market_data.get_spot(ctx.portfolio.get_symbol()) == (
+        assert ctx.market_data.get_spot(ctx.portfolio.get_symbol()).value == (
             ctx.portfolio.spot_price
         )
 
@@ -125,7 +125,11 @@ class TestStartSession:
         ) as mock_cboe_fred_provider:
             ctx = start_session(globals_dict={}, use_live_market_data=True)
 
-        mock_cboe_fred_provider.assert_called_once_with()
+        # The freshness window is IPS policy (market_environment.
+        # data_ttl_minutes), not the provider's constructor default.
+        mock_cboe_fred_provider.assert_called_once_with(
+            ttl=timedelta(minutes=15),
+        )
         # get_vix and get_spot are probed once each; setup_dashboard may
         # call them again via the live provider, so exact counts are not
         # asserted here.

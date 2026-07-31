@@ -8,6 +8,7 @@ import yaml
 
 from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import (
+    DEFAULT_DATA_TTL_MINUTES,
     DEFAULT_SKEW_HIGH_PCTILE,
     DEFAULT_SKEW_LOW_PCTILE,
     DEFAULT_TERM_CONTANGO_TOLERANCE,
@@ -410,6 +411,7 @@ class TestMarketEnvironment:
         assert env.skew_low_pctile == DEFAULT_SKEW_LOW_PCTILE
         assert env.skew_high_pctile == DEFAULT_SKEW_HIGH_PCTILE
         assert env.term_contango_tolerance == DEFAULT_TERM_CONTANGO_TOLERANCE
+        assert env.data_ttl_minutes == DEFAULT_DATA_TTL_MINUTES
 
     def test_example_ips_yaml_market_environment(self) -> None:
         """The shipped config/ips.yaml carries the policy bands."""
@@ -420,6 +422,7 @@ class TestMarketEnvironment:
         assert env.skew_low_pctile == 25
         assert env.skew_high_pctile == 75
         assert env.term_contango_tolerance == pytest.approx(0.5, rel=1e-4)
+        assert env.data_ttl_minutes == pytest.approx(15.0, rel=1e-7)
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Section values round-trip through the loader unchanged."""
@@ -431,6 +434,7 @@ class TestMarketEnvironment:
                 "skew_low_pctile": 20,
                 "skew_high_pctile": 80,
                 "term_contango_tolerance": 1.0,
+                "data_ttl_minutes": 45,
             },
         }
         env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
@@ -440,6 +444,7 @@ class TestMarketEnvironment:
         assert env.skew_low_pctile == 20
         assert env.skew_high_pctile == 80
         assert env.term_contango_tolerance == pytest.approx(1.0, rel=1e-7)
+        assert env.data_ttl_minutes == pytest.approx(45.0, rel=1e-7)
 
     def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
         """vol_regime_low >= vol_regime_high raises IpsConfigError."""
@@ -487,6 +492,24 @@ class TestMarketEnvironment:
             "market_environment": {"term_contango_tolerance": -0.5},
         }
         with pytest.raises(IpsConfigError, match="term_contango_tolerance"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_zero_data_ttl_raises(self, tmp_path: Path) -> None:
+        """A zero TTL would mark every cache hit STALE — refuse it."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {"data_ttl_minutes": 0},
+        }
+        with pytest.raises(IpsConfigError, match="data_ttl_minutes"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_negative_data_ttl_raises(self, tmp_path: Path) -> None:
+        """A negative freshness window is meaningless."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {"data_ttl_minutes": -5},
+        }
+        with pytest.raises(IpsConfigError, match="data_ttl_minutes"):
             load_ips_config(_write_yaml(tmp_path, config))
 
 

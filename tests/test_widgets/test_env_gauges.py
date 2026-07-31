@@ -1,5 +1,7 @@
 """Tests for deltadewa.widgets.env_gauges."""
 
+from datetime import UTC, datetime
+
 import ipywidgets as widgets  # type: ignore[import-untyped]
 
 from deltadewa.analysis.market_environment import (
@@ -10,6 +12,8 @@ from deltadewa.analysis.market_environment import (
     TermShape,
 )
 from deltadewa.widgets.env_gauges import build_env_gauges
+
+_AS_OF = datetime(2026, 7, 24, tzinfo=UTC)
 
 
 def _env(
@@ -32,6 +36,7 @@ def _env(
             forward_vol_front_3m=None,
             hedge_cost_verdict=None,
             data_quality=DataQuality.UNAVAILABLE,
+            as_of=None,
         )
     return MarketEnvironment(
         vix=18.0,
@@ -50,6 +55,7 @@ def _env(
         forward_vol_front_3m=forward_vol_front_3m,
         hedge_cost_verdict=HedgeCostVerdict.FAIR,
         data_quality=quality,
+        as_of=_AS_OF,
     )
 
 

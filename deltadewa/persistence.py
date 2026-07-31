@@ -212,12 +212,20 @@ class PortfolioSerializer:
         """
         portfolio_data = self._build_export_data(portfolio, changelog)
 
-        # Save to file
+        # Write to a temp file and rename onto the destination, so a
+        # concurrent reader (or a crash mid-write) never observes a
+        # truncated file.
         output_path = self.export_dir / filename
-        with Path.open(output_path, "w", encoding="utf-8") as f:
-            json.dump(portfolio_data, f, indent=2)
+        tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+        try:
+            with tmp_path.open("w", encoding="utf-8") as f:
+                json.dump(portfolio_data, f, indent=2)
+            tmp_path.replace(output_path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
-        return Path(output_path)
+        return output_path
 
     def export_to_csv(
         self,
@@ -407,7 +415,11 @@ class PortfolioSerializer:
             if strike is None:
                 raise ValueError("Position entry missing strike price")
 
-            option_type = pos_data.get("option_type") or OptionType.CALL
+            # Coerce to the enum — a round-tripped file stores option_type as
+            # its plain string .value, and a bare str compares equal to the
+            # StrEnum member but lacks .value, which breaks a later re-export.
+            raw_option_type = pos_data.get("option_type") or OptionType.CALL
+            option_type = OptionType(str(raw_option_type).upper())
             quantity = pos_data.get("quantity", pos_data.get("qty", 1))
 
             # Handle volatility - check for both explicit flag and presence of

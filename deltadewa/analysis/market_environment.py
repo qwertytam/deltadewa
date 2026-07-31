@@ -20,8 +20,11 @@ from deltadewa.ips_config import (
     IpsMarketEnvironment,
 )
 from deltadewa.marketdata._errors import MarketDataError
+from deltadewa.marketdata._observation import Observation, Source
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from deltadewa.marketdata._protocols import MarketDataProvider
 
 
@@ -50,14 +53,30 @@ class HedgeCostVerdict(StrEnum):
 
 
 class DataQuality(StrEnum):
-    """Data quality level of a ``MarketEnvironment``."""
+    """Data quality level of a ``MarketEnvironment``.
+
+    Derived from the ``Source`` of the observations that went into the
+    reading — what the fetches actually did — never from the provider's type.
+    """
 
     LIVE = "LIVE"
-    """All provider calls returned real-time or near-real-time data."""
+    """Every reading was fetched over the network on this call."""
+    CACHED = "CACHED"
+    """At worst, a reading came from the disk cache within its TTL."""
+    STALE = "STALE"
+    """A reading came from the cache past its TTL, the live fetch failing."""
     STATIC = "STATIC"
-    """Provider is backed by fixed/hardcoded values (e.g. StaticProvider)."""
+    """A reading was synthetic/hardcoded (e.g. ``StaticProvider``)."""
     UNAVAILABLE = "UNAVAILABLE"
     """Provider failed; all environment fields are ``None``."""
+
+
+_SOURCE_TO_QUALITY: Final[dict[Source, DataQuality]] = {
+    Source.LIVE: DataQuality.LIVE,
+    Source.CACHED: DataQuality.CACHED,
+    Source.STALE: DataQuality.STALE,
+    Source.STATIC: DataQuality.STATIC,
+}
 
 
 @dataclass(frozen=True)
@@ -81,8 +100,11 @@ class MarketEnvironment:
         forward_vol_front_3m: Implied forward vol between the front (VIX)
             and 3M tenors, in vol points. ``None`` if unavailable.
         hedge_cost_verdict: Overall cheap/fair/expensive read.
-        data_quality: ``LIVE`` if all provider calls succeeded, else
-            ``UNAVAILABLE``.
+        data_quality: The weakest ``Source`` among the readings that went into
+            this snapshot, or ``UNAVAILABLE`` if the provider failed.
+        as_of: Observation date of the *oldest* reading in the snapshot — what
+            a stale-data banner must display. ``None`` when ``data_quality``
+            is ``STATIC`` or ``UNAVAILABLE``, neither of which has one.
 
     """
 
@@ -96,6 +118,7 @@ class MarketEnvironment:
     forward_vol_front_3m: float | None
     hedge_cost_verdict: HedgeCostVerdict | None
     data_quality: DataQuality
+    as_of: datetime | None
 
 
 _VIX_LABEL_LOW_PCT: Final[float] = 25.0
@@ -285,10 +308,10 @@ def assess_market_environment(
     )
     term_tolerance = policy.term_contango_tolerance
     try:
-        vix = provider.get_vix()
-        term = provider.get_vix_term_structure()
-        skew_index = provider.get_skew_index()
-        skew_percentile = provider.get_skew_percentile(skew_lookback_days)
+        vix_obs = provider.get_vix()
+        term_obs = provider.get_vix_term_structure()
+        skew_index_obs = provider.get_skew_index()
+        skew_pctile_obs = provider.get_skew_percentile(skew_lookback_days)
     except MarketDataError:
         return MarketEnvironment(
             vix=None,
@@ -301,17 +324,30 @@ def assess_market_environment(
             forward_vol_front_3m=None,
             hedge_cost_verdict=None,
             data_quality=DataQuality.UNAVAILABLE,
+            as_of=None,
         )
+
+    vix = vix_obs.value
+    term = term_obs.value
+    skew_percentile = skew_pctile_obs.value
 
     regime_percentile, regime_label = classify_vix_regime(vix, *regime_bands)
     skew_label = _classify_band(skew_percentile, *skew_bands)
     term_shape = term_structure_shape(term, term_tolerance)
 
+    # The snapshot is only as trustworthy — and only as fresh — as its
+    # weakest input, so combine the four readings rather than asking the
+    # provider what kind of provider it is.
+    provenance = Observation.combine(
+        None,
+        (vix_obs, term_obs, skew_index_obs, skew_pctile_obs),
+    )
+
     return MarketEnvironment(
         vix=vix,
         regime_percentile=regime_percentile,
         regime_label=regime_label,
-        skew_index=skew_index,
+        skew_index=skew_index_obs.value,
         skew_percentile=skew_percentile,
         term_structure=term,
         term_shape=term_shape,
@@ -321,7 +357,6 @@ def assess_market_environment(
             skew_label,
             term_shape,
         ),
-        data_quality=(
-            DataQuality.LIVE if provider.is_live else DataQuality.STATIC
-        ),
+        data_quality=_SOURCE_TO_QUALITY[provenance.source],
+        as_of=provenance.as_of,
     )

@@ -106,6 +106,9 @@ def _make_crash_result(
     )
 
 
+_ENV_AS_OF = datetime.datetime(2026, 7, 24, tzinfo=datetime.UTC)
+
+
 def _make_market_env(
     data_quality: DataQuality = DataQuality.LIVE,
 ) -> MarketEnvironment:
@@ -121,6 +124,7 @@ def _make_market_env(
             forward_vol_front_3m=None,
             hedge_cost_verdict=None,
             data_quality=DataQuality.UNAVAILABLE,
+            as_of=None,
         )
     return MarketEnvironment(
         vix=18.0,
@@ -138,6 +142,7 @@ def _make_market_env(
         forward_vol_front_3m=20.0,
         hedge_cost_verdict=HedgeCostVerdict.FAIR,
         data_quality=data_quality,
+        as_of=_ENV_AS_OF,
     )
 
 

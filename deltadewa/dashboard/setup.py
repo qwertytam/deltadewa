@@ -218,8 +218,8 @@ def _seed_market_values(
         return spot_price, volatility
 
     try:
-        spot_price = market_data.get_spot(portfolio.get_symbol())
-        volatility = market_data.get_vix() / 100
+        spot_price = market_data.get_spot(portfolio.get_symbol()).value
+        volatility = market_data.get_vix().value / 100
     except MarketDataError as exc:
         reporter.warning(
             f"market_data unavailable, using portfolio values: {exc}",

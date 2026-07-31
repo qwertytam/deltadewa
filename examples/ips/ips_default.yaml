@@ -53,6 +53,8 @@ market_environment:
   skew_low_pctile: 25          # SKEW percentile (0-100); below = benign skew
   skew_high_pctile: 75         # SKEW percentile (0-100); above = stressed skew
   term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
+  data_ttl_minutes: 15         # how long a fetched value stays trustworthy;
+                               # past this a cache hit reads STALE, not CACHED
 
 triggers:
   target_delta_ratio_pct: 90.0   # intended net-delta-to-equity ratio; drift is

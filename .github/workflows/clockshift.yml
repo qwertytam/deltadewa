@@ -53,6 +53,9 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
+      - name: Install Playwright browser (Chromium)
+        run: poetry run playwright install --with-deps chromium
+
       - name: Pytest under a +${{ matrix.shift }} day clock
         env:
           CLOCK_SHIFT_DAYS: ${{ matrix.shift }}
