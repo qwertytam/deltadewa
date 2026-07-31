@@ -30,6 +30,16 @@ _ROUTES = {
 }
 
 
+class FetchCapableProviderError(RuntimeError):
+    """Raised when ``create_app`` is given a provider that can live-fetch.
+
+    The app runs unattended and must never depend on network reachability —
+    a feed outage should degrade the chrome to STALE, not take the app
+    down. Checked structurally via ``MarketDataProvider.is_read_only``
+    rather than trusted from a docstring.
+    """
+
+
 class ProgramDashApp(Dash):
     """A ``Dash`` app carrying the one shared program state + data provider.
 
@@ -58,7 +68,8 @@ def create_app(
             fetch — pass a read-only provider (e.g.
             ``CboeFredProvider(read_only=True)``); this app only reads
             cached/last-good values, so a feed outage degrades the chrome
-            to STALE rather than taking the app down.
+            to STALE rather than taking the app down. Enforced at
+            construction via ``market_data.is_read_only``.
         ips_config: Hedge program policy, used to classify market
             conditions for the chrome banner. ``None`` uses policy
             defaults.
@@ -66,7 +77,19 @@ def create_app(
     Returns:
         A ready-to-run ``Dash`` app.
 
+    Raises:
+        FetchCapableProviderError: If ``market_data.is_read_only`` is
+            ``False``.
+
     """
+    if not market_data.is_read_only:
+        raise FetchCapableProviderError(
+            "create_app() requires a read-only market data provider "
+            f"(got {type(market_data).__name__} with "
+            "is_read_only=False); pass e.g. "
+            "CboeFredProvider(read_only=True)",
+        )
+
     app = ProgramDashApp(__name__)
     app.program_state = state
     app.market_data = market_data

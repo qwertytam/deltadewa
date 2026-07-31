@@ -2,9 +2,15 @@
 
 from pathlib import Path
 
-from deltadewa.app.factory import ProgramDashApp, create_app
+import pytest
+
+from deltadewa.app.factory import (
+    FetchCapableProviderError,
+    ProgramDashApp,
+    create_app,
+)
 from deltadewa.constants import ExerciseStyle
-from deltadewa.marketdata import StaticProvider
+from deltadewa.marketdata import CboeFredProvider, StaticProvider
 from deltadewa.state import ProgramState
 
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
@@ -45,6 +51,12 @@ class TestCreateApp:
         second_app = create_app(state=second_state, market_data=_provider())
 
         assert first_app.program_state is not second_app.program_state
+
+    def test_rejects_a_fetch_capable_provider(self, tmp_path: Path) -> None:
+        provider = CboeFredProvider(cache_dir=tmp_path)
+
+        with pytest.raises(FetchCapableProviderError):
+            create_app(state=_state(tmp_path), market_data=provider)
 
 
 class TestRoutes:

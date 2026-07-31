@@ -198,6 +198,11 @@ class CboeFredProvider:
         self._fred_api_key = fred_api_key
         self._read_only = read_only
 
+    @property
+    def is_read_only(self) -> bool:
+        """Whether this instance was constructed with ``read_only=True``."""
+        return self._read_only
+
     def get_spot(self, symbol: str) -> Observation[float]:
         """Return the latest spot price for *symbol* from CBOE."""
         return self._get_cboe_spot(symbol)

@@ -13,14 +13,26 @@ what an individual fetch actually did.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from deltadewa.marketdata._observation import Observation
 
 
+@runtime_checkable
 class MarketDataProvider(Protocol):
     """Structural type for any source of spot/vol/skew market data."""
+
+    @property
+    def is_read_only(self) -> bool:
+        """Whether this provider is incapable of a live network fetch.
+
+        ``True`` for providers that only ever read cached/local/static data
+        (``StaticProvider``; a ``CboeFredProvider`` constructed with
+        ``read_only=True``). A consumer that must never depend on network
+        reachability (e.g. ``deltadewa.app.factory.create_app``) checks this
+        at construction rather than trusting a docstring.
+        """
 
     def get_spot(self, symbol: str) -> Observation[float]:
         """Return the latest spot price for *symbol*."""
