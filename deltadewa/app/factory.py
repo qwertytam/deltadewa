@@ -10,15 +10,18 @@ Pages' own nav/title support.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from dash import Dash, Input, Output, dcc, html
+from flask import jsonify
 
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.app.chrome import build_chrome
 from deltadewa.app.pages import design, monitor
 
 if TYPE_CHECKING:
+    from flask import Flask, Response
+
     from deltadewa.ips_config import IpsConfig
     from deltadewa.marketdata import MarketDataProvider
     from deltadewa.state import ProgramState
@@ -118,5 +121,32 @@ def create_app(
     @app.callback(Output("page-content", "children"), Input("url", "pathname"))
     def _render_page(pathname: str | None) -> html.Div:
         return _ROUTES.get(pathname or _DEFAULT_ROUTE, _ROUTES[_DEFAULT_ROUTE])
+
+    # app.server is typed Any on Dash (it's pluggable, per-backend); cast
+    # once so the route decorator below is properly typed rather than
+    # silently erasing _health's own annotation.
+    flask_app = cast("Flask", app.server)
+
+    @flask_app.route("/health")
+    def _health() -> tuple[Response, int]:
+        # Reuses the same cheap, no-network read _serve_layout already
+        # does for the chrome banner — a dead-man's-switch ping must not
+        # itself trigger a fetch or a reprice.
+        environment = assess_market_environment(market_data, env_policy)
+        as_of = (
+            environment.as_of.isoformat()
+            if environment.as_of is not None
+            else None
+        )
+        return jsonify(
+            {
+                "status": "ok",
+                "state_loaded": state.loaded_from is not None,
+                "market_data": {
+                    "source": environment.data_quality.value,
+                    "as_of": as_of,
+                },
+            },
+        ), 200
 
     return app
