@@ -1078,6 +1078,11 @@ that CI step.
 
 ### M2.3 — Deploy the thin app (the "Phase 2.5", brought forward)
 
+**Status: done** — containerization work landed as commits `fb7000a`,
+`3ff5c44`, `a1c979c`, squashed into `3b0e58a` (PR #213) and `46b554b`
+(PR #215) on `main`; closed out via PR "M2.3 — deploy the thin app to the
+VPS behind Tailscale" after live verification on the provisioned droplet.
+
 Stand up the box *now*, while the app is thin, so M2.4/M2.5 are built and tested
 against the real runtime. Provision the DigitalOcean VPS; a `Dockerfile` pinning
 Python + QuantLib + every wheel and a `compose.yaml` defining the app, the mounted
@@ -1086,6 +1091,69 @@ laptop; bind Dash to the tailnet. Success = the skeleton reachable by **bookmark
 from the partner's laptop over the tailnet, no public port. Write a one-page
 **RUNBOOK stub** (fresh-box recovery: install Docker + Tailscale → clone → restore
 `exports/` → `docker compose up -d`); finalise it in Phase 3.
+
+**Findings:**
+
+- **(a) The bind-address decision, not UFW, is the security boundary.**
+  Inside the container Dash listens on `0.0.0.0:8050` (`DELTADEWA_HOST`,
+  set only in the `Dockerfile`'s `ENV` — the code's own default stays
+  `127.0.0.1`, per `__main__.py`). That's safe only because
+  `compose.yaml` publishes the port to `${BIND_ADDR:-127.0.0.1}` on the
+  *host*, not `0.0.0.0` — Docker inserts published ports into the `nat`
+  table ahead of any UFW/iptables rule, so a published port bypasses the
+  host firewall entirely. `BIND_ADDR` is set to the droplet's Tailscale IP
+  via a gitignored `.env` (RUNBOOK §1); an unset `.env` fails
+  locked-down (loopback-only) rather than open. RUNBOOK §2's exposure
+  check verifies both directions and is mandatory after any `ports:`
+  change.
+- **(b) gunicorn over the dev server, one worker.** `ProgramState` is one
+  shared in-memory instance per the module's own docs ("one hedge
+  program, one instance") — a second worker *process* would fork it into
+  an independently-drifting portfolio. `gunicorn --workers 1
+  --worker-class gthread --threads 4` gets concurrency from threads
+  sharing that one process's memory instead; the default sync worker
+  class ignores `--threads` entirely, so `gthread` is required, not
+  cosmetic. `deltadewa/app/wsgi.py` gives gunicorn and local dev one
+  shared app-construction function so the two paths can't drift apart.
+- **(c) `/health` is reserved for M2.6's dead-man's switch, not a bare
+  liveness probe.** `factory.py`'s `/health` route is cheap (no
+  repricing) but reports `state_loaded` (whether `ProgramState` actually
+  restored a persisted file, not just "the process is up") and the
+  provenance of the freshest market-data reading, reusing the same
+  `assess_market_environment` call `_serve_layout` already makes for the
+  chrome banner. This is deliberately more than a liveness check because
+  M2.6's monitoring needs to distinguish "container is up" from "the data
+  pipeline behind it is actually healthy."
+- **(d) QuantLib-in-Docker was a non-issue.** `python:3.11-slim` +
+  QuantLib installs from a prebuilt manylinux wheel — no build toolchain
+  (gcc/cmake/Boost headers) needed in the image, confirmed both locally
+  via colima and on the droplet. Image is 1.32 GB; Jupyter/notebook/
+  Playwright remain in the main dependency group and are unused at
+  container runtime — a follow-up, not addressed here.
+- **(e) The deployed app is deliberately content-free.** What's live is
+  the M2.2 skeleton plus this milestone's ops plumbing (Dockerfile,
+  compose, `/health`, RUNBOOK) — no monitor/design surfaces beyond what
+  M2.2 already shipped. M2.4/M2.5 build their real content against this
+  already-live environment rather than deploying blind at the end of
+  Phase 2.
+
+**Verified at close-out** (2026-08-03, live on the provisioned droplet over
+Tailscale): `gate-runner` green (`ruff`, `mypy` strict, `pytest` — 1500
+passed, `pylint` 10.00/10); `dash-smoke-runner` green (24/24 app-level
+tests; both pages render; banner logic for all five provenance states —
+live, cached, stale, static, unavailable — verified). On the box itself:
+`/health` returns `200` with `state_loaded: false` and
+`market_data.source: UNAVAILABLE` — the honest, correct response for a
+box that has never run a market-data fetch (M2.6's cron doesn't exist
+yet), not a bug; `/monitor` and `/design` both return `200`, and the
+rendered chrome shows the matching `UNAVAILABLE` banner and "No as-of
+date" stamp — confirming the provenance chain is live end-to-end on the
+real box, not just in tests. `docker compose restart app` survives
+cleanly: the container is back `Up` within seconds and `/health` is
+identical before and after, confirmed from off-box over Tailscale, since
+`BIND_ADDR` intentionally leaves nothing listening on the host's own
+loopback — an unplanned second confirmation that the exposure design
+holds even from the host itself.
 
 ### M2.4 — The monitor (lead with the crash)
 
