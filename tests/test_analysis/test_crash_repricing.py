@@ -111,6 +111,26 @@ def _make_appendix_book(
     return portfolio
 
 
+def _make_mixed_leg_book() -> OptionPortfolio:
+    """Appendix book plus one short (covered) call — a genuinely mixed book.
+
+    The existing appendix/canonical fixtures are all-long-puts, so a curve
+    that accidentally dropped non-put legs would still match
+    ``crash_hedge_value`` on every other fixture in this file. This book
+    exists to catch exactly that regression.
+    """
+    portfolio = _make_appendix_book()
+    maturity = portfolio.positions[0].option.maturity_date
+    portfolio.add_position(
+        strike_price=7260.0,
+        maturity_date=maturity,
+        quantity=-10,
+        option_type=OptionType.CALL,
+        volatility=0.20,
+    )
+    return portfolio
+
+
 def _make_call_book() -> OptionPortfolio:
     """A long-call book with no OTM put — the skew knob has no wing to anchor.
 
@@ -1711,3 +1731,124 @@ class TestPerLegExerciseStyleRespected:
 
         # Repriced value must match direct European pricing
         assert repriced_value == pytest.approx(direct_value, rel=1e-9)
+
+
+class TestCrashValueCurve:
+    """Tests for crash_value_curve — the all-legs monitor sweep (M2.4).
+
+    Distinct from ``compute_crash_convexity``'s ``curve`` (long-puts-only,
+    scoped to the payoff-ratio question): this curve must share
+    ``crash_hedge_value``'s all-legs basis so the monitor's headline number
+    and its chart agree with each other.
+    """
+
+    def test_pins_to_crash_hedge_value_at_ips_shock(self) -> None:
+        """The curve's IPS-depth point matches crash_hedge_value exactly."""
+        portfolio = _make_appendix_book()
+        shock = CrashShock(
+            crash_scenario_pct=_APPENDIX_PCT,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        curve = cr.crash_value_curve(
+            portfolio,
+            shock=shock,
+            shock_range=(_APPENDIX_PCT, _APPENDIX_PCT),
+            n_points=1,
+        )
+        expected = cr.crash_hedge_value(portfolio, shock=shock)
+
+        assert len(curve) == 1
+        pct, value = curve[0]
+        assert pct == pytest.approx(_APPENDIX_PCT)
+        assert value == pytest.approx(expected, rel=1e-9)
+
+    def test_mixed_leg_book_matches_crash_hedge_value_all_legs(self) -> None:
+        """With a call in the book, the curve stays all-legs, not puts-only."""
+        portfolio = _make_mixed_leg_book()
+        shock = CrashShock(
+            crash_scenario_pct=_APPENDIX_PCT,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        curve = cr.crash_value_curve(
+            portfolio,
+            shock=shock,
+            shock_range=(_APPENDIX_PCT, _APPENDIX_PCT),
+            n_points=1,
+        )
+        expected_all_legs = cr.crash_hedge_value(portfolio, shock=shock)
+
+        _, curve_value = curve[0]
+        assert curve_value == pytest.approx(expected_all_legs, rel=1e-9)
+
+    def test_mixed_leg_book_curve_differs_from_puts_only_curve(self) -> None:
+        """The all-legs curve is NOT the puts-only crash_payoff curve.
+
+        Proves the two curves are genuinely different bases on a book that
+        actually holds a non-put leg — not accidentally equal because every
+        other fixture in this file happens to be all-long-puts.
+        """
+        portfolio = _make_mixed_leg_book()
+        shock = CrashShock(
+            crash_scenario_pct=_APPENDIX_PCT,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        all_legs_curve = cr.crash_value_curve(
+            portfolio,
+            shock=shock,
+            shock_range=(_APPENDIX_PCT, _APPENDIX_PCT),
+            n_points=1,
+        )
+        _, all_legs_value = all_legs_curve[0]
+
+        puts_only_result = compute_crash_convexity(
+            portfolio,
+            shock=dataclasses.replace(shock, crash_scenario_pct=0.0),
+            ips_convexity=IpsConvexity(
+                crash_scenario_pct=_APPENDIX_PCT,
+                target_min_pct=15.0,
+                target_max_pct=25.0,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
+        )
+        puts_only_row = next(
+            r
+            for r in puts_only_result.scenario_rows
+            if r.shock_pct == pytest.approx(_APPENDIX_PCT, rel=1e-4)
+        )
+
+        # The short call is excluded from the puts-only curve but included
+        # (as a negative contribution) in the all-legs curve, so the two
+        # must genuinely differ, not just be computed by different code.
+        assert all_legs_value != pytest.approx(puts_only_row.hedge_pnl)
+        assert all_legs_value < puts_only_row.hedge_pnl
+
+    def test_all_long_puts_book_value_rises_as_shock_severity_rises(
+        self,
+    ) -> None:
+        """Puts gain value as the spot shock gets more negative/severe."""
+        portfolio = _make_appendix_book()
+        shock = CrashShock(
+            crash_scenario_pct=_APPENDIX_PCT,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        curve = cr.crash_value_curve(portfolio, shock=shock)
+
+        # Sorted ascending by shock_pct (most severe/negative first), so
+        # values must be non-increasing across the grid.
+        values = [value for _, value in curve]
+        assert values == sorted(values, reverse=True)
+        assert values[0] > values[-1]
