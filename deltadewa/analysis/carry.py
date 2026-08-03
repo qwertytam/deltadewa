@@ -21,11 +21,15 @@ class CarryBudgetStatus:
             percentage.
         within_budget: True when ``carry_pct_of_notional <=
             budget_annual_pct``.
+        theta_annual: Net annual theta in dollars, verbatim from the
+            ``theta_annual`` argument (negative = cost; sign-preserving,
+            unlike ``carry_pct_of_notional``).
 
     """
 
     carry_pct_of_notional: float
     within_budget: bool
+    theta_annual: float
 
 
 def carry_vs_budget(
@@ -54,6 +58,7 @@ def carry_vs_budget(
     return CarryBudgetStatus(
         carry_pct_of_notional=carry_pct,
         within_budget=carry_pct <= budget_annual_pct,
+        theta_annual=theta_annual,
     )
 
 

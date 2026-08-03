@@ -177,6 +177,7 @@ class TestQuantityDecoupling:
             small.carry.carry_pct_of_notional
             != large.carry.carry_pct_of_notional
         )
+        assert small.carry.theta_annual == large.carry.theta_annual
 
 
 class TestNoLongPuts:

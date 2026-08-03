@@ -155,6 +155,7 @@ class TestCarryVsBudget:
 
         assert status.carry_pct_of_notional == pytest.approx(0.0)
         assert status.within_budget is True
+        assert status.theta_annual == pytest.approx(-50_000.0)
 
     def test_negative_notional_also_returns_zero_pct(self) -> None:
         """A negative book_notional is treated the same as zero."""
@@ -165,6 +166,7 @@ class TestCarryVsBudget:
         )
 
         assert status.carry_pct_of_notional == pytest.approx(0.0)
+        assert status.theta_annual == pytest.approx(-50_000.0)
 
     def test_boundary_at_exactly_the_budget_is_within_budget(self) -> None:
         """carry_pct_of_notional == budget_annual_pct is within budget (<=)."""
@@ -176,6 +178,7 @@ class TestCarryVsBudget:
 
         assert status.carry_pct_of_notional == pytest.approx(2.0)
         assert status.within_budget is True
+        assert status.theta_annual == pytest.approx(-20_000.0)
 
     def test_over_budget_is_not_within_budget(self) -> None:
         """A carry cost above the IPS budget reports within_budget=False."""
@@ -187,6 +190,7 @@ class TestCarryVsBudget:
 
         assert status.carry_pct_of_notional == pytest.approx(5.0)
         assert status.within_budget is False
+        assert status.theta_annual == pytest.approx(-50_000.0)
 
     def test_theta_sign_is_irrelevant(self) -> None:
         """Positive or negative theta_annual yields the same magnitude."""
@@ -204,3 +208,5 @@ class TestCarryVsBudget:
         assert negative.carry_pct_of_notional == pytest.approx(
             positive.carry_pct_of_notional,
         )
+        assert negative.theta_annual == pytest.approx(-20_000.0)
+        assert positive.theta_annual == pytest.approx(20_000.0)
