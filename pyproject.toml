@@ -52,6 +52,10 @@ exclude = ["^tests/", "^typings/"]
 module = ["ipywidgets", "ipywidgets.*", "ipyfilechooser", "ipyfilechooser.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["plotly", "plotly.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
 line-length = 80
 target-version = "py311"
