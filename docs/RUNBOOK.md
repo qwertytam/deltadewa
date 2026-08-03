@@ -21,12 +21,21 @@ image build wants headroom. Basic Droplet, regular (shared CPU), **2 vCPU /
 testing elsewhere; go straight to 4 GB.
 
 ```bash
-# --- on the droplet, as root, right after first boot ---
+# (root — droplet console / first SSH as root, right after first boot)
 
-# Non-root user
 adduser deploy
 usermod -aG sudo deploy
 su - deploy
+```
+
+Everything below this point runs as `deploy` (the `su -` above already
+switched you). The Docker and Tailscale installers below are still run as
+`deploy`, not root — each script detects it isn't running as root and
+re-invokes itself via `sudo` internally, which works because `deploy` has
+passwordless-prompted `sudo` from `usermod -aG sudo` above.
+
+```bash
+# (deploy)
 
 # Docker + Compose plugin (official convenience script; includes
 # docker-compose-plugin, i.e. `docker compose`, not the standalone v1 binary)
