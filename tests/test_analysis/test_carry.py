@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.carry import carry_vs_budget
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -139,3 +140,67 @@ class TestCarryMixin:
         # Should still have NET row even when empty
         assert not summary_table.empty
         assert "NET" in [idx[0] for idx in summary_table.index]
+
+
+class TestCarryVsBudget:
+    """Test cases for carry_vs_budget."""
+
+    def test_zero_or_negative_notional_returns_zero_pct(self) -> None:
+        """book_notional <= 0 yields 0.0%, never a division error."""
+        status = carry_vs_budget(
+            theta_annual=-50_000.0,
+            book_notional=0.0,
+            budget_annual_pct=2.0,
+        )
+
+        assert status.carry_pct_of_notional == pytest.approx(0.0)
+        assert status.within_budget is True
+
+    def test_negative_notional_also_returns_zero_pct(self) -> None:
+        """A negative book_notional is treated the same as zero."""
+        status = carry_vs_budget(
+            theta_annual=-50_000.0,
+            book_notional=-1.0,
+            budget_annual_pct=2.0,
+        )
+
+        assert status.carry_pct_of_notional == pytest.approx(0.0)
+
+    def test_boundary_at_exactly_the_budget_is_within_budget(self) -> None:
+        """carry_pct_of_notional == budget_annual_pct is within budget (<=)."""
+        status = carry_vs_budget(
+            theta_annual=-20_000.0,
+            book_notional=1_000_000.0,
+            budget_annual_pct=2.0,
+        )
+
+        assert status.carry_pct_of_notional == pytest.approx(2.0)
+        assert status.within_budget is True
+
+    def test_over_budget_is_not_within_budget(self) -> None:
+        """A carry cost above the IPS budget reports within_budget=False."""
+        status = carry_vs_budget(
+            theta_annual=-50_000.0,
+            book_notional=1_000_000.0,
+            budget_annual_pct=2.0,
+        )
+
+        assert status.carry_pct_of_notional == pytest.approx(5.0)
+        assert status.within_budget is False
+
+    def test_theta_sign_is_irrelevant(self) -> None:
+        """Positive or negative theta_annual yields the same magnitude."""
+        negative = carry_vs_budget(
+            theta_annual=-20_000.0,
+            book_notional=1_000_000.0,
+            budget_annual_pct=2.0,
+        )
+        positive = carry_vs_budget(
+            theta_annual=20_000.0,
+            book_notional=1_000_000.0,
+            budget_annual_pct=2.0,
+        )
+
+        assert negative.carry_pct_of_notional == pytest.approx(
+            positive.carry_pct_of_notional,
+        )
