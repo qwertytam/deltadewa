@@ -184,93 +184,122 @@ class TestTriggerHelpers:
 
     def test_time_trigger_roll_within_window(self) -> None:
         """Test ROLL when days_to_maturity is within the roll window."""
-        verdict = roll_status._time_trigger_verdict(
+        trigger = roll_status._time_trigger_verdict(
             days_to_maturity=10,
             roll_window_days=30,
             review_buffer=1.5,
         )
 
-        assert verdict == RollVerdict.ROLL
+        assert trigger.verdict == RollVerdict.ROLL
+        assert "10d" in trigger.reason
+        assert "30d" in trigger.reason
 
     def test_time_trigger_review_within_buffer(self) -> None:
         """Test REVIEW when within the buffered window but not the window."""
-        verdict = roll_status._time_trigger_verdict(
+        trigger = roll_status._time_trigger_verdict(
             days_to_maturity=40,
             roll_window_days=30,
             review_buffer=1.5,
         )
 
-        assert verdict == RollVerdict.REVIEW
+        assert trigger.verdict == RollVerdict.REVIEW
+        assert "40d" in trigger.reason
+        assert "30d" in trigger.reason
 
     def test_time_trigger_hold_outside_buffer(self) -> None:
         """Test HOLD when well outside the roll window."""
-        verdict = roll_status._time_trigger_verdict(
+        trigger = roll_status._time_trigger_verdict(
             days_to_maturity=100,
             roll_window_days=30,
             review_buffer=1.5,
         )
 
-        assert verdict == RollVerdict.HOLD
+        assert trigger.verdict == RollVerdict.HOLD
+        assert "100d" in trigger.reason
+        assert "30d" in trigger.reason
 
     def test_convexity_trigger_roll_below_min(self) -> None:
         """Test ROLL when crash convexity is below the target band."""
-        verdict = roll_status._convexity_trigger_verdict(
+        trigger = roll_status._convexity_trigger_verdict(
             crash_convexity_pct=5.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
 
-        assert verdict == RollVerdict.ROLL
+        assert trigger.verdict == RollVerdict.ROLL
+        assert "5.0%" in trigger.reason
+        assert "15-25%" in trigger.reason
 
     def test_convexity_trigger_monitor_above_max(self) -> None:
         """Test MONITOR when crash convexity exceeds the target band."""
-        verdict = roll_status._convexity_trigger_verdict(
+        trigger = roll_status._convexity_trigger_verdict(
             crash_convexity_pct=40.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
 
-        assert verdict == RollVerdict.MONITOR
+        assert trigger.verdict == RollVerdict.MONITOR
+        assert "40.0%" in trigger.reason
+        assert "15-25%" in trigger.reason
 
     def test_convexity_trigger_hold_within_band(self) -> None:
         """Test HOLD when crash convexity is within the target band."""
-        verdict = roll_status._convexity_trigger_verdict(
+        trigger = roll_status._convexity_trigger_verdict(
             crash_convexity_pct=20.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
 
-        assert verdict == RollVerdict.HOLD
+        assert trigger.verdict == RollVerdict.HOLD
+        assert "20.0%" in trigger.reason
+        assert "15-25%" in trigger.reason
 
     def test_strike_drift_trigger_hold_when_no_entry_data(self) -> None:
         """Test HOLD when drift_pct is None (no entry data)."""
-        verdict = roll_status._strike_drift_trigger_verdict(
+        trigger = roll_status._strike_drift_trigger_verdict(
             drift_pct=None,
             max_otm_drift_pct=45.0,
             review_fraction=0.75,
         )
 
-        assert verdict == RollVerdict.HOLD
+        assert trigger.verdict == RollVerdict.HOLD
+        assert trigger.reason == "no entry spot recorded"
 
     def test_strike_drift_trigger_roll_beyond_max(self) -> None:
         """Test ROLL when |drift_pct| exceeds the max threshold."""
-        verdict = roll_status._strike_drift_trigger_verdict(
+        trigger = roll_status._strike_drift_trigger_verdict(
             drift_pct=-50.0,
             max_otm_drift_pct=45.0,
             review_fraction=0.75,
         )
 
-        assert verdict == RollVerdict.ROLL
+        assert trigger.verdict == RollVerdict.ROLL
+        assert "-50.0%" in trigger.reason
+        assert "45%" in trigger.reason
 
     def test_strike_drift_trigger_review_within_buffer(self) -> None:
         """Test REVIEW when |drift_pct| is within the review fraction band."""
-        verdict = roll_status._strike_drift_trigger_verdict(
+        trigger = roll_status._strike_drift_trigger_verdict(
             drift_pct=40.0,
             max_otm_drift_pct=45.0,
             review_fraction=0.75,
         )
 
-        assert verdict == RollVerdict.REVIEW
+        assert trigger.verdict == RollVerdict.REVIEW
+        assert "+40.0%" in trigger.reason
+        assert "45%" in trigger.reason
+
+    def test_strike_drift_trigger_hold_within_band(self) -> None:
+        """Test HOLD when |drift_pct| is comfortably within the band."""
+        trigger = roll_status._strike_drift_trigger_verdict(
+            drift_pct=5.0,
+            max_otm_drift_pct=45.0,
+            review_fraction=0.75,
+        )
+
+        assert trigger.verdict == RollVerdict.HOLD
+        assert "+5.0%" in trigger.reason
+        assert "45%" in trigger.reason
 
 
 class TestEvaluateRollStatus:
@@ -315,6 +344,9 @@ class TestEvaluateRollStatus:
 
         assert records[0].verdict == RollVerdict.HOLD
         assert records[0].estimated_roll_up_cost is None
+        assert records[0].time_trigger.verdict == RollVerdict.HOLD
+        assert records[0].convexity_trigger.verdict == RollVerdict.HOLD
+        assert records[0].drift_trigger.verdict == RollVerdict.HOLD
 
     def test_roll_from_time_trigger_alone(
         self,
@@ -441,6 +473,11 @@ class TestEvaluateRollStatus:
         assert records[0].moneyness.drift_pct is not None
         assert records[0].moneyness.drift_pct < 0
         assert records[0].verdict == RollVerdict.MONITOR
+        # The suppression overrides the record's verdict, but the raw
+        # sub-verdicts still reflect what each trigger actually saw.
+        assert records[0].drift_trigger.verdict == RollVerdict.ROLL
+        assert records[0].time_trigger.verdict == RollVerdict.HOLD
+        assert records[0].convexity_trigger.verdict == RollVerdict.HOLD
 
     def test_no_downgrade_for_call_option(
         self,
