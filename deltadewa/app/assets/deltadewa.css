@@ -26,6 +26,14 @@ body {
 
 /* Chrome: as-of stamp + provenance banner (shared by both pages) */
 
+.chrome {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fafafa;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
 .chrome-stamp {
   font-size: 0.8rem;
   color: #666;
@@ -61,6 +69,17 @@ body {
 }
 
 /* Scenario explorer: dials, curve, numbers, cost panel */
+
+.scenario-explorer,
+.decisions-section,
+.position-detail {
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
 
 .scenario-explorer {
   margin-bottom: 32px;
@@ -107,8 +126,10 @@ body {
 }
 
 .big-number {
-  font-size: 1.6rem;
-  font-weight: 700;
+  font-size: 1.9rem;
+  font-weight: 800;
+  color: #111;
+  cursor: help;
 }
 
 .cost-panel {
@@ -129,8 +150,16 @@ body {
 }
 
 .plain-language {
-  color: #444;
+  color: #555;
+  font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.verdict-legend {
+  color: #666;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 4px 0 12px;
 }
 
 .plain-language--headline {
@@ -230,4 +259,45 @@ body {
 
 .position-detail-table th {
   background: #f0f0f0;
+}
+
+/* Band bar: "is this in range" horizontal indicator */
+
+.band-bar {
+  margin-top: 6px;
+  min-width: 160px;
+}
+
+.band-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: #e6e6e6;
+}
+
+.band-good-zone {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: #bfe3bf;
+}
+
+.band-marker {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 20%);
+}
+
+.band-marker--within {
+  background: #2e7d32;
+}
+
+.band-marker--outside {
+  background: #c62828;
 }

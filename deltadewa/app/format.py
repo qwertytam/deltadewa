@@ -8,6 +8,7 @@ a new number; that stays in ``analysis/``.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -71,6 +72,73 @@ def signed_percent(value: float, *, decimals: int = 1) -> str:
 
     """
     return f"{value:+.{decimals}f}%"
+
+
+def _round_sig_figs(value: float, sig_figs: int = 3) -> float:
+    """Round *value* to *sig_figs* significant figures."""
+    if value == 0:
+        return 0.0
+    exponent = math.floor(math.log10(abs(value)))
+    factor: float = 10 ** (sig_figs - 1 - exponent)
+    return round(value * factor) / factor
+
+
+_COMPACT_UNITS: tuple[tuple[float, str], ...] = (
+    (1_000_000_000, "B"),
+    (1_000_000, "M"),
+    (1_000, "K"),
+)
+
+
+def _compact_parts(value: float) -> tuple[float, str, int]:
+    """Split *value* into a compact (scaled, suffix, decimals) triple.
+
+    Rounds to 3 significant figures first, then picks the K/M/B unit
+    from the *rounded* magnitude, not the pre-round magnitude — a value
+    like 999,500 rounds to 1,000,000 and must present as ``"1.00M"``,
+    not ``"1000K"``.
+    """
+    rounded = _round_sig_figs(value)
+    magnitude = abs(rounded)
+    divisor, suffix = next(
+        ((d, s) for d, s in _COMPACT_UNITS if magnitude >= d),
+        (1, ""),
+    )
+    scaled = rounded / divisor
+    decimals = 0 if abs(scaled) >= 100 else (1 if abs(scaled) >= 10 else 2)
+    return scaled, suffix, decimals
+
+
+def compact_currency(value: float) -> str:
+    """Format *value* as currency to 3 significant figures.
+
+    Args:
+        value: A dollar amount.
+
+    Returns:
+        E.g. ``"$5.23M"``, ``"$823K"``, ``"$942"``. Exact values belong
+        in a ``title`` tooltip or a detail table — this is for headline
+        numbers a reader should absorb at a glance, not reproduce to
+        the cent.
+
+    """
+    scaled, suffix, decimals = _compact_parts(value)
+    return f"${scaled:,.{decimals}f}{suffix}"
+
+
+def signed_compact_currency(value: float) -> str:
+    """Format *value* as signed currency to 3 significant figures.
+
+    Args:
+        value: A dollar amount. Zero renders with a leading ``+``.
+
+    Returns:
+        E.g. ``"+$5.23M"`` or ``"-$823K"``.
+
+    """
+    scaled, suffix, decimals = _compact_parts(abs(value))
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}${scaled:,.{decimals}f}{suffix}"
 
 
 def roll_verdict_reason(record: RollStatusRecord) -> str:

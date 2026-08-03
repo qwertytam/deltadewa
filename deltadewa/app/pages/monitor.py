@@ -20,12 +20,17 @@ from typing import TYPE_CHECKING
 from dash import Input, Output, Patch, dcc, html
 from dash.development.base_component import Component
 
-from deltadewa.analysis.crash_repricing import CrashShock, crash_value_curve
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    crash_value_curve,
+    hedge_value,
+)
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.monitor_scenario import build_scenario
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.app import format as fmt
+from deltadewa.app.bands import band_bar
 from deltadewa.visualization.crash_charts_plotly import plot_crash_value_curve
 
 if TYPE_CHECKING:
@@ -34,6 +39,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.roll_status import RollStatusRecord
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
+    from deltadewa.portfolio.core import OptionPortfolio
 
 _SPOT_SLIDER_MIN = -50.0
 _SPOT_SLIDER_MAX = 10.0
@@ -78,8 +84,12 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
                     className="big-number-label",
                 ),
                 html.Span(
-                    fmt.currency(result.hedge_value_shocked, decimals=2),
+                    fmt.compact_currency(result.hedge_value_shocked),
                     id="hedge-value-shocked",
+                    title=fmt.currency(
+                        result.hedge_value_shocked,
+                        decimals=2,
+                    ),
                     className="big-number",
                 ),
             ],
@@ -89,7 +99,8 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
             [
                 html.Span("Hedge gain", className="big-number-label"),
                 html.Span(
-                    fmt.signed_currency(result.hedge_gain),
+                    fmt.signed_compact_currency(result.hedge_gain),
+                    title=fmt.signed_currency(result.hedge_gain),
                     className="big-number",
                 ),
             ],
@@ -99,7 +110,8 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
             [
                 html.Span("Underlying loss", className="big-number-label"),
                 html.Span(
-                    fmt.signed_currency(result.underlying_loss),
+                    fmt.signed_compact_currency(result.underlying_loss),
+                    title=fmt.signed_currency(result.underlying_loss),
                     className="big-number",
                 ),
             ],
@@ -109,7 +121,8 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
             [
                 html.Span("Net", className="big-number-label"),
                 html.Span(
-                    fmt.signed_currency(result.net),
+                    fmt.signed_compact_currency(result.net),
+                    title=fmt.signed_currency(result.net),
                     className="big-number",
                 ),
             ],
@@ -117,7 +130,13 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
         ),
         html.Div(
             [
-                html.Span("Offset ratio", className="big-number-label"),
+                html.Span(
+                    "Offset ratio",
+                    className="big-number-label",
+                    title=(
+                        "Hedge dollars gained per dollar of underlying loss"
+                    ),
+                ),
                 html.Span(offset_text, className="big-number"),
             ],
             className="scenario-figure",
@@ -139,10 +158,15 @@ def _cost_panel(
                 html.Span(
                     "Annual carry (theta)",
                     className="big-number-label",
+                    title=(
+                        "Theta: the option book's daily time-decay cost, "
+                        "annualized"
+                    ),
                 ),
                 html.Span(
-                    fmt.signed_currency(result.carry.theta_annual),
+                    fmt.signed_compact_currency(result.carry.theta_annual),
                     id="carry-theta-annual",
+                    title=fmt.signed_currency(result.carry.theta_annual),
                     className="big-number",
                 ),
             ],
@@ -159,13 +183,19 @@ def _cost_panel(
                     f"({verdict})",
                     className=f"cost-verdict cost-verdict--{verdict_class}",
                 ),
+                band_bar(
+                    value=result.carry.carry_pct_of_notional,
+                    low=0.0,
+                    high=budget_pct,
+                ),
             ],
         ),
         html.P(
-            f"This {fmt.currency(abs(result.carry.theta_annual))}/year "
-            "carry cost doesn't change with the quantity dial — only the "
-            "percentage of book (and the budget verdict) does, since a "
-            "smaller book turns the same dollar cost into a bigger share.",
+            f"This {fmt.compact_currency(abs(result.carry.theta_annual))}"
+            "/year carry cost doesn't change with the quantity dial — "
+            "only the percentage of book (and the budget verdict) does, "
+            "since a smaller book turns the same dollar cost into a "
+            "bigger share.",
             className="plain-language",
         ),
     ]
@@ -176,9 +206,10 @@ def _headline_sentence(result: ScenarioResult) -> html.P:
     return html.P(
         f"A {fmt.signed_percent(result.spot_pct)} spot move with a "
         f"{result.vol_points:+.2f} vol-point shock nets "
-        f"{fmt.signed_currency(result.net)}: the hedge gains "
-        f"{fmt.signed_currency(result.hedge_gain)} against an "
-        f"underlying loss of {fmt.signed_currency(result.underlying_loss)} "
+        f"{fmt.signed_compact_currency(result.net)}: the hedge gains "
+        f"{fmt.signed_compact_currency(result.hedge_gain)} against an "
+        "underlying loss of "
+        f"{fmt.signed_compact_currency(result.underlying_loss)} "
         f"on {result.quantity:,.0f} shares.",
         className="plain-language plain-language--headline",
     )
@@ -208,6 +239,11 @@ def _decisions_section(
                     f"{fmt.roll_verdict_reason(record)}",
                     className="decision-reason",
                 ),
+                band_bar(
+                    value=record.crash_convexity_pct,
+                    low=record.convexity_target_min_pct,
+                    high=record.convexity_target_max_pct,
+                ),
             ],
             className="decision-row",
         )
@@ -232,7 +268,9 @@ def _decisions_section(
             html.P(
                 f"Current hedge gain: {gain_text} — recommended cumulative "
                 f"sell: {fmt.percent(plan.recommended_cumulative_sell_pct)} "
-                f"({fmt.currency(plan.value_to_harvest)} to harvest).",
+                f"({fmt.compact_currency(plan.value_to_harvest)} to "
+                "harvest — the dollar amount recommended to sell at this "
+                "gain level).",
             ),
         ]
     if plan.vol_spike_context is not None:
@@ -243,6 +281,12 @@ def _decisions_section(
     return html.Div(
         [
             html.H2("Decisions"),
+            html.P(
+                "HOLD — no action needed. MONITOR — watching a metric "
+                "approach its threshold. REVIEW — a trigger has fired. "
+                "ROLL — time to replace this position.",
+                className="verdict-legend",
+            ),
             html.P(
                 "Each position's roll verdict, and any monetization "
                 "already recommended by the IPS schedule at the current "
@@ -260,52 +304,49 @@ def _decisions_section(
     )
 
 
-def _position_row(record: RollStatusRecord) -> html.Tr:
-    """Build one <tr> of the position-detail table."""
-    drift_text = (
-        fmt.signed_percent(record.moneyness.drift_pct)
-        if record.moneyness.drift_pct is not None
-        else "n/a"
-    )
-    moneyness_text = (
-        f"{fmt.percent(record.moneyness.current_otm_pct)} ({drift_text})"
-    )
-    convexity_text = (
-        f"{fmt.percent(record.crash_convexity_pct)} vs "
-        f"{fmt.percent(record.convexity_target_min_pct)}-"
-        f"{fmt.percent(record.convexity_target_max_pct)}"
-    )
+def _position_row(
+    record: RollStatusRecord,
+    portfolio: OptionPortfolio,
+) -> html.Tr:
+    """Build one <tr> of the position-detail table.
+
+    The plain per-leg ledger — "what do I actually hold" — not a second
+    copy of the DECISIONS section's risk narrative (verdict/reasons
+    already live there).
+    """
+    position = record.position
+    current_value = hedge_value(portfolio, positions=[position])
     return html.Tr(
         [
-            html.Td(f"{record.position.option.strike_price:,.0f}"),
-            html.Td(record.position.option.option_type.value),
-            html.Td(f"{record.position.quantity:,.0f}"),
+            html.Td(f"{position.option.strike_price:,.0f}"),
+            html.Td(position.option.option_type.value),
+            html.Td(position.option.maturity_date.strftime("%Y-%m-%d")),
             html.Td(f"{record.days_to_maturity}d"),
-            html.Td(moneyness_text),
-            html.Td(convexity_text),
-            html.Td(record.time_trigger.reason),
-            html.Td(record.convexity_trigger.reason),
-            html.Td(record.drift_trigger.reason),
+            html.Td(f"{position.quantity:,.0f}"),
+            html.Td(
+                fmt.signed_compact_currency(current_value),
+                title=fmt.signed_currency(current_value),
+            ),
         ],
     )
 
 
-def _position_detail_table(records: list[RollStatusRecord]) -> html.Details:
-    """Build the collapsed position-detail table."""
+def _position_detail_table(
+    records: list[RollStatusRecord],
+    portfolio: OptionPortfolio,
+) -> html.Details:
+    """Build the collapsed position-detail table: the plain per-leg ledger."""
     header = html.Tr(
         [
             html.Th("Strike"),
             html.Th("Type"),
-            html.Th("Qty"),
+            html.Th("Expiry"),
             html.Th("DTE"),
-            html.Th("Moneyness (drift)"),
-            html.Th("Crash convexity vs band"),
-            html.Th("Time"),
-            html.Th("Convexity"),
-            html.Th("Drift"),
+            html.Th("Quantity"),
+            html.Th("Current value"),
         ],
     )
-    rows = [_position_row(record) for record in records]
+    rows = [_position_row(record, portfolio) for record in records]
     return html.Details(
         [
             html.Summary("Position detail"),
@@ -371,7 +412,10 @@ def render(app: ProgramDashApp) -> html.Div:
                 [
                     html.Div(
                         [
-                            html.Label("Spot shock"),
+                            html.Label(
+                                "Spot shock",
+                                title="How far SPX falls in this scenario",
+                            ),
                             dcc.Slider(
                                 id="spot-slider",
                                 min=_SPOT_SLIDER_MIN,
@@ -386,7 +430,13 @@ def render(app: ProgramDashApp) -> html.Div:
                     ),
                     html.Div(
                         [
-                            html.Label("Vol shock (points)"),
+                            html.Label(
+                                "Vol shock (points)",
+                                title=(
+                                    "Implied volatility increase applied "
+                                    "in this scenario, in vol points"
+                                ),
+                            ),
                             dcc.Slider(
                                 id="vol-slider",
                                 min=_VOL_SLIDER_MIN,
@@ -435,7 +485,7 @@ def render(app: ProgramDashApp) -> html.Div:
             html.H1("Monitor"),
             scenario_explorer,
             _decisions_section(records, plan),
-            _position_detail_table(records),
+            _position_detail_table(records, portfolio),
         ],
         className="page page-monitor",
     )

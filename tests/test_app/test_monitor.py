@@ -23,7 +23,11 @@ import pytest
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
-from deltadewa.analysis.crash_repricing import CrashShock, crash_hedge_value
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    crash_hedge_value,
+    hedge_value,
+)
 from deltadewa.analysis.monitor_scenario import build_scenario
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -228,8 +232,12 @@ class TestAgreement:
             timeout=_PAGE_LOAD_TIMEOUT_MS,
         )
 
-        displayed_text = page.inner_text("#hedge-value-shocked")
-        displayed_value = _parse_dollar_amount(displayed_text)
+        # Visible text is now a 3-s.f. compact figure; the exact value
+        # (what used to be the visible inner_text) lives in the ``title``
+        # tooltip attribute — see Prompt E decision 1.
+        title_text = page.get_attribute("#hedge-value-shocked", "title")
+        assert title_text is not None
+        displayed_value = _parse_dollar_amount(title_text)
 
         ips_config = monitor_app.state.ips_config
         assert ips_config is not None
@@ -340,9 +348,12 @@ class TestCostSection:
             timeout=_PAGE_LOAD_TIMEOUT_MS,
         )
 
-        displayed_value = _parse_dollar_amount(
-            page.inner_text("#carry-theta-annual"),
-        )
+        # Visible text is now a 3-s.f. compact figure; the exact value
+        # lives in the ``title`` tooltip attribute — see Prompt E
+        # decision 1.
+        title_text = page.get_attribute("#carry-theta-annual", "title")
+        assert title_text is not None
+        displayed_value = _parse_dollar_amount(title_text)
 
         ips_config = monitor_app.state.ips_config
         assert ips_config is not None
@@ -359,6 +370,36 @@ class TestCostSection:
             result.carry.theta_annual,
             abs=1.0,
         )
+
+    def test_cost_panel_band_bar_matches_within_budget(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#cost-panel", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        ips_config = monitor_app.state.ips_config
+        assert ips_config is not None
+        result = build_scenario(
+            monitor_app.state.portfolio,
+            ips_config,
+            spot_pct=ips_config.convexity.crash_scenario_pct,
+            vol_points=ips_config.convexity.crash_vol_shock,
+            quantity=monitor_app.state.portfolio.underlying_quantity,
+        )
+
+        marker_class = page.get_attribute(
+            "#cost-panel .band-marker",
+            "class",
+        )
+        assert marker_class is not None
+        expected_modifier = (
+            "band-marker--within"
+            if result.carry.within_budget
+            else "band-marker--outside"
+        )
+        assert expected_modifier in marker_class
 
     def test_qty_dial_changes_cost_panel_but_not_dollar_carry(
         self,
@@ -520,6 +561,81 @@ class TestScenarioLocalGuard:
         assert monitor_app.state.dirty == before_dirty
         after_files = set(monitor_app.export_dir.iterdir())
         assert after_files == before_files
+
+
+class TestCollapsedPositionTable:
+    """The position-detail table: collapsed by default, a plain ledger."""
+
+    def test_starts_collapsed(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "details.position-detail",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        assert page.get_attribute("details.position-detail", "open") is None
+
+    def test_expands_on_summary_click(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "details.position-detail summary",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        page.click("details.position-detail summary")
+
+        assert page.get_attribute("details.position-detail", "open") is not None
+
+    def test_row_matches_portfolio_position(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "details.position-detail summary",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        page.click("details.position-detail summary")
+        page.wait_for_selector(
+            ".position-detail-table tbody tr",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        portfolio = monitor_app.state.portfolio
+        position = portfolio.positions[0]
+        row = page.locator(".position-detail-table tbody tr").first
+        cells = row.locator("td")
+
+        assert (
+            cells.nth(0).inner_text() == f"{position.option.strike_price:,.0f}"
+        )
+        assert cells.nth(1).inner_text() == position.option.option_type.value
+        assert cells.nth(2).inner_text() == (
+            position.option.maturity_date.strftime("%Y-%m-%d")
+        )
+        expected_dte = (
+            position.option.maturity_date - portfolio.valuation_date
+        ).days
+        assert cells.nth(3).inner_text() == f"{expected_dte}d"
+        assert cells.nth(4).inner_text() == f"{position.quantity:,.0f}"
+
+        expected_value = hedge_value(portfolio, positions=[position])
+        title = cells.nth(5).get_attribute("title")
+        assert title is not None
+        # signed_currency rounds to the nearest whole dollar.
+        assert _parse_dollar_amount(title) == pytest.approx(
+            expected_value,
+            abs=1.0,
+        )
 
 
 class TestNoIpsRender:

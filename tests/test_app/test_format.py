@@ -7,9 +7,11 @@ from deltadewa.analysis.roll_status import (
     TriggerReason,
 )
 from deltadewa.app.format import (
+    compact_currency,
     currency,
     percent,
     roll_verdict_reason,
+    signed_compact_currency,
     signed_currency,
     signed_percent,
 )
@@ -71,6 +73,47 @@ class TestSignedPercent:
 
     def test_zero(self) -> None:
         assert signed_percent(0.0) == "+0.0%"
+
+
+class TestCompactCurrency:
+    """Tests for compact_currency."""
+
+    def test_hundreds_tier(self) -> None:
+        assert compact_currency(942.0) == "$942"
+
+    def test_thousands_tier(self) -> None:
+        assert compact_currency(45_231.0) == "$45.2K"
+
+    def test_thousands_tier_no_decimal_needed(self) -> None:
+        assert compact_currency(823_000.0) == "$823K"
+
+    def test_millions_tier(self) -> None:
+        assert compact_currency(5_226_004.0) == "$5.23M"
+
+    def test_billions_tier(self) -> None:
+        assert compact_currency(2_360_000_000.0) == "$2.36B"
+
+    def test_rollover_boundary_does_not_use_scientific_notation(self) -> None:
+        assert compact_currency(999_500.0) == "$1.00M"
+
+    def test_zero(self) -> None:
+        assert compact_currency(0.0) == "$0.00"
+
+
+class TestSignedCompactCurrency:
+    """Tests for signed_compact_currency."""
+
+    def test_positive(self) -> None:
+        assert signed_compact_currency(5_226_004.0) == "+$5.23M"
+
+    def test_negative(self) -> None:
+        assert signed_compact_currency(-823_000.0) == "-$823K"
+
+    def test_zero(self) -> None:
+        assert signed_compact_currency(0.0) == "+$0.00"
+
+    def test_rollover_boundary(self) -> None:
+        assert signed_compact_currency(-999_500.0) == "-$1.00M"
 
 
 def _make_record(
