@@ -362,6 +362,7 @@ class TestEvaluateRollStatus:
 
         assert records[0].verdict == RollVerdict.ROLL
         assert records[0].estimated_roll_up_cost is not None
+        assert records[0].suppressed is False
 
     def test_valuation_date_moves_roll_verdict(
         self,
@@ -473,11 +474,27 @@ class TestEvaluateRollStatus:
         assert records[0].moneyness.drift_pct is not None
         assert records[0].moneyness.drift_pct < 0
         assert records[0].verdict == RollVerdict.MONITOR
+        assert records[0].suppressed is True
         # The suppression overrides the record's verdict, but the raw
         # sub-verdicts still reflect what each trigger actually saw.
         assert records[0].drift_trigger.verdict == RollVerdict.ROLL
         assert records[0].time_trigger.verdict == RollVerdict.HOLD
         assert records[0].convexity_trigger.verdict == RollVerdict.HOLD
+
+    def test_ordinary_roll_is_not_suppressed(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test suppressed is False on an un-downgraded ROLL verdict."""
+        self._patch_convexity(monkeypatch, 20.0)
+        position = _make_position(days_to_maturity=10, entry_spot=100.0)
+        portfolio = self._portfolio_with(position)
+        ips = _make_ips_config(roll_time_months=1.0)  # ~30 day window
+
+        records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
+
+        assert records[0].verdict == RollVerdict.ROLL
+        assert records[0].suppressed is False
 
     def test_no_downgrade_for_call_option(
         self,

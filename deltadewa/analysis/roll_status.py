@@ -74,6 +74,7 @@ class RollStatusRecord:
     convexity_target_min_pct: float
     convexity_target_max_pct: float
     verdict: RollVerdict
+    suppressed: bool
     estimated_roll_up_cost: float | None
     time_trigger: TriggerReason
     convexity_trigger: TriggerReason
@@ -292,6 +293,7 @@ def evaluate_roll_status(
         # gaining convexity on its own. If there's no time pressure and
         # crash convexity is still within target, don't force a roll that
         # was only triggered by strike drift.
+        suppressed = False
         if (  # pylint: disable=too-many-boolean-expressions  # six independent roll-suppression guards; decomposing would obscure the policy
             verdict == RollVerdict.ROLL
             and position.option.option_type == OptionType.PUT
@@ -301,6 +303,7 @@ def evaluate_roll_status(
             and convexity_verdict == RollVerdict.HOLD
         ):
             verdict = RollVerdict.MONITOR
+            suppressed = True
 
         estimated_roll_up_cost = None
         if (
@@ -328,6 +331,7 @@ def evaluate_roll_status(
                 convexity_target_min_pct=convexity.target_min_pct,
                 convexity_target_max_pct=convexity.target_max_pct,
                 verdict=verdict,
+                suppressed=suppressed,
                 estimated_roll_up_cost=estimated_roll_up_cost,
                 time_trigger=time_trigger,
                 convexity_trigger=convexity_trigger,
