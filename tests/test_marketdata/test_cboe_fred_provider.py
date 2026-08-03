@@ -204,6 +204,17 @@ class TestReadOnlyMode:
 
         assert session.get.call_count == 0
 
+    @pytest.mark.parametrize("read_only", [True, False])
+    def test_is_read_only_reflects_constructor_flag(
+        self,
+        tmp_path,
+        read_only,
+    ) -> None:
+        """The Protocol-facing property mirrors the constructor argument."""
+        provider = CboeFredProvider(cache_dir=tmp_path, read_only=read_only)
+
+        assert provider.is_read_only is read_only
+
     def test_get_vix_term_structure_returns_all_keys(self, tmp_path) -> None:
         """Test that get_vix_term_structure fetches each CBOE VIX index."""
         session = MagicMock(spec=requests.Session)

@@ -54,6 +54,11 @@ class StaticProvider:
     skew_percentile: float = 0.5
     vix_history: list[float] = field(default_factory=list)
 
+    @property
+    def is_read_only(self) -> bool:
+        """Always ``True`` — ``StaticProvider`` performs no I/O at all."""
+        return True
+
     @classmethod
     def from_assumptions(
         cls,

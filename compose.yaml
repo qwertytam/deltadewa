@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      DELTADEWA_HOST: "0.0.0.0"
+      DELTADEWA_PORT: "8050"
+    volumes:
+      # Bind mount, not a named volume: M2.6's backup cron pushes exports/
+      # to an offsite repo and needs direct host filesystem access to it —
+      # a Docker-managed named volume would need `docker cp` gymnastics.
+      - ./exports:/app/exports
+    ports:
+      # BIND_ADDR MUST be the host's Tailscale IP in production — NEVER
+      # 0.0.0.0, and never left unset in a way that defaults to it. Docker
+      # inserts published ports into the nat table ahead of any
+      # UFW/iptables rule, i.e. published ports BYPASS the host firewall
+      # entirely — this bind address is the actual control, not UFW. Set
+      # BIND_ADDR (e.g. via a local, untracked .env) before `docker compose
+      # up`; it defaults to loopback so an unset/forgotten value fails
+      # locked-down rather than open.
+      - "${BIND_ADDR:-127.0.0.1}:8050:8050"

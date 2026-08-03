@@ -1,33 +1,34 @@
-"""Entrypoint: run the Dash app (``python -m deltadewa.app``).
+"""Entrypoint: run the Dash app locally (``python -m deltadewa.app``).
 
-Wires the shared ``ProgramState`` (backed by ``exports/``) to a read-only
-``CboeFredProvider`` — this process never fetches; a separate cron job
-(later milestone) is what refreshes the disk cache it reads from.
+Uses the Flask/Werkzeug dev server, bound to ``DELTADEWA_HOST``/
+``DELTADEWA_PORT`` (default ``127.0.0.1:8050`` — safe for local use; only
+the container's own environment, set in the Dockerfile, overrides the host
+to ``0.0.0.0``). The container's production entrypoint is gunicorn against
+``deltadewa.app.wsgi:server()`` instead; this module shares that module's
+``dash_app()`` construction, so the two paths can't drift apart.
 """
 
 from __future__ import annotations
 
-import logging
-from pathlib import Path
+import os
 
-from deltadewa.app.factory import create_app
-from deltadewa.marketdata import CboeFredProvider
-from deltadewa.state import ProgramState
+from deltadewa.app.wsgi import dash_app
+
+_DEFAULT_HOST = "127.0.0.1"
+_DEFAULT_PORT = "8050"
+
+
+def _host_and_port() -> tuple[str, int]:
+    """Read ``DELTADEWA_HOST``/``DELTADEWA_PORT``, default loopback:8050."""
+    host = os.environ.get("DELTADEWA_HOST", _DEFAULT_HOST)
+    port = int(os.environ.get("DELTADEWA_PORT", _DEFAULT_PORT))
+    return host, port
 
 
 def main() -> None:
-    """Build and run the app against the shared ``exports/`` state."""
-    logging.basicConfig(level=logging.INFO)
-
-    state = ProgramState.load(Path("exports"))
-    market_data = CboeFredProvider(read_only=True)
-
-    app = create_app(
-        state=state,
-        market_data=market_data,
-        ips_config=state.ips_config,
-    )
-    app.run(debug=False)
+    """Run the dev server against the shared ``exports/`` state."""
+    host, port = _host_and_port()
+    dash_app().run(host=host, port=port, debug=False)
 
 
 if __name__ == "__main__":

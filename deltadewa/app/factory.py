@@ -10,15 +10,18 @@ Pages' own nav/title support.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from dash import Dash, Input, Output, dcc, html
+from flask import jsonify
 
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.app.chrome import build_chrome
 from deltadewa.app.pages import design, monitor
 
 if TYPE_CHECKING:
+    from flask import Flask, Response
+
     from deltadewa.ips_config import IpsConfig
     from deltadewa.marketdata import MarketDataProvider
     from deltadewa.state import ProgramState
@@ -28,6 +31,16 @@ _ROUTES = {
     "/design": design.layout,
     "/monitor": monitor.layout,
 }
+
+
+class FetchCapableProviderError(RuntimeError):
+    """Raised when ``create_app`` is given a provider that can live-fetch.
+
+    The app runs unattended and must never depend on network reachability —
+    a feed outage should degrade the chrome to STALE, not take the app
+    down. Checked structurally via ``MarketDataProvider.is_read_only``
+    rather than trusted from a docstring.
+    """
 
 
 class ProgramDashApp(Dash):
@@ -58,7 +71,8 @@ def create_app(
             fetch — pass a read-only provider (e.g.
             ``CboeFredProvider(read_only=True)``); this app only reads
             cached/last-good values, so a feed outage degrades the chrome
-            to STALE rather than taking the app down.
+            to STALE rather than taking the app down. Enforced at
+            construction via ``market_data.is_read_only``.
         ips_config: Hedge program policy, used to classify market
             conditions for the chrome banner. ``None`` uses policy
             defaults.
@@ -66,7 +80,19 @@ def create_app(
     Returns:
         A ready-to-run ``Dash`` app.
 
+    Raises:
+        FetchCapableProviderError: If ``market_data.is_read_only`` is
+            ``False``.
+
     """
+    if not market_data.is_read_only:
+        raise FetchCapableProviderError(
+            "create_app() requires a read-only market data provider "
+            f"(got {type(market_data).__name__} with "
+            "is_read_only=False); pass e.g. "
+            "CboeFredProvider(read_only=True)",
+        )
+
     app = ProgramDashApp(__name__)
     app.program_state = state
     app.market_data = market_data
@@ -95,5 +121,32 @@ def create_app(
     @app.callback(Output("page-content", "children"), Input("url", "pathname"))
     def _render_page(pathname: str | None) -> html.Div:
         return _ROUTES.get(pathname or _DEFAULT_ROUTE, _ROUTES[_DEFAULT_ROUTE])
+
+    # app.server is typed Any on Dash (it's pluggable, per-backend); cast
+    # once so the route decorator below is properly typed rather than
+    # silently erasing _health's own annotation.
+    flask_app = cast("Flask", app.server)
+
+    @flask_app.route("/health")
+    def _health() -> tuple[Response, int]:
+        # Reuses the same cheap, no-network read _serve_layout already
+        # does for the chrome banner — a dead-man's-switch ping must not
+        # itself trigger a fetch or a reprice.
+        environment = assess_market_environment(market_data, env_policy)
+        as_of = (
+            environment.as_of.isoformat()
+            if environment.as_of is not None
+            else None
+        )
+        return jsonify(
+            {
+                "status": "ok",
+                "state_loaded": state.loaded_from is not None,
+                "market_data": {
+                    "source": environment.data_quality.value,
+                    "as_of": as_of,
+                },
+            },
+        ), 200
 
     return app
