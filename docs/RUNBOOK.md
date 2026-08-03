@@ -88,7 +88,7 @@ If the public-IP curl returns JSON, stop — `BIND_ADDR` is wrong or unset
 `docker compose config` shows the tailnet IP, not the fallback, before
 assuming anything).
 
-## 3. Client setup — what the partner does once
+## 3. Client setup — what the other users do once
 
 1. Install Tailscale (desktop or mobile — https://tailscale.com/download).
 2. Sign in with the authorized account (MFA lives on this login, not on
