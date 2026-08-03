@@ -24,6 +24,7 @@ from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
 from deltadewa.analysis.crash_repricing import CrashShock, crash_hedge_value
+from deltadewa.analysis.monitor_scenario import build_scenario
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
 
 _PAGE_LOAD_TIMEOUT_MS = 10_000
 _EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
-_NUMBER_RE = re.compile(r"\$?-?[\d,]+(?:\.\d+)?")
+_NUMBER_RE = re.compile(r"[+-]?\$[+-]?[\d,]+(?:\.\d+)?")
 
 
 @dataclass
@@ -50,12 +51,22 @@ class MonitorAppHandle:
 
 
 def _parse_dollar_amount(text: str) -> float:
-    """Parse a signed dollar figure like '$1,234,567' or '-$500' from *text*."""
+    """Parse a dollar figure from *text*, sign-order-agnostic.
+
+    Handles both ``fmt.currency``'s ``"$-1,234"`` (sign after ``$``) and
+    ``fmt.signed_currency``'s ``"-$12,300"``/``"+$45,000"`` (sign before
+    ``$``) — a bare digit-only regex would silently drop the sign on the
+    latter, since it puts the minus ahead of the dollar sign.
+    """
     match = _NUMBER_RE.search(text)
     if match is None:
         msg = f"No dollar figure found in {text!r}"
         raise AssertionError(msg)
-    return float(match.group().replace("$", "").replace(",", ""))
+    raw = match.group()
+    negative = "-" in raw
+    digits = raw.replace("$", "").replace("+", "").replace("-", "")
+    value = float(digits.replace(",", ""))
+    return -value if negative else value
 
 
 def _assert_renders_cleanly(page: Page, url: str) -> None:
@@ -99,6 +110,56 @@ def monitor_app(
         quantity=-5,
         option_type=OptionType.CALL,
     )
+    market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
+    app = create_app(
+        state=state,
+        market_data=market_data,
+        ips_config=state.ips_config,
+    )
+
+    server = make_server("127.0.0.1", 0, app.server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield MonitorAppHandle(
+            url=f"http://127.0.0.1:{server.server_port}",
+            state=state,
+            app=app,
+            export_dir=export_dir,
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+@pytest.fixture(scope="module")
+def monitor_app_paid_gain(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[MonitorAppHandle]:
+    """Boot a real /monitor app whose long put has an entry_premium set.
+
+    ``ProgramState.add_position``/``OptionPortfolio.add_position`` don't
+    expose ``entry_premium`` as a kwarg, so — matching the pattern used
+    elsewhere in the suite (e.g. ``tests/test_persistence.py``) — it's set
+    directly on the position after creation. This gives ``gain_basis`` a
+    ``"paid"`` value, exercising the branch ``monitor_app``'s fixture
+    (whose long put has no ``entry_premium``, hence always ``"unknown"``)
+    cannot reach.
+    """
+    export_dir = tmp_path_factory.mktemp("monitor_app_paid_gain")
+    state = ProgramState.load(
+        export_dir,
+        ips_path=_EXAMPLE_IPS_YAML,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    state.portfolio.spot_price = 5000.0
+    state.add_position(
+        strike_price=4500.0,
+        maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+        quantity=10,
+        option_type=OptionType.PUT,
+    )
+    state.portfolio.positions[-1].entry_premium = 100.0
     market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
     app = create_app(
         state=state,
@@ -263,6 +324,167 @@ class TestCallbacksFireAndReturnValues:
 
         after = page.inner_text("#scenario-numbers")
         assert after != before
+
+
+class TestCostSection:
+    """The dollar annual-carry figure must be correct and dial-invariant."""
+
+    def test_carry_theta_annual_matches_build_scenario(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "#carry-theta-annual",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        displayed_value = _parse_dollar_amount(
+            page.inner_text("#carry-theta-annual"),
+        )
+
+        ips_config = monitor_app.state.ips_config
+        assert ips_config is not None
+        result = build_scenario(
+            monitor_app.state.portfolio,
+            ips_config,
+            spot_pct=ips_config.convexity.crash_scenario_pct,
+            vol_points=ips_config.convexity.crash_vol_shock,
+            quantity=monitor_app.state.portfolio.underlying_quantity,
+        )
+
+        # signed_currency rounds to the nearest whole dollar.
+        assert displayed_value == pytest.approx(
+            result.carry.theta_annual,
+            abs=1.0,
+        )
+
+    def test_qty_dial_changes_cost_panel_but_not_dollar_carry(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "#carry-theta-annual",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        before_theta = page.inner_text("#carry-theta-annual")
+        before_cost_panel = page.inner_text("#cost-panel")
+
+        qty_input = page.locator("#qty-input")
+        qty_input.fill("500")
+        qty_input.press("Tab")
+        page.wait_for_function(
+            "(before) => document.getElementById('cost-panel')"
+            ".innerText !== before",
+            arg=before_cost_panel,
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        after_theta = page.inner_text("#carry-theta-annual")
+        after_cost_panel = page.inner_text("#cost-panel")
+
+        # The dollar figure is byte-identical; the percent-of-notional
+        # line (part of the same panel) is what actually moved.
+        assert after_theta == before_theta
+        assert after_cost_panel != before_cost_panel
+
+    def test_spot_and_vol_dials_never_change_dollar_carry(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "#carry-theta-annual",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        before_theta = page.inner_text("#carry-theta-annual")
+
+        before_numbers = page.inner_text("#scenario-numbers")
+        spot_slider = page.locator('#spot-slider [role="slider"]')
+        spot_slider.focus()
+        for _ in range(5):
+            page.keyboard.press("ArrowLeft")
+        page.wait_for_function(
+            "(before) => document.getElementById('scenario-numbers')"
+            ".innerText !== before",
+            arg=before_numbers,
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        assert page.inner_text("#carry-theta-annual") == before_theta
+
+        before_numbers = page.inner_text("#scenario-numbers")
+        vol_slider = page.locator('#vol-slider [role="slider"]')
+        vol_slider.focus()
+        for _ in range(5):
+            page.keyboard.press("ArrowRight")
+        page.wait_for_function(
+            "(before) => document.getElementById('scenario-numbers')"
+            ".innerText !== before",
+            arg=before_numbers,
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        assert page.inner_text("#carry-theta-annual") == before_theta
+
+
+class TestMonetizationUnavailableState:
+    """The monetization panel must say "unknown", never a fake "0%"."""
+
+    def test_unknown_gain_basis_shows_explicit_sentence_not_na(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """monitor_app's long put has no entry_premium -> gain_basis is
+        "unknown", so the panel must name that explicitly, never "n/a".
+        """
+        long_puts = [
+            p for p in monitor_app.state.portfolio.positions if p.quantity > 0
+        ]
+        assert long_puts
+        assert all(p.entry_premium is None for p in long_puts)
+
+        _assert_renders_cleanly(page, f"{monitor_app.url}/monitor")
+        page.wait_for_selector(
+            "#monetization-panel",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        panel_text = page.inner_text("#monetization-panel")
+        assert "n/a" not in panel_text
+        assert "can't be evaluated" in panel_text
+
+    def test_paid_gain_basis_shows_real_percentages(
+        self,
+        page: Page,
+        monitor_app_paid_gain: MonitorAppHandle,
+    ) -> None:
+        """With entry_premium set, gain_basis is "paid" and real numbers
+        (not the unavailable sentence) render.
+        """
+        long_puts = [
+            p
+            for p in monitor_app_paid_gain.state.portfolio.positions
+            if p.quantity > 0
+        ]
+        assert long_puts
+        assert all(p.entry_premium is not None for p in long_puts)
+
+        _assert_renders_cleanly(page, f"{monitor_app_paid_gain.url}/monitor")
+        page.wait_for_selector(
+            "#monetization-panel",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        panel_text = page.inner_text("#monetization-panel")
+        assert "can't be evaluated" not in panel_text
+        assert "Current hedge gain" in panel_text
+        assert "%" in panel_text
 
 
 class TestScenarioLocalGuard:

@@ -136,6 +136,19 @@ def _cost_panel(
     return [
         html.Div(
             [
+                html.Span(
+                    "Annual carry (theta)",
+                    className="big-number-label",
+                ),
+                html.Span(
+                    fmt.signed_currency(result.carry.theta_annual),
+                    id="carry-theta-annual",
+                    className="big-number",
+                ),
+            ],
+        ),
+        html.Div(
+            [
                 html.Span("Carry", className="big-number-label"),
                 html.Span(
                     fmt.percent(result.carry.carry_pct_of_notional),
@@ -149,9 +162,10 @@ def _cost_panel(
             ],
         ),
         html.P(
-            "This is a percentage of scenario notional — moving the "
-            "quantity dial changes the percentage shown here, but never "
-            "the underlying dollar theta cost itself.",
+            f"This {fmt.currency(abs(result.carry.theta_annual))}/year "
+            "carry cost doesn't change with the quantity dial — only the "
+            "percentage of book (and the budget verdict) does, since a "
+            "smaller book turns the same dollar cost into a bigger share.",
             className="plain-language",
         ),
     ]
@@ -200,18 +214,27 @@ def _decisions_section(
         for record in records
     ]
 
-    gain_text = (
-        fmt.percent(plan.current_gain_pct)
-        if plan.current_gain_pct is not None
-        else "n/a"
-    )
-    monetization_children = [
-        html.P(
-            f"Current hedge gain: {gain_text} — recommended cumulative "
-            f"sell: {fmt.percent(plan.recommended_cumulative_sell_pct)} "
-            f"({fmt.currency(plan.value_to_harvest)} to harvest).",
-        ),
-    ]
+    if plan.gain_basis == "unknown":
+        monetization_children: list[Component] = [
+            html.P(
+                "No entry price is recorded for the protective puts, so "
+                "hedge gain — and this monetization schedule — can't be "
+                "evaluated.",
+            ),
+        ]
+    else:
+        gain_text = (
+            fmt.percent(plan.current_gain_pct)
+            if plan.current_gain_pct is not None
+            else "n/a"
+        )
+        monetization_children = [
+            html.P(
+                f"Current hedge gain: {gain_text} — recommended cumulative "
+                f"sell: {fmt.percent(plan.recommended_cumulative_sell_pct)} "
+                f"({fmt.currency(plan.value_to_harvest)} to harvest).",
+            ),
+        ]
     if plan.vol_spike_context is not None:
         monetization_children.append(
             html.P(plan.vol_spike_context, className="vol-spike-context"),
@@ -227,7 +250,11 @@ def _decisions_section(
                 className="plain-language",
             ),
             html.Div(roll_rows, className="decision-list"),
-            html.Div(monetization_children, className="monetization-panel"),
+            html.Div(
+                monetization_children,
+                id="monetization-panel",
+                className="monetization-panel",
+            ),
         ],
         className="decisions-section",
     )
