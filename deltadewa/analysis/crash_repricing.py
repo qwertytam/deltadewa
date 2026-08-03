@@ -662,3 +662,31 @@ def crash_intrinsic_floor(
             payoff = max(0.0, crash_spot - position.option.strike_price)
         total += payoff * position.quantity * position.contract_size
     return total
+
+
+def underlying_pnl(
+    *,
+    quantity: float,
+    spot_price: float,
+    spot_shock: float,
+) -> float:
+    """Scenario-local underlying P&L: ``quantity * spot_price * spot_shock``.
+
+    Deliberately takes a scenario ``quantity`` rather than reading
+    ``portfolio.underlying_quantity`` — the monitor's quantity dial (future
+    work) is scenario-local and must never require a portfolio mutation to
+    preview a hypothetical book size.
+
+    Args:
+        quantity: Scenario-local underlying share quantity (may differ from
+            the portfolio's stored quantity).
+        spot_price: Today's spot price (the shock is applied to this).
+        spot_shock: Signed fractional spot move, e.g. ``-0.25`` for -25%
+            (matches ``MarketShock.spot_shock`` / ``CrashShock.crash_move``
+            units).
+
+    Returns:
+        Signed dollar P&L on the underlying position under the shock.
+
+    """
+    return quantity * spot_price * spot_shock

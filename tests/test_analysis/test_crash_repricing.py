@@ -1852,3 +1852,39 @@ class TestCrashValueCurve:
         values = [value for _, value in curve]
         assert values == sorted(values, reverse=True)
         assert values[0] > values[-1]
+
+
+class TestUnderlyingPnl:
+    """Tests for underlying_pnl — scenario-local underlying P&L (M2.4)."""
+
+    def test_zero_shock_is_zero_pnl(self) -> None:
+        """No spot move means no underlying P&L, regardless of quantity."""
+        pnl = cr.underlying_pnl(
+            quantity=3000.0,
+            spot_price=6600.0,
+            spot_shock=0.0,
+        )
+
+        assert pnl == pytest.approx(0.0)
+
+    def test_long_quantity_with_negative_shock_is_negative_pnl(self) -> None:
+        """A long underlying position loses money when spot drops."""
+        pnl = cr.underlying_pnl(
+            quantity=3000.0,
+            spot_price=6600.0,
+            spot_shock=-0.25,
+        )
+
+        assert pnl == pytest.approx(3000.0 * 6600.0 * -0.25)
+        assert pnl < 0.0
+
+    def test_short_quantity_with_negative_shock_is_positive_pnl(self) -> None:
+        """A short underlying position gains money when spot drops."""
+        pnl = cr.underlying_pnl(
+            quantity=-3000.0,
+            spot_price=6600.0,
+            spot_shock=-0.25,
+        )
+
+        assert pnl == pytest.approx(-3000.0 * 6600.0 * -0.25)
+        assert pnl > 0.0
