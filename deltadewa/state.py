@@ -190,6 +190,30 @@ class ProgramState:
         self._dirty = False
         return True
 
+    def export_snapshot(self, filename: str) -> Path:
+        """Write a point-in-time copy of the live portfolio to *filename*.
+
+        Unlike the mutators, this never touches ``dirty`` — it's a
+        read-only snapshot for the operator to download, not a change to
+        the live book, and it goes through this class's own serializer/
+        changelog rather than a second ``PortfolioSerializer`` pointed at
+        the same directory, so it stays inside the guarded session layer.
+
+        Args:
+            filename: Name of the file to write under this state's
+                export directory. Should not be ``STATE_FILENAME`` — a
+                snapshot is a separate artifact, not the autosave slot.
+
+        Returns:
+            Path to the written file.
+
+        """
+        return self._serializer.export_to_json(
+            self._portfolio,
+            self._changelog,
+            filename=filename,
+        )
+
     def _mutate_and_save(self) -> None:
         self._dirty = True
         self.save_if_dirty()

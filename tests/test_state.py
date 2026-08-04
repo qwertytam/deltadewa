@@ -188,6 +188,37 @@ class TestNonDestructiveMutatorsAutosave:
         assert reloaded.portfolio.spot_price == pytest.approx(123.0)
 
 
+class TestExportSnapshot:
+    """export_snapshot: a read-only, non-autosave copy of the live book."""
+
+    def test_writes_a_distinct_file_without_touching_dirty(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _load(tmp_path)
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        assert state.dirty is False
+
+        written = state.export_snapshot("snapshot.json")
+
+        assert written == tmp_path / "snapshot.json"
+        assert written.exists()
+        assert written != tmp_path / STATE_FILENAME
+        assert state.dirty is False
+
+        # The snapshot round-trips through the same importer as any
+        # other export, independent of this ProgramState.
+        reimported = PortfolioSerializer(
+            export_dir=tmp_path,
+        ).import_from_json(written)
+        assert len(reimported["portfolio"].positions) == 1
+
+
 class TestDestructiveOpsRequireConfirm:
     """remove_position / clear_positions refuse without confirm=True."""
 
