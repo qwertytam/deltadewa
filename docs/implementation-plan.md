@@ -1157,6 +1157,11 @@ holds even from the host itself.
 
 ### M2.4 — The monitor (lead with the crash)
 
+**Status: done** — commits `dc7f70c`, `083b3cd`, `43b12fc`, `6bea05d`, `51689da`,
+`84dea56`, `94079e8`, `5dcd068`, `da4db65`, `641d904`, `c03d177`, `24384b1`,
+`541a04b`, plus a partner-feedback fix commit, on `feat/m2.4-engine-gaps` (PR:
+"M2.4 — the crash-led monitor").
+
 The partner's surface, and the highest-care work in Phase 2. Three sections, each
 answering one question:
 
@@ -1177,6 +1182,71 @@ the smart reader returning after eight weeks, not the daily expert. As-of stamps
 STALE banners everywhere (**M5**). Resolve **M2** (the inert hedge-success gauge):
 omit it until realized-carry tracking exists rather than ship a permanently-neutral
 gauge.
+
+**Findings:**
+
+- **(a) The quantity dial is scenario-local, with a structural guard, not just a
+  convention.** The scenario explorer's three dials (spot, vol, quantity) never
+  call a `ProgramState` mutator — `monitor_scenario.build_scenario` takes
+  `quantity` as a plain argument and reprices/recomputes carry against it without
+  ever touching `portfolio.underlying_quantity` or triggering an autosave.
+  `tests/test_app/test_monitor.py::TestScenarioLocalGuard` pins this by
+  exercising every dial across its full range and asserting `state.dirty` stays
+  `False` and no new file appears under `exports/` — a reader moving the dials
+  cannot accidentally mutate the shared book, and the test would fail loudly if
+  a future change made that possible.
+- **(b) The dials start at the IPS crash-anchor point, so the explorer *is* the
+  gauge at first paint, structurally.** `render()` initialises
+  `spot_pct`/`vol_points`/`quantity` from
+  `ips_config.convexity.crash_scenario_pct`/`.crash_vol_shock`/
+  `portfolio.underlying_quantity` — not just numerically equal to the gauge's
+  own inputs, but built through the identical `CrashShock.from_ips(...)`
+  pathway the gauge itself uses. `TestAgreement` pins the headline number
+  against `crash_hedge_value(portfolio, shock=CrashShock.from_ips(...))` to the
+  cent, the structural guarantee M2.1 was built to make possible.
+- **(c) `crash_skew_vol` is threaded through every /monitor repricing path, not
+  just the gauge.** The vol dial is not a flat vol bump: `CrashShock.to_shock()`/
+  `.vol_mapping()` — the pair `build_scenario`, `crash_value_curve`, and the
+  curve-reshaping callback all call — routes through `crash_skew_vol`'s
+  wing-anchored skew mapping internally, the same basis `calculate_crash_convexity_pct`
+  (the gauge) uses. The monitor never assembles a raw `MarketShock` anywhere;
+  this is what keeps the scenario explorer's curve and headline number
+  consistent with the gauge as the dials move, not just at the default position.
+- **(d) Explanatory, not actionable — by omission, not restraint.** The monitor
+  has no roll/monetize/edit buttons anywhere; DECISIONS shows a verdict badge
+  plus `fmt.roll_verdict_reason` text, band bars, and the monetization
+  schedule as read-only numbers. `register_callbacks` wires exactly three
+  dials and a reset button, none of which reach a `ProgramState` mutator —
+  matching CLAUDE.md's framing of `/monitor` as the "read-mostly book review"
+  page, distinct from `/design`'s editor. The legibility pass (3-s.f. headline
+  numbers with exact values in a `title` tooltip, band bars for in-range-at-a-
+  glance, the collapsed per-leg ledger, and a plain-language rewrite assuming
+  no program vocabulary) is what makes that read-only page legible cold rather
+  than merely inert.
+- **(e) Two partner-facing fixes from the first live review.** Showing the
+  deployed page cold surfaced two real gaps no test caught: the spot-shock
+  slider's tooltip rendered behind the payoff-curve card (the slider handle's
+  own `transform` opens a nested stacking context, so the tooltip's `z-index`
+  only won locally — fixed by giving `.dial-row` its own explicit
+  `position: relative; z-index` so the whole subtree paints above the graph),
+  and the page never showed the reference spot price the shock dials move
+  from, despite it already being on `portfolio.spot_price` — added as a plain
+  sentence under the "Crash scenario" heading. Neither needed new engine code.
+
+**Verified at close-out:** `gate-runner` green (`ruff`, `mypy` strict,
+`ruff format`, `pylint` 10.00/10, `pytest` — 1578 passed); `dash-smoke-runner`
+green (79/79 app-level tests, both `/monitor` and `/design` render cleanly),
+with `TestAgreement` and `TestScenarioLocalGuard` confirmed passing by exact
+node ID. Deployed live to the droplet (RUNBOOK §4) with the repo's own golden
+SPX tail-hedge fixture (`examples/portfolios/spx_tail_20m.yaml`) loaded as
+demo data — reproduced that fixture's own published numbers exactly ($298,099
+hedge value today, $5,226,004 in the IPS crash scenario, 17.5x) before
+shipping it, so the partner review was against real, checked economics, not
+an empty book. `/monitor` confirmed rendering over the tailnet with an honest
+`MARKET DATA UNAVAILABLE` banner (no live market-data provider configured on
+the droplet yet — an `[M2.6 TODO]`, not a bug). Partner reviewed the live page
+cold; both fixes from that review verified fixed on the redeployed droplet
+before commit.
 
 ### M2.5 — The design workbench
 
