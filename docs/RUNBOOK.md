@@ -90,7 +90,7 @@ assuming anything).
 
 ## 3. Client setup — what the other users do once
 
-1. Install Tailscale (desktop or mobile — https://tailscale.com/download).
+1. Install Tailscale (desktop or mobile — <https://tailscale.com/download>).
 2. Sign in with the authorized account (MFA lives on this login, not on
    the app itself).
 3. Bookmark: `http://<tailscale-ip>:8050/monitor`
@@ -121,7 +121,69 @@ curl http://<tailscale-ip>:8050/health
 `[M2.6 TODO]` Host cron: market-data refresh, monthly report email,
 `exports/` backup push — not implemented yet; do these manually until then.
 
-## 5. Recovery — the droplet dies
+## 5. Loading your positions
+
+There is no in-app position editor yet (that's M2.5) — the supported way to
+get a portfolio into the running app today is the CLI importer added for
+this purpose, run against the shared `exports/` state.
+
+```bash
+# 1. Write the portfolio YAML into exports/ (the bind-mounted, stateful
+#    directory — see §7). examples/portfolios/spx_protective_put.yaml (in
+#    the repo, not on the droplet's bind mount) is the format to copy —
+#    scp it up or paste its contents into a new file here.
+scp examples/portfolios/spx_protective_put.yaml \
+    deploy@<tailscale-ip>:~/deltadewa/exports/portfolio.yaml
+
+# 2. Run the importer inside the container (matches the app's own
+#    Python/deps — this is the normal path)
+docker compose exec app python -m deltadewa.app.import_portfolio \
+    exports/portfolio.yaml
+
+# On the host instead, only if it has a matching Poetry env set up
+# (not the normal case for this droplet):
+# poetry run python -m deltadewa.app.import_portfolio exports/portfolio.yaml
+
+# Re-importing later refuses to overwrite the existing state unless forced
+docker compose exec app python -m deltadewa.app.import_portfolio \
+    exports/portfolio.yaml --force
+```
+
+Fields worth getting right before importing, or specific panels degrade to
+an explicit "unavailable" rather than a number:
+
+- **`underlying_quantity`** — without it, delta-drift/theta-cost/hedge-ratio
+  metrics and the offset framing report unavailable rather than a
+  fabricated figure.
+- **`entry_spot` / `entry_premium`** on each leg — without them, the
+  monetization gain basis falls back to an explicit unknown-basis figure
+  instead of a computed cost basis.
+- **`exercise_style: EUROPEAN`** on every SPX leg — SPX is cash-settled
+  European; the American finite-difference path is only correct for
+  single-name/SPY and must not be left as the default for an SPX book.
+
+**IPS policy file.** `config/ips.yaml` is baked into the image at build
+time (`COPY config ./config` in the `Dockerfile`) — it is *not* on the
+`exports/` bind mount. If it's missing or invalid, the app logs a warning
+and keeps running without program-policy context (`docker compose logs -f
+app`); to change it, edit `config/ips.yaml` in the repo clone and rebuild
+(`docker compose build`) — a live container won't pick up a host-side edit
+to it.
+
+**Verify:**
+
+```bash
+curl http://<tailscale-ip>:8050/health
+# expect: "state_loaded": true, and market_data.source/as_of reflecting
+# the data's actual freshness
+```
+
+Reload `http://<tailscale-ip>:8050/monitor` and confirm it still renders.
+The monitor's crash headline and gain-basis panel land in M2.4 — once
+that's live, this is also where you'd confirm they show real numbers
+against the positions just imported.
+
+## 6. Recovery — the droplet dies
 
 Target: **under 30 minutes, nothing memorised.**
 
@@ -130,7 +192,7 @@ Target: **under 30 minutes, nothing memorised.**
 #    final `docker compose up -d --build`
 
 # 2. Restore exports/ from the last backup onto the new droplet, into the
-#    repo's exports/ directory (the bind-mount source — see §6). Until
+#    repo's exports/ directory (the bind-mount source — see §7). Until
 #    [M2.6 TODO]'s offsite backup exists, this means: whatever manual copy
 #    (scp, USB, etc.) you made of exports/ from the old box.
 scp -r old-backup/exports/ deploy@<new-tailscale-ip>:~/deltadewa/exports/
@@ -142,7 +204,7 @@ docker compose up -d --build
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 ```
 
-## 6. What lives where
+## 7. What lives where
 
 - **`exports/`** — the only stateful directory. Bind-mounted (not a named
   volume, so a future backup job can read it directly off the host
