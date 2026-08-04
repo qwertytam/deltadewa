@@ -164,11 +164,12 @@ an explicit "unavailable" rather than a number:
 
 **IPS policy file.** `config/ips.yaml` is baked into the image at build
 time (`COPY config ./config` in the `Dockerfile`) — it is *not* on the
-`exports/` bind mount. If it's missing or invalid, the app logs a warning
-and keeps running without program-policy context (`docker compose logs -f
-app`); to change it, edit `config/ips.yaml` in the repo clone and rebuild
-(`docker compose build`) — a live container won't pick up a host-side edit
-to it.
+`exports/` bind mount. If it's missing or invalid, `/monitor` renders a
+single "No IPS policy is loaded" screen in place of the crash-led content
+(there's no partial-policy state — see `docker compose logs -f app` for
+why it was skipped); to change it, edit `config/ips.yaml` in the repo
+clone and rebuild (`docker compose build`) — a live container won't pick
+up a host-side edit to it.
 
 **Verify:**
 
@@ -178,10 +179,17 @@ curl http://<tailscale-ip>:8050/health
 # the data's actual freshness
 ```
 
-Reload `http://<tailscale-ip>:8050/monitor` and confirm it still renders.
-The monitor's crash headline and gain-basis panel land in M2.4 — once
-that's live, this is also where you'd confirm they show real numbers
-against the positions just imported.
+Reload `http://<tailscale-ip>:8050/monitor` and confirm:
+
+- the crash-led headline sentence at the top shows real numbers (spot
+  move, vol shock, hedge gain, underlying loss, share count) — not zeros
+  and not the "No IPS policy is loaded" screen
+- the monetization panel shows an actual gain percentage if `entry_premium`
+  was set on the puts, or its explicit "No entry price is recorded..."
+  sentence if it wasn't
+- the as-of stamp under the top banner reflects the data's actual
+  freshness, with no STALE/SYNTHETIC/UNAVAILABLE banner unless that's
+  genuinely the feed's current state
 
 ## 6. Recovery — the droplet dies
 
