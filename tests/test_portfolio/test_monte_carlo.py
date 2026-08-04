@@ -156,6 +156,77 @@ class TestMonteCarloMixin:
         stored = portfolio.monte_carlo_results
         assert stored == result
 
+    def test_run_monte_carlo_simulation_caches_by_default(self) -> None:
+        """persist_cache defaults to True: the run's own result is cached
+        on the portfolio, not just settable via direct assignment."""
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+
+        assert portfolio.monte_carlo_results is None
+
+        result = portfolio.run_monte_carlo_simulation(num_simulations=1000)
+
+        assert portfolio.monte_carlo_results is result
+
+    def test_run_monte_carlo_simulation_persist_cache_false(self) -> None:
+        """persist_cache=False returns the full result without touching
+        the shared portfolio.monte_carlo_results cache."""
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+
+        result = portfolio.run_monte_carlo_simulation(
+            num_simulations=1000,
+            persist_cache=False,
+        )
+
+        assert "prob_profit" in result
+        assert "simulated_pnls" in result
+        assert portfolio.monte_carlo_results is None
+
+    def test_persist_cache_false_does_not_clobber_prior_cache(self) -> None:
+        """A scenario-local run must not overwrite a previously-cached
+        real run other panels may still be reading."""
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+
+        real_result = portfolio.run_monte_carlo_simulation(
+            num_simulations=1000,
+        )
+        assert portfolio.monte_carlo_results is real_result
+
+        scenario_result = portfolio.run_monte_carlo_simulation(
+            num_simulations=1000,
+            expected_return=0.15,
+            persist_cache=False,
+        )
+
+        assert scenario_result is not real_result
+        assert portfolio.monte_carlo_results is real_result
+
     def test_probability_high_simulations(self) -> None:
         """Test with higher number of simulations."""
         portfolio = OptionPortfolio(

@@ -341,6 +341,41 @@ class TestSharedObjectIdentity:
         assert state.portfolio is not original
 
 
+class TestMonteCarloScenarioLocalGuard:
+    """A scenario-local Monte Carlo run must not dirty or autosave state.
+
+    Mirrors tests/test_app/test_monitor.py::TestScenarioLocalGuard's
+    guarantee for the monitor's quantity dial, applied here to the
+    Monte Carlo cache (F6): a what-if run reached via
+    ``state.portfolio.run_monte_carlo_simulation(..., persist_cache=False)``
+    must never touch ``ProgramState``'s dirty flag or write to ``exports/``.
+    """
+
+    def test_scenario_local_run_leaves_state_untouched(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _load(tmp_path)
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        assert state.dirty is False
+        before_files = set(tmp_path.iterdir())
+
+        state.portfolio.run_monte_carlo_simulation(
+            num_simulations=1000,
+            expected_return=0.15,
+            persist_cache=False,
+        )
+
+        assert state.dirty is False
+        after_files = set(tmp_path.iterdir())
+        assert after_files == before_files
+
+
 def test_create_empty_portfolio_used_for_fresh_state(tmp_path: Path) -> None:
     """Sanity check: the empty-book path matches the factory's own shape."""
     baseline = create_empty_portfolio(
