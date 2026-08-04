@@ -321,6 +321,43 @@ class TestCallbacksFireAndReturnValues:
         assert after_numbers != before_numbers
         assert after_curve != before_curve
 
+    def test_qty_input_changes_curve_not_just_numbers(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """Regression: underlying_loss/net now scale with quantity (item c).
+
+        Before this change the curve only depended on the vol dial (hedge
+        value alone doesn't scale with quantity); now net/underlying_loss
+        do, so the curve must reshape when only the quantity dial moves.
+        """
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#payoff-curve", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        before_curve = page.evaluate(
+            "() => document.querySelector("
+            "'#payoff-curve .js-plotly-plot').data[0].y",
+        )
+
+        qty_input = page.locator("#qty-input")
+        qty_input.fill("500")
+        qty_input.press("Tab")
+        page.wait_for_function(
+            "(before) => JSON.stringify(document.querySelector("
+            "'#payoff-curve .js-plotly-plot').data[0].y) !== "
+            "JSON.stringify(before)",
+            arg=before_curve,
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        after_curve = page.evaluate(
+            "() => document.querySelector("
+            "'#payoff-curve .js-plotly-plot').data[0].y",
+        )
+
+        assert after_curve != before_curve
+
     def test_spot_slider_updates_scenario_numbers(
         self,
         page: Page,
