@@ -429,7 +429,10 @@ def render(app: ProgramDashApp) -> html.Div:
                                 step=1.0,
                                 value=spot_pct,
                                 marks=None,
-                                tooltip={"placement": "bottom"},
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
                             ),
                         ],
                         className="dial",
@@ -450,7 +453,10 @@ def render(app: ProgramDashApp) -> html.Div:
                                 step=0.01,
                                 value=vol_points,
                                 marks=None,
-                                tooltip={"placement": "bottom"},
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
                             ),
                         ],
                         className="dial",

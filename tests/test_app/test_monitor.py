@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from dash.development.base_component import Component
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
@@ -30,6 +31,7 @@ from deltadewa.analysis.crash_repricing import (
 )
 from deltadewa.analysis.monitor_scenario import build_scenario
 from deltadewa.app.factory import ProgramDashApp, create_app
+from deltadewa.app.pages import monitor
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
 from deltadewa.state import ProgramState
@@ -71,6 +73,20 @@ def _parse_dollar_amount(text: str) -> float:
     digits = raw.replace("$", "").replace("+", "").replace("-", "")
     value = float(digits.replace(",", ""))
     return -value if negative else value
+
+
+def _find_component(node: object, component_id: str) -> Component | None:
+    """Recursively find a Dash component by *component_id* in a layout tree."""
+    if isinstance(node, Component):
+        if getattr(node, "id", None) == component_id:
+            return node
+        return _find_component(getattr(node, "children", None), component_id)
+    if isinstance(node, (list, tuple)):
+        for child in node:
+            found = _find_component(child, component_id)
+            if found is not None:
+                return found
+    return None
 
 
 def _assert_renders_cleanly(page: Page, url: str) -> None:
@@ -216,6 +232,25 @@ class TestMonitorRenders:
         monitor_app: MonitorAppHandle,
     ) -> None:
         _assert_renders_cleanly(page, f"{monitor_app.url}/monitor")
+
+
+class TestSliderTooltips:
+    """Slider values must stay visible while dragging, not just on hover.
+
+    A structural (non-Playwright) check on ``render()``'s own component
+    tree — no browser needed to confirm the tooltip config is set.
+    """
+
+    def test_spot_and_vol_sliders_report_always_visible(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        for slider_id in ("spot-slider", "vol-slider"):
+            slider = _find_component(layout, slider_id)
+            assert slider is not None, f"{slider_id} not found in layout"
+            assert slider.tooltip["always_visible"] is True
 
 
 class TestAgreement:
