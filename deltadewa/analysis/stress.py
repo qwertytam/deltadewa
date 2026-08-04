@@ -95,7 +95,28 @@ def build_spot_vol_grid_spec(
         The scenario axes plus the baseline context used to render and
         annotate the heatmap.
 
+    Raises:
+        ValueError: If *spot_shock_pct* is not a fraction in ``(0, 1)``,
+            or *vol_shock_pct* is not positive. Both arguments are
+            fractions, not percents — a caller passing a percent-shaped
+            value (e.g. ``30.0`` for +/-30%) would otherwise drive the
+            spot axis to zero or negative and fail deep inside the
+            pricer instead of here.
+
     """
+    if not 0 < spot_shock_pct < 1:
+        raise ValueError(
+            "spot_shock_pct must be a fraction in (0, 1) — e.g. 0.25 "
+            f"for +/-25%; got {spot_shock_pct!r}. A value >= 1 drives "
+            "the lower spot bound to zero or below, which is not a "
+            "valid spot price."
+        )
+    if vol_shock_pct <= 0:
+        raise ValueError(
+            "vol_shock_pct must be a positive fraction — e.g. 0.20 for "
+            f"+/-20%; got {vol_shock_pct!r}."
+        )
+
     original_spot = portfolio.spot_price
     baseline_value = portfolio.total_value()
     avg_vol = calculate_portfolio_avg_volatility(portfolio)
@@ -178,7 +199,19 @@ def build_time_price_grid_spec(
     Returns:
         The spot and time scenario axes.
 
+    Raises:
+        ValueError: If *spot_range_pct* is not a fraction in ``(0, 1)``
+            — see :func:`build_spot_vol_grid_spec` for why this matters.
+
     """
+    if not 0 < spot_range_pct < 1:
+        raise ValueError(
+            "spot_range_pct must be a fraction in (0, 1) — e.g. 0.25 "
+            f"for +/-25%; got {spot_range_pct!r}. A value >= 1 drives "
+            "the lower spot bound to zero or below, which is not a "
+            "valid spot price."
+        )
+
     spot_min = original_spot * (1 - spot_range_pct)
     spot_max = original_spot * (1 + spot_range_pct)
     spot_scenarios = np.linspace(spot_min, spot_max, num_price_steps)

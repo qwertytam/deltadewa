@@ -150,6 +150,51 @@ class TestBuildSpotVolGridSpec:
         assert spec.baseline_value == pytest.approx(portfolio.total_value())
         assert spec.max_days == 60
 
+    def test_spot_shock_pct_percent_shaped_value_raises(self) -> None:
+        """A percent-shaped value (e.g. 30.0) raises ValueError, not a
+        QuantLib RuntimeError from a negative spot."""
+        portfolio = _make_put_portfolio(spot=100.0)
+
+        with pytest.raises(ValueError, match="spot_shock_pct"):
+            build_spot_vol_grid_spec(
+                portfolio,
+                spot_shock_pct=30.0,
+                vol_shock_pct=0.20,
+                grid_resolution=5,
+            )
+
+    def test_spot_shock_pct_at_one_raises(self) -> None:
+        """spot_shock_pct == 1.0 drives spot_min to zero and raises."""
+        portfolio = _make_put_portfolio(spot=100.0)
+
+        with pytest.raises(ValueError, match="spot_shock_pct"):
+            build_spot_vol_grid_spec(
+                portfolio,
+                spot_shock_pct=1.0,
+                vol_shock_pct=0.20,
+                grid_resolution=5,
+            )
+
+    def test_vol_shock_pct_non_positive_raises(self) -> None:
+        """A zero or negative vol_shock_pct raises ValueError."""
+        portfolio = _make_put_portfolio(spot=100.0)
+
+        with pytest.raises(ValueError, match="vol_shock_pct"):
+            build_spot_vol_grid_spec(
+                portfolio,
+                spot_shock_pct=0.10,
+                vol_shock_pct=0.0,
+                grid_resolution=5,
+            )
+
+        with pytest.raises(ValueError, match="vol_shock_pct"):
+            build_spot_vol_grid_spec(
+                portfolio,
+                spot_shock_pct=0.10,
+                vol_shock_pct=-0.1,
+                grid_resolution=5,
+            )
+
 
 class TestBuildTimePriceGridSpec:
     """build_time_price_grid_spec: spot axis and the time-truncation quirk."""
@@ -191,6 +236,19 @@ class TestBuildTimePriceGridSpec:
         assert spec.spot_max == pytest.approx(110.0)
         assert len(spec.spot_scenarios) == 5
         assert spec.spot_scenarios[2] == pytest.approx(100.0)
+
+    def test_spot_range_pct_percent_shaped_value_raises(self) -> None:
+        """A percent-shaped value (e.g. 30.0) raises ValueError, not a
+        QuantLib RuntimeError from a negative spot."""
+        with pytest.raises(ValueError, match="spot_range_pct"):
+            build_time_price_grid_spec(
+                spot_range_pct=30.0,
+                num_time_steps=5,
+                num_price_steps=5,
+                original_spot=100.0,
+                original_date=_AS_OF,
+                max_days_to_maturity=90,
+            )
 
 
 class TestRecomputeConcentration:
