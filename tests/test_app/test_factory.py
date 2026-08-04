@@ -58,6 +58,11 @@ class TestCreateApp:
         with pytest.raises(FetchCapableProviderError):
             create_app(state=_state(tmp_path), market_data=provider)
 
+    def test_suppresses_callback_exceptions(self, tmp_path: Path) -> None:
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        assert app.config.suppress_callback_exceptions is True
+
 
 class TestRoutes:
     """Both pages must come up over HTTP without a server-side exception."""

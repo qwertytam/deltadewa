@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from html import escape
 from typing import TYPE_CHECKING, Any
 
+from deltadewa.analysis.carry import carry_vs_budget
+
 if TYPE_CHECKING:
     from deltadewa.analysis.crash_payoff import CrashConvexityResult
     from deltadewa.analysis.market_environment import MarketEnvironment
@@ -299,15 +301,17 @@ def _build_cost(
 ) -> CostSection:
     """Build the CostSection from carry metrics and notional."""
     theta_annual: float = carry_metrics.get("total_theta_annual", 0.0)
-    carry_pct = (
-        abs(theta_annual) / book_notional * 100 if book_notional > 0 else 0.0
+    status = carry_vs_budget(
+        theta_annual=theta_annual,
+        book_notional=book_notional,
+        budget_annual_pct=budget_annual_pct,
     )
     return CostSection(
         total_theta_annual=theta_annual,
         book_notional=book_notional,
-        carry_pct_of_notional=carry_pct,
+        carry_pct_of_notional=status.carry_pct_of_notional,
         budget_annual_pct=budget_annual_pct,
-        within_budget=carry_pct <= budget_annual_pct,
+        within_budget=status.within_budget,
     )
 
 

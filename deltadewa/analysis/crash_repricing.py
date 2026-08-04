@@ -46,6 +46,7 @@ import functools
 import math
 from typing import TYPE_CHECKING
 
+import numpy as np
 from scipy.optimize import brentq
 
 from deltadewa.analysis.repricing import (
@@ -54,6 +55,7 @@ from deltadewa.analysis.repricing import (
     VolMapping,
     flat_bump_vol,
     reprice_leg,
+    reprice_legs_at,
     reprice_portfolio,
 )
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -569,6 +571,64 @@ def crash_convexity_pct(
     return (v_crash - v_today) / book * 100.0
 
 
+def crash_value_curve(
+    portfolio: OptionPortfolio,
+    *,
+    shock: CrashShock,
+    shock_range: tuple[float, float] = (-40.0, 10.0),
+    n_points: int = 25,
+) -> list[tuple[float, float]]:
+    """All-legs hedge value across a shock sweep — the monitor's curve.
+
+    Same repricing basis as :func:`crash_hedge_value` /
+    :func:`crash_convexity_pct` (every option leg, none dropped, positions
+    never overridden), swept over spot depth at one vol/skew basis, so the
+    monitor's headline number (all-legs) and its chart agree with each
+    other by construction. Deliberately not
+    :func:`~deltadewa.analysis.crash_payoff.compute_crash_convexity`: that
+    function's curve is long-puts-only, scoped to the premium-payoff-ratio
+    question (dollars back per dollar of premium paid), not this one.
+
+    Builds :class:`~deltadewa.analysis.repricing.MarketState` once and
+    reprices every grid point off it, so a whole sweep does one
+    vega-weighted-average pass rather than one per point (see
+    :func:`~deltadewa.analysis.repricing.reprice_legs_at`).
+
+    Args:
+        portfolio: Portfolio to evaluate.
+        shock: The crash basis (vol bump, skew steepening/anchor). Its own
+            ``crash_scenario_pct`` is unused — each grid point supplies its
+            own depth via :meth:`CrashShock.at_pct`.
+        shock_range: (min_shock_pct, max_shock_pct) bounding the grid.
+        n_points: Number of evenly-spaced points in the grid.
+
+    Returns:
+        ``(shock_pct, repriced_value)`` pairs, sorted ascending (most
+        severe crash first, matching the sort convention of
+        :func:`~deltadewa.analysis.crash_payoff.compute_crash_convexity`'s
+        ``curve``).
+
+    """
+    lo, hi = shock_range
+    grid = sorted(
+        {round(float(s), 6) for s in np.linspace(lo, hi, n_points)},
+    )
+
+    state = MarketState.from_portfolio(portfolio)
+    return [
+        (
+            pct,
+            reprice_legs_at(
+                portfolio.positions,
+                state,
+                shock=shock.at_pct(pct).to_shock(),
+                vol_mapping=shock.at_pct(pct).vol_mapping(),
+            ),
+        )
+        for pct in grid
+    ]
+
+
 def crash_intrinsic_floor(
     portfolio: OptionPortfolio,
     *,
@@ -602,3 +662,31 @@ def crash_intrinsic_floor(
             payoff = max(0.0, crash_spot - position.option.strike_price)
         total += payoff * position.quantity * position.contract_size
     return total
+
+
+def underlying_pnl(
+    *,
+    quantity: float,
+    spot_price: float,
+    spot_shock: float,
+) -> float:
+    """Scenario-local underlying P&L: ``quantity * spot_price * spot_shock``.
+
+    Deliberately takes a scenario ``quantity`` rather than reading
+    ``portfolio.underlying_quantity`` — the monitor's quantity dial (future
+    work) is scenario-local and must never require a portfolio mutation to
+    preview a hypothetical book size.
+
+    Args:
+        quantity: Scenario-local underlying share quantity (may differ from
+            the portfolio's stored quantity).
+        spot_price: Today's spot price (the shock is applied to this).
+        spot_shock: Signed fractional spot move, e.g. ``-0.25`` for -25%
+            (matches ``MarketShock.spot_shock`` / ``CrashShock.crash_move``
+            units).
+
+    Returns:
+        Signed dollar P&L on the underlying position under the shock.
+
+    """
+    return quantity * spot_price * spot_shock

@@ -1,5 +1,6 @@
 """Carry and theta analysis mixin for portfolio analysis."""
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -9,6 +10,56 @@ from deltadewa.utils import abs_sum
 
 if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
+
+
+@dataclass(frozen=True)
+class CarryBudgetStatus:
+    """Carry cost measured against the IPS annual budget.
+
+    Attributes:
+        carry_pct_of_notional: ``abs(theta_annual) / book_notional`` as a
+            percentage.
+        within_budget: True when ``carry_pct_of_notional <=
+            budget_annual_pct``.
+        theta_annual: Net annual theta in dollars, verbatim from the
+            ``theta_annual`` argument (negative = cost; sign-preserving,
+            unlike ``carry_pct_of_notional``).
+
+    """
+
+    carry_pct_of_notional: float
+    within_budget: bool
+    theta_annual: float
+
+
+def carry_vs_budget(
+    *,
+    theta_annual: float,
+    book_notional: float,
+    budget_annual_pct: float,
+) -> CarryBudgetStatus:
+    """Carry cost as a % of notional, compared against the IPS budget.
+
+    Args:
+        theta_annual: Net annual theta in dollars (sign-agnostic; ``abs`` is
+            taken internally since carry cost is reported as a magnitude).
+        book_notional: Protected book notional in dollars.
+        budget_annual_pct: IPS carry budget, in percent of notional.
+
+    Returns:
+        The carry-vs-budget comparison. ``carry_pct_of_notional`` is
+        ``0.0`` when ``book_notional <= 0`` (undefined ratio, not an
+        error).
+
+    """
+    carry_pct = (
+        abs(theta_annual) / book_notional * 100 if book_notional > 0 else 0.0
+    )
+    return CarryBudgetStatus(
+        carry_pct_of_notional=carry_pct,
+        within_budget=carry_pct <= budget_annual_pct,
+        theta_annual=theta_annual,
+    )
 
 
 class CarryMixin:

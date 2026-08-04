@@ -10,6 +10,7 @@ Pages' own nav/title support.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, cast
 
 from dash import Dash, Input, Output, dcc, html
@@ -27,9 +28,9 @@ if TYPE_CHECKING:
     from deltadewa.state import ProgramState
 
 _DEFAULT_ROUTE = "/monitor"
-_ROUTES = {
-    "/design": design.layout,
-    "/monitor": monitor.layout,
+_ROUTES: dict[str, Callable[[ProgramDashApp], html.Div]] = {
+    "/design": design.render,
+    "/monitor": monitor.render,
 }
 
 
@@ -93,7 +94,7 @@ def create_app(
             "CboeFredProvider(read_only=True)",
         )
 
-    app = ProgramDashApp(__name__)
+    app = ProgramDashApp(__name__, suppress_callback_exceptions=True)
     app.program_state = state
     app.market_data = market_data
     app.ips_config = ips_config
@@ -117,10 +118,13 @@ def create_app(
         )
 
     app.layout = _serve_layout
+    design.register_callbacks(app)
+    monitor.register_callbacks(app)
 
     @app.callback(Output("page-content", "children"), Input("url", "pathname"))
     def _render_page(pathname: str | None) -> html.Div:
-        return _ROUTES.get(pathname or _DEFAULT_ROUTE, _ROUTES[_DEFAULT_ROUTE])
+        route = _ROUTES.get(pathname or _DEFAULT_ROUTE, _ROUTES[_DEFAULT_ROUTE])
+        return route(app)
 
     # app.server is typed Any on Dash (it's pluggable, per-backend); cast
     # once so the route decorator below is properly typed rather than
