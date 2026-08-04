@@ -6,7 +6,7 @@ in :func:`render`, at the default dial values; the scenario explorer's
 three dials only *update* it afterward, via :func:`register_callbacks`.
 No arithmetic happens in this module — every number comes from
 ``analysis/`` (``monitor_scenario.build_scenario``,
-``crash_repricing.crash_value_curve``, ``roll_status.evaluate_roll_status``,
+``monitor_scenario.build_scenario_curve``, ``roll_status.evaluate_roll_status``,
 ``monetization.build_monetization_plan``) and is only formatted here
 (``app.format``) or handed to a chart builder
 (``visualization.crash_charts_plotly``).
@@ -14,24 +14,22 @@ No arithmetic happens in this module — every number comes from
 
 from __future__ import annotations
 
-import dataclasses
 from typing import TYPE_CHECKING
 
 from dash import Input, Output, Patch, dcc, html
 from dash.development.base_component import Component
 
-from deltadewa.analysis.crash_repricing import (
-    CrashShock,
-    crash_value_curve,
-    hedge_value,
-)
+from deltadewa.analysis.crash_repricing import hedge_value
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.monetization import build_monetization_plan
-from deltadewa.analysis.monitor_scenario import build_scenario
+from deltadewa.analysis.monitor_scenario import (
+    build_scenario,
+    build_scenario_curve,
+)
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
-from deltadewa.visualization.crash_charts_plotly import plot_crash_value_curve
+from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
 if TYPE_CHECKING:
     from deltadewa.analysis.monetization import MonetizationPlan
@@ -385,12 +383,16 @@ def render(app: ProgramDashApp) -> html.Div:
         vol_points=vol_points,
         quantity=quantity,
     )
-    shock = CrashShock.from_ips(convexity)
-    curve = crash_value_curve(portfolio, shock=shock)
-    figure = plot_crash_value_curve(
+    curve = build_scenario_curve(
+        portfolio,
+        ips_config,
+        vol_points=vol_points,
+        quantity=quantity,
+    )
+    figure = plot_scenario_curve(
         curve,
         marker_pct=result.spot_pct,
-        marker_value=result.hedge_value_shocked,
+        marker_hedge_value=result.hedge_value_shocked,
         ips_crash_pct=convexity.crash_scenario_pct,
     )
 
@@ -429,7 +431,10 @@ def render(app: ProgramDashApp) -> html.Div:
                                 step=1.0,
                                 value=spot_pct,
                                 marks=None,
-                                tooltip={"placement": "bottom"},
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
                             ),
                         ],
                         className="dial",
@@ -450,7 +455,10 @@ def render(app: ProgramDashApp) -> html.Div:
                                 step=0.01,
                                 value=vol_points,
                                 marks=None,
-                                tooltip={"placement": "bottom"},
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
                             ),
                         ],
                         className="dial",
@@ -511,20 +519,22 @@ def register_callbacks(app: ProgramDashApp) -> None:
     @app.callback(
         Output("payoff-curve", "figure"),
         Input("vol-slider", "value"),
+        Input("qty-input", "value"),
         prevent_initial_call=True,
     )
-    def _update_curve(vol_points: float) -> Patch:
-        shock = dataclasses.replace(
-            CrashShock.from_ips(ips_config.convexity),
-            crash_vol_shock=vol_points,
+    def _update_curve(vol_points: float, quantity: float) -> Patch:
+        curve = build_scenario_curve(
+            app.program_state.portfolio,
+            ips_config,
+            vol_points=vol_points,
+            quantity=quantity,
         )
-        curve = crash_value_curve(app.program_state.portfolio, shock=shock)
-        xs = [shock_pct for shock_pct, _ in curve]
-        ys = [value for _, value in curve]
 
         patched = Patch()
-        patched["data"][0]["x"] = xs
-        patched["data"][0]["y"] = ys
+        patched["data"][0]["y"] = [point.net for point in curve]
+        patched["data"][1]["y"] = [point.hedge_value for point in curve]
+        patched["data"][2]["y"] = [point.underlying_loss for point in curve]
+        patched["data"][3]["y"] = [point.offset_ratio for point in curve]
         return patched
 
     @app.callback(
@@ -550,8 +560,8 @@ def register_callbacks(app: ProgramDashApp) -> None:
         )
 
         patched = Patch()
-        patched["data"][1]["x"] = [result.spot_pct]
-        patched["data"][1]["y"] = [result.hedge_value_shocked]
+        patched["data"][4]["x"] = [result.spot_pct]
+        patched["data"][4]["y"] = [result.hedge_value_shocked]
         return (
             patched,
             _scenario_numbers(result),
