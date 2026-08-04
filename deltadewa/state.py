@@ -255,6 +255,14 @@ class ProgramState:
         self._portfolio.set_volatility(volatility)
         self._mutate_and_save()
 
+    def set_underlying_quantity(self, underlying_quantity: float) -> None:
+        """Set underlying quantity.
+
+        See ``OptionPortfolio.set_underlying_quantity``.
+        """
+        self._portfolio.set_underlying_quantity(underlying_quantity)
+        self._mutate_and_save()
+
     def update_market_conditions(  # pylint: disable=too-many-arguments
         self,
         spot_price: float | None = None,

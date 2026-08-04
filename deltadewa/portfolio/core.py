@@ -182,6 +182,10 @@ class OptionPortfolioBase:
                 # the greek cache are updated, not just the Python attribute.
                 pos.option.update_volatility(volatility)
 
+    def set_underlying_quantity(self, underlying_quantity: float) -> None:
+        """Set the underlying notional position being hedged."""
+        self.underlying_quantity = underlying_quantity
+
     def get_symbol(self) -> str:
         """Get the symbol of the portfolio."""
         return self.symbol

@@ -350,6 +350,20 @@ class TestOptionPortfolioBase:
             5000.0, rel=1e-4
         )
 
+    def test_set_underlying_quantity(self) -> None:
+        """Test set_underlying_quantity method."""
+        portfolio = OptionPortfolioBase(
+            underlying_quantity=100.0,
+            spot_price=50.0,
+        )
+
+        portfolio.set_underlying_quantity(250.0)
+
+        assert portfolio.underlying_quantity == pytest.approx(250.0)
+        assert portfolio.total_underlying_value() == pytest.approx(
+            12500.0, rel=1e-4
+        )
+
     def test_total_portfolio_value(self) -> None:
         """Test total_portfolio_value calculation."""
         portfolio = OptionPortfolioBase(

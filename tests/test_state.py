@@ -169,6 +169,15 @@ class TestNonDestructiveMutatorsAutosave:
         reloaded = _load(tmp_path)
         assert reloaded.portfolio.volatility == pytest.approx(0.42)
 
+    def test_set_underlying_quantity(self, tmp_path: Path) -> None:
+        state = _load(tmp_path)
+
+        state.set_underlying_quantity(500.0)
+
+        assert state.dirty is False
+        reloaded = _load(tmp_path)
+        assert reloaded.portfolio.underlying_quantity == pytest.approx(500.0)
+
     def test_update_market_conditions(self, tmp_path: Path) -> None:
         state = _load(tmp_path)
 
