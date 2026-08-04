@@ -9,12 +9,21 @@ all-long-puts fixtures elsewhere in this suite).
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from deltadewa.analysis.crash_repricing import CrashShock, crash_hedge_value
-from deltadewa.analysis.monitor_scenario import build_scenario
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    crash_hedge_value,
+    crash_value_curve,
+)
+from deltadewa.analysis.monitor_scenario import (
+    _OFFSET_RATIO_MATERIAL_SHOCK_PCT,
+    build_scenario,
+    build_scenario_curve,
+)
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
@@ -232,3 +241,184 @@ class TestNoLongPuts:
         )
 
         assert result.hedge_value_shocked > 0.0
+
+
+class TestBuildScenarioCurve:
+    """The four-series scenario curve: shape, sign convention, agreement."""
+
+    def test_returns_documented_series_per_point(self) -> None:
+        """Every point exposes all six documented fields."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        curve = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        assert curve
+        for point in curve:
+            assert isinstance(point.shock_pct, float)
+            assert isinstance(point.shocked_spot_price, float)
+            assert isinstance(point.hedge_value, float)
+            assert isinstance(point.underlying_loss, float)
+            assert isinstance(point.net, float)
+            assert point.offset_ratio is None or isinstance(
+                point.offset_ratio,
+                float,
+            )
+
+    def test_underlying_loss_is_negative_on_a_down_shock(self) -> None:
+        """Sign convention: underlying_loss is negative P&L on a down move."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        curve = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        down_shocks = [point for point in curve if point.shock_pct < -1.0]
+        assert down_shocks
+        assert all(point.underlying_loss < 0.0 for point in down_shocks)
+
+    def test_hedge_value_matches_crash_value_curve(self) -> None:
+        """hedge_value is crash_value_curve's value, not a reimplementation."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        curve = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+        base_shock = CrashShock.from_ips(ips.convexity)
+        expected = dict(
+            crash_value_curve(
+                portfolio,
+                shock=dataclasses.replace(
+                    base_shock,
+                    crash_vol_shock=_VOL_SHOCK,
+                ),
+            ),
+        )
+
+        for point in curve:
+            assert point.hedge_value == pytest.approx(
+                expected[point.shock_pct],
+                rel=1e-9,
+            )
+
+    def test_shocked_spot_price_matches_spot_times_shock(self) -> None:
+        """shocked_spot_price is spot * (1 + shock_pct/100), per point."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        curve = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        for point in curve:
+            expected = portfolio.spot_price * (1.0 + point.shock_pct / 100.0)
+            assert point.shocked_spot_price == pytest.approx(expected)
+
+    def test_offset_ratio_none_near_zero_shock(self) -> None:
+        """offset_ratio is None near 0% shock, real away from it."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        curve = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        near_zero = [
+            point
+            for point in curve
+            if abs(point.shock_pct) < _OFFSET_RATIO_MATERIAL_SHOCK_PCT
+        ]
+        assert near_zero
+        assert all(point.offset_ratio is None for point in near_zero)
+
+        away_from_zero = [
+            point
+            for point in curve
+            if abs(point.shock_pct) >= _OFFSET_RATIO_MATERIAL_SHOCK_PCT
+        ]
+        assert away_from_zero
+        assert all(point.offset_ratio is not None for point in away_from_zero)
+
+    def test_agrees_with_build_scenario_at_matching_point(self) -> None:
+        """A single-point curve at the dial's own pct matches build_scenario.
+
+        Mirrors the explorer-equals-gauge pinning: the curve and the
+        single-point scenario explorer must never disagree at the same
+        (spot_pct, vol_points, quantity).
+        """
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+        quantity = portfolio.underlying_quantity
+
+        (point,) = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=quantity,
+            shock_range=(_CRASH_PCT, _CRASH_PCT),
+            n_points=1,
+        )
+        result = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=_CRASH_PCT,
+            vol_points=_VOL_SHOCK,
+            quantity=quantity,
+        )
+
+        assert point.net == pytest.approx(result.net, rel=1e-9)
+        assert point.offset_ratio == pytest.approx(
+            result.offset_ratio,
+            rel=1e-9,
+        )
+
+    def test_recomputes_with_quantity(self) -> None:
+        """underlying_loss/net/offset_ratio scale with qty; hedge_value not.
+
+        Pins the (c) regression: the curve must recompute when the quantity
+        dial moves, not just the numbers panel.
+        """
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        small = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=1_000.0,
+        )
+        large = build_scenario_curve(
+            portfolio,
+            ips,
+            vol_points=_VOL_SHOCK,
+            quantity=5_000.0,
+        )
+
+        for small_point, large_point in zip(small, large, strict=True):
+            assert small_point.hedge_value == pytest.approx(
+                large_point.hedge_value,
+            )
+            if abs(small_point.shock_pct) >= _OFFSET_RATIO_MATERIAL_SHOCK_PCT:
+                assert small_point.underlying_loss != pytest.approx(
+                    large_point.underlying_loss,
+                )
+                assert small_point.net != pytest.approx(large_point.net)
