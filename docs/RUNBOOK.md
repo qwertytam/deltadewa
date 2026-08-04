@@ -90,7 +90,7 @@ assuming anything).
 
 ## 3. Client setup — what the other users do once
 
-1. Install Tailscale (desktop or mobile — https://tailscale.com/download).
+1. Install Tailscale (desktop or mobile — <https://tailscale.com/download>).
 2. Sign in with the authorized account (MFA lives on this login, not on
    the app itself).
 3. Bookmark: `http://<tailscale-ip>:8050/monitor`
