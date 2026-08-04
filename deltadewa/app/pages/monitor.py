@@ -408,6 +408,12 @@ def render(app: ProgramDashApp) -> html.Div:
     scenario_explorer = html.Div(
         [
             html.H2("Crash scenario"),
+            html.P(
+                f"Today's {portfolio.get_symbol()} spot: "
+                f"{fmt.currency(portfolio.spot_price, decimals=2)} — the "
+                "shocks below move from this reference point.",
+                className="plain-language",
+            ),
             html.Div(
                 [
                     html.Div(

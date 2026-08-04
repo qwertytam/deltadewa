@@ -90,7 +90,13 @@ body {
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 24px;
-  margin: 16px 0;
+  /* Extra bottom margin + an explicit stacking context above the payoff
+   * graph: the slider handle's own transform creates a nested stacking
+   * context, so the tooltip's z-index only wins locally — without this,
+   * the whole dial subtree still paints under the graph card below it. */
+  margin: 16px 0 44px;
+  position: relative;
+  z-index: 5;
 }
 
 .dial {
