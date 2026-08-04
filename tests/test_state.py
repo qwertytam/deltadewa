@@ -127,6 +127,24 @@ class TestNonDestructiveMutatorsAutosave:
         assert len(reloaded.portfolio.positions) == 1
         assert reloaded.portfolio.positions[0].quantity == 5
 
+    def test_add_position_entry_premium(self, tmp_path: Path) -> None:
+        """entry_premium round-trips through the real save/load path."""
+        state = _load(tmp_path)
+
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=5,
+            option_type=OptionType.CALL,
+            entry_premium=12.34,
+        )
+
+        assert state.dirty is False
+        reloaded = _load(tmp_path)
+        assert reloaded.portfolio.positions[0].entry_premium == pytest.approx(
+            12.34
+        )
+
     def test_update_position(self, tmp_path: Path) -> None:
         state = _load(tmp_path)
         state.add_position(

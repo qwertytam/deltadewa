@@ -88,6 +88,7 @@ class OptionPortfolioBase:
         exercise_style: ExerciseStyle | None = None,
         entry_spot: float | None = None,
         entry_date: dt | None = None,
+        entry_premium: float | None = None,
     ) -> OptionPosition:
         """Add an option position to the portfolio.
 
@@ -106,6 +107,10 @@ class OptionPortfolioBase:
                 (uses self.default_exercise_style if None)
             entry_spot: Spot price at entry (uses self.spot_price if None)
             entry_date: Date of entry (uses self.valuation_date if None)
+            entry_premium: Per-share option price paid at entry, or None if
+                unknown. Used as the cost basis for monetization/gain
+                calculations; a position with no recorded entry_premium
+                reports its gain basis as "unknown" rather than "paid".
 
         Returns:
             The newly created and appended OptionPosition.
@@ -160,6 +165,7 @@ class OptionPortfolioBase:
             custom_volatility=custom_volatility,
             entry_spot=entry_spot,
             entry_date=entry_date,
+            entry_premium=entry_premium,
         )
         self.positions.append(position)
         return position

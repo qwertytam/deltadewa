@@ -205,6 +205,7 @@ class ProgramState:
         exercise_style: ExerciseStyle | None = None,
         entry_spot: float | None = None,
         entry_date: dt | None = None,
+        entry_premium: float | None = None,
     ) -> OptionPosition:
         """Add a position. See ``OptionPortfolio.add_position``."""
         position = self._portfolio.add_position(
@@ -217,6 +218,7 @@ class ProgramState:
             exercise_style=exercise_style,
             entry_spot=entry_spot,
             entry_date=entry_date,
+            entry_premium=entry_premium,
         )
         self._mutate_and_save()
         return position
