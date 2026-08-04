@@ -55,6 +55,14 @@ class MoneynessDrift:
 
 
 @dataclass(frozen=True)
+class TriggerReason:
+    """One roll trigger's verdict and the plain-language reason for it."""
+
+    verdict: RollVerdict
+    reason: str
+
+
+@dataclass(frozen=True)
 class RollStatusRecord:
     """One row of the roll status table — one option tranche."""
 
@@ -66,7 +74,11 @@ class RollStatusRecord:
     convexity_target_min_pct: float
     convexity_target_max_pct: float
     verdict: RollVerdict
+    suppressed: bool
     estimated_roll_up_cost: float | None
+    time_trigger: TriggerReason
+    convexity_trigger: TriggerReason
+    drift_trigger: TriggerReason
 
 
 def _otm_pct(option_type: OptionType, spot: float, strike: float) -> float:
@@ -142,39 +154,50 @@ def _time_trigger_verdict(
     days_to_maturity: int,
     roll_window_days: float,
     review_buffer: float,
-) -> RollVerdict:
+) -> TriggerReason:
+    reason = (
+        f"{days_to_maturity}d to maturity, {roll_window_days:.0f}d roll window"
+    )
     if days_to_maturity <= roll_window_days:
-        return RollVerdict.ROLL
+        return TriggerReason(RollVerdict.ROLL, reason=reason)
     if days_to_maturity <= roll_window_days * review_buffer:
-        return RollVerdict.REVIEW
-    return RollVerdict.HOLD
+        return TriggerReason(RollVerdict.REVIEW, reason=reason)
+    return TriggerReason(RollVerdict.HOLD, reason=reason)
 
 
 def _convexity_trigger_verdict(
     crash_convexity_pct: float,
     target_min_pct: float,
     target_max_pct: float,
-) -> RollVerdict:
+) -> TriggerReason:
+    reason = (
+        f"{crash_convexity_pct:.1f}% convexity vs "
+        f"{target_min_pct:.0f}-{target_max_pct:.0f}% band"
+    )
     if crash_convexity_pct < target_min_pct:
-        return RollVerdict.ROLL
+        return TriggerReason(RollVerdict.ROLL, reason=reason)
     if crash_convexity_pct > target_max_pct:
-        return RollVerdict.MONITOR
-    return RollVerdict.HOLD
+        return TriggerReason(RollVerdict.MONITOR, reason=reason)
+    return TriggerReason(RollVerdict.HOLD, reason=reason)
 
 
 def _strike_drift_trigger_verdict(
     drift_pct: float | None,
     max_otm_drift_pct: float,
     review_fraction: float,
-) -> RollVerdict:
+) -> TriggerReason:
     if drift_pct is None:
-        return RollVerdict.HOLD
+        return TriggerReason(
+            RollVerdict.HOLD,
+            reason="no entry spot recorded",
+        )
+    reason = f"{drift_pct:+.1f}% OTM drift vs {max_otm_drift_pct:.0f}% max"
     abs_drift = abs(drift_pct)
     if abs_drift > max_otm_drift_pct:
-        return RollVerdict.ROLL
+        return TriggerReason(RollVerdict.ROLL, reason=reason)
     if abs_drift > max_otm_drift_pct * review_fraction:
-        return RollVerdict.REVIEW
-    return RollVerdict.HOLD
+        return TriggerReason(RollVerdict.REVIEW, reason=reason)
+    return TriggerReason(RollVerdict.HOLD, reason=reason)
 
 
 def new_strike_for_entry_otm(
@@ -241,22 +264,25 @@ def evaluate_roll_status(
     for position in portfolio.positions:
         days_to_maturity = (position.option.maturity_date - as_of).days
 
-        time_verdict = _time_trigger_verdict(
+        time_trigger = _time_trigger_verdict(
             days_to_maturity,
             roll_window_days,
             triggers.roll_review_buffer,
         )
-        convexity_verdict = _convexity_trigger_verdict(
+        convexity_trigger = _convexity_trigger_verdict(
             crash_convexity_pct,
             convexity.target_min_pct,
             convexity.target_max_pct,
         )
         moneyness = compute_moneyness_drift(position, current_spot)
-        drift_verdict = _strike_drift_trigger_verdict(
+        drift_trigger = _strike_drift_trigger_verdict(
             moneyness.drift_pct,
             triggers.strike_drift_max_otm_pct,
             triggers.strike_drift_review_fraction,
         )
+        time_verdict = time_trigger.verdict
+        convexity_verdict = convexity_trigger.verdict
+        drift_verdict = drift_trigger.verdict
 
         verdict = max(
             (time_verdict, convexity_verdict, drift_verdict),
@@ -267,6 +293,7 @@ def evaluate_roll_status(
         # gaining convexity on its own. If there's no time pressure and
         # crash convexity is still within target, don't force a roll that
         # was only triggered by strike drift.
+        suppressed = False
         if (  # pylint: disable=too-many-boolean-expressions  # six independent roll-suppression guards; decomposing would obscure the policy
             verdict == RollVerdict.ROLL
             and position.option.option_type == OptionType.PUT
@@ -276,6 +303,7 @@ def evaluate_roll_status(
             and convexity_verdict == RollVerdict.HOLD
         ):
             verdict = RollVerdict.MONITOR
+            suppressed = True
 
         estimated_roll_up_cost = None
         if (
@@ -303,7 +331,11 @@ def evaluate_roll_status(
                 convexity_target_min_pct=convexity.target_min_pct,
                 convexity_target_max_pct=convexity.target_max_pct,
                 verdict=verdict,
+                suppressed=suppressed,
                 estimated_roll_up_cost=estimated_roll_up_cost,
+                time_trigger=time_trigger,
+                convexity_trigger=convexity_trigger,
+                drift_trigger=drift_trigger,
             ),
         )
 
