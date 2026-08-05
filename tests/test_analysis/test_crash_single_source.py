@@ -15,10 +15,13 @@ from pathlib import Path
 
 import pytest
 
+from deltadewa import constants as const
 from deltadewa.analysis import health as health_module
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.candidate import evaluate_candidate
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.analysis.monitor_scenario import build_scenario
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
@@ -253,3 +256,77 @@ class TestRollMatchesGauge:
         # ...and the roll tracks the gauge at each shock.
         assert roll_lo == pytest.approx(self._gauge(portfolio, ips_lo))
         assert roll_hi == pytest.approx(self._gauge(portfolio, ips_hi))
+
+
+# A fixed valuation date (not datetime.now()) so a maturity built from an
+# integer day count round-trips exactly through evaluate_candidate's own
+# ``valuation_date + timedelta(days=round(maturity_years * DAYS_PER_YEAR))``
+# reconstruction — two independent ``datetime.now()`` calls a few
+# microseconds apart would not.
+_VALUATION_DATE = datetime(2026, 1, 1, tzinfo=UTC)
+_MATURITY_DAYS = 200
+
+
+def _make_single_leg_book() -> OptionPortfolio:
+    """One long put, quantity 10 — the whole hedge value IS this one leg's.
+
+    ``crash_hedge_value`` excludes the underlying and there is nothing else
+    in the book, so the all-legs value ``/monitor`` reads is exactly this
+    leg's own repriced value at quantity 10 — no aggregation to account for.
+    """
+    portfolio = OptionPortfolio(
+        spot_price=100.0,
+        volatility=0.2,
+        risk_free_rate=0.04,
+        dividend_yield=0.0,
+        underlying_quantity=100.0,
+        valuation_date=_VALUATION_DATE,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    portfolio.add_position(
+        strike_price=90.0,
+        maturity_date=_VALUATION_DATE + timedelta(days=_MATURITY_DAYS),
+        quantity=10,
+        option_type=OptionType.PUT,
+    )
+    return portfolio
+
+
+class TestPlanningZoneAgreesWithMonitor:
+    """/design's PLANNING zone must reprice the IPS crash exactly as /monitor.
+
+    ``candidate.py``'s own docstring promises this ("evaluating a candidate
+    at a strike the book already holds yields the held leg's per-contract
+    crash value exactly"). Pinned here as a regression test against the two
+    real call sites — ``sizing.py``'s ``evaluate_candidate`` (the PLANNING
+    zone's engine call) and ``monitor_scenario.build_scenario`` (/monitor)
+    — not just the shared helper underneath them, so the PLANNING zone
+    header's "agrees with /monitor to the cent" claim is enforced, not
+    merely asserted. If this ever fails, that header text is a lie.
+    """
+
+    def test_sizing_candidate_matches_monitor_at_ips_crash_point(self) -> None:
+        portfolio = _make_single_leg_book()
+        ips = _make_ips(_DEEP_PCT, crash_vol_shock=0.15)
+        maturity_years = _MATURITY_DAYS / const.DAYS_PER_YEAR
+
+        candidate = evaluate_candidate(
+            portfolio,
+            strike=90.0,
+            maturity_years=maturity_years,
+            shock=CrashShock.from_ips(ips.convexity),
+        )
+        monitor_value = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=ips.convexity.crash_scenario_pct,
+            vol_points=ips.convexity.crash_vol_shock,
+            quantity=portfolio.underlying_quantity,
+        ).hedge_value_shocked
+
+        # Single-leg book (quantity 10): the whole hedge value IS this one
+        # candidate's repriced value, ten times over.
+        assert candidate.per_contract_payoff * 10 == pytest.approx(
+            monitor_value,
+            abs=0.005,
+        )

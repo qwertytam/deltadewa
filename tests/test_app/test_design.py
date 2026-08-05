@@ -25,6 +25,8 @@ from dash import no_update
 from dash.development.base_component import Component
 from werkzeug.serving import make_server
 
+from deltadewa.analysis.roll_status import evaluate_roll_status
+from deltadewa.analysis.sizing import size_hedge
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import design
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -83,6 +85,23 @@ def _find_component(node: object, component_id: str) -> Component | None:
             if found is not None:
                 return found
     return None
+
+
+def _collect_text(node: object) -> str:
+    """Recursively concatenate every string leaf under a component tree.
+
+    Used to assert on a PLANNING panel's rendered content without pinning
+    to exact markup — a rung's unsolvable reason, a trigger's reason
+    string, or a formatted dollar figure just has to appear *somewhere*
+    under the returned component.
+    """
+    if isinstance(node, str):
+        return node
+    if isinstance(node, Component):
+        return _collect_text(getattr(node, "children", None))
+    if isinstance(node, (list, tuple)):
+        return " ".join(_collect_text(child) for child in node)
+    return ""
 
 
 def _write_other_export(tmp_path: Path) -> Path:
@@ -340,6 +359,273 @@ class TestImportRefusal:
         assert state.dirty is False
 
 
+class TestBasisChip:
+    """Main plan mechanism 3: one basis chip, shared by /monitor and design."""
+
+    def test_chip_appears_on_every_planning_panel(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        app.program_state.set_underlying_quantity(1_000.0)
+
+        text = str(design.render(app))
+
+        # Zone header + sizing + ladder + roll + monetization.
+        assert text.count(design._BASIS_CRASH_SKEW) == 5
+
+
+class TestSizingPanel:
+    """Sizing: rationale + answer, reacts to input, matches the engine."""
+
+    def test_recomputes_on_input_change(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        narrow = design._render_sizing_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            pct_otm=5.0,
+            maturity_years=0.5,
+            vol_override=None,
+        )
+        wide = design._render_sizing_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            pct_otm=30.0,
+            maturity_years=0.5,
+            vol_override=None,
+        )
+
+        assert _collect_text(narrow) != _collect_text(wide)
+
+    def test_blank_inputs_show_incomplete_message_not_zeros(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_sizing_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            pct_otm=None,
+            maturity_years=0.5,
+            vol_override=None,
+        )
+
+        text = _collect_text(panel)
+        assert "enter a strike" in text.lower()
+        assert "$0" not in text
+
+    def test_no_underlying_position_shows_engine_message_not_traceback(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        ips_config = state.ips_config
+        assert ips_config is not None
+        assert state.portfolio.underlying_quantity == pytest.approx(0.0)
+
+        panel = design._render_sizing_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            pct_otm=20.0,
+            maturity_years=0.5,
+            vol_override=None,
+        )
+
+        text = _collect_text(panel).lower()
+        assert "underlying position" in text
+        assert "traceback" not in text
+
+    def test_matches_engine_values_on_a_fixture(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_sizing_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            pct_otm=20.0,
+            maturity_years=0.5,
+            vol_override=None,
+        )
+        expected = size_hedge(
+            state.portfolio,
+            ips_config,
+            candidate_pct_otm=20.0,
+            candidate_maturity_years=0.5,
+        )
+
+        text = _collect_text(panel)
+        assert f"{expected.contracts_needed:,} contracts needed" in text
+
+
+class TestStrikeLadderPanel:
+    """Ladder: unsolvable rungs shown explicitly (Mi5), reacts to input."""
+
+    def test_unsolvable_rung_reason_is_shown(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10, 0.60",
+            maturities_years_raw="0.5",
+        )
+
+        text = _collect_text(panel).lower()
+        assert "unsolvable" in text
+        assert "0.60" in text
+        assert "outside the solvable" in text
+
+    def test_malformed_dial_text_shows_incomplete_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="abc",
+            maturities_years_raw="0.5",
+        )
+
+        assert "comma-separated" in _collect_text(panel).lower()
+
+    def test_recomputes_on_input_change(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        narrow = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.05",
+            maturities_years_raw="0.25",
+        )
+        wide = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10, 0.20",
+            maturities_years_raw="0.5, 1.0",
+        )
+
+        assert _collect_text(narrow) != _collect_text(wide)
+
+
+class TestRollPlanner:
+    """Roll: all three per-trigger reasons (G3), not just the summary."""
+
+    def test_all_three_trigger_reasons_appear(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        ips_config = state.ips_config
+        assert ips_config is not None
+        expected = evaluate_roll_status(state.portfolio, ips_config)[0]
+
+        panel = design._render_roll_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+        )
+
+        text = _collect_text(panel)
+        assert expected.time_trigger.reason in text
+        assert expected.convexity_trigger.reason in text
+        assert expected.drift_trigger.reason in text
+
+    def test_empty_book_shows_no_positions_message(
+        self, tmp_path: Path
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_roll_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+        assert "no positions in the book yet" in _collect_text(panel).lower()
+
+
+class TestMonetizationPanel:
+    """Monetization: entry_premium (B0) flips gain_basis; reacts to the book."""
+
+    def test_unknown_gain_basis_shows_explicit_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_monetization_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            market_env=None,
+        )
+
+        assert "no entry price is recorded" in _collect_text(panel).lower()
+
+    def test_entry_premium_flips_to_paid_gain_basis(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+            entry_premium=50.0,
+        )
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_monetization_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            market_env=None,
+        )
+
+        text = _collect_text(panel).lower()
+        assert "no entry price is recorded" not in text
+        assert "current hedge gain" in text
+
+
 @dataclass
 class DesignAppHandle:
     """Everything a design-page test needs: URL, state, and app handles."""
@@ -423,6 +709,29 @@ class TestRemoveConfirmDialog:
 
         assert len(design_app.state.portfolio.positions) == before_count
         assert page.locator(".position-table tbody tr").count() == before_count
+
+
+class TestPlanningZoneRendersClientSide:
+    """The PLANNING zone must render with no console error or traceback.
+
+    Mirrors ``test_monitor.py``'s ``TestMonitorRenders.test_renders_cleanly``
+    — a green code gate doesn't imply the live page renders.
+    """
+
+    def test_planning_zone_renders_cleanly(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors: list[str] = []
+        page.on("pageerror", lambda exc: js_errors.append(str(exc)))
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(".zone-planning", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        assert js_errors == []
+        assert "Traceback" not in page.content()
+        assert page.locator(".panel").count() == 4
 
 
 class TestIpsGateRendersClientSide:
