@@ -470,7 +470,13 @@ class TestSizingPanel:
 
 
 class TestStrikeLadderPanel:
-    """Ladder: unsolvable rungs shown explicitly (Mi5), reacts to input."""
+    """Ladder: unsolvable rungs shown explicitly, reacts to input.
+
+    Not "Mi5" — that finding ID already belongs to the unrelated
+    ``include_underlying`` scalar/vectorized default (M1.3/M1.4). The
+    unsolvable-rungs gap is M1.4's strike-ladder bullet's third clause,
+    which was never given its own number in the finding index.
+    """
 
     def test_unsolvable_rung_reason_is_shown(self, tmp_path: Path) -> None:
         app = _app_with_ips(tmp_path)

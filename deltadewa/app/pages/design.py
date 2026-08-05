@@ -611,7 +611,13 @@ def _render_sizing_panel_logic(
 
 
 def _unsolvable_rung_line(rung: UnsolvableRung) -> html.P:
-    """One unsolvable ladder cell, surfaced explicitly (Mi5 — never dropped)."""
+    """One unsolvable ladder cell, surfaced explicitly — never dropped.
+
+    Not the ``Mi5`` finding (that's the unrelated ``include_underlying``
+    scalar/vectorized P&L default, already closed in M1.3/M1.4) — this
+    is M1.4's strike-ladder bullet's third clause, which was never given
+    its own finding number in ``docs/implementation-plan.md``.
+    """
     return html.P(
         f"{rung.target_delta:.2f}Δ @ {rung.maturity_years:.2f}y — "
         f"{rung.reason}",
@@ -641,7 +647,11 @@ def _ladder_rung_row(rung: LadderRung) -> html.Tr:
 
 
 def _ladder_panel_view(result: StrikeLadderResult) -> Component:
-    """Render the solved rungs table, then the unsolvable cells (Mi5)."""
+    """Render the solved rungs table, then the unsolvable cells.
+
+    Unsolvable rungs are shown, never dropped — see
+    :func:`_unsolvable_rung_line` for the finding-ID note.
+    """
     if not result.rungs and not result.unsolvable:
         return _incomplete("No rungs requested.")
 
