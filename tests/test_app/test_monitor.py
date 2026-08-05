@@ -731,8 +731,13 @@ class TestNoIpsRender:
         live_app_url: str,
     ) -> None:
         page.goto(f"{live_app_url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        # Wait for the actual rendered message, not just the mount point:
+        # #react-entry-point exists in the raw HTML shell before React
+        # hydrates, so waiting on it alone races the client-side render
+        # (this is what let this test flake under load — see the
+        # clock-shift-probe memory).
         page.wait_for_selector(
-            "#react-entry-point",
+            ".no-ips-message",
             timeout=_PAGE_LOAD_TIMEOUT_MS,
         )
 
