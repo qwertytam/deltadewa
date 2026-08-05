@@ -15,6 +15,7 @@ import requests
 
 from deltadewa.marketdata._errors import MarketDataError
 from deltadewa.marketdata._observation import Observation, Source
+from deltadewa.marketdata._policy import default_cache_dir
 
 _CBOE_HISTORY_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 _FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
@@ -176,7 +177,8 @@ class CboeFredProvider:
 
         Args:
             cache_dir: Directory for the disk cache. Defaults to
-                ``~/.cache/deltadewa/marketdata/``.
+                ``default_cache_dir()`` (``DELTADEWA_CACHE_DIR`` if set,
+                else ``~/.cache/deltadewa/marketdata/``).
             ttl: How long a cached value is considered fresh.
             session: Optional ``requests.Session`` to use (for testing or
                 custom transport config). Defaults to a new ``Session``.
@@ -192,7 +194,7 @@ class CboeFredProvider:
 
         """
         if cache_dir is None:
-            cache_dir = Path.home() / ".cache" / "deltadewa" / "marketdata"
+            cache_dir = default_cache_dir()
         self._cache = _DiskCache(cache_dir=cache_dir, ttl=ttl)
         self._session = session or requests.Session()
         self._fred_api_key = fred_api_key

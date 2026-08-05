@@ -126,9 +126,11 @@ class TestStartSession:
             ctx = start_session(globals_dict={}, use_live_market_data=True)
 
         # The freshness window is IPS policy (market_environment.
-        # data_ttl_minutes), not the provider's constructor default.
+        # data_ttl_minutes), not the provider's constructor default. The
+        # shipped config/ips.yaml carries 2160 (36h; see M2.6's refresh-cron
+        # comment there), not the dataclass's own 15-minute default.
         mock_cboe_fred_provider.assert_called_once_with(
-            ttl=timedelta(minutes=15),
+            ttl=timedelta(minutes=2160),
         )
         # get_vix and get_spot are probed once each; setup_dashboard may
         # call them again via the live provider, so exact counts are not

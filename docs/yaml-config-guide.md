@@ -154,12 +154,21 @@ terms before redistributing pulled values outside this session.
 
 ### Disk cache and TTL
 
-`CboeFredProvider` caches each successful response to disk
-(`~/.cache/deltadewa/marketdata/` by default) with a **15-minute TTL**
-per endpoint. A fresh entry within that window is served from cache with
-no HTTP request. On network failure the provider falls back to the last
-cached value (regardless of TTL); if no cached value exists and the
-network is unreachable, a `MarketDataError` is raised.
+`CboeFredProvider` caches each successful response to disk (by default
+`~/.cache/deltadewa/marketdata/`, or `DELTADEWA_CACHE_DIR` if set — the
+deployed app and its refresh cron both point this at `exports/` so they
+share one cache) with a TTL per endpoint. A fresh entry within that window
+is served from cache with no HTTP request. On network failure the provider
+falls back to the last cached value (regardless of TTL); if no cached value
+exists and the network is unreachable, a `MarketDataError` is raised.
+
+The TTL is policy, not a provider constant: it comes from
+`market_environment.data_ttl_minutes` in `ips.yaml` — the CACHED/STALE
+boundary is "how old may data be before a decision shouldn't rely on it,"
+which is a program decision. The provider's own constructor default
+(15 minutes) only applies when no `ips.yaml` is available. The shipped
+`config/ips.yaml` sets it to 2160 (36h) to match M2.6's daily refresh cron
+with headroom for ordinary jitter — see the comment there.
 
 ### Offline fallback
 

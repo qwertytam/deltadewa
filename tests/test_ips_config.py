@@ -422,7 +422,7 @@ class TestMarketEnvironment:
         assert env.skew_low_pctile == 25
         assert env.skew_high_pctile == 75
         assert env.term_contango_tolerance == pytest.approx(0.5, rel=1e-4)
-        assert env.data_ttl_minutes == pytest.approx(15.0, rel=1e-7)
+        assert env.data_ttl_minutes == pytest.approx(2160.0, rel=1e-7)
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Section values round-trip through the loader unchanged."""

@@ -38,7 +38,8 @@ optional live CBOE/FRED pull that falls back gracefully on network failure.
 - **Program report** — IC/board format (Monitor dashboard)
 - **IPS policy contract** — carry budget, convexity and drawdown targets, roll/rally/
   monetization triggers (`config/ips.yaml`)
-- **Live CBOE/FRED market data** (optional; 15-minute disk cache; automatic offline
+- **Live CBOE/FRED market data** (optional; disk-cached with a policy-driven TTL
+  — `market_environment.data_ttl_minutes` in `config/ips.yaml`; automatic offline
   fallback)
 
 ## Pricing

@@ -17,7 +17,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from deltadewa.app.factory import create_app
-from deltadewa.marketdata import CboeFredProvider
+from deltadewa.marketdata import (
+    CboeFredProvider,
+    default_cache_dir,
+    resolve_data_ttl,
+)
 from deltadewa.state import ProgramState
 
 if TYPE_CHECKING:
@@ -32,7 +36,11 @@ def _build() -> ProgramDashApp:
     state = ProgramState.load(Path("exports"))
     return create_app(
         state=state,
-        market_data=CboeFredProvider(read_only=True),
+        market_data=CboeFredProvider(
+            cache_dir=default_cache_dir(),
+            ttl=resolve_data_ttl(state.ips_config),
+            read_only=True,
+        ),
         ips_config=state.ips_config,
     )
 

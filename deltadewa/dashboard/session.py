@@ -37,7 +37,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime as dt
-from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -45,16 +44,13 @@ import yaml
 
 from deltadewa import create_empty_portfolio
 from deltadewa.dashboard.setup import setup_dashboard
-from deltadewa.ips_config import (
-    DEFAULT_DATA_TTL_MINUTES,
-    IpsConfigError,
-    load_ips_config,
-)
+from deltadewa.ips_config import IpsConfigError, load_ips_config
 from deltadewa.marketdata import (
     CboeFredProvider,
     MarketDataError,
     MarketDataProvider,
     StaticProvider,
+    resolve_data_ttl,
 )
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.reporting import ConsoleReporter, PortfolioLogger
@@ -65,22 +61,6 @@ if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.widgets.assumptions import GlobalAssumptions
-
-
-def _data_ttl(ips_config: IpsConfig | None) -> timedelta:
-    """Return the market-data freshness window from IPS policy.
-
-    The CACHED/STALE boundary is policy, so it comes from ips.yaml rather
-    than the provider's constructor default. A missing or unreadable
-    ips.yaml falls back to the same ``DEFAULT_DATA_TTL_MINUTES`` single
-    source the dataclass default uses.
-    """
-    minutes = (
-        DEFAULT_DATA_TTL_MINUTES
-        if ips_config is None
-        else ips_config.market_environment.data_ttl_minutes
-    )
-    return timedelta(minutes=minutes)
 
 
 def _load_dashboard_config(
@@ -213,7 +193,7 @@ def start_session(
     market_data: MarketDataProvider
     market_data_source: str
     if use_live_market_data:
-        live_provider = CboeFredProvider(ttl=_data_ttl(ips_config))
+        live_provider = CboeFredProvider(ttl=resolve_data_ttl(ips_config))
         try:
             live_provider.get_vix()
             live_provider.get_spot(portfolio.get_symbol())
