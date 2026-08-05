@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 from html import escape
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.carry import carry_vs_budget
 
@@ -26,6 +26,18 @@ _MONETIZATION_PLACEHOLDER: str = "n/a — planned (C4)"
 _PENDING_NOTE: str = (
     "PENDING: start/end book values are not yet tracked; "
     "before/after-hedge returns cannot be computed."
+)
+
+# Qualities worse than a fresh-enough disk-cache hit. CACHED is the healthy
+# steady state once a refresh cron exists (M2.6) — a value is only LIVE on
+# the call that fetched it — so the caveat must fire on "worse than CACHED",
+# not "not LIVE", or it becomes a permanent warning on every scheduled
+# report. There is no shared severity ordering to reuse here: ``Source``
+# (deltadewa.marketdata) has no UNAVAILABLE member, since a provider never
+# returns that source — assess_market_environment substitutes it itself
+# when every provider call fails.
+_STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
+    {"STALE", "STATIC", "UNAVAILABLE"},
 )
 
 
@@ -548,7 +560,7 @@ def render_markdown(report: ProgramReport) -> str:
     mc = report.market_context
     lines.append("## 3. Market Context")
     lines.append("")
-    if mc.data_quality != "LIVE":
+    if mc.data_quality in _STALE_OR_WORSE:
         lines += [
             (
                 f"> ⚠ Data quality: **{mc.data_quality}**"
@@ -711,7 +723,7 @@ def render_html(report: ProgramReport) -> str:
 
     # ── Pre-compute per-section fragments ──────────────────────────────
     caveat_html = ""
-    if mc.data_quality != "LIVE":
+    if mc.data_quality in _STALE_OR_WORSE:
         caveat_html = (
             '<div class="caveat">&#9888;&#160;Data quality:'
             f" <strong>{escape(mc.data_quality)}</strong>"

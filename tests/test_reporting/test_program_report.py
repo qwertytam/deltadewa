@@ -435,6 +435,17 @@ class TestRenderMarkdown:
         md = render_markdown(_build(data_quality=DataQuality.LIVE))
         assert "reference values" not in md
 
+    def test_caveat_absent_when_cached(self) -> None:
+        """No caveat for CACHED — the steady state once a cron exists."""
+        md = render_markdown(_build(data_quality=DataQuality.CACHED))
+        assert "reference values" not in md
+
+    def test_caveat_present_when_stale(self) -> None:
+        """The caveat still fires for STALE — worse than CACHED."""
+        md = render_markdown(_build(data_quality=DataQuality.STALE))
+        assert "STALE" in md
+        assert "reference values" in md
+
     def test_monetization_placeholder_present(self) -> None:
         """The monetization placeholder string appears in the output."""
         md = render_markdown(_make_full_report())
@@ -515,6 +526,17 @@ class TestRenderHtml:
         """No caveat div for LIVE data."""
         html = render_html(_build(data_quality=DataQuality.LIVE))
         assert 'class="caveat"' not in html
+
+    def test_data_quality_caveat_absent_cached(self) -> None:
+        """No caveat div for CACHED — the steady state once a cron exists."""
+        html = render_html(_build(data_quality=DataQuality.CACHED))
+        assert 'class="caveat"' not in html
+
+    def test_data_quality_caveat_present_stale(self) -> None:
+        """Caveat div still appears for STALE — worse than CACHED."""
+        html = render_html(_build(data_quality=DataQuality.STALE))
+        assert 'class="caveat"' in html
+        assert "STALE" in html
 
     def test_pass_class_present(self) -> None:
         """HTML class 'pass' appears for passing metrics."""
