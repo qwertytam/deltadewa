@@ -26,6 +26,11 @@ from dash.development.base_component import Component
 from werkzeug.serving import make_server
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    crash_hedge_value,
+    hedge_value,
+)
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.app.factory import ProgramDashApp, create_app
@@ -564,6 +569,71 @@ class TestRollPlanner:
         assert expected.time_trigger.reason in text
         assert expected.convexity_trigger.reason in text
         assert expected.drift_trigger.reason in text
+
+    def test_crash_valuation_matches_engine_on_mixed_leg_book(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Roll's crash basis == crash_hedge_value, to the cent, mixed book.
+
+        test_crash_single_source.py's existing pin
+        (``TestPlanningZoneAgreesWithMonitor``) uses a single-leg (all-put)
+        book, so a leg-selection bug (e.g. dropping the short call, or
+        mangling its sign) would pass unnoticed -- there's nothing else to
+        select. This mirrors test_monitor.py's
+        test_hedge_value_shocked_matches_crash_hedge_value on a book with
+        both a long put and a short call, so that failure mode is actually
+        reachable. ``evaluate_roll_status`` is the one PLANNING-zone
+        computation that reprices every leg (not just a candidate put) via
+        ``crash_convexity_pct``'s ``crash_hedge_value(portfolio,
+        shock=shock)`` call with no ``positions=`` override -- so its
+        ``crash_convexity_pct`` is inverted back to a dollar figure and
+        checked against an independent ``crash_hedge_value`` call.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        # Nonzero book notional: crash_convexity_pct short-circuits to 0.0
+        # on an empty book, which would make the inversion below vacuously
+        # true.
+        state.set_underlying_quantity(1_000.0)
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        state.add_position(
+            strike_price=5500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=90),
+            quantity=-5,
+            option_type=OptionType.CALL,
+        )
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        # Also exercise the actual PLANNING-zone panel on this book -- this
+        # is pinning the zone, not just the bare engine call.
+        panel = design._render_roll_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+        )
+        assert "traceback" not in _collect_text(panel).lower()
+
+        book_notional = abs(
+            state.portfolio.underlying_quantity * state.portfolio.spot_price,
+        )
+        v_today = hedge_value(state.portfolio)
+        expected_v_crash = crash_hedge_value(
+            state.portfolio,
+            shock=CrashShock.from_ips(ips_config.convexity),
+        )
+
+        record = evaluate_roll_status(state.portfolio, ips_config)[0]
+        implied_v_crash = (
+            record.crash_convexity_pct / 100.0 * book_notional + v_today
+        )
+
+        assert implied_v_crash == pytest.approx(expected_v_crash, abs=0.01)
 
     def test_empty_book_shows_no_positions_message(
         self, tmp_path: Path
