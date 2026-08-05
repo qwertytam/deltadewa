@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, cast
 from dash import Dash, Input, Output, dcc, html
 from flask import jsonify
 
+from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.app.chrome import build_chrome
 from deltadewa.app.pages import design, monitor
@@ -54,6 +55,7 @@ class ProgramDashApp(Dash):
     program_state: ProgramState
     market_data: MarketDataProvider
     ips_config: IpsConfig | None
+    scenario_cache: ScenarioGridCache
 
 
 def create_app(
@@ -98,6 +100,11 @@ def create_app(
     app.program_state = state
     app.market_data = market_data
     app.ips_config = ips_config
+    # One instance for the app's lifetime, not per-request/per-callback --
+    # it self-invalidates on the portfolio state hash (and, for the
+    # spot/vol grid, on vol_mapping + days_forward too), so sharing it is
+    # what makes repeat EXPLORATION-zone dial moves free (M2.5 Prompt D).
+    app.scenario_cache = ScenarioGridCache()
 
     env_policy = (
         ips_config.market_environment if ips_config is not None else None

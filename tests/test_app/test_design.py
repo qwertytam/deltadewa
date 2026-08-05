@@ -21,10 +21,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from dash import no_update
+from dash import dcc, no_update
 from dash.development.base_component import Component
 from werkzeug.serving import make_server
 
+from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.app.factory import ProgramDashApp, create_app
@@ -626,6 +627,297 @@ class TestMonetizationPanel:
         assert "current hedge gain" in text
 
 
+def _add_starter_position(state: ProgramState) -> None:
+    """Add the same one-leg book every EXPLORATION test builds against."""
+    state.add_position(
+        strike_price=4500.0,
+        maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+        quantity=10,
+        option_type=OptionType.PUT,
+    )
+
+
+class TestSpotVolPanel:
+    """The spot x vol heatmap panel: proportional-vol basis, reactive."""
+
+    def test_empty_book_shows_incomplete_message(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+
+        panel = design._render_spot_vol_panel_logic(
+            portfolio=app.program_state.portfolio,
+            cache=app.scenario_cache,
+            spot_pct=50.0,
+            vol_pct=50.0,
+            resolution=11,
+            days_forward=0,
+            metric="pnl",
+        )
+
+        assert "add a position" in _collect_text(panel).lower()
+
+    def test_blank_dial_shows_incomplete_not_zeros(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        panel = design._render_spot_vol_panel_logic(
+            portfolio=app.program_state.portfolio,
+            cache=app.scenario_cache,
+            spot_pct=None,
+            vol_pct=50.0,
+            resolution=11,
+            days_forward=0,
+            metric="pnl",
+        )
+
+        text = _collect_text(panel).lower()
+        assert "required" in text
+
+    def test_out_of_range_percent_renders_message_not_traceback(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        panel = design._render_spot_vol_panel_logic(
+            portfolio=app.program_state.portfolio,
+            cache=app.scenario_cache,
+            spot_pct=250.0,  # -> 2.5 as a fraction, rejected by B0's guard
+            vol_pct=50.0,
+            resolution=11,
+            days_forward=0,
+            metric="pnl",
+        )
+
+        text = _collect_text(panel)
+        assert "Traceback" not in text
+        assert "fraction" in text.lower()
+
+    def test_recomputes_on_metric_change(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        def _panel(metric: str) -> Component:
+            return design._render_spot_vol_panel_logic(
+                portfolio=app.program_state.portfolio,
+                cache=app.scenario_cache,
+                spot_pct=50.0,
+                vol_pct=50.0,
+                resolution=11,
+                days_forward=0,
+                metric=metric,
+            )
+
+        pnl_panel = _panel("pnl")
+        vega_panel = _panel("vega")
+
+        assert isinstance(pnl_panel, dcc.Graph)
+        assert isinstance(vega_panel, dcc.Graph)
+        assert pnl_panel.figure != vega_panel.figure
+
+
+class TestTimePricePanel:
+    """The time x price heatmap panel: cell annotations, reactive."""
+
+    def test_empty_book_shows_incomplete_message(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+
+        panel = design._render_time_price_panel_logic(
+            portfolio=app.program_state.portfolio,
+            cache=app.scenario_cache,
+            spot_pct=50.0,
+            num_time_steps=10,
+            num_price_steps=13,
+            metric="pnl",
+        )
+
+        assert "add a position" in _collect_text(panel).lower()
+
+    def test_malformed_dial_shows_incomplete_not_zeros(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        panel = design._render_time_price_panel_logic(
+            portfolio=app.program_state.portfolio,
+            cache=app.scenario_cache,
+            spot_pct=50.0,
+            num_time_steps=None,
+            num_price_steps=13,
+            metric="pnl",
+        )
+
+        assert "required" in _collect_text(panel).lower()
+
+    def test_recomputes_on_step_count_change(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        def _panel(num_price_steps: int) -> Component:
+            return design._render_time_price_panel_logic(
+                portfolio=app.program_state.portfolio,
+                cache=app.scenario_cache,
+                spot_pct=50.0,
+                num_time_steps=10,
+                num_price_steps=num_price_steps,
+                metric="pnl",
+            )
+
+        narrow = _panel(5)
+        wide = _panel(13)
+
+        assert isinstance(narrow, dcc.Graph)
+        assert isinstance(wide, dcc.Graph)
+        assert narrow.figure != wide.figure
+
+
+class TestMcPanel:
+    """The Monte Carlo distribution panel: scenario-local (B0 F6)."""
+
+    def test_empty_book_shows_incomplete_message(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+
+        panel = design._render_mc_panel_logic(
+            portfolio=app.program_state.portfolio,
+            num_paths=1_000,
+            horizon_days=None,
+            expected_return_pct=None,
+            seed=42,
+        )
+
+        assert "add a position" in _collect_text(panel).lower()
+
+    def test_renders_graph_and_stats(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        panel = design._render_mc_panel_logic(
+            portfolio=app.program_state.portfolio,
+            num_paths=2_000,
+            horizon_days=None,
+            expected_return_pct=None,
+            seed=42,
+        )
+
+        text = _collect_text(panel).lower()
+        assert "simulations" in text
+        assert "probability of profit" in text
+        assert "risk-neutral" in text
+
+
+class TestMonteCarloContainment:
+    """The MC panel never touches the shared cache or autosave (B0 F6)."""
+
+    def test_exercising_dials_leaves_state_and_cache_untouched(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        _add_starter_position(state)
+        portfolio = state.portfolio
+
+        before_dirty = state.dirty
+        before_files = set(tmp_path.iterdir())
+        before_cached = portfolio.monte_carlo_results
+
+        for paths, horizon, expected_return, seed in (
+            (1_000, None, None, 42),
+            (2_000, 30, None, 7),
+            (1_500, 60, 8.0, None),
+        ):
+            design._render_mc_panel_logic(
+                portfolio=portfolio,
+                num_paths=paths,
+                horizon_days=horizon,
+                expected_return_pct=expected_return,
+                seed=seed,
+            )
+
+        assert state.dirty == before_dirty
+        assert set(tmp_path.iterdir()) == before_files
+        assert portfolio.monte_carlo_results == before_cached
+
+
+class TestScenarioCacheReuse:
+    """The shared ScenarioGridCache hits on repeat dials, misses on resize.
+
+    Pins the M2.1 cache-key fix directly: a spot/vol grid keys on
+    resolution (via the array contents), so a "resize" must miss.
+    """
+
+    def test_hits_on_unchanged_dials_misses_after_resize(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+        portfolio = app.program_state.portfolio
+
+        call_count = {"n": 0}
+        original = PortfolioAnalyzer.scenario_grid_spot_vol
+
+        def _counting_scenario_grid_spot_vol(
+            self: PortfolioAnalyzer,
+            *args: object,
+            **kwargs: object,
+        ) -> object:
+            call_count["n"] += 1
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(
+            PortfolioAnalyzer,
+            "scenario_grid_spot_vol",
+            _counting_scenario_grid_spot_vol,
+        )
+
+        def _render(resolution: int) -> None:
+            design._render_spot_vol_panel_logic(
+                portfolio=portfolio,
+                cache=app.scenario_cache,
+                spot_pct=50.0,
+                vol_pct=50.0,
+                resolution=resolution,
+                days_forward=0,
+                metric="pnl",
+            )
+
+        _render(11)
+        assert call_count["n"] == 1
+
+        _render(11)  # unchanged book, unchanged dials -> cache hit
+        assert call_count["n"] == 1
+
+        _render(13)  # a resize -> cache miss
+        assert call_count["n"] == 2
+
+
+class TestExplorationBasisLabelling:
+    """The zone header, boundary sentence, and /monitor link are present."""
+
+    def test_zone_states_its_basis_and_links_to_monitor(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        layout = design.render(app)
+        exploration = _find_component(layout, "explore-spotvol-panel")
+        assert exploration is not None
+
+        text = _collect_text(layout)
+        assert "basis: proportional vol" in text.lower()
+        assert "different questions" in text.lower()
+        assert "see the policy crash number on /monitor" in text.lower()
+
+
 @dataclass
 class DesignAppHandle:
     """Everything a design-page test needs: URL, state, and app handles."""
@@ -731,7 +1023,38 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        assert page.locator(".panel").count() == 4
+        # 4 PLANNING panels + 3 EXPLORATION panels share the .panel class.
+        assert page.locator(".panel").count() == 7
+
+
+class TestExplorationZoneRendersClientSide:
+    """The EXPLORATION zone must render with no console error or traceback.
+
+    Mirrors ``TestPlanningZoneRendersClientSide`` above — a green code
+    gate doesn't imply the live page (and its 3 Plotly graphs) renders.
+    """
+
+    def test_exploration_zone_renders_cleanly(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors: list[str] = []
+        page.on("pageerror", lambda exc: js_errors.append(str(exc)))
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            ".zone-exploration",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        page.wait_for_selector(
+            "#explore-mc-panel .js-plotly-plot",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        assert js_errors == []
+        assert "Traceback" not in page.content()
+        assert page.locator(".zone-exploration .js-plotly-plot").count() == 3
 
 
 class TestIpsGateRendersClientSide:

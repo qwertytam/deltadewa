@@ -1,14 +1,18 @@
-"""The `/design` page: the operator's editor (BOOK) and planners (PLANNING).
+"""The `/design` page: editor (BOOK), planners (PLANNING), stress (EXPLORATION).
 
 BOOK: add/remove positions, the underlying quantity, and guarded
 import/export. PLANNING: the four read-only planners — sizing, strike
 ladder, roll, monetization — each a thin wrapper over its `analysis/`
-function, all pricing the same IPS crash basis `/monitor`'s gauge uses
-(the exploration zone's stress-grid surfaces, a different, proportional-
-vol basis, land in a later milestone). Gates at the page level: without
-``ips_config`` there is no source for the exercise-style default and no
-policy to plan against, so the whole page becomes a single "no IPS policy
-loaded" state, the same discipline ``monitor.py`` uses.
+function, all pricing the same IPS crash basis `/monitor`'s gauge uses.
+EXPLORATION: the three notebook stress surfaces — spot/vol heatmap,
+time/price heatmap, Monte Carlo distribution — priced on a *different*
+basis (proportional vol, a generic GBM move) than PLANNING's crash-skew;
+the zone header, a boundary sentence, and a basis chip on every panel say
+so, so the two zones' numbers disagreeing on the same cell reads as two
+questions, not a bug. Gates at the page level: without ``ips_config``
+there is no source for the exercise-style default and no policy to plan
+against, so the whole page becomes a single "no IPS policy loaded" state,
+the same discipline ``monitor.py`` uses.
 
 Every mutating callback routes through a module-level ``_..._logic``
 function that is directly callable from tests (the ``@app.callback``-
@@ -19,11 +23,12 @@ tell a policy refusal apart from any other failure and so handles its
 own try/except — so nothing here ever leaks a traceback to the browser,
 and a failed mutation never bumps ``book-version``: the single
 ``dcc.Store`` every read-only panel in this page (BOOK's position table,
-and every PLANNING panel) watches for "the book changed, re-read it."
-PLANNING's own reads have no mutator to guard, so they use
-:func:`_safe_render` instead — the same no-leaked-traceback discipline,
-applied to an engine ``ValueError`` (a structurally missing input) rather
-than a failed mutation.
+every PLANNING panel, and every EXPLORATION panel) watches for "the book
+changed, re-read it." PLANNING's and EXPLORATION's own reads have no
+mutator to guard, so they use :func:`_safe_render` instead — the same
+no-leaked-traceback discipline, applied to an engine ``ValueError`` (a
+structurally missing input, e.g. no underlying position or an
+out-of-range dial) rather than a failed mutation.
 """
 
 from __future__ import annotations
@@ -33,23 +38,44 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 from dash.development.base_component import Component
 
+from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.monetization import build_monetization_plan
+from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.stress import (
+    build_spot_vol_grid_spec,
+    build_time_price_grid_spec,
+    compute_empirical_cdf,
+    compute_pnl_histogram,
+    days_to_max_maturity,
+    percentile_of_value,
+)
 from deltadewa.analysis.strike_ladder import build_strike_ladder
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.portfolio.monte_carlo import drift_measure_label
 from deltadewa.state import ConfirmationRequiredError
+from deltadewa.visualization.distribution_charts_plotly import (
+    plot_pnl_distribution,
+)
+from deltadewa.visualization.stress_charts_plotly import (
+    STRESS_METRICS,
+    plot_spot_vol_heatmap,
+    plot_time_price_heatmap,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from deltadewa.analysis.cache import ScenarioGridCache
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import (
         MonetizationPlan,
@@ -86,6 +112,36 @@ _DEFAULT_LADDER_MATURITIES_YEARS = "0.25, 0.5, 1.0"
 # point. One literal, so the zone header and every panel's chip say the
 # same thing.
 _BASIS_CRASH_SKEW = "basis: crash-skew (IPS anchor)"
+
+# EXPLORATION zone: dial defaults, matching hedge_design.ipynb's own
+# GlobalAssumptions/StressDashboard notebook-cell literals.
+_DEFAULT_SPOTVOL_SPOT_PCT = 50.0
+_DEFAULT_SPOTVOL_VOL_PCT = 50.0
+_DEFAULT_SPOTVOL_RESOLUTION = 21  # matches the measured 21x21 grid (F4)
+_DEFAULT_SPOTVOL_DAYS_FORWARD = 0
+_DEFAULT_SPOTVOL_METRIC = "pnl"
+_DEFAULT_TIME_SPOT_PCT = 50.0
+_DEFAULT_TIME_STEPS = 10
+_DEFAULT_PRICE_STEPS = 13
+_DEFAULT_TIME_METRIC = "pnl"
+_DEFAULT_MC_PATHS = 100_000
+_DEFAULT_MC_SEED = 42
+_FALLBACK_MAX_DAYS = 90  # matches build_spot_vol_grid_spec's own default
+# for an empty book, used only to bound the days-forward slider at layout
+# time before any position has been added.
+
+_METRIC_OPTIONS = [
+    {"label": spec.label, "value": key} for key, spec in STRESS_METRICS.items()
+]
+
+_EXPLORATION_EMPTY_BOOK_MSG = (
+    "Add a position in the BOOK zone to explore stress scenarios."
+)
+
+# Every EXPLORATION panel prices this basis instead — a generic vol move,
+# not the policy crash. proportional_vol is always passed explicitly to
+# the cache (M2.1 finding (c): VolMapping is required, never defaulted).
+_BASIS_PROPORTIONAL = "basis: proportional vol (GBM, risk-neutral drift)"
 
 
 def _no_ips_layout() -> html.Div:
@@ -824,6 +880,219 @@ def _render_monetization_panel_logic(
     )
 
 
+def _render_spot_vol_panel_logic(  # pylint: disable=too-many-arguments
+    *,
+    portfolio: OptionPortfolio,
+    cache: ScenarioGridCache,
+    spot_pct: float | None,
+    vol_pct: float | None,
+    resolution: float | None,
+    days_forward: float | None,
+    metric: str | None,
+) -> Component:
+    """Render the spot x vol stress heatmap for the current dials.
+
+    ``spot_pct``/``vol_pct`` are collected as percents and divided by 100
+    here — the F5/B0 percent-fraction seam. A value that still ends up
+    out of range (e.g. 250%) reaches ``build_spot_vol_grid_spec`` as a
+    fraction >= 1 and is rejected there with its own ``ValueError``,
+    caught by :func:`_safe_render`.
+    """
+    if not portfolio.positions:
+        return _incomplete(_EXPLORATION_EMPTY_BOOK_MSG)
+    if (
+        spot_pct is None
+        or vol_pct is None
+        or resolution is None
+        or days_forward is None
+        or metric is None
+    ):
+        return _incomplete("All spot/vol dials are required.")
+
+    def _build() -> Component:
+        grid_spec = build_spot_vol_grid_spec(
+            portfolio,
+            spot_shock_pct=spot_pct / 100.0,
+            vol_shock_pct=vol_pct / 100.0,
+            grid_resolution=int(resolution),
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+        result_df = cache.get_or_calculate_spot_vol(
+            portfolio,
+            analyzer,
+            grid_spec.spot_scenarios,
+            grid_spec.vol_scenarios,
+            vol_mapping=proportional_vol,
+            metric=metric,
+            baseline_value=grid_spec.baseline_value,
+            days_forward=int(days_forward),
+        )
+        fig = plot_spot_vol_heatmap(
+            result_df,
+            spot_scenarios=grid_spec.spot_scenarios,
+            vol_scenarios=grid_spec.vol_scenarios,
+            original_spot=grid_spec.original_spot,
+            avg_vol=grid_spec.avg_vol,
+            metric=metric,
+        )
+        return dcc.Graph(figure=fig)
+
+    return _safe_render(_build)
+
+
+def _render_time_price_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+    cache: ScenarioGridCache,
+    spot_pct: float | None,
+    num_time_steps: float | None,
+    num_price_steps: float | None,
+    metric: str | None,
+) -> Component:
+    """Render the time x price stress heatmap for the current dials.
+
+    ``spot_pct`` is collected as a percent and divided by 100 here — the
+    same F5/B0 seam :func:`_render_spot_vol_panel_logic` uses.
+    """
+    if not portfolio.positions:
+        return _incomplete(_EXPLORATION_EMPTY_BOOK_MSG)
+    if (
+        spot_pct is None
+        or num_time_steps is None
+        or num_price_steps is None
+        or metric is None
+    ):
+        return _incomplete("All time/price dials are required.")
+
+    def _build() -> Component:
+        max_days = days_to_max_maturity(portfolio)
+        grid_spec = build_time_price_grid_spec(
+            spot_range_pct=spot_pct / 100.0,
+            num_time_steps=int(num_time_steps),
+            num_price_steps=int(num_price_steps),
+            original_spot=portfolio.spot_price,
+            original_date=portfolio.valuation_date,
+            max_days_to_maturity=max_days,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+        result_df = cache.get_or_calculate(
+            portfolio,
+            analyzer,
+            grid_spec.spot_scenarios,
+            grid_spec.time_points,
+            metric,
+            baseline_spot=portfolio.spot_price,
+            baseline_valuation_date=portfolio.valuation_date,
+        )
+        fig = plot_time_price_heatmap(
+            result_df,
+            original_spot=portfolio.spot_price,
+            original_date=portfolio.valuation_date,
+            metric=metric,
+        )
+        return dcc.Graph(figure=fig)
+
+    return _safe_render(_build)
+
+
+def _mc_stats_block(results: dict[str, Any]) -> Component:
+    """Format the Monte Carlo panel's summary stats — text only.
+
+    Surfaces ``drift_measure_label`` next to "probability of profit"
+    (M1.3) — a bare probability figure is never shown without naming the
+    drift assumption behind it.
+    """
+    drift_label = drift_measure_label(results["drift_measure"])
+    return html.Div(
+        [
+            html.P(
+                f"{results['num_simulations']:,} simulations, "
+                f"{results['days_to_expiry']} days to horizon.",
+                className="plain-language",
+            ),
+            html.P(
+                "Expected P&L "
+                f"{fmt.currency(results['expected_pnl'])} (median "
+                f"{fmt.currency(results['median_pnl'])}); probability of "
+                f"profit {fmt.percent(results['prob_profit'] * 100)} "
+                f"({drift_label} drift).",
+            ),
+            html.P(
+                f"95% VaR {fmt.currency(results['var_95'])}, 95% CVaR "
+                f"{fmt.currency(results['cvar_95'])}, worst case "
+                f"{fmt.currency(results['max_loss'])}.",
+            ),
+        ],
+    )
+
+
+def _render_mc_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+    num_paths: float | None,
+    horizon_days: float | None,
+    expected_return_pct: float | None,
+    seed: float | None,
+) -> Component:
+    """Run a scenario-local Monte Carlo simulation and render it.
+
+    Always passes ``persist_cache=False`` — this is a what-if panel, not
+    the shared book-level cache other readers (``visualization/
+    pnl_charts.py``, ``widgets/summary.py``) rely on (B0's containment,
+    F6). ``horizon_days``/``expected_return_pct``/``seed`` blank map to
+    the engine's own ``None`` defaults (nearest maturity, risk-neutral
+    drift, true randomness), not to a fabricated zero.
+    """
+    if not portfolio.positions:
+        return _incomplete(_EXPLORATION_EMPTY_BOOK_MSG)
+    if num_paths is None:
+        return _incomplete("Number of paths is required.")
+
+    def _build() -> Component:
+        results = portfolio.run_monte_carlo_simulation(
+            num_simulations=int(num_paths),
+            days_to_expiry=(
+                int(horizon_days) if horizon_days is not None else None
+            ),
+            expected_return=(
+                expected_return_pct / 100.0
+                if expected_return_pct is not None
+                else None
+            ),
+            random_seed=int(seed) if seed is not None else None,
+            persist_cache=False,
+        )
+        pnls_clean = np.asarray(results["simulated_pnls"], dtype=float)
+        histogram = compute_pnl_histogram(
+            pnls_clean,
+            min_pnl=results["min_pnl"],
+            max_pnl=results["max_pnl"],
+            is_concentrated=results["is_concentrated"],
+        )
+        empirical_cdf = compute_empirical_cdf(pnls_clean)
+        expected_percentile = percentile_of_value(
+            empirical_cdf,
+            results["expected_pnl"],
+        )
+        fig = plot_pnl_distribution(
+            histogram=histogram,
+            empirical_cdf=empirical_cdf,
+            expected_pnl=results["expected_pnl"],
+            median_pnl=results["median_pnl"],
+            var_95=results["var_95"],
+            cvar_95=results["cvar_95"],
+            max_loss=results["max_loss"],
+            is_concentrated=results["is_concentrated"],
+            most_common_pnl=results["most_common_pnl"],
+            concentration_pct=results["concentration_pct"],
+            expected_percentile=expected_percentile,
+            drift_measure=results["drift_measure"],
+        )
+        return html.Div([dcc.Graph(figure=fig), _mc_stats_block(results)])
+
+    return _safe_render(_build)
+
+
 def render(app: ProgramDashApp) -> html.Div:
     """Build the /design page: the BOOK zone and the PLANNING zone.
 
@@ -840,6 +1109,13 @@ def render(app: ProgramDashApp) -> html.Div:
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
     default_style = ips_config.pricing.exercise_style.value
+    # Bounds the spot-vol days-forward slider at layout-build time; the
+    # empty-book fallback matches build_spot_vol_grid_spec's own default.
+    max_days = (
+        days_to_max_maturity(portfolio)
+        if portfolio.positions
+        else _FALLBACK_MAX_DAYS
+    )
 
     book_zone = html.Div(
         [
@@ -1129,8 +1405,302 @@ def render(app: ProgramDashApp) -> html.Div:
         className="zone-planning",
     )
 
+    exploration_zone = html.Div(
+        [
+            html.H2(["Exploration", basis_chip(_BASIS_PROPORTIONAL)]),
+            html.P(
+                "These grids price a generic volatility move — every leg "
+                "scaled so the vega-weighted average reaches the level on "
+                "the axis. The PLANNING panels above price the IPS crash "
+                "with its wing-anchored skew instead. The same spot/vol "
+                "cell will read differently on the two — they are answers "
+                "to different questions, not a disagreement.",
+                className="plain-language",
+            ),
+            dcc.Link(
+                "See the policy crash number on /monitor.",
+                href="/monitor",
+            ),
+            html.Div(
+                [
+                    html.H3(
+                        ["Spot x vol heatmap", basis_chip(_BASIS_PROPORTIONAL)],
+                    ),
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.Label("Spot range (%)"),
+                                    dcc.Input(
+                                        id="explore-spotvol-spot-pct",
+                                        type="number",
+                                        value=_DEFAULT_SPOTVOL_SPOT_PCT,
+                                        debounce=True,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Vol range (%)"),
+                                    dcc.Input(
+                                        id="explore-spotvol-vol-pct",
+                                        type="number",
+                                        value=_DEFAULT_SPOTVOL_VOL_PCT,
+                                        debounce=True,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Metric"),
+                                    dcc.Dropdown(
+                                        id="explore-spotvol-metric",
+                                        options=_METRIC_OPTIONS,
+                                        value=_DEFAULT_SPOTVOL_METRIC,
+                                        clearable=False,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                        ],
+                        className="editor-form",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Grid resolution"),
+                            dcc.Slider(
+                                id="explore-spotvol-resolution",
+                                min=10,
+                                max=41,
+                                step=1,
+                                value=_DEFAULT_SPOTVOL_RESOLUTION,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Days forward"),
+                            dcc.Slider(
+                                id="explore-spotvol-days-forward",
+                                min=0,
+                                max=max_days,
+                                step=max(1, max_days // 20),
+                                value=_DEFAULT_SPOTVOL_DAYS_FORWARD,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
+                    ),
+                    dcc.Loading(
+                        html.Div(
+                            _render_spot_vol_panel_logic(
+                                portfolio=portfolio,
+                                cache=app.scenario_cache,
+                                spot_pct=_DEFAULT_SPOTVOL_SPOT_PCT,
+                                vol_pct=_DEFAULT_SPOTVOL_VOL_PCT,
+                                resolution=_DEFAULT_SPOTVOL_RESOLUTION,
+                                days_forward=_DEFAULT_SPOTVOL_DAYS_FORWARD,
+                                metric=_DEFAULT_SPOTVOL_METRIC,
+                            ),
+                            id="explore-spotvol-panel",
+                        ),
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
+                    html.H3(
+                        [
+                            "Time x price heatmap",
+                            basis_chip(_BASIS_PROPORTIONAL),
+                        ],
+                    ),
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.Label("Spot range (%)"),
+                                    dcc.Input(
+                                        id="explore-time-spot-pct",
+                                        type="number",
+                                        value=_DEFAULT_TIME_SPOT_PCT,
+                                        debounce=True,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                            html.Div(
+                                [
+                                    html.Label("Metric"),
+                                    dcc.Dropdown(
+                                        id="explore-time-metric",
+                                        options=_METRIC_OPTIONS,
+                                        value=_DEFAULT_TIME_METRIC,
+                                        clearable=False,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                        ],
+                        className="editor-form",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Time steps"),
+                            dcc.Slider(
+                                id="explore-time-steps",
+                                min=5,
+                                max=20,
+                                step=1,
+                                value=_DEFAULT_TIME_STEPS,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Price steps"),
+                            dcc.Slider(
+                                id="explore-price-steps",
+                                min=5,
+                                max=19,
+                                step=2,
+                                value=_DEFAULT_PRICE_STEPS,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
+                    ),
+                    dcc.Loading(
+                        html.Div(
+                            _render_time_price_panel_logic(
+                                portfolio=portfolio,
+                                cache=app.scenario_cache,
+                                spot_pct=_DEFAULT_TIME_SPOT_PCT,
+                                num_time_steps=_DEFAULT_TIME_STEPS,
+                                num_price_steps=_DEFAULT_PRICE_STEPS,
+                                metric=_DEFAULT_TIME_METRIC,
+                            ),
+                            id="explore-time-panel",
+                        ),
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
+                    html.H3(
+                        [
+                            "Monte Carlo distribution",
+                            basis_chip(_BASIS_PROPORTIONAL),
+                        ],
+                    ),
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.Label("Paths"),
+                                    dcc.Input(
+                                        id="explore-mc-paths",
+                                        type="number",
+                                        value=_DEFAULT_MC_PATHS,
+                                        debounce=True,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                            html.Div(
+                                [
+                                    html.Label(
+                                        "Horizon (days, blank = nearest "
+                                        "maturity)",
+                                    ),
+                                    dcc.Input(
+                                        id="explore-mc-horizon-days",
+                                        type="number",
+                                        debounce=True,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                            html.Div(
+                                [
+                                    html.Label(
+                                        "Expected return (%, blank = "
+                                        "risk-neutral)",
+                                    ),
+                                    dcc.Input(
+                                        id="explore-mc-expected-return",
+                                        type="number",
+                                        debounce=True,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                            html.Div(
+                                [
+                                    html.Label(
+                                        "Random seed (blank = true randomness)",
+                                    ),
+                                    dcc.Input(
+                                        id="explore-mc-seed",
+                                        type="number",
+                                        value=_DEFAULT_MC_SEED,
+                                        debounce=True,
+                                    ),
+                                ],
+                                className="editor-field",
+                            ),
+                        ],
+                        className="editor-form",
+                    ),
+                    dcc.Loading(
+                        html.Div(
+                            _render_mc_panel_logic(
+                                portfolio=portfolio,
+                                num_paths=_DEFAULT_MC_PATHS,
+                                horizon_days=None,
+                                expected_return_pct=None,
+                                seed=_DEFAULT_MC_SEED,
+                            ),
+                            id="explore-mc-panel",
+                        ),
+                    ),
+                ],
+                className="panel",
+            ),
+        ],
+        className="zone-exploration",
+    )
+
     return html.Div(
-        [html.H1("Design"), book_zone, planning_zone],
+        [html.H1("Design"), book_zone, planning_zone, exploration_zone],
         className="page page-design",
     )
 
@@ -1347,4 +1917,78 @@ def register_callbacks(app: ProgramDashApp) -> None:
                 app.market_data,
                 ips_config.market_environment,
             ),
+        )
+
+    @app.callback(
+        Output("explore-spotvol-panel", "children"),
+        Input("book-version", "data"),
+        Input("explore-spotvol-spot-pct", "value"),
+        Input("explore-spotvol-vol-pct", "value"),
+        Input("explore-spotvol-resolution", "value"),
+        Input("explore-spotvol-days-forward", "value"),
+        Input("explore-spotvol-metric", "value"),
+    )
+    def _render_spot_vol_panel(  # pylint: disable=too-many-arguments
+        _version: int,
+        spot_pct: float | None,
+        vol_pct: float | None,
+        resolution: float | None,
+        days_forward: float | None,
+        metric: str | None,
+    ) -> Component:
+        return _render_spot_vol_panel_logic(
+            portfolio=app.program_state.portfolio,
+            cache=app.scenario_cache,
+            spot_pct=spot_pct,
+            vol_pct=vol_pct,
+            resolution=resolution,
+            days_forward=days_forward,
+            metric=metric,
+        )
+
+    @app.callback(
+        Output("explore-time-panel", "children"),
+        Input("book-version", "data"),
+        Input("explore-time-spot-pct", "value"),
+        Input("explore-time-steps", "value"),
+        Input("explore-price-steps", "value"),
+        Input("explore-time-metric", "value"),
+    )
+    def _render_time_price_panel(
+        _version: int,
+        spot_pct: float | None,
+        num_time_steps: float | None,
+        num_price_steps: float | None,
+        metric: str | None,
+    ) -> Component:
+        return _render_time_price_panel_logic(
+            portfolio=app.program_state.portfolio,
+            cache=app.scenario_cache,
+            spot_pct=spot_pct,
+            num_time_steps=num_time_steps,
+            num_price_steps=num_price_steps,
+            metric=metric,
+        )
+
+    @app.callback(
+        Output("explore-mc-panel", "children"),
+        Input("book-version", "data"),
+        Input("explore-mc-paths", "value"),
+        Input("explore-mc-horizon-days", "value"),
+        Input("explore-mc-expected-return", "value"),
+        Input("explore-mc-seed", "value"),
+    )
+    def _render_mc_panel(
+        _version: int,
+        num_paths: float | None,
+        horizon_days: float | None,
+        expected_return_pct: float | None,
+        seed: float | None,
+    ) -> Component:
+        return _render_mc_panel_logic(
+            portfolio=app.program_state.portfolio,
+            num_paths=num_paths,
+            horizon_days=horizon_days,
+            expected_return_pct=expected_return_pct,
+            seed=seed,
         )
