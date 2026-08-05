@@ -34,9 +34,11 @@ from deltadewa.ips_config import (
 )
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.program_report import (
+    HTML_STYLE,
     ProgramReport,
     build_program_report,
     render_html,
+    render_html_body,
     render_markdown,
 )
 
@@ -487,6 +489,32 @@ class TestRenderHtml:
         """Output starts with <!DOCTYPE html>."""
         html = render_html(_make_full_report())
         assert html.startswith("<!DOCTYPE html>")
+
+    def test_wraps_render_html_body_unchanged(self) -> None:
+        """render_html is exactly render_html_body wrapped in the shell.
+
+        Locks the M2.6 refactor that split the two apart (so the weekly
+        digest can embed the body without a second, nested HTML document):
+        render_html's own output must stay byte-for-byte what it was
+        before the split.
+        """
+        report = _make_full_report()
+        html = render_html(report)
+        body = render_html_body(report)
+
+        assert body in html
+        assert html == (
+            f"<!DOCTYPE html>\n"
+            f'<html lang="en">\n'
+            f"<head>\n"
+            f'<meta charset="UTF-8">\n'
+            f"<title>Hedge Program Report &mdash; "
+            f"{report.header.program_name}</title>\n"
+            f"<style>\n{HTML_STYLE}\n</style>\n"
+            f"</head>\n"
+            f"<body>\n\n{body}\n\n</body>\n"
+            f"</html>"
+        )
 
     def test_section_headings_present(self) -> None:
         """All six <h2> section headings appear in the HTML."""

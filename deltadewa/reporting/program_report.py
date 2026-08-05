@@ -666,7 +666,10 @@ def render_markdown(report: ProgramReport) -> str:
 
 # ── HTML renderer ─────────────────────────────────────────────────────────
 
-_HTML_STYLE = """\
+# Public (no leading underscore): the M2.6 weekly digest reuses this verbatim
+# so its own document shell matches this one visually, rather than embedding
+# a second, drifting copy of the same CSS.
+HTML_STYLE = """\
 body {
   font-family: system-ui, -apple-system, sans-serif;
   max-width: 820px; margin: 2rem auto; padding: 0 1rem;
@@ -711,6 +714,41 @@ def render_html(report: ProgramReport) -> str:
 
     Returns:
         Self-contained HTML string.
+
+    """
+    h = report.header
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hedge Program Report &mdash; {escape(h.program_name)}</title>
+<style>
+{HTML_STYLE}
+</style>
+</head>
+<body>
+
+{render_html_body(report)}
+
+</body>
+</html>"""
+
+
+def render_html_body(report: ProgramReport) -> str:
+    """Render a ProgramReport's HTML markup, without the document shell.
+
+    Everything ``render_html`` puts inside ``<body>`` — no ``<!DOCTYPE>``,
+    ``<html>``, ``<head>``, or ``<style>``. Exists so a caller embedding the
+    report inside a larger page (the M2.6 weekly digest, which prepends its
+    own lede ahead of this content) can reuse the section markup without a
+    second, nested HTML document. ``render_html`` is unchanged behaviour —
+    it now just wraps this function's output in the same shell as before.
+
+    Args:
+        report: Assembled report to render.
+
+    Returns:
+        HTML markup for the report body only.
 
     """
     h = report.header
@@ -792,18 +830,7 @@ def render_html(report: ProgramReport) -> str:
             "</table>"
         )
 
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Hedge Program Report &mdash; {escape(h.program_name)}</title>
-<style>
-{_HTML_STYLE}
-</style>
-</head>
-<body>
-
-<h1>Part VII: Hedge Program Report</h1>
+    return f"""<h1>Part VII: Hedge Program Report</h1>
 <p>
   <strong>Program:</strong> {escape(h.program_name)}\
  ({escape(h.instrument)})<br>
@@ -874,7 +901,4 @@ def render_html(report: ProgramReport) -> str:
 <tr><th>Metric</th><th>Target</th><th>Actual</th><th>Status</th></tr>
 {compliance_rows_html}
 </table>
-<p><strong>Overall: {_pass_fail_html(ic.all_pass)}</strong></p>
-
-</body>
-</html>"""
+<p><strong>Overall: {_pass_fail_html(ic.all_pass)}</strong></p>"""
