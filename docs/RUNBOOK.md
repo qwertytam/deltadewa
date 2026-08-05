@@ -123,13 +123,14 @@ curl http://<tailscale-ip>:8050/health
 
 ## 5. Loading your positions
 
-There is no in-app position editor yet (that's M2.5) — the supported way to
-get a portfolio into the running app today is the CLI importer added for
-this purpose, run against the shared `exports/` state.
+For a bulk or fresh load, the CLI importer is still the right tool — it's
+the fastest way to get a whole book in at once, run against the shared
+`exports/` state. For adding one or two positions to a book that's already
+live, use `/design` instead (§6).
 
 ```bash
 # 1. Write the portfolio YAML into exports/ (the bind-mounted, stateful
-#    directory — see §7). examples/portfolios/spx_protective_put.yaml (in
+#    directory — see §8). examples/portfolios/spx_protective_put.yaml (in
 #    the repo, not on the droplet's bind mount) is the format to copy —
 #    scp it up or paste its contents into a new file here.
 scp examples/portfolios/spx_protective_put.yaml \
@@ -191,7 +192,32 @@ Reload `http://<tailscale-ip>:8050/monitor` and confirm:
   freshness, with no STALE/SYNTHETIC/UNAVAILABLE banner unless that's
   genuinely the feed's current state
 
-## 6. Recovery — the droplet dies
+## 6. Adding a position via `/design`
+
+Bookmark `http://<tailscale-ip>:8050/design`. This is the operator's editor
+— §5's CLI importer is still the right tool for a bulk or fresh load;
+`/design` is for one-off additions to a book that's already live.
+
+- Fill in Strike, Maturity, Quantity, Type (put/call, defaults to put),
+  Exercise style (defaults from `config/ips.yaml`'s pricing exercise
+  style — don't override it for an SPX leg), and Entry premium (optional,
+  but needed for the monetization panel's real gain basis rather than its
+  "unknown" one). Click **Add position**.
+- There is no in-place edit — changing a position is remove + add. Click
+  **Remove** on the old row (a browser confirm dialog is the safety gate,
+  and it can't be scripted around), then re-add it with the new numbers.
+- Underlying quantity has its own field at the top of the BOOK zone; it
+  autosaves like every other mutation on this page.
+- Every add/remove autosaves immediately to `exports/program_state.json`
+  — the same file `/monitor` reads — so there's nothing further to run.
+
+**Verify:** reload `/monitor` — the new position should be in the collapsed
+"Position detail" table, and (if `entry_premium` was set) the monetization
+panel should show a real gain percentage instead of "No entry price is
+recorded...". `/design`'s own PLANNING panels reprice against the change on
+their own — there's no Recompute button anywhere on this page.
+
+## 7. Recovery — the droplet dies
 
 Target: **under 30 minutes, nothing memorised.**
 
@@ -200,7 +226,7 @@ Target: **under 30 minutes, nothing memorised.**
 #    final `docker compose up -d --build`
 
 # 2. Restore exports/ from the last backup onto the new droplet, into the
-#    repo's exports/ directory (the bind-mount source — see §7). Until
+#    repo's exports/ directory (the bind-mount source — see §8). Until
 #    [M2.6 TODO]'s offsite backup exists, this means: whatever manual copy
 #    (scp, USB, etc.) you made of exports/ from the old box.
 scp -r old-backup/exports/ deploy@<new-tailscale-ip>:~/deltadewa/exports/
@@ -212,7 +238,7 @@ docker compose up -d --build
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 ```
 
-## 7. What lives where
+## 8. What lives where
 
 - **`exports/`** — the only stateful directory. Bind-mounted (not a named
   volume, so a future backup job can read it directly off the host

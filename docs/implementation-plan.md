@@ -1250,14 +1250,145 @@ before commit.
 
 ### M2.5 — The design workbench
 
+**Status: done** — commits `933ad5d`, `7d06f82`, `aa91ff9`, `86f49d8` (engine
+prerequisites: entry_premium's write path, `underlying_quantity`'s guarded
+mutator, the percent/fraction validation seam on both grid specs, and the
+Monte Carlo `persist_cache` opt-out), `bbe47b4` (BOOK zone: per-request page,
+IPS gate, position editor, guarded import/export), `fe9bc1b` (PLANNING zone:
+sizing, ladder, roll, monetization), `782d930` (EXPLORATION zone: stress
+heatmaps and MC distribution), `2eee9d3` (the cross-page shared-book
+regression test below), `b5b7678` (a finding-ID correction caught while
+writing this section — see the note under Mi5/Mi6 below), all on
+`feat/m2.5-design-exploration`; closed out via PR "M2.5 — the design
+workbench" after live verification on the droplet.
+
 The dense expert tool migrated to Dash — sizing / ladder / monetization / roll
-planners on the corrected engine. Position editor gains the missing
-**`entry_premium`** and **`underlying_quantity`** inputs (**Mo3/Mo7**); reactive
-panels eliminate the stale-panel / re-run-cells problem (**Mo7**); the C2 editor
-exercise-style default (deferred from M1.5a) lands here, defaulting from the IPS. No
-red primary buttons; no leaked tracebacks or `DEBUG:` prints. Import/export via the
-guarded session layer (supersedes **Mo5**). Less design agonising — the reader is the
-operator.
+planners on the corrected engine, plus the three notebook stress surfaces
+(spot-vol heatmap, time-price heatmap, MC distribution), plus the position
+editor. Position editor gains the missing **`entry_premium`** and
+**`underlying_quantity`** inputs (**Mo3/Mo7**); reactive panels eliminate the
+stale-panel / re-run-cells problem (**Mo7**); the C2 editor exercise-style
+default (deferred from M1.5a) lands here, defaulting from the IPS. No red
+primary buttons; no leaked tracebacks or `DEBUG:` prints. Import/export via
+the guarded session layer (supersedes **Mo5**). Less design agonising — the
+reader is the operator.
+
+**Findings:**
+
+- **(a) The IPS gate is page-level, not per-panel — because the editor
+  needs it too, not just the planners.** `render()`/`register_callbacks()`
+  both short-circuit on `app.ips_config is None` before building anything.
+  The planners obviously need policy (sizing targets, ladder bands, roll
+  thresholds are all IPS-derived) — but so does the BOOK zone's add-form:
+  its exercise-style default has no other source (C2), and without a
+  policy to plan against, a bare editor with no planning context isn't a
+  useful degraded state, it's just a different kind of broken page. One
+  gate, one `_no_ips_layout()`, matching `/monitor`'s own discipline
+  (M2.4) rather than inventing a second no-IPS story.
+- **(b) Add/remove only — `update_position` exists and stays deliberately
+  unwired.** Changing a position on `/design` is remove + add, not an
+  in-place edit; there is no "update" form anywhere in `pages/design.py`,
+  and no test references `ProgramState.update_position` from this page.
+  The reasons: an in-place edit UI has to reconcile *which* fields changed
+  against `entry_spot`/`entry_date`/`entry_premium`'s cost-basis semantics
+  (a changed strike isn't "the same position, different strike," it's
+  economically a different position), and remove+add reuses the exact
+  guarded mutators and confirm-dialog discipline the rest of the page
+  already has — no new mutation shape to review or misuse.
+  `update_position` isn't deleted (other callers may still want it), it's
+  just not this page's editing model.
+- **(c) Both bases render on one page now, so both are labelled, not just
+  the one that might surprise a reader.** PLANNING prices **crash-skew**
+  (`CrashShock.from_ips(ips_config.convexity)`, identical to `/monitor`'s
+  gauge) and EXPLORATION prices **proportional vol** (every leg scaled so
+  the vega-weighted average reaches the dial's level, via
+  `proportional_vol` — always passed explicitly to `ScenarioGridCache`,
+  never defaulted, M2.1 finding (c)). Four mechanisms carry that split so
+  a reader meets it as a design fact, not a bug: a zone header naming the
+  basis on both zones; a boundary sentence between them stating the
+  expected discrepancy *in advance*; a `basis_chip(...)` on every
+  repricing panel (now shared with `/monitor`'s own crash-scenario header,
+  so the vocabulary is one program-wide vocabulary, not `/design`-local);
+  and honest units — EXPLORATION's spot-vol y-axis is labelled an
+  *absolute IV level*, `/monitor`'s dial is labelled an *additive bump* —
+  the exact unit mismatch that hid M2.1's −25.4% gap. EXPLORATION
+  cross-references `/monitor` by link only; it never re-renders a crash
+  number itself, so there is exactly one place either basis's number is
+  computed.
+- **(d) The grid compute is live-reactive with no Recompute button,
+  because the numbers said the button was solving a problem that doesn't
+  exist.** Measured on `examples/portfolios/spx_tail_20m.yaml` (3 legs) on
+  the corrected engine: spot-vol grid 21×21 (the default resolution)
+  **0.061 s**, 41×41 (the slider's max) **0.217 s**, time-price grid
+  10×13 **0.003 s**, Monte Carlo 100,000 paths **0.019 s** — all well
+  under the threshold where a reader would perceive "frozen" rather than
+  "updating." Every dial uses `dcc.Input(..., debounce=True)` or
+  `dcc.Slider(..., updatemode="mouseup")` so a drag or keystroke run
+  commits once, not per pixel/character; one `ScenarioGridCache` lives on
+  `ProgramDashApp` for the app's lifetime (not per-callback), so a dial
+  moved back to a value already seen is free; each panel's output is
+  wrapped in `dcc.Loading` so the sub-quarter-second case still reads as
+  "working." A button would have added a click to every interaction to
+  save a cost nobody can perceive, and would have reintroduced exactly
+  the stale-panel problem (Mo7) this milestone exists to remove.
+- **(e) A finding-ID mislabel, caught and corrected while writing this
+  section.** The unsolvable-ladder-rungs surfacing (M1.4's strike-ladder
+  bullet, third clause — "silently-dropped unsolvable ladder rungs") had
+  been cited in this milestone's own code and tests as finding **"Mi5."**
+  That ID already belongs to a different, unrelated, already-closed
+  finding — the `include_underlying` scalar/vectorized P&L default
+  mismatch, pinned in `tests/test_portfolio/test_pnl.py` and confirmed by
+  `tests/test_ips_config.py`'s own `Mi6` comment on the neighbouring
+  carry-ceiling fix. The unsolvable-rungs gap was never given its own
+  number in the finding index at all — commit `b5b7678` removes the wrong
+  ID from `design.py`/`test_design.py` rather than inventing a right one.
+  Recorded here so the mistake doesn't get re-copied from this file the
+  way it was copied *into* the code from an earlier planning draft.
+- **(f) A live-observed, deliberately-deferred gap: `wsgi.py`'s production
+  entrypoint still doesn't set `default_exercise_style`.** Confirmed live
+  on the droplet, not hypothetically: the sizing panel degrades to its
+  own engine-level message ("`portfolio.default_exercise_style` must be
+  set before evaluating candidates...") — via `_safe_render`, not a
+  traceback — for the box's currently-loaded book, because
+  `ProgramState.load(Path("exports"))` in `wsgi.py` never passes
+  `default_exercise_style`. This is the exact entrypoint-level gap flagged
+  as explicitly out of scope when the BOOK zone landed (`/design`'s own
+  add-form always supplies an explicit style per leg, C2, so it never hits
+  this path) — live review just confirms the gap is real for any book
+  whose portfolio-level default was never set some other way. Not fixed
+  here (it's a one-line, already-scoped-out entrypoint change, not a
+  `/design` change); worth a small follow-up PR passing
+  `default_exercise_style=ips_config.pricing.exercise_style` once the IPS
+  config is available at `wsgi.py`'s call site.
+
+**Verified at close-out:** `gate-runner` green (`ruff`, `mypy deltadewa`
+strict, `ruff format`, `pylint` 10.00/10, `pytest` — 1669 passed; one
+timing-sensitive perf test, `test_vol_update_faster_than_rebuild`,
+flaked once under load and passed cleanly on three immediate reruns —
+untouched by this milestone's changes, not a regression); `dash-smoke-runner`
+green (124/124 app-level tests, both pages render with no client-side error
+and no leaked traceback). `TestSharedBookAcrossPages` (new this milestone)
+pins the cross-page guarantee directly: a position added through
+`state.add_position` — the real BOOK-zone write path — appears on
+`/monitor`'s next render; `entry_premium` flips `/monitor`'s monetization
+panel from "no entry price is recorded" to a real gain percentage;
+`underlying_quantity` flips `/monitor`'s offset-ratio figure from "n/a" to a
+real ratio.
+
+Deployed live to the droplet (`git fetch && git checkout
+feat/m2.5-design-exploration && docker compose build && docker compose up
+-d`, RUNBOOK §4) and confirmed over Tailscale with a real headless-browser
+check (not just `curl`, since Dash's initial HTML response is a client-side
+shell — the served `assets/deltadewa.css` was checked first to confirm the
+new build, not a stale image, was actually running): both `/monitor` and
+`/design` render client-side with zero console/page errors and no leaked
+traceback; `/design` shows all three zones (`.zone-book`, `.zone-planning`,
+`.zone-exploration`) and 9 basis chips (1 PLANNING header, 4 PLANNING panels,
+1 EXPLORATION header, 3 EXPLORATION panels); the MC panel's Plotly graph
+renders. Against the box's live 5-position book, `/monitor` and `/design`'s
+monetization panels agree on the current hedge gain (**−88.1%**) to one
+decimal place — the crash-skew single-source claim (finding (c)), confirmed
+live, not just in `TestPlanningZoneAgreesWithMonitor`.
 
 ### M2.6 — Headless report + cron + backup (the heartbeat)
 

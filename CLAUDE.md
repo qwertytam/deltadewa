@@ -116,14 +116,17 @@ config, a Roll Status panel, and the notebook split into `monitor_dashboard.ipyn
 and `hedge_design.ipynb`. The **sizing workbench, strike-ladder builder, and
 monetization planner are also done, tested, and wired** — each is its own
 `analysis/`-layer module (`sizing.py`, `strike_ladder.py`, `monetization.py`, with
-`roll_planner.py`) driving a panel in `hedge_design.ipynb`. See
-`docs/part-x-coverage.md` for the full handbook-item → implementation map and
-`docs/hedging handbook.md` for the cited sections.
+`roll_planner.py`) driving a panel in `hedge_design.ipynb` and, since M2.5, the
+Dash `/design` page's PLANNING zone. See `docs/part-x-coverage.md` for the full
+handbook-item → implementation map and `docs/hedging handbook.md` for the cited
+sections.
 
-Current work is the **correctness + Dash migration**, tracked in
+The engine-correctness fixes and the Dash migration of both notebooks are done:
+`/monitor` (M2.4, the crash-led read-mostly review) and `/design` (M2.5, the
+editor/planning/exploration workbench) are both live on the deployed app. Current
+work is **M2.6 — the headless report, cron, and backup heartbeat**, tracked in
 `docs/implementation-plan.md` — **treat that plan as the source of truth for
-what to build next.** It fixes the pricing/metric (engine) layer first, then
-rebuilds both notebooks as a Dash app.
+what to build next.**
 
 The only features still genuinely outstanding are the data-blocked Tier-4 metrics —
 **#12 Liquidity Risk**, **#13 Delta Drift**, and **#14 Vega Term Exposure** — each
