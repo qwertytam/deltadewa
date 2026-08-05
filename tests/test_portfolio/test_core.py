@@ -109,6 +109,37 @@ class TestOptionPortfolioBase:
         )
         assert portfolio.positions[0].entry_date == entry_date
 
+    def test_add_position_entry_premium(self) -> None:
+        """entry_premium is forwarded through to the created position."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            entry_premium=12.34,
+        )
+
+        assert portfolio.positions[0].entry_premium == pytest.approx(
+            12.34, rel=1e-4
+        )
+
+    def test_add_position_entry_premium_defaults_to_none(self) -> None:
+        """Omitting entry_premium leaves it None (no regression)."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+        )
+
+        assert portfolio.positions[0].entry_premium is None
+
     def test_remove_position(self) -> None:
         """Test removing a position."""
         portfolio = OptionPortfolioBase(
@@ -317,6 +348,20 @@ class TestOptionPortfolioBase:
 
         assert portfolio.total_underlying_value() == pytest.approx(
             5000.0, rel=1e-4
+        )
+
+    def test_set_underlying_quantity(self) -> None:
+        """Test set_underlying_quantity method."""
+        portfolio = OptionPortfolioBase(
+            underlying_quantity=100.0,
+            spot_price=50.0,
+        )
+
+        portfolio.set_underlying_quantity(250.0)
+
+        assert portfolio.underlying_quantity == pytest.approx(250.0)
+        assert portfolio.total_underlying_value() == pytest.approx(
+            12500.0, rel=1e-4
         )
 
     def test_total_portfolio_value(self) -> None:

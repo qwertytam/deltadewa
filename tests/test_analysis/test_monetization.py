@@ -323,6 +323,29 @@ class TestGainBasis:
         plan = build_monetization_plan(portfolio, _THREE_STEP_IPS)
         assert plan.gain_basis == "paid"
 
+    def test_paid_when_entry_premium_set_via_add_position(self) -> None:
+        """entry_premium threaded through add_position() → gain_basis
+        'paid' (not just settable by direct attribute assignment)."""
+        portfolio = OptionPortfolio(
+            spot_price=_SPOT,
+            underlying_quantity=100.0,
+            volatility=0.20,
+            risk_free_rate=0.04,
+            dividend_yield=0.015,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        portfolio.add_position(
+            strike_price=4500.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+            contract_size=100,
+            exercise_style=ExerciseStyle.EUROPEAN,
+            entry_premium=portfolio.spot_price * 0.02,
+        )
+        plan = build_monetization_plan(portfolio, _THREE_STEP_IPS)
+        assert plan.gain_basis == "paid"
+
     def test_unknown_when_entry_premium_missing(self) -> None:
         """Missing entry_premium → gain_basis == 'unknown', no raise."""
         portfolio = _portfolio_with_put()

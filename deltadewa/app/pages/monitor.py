@@ -29,6 +29,7 @@ from deltadewa.analysis.monitor_scenario import (
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
+from deltadewa.app.basis_chip import basis_chip
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
 if TYPE_CHECKING:
@@ -409,7 +410,12 @@ def render(app: ProgramDashApp) -> html.Div:
 
     scenario_explorer = html.Div(
         [
-            html.H2("Crash scenario"),
+            html.H2(
+                [
+                    "Crash scenario",
+                    basis_chip("basis: crash-skew (IPS anchor)"),
+                ],
+            ),
             html.P(
                 f"Today's {portfolio.get_symbol()} spot: "
                 f"{fmt.currency(portfolio.spot_price, decimals=2)} — the "

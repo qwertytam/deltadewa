@@ -222,6 +222,7 @@ class MonteCarloMixin:
         random_seed: int | None = 42,  # Set to None for true randomness
         days_to_expiry: int | None = None,
         expected_return: float | None = None,
+        persist_cache: bool = True,
     ) -> dict[str, Any]:
         """Run Monte Carlo simulation and store results on portfolio object.
 
@@ -243,6 +244,14 @@ class MonteCarloMixin:
                 by ``results["drift_measure"] == "risk_neutral"``. Supplying a
                 value makes the results real-world (P-measure), flagged
                 ``"real_world"``.
+            persist_cache: When ``True`` (default), caches the result on
+                ``self.monte_carlo_results`` as before — existing callers
+                (``visualization/pnl_charts.py``, ``widgets/summary.py``)
+                read that attribute directly rather than the return value.
+                Pass ``False`` for a scenario-local run (e.g. a what-if
+                horizon or expected-return override) that must not
+                overwrite the shared cache other panels read; the full
+                result dict is still returned either way.
 
         Returns:
             dict: Monte Carlo results dictionary
@@ -386,7 +395,8 @@ class MonteCarloMixin:
             "expected_return_annual": mu_annual,
         }
 
-        # Cache results on the object
-        self.monte_carlo_results = results
+        # Cache results on the object, unless this is a scenario-local run
+        if persist_cache:
+            self.monte_carlo_results = results
 
         return results

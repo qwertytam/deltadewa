@@ -127,6 +127,24 @@ class TestNonDestructiveMutatorsAutosave:
         assert len(reloaded.portfolio.positions) == 1
         assert reloaded.portfolio.positions[0].quantity == 5
 
+    def test_add_position_entry_premium(self, tmp_path: Path) -> None:
+        """entry_premium round-trips through the real save/load path."""
+        state = _load(tmp_path)
+
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=5,
+            option_type=OptionType.CALL,
+            entry_premium=12.34,
+        )
+
+        assert state.dirty is False
+        reloaded = _load(tmp_path)
+        assert reloaded.portfolio.positions[0].entry_premium == pytest.approx(
+            12.34
+        )
+
     def test_update_position(self, tmp_path: Path) -> None:
         state = _load(tmp_path)
         state.add_position(
@@ -151,6 +169,15 @@ class TestNonDestructiveMutatorsAutosave:
         reloaded = _load(tmp_path)
         assert reloaded.portfolio.volatility == pytest.approx(0.42)
 
+    def test_set_underlying_quantity(self, tmp_path: Path) -> None:
+        state = _load(tmp_path)
+
+        state.set_underlying_quantity(500.0)
+
+        assert state.dirty is False
+        reloaded = _load(tmp_path)
+        assert reloaded.portfolio.underlying_quantity == pytest.approx(500.0)
+
     def test_update_market_conditions(self, tmp_path: Path) -> None:
         state = _load(tmp_path)
 
@@ -159,6 +186,37 @@ class TestNonDestructiveMutatorsAutosave:
         assert state.dirty is False
         reloaded = _load(tmp_path)
         assert reloaded.portfolio.spot_price == pytest.approx(123.0)
+
+
+class TestExportSnapshot:
+    """export_snapshot: a read-only, non-autosave copy of the live book."""
+
+    def test_writes_a_distinct_file_without_touching_dirty(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _load(tmp_path)
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        assert state.dirty is False
+
+        written = state.export_snapshot("snapshot.json")
+
+        assert written == tmp_path / "snapshot.json"
+        assert written.exists()
+        assert written != tmp_path / STATE_FILENAME
+        assert state.dirty is False
+
+        # The snapshot round-trips through the same importer as any
+        # other export, independent of this ProgramState.
+        reimported = PortfolioSerializer(
+            export_dir=tmp_path,
+        ).import_from_json(written)
+        assert len(reimported["portfolio"].positions) == 1
 
 
 class TestDestructiveOpsRequireConfirm:
@@ -312,6 +370,41 @@ class TestSharedObjectIdentity:
         state.import_portfolio(import_source)
 
         assert state.portfolio is not original
+
+
+class TestMonteCarloScenarioLocalGuard:
+    """A scenario-local Monte Carlo run must not dirty or autosave state.
+
+    Mirrors tests/test_app/test_monitor.py::TestScenarioLocalGuard's
+    guarantee for the monitor's quantity dial, applied here to the
+    Monte Carlo cache (F6): a what-if run reached via
+    ``state.portfolio.run_monte_carlo_simulation(..., persist_cache=False)``
+    must never touch ``ProgramState``'s dirty flag or write to ``exports/``.
+    """
+
+    def test_scenario_local_run_leaves_state_untouched(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _load(tmp_path)
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        assert state.dirty is False
+        before_files = set(tmp_path.iterdir())
+
+        state.portfolio.run_monte_carlo_simulation(
+            num_simulations=1000,
+            expected_return=0.15,
+            persist_cache=False,
+        )
+
+        assert state.dirty is False
+        after_files = set(tmp_path.iterdir())
+        assert after_files == before_files
 
 
 def test_create_empty_portfolio_used_for_fresh_state(tmp_path: Path) -> None:

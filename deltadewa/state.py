@@ -190,6 +190,30 @@ class ProgramState:
         self._dirty = False
         return True
 
+    def export_snapshot(self, filename: str) -> Path:
+        """Write a point-in-time copy of the live portfolio to *filename*.
+
+        Unlike the mutators, this never touches ``dirty`` — it's a
+        read-only snapshot for the operator to download, not a change to
+        the live book, and it goes through this class's own serializer/
+        changelog rather than a second ``PortfolioSerializer`` pointed at
+        the same directory, so it stays inside the guarded session layer.
+
+        Args:
+            filename: Name of the file to write under this state's
+                export directory. Should not be ``STATE_FILENAME`` — a
+                snapshot is a separate artifact, not the autosave slot.
+
+        Returns:
+            Path to the written file.
+
+        """
+        return self._serializer.export_to_json(
+            self._portfolio,
+            self._changelog,
+            filename=filename,
+        )
+
     def _mutate_and_save(self) -> None:
         self._dirty = True
         self.save_if_dirty()
@@ -205,6 +229,7 @@ class ProgramState:
         exercise_style: ExerciseStyle | None = None,
         entry_spot: float | None = None,
         entry_date: dt | None = None,
+        entry_premium: float | None = None,
     ) -> OptionPosition:
         """Add a position. See ``OptionPortfolio.add_position``."""
         position = self._portfolio.add_position(
@@ -217,6 +242,7 @@ class ProgramState:
             exercise_style=exercise_style,
             entry_spot=entry_spot,
             entry_date=entry_date,
+            entry_premium=entry_premium,
         )
         self._mutate_and_save()
         return position
@@ -251,6 +277,14 @@ class ProgramState:
     def set_volatility(self, volatility: float) -> None:
         """Set portfolio volatility. See ``OptionPortfolio.set_volatility``."""
         self._portfolio.set_volatility(volatility)
+        self._mutate_and_save()
+
+    def set_underlying_quantity(self, underlying_quantity: float) -> None:
+        """Set underlying quantity.
+
+        See ``OptionPortfolio.set_underlying_quantity``.
+        """
+        self._portfolio.set_underlying_quantity(underlying_quantity)
         self._mutate_and_save()
 
     def update_market_conditions(  # pylint: disable=too-many-arguments

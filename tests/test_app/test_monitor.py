@@ -253,6 +253,18 @@ class TestSliderTooltips:
             assert slider.tooltip["always_visible"] is True
 
 
+class TestBasisChip:
+    """Main plan mechanism 3: /monitor names its basis, shared with PLANNING."""
+
+    def test_crash_scenario_header_shows_the_basis_chip(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        assert "basis: crash-skew (IPS anchor)" in str(layout)
+
+
 class TestAgreement:
     """The rendered hedge value must match crash_hedge_value exactly."""
 

@@ -32,8 +32,8 @@ optional live CBOE/FRED pull that falls back gracefully on network failure.
   SKEW-index percentile, vol-regime percentile
 - **Roll Status** — per-position moneyness drift, time decay, and roll-up cost ladder
 - **Seven hedge-health gauges** with configurable thresholds (`config/dashboard.yaml`)
-- **Sizing workbench, strike ladder builder, monetization planner** — active development
-  in `hedge_design.ipynb`
+- **Sizing workbench, strike ladder builder, monetization planner** — done; drive
+  a panel in `hedge_design.ipynb` and the Dash `/design` page's PLANNING zone
 - **Decision matrix** — structured roll / monetization / re-risk checklist
 - **Program report** — IC/board format (Monitor dashboard)
 - **IPS policy contract** — carry budget, convexity and drawdown targets, roll/rally/
@@ -155,7 +155,8 @@ Workbench mode: load a book and design changes to it.
 
 - Position Editor, editable scenario assumptions
 - Roll planner (candidate roll-up costs via `analysis.roll_status`)
-- Sizing workbench, strike ladder builder, monetization planner — in development
+- Sizing workbench, strike ladder builder, monetization planner — done; also on
+  the Dash `/design` page's PLANNING zone
 - Eager Monte Carlo run, full stress tooling (time × price / spot × vol heatmaps),
   Risk/Reward summary, Volatility Profile
 - Session Change Log and export
