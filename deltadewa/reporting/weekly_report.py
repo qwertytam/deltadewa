@@ -23,6 +23,20 @@ makes (``Observation.combine`` inside ``assess_market_environment``).
 Only ``main()``'s ``--as-of`` default reads the wall clock; everything
 downstream is a pure function of its arguments, which is what makes the
 golden-file test possible.
+
+With ``--send-email``, the digest is also sent via SendGrid
+(``deltadewa.reporting.email_sendgrid``), reading ``SENDGRID_API_KEY``,
+``REPORT_EMAIL_TO``, ``REPORT_EMAIL_FROM`` from the environment. This is
+opt-in (default off) so building the digest never requires mail
+credentials — only the cron line that actually wants delivery passes the
+flag. A missing env var or a failed send both exit **2**, distinct from
+the **1** used when the report itself was refused: at that point the
+report files are already written successfully, and a delivery failure
+must never look like exit-0 success. On a confirmed send,
+``DIGEST_HEARTBEAT_URL`` (``deltadewa.heartbeat``) is pinged — the *only*
+path that pings it, per the dead-man's-switch design: a missing weekly
+email is exactly the kind of silence that gets rationalised as "quiet
+week," so it must alarm rather than ping regardless.
 """
 
 from __future__ import annotations
@@ -30,6 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -45,10 +60,16 @@ from deltadewa.analysis import (
     decision_matrix,
     evaluate_roll_status,
 )
+from deltadewa.heartbeat import ping
 from deltadewa.marketdata import (
     CboeFredProvider,
     default_cache_dir,
     resolve_data_ttl,
+)
+from deltadewa.reporting.email_sendgrid import (
+    EmailDeliveryError,
+    EmailMessage,
+    send_email,
 )
 from deltadewa.reporting.program_report import (
     HTML_STYLE,
@@ -89,6 +110,11 @@ _NO_POSITIONS_ROLL_VERDICT: Final[str] = "N/A"
 _STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
     {"STALE", "STATIC", "UNAVAILABLE"},
 )
+
+_SENDGRID_API_KEY_ENV_VAR: Final[str] = "SENDGRID_API_KEY"
+_REPORT_EMAIL_TO_ENV_VAR: Final[str] = "REPORT_EMAIL_TO"
+_REPORT_EMAIL_FROM_ENV_VAR: Final[str] = "REPORT_EMAIL_FROM"
+_DIGEST_HEARTBEAT_ENV_VAR: Final[str] = "DIGEST_HEARTBEAT_URL"
 
 
 def _worst_roll_verdict(records: Sequence[RollStatusRecord]) -> str:
@@ -455,6 +481,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         default=None,
         help='Human-readable period label (default: "Week of <as-of>").',
     )
+    parser.add_argument(
+        "--send-email",
+        action="store_true",
+        default=False,
+        help=(
+            "Send the digest via SendGrid after writing it. Reads "
+            f"{_SENDGRID_API_KEY_ENV_VAR}, {_REPORT_EMAIL_TO_ENV_VAR}, "
+            f"{_REPORT_EMAIL_FROM_ENV_VAR} from the environment; opt-in "
+            "so building the digest never requires mail credentials."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -464,7 +501,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns:
         Process exit code: ``0`` on success; ``1`` if refused (no IPS
         policy, or an empty book — a report built from neither is not a
-        degraded report, it isn't a report).
+        degraded report, it isn't a report); ``2`` if the digest was built
+        and written but ``--send-email`` was requested and delivery
+        failed (missing env vars, or a SendGrid send failure) — distinct
+        from ``1`` since the report files did get written successfully.
 
     """
     logging.basicConfig(level=logging.INFO)
@@ -552,13 +592,63 @@ def main(argv: Sequence[str] | None = None) -> int:
     weekly_dir.mkdir(parents=True, exist_ok=True)
     md_path = weekly_dir / f"digest-{as_of.isoformat()}.md"
     html_path = weekly_dir / f"digest-{as_of.isoformat()}.html"
+    html_text = render_weekly_digest_html(digest)
     md_path.write_text(render_weekly_digest_markdown(digest), encoding="utf-8")
-    html_path.write_text(render_weekly_digest_html(digest), encoding="utf-8")
+    html_path.write_text(html_text, encoding="utf-8")
     snapshot_path = _write_snapshot(args.export_dir, digest.snapshot)
 
     print(digest.headline)
     print(f"Wrote {md_path}, {html_path}, {snapshot_path}")
+
+    if args.send_email:
+        failure_code = _send_digest_email(digest, html_text, as_of)
+        if failure_code is not None:
+            return failure_code
+
     return 0
+
+
+def _send_digest_email(
+    digest: WeeklyDigest,
+    html_text: str,
+    as_of: date,
+) -> int | None:
+    """Send *digest* via SendGrid; ping the digest heartbeat on success.
+
+    Returns:
+        ``None`` on a confirmed send; otherwise the exit code ``main()``
+        should return (``2`` — required env vars missing, or the send
+        itself failed).
+
+    """
+    try:
+        api_key = os.environ[_SENDGRID_API_KEY_ENV_VAR]
+        to_addr = os.environ[_REPORT_EMAIL_TO_ENV_VAR]
+        from_addr = os.environ[_REPORT_EMAIL_FROM_ENV_VAR]
+    except KeyError as exc:
+        print(
+            f"weekly_report: --send-email requires {exc} to be set; "
+            "the digest was written above but not sent.",
+            file=sys.stderr,
+        )
+        return 2
+
+    message = EmailMessage(
+        subject=f"Weekly Hedge Digest — {digest.headline} ({as_of})",
+        html_body=html_text,
+        to_addr=to_addr,
+        from_addr=from_addr,
+    )
+    try:
+        send_email(message, api_key=api_key)
+    except EmailDeliveryError as exc:
+        _logger.error("weekly_report: email delivery FAILED: %s", exc)
+        print(f"weekly_report: email delivery FAILED — {exc}", file=sys.stderr)
+        return 2
+
+    _logger.info("weekly_report: digest emailed to %s", to_addr)
+    ping(os.environ.get(_DIGEST_HEARTBEAT_ENV_VAR), label="digest")
+    return None
 
 
 if __name__ == "__main__":

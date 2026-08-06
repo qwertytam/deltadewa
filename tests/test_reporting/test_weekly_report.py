@@ -7,10 +7,13 @@ from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
 from deltadewa.app.import_portfolio import main as import_portfolio_main
+from deltadewa.reporting import weekly_report as weekly_report_module
+from deltadewa.reporting.email_sendgrid import EmailDeliveryError
 from deltadewa.reporting.program_report import (
     CostSection,
     IpsComplianceRow,
@@ -559,4 +562,129 @@ class TestMainCli:
         assert "first snapshot" not in second_digest_md
         assert "Compared against the snapshot from 2026-08-05" in (
             second_digest_md
+        )
+
+
+class TestMainSendEmail:
+    """--send-email: opt-in delivery, exit 2 on any failure, ping on send."""
+
+    def test_without_flag_never_sends_or_pings(
+        self,
+        seeded_export_dir: _MainFixture,
+    ) -> None:
+        """The existing (no --send-email) tests' behaviour, made explicit."""
+        with (
+            patch.object(weekly_report_module, "send_email") as mock_send,
+            patch.object(weekly_report_module, "ping") as mock_ping,
+        ):
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(seeded_export_dir.export_dir),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS_YAML),
+                    "--as-of",
+                    "2026-08-05",
+                ],
+            )
+
+        assert exit_code == 0
+        mock_send.assert_not_called()
+        mock_ping.assert_not_called()
+
+    def test_missing_env_vars_exits_two_without_sending(
+        self,
+        seeded_export_dir: _MainFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("SENDGRID_API_KEY", raising=False)
+        monkeypatch.delenv("REPORT_EMAIL_TO", raising=False)
+        monkeypatch.delenv("REPORT_EMAIL_FROM", raising=False)
+
+        with patch.object(weekly_report_module, "send_email") as mock_send:
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(seeded_export_dir.export_dir),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS_YAML),
+                    "--as-of",
+                    "2026-08-05",
+                    "--send-email",
+                ],
+            )
+
+        assert exit_code == 2
+        mock_send.assert_not_called()
+        # The digest itself was still written — only delivery is missing.
+        weekly_dir = seeded_export_dir.export_dir / "reports" / "weekly"
+        assert (weekly_dir / "digest-2026-08-05.md").exists()
+
+    def test_send_failure_exits_two_without_pinging(
+        self,
+        seeded_export_dir: _MainFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SENDGRID_API_KEY", "SG.fake")
+        monkeypatch.setenv("REPORT_EMAIL_TO", "ic@example.com")
+        monkeypatch.setenv("REPORT_EMAIL_FROM", "hedge-program@example.com")
+        monkeypatch.setenv("DIGEST_HEARTBEAT_URL", "https://hc-ping.com/x")
+
+        with (
+            patch.object(
+                weekly_report_module,
+                "send_email",
+                side_effect=EmailDeliveryError("SendGrid rejected the send"),
+            ),
+            patch.object(weekly_report_module, "ping") as mock_ping,
+        ):
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(seeded_export_dir.export_dir),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS_YAML),
+                    "--as-of",
+                    "2026-08-05",
+                    "--send-email",
+                ],
+            )
+
+        assert exit_code == 2
+        mock_ping.assert_not_called()
+
+    def test_successful_send_pings_the_digest_heartbeat(
+        self,
+        seeded_export_dir: _MainFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SENDGRID_API_KEY", "SG.fake")
+        monkeypatch.setenv("REPORT_EMAIL_TO", "ic@example.com")
+        monkeypatch.setenv("REPORT_EMAIL_FROM", "hedge-program@example.com")
+        monkeypatch.setenv("DIGEST_HEARTBEAT_URL", "https://hc-ping.com/x")
+
+        with (
+            patch.object(weekly_report_module, "send_email") as mock_send,
+            patch.object(weekly_report_module, "ping") as mock_ping,
+        ):
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(seeded_export_dir.export_dir),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS_YAML),
+                    "--as-of",
+                    "2026-08-05",
+                    "--send-email",
+                ],
+            )
+
+        assert exit_code == 0
+        mock_send.assert_called_once()
+        message = mock_send.call_args.args[0]
+        assert message.to_addr == "ic@example.com"
+        assert message.from_addr == "hedge-program@example.com"
+        mock_ping.assert_called_once_with(
+            "https://hc-ping.com/x",
+            label="digest",
         )
