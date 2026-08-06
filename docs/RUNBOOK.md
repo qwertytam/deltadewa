@@ -299,13 +299,24 @@ periodically until then.
 
 - **`.env`** (repo root, gitignored — `.env.example` is the tracked
   template). Holds `BIND_ADDR` and everything the `jobs` compose service
-  needs: `SENDGRID_API_KEY`, `REPORT_EMAIL_TO`, `REPORT_EMAIL_FROM`,
-  `FRED_API_KEY` (reserved, safe to leave blank), `REFRESH_HEARTBEAT_URL`,
-  `DIGEST_HEARTBEAT_URL`. Read into the `jobs` container via
-  `env_file: .env`; the three required-for-email vars are also declared
-  `${VAR:?...}` in `compose.yaml` so a `docker compose run jobs ...`
-  fails immediately, at the command line, if `.env` was never populated —
-  not three months later inside a Python traceback.
+  needs: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
+  `REPORT_EMAIL_TO`, `REPORT_EMAIL_FROM`, `FRED_API_KEY` (reserved, safe
+  to leave blank), `REFRESH_HEARTBEAT_URL`, `DIGEST_HEARTBEAT_URL`. Read
+  into the `jobs` container via `env_file: .env`; the six required-for-email
+  vars are also declared `${VAR:?...}` in `compose.yaml` so a
+  `docker compose run jobs ...` fails immediately, at the command line, if
+  `.env` was never populated — not three months later inside a Python
+  traceback.
+
+  The email transport (`deltadewa/reporting/email_smtp.py`) is plain
+  stdlib SMTP, so the provider is interchangeable — any SMTP relay works
+  (Resend, Brevo, Amazon SES, Mailtrap, ...) by changing only these `.env`
+  values, no code change. `SMTP_PORT` selects the connection mode: `465`
+  is implicit TLS/SMTPS, anything else (typically `587`) is STARTTLS. If
+  using Amazon SES, sandbox mode is fine indefinitely for this use case —
+  just verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
+  `REPORT_EMAIL_FROM`) in the SES console rather than requesting
+  production access.
 - **The Codeberg SSH deploy key** — `/root/.ssh/codeberg_backup` (mode
   `0600`, root-owned), referenced by a `~/.ssh/config` alias so
   `ops/backup-exports.sh` never hardcodes the key path:
@@ -398,5 +409,5 @@ digest — period 1 week, grace 1 day.
   news," which is precisely why the design pings only on a *confirmed*
   send (`deltadewa/reporting/weekly_report.py`). Check
   `~/deltadewa/logs/weekly_report.log` for a `--send-email` failure
-  (missing env var, or SendGrid rejecting the key/quota), then re-run
-  §11's send command by hand.
+  (missing/invalid env var, or the SMTP relay rejecting the
+  credentials/quota), then re-run §11's send command by hand.

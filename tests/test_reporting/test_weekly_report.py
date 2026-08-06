@@ -13,7 +13,7 @@ import pytest
 
 from deltadewa.app.import_portfolio import main as import_portfolio_main
 from deltadewa.reporting import weekly_report as weekly_report_module
-from deltadewa.reporting.email_sendgrid import EmailDeliveryError
+from deltadewa.reporting.email_smtp import EmailDeliveryError
 from deltadewa.reporting.program_report import (
     CostSection,
     IpsComplianceRow,
@@ -597,7 +597,10 @@ class TestMainSendEmail:
         seeded_export_dir: _MainFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.delenv("SENDGRID_API_KEY", raising=False)
+        monkeypatch.delenv("SMTP_HOST", raising=False)
+        monkeypatch.delenv("SMTP_PORT", raising=False)
+        monkeypatch.delenv("SMTP_USERNAME", raising=False)
+        monkeypatch.delenv("SMTP_PASSWORD", raising=False)
         monkeypatch.delenv("REPORT_EMAIL_TO", raising=False)
         monkeypatch.delenv("REPORT_EMAIL_FROM", raising=False)
 
@@ -625,7 +628,10 @@ class TestMainSendEmail:
         seeded_export_dir: _MainFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv("SENDGRID_API_KEY", "SG.fake")
+        monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("SMTP_PORT", "587")
+        monkeypatch.setenv("SMTP_USERNAME", "hedge-program@example.com")
+        monkeypatch.setenv("SMTP_PASSWORD", "fake-smtp-password")
         monkeypatch.setenv("REPORT_EMAIL_TO", "ic@example.com")
         monkeypatch.setenv("REPORT_EMAIL_FROM", "hedge-program@example.com")
         monkeypatch.setenv("DIGEST_HEARTBEAT_URL", "https://hc-ping.com/x")
@@ -634,7 +640,7 @@ class TestMainSendEmail:
             patch.object(
                 weekly_report_module,
                 "send_email",
-                side_effect=EmailDeliveryError("SendGrid rejected the send"),
+                side_effect=EmailDeliveryError("SMTP relay rejected the send"),
             ),
             patch.object(weekly_report_module, "ping") as mock_ping,
         ):
@@ -658,7 +664,10 @@ class TestMainSendEmail:
         seeded_export_dir: _MainFixture,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setenv("SENDGRID_API_KEY", "SG.fake")
+        monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("SMTP_PORT", "587")
+        monkeypatch.setenv("SMTP_USERNAME", "hedge-program@example.com")
+        monkeypatch.setenv("SMTP_PASSWORD", "fake-smtp-password")
         monkeypatch.setenv("REPORT_EMAIL_TO", "ic@example.com")
         monkeypatch.setenv("REPORT_EMAIL_FROM", "hedge-program@example.com")
         monkeypatch.setenv("DIGEST_HEARTBEAT_URL", "https://hc-ping.com/x")

@@ -45,7 +45,10 @@ services:
       # per-command one: once .env carries a real key it stays populated,
       # so `docker compose run jobs python -m deltadewa.marketdata.refresh`
       # (which needs none of these) is never blocked by it in practice.
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY:?Set SENDGRID_API_KEY in .env — see .env.example}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST in .env — see .env.example}
+      SMTP_PORT: ${SMTP_PORT:?Set SMTP_PORT in .env — see .env.example}
+      SMTP_USERNAME: ${SMTP_USERNAME:?Set SMTP_USERNAME in .env — see .env.example}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD in .env — see .env.example}
       REPORT_EMAIL_TO: ${REPORT_EMAIL_TO:?Set REPORT_EMAIL_TO in .env — see .env.example}
       REPORT_EMAIL_FROM: ${REPORT_EMAIL_FROM:?Set REPORT_EMAIL_FROM in .env — see .env.example}
     # Carries the rest through as-is (FRED_API_KEY, the two heartbeat
