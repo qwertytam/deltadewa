@@ -229,7 +229,7 @@ Target: **under 30 minutes, nothing memorised.**
 #    it directly into the repo's exports/ directory (the bind-mount
 #    source). Needs the same SSH deploy key set up as §10 describes.
 rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it yet
-git clone codeberg-backup:deploy/deltadewa-exports-backup.git \
+git clone codeberg-backup:deploy_deltadewa-exports-backup.git \
     ~/deltadewa/exports
 
 # 3. Bring it up
@@ -333,7 +333,7 @@ periodically until then.
   Provisioning (once, manual, same spirit as §1's droplet click-through):
   generate the key (`ssh-keygen -t ed25519 -f /root/.ssh/codeberg_backup
   -N ""`), create a **private** repo on Codeberg
-  (`deploy/deltadewa-exports-backup`), add the key's public half as a
+  (`deploy_deltadewa-exports-backup`), add the key's public half as a
   deploy key with **write** access.
 - **The optional token alternative** — `/etc/deltadewa/backup.env`
   (mode `0600`, root-owned), sourced by `ops/backup-exports.sh` if
