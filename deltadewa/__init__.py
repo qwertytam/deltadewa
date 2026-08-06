@@ -13,7 +13,14 @@ from .constants import (
 from .portfolio.core import OptionPortfolio
 from .portfolio.factory import create_empty_portfolio
 from .valuation import OptionValuation
-from .widgets import InteractiveOutput, PortfolioWidgets
+
+# InteractiveOutput/PortfolioWidgets deliberately NOT re-exported here:
+# they pull in the notebook-only widgets/ package (ipywidgets), which
+# would make importing anything under `deltadewa` — including the
+# production `deltadewa.app` — require ipywidgets. Import them from
+# `deltadewa.widgets` directly (matches `deltadewa.formatters`' own
+# "import from submodules directly" convention). Confirmed unused
+# anywhere in this repo before removing.
 
 __all__ = [
     "BUSINESS_DAYS_PER_YEAR",
@@ -23,10 +30,8 @@ __all__ = [
     "TRADING_DAYS_PER_YEAR",
     "WEEKS_PER_YEAR",
     "BatchPricer",
-    "InteractiveOutput",
     "OptionPortfolio",
     "OptionValuation",
-    "PortfolioWidgets",
     "__version__",
     "create_empty_portfolio",
 ]
