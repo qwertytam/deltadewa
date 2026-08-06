@@ -54,7 +54,12 @@ market_environment:
   skew_high_pctile: 75         # SKEW percentile (0-100); above = stressed skew
   term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
   data_ttl_minutes: 15         # how long a fetched value stays trustworthy;
-                               # past this a cache hit reads STALE, not CACHED
+                               # past this a cache hit reads STALE, not CACHED.
+                               # 15 minutes suits fetch-on-demand local use; a
+                               # deployment refreshed by cron needs a TTL
+                               # exceeding its refresh interval (see
+                               # config/ips.yaml, 2160 = 36h for a daily
+                               # refresh), or every read will be STALE.
 
 triggers:
   target_delta_ratio_pct: 90.0   # intended net-delta-to-equity ratio; drift is

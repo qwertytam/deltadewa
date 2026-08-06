@@ -25,9 +25,11 @@ working document: drive Claude Code through it one milestone at a time.
   handbook/IPS reference value.
 - **One PR per milestone**, small conventional commits.
 - **The gate must be green before "done":** `ruff check .`, `pylint deltadewa`
-  (10.00), `mypy deltadewa` (strict), `pytest`. Until the notebooks are retired,
-  also `nbqa ruff` + headless notebook execution. The clock-shift probe (M1.11)
-  is deliberately **outside** this list — see there for why.
+  (10.00), `mypy deltadewa` (strict), `pytest`. The clock-shift probe (M1.11)
+  is deliberately **outside** this list — see there for why. (`nbqa ruff` +
+  headless notebook execution were part of this gate until M2.6 retired them
+  from CI — the app + report tests now cover both notebook surfaces; see
+  M2.6's close-out for the coverage mapping.)
 - Read the sibling module before adding to it; match its style.
 
 ---
@@ -923,7 +925,7 @@ $ git ls-files .mypy_cache | wc -l
   access (MFA via the tailnet sign-in; no public exposure, no login page to build).
   Deploy the *thin* app early (M2.3) so the surfaces are built against the real
   environment.
-- **Report.** Emailed monthly heartbeat. Stale-data policy: **send anyway, stamped
+- **Report.** Emailed weekly heartbeat. Stale-data policy: **send anyway, stamped
   stale, staleness impossible to miss** — never silently skips, never silently
   prices on old data.
 - **Backup.** Cheap version: nightly `git commit && push` of `exports/` to a private
@@ -1392,25 +1394,86 @@ live, not just in `TestPlanningZoneAgreesWithMonitor`.
 
 ### M2.6 — Headless report + cron + backup (the heartbeat)
 
+**Status: done** (code + docs; droplet deploy pending — see close-out below).
+
 The Part VII board report as a parametrised, schedulable entrypoint rendering
 deterministic HTML/PDF, with **M8** content: return framing from tracked start/end
 book values, realized monetization, and an as-of stamp. Golden-file regression test.
 **Stale-data policy: send stamped-stale, impossible to miss.** Host cron drives three
-jobs: market-data refresh, the monthly report email, and the `exports/` backup
+jobs: market-data refresh, the weekly report email, and the `exports/` backup
 push. Backup goes to a private **offsite** repo (Codeberg; optional `age`
-encryption). The **email-delivery mechanism** (own SMTP vs a transactional free tier
-like Postmark/SendGrid) is decided here. Retire the notebook-execution CI steps once
-app + report tests cover both surfaces.
+encryption, deliberately deferred — a backup you can't decrypt is worse than one
+you can). The **email-delivery mechanism** is SendGrid's v3 REST API, called
+directly via `requests` rather than adding its SDK as a dependency. The
+notebook-execution CI steps are retired now that app + report tests cover both
+surfaces.
+
+- **Weekly-digest-leads-with-change.** The digest leads with what changed since
+  last week — verdict crossings, band exits, staleness — rather than repeating a
+  near-identical report 52×/year. Return framing shows the week's own carry cost
+  alongside the cumulative figure since the first snapshot, so one week of pure
+  theta doesn't read as a loss story on its own (`weekly_snapshot.py`: that
+  cumulative figure is carry cost, a flow, not premium paid, a stock — the
+  latter would double-count or miss cash entirely across a roll).
+- **Stamped-stale policy, concretely.** The staleness banner always renders,
+  driven by `MarketContextSection.data_quality` — already the worst `Source`
+  across every live observation `assess_market_environment` makes
+  (`Observation.combine`). The digest is never silently skipped for stale data.
+- **Refresh job's partial-failure semantics.** Each of the six series the app
+  depends on is fetched independently; one failure never aborts the run and
+  never blanks a prior cache entry (the disk cache only writes on success).
+  Exit 0 = every series refreshed live; 1 = partial (the normal early-morning
+  state — FRED's VIXCLS publishes with a lag); 2 = total failure. Callers
+  should treat 0/1 alike and escalate only on sustained 1s or any 2.
+- **Dead-man's-switch model.** Two independent healthchecks.io-style checks,
+  because the two jobs fail independently: REFRESH pings on exit 0 and 1, not
+  2 (so a routine partial morning doesn't page); DIGEST pings only on a
+  confirmed send — the one path where silence is dangerous, since a missing
+  weekly email reads exactly like "a quiet week."
+
+**Findings closed:**
+
+- **M8** — the digest content above (return framing from tracked start/end book
+  values, realized monetization, an as-of stamp) is shipped and golden-tested.
+- **M5** — chain now complete end to end. The Dash-native STALE/STATIC banner
+  itself shipped in M2.2, but until this milestone's refresh cron actually runs
+  on the droplet, production could only ever show `UNAVAILABLE` (confirmed at
+  the M2.3 close-out) — never the `CACHED` state the banner logic was built
+  for. The droplet verification below is what finally exercises that state for
+  real.
 
 > **Checkpoint:** notebooks retired; the app is live on the VPS behind Tailscale,
-> reachable by the partner without the operator; the monthly report emails; CI green
+> reachable by the partner without the operator; the weekly report emails; CI green
 > on the new (app + report) gate.
+
+**Verified at close-out (code):** `gate-runner` green (`ruff`, `ruff format`,
+`mypy` strict — 120 files, `pylint` 10.00/10, `pytest` — 1753 passed) against
+the full (`dev`+`test` groups) install; `dash-smoke-runner` green (129/129
+app-level tests). `poetry install --only main` in a scratch venv, then
+importing `deltadewa.app.wsgi`, `marketdata.refresh`, `reporting.weekly_report`,
+`reporting.email_sendgrid`, and `heartbeat` all succeed with matplotlib,
+seaborn, ipywidgets, ipyfilechooser, the whole Jupyter/notebook stack,
+Playwright, and IPython genuinely absent — confirming the `dev`/`test` group
+split (image-slimming work below) didn't silently break the production import
+graph. `docker build`: **758 MB**, down from the M2.3 close-out's recorded
+1.32 GB (a ~43% reduction); the built image runs and `/health` responds
+correctly.
+
+**Pending:** the droplet deploy + manual job run + email/backup verification
+(RUNBOOK §4/§11/§12) — this milestone's PR needs to merge and get tagged
+first, per RUNBOOK §4's "pull a tag, not a branch" deploy discipline. This
+checkpoint entry will be updated with the real `/health` banner state, email
+delivery confirmation, and Codeberg backup commit once that happens.
 
 ---
 
 ## Phase 3 — Docs & handbook (post-migration, per your call)
 
-- README (chart stack, feature status, `__version__` 0.1.0 → 0.2.0) and a
+- README (chart stack, feature status, `__version__` 0.4.2 → 0.5.0 — this
+  line originally targeted 0.1.0 → 0.2.0 and had already drifted three
+  releases behind by M2.6; re-check the actual current version in
+  `pyproject.toml` before using this figure rather than trusting it again)
+  and a
   **QUICKSTART rewrite against the real API** (**M7** — Example 1 imports a
   nonexistent `AmericanOption`) — now stable against Dash, not thrown away.
 - Mi1 residual drift: "Section 6/7" / "MODE 0" output references, "American

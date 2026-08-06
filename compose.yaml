@@ -5,6 +5,11 @@ services:
     environment:
       DELTADEWA_HOST: "0.0.0.0"
       DELTADEWA_PORT: "8050"
+      # Bind-mounted, not the container's ephemeral writable layer — a
+      # container recreate must not silently wipe the warmed cache back
+      # to UNAVAILABLE, and this is the same path the `jobs` service
+      # below writes to, so a refresh actually warms what the app reads.
+      DELTADEWA_CACHE_DIR: /app/exports/marketdata-cache
     volumes:
       # Bind mount, not a named volume: M2.6's backup cron pushes exports/
       # to an offsite repo and needs direct host filesystem access to it —
@@ -20,3 +25,32 @@ services:
       # up`; it defaults to loopback so an unset/forgotten value fails
       # locked-down rather than open.
       - "${BIND_ADDR:-127.0.0.1}:8050:8050"
+
+  # M2.6's cron-driven jobs (market-data refresh, weekly digest) — run via
+  # `docker compose run --rm --no-deps jobs <command>`, never `up`, never
+  # a long-lived process. A separate service from `app` rather than
+  # `docker compose exec`-ing into it, for two reasons: the long-lived web
+  # process never holds an email credential it doesn't use, and these jobs
+  # keep working when the `app` container is down or restarting.
+  jobs:
+    build: .
+    # Gated behind a profile so a bare `docker compose up` never starts
+    # this — it only ever runs via an explicit `docker compose run jobs`.
+    profiles: ["jobs"]
+    environment:
+      DELTADEWA_CACHE_DIR: /app/exports/marketdata-cache
+      # Fail loudly at `docker compose run` time — not silently, 3am,
+      # inside a job's Python traceback — if .env was never populated
+      # with these per .env.example. This is a one-time setup gate, not a
+      # per-command one: once .env carries a real key it stays populated,
+      # so `docker compose run jobs python -m deltadewa.marketdata.refresh`
+      # (which needs none of these) is never blocked by it in practice.
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:?Set SENDGRID_API_KEY in .env — see .env.example}
+      REPORT_EMAIL_TO: ${REPORT_EMAIL_TO:?Set REPORT_EMAIL_TO in .env — see .env.example}
+      REPORT_EMAIL_FROM: ${REPORT_EMAIL_FROM:?Set REPORT_EMAIL_FROM in .env — see .env.example}
+    # Carries the rest through as-is (FRED_API_KEY, the two heartbeat
+    # URLs) — secrets live only in this gitignored file, never in the
+    # image or in compose.yaml itself.
+    env_file: .env
+    volumes:
+      - ./exports:/app/exports

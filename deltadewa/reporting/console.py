@@ -2,11 +2,18 @@
 
 Handles formatted output to stdout/stderr with support for headers,
 tables, status messages, and progress bars.
+
+IPython is a notebook-only dependency (not in the production/`jobs`
+image — see the M2.6 close-out) and is only needed by
+``clear_and_print``, used from notebook widgets. The import is deferred
+into that method, guarded like ``formatters.values``' matplotlib import,
+so the rest of ``ConsoleReporter`` — and everything that transitively
+imports this module via ``deltadewa.reporting``'s package ``__init__``,
+including production code that only wants ``PortfolioLogger`` — stays
+importable without it.
 """
 
 from typing import Any
-
-from IPython.display import clear_output
 
 from deltadewa.formatters.values import format_number_auto_precision
 
@@ -154,7 +161,19 @@ class ConsoleReporter:
             self.table_row(row, widths)
 
     def clear_and_print(self, message: str, wait: bool = True) -> None:
-        """Clear output and print a new message (useful in widgets)."""
+        """Clear output and print a new message (useful in widgets).
+
+        Notebook-only: imports IPython on call, not on module load, so
+        the rest of this class stays usable without it.
+        """
+        try:
+            # pylint: disable-next=import-outside-toplevel
+            from IPython.display import clear_output  # deferred: notebook-only
+        except ImportError as exc:
+            raise ImportError(
+                "IPython is required for ConsoleReporter.clear_and_print "
+                "(notebook-only; not installed in the production image)",
+            ) from exc
         clear_output(wait=wait)
         print(message)
 

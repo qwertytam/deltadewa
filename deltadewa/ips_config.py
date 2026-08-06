@@ -68,6 +68,15 @@ DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
 # How long a fetched market data value stays trustworthy. This is the boundary
 # between a CACHED reading (good enough for a verdict) and a STALE one (not),
 # so it is policy, not a provider implementation detail.
+#
+# This is also what a config that omits `data_ttl_minutes` silently gets
+# (see IpsMarketEnvironment's dataclass default and resolve_data_ttl's
+# ips_config=None fallback, both of which resolve here) — 15 minutes suits
+# fetch-on-demand local use, but a deployment refreshed by cron needs a TTL
+# exceeding its refresh interval (see config/ips.yaml, 2160 = 36h for a
+# daily refresh), or every read will be STALE. A missing/unreadable
+# ips.yaml on a cron-refreshed deployment hits this fallback, not a loud
+# error, so it fails as silent permanent-STALE rather than a config error.
 DEFAULT_DATA_TTL_MINUTES: Final[float] = 15.0
 
 try:

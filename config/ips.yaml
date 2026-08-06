@@ -53,8 +53,17 @@ market_environment:
   skew_low_pctile: 25          # SKEW percentile (0-100); below = benign skew
   skew_high_pctile: 75         # SKEW percentile (0-100); above = stressed skew
   term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
-  data_ttl_minutes: 15         # how long a fetched value stays trustworthy;
-                               # past this a cache hit reads STALE, not CACHED
+  data_ttl_minutes: 2160       # how long a fetched value stays trustworthy;
+                               # past this a cache hit reads STALE, not CACHED.
+                               # M2.6's refresh cron runs ~daily (24h); 2160min
+                               # (36h) is 1.5x that interval — headroom so
+                               # ordinary cron jitter doesn't flap the banner,
+                               # tight enough that one fully-missed refresh
+                               # still reads STALE before a second one does.
+                               # This is a policy answer to "how old may data
+                               # be before a decision shouldn't rely on it",
+                               # not a number tuned to the crontab — if ops
+                               # can't meet it, STALE is the correct signal.
 
 triggers:
   target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is

@@ -123,10 +123,22 @@ sections.
 
 The engine-correctness fixes and the Dash migration of both notebooks are done:
 `/monitor` (M2.4, the crash-led read-mostly review) and `/design` (M2.5, the
-editor/planning/exploration workbench) are both live on the deployed app. Current
-work is **M2.6 — the headless report, cron, and backup heartbeat**, tracked in
-`docs/implementation-plan.md` — **treat that plan as the source of truth for
-what to build next.**
+editor/planning/exploration workbench) are both live on the deployed app.
+**M2.6 — the headless report, cron, and backup heartbeat — has shipped**,
+closing Phase 2: the weekly digest (`reporting/weekly_report.py`, SendGrid
+delivery), the market-data refresh job, the offsite `exports/` backup, and a
+two-check dead-man's-switch are all built, tested, and documented (RUNBOOK
+§9–13). The notebook-execution and `nbqa` CI steps are retired — the app and
+report test suites now cover both surfaces the notebooks used to (see the
+M2.6 close-out in `docs/implementation-plan.md` for the coverage mapping);
+the notebook files themselves are unchanged and still work locally, just no
+longer CI-gated. Jupyter/notebook and Playwright moved out of the main
+Poetry dependency group into `dev`/`test`, shrinking the production image
+from 1.32 GB to 758 MB. The droplet deploy of this milestone is pending on
+this PR merging and a release tag being cut — see `docs/implementation-plan.md`'s
+M2.6 section for what's left to verify live. Phase 3 (docs/handbook) is next;
+**treat `docs/implementation-plan.md` as the source of truth for what to
+build there.**
 
 The only features still genuinely outstanding are the data-blocked Tier-4 metrics —
 **#12 Liquidity Risk**, **#13 Delta Drift**, and **#14 Vega Term Exposure** — each

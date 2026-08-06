@@ -5,9 +5,8 @@ nothing memorised. Scope: the M2.3 skeleton — a single Dash container on a
 DigitalOcean droplet, reachable only over Tailscale. Provisioning (clicking
 in DigitalOcean) is manual; everything below the click is a command.
 
-**Stub notice (M2.3, finalised in Phase 3 / M2.6):** sections marked
-`[M2.6 TODO]` don't exist yet — no cron, no backup push, no email. Until
-then, backups and restarts are manual.
+**M2.6 note:** cron, the offsite backup push, and the weekly digest email
+are now live — see §9–§13 below.
 
 ---
 
@@ -118,8 +117,9 @@ docker compose restart app
 curl http://<tailscale-ip>:8050/health
 ```
 
-`[M2.6 TODO]` Host cron: market-data refresh, monthly report email,
-`exports/` backup push — not implemented yet; do these manually until then.
+Host cron drives the market-data refresh, the weekly digest email, and the
+`exports/` backup push automatically — see §9 for the crontab lines, §11 to
+run any of them by hand.
 
 ## 5. Loading your positions
 
@@ -225,28 +225,178 @@ Target: **under 30 minutes, nothing memorised.**
 # 1. New droplet, repeat section 1 in full, up to (not including) the
 #    final `docker compose up -d --build`
 
-# 2. Restore exports/ from the last backup onto the new droplet, into the
-#    repo's exports/ directory (the bind-mount source — see §8). Until
-#    [M2.6 TODO]'s offsite backup exists, this means: whatever manual copy
-#    (scp, USB, etc.) you made of exports/ from the old box.
-scp -r old-backup/exports/ deploy@<new-tailscale-ip>:~/deltadewa/exports/
+# 2. Restore exports/ from the offsite Codeberg backup (see §8) — clone
+#    it directly into the repo's exports/ directory (the bind-mount
+#    source). Needs the same SSH deploy key set up as §10 describes.
+rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it yet
+git clone codeberg-backup:deploy/deltadewa-exports-backup.git \
+    ~/deltadewa/exports
 
 # 3. Bring it up
 docker compose up -d --build
 
 # 4. Confirm state actually came back
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
+# market_data.source should read CACHED (or STALE, not UNAVAILABLE) —
+# the restored exports/marketdata-cache/ means this box doesn't start
+# blind even before the next refresh cron fires.
 ```
 
 ## 8. What lives where
 
 - **`exports/`** — the only stateful directory. Bind-mounted (not a named
-  volume, so a future backup job can read it directly off the host
-  filesystem — see `compose.yaml`). Contains `program_state.json`
-  (the live portfolio + IPS state) and any autosaves.
+  volume, so `ops/backup-exports.sh` can read it directly off the host
+  filesystem — see `compose.yaml`). Contains `program_state.json` (the
+  live portfolio + IPS state), `exports/marketdata-cache/` (the warmed
+  CBOE/FRED cache both `app` and `jobs` share via `DELTADEWA_CACHE_DIR`),
+  `exports/reports/weekly/` (digest + snapshot history), and any
+  autosaves.
 - **Everything else** — code, config, the image itself — is rebuildable
   from `git clone` + `docker compose build`. Nothing else on the droplet
   needs to survive a rebuild.
+- **Offsite backup**: `exports/` is *itself* a standalone git repo (nested
+  inside this repo's already-gitignored `exports/`, so there's no
+  submodule conflict), pushed nightly by root's cron to a private
+  Codeberg repo — see §9 (cron), §10 (the SSH deploy key), §12 (verifying
+  the last push). `age` encryption is a deliberate follow-up, not done
+  yet: a backup you can't decrypt is worse than one you can, and adding
+  it needs an explicit key-escrow step first.
 
-`[M2.6 TODO]` Offsite backup target (private Codeberg repo, optional `age`
-encryption) and the cron/push commands for it — not implemented yet.
+## 9. Cron setup
+
+Two crontabs, on purpose — see §10 for why the credentials underneath
+them are kept apart:
+
+```bash
+# deploy's crontab (crontab -e, as `deploy`) — the two jobs, both run
+# through the `jobs` compose service (see compose.yaml). The digest line
+# is scheduled AFTER the refresh line so it reads freshly-warmed data.
+mkdir -p ~/deltadewa/logs
+
+crontab -e
+# Market-data refresh — seven days a week (CBOE/FRED are closed weekends,
+# but a weekend run still re-observes Friday's close and refreshes
+# fetched_at; a weekdays-only schedule would leave a 72h gap the TTL
+# can't absorb — see deltadewa/marketdata/refresh.py's own docstring).
+30 2 * * * cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh >> /home/deploy/deltadewa/logs/refresh.log 2>&1
+
+# Weekly digest, with delivery — Sundays 03:00 UTC, after the refresh above.
+0 3 * * 0 cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_report --send-email >> /home/deploy/deltadewa/logs/weekly_report.log 2>&1
+```
+
+```bash
+# root's crontab (sudo crontab -e) — the offsite backup push. Separate
+# from deploy's crontab because the push credential is root-owned (§10).
+sudo crontab -e
+30 3 * * * /home/deploy/deltadewa/ops/backup-exports.sh >> /var/log/deltadewa-backup.log 2>&1
+```
+
+Log rotation isn't set up yet — `logs/` and `/var/log/deltadewa-backup.log`
+will grow unbounded until a follow-up adds `logrotate` config; check
+periodically until then.
+
+## 10. Secrets — three separate homes, don't mix them up
+
+- **`.env`** (repo root, gitignored — `.env.example` is the tracked
+  template). Holds `BIND_ADDR` and everything the `jobs` compose service
+  needs: `SENDGRID_API_KEY`, `REPORT_EMAIL_TO`, `REPORT_EMAIL_FROM`,
+  `FRED_API_KEY` (reserved, safe to leave blank), `REFRESH_HEARTBEAT_URL`,
+  `DIGEST_HEARTBEAT_URL`. Read into the `jobs` container via
+  `env_file: .env`; the three required-for-email vars are also declared
+  `${VAR:?...}` in `compose.yaml` so a `docker compose run jobs ...`
+  fails immediately, at the command line, if `.env` was never populated —
+  not three months later inside a Python traceback.
+- **The Codeberg SSH deploy key** — `/root/.ssh/codeberg_backup` (mode
+  `0600`, root-owned), referenced by a `~/.ssh/config` alias so
+  `ops/backup-exports.sh` never hardcodes the key path:
+
+  ```text
+  # /root/.ssh/config
+  Host codeberg-backup
+      HostName codeberg.org
+      User git
+      IdentityFile /root/.ssh/codeberg_backup
+      IdentitiesOnly yes
+  ```
+
+  Provisioning (once, manual, same spirit as §1's droplet click-through):
+  generate the key (`ssh-keygen -t ed25519 -f /root/.ssh/codeberg_backup
+  -N ""`), create a **private** repo on Codeberg
+  (`deploy/deltadewa-exports-backup`), add the key's public half as a
+  deploy key with **write** access.
+- **The optional token alternative** — `/etc/deltadewa/backup.env`
+  (mode `0600`, root-owned), sourced by `ops/backup-exports.sh` if
+  present. **Never** put a Codeberg token in `.env` — `env_file: .env` is
+  read into the `jobs` container, so anything there is exposed to every
+  job command run through it; the whole point of a host-side credential
+  (SSH key or this file) is that it never enters a container at all.
+
+This section exists because all three are plausible places to reach for
+the same kind of "just add a secret here" instinct — they are
+deliberately not interchangeable.
+
+## 11. Running each job manually
+
+```bash
+# Market-data refresh
+docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh
+
+# Weekly digest — build only, no email (files land under exports/reports/weekly/)
+docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_report --as-of 2026-08-05
+
+# Weekly digest — build and send
+docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_report --send-email
+
+# Offsite backup push (root; needs the SSH key from §10)
+sudo /home/deploy/deltadewa/ops/backup-exports.sh
+```
+
+## 12. Verifying the last run succeeded
+
+```bash
+# Cron logs
+tail -50 ~/deltadewa/logs/refresh.log
+tail -50 ~/deltadewa/logs/weekly_report.log
+sudo tail -50 /var/log/deltadewa-backup.log
+
+# Latest digest + snapshot files
+ls -la ~/deltadewa/exports/reports/weekly/ | tail -5
+
+# Market-data cache freshness (mtimes should track the refresh schedule)
+ls -la ~/deltadewa/exports/marketdata-cache/
+
+# Last backup commit actually pushed
+cd ~/deltadewa/exports && git log -1 --format='%H %ci'
+
+# The app's own view of data freshness
+curl http://<tailscale-ip>:8050/health
+```
+
+Also check the healthchecks.io (or equivalent) dashboard — both checks
+should show green with a "last ping" time inside their schedule + grace
+window (see §13).
+
+## 13. What each heartbeat alarm means when it fires
+
+`REFRESH_HEARTBEAT_URL` and `DIGEST_HEARTBEAT_URL` (`.env`, §10) are two
+*separate* checks because the two jobs fail independently and an overdue
+alarm means something different for each — see
+`deltadewa/heartbeat.py`'s docstring for the full design rationale.
+Suggested starting grace periods (comfortably over each job's own
+schedule; tune from there): refresh — period 1 day, grace 4 hours;
+digest — period 1 week, grace 1 day.
+
+- **REFRESH overdue**: the market-data refresh hasn't produced even a
+  partial success (exit 0 or 1) within the grace window — either the cron
+  entry itself stopped firing, or CBOE/FRED have been unreachable for
+  longer than a routine early-morning lag. Check
+  `~/deltadewa/logs/refresh.log`, then run §11's refresh command by hand
+  and read its exit code (`echo $?`; 0/1 partial-or-full success, 2 total
+  failure).
+- **DIGEST overdue**: the weekly email did not send. This is the
+  dangerous one — an overdue digest reads exactly like "a quiet week, no
+  news," which is precisely why the design pings only on a *confirmed*
+  send (`deltadewa/reporting/weekly_report.py`). Check
+  `~/deltadewa/logs/weekly_report.log` for a `--send-email` failure
+  (missing env var, or SendGrid rejecting the key/quota), then re-run
+  §11's send command by hand.

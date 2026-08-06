@@ -34,9 +34,11 @@ from deltadewa.ips_config import (
 )
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting.program_report import (
+    HTML_STYLE,
     ProgramReport,
     build_program_report,
     render_html,
+    render_html_body,
     render_markdown,
 )
 
@@ -435,6 +437,17 @@ class TestRenderMarkdown:
         md = render_markdown(_build(data_quality=DataQuality.LIVE))
         assert "reference values" not in md
 
+    def test_caveat_absent_when_cached(self) -> None:
+        """No caveat for CACHED — the steady state once a cron exists."""
+        md = render_markdown(_build(data_quality=DataQuality.CACHED))
+        assert "reference values" not in md
+
+    def test_caveat_present_when_stale(self) -> None:
+        """The caveat still fires for STALE — worse than CACHED."""
+        md = render_markdown(_build(data_quality=DataQuality.STALE))
+        assert "STALE" in md
+        assert "reference values" in md
+
     def test_monetization_placeholder_present(self) -> None:
         """The monetization placeholder string appears in the output."""
         md = render_markdown(_make_full_report())
@@ -477,6 +490,32 @@ class TestRenderHtml:
         html = render_html(_make_full_report())
         assert html.startswith("<!DOCTYPE html>")
 
+    def test_wraps_render_html_body_unchanged(self) -> None:
+        """render_html is exactly render_html_body wrapped in the shell.
+
+        Locks the M2.6 refactor that split the two apart (so the weekly
+        digest can embed the body without a second, nested HTML document):
+        render_html's own output must stay byte-for-byte what it was
+        before the split.
+        """
+        report = _make_full_report()
+        html = render_html(report)
+        body = render_html_body(report)
+
+        assert body in html
+        assert html == (
+            f"<!DOCTYPE html>\n"
+            f'<html lang="en">\n'
+            f"<head>\n"
+            f'<meta charset="UTF-8">\n'
+            f"<title>Hedge Program Report &mdash; "
+            f"{report.header.program_name}</title>\n"
+            f"<style>\n{HTML_STYLE}\n</style>\n"
+            f"</head>\n"
+            f"<body>\n\n{body}\n\n</body>\n"
+            f"</html>"
+        )
+
     def test_section_headings_present(self) -> None:
         """All six <h2> section headings appear in the HTML."""
         html = render_html(_make_full_report())
@@ -515,6 +554,17 @@ class TestRenderHtml:
         """No caveat div for LIVE data."""
         html = render_html(_build(data_quality=DataQuality.LIVE))
         assert 'class="caveat"' not in html
+
+    def test_data_quality_caveat_absent_cached(self) -> None:
+        """No caveat div for CACHED — the steady state once a cron exists."""
+        html = render_html(_build(data_quality=DataQuality.CACHED))
+        assert 'class="caveat"' not in html
+
+    def test_data_quality_caveat_present_stale(self) -> None:
+        """Caveat div still appears for STALE — worse than CACHED."""
+        html = render_html(_build(data_quality=DataQuality.STALE))
+        assert 'class="caveat"' in html
+        assert "STALE" in html
 
     def test_pass_class_present(self) -> None:
         """HTML class 'pass' appears for passing metrics."""
