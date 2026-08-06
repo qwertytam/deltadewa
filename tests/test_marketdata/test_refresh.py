@@ -274,3 +274,83 @@ class TestMain:
 
         assert exit_code == 0
         assert "unavailable" in caplog.text
+
+
+class TestMainHeartbeat:
+    """REFRESH_HEARTBEAT_URL pings on exit 0/1, never on exit 2."""
+
+    def test_pings_on_full_success(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=_dispatching_session(),
+        )
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                return_value=provider,
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 0
+        mock_ping.assert_called_once_with(
+            "https://hc-ping.com/x",
+            label="refresh",
+        )
+
+    def test_pings_on_partial_success(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=_dispatching_session(
+                fail_url_substrings=frozenset({"VIXCLS"}),
+            ),
+        )
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                return_value=provider,
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 1
+        mock_ping.assert_called_once_with(
+            "https://hc-ping.com/x",
+            label="refresh",
+        )
+
+    def test_does_not_ping_on_total_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        session = MagicMock(spec=requests.Session)
+        session.get.side_effect = requests.ConnectionError("offline")
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                return_value=provider,
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 2
+        mock_ping.assert_not_called()

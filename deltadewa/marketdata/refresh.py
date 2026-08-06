@@ -29,6 +29,9 @@ plausible *normal* state, not an incident by itself — a caller consuming
 this exit code should treat 0 and 1 alike and escalate only on sustained
 1s or any 2.
 
+If ``REFRESH_HEARTBEAT_URL`` is set, this job pings it on exit 0 and 1
+(see ``deltadewa.heartbeat`` for why exit 2 does not ping).
+
 A note on ``as_of``: it is the *source series'* observation date, not when
 this job ran — a Saturday run fetching Friday's close reports
 ``as_of=Friday``. That's expected and already documented at the
@@ -41,10 +44,12 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from deltadewa.heartbeat import ping
 from deltadewa.ips_config import IpsConfigError, load_ips_config
 from deltadewa.marketdata import (
     CboeFredProvider,
@@ -61,6 +66,7 @@ _logger = logging.getLogger(__name__)
 
 _DEFAULT_SYMBOL = "SPX"
 _DEFAULT_IPS_PATH = Path("config/ips.yaml")
+_HEARTBEAT_ENV_VAR = "REFRESH_HEARTBEAT_URL"
 
 
 def _series(
@@ -188,10 +194,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     _logger.info("Refreshed %d/%d series", succeeded, total)
 
     if succeeded == total:
-        return 0
-    if succeeded == 0:
-        return 2
-    return 1
+        exit_code = 0
+    elif succeeded == 0:
+        exit_code = 2
+    else:
+        exit_code = 1
+
+    if exit_code in (0, 1):
+        ping(os.environ.get(_HEARTBEAT_ENV_VAR), label="refresh")
+    else:
+        _logger.warning(
+            "refresh: total failure, skipping heartbeat ping so it stays "
+            "visible instead of masking a real outage",
+        )
+    return exit_code
 
 
 if __name__ == "__main__":
