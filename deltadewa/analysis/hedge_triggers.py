@@ -1,17 +1,28 @@
 """Hedge decision triggers for the deltadewa options dashboard.
 
-Encapsulates the ~80-line "Hedge Decision Triggers" section of
-``monitor_dashboard.ipynb`` into a single importable function.
+Two entry points over one evaluation:
 
-The module is intentionally side-effect-free: ``evaluate_hedge_triggers``
-reads from ``portfolio`` and writes formatted output via ``reporter``, but
-never mutates any object it receives.
+- :func:`evaluate_hedge_trigger_set` is the pure core — it reads a
+  portfolio and returns each trigger's status and the plain-language
+  reason for it, with no output of any kind. This is what a UI renders.
+- :func:`evaluate_hedge_triggers` is the console report the notebook
+  cell this module came from used. It calls the core and prints; its
+  return value and its printed output are both unchanged.
+
+The split exists because until M2.7 only the printing form existed, so
+the delta, expiry, theta and gamma triggers — which M1.3 and M1.4 did
+substantial correctness work on — could not be shown on either Dash page
+and were live nowhere in the product.
+
+The module is side-effect-free with respect to its inputs: neither
+function mutates any object it receives.
 """
 
 from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -20,6 +31,8 @@ import deltadewa.constants as const
 from deltadewa.analysis.health import delta_drift_from_target
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from deltadewa.ips_config import IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.reporting import ConsoleReporter
@@ -130,6 +143,72 @@ class HedgeTriggerThresholds:
 # ---------------------------------------------------------------------------
 
 
+class TriggerStatus(StrEnum):
+    """One trigger's reading, in increasing order of urgency.
+
+    Deliberately three values rather than mirroring
+    :class:`~deltadewa.analysis.roll_status.RollVerdict`'s four: these
+    triggers have no ROLL-equivalent, and inventing one to make the two
+    enums match would imply an action this evaluation does not recommend.
+
+    ``UNAVAILABLE`` is not "fine" — it means the metric could not be
+    measured (almost always a missing ``underlying_quantity``) and must be
+    shown as such rather than folded into ``OK``.
+    """
+
+    OK = "OK"
+    MONITOR = "MONITOR"
+    ACTION = "ACTION"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+@dataclass(frozen=True)
+class HedgeTriggerReason:
+    """One trigger's status and the plain-language reason for it.
+
+    The counterpart of
+    :class:`~deltadewa.analysis.roll_status.TriggerReason`, and rendered
+    the same way: the reason states the reading *and* the threshold it was
+    read against, so a verdict is never a bare word.
+    """
+
+    label: str
+    status: TriggerStatus
+    reason: str
+
+
+@dataclass(frozen=True)
+class HedgeTriggerSet:
+    """Every hedge rebalance trigger, evaluated for one book.
+
+    Distinct from :func:`~deltadewa.analysis.roll_status.evaluate_roll_status`,
+    which answers "should *this tranche* be replaced" per position. These
+    four answer "is the book still hedged the way policy says" for the book
+    as a whole, and the two sets are never merged.
+
+    Attributes:
+        delta: Net-delta drift vs the IPS target hedge ratio.
+        expiry: Nearest expiry vs the URGENT / SOON windows.
+        theta: Annualised carry cost vs the EXCELLENT / ACCEPTABLE bands.
+        gamma: Net-delta drift per 1% spot move vs the gamma bands.
+        metrics: The raw figures behind the four readings — the same
+            values :class:`HedgeTriggerResult` carries.
+        actions: Priority-ordered ``(label, description)`` recommendations.
+
+    """
+
+    delta: HedgeTriggerReason
+    expiry: HedgeTriggerReason
+    theta: HedgeTriggerReason
+    gamma: HedgeTriggerReason
+    metrics: HedgeTriggerResult
+    actions: list[tuple[str, str]]
+
+    def __iter__(self) -> Iterator[HedgeTriggerReason]:
+        """Iterate the four triggers in the order the report prints them."""
+        return iter((self.delta, self.expiry, self.theta, self.gamma))
+
+
 @dataclass
 class HedgeTriggerResult:
     """Structured result of ``evaluate_hedge_triggers``.
@@ -169,8 +248,216 @@ class HedgeTriggerResult:
 
 
 # ---------------------------------------------------------------------------
+# Banding: one decision per trigger, rendered two ways
+# ---------------------------------------------------------------------------
+#
+# Each ``_*_reason`` below is the single place its trigger's thresholds are
+# compared. The console printers dispatch on the resulting status rather than
+# re-deciding, so the report and any UI can never disagree about whether a
+# trigger has fired.
+
+
+def _delta_reason(
+    delta_drift_pct: float | None,
+    t: HedgeTriggerThresholds,
+) -> HedgeTriggerReason:
+    """Band net-delta drift against the IPS target hedge ratio."""
+    label = "Delta drift"
+    if delta_drift_pct is None:
+        return HedgeTriggerReason(
+            label=label,
+            status=TriggerStatus.UNAVAILABLE,
+            reason=(
+                "no underlying quantity set, so the hedge ratio cannot be "
+                "measured"
+            ),
+        )
+
+    reason = (
+        f"{delta_drift_pct:+.1f}pp from the "
+        f"{t.target_delta_ratio_pct:.0f}% target; monitor past "
+        f"{t.delta_drift_warn_pct:.0f}pp, act past "
+        f"{t.delta_drift_action_pct:.0f}pp"
+    )
+    drift = abs(delta_drift_pct)
+    if drift < t.delta_drift_warn_pct:
+        return HedgeTriggerReason(label, TriggerStatus.OK, reason)
+    if drift < t.delta_drift_action_pct:
+        return HedgeTriggerReason(label, TriggerStatus.MONITOR, reason)
+    return HedgeTriggerReason(label, TriggerStatus.ACTION, reason)
+
+
+def _expiry_reason(
+    days_to_nearest_expiry: int,
+    t: HedgeTriggerThresholds,
+) -> HedgeTriggerReason:
+    """Band the nearest expiry against the URGENT / SOON windows."""
+    label = "Expiry"
+    reason = (
+        f"{days_to_nearest_expiry}d to the nearest expiry; urgent under "
+        f"{t.expiry_urgent_days}d, plan rolls under {t.expiry_soon_days}d"
+    )
+    if days_to_nearest_expiry > t.expiry_soon_days:
+        return HedgeTriggerReason(label, TriggerStatus.OK, reason)
+    if days_to_nearest_expiry > t.expiry_urgent_days:
+        return HedgeTriggerReason(label, TriggerStatus.MONITOR, reason)
+    return HedgeTriggerReason(label, TriggerStatus.ACTION, reason)
+
+
+def _theta_reason(
+    theta_cost_pct: float | None,
+    t: HedgeTriggerThresholds,
+) -> HedgeTriggerReason:
+    """Band annualised carry cost against the EXCELLENT / ACCEPTABLE bands."""
+    label = "Theta cost"
+    if theta_cost_pct is None:
+        return HedgeTriggerReason(
+            label=label,
+            status=TriggerStatus.UNAVAILABLE,
+            reason=(
+                "no underlying quantity set, so cost as a share of the book "
+                "cannot be measured"
+            ),
+        )
+
+    reason = (
+        f"{theta_cost_pct:.2f}% of the book per year; excellent under "
+        f"{t.theta_cost_excellent_pct:.1f}%, acceptable under "
+        f"{t.theta_cost_acceptable_pct:.1f}%"
+    )
+    if theta_cost_pct < t.theta_cost_excellent_pct:
+        return HedgeTriggerReason(label, TriggerStatus.OK, reason)
+    if theta_cost_pct < t.theta_cost_acceptable_pct:
+        return HedgeTriggerReason(label, TriggerStatus.MONITOR, reason)
+    return HedgeTriggerReason(label, TriggerStatus.ACTION, reason)
+
+
+def _gamma_reason(
+    gamma_drift_pct: float | None,
+    t: HedgeTriggerThresholds,
+) -> HedgeTriggerReason:
+    """Band net-delta drift per 1% spot move against the gamma bands."""
+    label = "Gamma drift"
+    if gamma_drift_pct is None:
+        return HedgeTriggerReason(
+            label=label,
+            status=TriggerStatus.UNAVAILABLE,
+            reason=(
+                "no underlying quantity set, so drift per 1% move cannot be "
+                "measured"
+            ),
+        )
+
+    reason = (
+        f"{gamma_drift_pct:.2f}% of equity per 1% spot move; moderate past "
+        f"{t.gamma_drift_moderate_pct:.1f}%, high past "
+        f"{t.gamma_drift_high_pct:.1f}%"
+    )
+    if gamma_drift_pct < t.gamma_drift_moderate_pct:
+        return HedgeTriggerReason(label, TriggerStatus.OK, reason)
+    if gamma_drift_pct < t.gamma_drift_high_pct:
+        return HedgeTriggerReason(label, TriggerStatus.MONITOR, reason)
+    return HedgeTriggerReason(label, TriggerStatus.ACTION, reason)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def evaluate_hedge_trigger_set(
+    portfolio: OptionPortfolio,
+    thresholds: HedgeTriggerThresholds | None = None,
+) -> HedgeTriggerSet:
+    """Evaluate every hedge rebalance trigger for *portfolio*.
+
+    The pure counterpart of :func:`evaluate_hedge_triggers`: same metrics,
+    same thresholds, same firing points — but returned as structured
+    statuses and reasons instead of printed. This is what a dashboard
+    renders.
+
+    Args:
+        portfolio: Live ``OptionPortfolio``. Never mutated.
+        thresholds: Optional :class:`HedgeTriggerThresholds`. Pass ``None``
+            for the notebook defaults; production callers should pass
+            ``HedgeTriggerThresholds.from_ips(ips_config.triggers)`` so no
+            threshold comes from a dataclass literal.
+
+    Returns:
+        The four triggers, the raw metrics behind them, and the
+        priority-ordered action list.
+
+    """
+    t = thresholds or HedgeTriggerThresholds()
+    # Evaluate DTE/expiry against the portfolio's (what-if) valuation date, not
+    # the wall clock, so a moved valuation date moves the trigger logic.
+    now = portfolio.valuation_date
+    stats = portfolio.summary_stats()
+
+    delta_drift_pct = delta_drift_from_target(
+        stats["net_delta"],
+        stats["underlying_quantity"],
+        t.target_delta_ratio_pct,
+    )
+
+    days_to_nearest_expiry = (
+        min(
+            (pos.option.maturity_date - now).days for pos in portfolio.positions
+        )
+        if portfolio.positions
+        else 999
+    )
+    near_expiry_positions = [
+        pos
+        for pos in portfolio.positions
+        if (pos.option.maturity_date - now).days < t.expiry_urgent_days
+    ]
+
+    theta_cost_per_day = abs(stats["total_theta"])
+    theta_annual_cost = theta_cost_per_day * const.DAYS_PER_YEAR
+
+    # Theta cost is a % of the hedged equity; unavailable (not a fabricated 0)
+    # when there is no underlying position to measure it against.
+    portfolio_value = abs(stats["underlying_quantity"] * portfolio.spot_price)
+    theta_cost_pct: float | None = (
+        (theta_annual_cost / portfolio_value * 100)
+        if portfolio_value > 0
+        else None
+    )
+
+    total_gamma = abs(stats["total_gamma"])
+    gamma_drift = gamma_drift_from_spot(
+        stats["total_gamma"],
+        portfolio.spot_price,
+        stats["underlying_quantity"],
+    )
+
+    actions = _build_action_list(
+        stats,
+        delta_drift_pct,
+        near_expiry_positions,
+        days_to_nearest_expiry,
+        theta_cost_pct,
+        gamma_drift,
+        t,
+    )
+
+    return HedgeTriggerSet(
+        delta=_delta_reason(delta_drift_pct, t),
+        expiry=_expiry_reason(days_to_nearest_expiry, t),
+        theta=_theta_reason(theta_cost_pct, t),
+        gamma=_gamma_reason(gamma_drift, t),
+        metrics=HedgeTriggerResult(
+            delta_drift_pct=delta_drift_pct,
+            days_to_nearest_expiry=days_to_nearest_expiry,
+            near_expiry_count=len(near_expiry_positions),
+            theta_cost_pct=theta_cost_pct,
+            total_gamma=total_gamma,
+            gamma_drift_pct=gamma_drift,
+            actions=actions,
+        ),
+        actions=actions,
+    )
 
 
 def evaluate_hedge_triggers(
@@ -206,61 +493,36 @@ def evaluate_hedge_triggers(
 
     """
     t = thresholds or HedgeTriggerThresholds()
-    # Evaluate DTE/expiry against the portfolio's (what-if) valuation date, not
-    # the wall clock, so a moved valuation date moves the trigger logic.
+    triggers = evaluate_hedge_trigger_set(portfolio, t)
+    metrics = triggers.metrics
     now = portfolio.valuation_date
-
-    # --- compute metrics ---
     stats = portfolio.summary_stats()
 
-    delta_drift_pct = delta_drift_from_target(
-        stats["net_delta"],
-        stats["underlying_quantity"],
-        t.target_delta_ratio_pct,
-    )
-
-    days_to_nearest_expiry = (
-        min(
-            (pos.option.maturity_date - now).days for pos in portfolio.positions
-        )
-        if portfolio.positions
-        else 999
-    )
-
+    # Only the console form needs the positions themselves (it names each
+    # one); the structured form carries the count.
     near_expiry_positions = [
         pos
         for pos in portfolio.positions
         if (pos.option.maturity_date - now).days < t.expiry_urgent_days
     ]
-
     theta_cost_per_day = abs(stats["total_theta"])
     theta_annual_cost = theta_cost_per_day * const.DAYS_PER_YEAR
 
-    # Theta cost is a % of the hedged equity; unavailable (not a fabricated 0)
-    # when there is no underlying position to measure it against.
-    portfolio_value = abs(stats["underlying_quantity"] * portfolio.spot_price)
-    theta_cost_pct: float | None = (
-        (theta_annual_cost / portfolio_value * 100)
-        if portfolio_value > 0
-        else None
-    )
-
-    total_gamma = abs(stats["total_gamma"])
-    gamma_drift = gamma_drift_from_spot(
-        stats["total_gamma"],
-        portfolio.spot_price,
-        stats["underlying_quantity"],
-    )
-
-    # --- print report ---
     reporter.header("  HEDGE DECISION TRIGGERS")
     print()
 
-    _print_delta_trigger(stats, delta_drift_pct, reporter, t)
+    _print_delta_trigger(
+        stats,
+        metrics.delta_drift_pct,
+        triggers.delta.status,
+        reporter,
+        t,
+    )
     _print_expiry_trigger(
         portfolio,
         near_expiry_positions,
-        days_to_nearest_expiry,
+        metrics.days_to_nearest_expiry,
+        triggers.expiry.status,
         reporter,
         t,
         now,
@@ -268,32 +530,19 @@ def evaluate_hedge_triggers(
     _print_theta_trigger(
         theta_annual_cost,
         theta_cost_per_day,
-        theta_cost_pct,
+        metrics.theta_cost_pct,
+        triggers.theta.status,
         reporter,
-        t,
     )
-    _print_gamma_trigger(total_gamma, gamma_drift, reporter, t)
+    _print_gamma_trigger(
+        metrics.total_gamma,
+        metrics.gamma_drift_pct,
+        triggers.gamma.status,
+        reporter,
+    )
+    _print_action_summary(triggers.actions, reporter, t)
 
-    actions = _build_action_list(
-        stats,
-        delta_drift_pct,
-        near_expiry_positions,
-        days_to_nearest_expiry,
-        theta_cost_pct,
-        gamma_drift,
-        t,
-    )
-    _print_action_summary(actions, reporter, t)
-
-    return HedgeTriggerResult(
-        delta_drift_pct=delta_drift_pct,
-        days_to_nearest_expiry=days_to_nearest_expiry,
-        near_expiry_count=len(near_expiry_positions),
-        theta_cost_pct=theta_cost_pct,
-        total_gamma=total_gamma,
-        gamma_drift_pct=gamma_drift,
-        actions=actions,
-    )
+    return metrics
 
 
 # ---------------------------------------------------------------------------
@@ -317,15 +566,16 @@ def _shares_to_target(
     return float(target_net_delta - stats["net_delta"])
 
 
-def _print_delta_trigger(
+def _print_delta_trigger(  # pylint: disable=too-many-arguments  # a printer over one already-banded trigger; every argument is a distinct print input
     stats: dict[str, Any],
     delta_drift_pct: float | None,
+    status: TriggerStatus,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
 ) -> None:
     print("1️⃣  DELTA HEDGE EFFECTIVENESS:")
     reporter.divider()
-    if delta_drift_pct is None:
+    if delta_drift_pct is None or status is TriggerStatus.UNAVAILABLE:
         reporter.warning(
             "    Delta drift: unavailable - no underlying_quantity set",
         )
@@ -337,10 +587,10 @@ def _print_delta_trigger(
         f"    Delta drift: {delta_drift_pct:+.1f}pp from "
         f"{t.target_delta_ratio_pct:.0f}% target"
     )
-    if abs(delta_drift_pct) < t.delta_drift_warn_pct:
+    if status is TriggerStatus.OK:
         reporter.success(f"{drift_label} - ON TARGET")
         print("     → Hedge ratio is at target, no action needed")
-    elif abs(delta_drift_pct) < t.delta_drift_action_pct:
+    elif status is TriggerStatus.MONITOR:
         direction = "under-hedged" if delta_drift_pct > 0 else "over-hedged"
         reporter.warning(f"{drift_label} - MONITOR")
         print(
@@ -367,21 +617,22 @@ def _print_delta_trigger(
     print()
 
 
-def _print_expiry_trigger(
+def _print_expiry_trigger(  # pylint: disable=too-many-arguments  # a printer over one already-banded trigger; every argument is a distinct print input
     portfolio: OptionPortfolio,
     near_expiry_positions: list[Any],
     days_to_nearest_expiry: int,
+    status: TriggerStatus,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
     now: datetime.datetime,
 ) -> None:
     print("2️⃣  POSITION EXPIRATION STATUS:")
     reporter.divider()
-    if days_to_nearest_expiry > t.expiry_soon_days:
+    if status is TriggerStatus.OK:
         reporter.success(
             f"    Nearest expiry: {days_to_nearest_expiry} days - NO URGENCY",
         )
-    elif days_to_nearest_expiry > t.expiry_urgent_days:
+    elif status is TriggerStatus.MONITOR:
         reporter.warning(
             f"    Nearest expiry: {days_to_nearest_expiry} days - "
             f"PLAN ROLLS WITHIN {t.expiry_soon_days} DAYS",
@@ -440,16 +691,18 @@ def _print_expiry_trigger(
     print()
 
 
-def _print_theta_trigger(
+def _print_theta_trigger(  # pylint: disable=too-many-arguments  # a printer over one already-banded trigger; every argument is a distinct print input
     theta_annual_cost: float,
     theta_cost_per_day: float,
     theta_cost_pct: float | None,
+    status: TriggerStatus,
     reporter: ConsoleReporter,
-    t: HedgeTriggerThresholds,
 ) -> None:
+    # As with the gamma printer: the banding moved to _theta_reason, and
+    # this output names no threshold, so no thresholds argument survives.
     print("3️⃣  TIME DECAY COST:")
     reporter.divider()
-    if theta_cost_pct is None:
+    if theta_cost_pct is None or status is TriggerStatus.UNAVAILABLE:
         reporter.warning(
             "    Theta cost: unavailable - no underlying_quantity set",
         )
@@ -457,14 +710,14 @@ def _print_theta_trigger(
         print("     → Set the equity position to measure cost as % of book")
         print()
         return
-    if theta_cost_pct < t.theta_cost_excellent_pct:
+    if status is TriggerStatus.OK:
         reporter.success(
             f"    Annual theta cost: ${theta_annual_cost:,.0f} "
             f"({theta_cost_pct:.2f}% of portfolio) - EXCELLENT",
         )
         print(f"     → Daily bleed:  ${theta_cost_per_day:.2f}/day")
         print("     → Hedge cost is very reasonable")
-    elif theta_cost_pct < t.theta_cost_acceptable_pct:
+    elif status is TriggerStatus.MONITOR:
         reporter.warning(
             f"    Annual theta cost: ${theta_annual_cost:,.0f} "
             f"({theta_cost_pct:.2f}% of portfolio) - ACCEPTABLE",
@@ -487,12 +740,15 @@ def _print_theta_trigger(
 def _print_gamma_trigger(
     total_gamma: float,
     gamma_drift_pct: float | None,
+    status: TriggerStatus,
     reporter: ConsoleReporter,
-    t: HedgeTriggerThresholds,
 ) -> None:
+    # No ``thresholds`` argument, unlike the other three printers: once the
+    # banding moved to _gamma_reason this printer stopped naming any
+    # threshold in its output, so carrying one would be decoration.
     print("4️⃣  GAMMA EXPOSURE:")
     reporter.divider()
-    if gamma_drift_pct is None:
+    if gamma_drift_pct is None or status is TriggerStatus.UNAVAILABLE:
         reporter.warning(
             "    Gamma drift: unavailable - no underlying_quantity set",
         )
@@ -504,10 +760,10 @@ def _print_gamma_trigger(
         f"    Gamma drift: {gamma_drift_pct:.2f}% of equity per 1% move "
         f"(gamma {total_gamma:.2f})"
     )
-    if gamma_drift_pct < t.gamma_drift_moderate_pct:
+    if status is TriggerStatus.OK:
         reporter.success(f"{label} - LOW RISK")
         print("     → Delta will be stable as spot moves")
-    elif gamma_drift_pct < t.gamma_drift_high_pct:
+    elif status is TriggerStatus.MONITOR:
         reporter.warning(f"{label} - MODERATE")
         print("     → Delta will change moderately with spot price moves")
         print("     → May need intraday rebalancing on large moves")

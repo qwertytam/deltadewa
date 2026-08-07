@@ -8,6 +8,8 @@ import pytest
 
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
+    TriggerStatus,
+    evaluate_hedge_trigger_set,
     evaluate_hedge_triggers,
 )
 from deltadewa.constants import DAYS_PER_YEAR, ExerciseStyle, OptionType
@@ -498,3 +500,163 @@ class TestEvaluateDeltaDriftTrigger:
         assert "🟡 SOON" in {label for label, _ in monitor.actions}
         assert action.delta_drift_pct == pytest.approx(12.0, rel=1e-4)
         assert "🔴 URGENT" in {label for label, _ in action.actions}
+
+
+class TestEvaluateHedgeTriggerSet:
+    """The pure core (M2.7): same bands, structured instead of printed.
+
+    Nothing above this class was touched by the M2.7 extraction — the whole
+    existing suite is the contract that the refactor did not move where any
+    trigger fires. These tests cover what only the structured form exposes:
+    the per-trigger status and its reason.
+    """
+
+    @staticmethod
+    def _thresholds(**overrides: float) -> HedgeTriggerThresholds:
+        defaults: dict[str, float] = {
+            "target_delta_ratio_pct": 90.0,
+            "delta_drift_warn_pct": 5.0,
+            "delta_drift_action_pct": 10.0,
+            "theta_cost_excellent_pct": 1.0,
+            "theta_cost_acceptable_pct": 2.0,
+            "gamma_drift_moderate_pct": 2.0,
+            "gamma_drift_high_pct": 5.0,
+        }
+        return HedgeTriggerThresholds(**{**defaults, **overrides})  # type: ignore[arg-type]
+
+    def test_returns_four_triggers_in_report_order(self) -> None:
+        triggers = evaluate_hedge_trigger_set(
+            _mock_portfolio(net_delta=90.0, underlying_qty=100.0),
+            self._thresholds(),
+        )
+
+        assert [t.label for t in triggers] == [
+            "Delta drift",
+            "Expiry",
+            "Theta cost",
+            "Gamma drift",
+        ]
+
+    @pytest.mark.parametrize(
+        ("net_delta", "expected"),
+        [
+            (90.0, TriggerStatus.OK),
+            (97.0, TriggerStatus.MONITOR),
+            (105.0, TriggerStatus.ACTION),
+        ],
+    )
+    def test_delta_bands(
+        self,
+        net_delta: float,
+        expected: TriggerStatus,
+    ) -> None:
+        triggers = evaluate_hedge_trigger_set(
+            _mock_portfolio(net_delta=net_delta, underlying_qty=100.0),
+            self._thresholds(),
+        )
+
+        assert triggers.delta.status is expected
+
+    @pytest.mark.parametrize(
+        ("gamma", "expected"),
+        [
+            (1.0, TriggerStatus.OK),
+            (3.0, TriggerStatus.MONITOR),
+            (7.0, TriggerStatus.ACTION),
+        ],
+    )
+    def test_gamma_bands(
+        self,
+        gamma: float,
+        expected: TriggerStatus,
+    ) -> None:
+        # _mock_portfolio's spot == underlying_qty == 100 makes the crafted
+        # gamma equal the drift percent.
+        triggers = evaluate_hedge_trigger_set(
+            _mock_portfolio(
+                net_delta=90.0,
+                underlying_qty=100.0,
+                total_gamma=gamma,
+            ),
+            self._thresholds(),
+        )
+
+        assert triggers.gamma.status is expected
+
+    @pytest.mark.parametrize(
+        ("days", "expected"),
+        [
+            (200, TriggerStatus.OK),
+            (14, TriggerStatus.MONITOR),
+            (3, TriggerStatus.ACTION),
+        ],
+    )
+    def test_expiry_bands(self, days: int, expected: TriggerStatus) -> None:
+        triggers = evaluate_hedge_trigger_set(
+            _asof_portfolio(days),
+            self._thresholds(),
+        )
+
+        assert triggers.expiry.status is expected
+
+    def test_missing_underlying_is_unavailable_not_ok(self) -> None:
+        """Three metrics can't be measured without an equity position.
+
+        UNAVAILABLE must be its own status: folding it into OK would show a
+        green book that was never actually measured.
+        """
+        triggers = evaluate_hedge_trigger_set(
+            _mock_portfolio(net_delta=0.0, underlying_qty=0.0),
+            self._thresholds(),
+        )
+
+        assert triggers.delta.status is TriggerStatus.UNAVAILABLE
+        assert triggers.theta.status is TriggerStatus.UNAVAILABLE
+        assert triggers.gamma.status is TriggerStatus.UNAVAILABLE
+        for trigger in (triggers.delta, triggers.theta, triggers.gamma):
+            assert "no underlying quantity set" in trigger.reason
+
+    def test_every_reason_states_the_reading_and_the_threshold(self) -> None:
+        """A verdict word alone is not a reason — the roll table's rule."""
+        triggers = evaluate_hedge_trigger_set(
+            _mock_portfolio(
+                net_delta=97.0,
+                underlying_qty=100.0,
+                total_theta=-1.0,
+                total_gamma=3.0,
+            ),
+            self._thresholds(),
+        )
+
+        assert "+7.0pp from the 90% target" in triggers.delta.reason
+        assert "monitor past 5pp, act past 10pp" in triggers.delta.reason
+        assert "excellent under 1.0%" in triggers.theta.reason
+        assert "moderate past 2.0%" in triggers.gamma.reason
+
+    def test_thresholds_come_from_the_ips(self) -> None:
+        """from_ips maps every band, so none stays on a dataclass literal."""
+        ips = load_ips_config(EXAMPLE_IPS_YAML)
+        triggers = evaluate_hedge_trigger_set(
+            _mock_portfolio(net_delta=97.0, underlying_qty=100.0),
+            HedgeTriggerThresholds.from_ips(ips.triggers),
+        )
+
+        assert (
+            f"{ips.triggers.target_delta_ratio_pct:.0f}% target"
+            in triggers.delta.reason
+        )
+
+    def test_console_form_returns_the_same_metrics(self) -> None:
+        """The printer is a wrapper, not a second evaluation."""
+        portfolio = _mock_portfolio(
+            net_delta=97.0,
+            underlying_qty=100.0,
+            total_theta=-1.0,
+            total_gamma=3.0,
+        )
+        thresholds = self._thresholds()
+
+        printed = evaluate_hedge_triggers(portfolio, Mock(), thresholds)
+        structured = evaluate_hedge_trigger_set(portfolio, thresholds)
+
+        assert printed == structured.metrics

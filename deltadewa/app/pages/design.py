@@ -48,6 +48,10 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
+from deltadewa.analysis.hedge_triggers import (
+    HedgeTriggerThresholds,
+    evaluate_hedge_trigger_set,
+)
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.repricing import proportional_vol
@@ -84,6 +88,10 @@ if TYPE_CHECKING:
     from deltadewa.analysis.decision_matrix import (
         DecisionResult,
         EntryTimingResult,
+    )
+    from deltadewa.analysis.hedge_triggers import (
+        HedgeTriggerReason,
+        HedgeTriggerSet,
     )
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import (
@@ -124,6 +132,9 @@ _BASIS_CRASH_SKEW = "basis: crash-skew (IPS anchor)"
 # The market-environment panel reprices nothing — it reads the live feed —
 # so it must not carry PLANNING's crash-skew chip.
 _BASIS_LIVE_MARKET_DATA = "basis: live market data"
+# Nor does the trigger panel: it reads the book's Greeks at today's market,
+# with no crash shock applied at all.
+_BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
 
 # EXPLORATION zone: dial defaults, matching hedge_design.ipynb's own
 # GlobalAssumptions/StressDashboard notebook-cell literals.
@@ -1160,6 +1171,94 @@ def _render_roll_panel_logic(
     )
 
 
+def _hedge_trigger_row(trigger: HedgeTriggerReason) -> html.Tr:
+    """One rebalance trigger: status badge, name, and the reason for it.
+
+    Reuses the ``verdict-badge`` styling the roll table already uses, so
+    the two tables read alike — but see :func:`_hedge_triggers_panel_view`
+    for why they are not the same set.
+    """
+    return html.Tr(
+        [
+            html.Td(
+                html.Span(
+                    trigger.status.value,
+                    className=(
+                        "verdict-badge verdict-badge--"
+                        f"{trigger.status.value.lower()}"
+                    ),
+                ),
+            ),
+            html.Td(trigger.label),
+            html.Td(trigger.reason),
+        ],
+    )
+
+
+def _hedge_triggers_panel_view(triggers: HedgeTriggerSet) -> Component:
+    """Render the book-level rebalance triggers, each with its reasoning.
+
+    Deliberately **not** merged into the roll planner directly above it,
+    despite the shared vocabulary: the roll table asks "should this tranche
+    be replaced" per position, while these four ask "is the book still
+    hedged the way policy says" for the book as a whole. They are different
+    questions with different thresholds, and a combined table would imply
+    one verdict where there are two.
+    """
+    header = html.Tr(
+        [html.Th("Status"), html.Th("Trigger"), html.Th("Reading vs policy")],
+    )
+    children: list[Component] = [
+        html.P(
+            "Book-level rebalance triggers — distinct from the roll planner "
+            "above, which judges each tranche separately. These ask whether "
+            "the book as a whole is still hedged the way the IPS says.",
+            className="plain-language",
+        ),
+        html.Table(
+            [
+                html.Thead(header),
+                html.Tbody([_hedge_trigger_row(t) for t in triggers]),
+            ],
+            className="planning-table",
+        ),
+    ]
+    if triggers.actions:
+        children.append(
+            html.Ul(
+                [
+                    html.Li(f"{priority}: {description}")
+                    for priority, description in triggers.actions
+                ],
+                className="trigger-actions",
+            ),
+        )
+    else:
+        children.append(
+            html.P(
+                "No action required — every trigger is inside its band.",
+                className="plain-language",
+            ),
+        )
+    return html.Div(children)
+
+
+def _render_hedge_triggers_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> Component:
+    """Render the hedge rebalance triggers for the current book."""
+    return _safe_render(
+        lambda: _hedge_triggers_panel_view(
+            evaluate_hedge_trigger_set(
+                portfolio,
+                HedgeTriggerThresholds.from_ips(ips_config.triggers),
+            ),
+        ),
+    )
+
+
 def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
     """One row of the IPS monetization schedule."""
     return html.Tr(
@@ -1778,6 +1877,24 @@ def render(app: ProgramDashApp) -> html.Div:
             ),
             html.Div(
                 [
+                    html.H3(
+                        [
+                            "Hedge rebalance triggers",
+                            basis_chip(_BASIS_BOOK_GREEKS),
+                        ],
+                    ),
+                    html.Div(
+                        _render_hedge_triggers_panel_logic(
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                        ),
+                        id="plan-hedge-triggers-panel",
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
                     html.H3(["Monetization", basis_chip(_BASIS_CRASH_SKEW)]),
                     html.Div(
                         _render_monetization_panel_logic(
@@ -2290,6 +2407,16 @@ def register_callbacks(app: ProgramDashApp) -> None:
     )
     def _render_roll_panel(_version: int) -> Component:
         return _render_roll_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+    @app.callback(
+        Output("plan-hedge-triggers-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_hedge_triggers_panel(_version: int) -> Component:
+        return _render_hedge_triggers_panel_logic(
             portfolio=app.program_state.portfolio,
             ips_config=ips_config,
         )

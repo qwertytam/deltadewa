@@ -872,6 +872,109 @@ class TestMarketEnvironmentPanel:
         ) in text
 
 
+class TestHedgeTriggersPanel:
+    """Part X #11's other half — the book-level rebalance triggers.
+
+    Until M2.7 ``evaluate_hedge_triggers`` had no product consumer at all,
+    so the delta, expiry, theta and gamma triggers M1.3/M1.4 did
+    correctness work on were live nowhere.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        return design._render_hedge_triggers_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+    @staticmethod
+    def _hedged_app(tmp_path: Path) -> ProgramDashApp:
+        """A book with an equity leg, so every metric is measurable.
+
+        ``_app_with_ips`` starts with no underlying quantity, which makes
+        three of the four triggers UNAVAILABLE — correct behaviour, and
+        tested below, but not what the reading tests are about.
+        """
+        app = _app_with_ips(tmp_path)
+        app.program_state.portfolio.underlying_quantity = 1_000.0
+        _add_starter_position(app.program_state)
+        return app
+
+    def test_renders_all_four_triggers(self, tmp_path: Path) -> None:
+        text = _collect_text(self._panel(self._hedged_app(tmp_path)))
+
+        assert "Delta drift" in text
+        assert "Expiry" in text
+        assert "Theta cost" in text
+        assert "Gamma drift" in text
+
+    def test_each_trigger_shows_its_reasoning(self, tmp_path: Path) -> None:
+        """Same treatment as the roll table: never a bare verdict word."""
+        app = self._hedged_app(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        text = _collect_text(self._panel(app))
+
+        assert (
+            f"{ips_config.triggers.target_delta_ratio_pct:.0f}% target" in text
+        )
+        assert "to the nearest expiry" in text
+        assert "of the book per year" in text
+        assert "per 1% spot move" in text
+
+    def test_says_it_is_not_the_roll_planner(self, tmp_path: Path) -> None:
+        """It sits beside a panel with overlapping vocabulary.
+
+        Roll status judges each tranche; these judge the book. Without the
+        distinction stated, two adjacent tables of verdicts read as one.
+        """
+        text = _collect_text(self._panel(self._hedged_app(tmp_path)))
+
+        assert "distinct from the roll planner" in text
+
+    def test_empty_book_reads_as_unmeasured_not_healthy(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """No underlying means three metrics are unavailable, not OK."""
+        app = _app_with_ips(tmp_path)
+        app.program_state.portfolio.underlying_quantity = 0.0
+
+        text = _collect_text(self._panel(app))
+
+        assert text.count("UNAVAILABLE") >= 3
+        assert "no underlying quantity set" in text
+
+    def test_fired_triggers_produce_a_ranked_action_list(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A table of statuses with no "so what" is half an answer.
+
+        This fixture's book is deliberately under-hedged (1,000 shares
+        against one put), so the delta and theta triggers both fire.
+        """
+        text = _collect_text(self._panel(self._hedged_app(tmp_path)))
+
+        assert "URGENT" in text
+        assert "Rebalance delta" in text
+
+    def test_quiet_book_says_so_rather_than_showing_an_empty_list(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        # An empty book on a zero equity position fires nothing: the panel
+        # must state that rather than rendering a table with no conclusion
+        # under it.
+        text = _collect_text(self._panel(app))
+
+        assert "No action required" in text
+
+
 class TestVegaSufficiency:
     """Part X #4 on /design — the only Tier-1 item the rebuild dropped."""
 
@@ -1410,8 +1513,8 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 5 PLANNING panels + 3 EXPLORATION panels share the .panel class.
-        assert page.locator(".panel").count() == 8
+        # 6 PLANNING panels + 3 EXPLORATION panels share the .panel class.
+        assert page.locator(".panel").count() == 9
 
 
 class TestExplorationZoneRendersClientSide:

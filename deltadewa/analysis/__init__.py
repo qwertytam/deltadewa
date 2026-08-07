@@ -36,7 +36,11 @@ from deltadewa.analysis.hedge_efficiency import (
     hedge_efficiency,
 )
 from deltadewa.analysis.hedge_triggers import (
+    HedgeTriggerReason,
+    HedgeTriggerSet,
     HedgeTriggerThresholds,
+    TriggerStatus,
+    evaluate_hedge_trigger_set,
     evaluate_hedge_triggers,
 )
 from deltadewa.analysis.market_environment import (
@@ -128,6 +132,8 @@ __all__ = [
     "HedgeCostVerdict",
     "HedgeEfficiency",
     "HedgeSizingResult",
+    "HedgeTriggerReason",
+    "HedgeTriggerSet",
     "HedgeTriggerThresholds",
     "LadderRung",
     "MarketEnvironment",
@@ -149,6 +155,7 @@ __all__ = [
     "StrikeLadderResult",
     "TermShape",
     "TimePriceGridSpec",
+    "TriggerStatus",
     "UnsolvableRung",
     "VolMapping",
     "assess_market_environment",
@@ -172,6 +179,7 @@ __all__ = [
     "default_crash_shock",
     "entry_timing_tree",
     "evaluate_candidate",
+    "evaluate_hedge_trigger_set",
     "evaluate_hedge_triggers",
     "evaluate_roll_status",
     "flat_bump_vol",
