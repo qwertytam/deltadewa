@@ -43,6 +43,11 @@ from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 from dash.development.base_component import Component
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.analysis.decision_matrix import (
+    decision_matrix,
+    entry_timing_tree,
+)
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.repricing import proportional_vol
@@ -76,6 +81,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from deltadewa.analysis.cache import ScenarioGridCache
+    from deltadewa.analysis.decision_matrix import (
+        DecisionResult,
+        EntryTimingResult,
+    )
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import (
         MonetizationPlan,
@@ -89,7 +98,7 @@ if TYPE_CHECKING:
         UnsolvableRung,
     )
     from deltadewa.app.factory import ProgramDashApp
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsMarketEnvironment
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
     from deltadewa.state import ProgramState
@@ -112,6 +121,9 @@ _DEFAULT_LADDER_MATURITIES_YEARS = "0.25, 0.5, 1.0"
 # point. One literal, so the zone header and every panel's chip say the
 # same thing.
 _BASIS_CRASH_SKEW = "basis: crash-skew (IPS anchor)"
+# The market-environment panel reprices nothing — it reads the live feed —
+# so it must not carry PLANNING's crash-skew chip.
+_BASIS_LIVE_MARKET_DATA = "basis: live market data"
 
 # EXPLORATION zone: dial defaults, matching hedge_design.ipynb's own
 # GlobalAssumptions/StressDashboard notebook-cell literals.
@@ -515,6 +527,253 @@ def _parse_float_list(raw: str | None) -> list[float] | None:
     except ValueError:
         return None
     return values or None
+
+
+def _env_metric_row(
+    *,
+    label: str,
+    headline: str,
+    detail: str,
+    bar: Component | None = None,
+) -> Component:
+    """One market-environment metric: name, reading, and what it means."""
+    children: list[Component] = [
+        html.Span(label, className="env-metric-label"),
+        html.Span(headline, className="env-metric-value"),
+        html.Span(detail, className="env-metric-detail"),
+    ]
+    if bar is not None:
+        children.append(bar)
+    return html.Div(children, className="env-metric")
+
+
+def _env_unavailable_row(label: str, why: str) -> Component:
+    """One metric the provider didn't return.
+
+    Rendered as an explicit absence rather than omitted or zeroed: a
+    silently missing row reads as "nothing to report", which is the
+    opposite of what a failed fetch means.
+    """
+    return _env_metric_row(
+        label=label,
+        headline="unavailable",
+        detail=why,
+    )
+
+
+def _vol_regime_row(
+    market_env: MarketEnvironment,
+    policy: IpsMarketEnvironment,
+) -> Component:
+    """Part X #6 — the volatility regime, banded against the IPS."""
+    if market_env.vix is None or market_env.regime_label is None:
+        return _env_unavailable_row(
+            "Vol regime",
+            "no VIX reading in this snapshot",
+        )
+
+    percentile = (
+        f", regime percentile {market_env.regime_percentile:.0f}"
+        if market_env.regime_percentile is not None
+        else ""
+    )
+    # The IPS band is decimal implied vol compared against VIX/100
+    # (market_environment.classify_vix_regime), so the bar is drawn on the
+    # VIX level in vol points — the units the reading is actually in —
+    # rather than on the derived percentile.
+    return _env_metric_row(
+        label="Vol regime",
+        headline=f"{market_env.regime_label.value} — VIX {market_env.vix:.1f}",
+        detail=(
+            f"IPS band {policy.vol_regime_low * 100:.0f}-"
+            f"{policy.vol_regime_high * 100:.0f} VIX points{percentile}"
+        ),
+        bar=band_bar(
+            value=market_env.vix,
+            low=policy.vol_regime_low * 100,
+            high=policy.vol_regime_high * 100,
+        ),
+    )
+
+
+def _skew_row(
+    market_env: MarketEnvironment,
+    policy: IpsMarketEnvironment,
+) -> Component:
+    """Part X #7 — the SKEW percentile, banded against the IPS."""
+    if market_env.skew_percentile is None:
+        return _env_unavailable_row(
+            "Skew percentile",
+            "no SKEW reading in this snapshot",
+        )
+
+    # skew_percentile is a 0-1 fraction (the units get_skew_percentile
+    # returns and assess_market_environment compares in), while the IPS band
+    # is stated on 0-100. Converted back here, once, for display — the same
+    # boundary market_environment.py:303-308 crosses in the other direction.
+    percentile_pct = market_env.skew_percentile * 100
+    index_text = (
+        f", SKEW index {market_env.skew_index:.1f}"
+        if market_env.skew_index is not None
+        else ""
+    )
+    return _env_metric_row(
+        label="Skew percentile",
+        headline=f"{percentile_pct:.0f}th percentile",
+        detail=(
+            f"IPS band {policy.skew_low_pctile:.0f}-"
+            f"{policy.skew_high_pctile:.0f}{index_text}"
+        ),
+        bar=band_bar(
+            value=percentile_pct,
+            low=policy.skew_low_pctile,
+            high=policy.skew_high_pctile,
+        ),
+    )
+
+
+def _forward_variance_row(market_env: MarketEnvironment) -> Component:
+    """Part X #8 — forward variance, as a level with no band.
+
+    The IPS states no forward-variance band, so this deliberately gets no
+    ``band_bar``: inventing one here would be exactly the presentation-side
+    policy the ``market_environment`` section exists to prevent. It is read
+    alongside the hedge-cost verdict below instead.
+    """
+    if market_env.forward_vol_front_3m is None:
+        return _env_unavailable_row(
+            "Forward variance",
+            "needs both VIX and VIX3M; one is missing",
+        )
+
+    shape_text = (
+        f", term structure {market_env.term_shape.value}"
+        if market_env.term_shape is not None
+        else ""
+    )
+    return _env_metric_row(
+        label="Forward variance",
+        headline=f"{market_env.forward_vol_front_3m:.1f} vol points",
+        detail=(
+            f"front-to-3M implied forward vol; no IPS band{shape_text} — "
+            "read against the hedge-cost verdict below"
+        ),
+    )
+
+
+def _entry_timing_rows(timing: EntryTimingResult) -> list[Component]:
+    """Render the entry-timing tree's path, step by step."""
+    rows: list[Component] = [
+        html.P(
+            f"Entry timing: {timing.recommendation}",
+            className="env-verdict",
+        ),
+    ]
+    if timing.data_quality_note is not None:
+        rows.append(
+            html.P(timing.data_quality_note, className="plain-language"),
+        )
+    rows.extend(
+        html.P(
+            f"{step.step}. {step.label}: {step.value} — {step.recommendation}",
+            className="env-timing-step",
+        )
+        for step in timing.steps
+    )
+    return rows
+
+
+def _market_env_panel_view(
+    market_env: MarketEnvironment,
+    decision: DecisionResult,
+    timing: EntryTimingResult,
+    policy: IpsMarketEnvironment,
+) -> Component:
+    """Render the market environment panel: matrix inputs, then its verdict.
+
+    Part X #6, #7 and #8 are exactly the three inputs
+    :func:`~deltadewa.analysis.decision_matrix.decision_matrix` takes, so
+    they are shown here together with the verdict they produce. Splitting
+    them across surfaces — the numbers nowhere, the verdict in the Sunday
+    digest — is what the 2026-08-06 re-audit found had lost them.
+    """
+    cost_text = (
+        market_env.hedge_cost_verdict.value
+        if market_env.hedge_cost_verdict is not None
+        else "unavailable"
+    )
+    return html.Div(
+        [
+            html.P(
+                "The three readings the decision matrix takes, and the "
+                'verdict they produce — so "should I buy today" can be '
+                "asked on any day, not only when the weekly digest lands.",
+                className="plain-language",
+            ),
+            html.Div(
+                [
+                    _vol_regime_row(market_env, policy),
+                    _skew_row(market_env, policy),
+                    _forward_variance_row(market_env),
+                ],
+                className="env-metrics",
+            ),
+            html.P(
+                f"Hedge cost: {cost_text}",
+                className="env-verdict",
+            ),
+            html.P(
+                f"Decision: {decision.verdict.value} — {decision.rationale}",
+                className="env-verdict",
+            ),
+            *(
+                [
+                    html.P(
+                        decision.data_quality_note,
+                        className="plain-language",
+                    ),
+                ]
+                if decision.data_quality_note is not None
+                else []
+            ),
+            *_entry_timing_rows(timing),
+        ],
+    )
+
+
+def _render_market_env_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+    market_env: MarketEnvironment,
+) -> Component:
+    """Render the market environment panel for the current book and feed."""
+
+    def _build() -> Component:
+        convexity_now_pct = PortfolioAnalyzer(
+            portfolio,
+        ).calculate_crash_convexity_pct(
+            CrashShock.from_ips(ips_config.convexity),
+        )
+        plan = build_monetization_plan(
+            portfolio,
+            ips_config,
+            market_env=market_env,
+        )
+        decision = decision_matrix(
+            market_env,
+            convexity_now_pct=convexity_now_pct,
+            ips_convexity=ips_config.convexity,
+            monetization_plan=plan,
+        )
+        return _market_env_panel_view(
+            market_env,
+            decision,
+            entry_timing_tree(market_env),
+            ips_config.market_environment,
+        )
+
+    return _safe_render(_build)
 
 
 def _sizing_panel_view(
@@ -1119,6 +1378,13 @@ def render(app: ProgramDashApp) -> html.Div:
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
     default_style = ips_config.pricing.exercise_style.value
+    # One assessment shared by the market-environment and monetization
+    # panels. Both need the same snapshot, and a second fetch could return a
+    # different one — the two panels would then disagree on the same page.
+    market_env = assess_market_environment(
+        app.market_data,
+        ips_config.market_environment,
+    )
     # Bounds the spot-vol days-forward slider at layout-build time; the
     # empty-book fallback matches build_spot_vol_grid_spec's own default.
     max_days = (
@@ -1272,10 +1538,30 @@ def render(app: ProgramDashApp) -> html.Div:
         [
             html.H2(["Planning", basis_chip(_BASIS_CRASH_SKEW)]),
             html.P(
-                "Every panel below prices the IPS crash — the same basis "
-                "/monitor's gauge uses. These agree with /monitor to the "
-                "cent.",
+                "Every panel below that prices the book prices the IPS "
+                "crash — the same basis /monitor's gauge uses. Those agree "
+                "with /monitor to the cent. Panels reading live market data "
+                "rather than repricing the book carry their own chip.",
                 className="plain-language",
+            ),
+            html.Div(
+                [
+                    html.H3(
+                        [
+                            "Market environment",
+                            basis_chip(_BASIS_LIVE_MARKET_DATA),
+                        ],
+                    ),
+                    html.Div(
+                        _render_market_env_panel_logic(
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                            market_env=market_env,
+                        ),
+                        id="plan-market-env-panel",
+                    ),
+                ],
+                className="panel",
             ),
             html.Div(
                 [
@@ -1401,10 +1687,7 @@ def render(app: ProgramDashApp) -> html.Div:
                         _render_monetization_panel_logic(
                             portfolio=portfolio,
                             ips_config=ips_config,
-                            market_env=assess_market_environment(
-                                app.market_data,
-                                ips_config.market_environment,
-                            ),
+                            market_env=market_env,
                         ),
                         id="plan-monetization-panel",
                     ),
@@ -1921,6 +2204,24 @@ def register_callbacks(app: ProgramDashApp) -> None:
     )
     def _render_monetization_panel(_version: int) -> Component:
         return _render_monetization_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+            market_env=assess_market_environment(
+                app.market_data,
+                ips_config.market_environment,
+            ),
+        )
+
+    @app.callback(
+        Output("plan-market-env-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_market_env_panel(_version: int) -> Component:
+        # Watches book-version like every other PLANNING panel: the readings
+        # themselves don't depend on the book, but the decision verdict does
+        # (it takes current convexity and the monetization plan), so an edit
+        # that moves convexity out of band has to move this verdict too.
+        return _render_market_env_panel_logic(
             portfolio=app.program_state.portfolio,
             ips_config=ips_config,
             market_env=assess_market_environment(

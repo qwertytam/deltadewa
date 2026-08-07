@@ -18,7 +18,7 @@ import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from dash import dcc, no_update
@@ -30,6 +30,13 @@ from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
     hedge_value,
+)
+from deltadewa.analysis.market_environment import (
+    DataQuality,
+    HedgeCostVerdict,
+    MarketEnvironment,
+    RegimeLabel,
+    TermShape,
 )
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
@@ -703,6 +710,168 @@ class TestMonetizationPanel:
         assert "current hedge gain" in text
 
 
+def _make_market_env(**overrides: Any) -> MarketEnvironment:
+    """A fully-populated LIVE environment, with per-test overrides.
+
+    Mirrors ``tests/test_analysis/test_decision_matrix.py``'s own builder —
+    LIVE by default because that is the only quality the decision matrix
+    and the entry-timing tree will produce a verdict on, and both branches
+    need exercising here.
+    """
+    defaults: dict[str, Any] = {
+        "vix": 14.0,
+        "regime_percentile": 12.0,
+        "regime_label": RegimeLabel.LOW,
+        "skew_index": 128.0,
+        "skew_percentile": 0.22,
+        "term_structure": {"VIX": 14.0, "VIX3M": 17.0, "VIX6M": 18.0},
+        "term_shape": TermShape.CONTANGO,
+        "forward_vol_front_3m": 18.2,
+        "hedge_cost_verdict": HedgeCostVerdict.CHEAP,
+        "data_quality": DataQuality.LIVE,
+        "as_of": datetime(2026, 8, 7, tzinfo=UTC),
+    }
+    return MarketEnvironment(**{**defaults, **overrides})
+
+
+class TestMarketEnvironmentPanel:
+    """Part X #6/#7/#8 plus the verdict they produce, on /design.
+
+    The three readings are exactly what ``decision_matrix`` takes, so the
+    panel shows them together with the verdict rather than leaving the
+    operator to read the numbers on one surface and the conclusion on
+    another (which is how the Dash rebuild lost them).
+    """
+
+    @staticmethod
+    def _panel(tmp_path: Path, market_env: MarketEnvironment) -> Component:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        ips_config = state.ips_config
+        assert ips_config is not None
+        return design._render_market_env_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            market_env=market_env,
+        )
+
+    def test_renders_all_three_readings(self, tmp_path: Path) -> None:
+        text = _collect_text(self._panel(tmp_path, _make_market_env()))
+
+        assert "Vol regime" in text
+        assert "VIX 14.0" in text
+        assert "Skew percentile" in text
+        assert "Forward variance" in text
+        assert "18.2 vol points" in text
+
+    def test_skew_percentile_is_converted_from_its_fraction(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """MarketEnvironment stores 0-1; the IPS band is stated on 0-100.
+
+        Pinned because rendering the raw fraction would show "0th
+        percentile" for a 22nd-percentile reading and band it against
+        25/75 as if it were deeply cheap — a wrong verdict, not just a
+        wrong label.
+        """
+        env = _make_market_env(skew_percentile=0.22)
+
+        text = _collect_text(self._panel(tmp_path, env))
+
+        assert "22th percentile" in text
+        assert "0th percentile" not in text.replace("22th percentile", "")
+
+    def test_forward_variance_carries_no_band(self, tmp_path: Path) -> None:
+        """The IPS states no forward-variance band, so none is invented."""
+        panel = self._panel(tmp_path, _make_market_env())
+        text = _collect_text(panel)
+
+        assert "no IPS band" in text
+
+    def test_renders_the_decision_verdict_and_entry_timing(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        text = _collect_text(self._panel(tmp_path, _make_market_env()))
+
+        assert "Decision:" in text
+        assert "Entry timing:" in text
+        assert "Hedge cost: CHEAP" in text
+
+    def test_static_data_says_so_rather_than_fabricating_a_verdict(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """StaticProvider is the default here and in the smoke suite.
+
+        Both the matrix and the timing tree decline on non-LIVE quality, so
+        this is the ordinary path, not an edge case — and the panel has to
+        surface why rather than showing a confident-looking verdict built
+        on synthetic numbers.
+        """
+        env = _make_market_env(data_quality=DataQuality.STATIC)
+
+        text = _collect_text(self._panel(tmp_path, env))
+
+        assert "INSUFFICIENT_DATA" in text
+        assert "data_quality" in text
+
+    def test_unavailable_readings_are_stated_not_zeroed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A failed fetch must read as absence, never as a zero.
+
+        An omitted row reads as "nothing to report", which is the opposite
+        of what a provider failure means.
+        """
+        env = _make_market_env(
+            vix=None,
+            regime_label=None,
+            regime_percentile=None,
+            skew_percentile=None,
+            skew_index=None,
+            forward_vol_front_3m=None,
+            hedge_cost_verdict=None,
+            data_quality=DataQuality.UNAVAILABLE,
+        )
+
+        text = _collect_text(self._panel(tmp_path, env))
+
+        assert text.count("unavailable") >= 3
+        assert "Vol regime" in text
+        assert "Skew percentile" in text
+        assert "Forward variance" in text
+        assert "0.0" not in text
+
+    def test_bands_come_from_the_ips_not_a_literal(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        policy = ips_config.market_environment
+
+        text = _collect_text(self._panel(tmp_path, _make_market_env()))
+
+        assert (
+            f"IPS band {policy.vol_regime_low * 100:.0f}-"
+            f"{policy.vol_regime_high * 100:.0f} VIX points"
+        ) in text
+        assert (
+            f"IPS band {policy.skew_low_pctile:.0f}-"
+            f"{policy.skew_high_pctile:.0f}"
+        ) in text
+
+
 def _add_starter_position(state: ProgramState) -> None:
     """Add the same one-leg book every EXPLORATION test builds against."""
     state.add_position(
@@ -1099,8 +1268,8 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 4 PLANNING panels + 3 EXPLORATION panels share the .panel class.
-        assert page.locator(".panel").count() == 7
+        # 5 PLANNING panels + 3 EXPLORATION panels share the .panel class.
+        assert page.locator(".panel").count() == 8
 
 
 class TestExplorationZoneRendersClientSide:
