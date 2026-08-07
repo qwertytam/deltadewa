@@ -1467,6 +1467,54 @@ delivery confirmation, and Codeberg backup commit once that happens.
 
 ---
 
+### M2.7 — Restore the Part X coverage the Dash rebuild dropped
+
+**Shipped.** A surfacing milestone, not a rebuild: every engine function
+already existed and was unit-tested. Driven by `docs/part-x-coverage.md`'s
+2026-08-06 re-audit, which found five handbook items the M2.4/M2.5 Dash
+rebuild silently stopped surfacing, with no decision recorded anywhere to
+drop them.
+
+Six commits:
+
+1. **`analysis/hedge_efficiency.py`** — the convexity÷carry ratio (Part X
+   **#5**/**#15**), which existed nowhere in the codebase. Both handbook
+   worked examples are pinned as tests. Band from a new
+   `convexity.efficiency_min_ratio`/`_max_ratio` IPS pair (the handbook's
+   3/6 reading), not a module literal.
+2. **`/monitor`** — the ratio in the cost panel, as one plain-language
+   sentence. No big number, no band bar: the page already carries five and
+   two, and M2.4's "legible cold" through-line rules out a sixth headline.
+   A test pins that.
+3. **`/design`** — a market-environment panel carrying **#6**, **#7**, **#8**
+   *and* the decision matrix + entry-timing tree. Those three readings are
+   exactly the matrix's inputs; splitting them from the verdict across
+   surfaces is what lost them.
+4. **`/design`** — **#4** vega sufficiency in the sizing panel and **#10**'s
+   net-delta scalar in BOOK. The vega band moved from `dashboard.yaml`
+   (presentation) to a new `vega:` IPS section, with the existing values
+   carried over verbatim so no reading changed meaning.
+5. **`/design`** — the hedge-trigger set (**#11**'s other half).
+   `analysis/hedge_triggers.py` had no functional consumer at all; a pure
+   `evaluate_hedge_trigger_set` was extracted from the console-printing
+   `evaluate_hedge_triggers`, whose signature and output are unchanged and
+   whose test suite passed with no edits — the contract that no firing point
+   moved.
+6. **Docs** — `part-x-coverage.md` rewritten to the post-M2.7 state, with the
+   conscious retirements (Part VII report → emailed deliverable; #2's
+   discrete table → the curve) recorded as decisions rather than leftovers,
+   and **#9**'s skew-beta scalar stated as never built rather than lost.
+
+**Left open, deliberately:** #12 (data-blocked), #13/#14 (surfacing gaps not
+in this milestone's brief), #9's scalar (a genuine feature — it needs a
+repricing pass at a perturbed skew), the four remaining Jupyter-only health
+gauges, `dashboard.yaml`'s now-duplicated `vega_sufficiency` block, and
+`entry_timing_tree`'s hardcoded VIX thresholds (a pre-existing policy leak of
+the M1.4 class, surfaced but not fixed here). All six are listed in
+`part-x-coverage.md`.
+
+---
+
 ## Phase 3 — Docs & handbook (post-migration, per your call)
 
 - README (chart stack, feature status, `__version__` 0.4.2 → 0.5.0 — this
@@ -1501,14 +1549,31 @@ delivery confirmation, and Codeberg backup commit once that happens.
 
 ---
 
-## Deferred — blocked on data feeds (backlog, not in this plan)
+## Deferred — backlog, not in this plan
 
-- **#12 Liquidity Risk** — needs a live options-chain feed (bid/ask, OI per
-  strike).
-- **#13 Delta Drift series** — needs a net-delta series from position history;
-  partly unblocked by `analysis/scenarios.py`'s `scenario_grid`.
-- **#14 Vega Term Exposure** — maturity-bucketed vega; `analysis/maturity.py`'s
-  bucket logic (already used for theta carry) can extend.
+Only the first is genuinely blocked. The 2026-08-06 re-audit reclassified
+the other two against the handbook's own definitions; M2.7 did not take
+them, but nothing is stopping them.
+
+- **#12 Liquidity Risk** — **data-blocked.** Needs a live options-chain feed
+  (bid/ask, OI per strike); the free CBOE/FRED provider returns index-level
+  series only.
+- **#13 Delta Drift** — **a surfacing gap, not a data gap.** Handbook §13
+  defines it as `Δ(−5%) − Δ(0)` — two shocked deltas at one valuation date,
+  not a series from position history. `analysis/scenarios.py` already prices
+  `metric="net_delta"` at arbitrary shocked spots. Needs the scalar and a
+  panel. Do **not** wire `health.delta_drift_from_target` for this: despite
+  the name it is deviation from a target net-delta ratio, and since M2.7 it
+  backs `/design`'s hedge-trigger panel.
+- **#14 Vega Term Exposure** — **a surfacing gap.** Maturity-bucketed vega;
+  `analysis/maturity.py`'s bucket logic (already used for theta carry)
+  extends directly.
+- **#9 Skew Exposure / Beta** — **never built**, as distinct from lost. No
+  `∂V/∂skew` scalar has ever existed here; the coverage table's PARTIAL rests
+  on the `vega` heatmap metric, which is a related but different quantity.
+  This one is a genuine feature — it needs a repricing pass at a perturbed
+  skew, which `crash_repricing.crash_skew_vol` can express but nothing
+  drives.
 
 ---
 
@@ -1526,7 +1591,7 @@ delivery confirmation, and Codeberg backup commit once that happens.
 | M4      | M1.1                                         | Mi5         | M1.3                                         |
 | M5      | M2.2 (Dash-native)                           | Mi6         | M1.4                                         |
 | M6      | M2.2 (Dash-native; notebook version skipped) | Negligibles | Phase 3 / batch with nearest touch           |
-| M7      | Phase 3                                      | #12/#13/#14 | Deferred (data-blocked)                      |
+| M7      | Phase 3                                      | #12/#13/#14 | #12 data-blocked; #13/#14 surfacing gaps     |
 | M8      | M2.6                                         |             |                                              |
 | Mo1     | M1.2                                         |             |                                              |
 | Mo2     | M1.4                                         |             |                                              |
