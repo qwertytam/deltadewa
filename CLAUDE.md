@@ -125,8 +125,9 @@ The engine-correctness fixes and the Dash migration of both notebooks are done:
 `/monitor` (M2.4, the crash-led read-mostly review) and `/design` (M2.5, the
 editor/planning/exploration workbench) are both live on the deployed app.
 **M2.6 — the headless report, cron, and backup heartbeat — has shipped**,
-closing Phase 2: the weekly digest (`reporting/weekly_report.py`, SendGrid
-delivery), the market-data refresh job, the offsite `exports/` backup, and a
+closing Phase 2: the weekly digest (`reporting/weekly_report.py`,
+provider-agnostic SMTP delivery), the market-data refresh job, the offsite
+`exports/` backup, and a
 two-check dead-man's-switch are all built, tested, and documented (RUNBOOK
 §9–13). The notebook-execution and `nbqa` CI steps are retired — the app and
 report test suites now cover both surfaces the notebooks used to (see the

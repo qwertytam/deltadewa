@@ -36,7 +36,7 @@ set -euo pipefail
 
 REPO_DIR="${DELTADEWA_REPO_DIR:-/home/deploy/deltadewa}"
 REMOTE_ALIAS="${DELTADEWA_BACKUP_REMOTE:-codeberg-backup}"
-DEFAULT_REMOTE_URL="${REMOTE_ALIAS}:deploy/deltadewa-exports-backup.git"
+DEFAULT_REMOTE_URL="${REMOTE_ALIAS}:deploy_deltadewa-exports-backup.git"
 REMOTE_URL="${DELTADEWA_BACKUP_REMOTE_URL:-${DEFAULT_REMOTE_URL}}"
 EXPORTS_DIR="${REPO_DIR}/exports"
 
