@@ -94,11 +94,13 @@ if TYPE_CHECKING:
         HedgeTriggerSet,
     )
     from deltadewa.analysis.market_environment import MarketEnvironment
+    from deltadewa.analysis.maturity import MaturityVegaExposure
     from deltadewa.analysis.monetization import (
         MonetizationPlan,
         MonetizationStepStatus,
     )
     from deltadewa.analysis.roll_status import MoneynessDrift, RollStatusRecord
+    from deltadewa.analysis.scenarios import DeltaDrift, DeltaDriftLeg
     from deltadewa.analysis.sizing import HedgeSizingResult
     from deltadewa.analysis.strike_ladder import (
         LadderRung,
@@ -135,6 +137,10 @@ _BASIS_LIVE_MARKET_DATA = "basis: live market data"
 # Nor does the trigger panel: it reads the book's Greeks at today's market,
 # with no crash shock applied at all.
 _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
+# Nor does the delta drift panel: it reprices at the handbook's own fixed
+# -5% spot shock (Part X §13), not the IPS crash anchor -- a distinct basis
+# from every other PLANNING panel.
+_BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"
 
 # EXPLORATION zone: dial defaults, matching hedge_design.ipynb's own
 # GlobalAssumptions/StressDashboard notebook-cell literals.
@@ -805,7 +811,12 @@ def _render_market_env_panel_logic(
         return _market_env_panel_view(
             market_env,
             decision,
-            entry_timing_tree(market_env),
+            entry_timing_tree(
+                market_env,
+                vix_very_high=ips_config.market_environment.vix_very_high,
+                vix_caution=ips_config.market_environment.vix_caution,
+                vix_low=ips_config.market_environment.vix_low,
+            ),
             ips_config.market_environment,
         )
 
@@ -1259,6 +1270,77 @@ def _render_hedge_triggers_panel_logic(
     )
 
 
+def _delta_drift_leg_row(leg: DeltaDriftLeg) -> html.Tr:
+    """One option leg's delta today, at -5%, and the drift between them."""
+    label = (
+        f"{leg.position.option.option_type.value} "
+        f"{leg.position.option.strike_price:,.0f}"
+    )
+    return html.Tr(
+        [
+            html.Td(label),
+            html.Td(f"{leg.delta_now:,.1f}"),
+            html.Td(f"{leg.delta_shocked:,.1f}"),
+            html.Td(f"{leg.drift:,.1f}"),
+        ],
+    )
+
+
+def _delta_drift_panel_view(drift: DeltaDrift) -> Component:
+    """Render Part X §13: hedge delta today vs. at the handbook's -5% shock.
+
+    Sits beside the hedge triggers panel — same "does the book need
+    rebalancing" question, asked a different way: not whether a threshold
+    has been crossed, but how quickly the hedge itself would start
+    offsetting losses in an early-stage decline.
+    """
+    header = html.Tr(
+        [
+            html.Th("Leg"),
+            html.Th("Delta now"),
+            html.Th(f"Delta at {drift.shock_pct:.0f}%"),
+            html.Th("Drift"),
+        ],
+    )
+    return html.Div(
+        [
+            html.P(
+                "Hedge-only delta (options, no underlying) today vs. "
+                f"spot {drift.shock_pct:.0f}% — the handbook's own "
+                "worked example, not the IPS crash scenario.",
+                className="plain-language",
+            ),
+            html.P(
+                f"Delta now {drift.delta_now:,.1f}, at "
+                f"{drift.shock_pct:.0f}% {drift.delta_shocked:,.1f} — "
+                f"drift {drift.drift:,.1f}.",
+                className="env-verdict",
+            ),
+            html.Table(
+                [
+                    html.Thead(header),
+                    html.Tbody(
+                        [_delta_drift_leg_row(leg) for leg in drift.legs],
+                    ),
+                ],
+                className="planning-table",
+            ),
+        ],
+    )
+
+
+def _render_delta_drift_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Render the delta drift panel for the current book."""
+    return _safe_render(
+        lambda: _delta_drift_panel_view(
+            PortfolioAnalyzer(portfolio).calculate_delta_drift(),
+        ),
+    )
+
+
 def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
     """One row of the IPS monetization schedule."""
     return html.Tr(
@@ -1551,6 +1633,51 @@ def _render_mc_panel_logic(
         return html.Div([dcc.Graph(figure=fig), _mc_stats_block(results)])
 
     return _safe_render(_build)
+
+
+def _vega_term_panel_view(exposure: MaturityVegaExposure) -> Component:
+    """Render Part X §14: vega bucketed by maturity, a structural view.
+
+    Not a stress scenario — a read of today's book, so it carries the
+    ``_BASIS_BOOK_GREEKS`` chip (like the PLANNING zone's hedge triggers
+    panel) rather than EXPLORATION's default proportional-vol basis.
+    """
+    header = html.Tr([html.Th("Maturity bucket"), html.Th("Vega")])
+    rows = [
+        html.Tr([html.Td(bucket), html.Td(f"{vega:,.1f}")])
+        for bucket, vega in exposure.vega_by_bucket.items()
+    ]
+    return html.Div(
+        [
+            html.P(
+                "Where the book's volatility sensitivity sits across the "
+                "term structure — a structural read, not a stress "
+                "scenario. Institutional tail hedges typically prefer "
+                "long-dated vega exposure.",
+                className="plain-language",
+            ),
+            html.P(
+                f"Total vega {exposure.total_vega:,.1f}.",
+                className="env-verdict",
+            ),
+            html.Table(
+                [html.Thead(header), html.Tbody(rows)],
+                className="planning-table",
+            ),
+        ],
+    )
+
+
+def _render_vega_term_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Render the vega term exposure panel for the current book."""
+    return _safe_render(
+        lambda: _vega_term_panel_view(
+            PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(),
+        ),
+    )
 
 
 def render(app: ProgramDashApp) -> html.Div:
@@ -1895,6 +2022,18 @@ def render(app: ProgramDashApp) -> html.Div:
             ),
             html.Div(
                 [
+                    html.H3(
+                        ["Delta drift", basis_chip(_BASIS_MINUS_5PCT)],
+                    ),
+                    html.Div(
+                        _render_delta_drift_panel_logic(portfolio=portfolio),
+                        id="plan-delta-drift-panel",
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
                     html.H3(["Monetization", basis_chip(_BASIS_CRASH_SKEW)]),
                     html.Div(
                         _render_monetization_panel_logic(
@@ -2201,6 +2340,21 @@ def render(app: ProgramDashApp) -> html.Div:
                 ],
                 className="panel",
             ),
+            html.Div(
+                [
+                    html.H3(
+                        [
+                            "Vega term exposure",
+                            basis_chip(_BASIS_BOOK_GREEKS),
+                        ],
+                    ),
+                    html.Div(
+                        _render_vega_term_panel_logic(portfolio=portfolio),
+                        id="explore-vega-term-panel",
+                    ),
+                ],
+                className="panel",
+            ),
         ],
         className="zone-exploration",
     )
@@ -2422,6 +2576,15 @@ def register_callbacks(app: ProgramDashApp) -> None:
         )
 
     @app.callback(
+        Output("plan-delta-drift-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_delta_drift_panel(_version: int) -> Component:
+        return _render_delta_drift_panel_logic(
+            portfolio=app.program_state.portfolio,
+        )
+
+    @app.callback(
         Output("plan-monetization-panel", "children"),
         Input("book-version", "data"),
     )
@@ -2533,4 +2696,13 @@ def register_callbacks(app: ProgramDashApp) -> None:
             horizon_days=horizon_days,
             expected_return_pct=expected_return_pct,
             seed=seed,
+        )
+
+    @app.callback(
+        Output("explore-vega-term-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_vega_term_panel(_version: int) -> Component:
+        return _render_vega_term_panel_logic(
+            portfolio=app.program_state.portfolio,
         )

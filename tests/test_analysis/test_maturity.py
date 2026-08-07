@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
@@ -158,3 +160,106 @@ class TestMaturityMixin:
             df_with_buckets = analyzer.add_maturity_buckets(df)
             assert "days_to_expiry" in df_with_buckets.columns
             assert "maturity_bucket" in df_with_buckets.columns
+
+
+class TestVegaByMaturityBucket:
+    """Tests for MaturityMixin.calculate_vega_by_maturity (Part X §14)."""
+
+    def test_buckets_positions_correctly(self) -> None:
+        """Legs in different buckets land in the right bucket."""
+        maturity = datetime(2027, 1, 1, tzinfo=UTC)
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            valuation_date=maturity - timedelta(days=400),
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        # Weekly bucket (5 days out).
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=maturity - timedelta(days=395),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        # Long-term bucket (100 days out).
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=maturity - timedelta(days=300),
+            quantity=2,
+            option_type=OptionType.PUT,
+        )
+
+        analyzer = PortfolioAnalyzer(portfolio)
+        exposure = analyzer.calculate_vega_by_maturity()
+
+        assert exposure.vega_by_bucket["0-7 days (Weekly)"] != pytest.approx(
+            0.0,
+            abs=1e-9,
+        )
+        assert exposure.vega_by_bucket["90+ days (Long-term)"] != pytest.approx(
+            0.0, abs=1e-9
+        )
+        # Buckets nothing landed in are present, zero-filled.
+        assert exposure.vega_by_bucket["8-30 days (Monthly)"] == pytest.approx(
+            0.0,
+            abs=1e-9,
+        )
+        assert exposure.vega_by_bucket["31-60 days (2M)"] == pytest.approx(
+            0.0,
+            abs=1e-9,
+        )
+        assert exposure.vega_by_bucket["61-90 days (3M)"] == pytest.approx(
+            0.0,
+            abs=1e-9,
+        )
+        assert set(exposure.vega_by_bucket) == {
+            "0-7 days (Weekly)",
+            "8-30 days (Monthly)",
+            "31-60 days (2M)",
+            "61-90 days (3M)",
+            "90+ days (Long-term)",
+        }
+
+    def test_bucketed_vega_reconciles_to_total(self) -> None:
+        """sum(vega_by_bucket.values()) == total_vega, always."""
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=10),
+            quantity=3,
+            option_type=OptionType.PUT,
+        )
+        portfolio.add_position(
+            strike_price=110.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=200),
+            quantity=-1,
+            option_type=OptionType.CALL,
+        )
+
+        analyzer = PortfolioAnalyzer(portfolio)
+        exposure = analyzer.calculate_vega_by_maturity()
+
+        assert sum(exposure.vega_by_bucket.values()) == pytest.approx(
+            exposure.total_vega,
+            rel=1e-9,
+        )
+
+    def test_empty_book_returns_zero_filled_buckets(self) -> None:
+        """An empty book is a real all-zero reading, not a raise."""
+        portfolio = OptionPortfolio(
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        analyzer = PortfolioAnalyzer(portfolio)
+
+        exposure = analyzer.calculate_vega_by_maturity()
+
+        assert exposure.total_vega == pytest.approx(0.0, abs=1e-9)
+        assert len(exposure.vega_by_bucket) == 5
+        assert all(
+            v == pytest.approx(0.0, abs=1e-9)
+            for v in exposure.vega_by_bucket.values()
+        )

@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from deltadewa.analysis.decision_matrix import (
     DecisionVerdict,
     HedgeAdequacy,
@@ -71,6 +73,25 @@ def _make_plan(*, harvest: float) -> MonetizationPlan:
         gain_basis="paid",
         vol_spike_context=None,
     )
+
+
+# entry_timing_tree's vix_* thresholds are required (no default -- M2.8's
+# fail-loud fix), so every call in this file goes through _entry_timing,
+# which supplies the same values the removed Python defaults used to.
+_VIX_VERY_HIGH = 40.0
+_VIX_CAUTION = 25.0
+_VIX_LOW = 15.0
+
+
+def _entry_timing(env: MarketEnvironment, **overrides: float) -> Any:
+    """Call entry_timing_tree with the standard VIX thresholds."""
+    kwargs: dict[str, float] = {
+        "vix_very_high": _VIX_VERY_HIGH,
+        "vix_caution": _VIX_CAUTION,
+        "vix_low": _VIX_LOW,
+        **overrides,
+    }
+    return entry_timing_tree(env, **kwargs)
 
 
 # ── decision_matrix: data-quality guard ──────────────────────────────
@@ -329,7 +350,7 @@ class TestEntryTimingTreeInsufficientData:
     def test_static_quality_declines(self) -> None:
         """STATIC env → INSUFFICIENT_DATA, should_enter=False."""
         env = _make_env(data_quality=DataQuality.STATIC)
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert result.recommendation == "INSUFFICIENT_DATA"
         assert result.data_quality_note is not None
@@ -341,14 +362,14 @@ class TestEntryTimingTreeInsufficientData:
             data_quality=DataQuality.UNAVAILABLE,
             vix=None,
         )
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert len(result.steps) == 0
 
     def test_live_but_vix_none_returns_insufficient_data(self) -> None:
         """LIVE but vix=None → INSUFFICIENT_DATA, step 1 recorded."""
         env = _make_env(vix=None)
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert len(result.steps) == 1
         assert result.steps[0].proceed is False
@@ -356,7 +377,7 @@ class TestEntryTimingTreeInsufficientData:
     def test_live_but_skew_none_returns_insufficient_data(self) -> None:
         """LIVE, vix ok, skew=None → stops at step 2."""
         env = _make_env(vix=18.0, skew_percentile=None)
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert len(result.steps) == 2
         assert result.steps[0].proceed is True
@@ -372,7 +393,7 @@ class TestEntryTimingTreeVixStop:
     def test_vix_above_very_high_threshold_stops_at_step1(self) -> None:
         """VIX > 40 → monetize recommendation, should_enter=False."""
         env = _make_env(vix=42.0)
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert len(result.steps) == 1
         assert result.steps[0].proceed is False
@@ -383,14 +404,14 @@ class TestEntryTimingTreeVixStop:
     ) -> None:
         """VIX exactly = 40 is not > 40, so falls to caution branch."""
         env = _make_env(vix=40.0)
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert "caution" in result.recommendation.lower()
 
     def test_vix_in_caution_range_stops_at_step1(self) -> None:
         """VIX 25-40 → caution recommendation, should_enter=False."""
         env = _make_env(vix=30.0)
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert len(result.steps) == 1
         assert "caution" in result.recommendation.lower()
@@ -405,7 +426,7 @@ class TestEntryTimingTreeSkewStop:
     def test_expensive_skew_stops_at_step2(self) -> None:
         """VIX ok, skew > 0.70 → step 2 stops, should_enter=False."""
         env = _make_env(vix=18.0, skew_percentile=0.80)
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is False
         assert len(result.steps) == 2
         assert result.steps[0].proceed is True
@@ -425,7 +446,7 @@ class TestEntryTimingTreeFullPath:
             skew_percentile=0.20,
             term_shape=TermShape.CONTANGO,
         )
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is True
         assert len(result.steps) == 3
         assert all(s.proceed for s in result.steps)
@@ -438,7 +459,7 @@ class TestEntryTimingTreeFullPath:
             skew_percentile=0.50,
             term_shape=TermShape.FLAT,
         )
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is True
         assert len(result.steps) == 3
 
@@ -449,7 +470,7 @@ class TestEntryTimingTreeFullPath:
             skew_percentile=0.50,
             term_shape=TermShape.FLAT,
         )
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert "urgency" in result.steps[0].recommendation.lower()
 
     def test_backwardation_noted_in_step3(self) -> None:
@@ -459,7 +480,7 @@ class TestEntryTimingTreeFullPath:
             skew_percentile=0.40,
             term_shape=TermShape.BACKWARDATION,
         )
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is True
         assert "backwardation" in result.recommendation.lower()
 
@@ -470,7 +491,7 @@ class TestEntryTimingTreeFullPath:
             skew_percentile=0.20,
             term_shape=TermShape.FLAT,
         )
-        result = entry_timing_tree(env)
+        result = _entry_timing(env)
         assert result.should_enter is True
         assert "aggressively" in result.steps[1].recommendation.lower()
 
@@ -517,7 +538,7 @@ class TestDataQualityGate:
 
     def test_entry_timing_accepts_cached(self) -> None:
         """The entry-timing tree uses the same gate as the matrix."""
-        result = entry_timing_tree(
+        result = _entry_timing(
             _make_env(data_quality=DataQuality.CACHED),
         )
 
@@ -525,8 +546,13 @@ class TestDataQualityGate:
 
     def test_entry_timing_refuses_stale(self) -> None:
         """A stale environment cannot time an entry."""
-        result = entry_timing_tree(
+        result = _entry_timing(
             _make_env(data_quality=DataQuality.STALE),
         )
 
         assert result.recommendation == "INSUFFICIENT_DATA"
+
+    def test_entry_timing_tree_requires_vix_thresholds(self) -> None:
+        """No default: a caller cannot silently fall back to old literals."""
+        with pytest.raises(TypeError):
+            entry_timing_tree(_make_env())  # type: ignore[call-arg]

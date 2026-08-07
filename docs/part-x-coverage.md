@@ -3,12 +3,17 @@
 Maps every item in [Handbook Part X — Institutional Hedge Dashboards](hedging%20handbook.md#part-x--institutional-hedge-dashboards)
 to its implementation in this codebase.
 
-**Updated 2026-08-07, after M2.7.** The 2026-08-06 re-audit found five
+**Updated 2026-08-07, after M2.8.** The 2026-08-06 re-audit found five
 coverage regressions from the M2.4/M2.5 Dash rebuild — panels the notebooks
 had that the Dash pages did not, with no decision recorded anywhere to drop
-them. M2.7 closed all five. This document now records the resulting state,
-plus the retirements that *were* deliberate, so the next audit can tell the
-two apart.
+them. M2.7 closed all five, and also surfaced a policy leak of its own
+(the entry-timing tree's VIX thresholds, hardcoded rather than sourced
+from `ips.yaml`, went from dormant to user-visible the moment M2.7 put the
+matrix on a page). M2.8 closed the two remaining surfacing gaps the
+re-audit had found (#13, #14) and fixed that leak, leaving #12 as the only
+item still genuinely blocked. This document now records the resulting
+state, plus the retirements that *were* deliberate, so the next audit can
+tell the three (regression, leak, genuine gap) apart.
 
 The regressions themselves are listed in [Closed by M2.7](#closed-by-m27)
 rather than deleted: an audit that erases what it found leaves the next one
@@ -37,13 +42,16 @@ Three zones:
   readout**, guarded import/export.
 - *PLANNING* — market environment, sizing (with the **vega sufficiency**
   block), strike ladder, roll planner, **hedge rebalance triggers**,
-  monetization. Most price the crash-skew (IPS anchor) basis; the two that
-  do not carry their own basis chip (see [Basis chips](#basis-chips)).
+  **delta drift** (M2.8), monetization. Most price the crash-skew (IPS
+  anchor) basis; the three that do not carry their own basis chip (see
+  [Basis chips](#basis-chips)).
 - *EXPLORATION* — spot×vol heatmap, time×price heatmap, Monte Carlo
-  distribution; all on the proportional-vol (GBM) basis. Both heatmaps carry
-  a **metric dropdown** built from `visualization.stress_charts_plotly.STRESS_METRICS`,
-  which offers `pnl`, `value`, `net_delta`, `delta`, `gamma`, `vega`,
-  `theta`, `rho`.
+  distribution, **vega term exposure** (M2.8). The three stress surfaces
+  are on the proportional-vol (GBM) basis and carry a **metric dropdown**
+  built from `visualization.stress_charts_plotly.STRESS_METRICS` (`pnl`,
+  `value`, `net_delta`, `delta`, `gamma`, `vega`, `theta`, `rho`); vega term
+  exposure is a structural read of today's book instead, so it carries its
+  own basis chip rather than the zone's default.
 
 **The weekly digest** (`deltadewa/reporting/weekly_report.py` →
 `program_report.py`, shipped in M2.6) — an emailed report, not a page. It
@@ -59,13 +67,16 @@ metric values.
 ### Basis chips
 
 PLANNING is no longer uniformly crash-priced, and the zone's intro sentence
-says so. Three bases now appear on the page, and every panel is chipped:
+says so. Four bases now appear on the page (a fifth, `book Greeks`, also
+appears once in EXPLORATION), and every panel that departs from its zone's
+default is chipped:
 
 | Chip | Panels | What it means |
 | --- | --- | --- |
 | `basis: crash-skew (IPS anchor)` | Sizing, strike ladder, roll planner, monetization | Reprices the book at the IPS crash. Agrees with `/monitor` to the cent. |
 | `basis: live market data` | Market environment | Reprices nothing — reads the feed. |
-| `basis: book Greeks at today's market` | Hedge rebalance triggers | Reads the book's Greeks unshocked. |
+| `basis: book Greeks at today's market` | Hedge rebalance triggers (PLANNING); vega term exposure (EXPLORATION) | Reads the book's Greeks unshocked. |
+| `basis: spot -5%, flat vol (not the IPS crash)` | Delta drift | Reprices at the handbook's own fixed §13 shock, distinct from the IPS crash anchor every other PLANNING panel prices. |
 
 ## Status legend
 
@@ -82,7 +93,7 @@ says so. Three bases now appear on the page, and every panel is chipped:
 
 | # | Part X item | Tier | Current surface | Analysis backing | Status |
 | --- | --- | --- | --- | --- | --- |
-| — | Decision matrix + entry-timing tree | pre-Tier | `/design` PLANNING — *Market environment*; also the weekly digest | `analysis/decision_matrix.py` (`decision_matrix`, `entry_timing_tree`) | **PRESENT** (M2.7) |
+| — | Decision matrix + entry-timing tree | pre-Tier | `/design` PLANNING — *Market environment*; also the weekly digest | `analysis/decision_matrix.py` (`decision_matrix`, `entry_timing_tree`) | **PRESENT** (M2.7; VIX thresholds sourced from policy in M2.8) |
 | 1 | Crash Convexity Chart | 1 | `/monitor` — *Crash scenario*, `payoff-curve` | `analysis/monitor_scenario.build_scenario_curve`, `visualization/crash_charts_plotly.plot_scenario_curve` | **PRESENT** |
 | 2 | Crash Scenario Table & Payoff Ratio | 1 | `/monitor` — *Crash scenario*, `_scenario_numbers` (offset ratio) | `analysis/monitor_scenario.build_scenario` | **PRESENT** (form changed — see [Conscious retirements](#conscious-retirements)) |
 | 3 | Theta Carry (Insurance Cost) | 1 | `/monitor` — *Crash scenario*, `_cost_panel`; also digest `CostSection` | `analysis/carry.carry_vs_budget` via `monitor_scenario` | **PRESENT** |
@@ -95,8 +106,8 @@ says so. Three bases now appear on the page, and every panel is chipped:
 | 10 | Net Delta Exposure | 3 | `/design` BOOK — `_net_delta_readout`; grid form via the `net_delta` heatmap metric | `portfolio/greeks.net_delta` via `summary_stats()` | **PRESENT** (M2.7) |
 | 11 | Hedge Rebalance Triggers | 3 | `/monitor` — *Decisions*; `/design` PLANNING — *Roll planner*, **Hedge rebalance triggers**, *Monetization* | `analysis/roll_status.evaluate_roll_status`, `analysis/hedge_triggers.evaluate_hedge_trigger_set`, `analysis/monetization`, `analysis/roll_planner` | **PRESENT** — both trigger sets now live (see note) |
 | 12 | Liquidity Risk | 4 | none | none — needs per-strike bid/ask and open interest | **OUTSTANDING** — genuinely data-blocked |
-| 13 | Delta Drift | 4 | Readable off `/design`'s `net_delta` heatmap; no drift scalar | `analysis/scenarios.py` already prices delta at shocked spot | **PARTIAL** — surfacing gap, not data-blocked |
-| 14 | Vega Term Exposure | 4 | none | `analysis/maturity.MaturityMixin.add_maturity_buckets` already does this grouping for theta | **PARTIAL** — surfacing gap, not data-blocked |
+| 13 | Delta Drift | 4 | `/design` PLANNING — **Delta drift** | `analysis/scenarios.ScenariosMixin.calculate_delta_drift` | **PRESENT** (M2.8) |
+| 14 | Vega Term Exposure | 4 | `/design` EXPLORATION — **Vega term exposure** | `analysis/maturity.MaturityMixin.calculate_vega_by_maturity` | **PRESENT** (M2.8) |
 | 15 | Hedge Efficiency Ratio | 4 | `/monitor` `_cost_panel`; digest `ProtectionSection.payoff_ratio` | Same function as #5 — see below | **PRESENT** (M2.7) |
 | — | Part VII Board/IC report | — | Weekly digest email | `reporting/program_report.py` | **RETIRED** from the dashboard — see [Conscious retirements](#conscious-retirements) |
 | — | Sizing workbench | — | `/design` PLANNING | `analysis/sizing.size_hedge` | **PRESENT** |
@@ -215,34 +226,29 @@ express but nothing currently drives.
 
 ## Outstanding
 
-**#12 Liquidity Risk** — genuinely data-blocked. Needs per-strike bid/ask
-spreads and open interest from a live options-chain feed; the free CBOE/FRED
-provider returns index-level series only. There is no stub on either Dash
-page (the notebooks had one), so the item is currently invisible rather than
-marked "planned".
+**#12 Liquidity Risk** — genuinely data-blocked, and now the *only* item in
+this state. Needs per-strike bid/ask spreads and open interest from a live
+options-chain feed; the free CBOE/FRED provider returns index-level series
+only. There is no stub on either Dash page (the notebooks had one), so the
+item is currently invisible rather than marked "planned". Tracked in #156
+(the options-chain feed), which also unlocks skew-aware pricing and
+backtesting — #12 is the Part X piece of that issue's scope, not a
+separate effort.
 
-**#13 Delta Drift** and **#14 Vega Term Exposure** — surfacing gaps, not data
-gaps, and not in M2.7's scope. Each needs a small `analysis/` function plus a
-panel.
-
-**#13** is defined in handbook §13 as `Δ(−5%) − Δ(0)` — two shocked deltas at
-a single valuation date, not a series from position history.
-`analysis/scenarios.py` already prices `metric="net_delta"` at arbitrary
-shocked spots, which is exactly the input required; `/design`'s spot×vol
-heatmap with `net_delta` selected already *displays* Δ at −5%. What is
-missing is the drift scalar and a panel to hold it.
+**#13 Delta Drift** and **#14 Vega Term Exposure** were surfacing gaps, not
+data gaps — both closed in M2.8. See the coverage table above:
+`analysis/scenarios.ScenariosMixin.calculate_delta_drift`
+(`/design` PLANNING — **Delta drift**) and
+`analysis/maturity.MaturityMixin.calculate_vega_by_maturity`
+(`/design` EXPLORATION — **Vega term exposure**). §14 extends
+`add_maturity_buckets` rather than a second bucketing scheme, so it and
+`carry.py`'s `theta_by_bucket` can never disagree on where a boundary falls.
 
 > Do not wire `health.delta_drift_from_target` /
-> `HealthMixin.calculate_delta_drift_pct` for this. Despite the name, it
-> implements a different metric — signed deviation from a target net-delta
-> ratio — and it now backs the `/design` hedge-trigger panel's delta row, not
-> handbook #13.
-
-**#14** is defined in handbook §14 as vega aggregated by maturity bucket.
-`MaturityMixin.add_maturity_buckets` (`analysis/maturity.py`) already
-produces that grouping, and `analysis/carry.py` already applies it to theta
-(`df.groupby("maturity_bucket")["position_theta"].sum()`). Extending the same
-pattern to `position_vega` needs no new data.
+> `HealthMixin.calculate_delta_drift_pct` for handbook #13. Despite the
+> name, it implements a different metric — signed deviation from a target
+> net-delta ratio — and it backs the `/design` hedge-trigger panel's delta
+> row, not this one.
 
 ## Engine code with no live consumer
 
@@ -277,7 +283,7 @@ kept deliberately; see [Conscious retirements](#conscious-retirements).
 
 ## Open questions
 
-Not decided by M2.7, and not blocking anything.
+Not decided by M2.7 or M2.8, and not blocking anything.
 
 1. **The four remaining Jupyter-only health gauges** — revive on a Dash page,
    fold into `roll_status.py`, or delete. They are ungated as things stand,
@@ -285,7 +291,8 @@ Not decided by M2.7, and not blocking anything.
 2. **`dashboard.yaml`'s `vega_sufficiency` block**, now duplicated by
    `IpsVega`. Retiring it means changing `widgets/health_dashboard.py` to
    read the IPS, which is a `widgets/` change.
-3. **`entry_timing_tree`'s hardcoded VIX thresholds** (40 / 25 / 15,
-   `analysis/decision_matrix.py`). M2.7 surfaced the function on `/design`
-   but did not touch its defaults; they are a pre-existing policy leak of the
-   same class as the ones M1.4 closed.
+
+`entry_timing_tree`'s hardcoded VIX thresholds (item 3 in earlier revisions
+of this list) are resolved, not open: M2.8 moved them to
+`IpsMarketEnvironment` and made the parameters required, closing the
+M1.4-class leak M2.7 had surfaced but not fixed.

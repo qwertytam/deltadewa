@@ -975,6 +975,63 @@ class TestHedgeTriggersPanel:
         assert "No action required" in text
 
 
+class TestDeltaDriftPanel:
+    """Part X §13 — hedge delta today vs. the handbook's own -5% shock.
+
+    Sits beside the hedge triggers panel: same "does the book need
+    rebalancing" question, asked by how fast the hedge itself responds
+    rather than by a policy threshold.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        return design._render_delta_drift_panel_logic(
+            portfolio=app.program_state.portfolio,
+        )
+
+    def test_renders_drift_and_per_leg_rows(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        text = _collect_text(self._panel(app))
+
+        assert "Delta now" in text
+        assert "at -5%" in text
+        assert "PUT" in text
+        assert "4,500" in text  # starter position's strike, formatted
+
+    def test_empty_book_shows_incomplete_message(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+
+        text = _collect_text(self._panel(app)).lower()
+
+        assert "at least one option position" in text
+
+    def test_drift_is_negative_for_a_protective_put(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A long put's delta becomes more negative as spot falls -5%.
+
+        Struck near the book's own spot (unlike ``_add_starter_position``'s
+        deep-ITM starter, whose delta is already saturated at -1 and so
+        shows zero drift) so the shock actually moves the reading.
+        """
+        app = _app_with_ips(tmp_path)
+        portfolio = app.program_state.portfolio
+        portfolio.add_position(
+            strike_price=portfolio.spot_price,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+
+        drift = PortfolioAnalyzer(portfolio).calculate_delta_drift()
+
+        assert drift.drift < 0.0
+        assert len(drift.legs) == 1
+
+
 class TestVegaSufficiency:
     """Part X #4 on /design — the only Tier-1 item the rebuild dropped."""
 
@@ -1300,6 +1357,57 @@ class TestMcPanel:
         assert "risk-neutral" in text
 
 
+class TestVegaTermPanel:
+    """Part X §14 — vega bucketed by maturity, a structural EXPLORATION view.
+
+    Unlike the other EXPLORATION panels it prices nothing — it reads
+    today's book Greeks — so an empty book is a real all-zero reading, not
+    an incomplete-inputs message.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        return design._render_vega_term_panel_logic(
+            portfolio=app.program_state.portfolio,
+        )
+
+    def test_renders_bucketed_vega_for_multi_maturity_book(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        portfolio = app.program_state.portfolio
+        portfolio.add_position(
+            strike_price=portfolio.spot_price,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=5),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        portfolio.add_position(
+            strike_price=portfolio.spot_price,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=200),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "Total vega" in text
+        assert "0-7 days (Weekly)" in text
+        assert "90+ days (Long-term)" in text
+
+    def test_empty_book_renders_zeros_not_a_raise(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        text = _collect_text(self._panel(app))
+
+        assert "Total vega 0.0" in text
+        assert "traceback" not in text.lower()
+
+
 class TestMonteCarloContainment:
     """The MC panel never touches the shared cache or autosave (B0 F6)."""
 
@@ -1513,8 +1621,8 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 6 PLANNING panels + 3 EXPLORATION panels share the .panel class.
-        assert page.locator(".panel").count() == 9
+        # 7 PLANNING panels + 4 EXPLORATION panels share the .panel class.
+        assert page.locator(".panel").count() == 11
 
 
 class TestExplorationZoneRendersClientSide:

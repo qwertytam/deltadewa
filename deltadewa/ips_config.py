@@ -84,6 +84,18 @@ DEFAULT_SKEW_LOW_PCTILE: Final[float] = 25.0
 DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 75.0
 DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
 
+# Defaults for the entry-timing VIX thresholds (M2.8). Seeded from the
+# values ``decision_matrix.entry_timing_tree`` used to hardcode as Python
+# defaults, so moving them onto this policy surface does not silently
+# change what a given VIX reading means. Private (unlike the bands above):
+# entry_timing_tree's vix_* parameters are no longer defaulted at all — a
+# caller must pass them explicitly (the M1.4/M1.5 fail-loud pattern) — so
+# these are consulted only when loading ips.yaml, never as a function
+# default elsewhere.
+_DEFAULT_VIX_VERY_HIGH: Final[float] = 40.0
+_DEFAULT_VIX_CAUTION: Final[float] = 25.0
+_DEFAULT_VIX_LOW: Final[float] = 15.0
+
 # How long a fetched market data value stays trustworthy. This is the boundary
 # between a CACHED reading (good enough for a verdict) and a STALE one (not),
 # so it is policy, not a provider implementation detail.
@@ -143,6 +155,9 @@ class IpsMarketEnvironment:
         ``data_ttl_minutes`` is how long a fetched value stays trustworthy —
         the CACHED/STALE boundary, and so a policy decision about how old data
         may be before it stops supporting a verdict.
+        ``vix_very_high``/``vix_caution``/``vix_low`` are VIX levels (vol
+        points, e.g. ``40.0``), the entry-timing tree's three stops (M2.8) —
+        see :func:`~deltadewa.analysis.decision_matrix.entry_timing_tree`.
     """
 
     vol_regime_low: float = DEFAULT_VOL_REGIME_LOW
@@ -151,6 +166,9 @@ class IpsMarketEnvironment:
     skew_high_pctile: float = DEFAULT_SKEW_HIGH_PCTILE
     term_contango_tolerance: float = DEFAULT_TERM_CONTANGO_TOLERANCE
     data_ttl_minutes: float = DEFAULT_DATA_TTL_MINUTES
+    vix_very_high: float = _DEFAULT_VIX_VERY_HIGH
+    vix_caution: float = _DEFAULT_VIX_CAUTION
+    vix_low: float = _DEFAULT_VIX_LOW
 
 
 @dataclass(frozen=True)
@@ -591,6 +609,9 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         DEFAULT_TERM_CONTANGO_TOLERANCE,
     )
     data_ttl = section.get("data_ttl_minutes", DEFAULT_DATA_TTL_MINUTES)
+    vix_very_high = section.get("vix_very_high", _DEFAULT_VIX_VERY_HIGH)
+    vix_caution = section.get("vix_caution", _DEFAULT_VIX_CAUTION)
+    vix_low = section.get("vix_low", _DEFAULT_VIX_LOW)
 
     if vol_low >= vol_high:
         raise IpsConfigError(
@@ -612,6 +633,12 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
             "market_environment.data_ttl_minutes must be > 0, got "
             f"{data_ttl} — a zero TTL would mark every cache hit STALE",
         )
+    if not vix_low < vix_caution < vix_very_high:
+        raise IpsConfigError(
+            "market_environment VIX thresholds must satisfy vix_low < "
+            "vix_caution < vix_very_high, got "
+            f"{vix_low}, {vix_caution}, {vix_very_high}",
+        )
 
     return IpsMarketEnvironment(
         vol_regime_low=vol_low,
@@ -620,6 +647,9 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         skew_high_pctile=skew_high,
         term_contango_tolerance=term_tol,
         data_ttl_minutes=data_ttl,
+        vix_very_high=vix_very_high,
+        vix_caution=vix_caution,
+        vix_low=vix_low,
     )
 
 
