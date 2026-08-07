@@ -99,6 +99,7 @@ if TYPE_CHECKING:
         MonetizationStepStatus,
     )
     from deltadewa.analysis.roll_status import MoneynessDrift, RollStatusRecord
+    from deltadewa.analysis.scenarios import DeltaDrift, DeltaDriftLeg
     from deltadewa.analysis.sizing import HedgeSizingResult
     from deltadewa.analysis.strike_ladder import (
         LadderRung,
@@ -135,6 +136,10 @@ _BASIS_LIVE_MARKET_DATA = "basis: live market data"
 # Nor does the trigger panel: it reads the book's Greeks at today's market,
 # with no crash shock applied at all.
 _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
+# Nor does the delta drift panel: it reprices at the handbook's own fixed
+# -5% spot shock (Part X §13), not the IPS crash anchor -- a distinct basis
+# from every other PLANNING panel.
+_BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"
 
 # EXPLORATION zone: dial defaults, matching hedge_design.ipynb's own
 # GlobalAssumptions/StressDashboard notebook-cell literals.
@@ -1259,6 +1264,77 @@ def _render_hedge_triggers_panel_logic(
     )
 
 
+def _delta_drift_leg_row(leg: DeltaDriftLeg) -> html.Tr:
+    """One option leg's delta today, at -5%, and the drift between them."""
+    label = (
+        f"{leg.position.option.option_type.value} "
+        f"{leg.position.option.strike_price:,.0f}"
+    )
+    return html.Tr(
+        [
+            html.Td(label),
+            html.Td(f"{leg.delta_now:,.1f}"),
+            html.Td(f"{leg.delta_shocked:,.1f}"),
+            html.Td(f"{leg.drift:,.1f}"),
+        ],
+    )
+
+
+def _delta_drift_panel_view(drift: DeltaDrift) -> Component:
+    """Render Part X §13: hedge delta today vs. at the handbook's -5% shock.
+
+    Sits beside the hedge triggers panel — same "does the book need
+    rebalancing" question, asked a different way: not whether a threshold
+    has been crossed, but how quickly the hedge itself would start
+    offsetting losses in an early-stage decline.
+    """
+    header = html.Tr(
+        [
+            html.Th("Leg"),
+            html.Th("Delta now"),
+            html.Th(f"Delta at {drift.shock_pct:.0f}%"),
+            html.Th("Drift"),
+        ],
+    )
+    return html.Div(
+        [
+            html.P(
+                "Hedge-only delta (options, no underlying) today vs. "
+                f"spot {drift.shock_pct:.0f}% — the handbook's own "
+                "worked example, not the IPS crash scenario.",
+                className="plain-language",
+            ),
+            html.P(
+                f"Delta now {drift.delta_now:,.1f}, at "
+                f"{drift.shock_pct:.0f}% {drift.delta_shocked:,.1f} — "
+                f"drift {drift.drift:,.1f}.",
+                className="env-verdict",
+            ),
+            html.Table(
+                [
+                    html.Thead(header),
+                    html.Tbody(
+                        [_delta_drift_leg_row(leg) for leg in drift.legs],
+                    ),
+                ],
+                className="planning-table",
+            ),
+        ],
+    )
+
+
+def _render_delta_drift_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Render the delta drift panel for the current book."""
+    return _safe_render(
+        lambda: _delta_drift_panel_view(
+            PortfolioAnalyzer(portfolio).calculate_delta_drift(),
+        ),
+    )
+
+
 def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
     """One row of the IPS monetization schedule."""
     return html.Tr(
@@ -1895,6 +1971,18 @@ def render(app: ProgramDashApp) -> html.Div:
             ),
             html.Div(
                 [
+                    html.H3(
+                        ["Delta drift", basis_chip(_BASIS_MINUS_5PCT)],
+                    ),
+                    html.Div(
+                        _render_delta_drift_panel_logic(portfolio=portfolio),
+                        id="plan-delta-drift-panel",
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
                     html.H3(["Monetization", basis_chip(_BASIS_CRASH_SKEW)]),
                     html.Div(
                         _render_monetization_panel_logic(
@@ -2419,6 +2507,15 @@ def register_callbacks(app: ProgramDashApp) -> None:
         return _render_hedge_triggers_panel_logic(
             portfolio=app.program_state.portfolio,
             ips_config=ips_config,
+        )
+
+    @app.callback(
+        Output("plan-delta-drift-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_delta_drift_panel(_version: int) -> Component:
+        return _render_delta_drift_panel_logic(
+            portfolio=app.program_state.portfolio,
         )
 
     @app.callback(
