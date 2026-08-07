@@ -141,10 +141,20 @@ M2.6 section for what's left to verify live. Phase 3 (docs/handbook) is next;
 **treat `docs/implementation-plan.md` as the source of truth for what to
 build there.**
 
-The only features still genuinely outstanding are the data-blocked Tier-4 metrics —
-**#12 Liquidity Risk**, **#13 Delta Drift**, and **#14 Vega Term Exposure** — each
-of which needs a live options-chain or position-history feed that isn't available
-yet (see "Outstanding Tier-4 items" in `docs/part-x-coverage.md`).
+Only **#12 Liquidity Risk** is genuinely data-blocked — it needs per-strike
+bid/ask and open interest from a live options-chain feed, which the free
+CBOE/FRED provider doesn't return. **#13 Delta Drift** and **#14 Vega Term
+Exposure** were listed alongside it until the 2026-08-06 re-audit; both are
+**surfacing gaps, not data gaps** (§13 is `Δ(−5%) − Δ(0)`, which
+`analysis/scenarios.py` already prices; §14 is vega by maturity bucket, which
+`analysis/maturity.py` already groups for theta).
+
+The re-audit also found **real coverage regressions from the Dash rebuild**:
+**#4 Vega Sufficiency** (Tier 1) and **#8 Forward Variance** have no surface at
+all, and **#6**/**#7** moved to the weekly digest only. **Read
+`docs/part-x-coverage.md` before adding or moving a dashboard panel** — it is
+the current handbook-item → surface map, and its "Deliberate exclusions"
+section records what must *not* be re-added.
 
 ## Workflow expectations
 
