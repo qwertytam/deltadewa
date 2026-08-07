@@ -94,6 +94,7 @@ if TYPE_CHECKING:
         HedgeTriggerSet,
     )
     from deltadewa.analysis.market_environment import MarketEnvironment
+    from deltadewa.analysis.maturity import MaturityVegaExposure
     from deltadewa.analysis.monetization import (
         MonetizationPlan,
         MonetizationStepStatus,
@@ -1629,6 +1630,51 @@ def _render_mc_panel_logic(
     return _safe_render(_build)
 
 
+def _vega_term_panel_view(exposure: MaturityVegaExposure) -> Component:
+    """Render Part X §14: vega bucketed by maturity, a structural view.
+
+    Not a stress scenario — a read of today's book, so it carries the
+    ``_BASIS_BOOK_GREEKS`` chip (like the PLANNING zone's hedge triggers
+    panel) rather than EXPLORATION's default proportional-vol basis.
+    """
+    header = html.Tr([html.Th("Maturity bucket"), html.Th("Vega")])
+    rows = [
+        html.Tr([html.Td(bucket), html.Td(f"{vega:,.1f}")])
+        for bucket, vega in exposure.vega_by_bucket.items()
+    ]
+    return html.Div(
+        [
+            html.P(
+                "Where the book's volatility sensitivity sits across the "
+                "term structure — a structural read, not a stress "
+                "scenario. Institutional tail hedges typically prefer "
+                "long-dated vega exposure.",
+                className="plain-language",
+            ),
+            html.P(
+                f"Total vega {exposure.total_vega:,.1f}.",
+                className="env-verdict",
+            ),
+            html.Table(
+                [html.Thead(header), html.Tbody(rows)],
+                className="planning-table",
+            ),
+        ],
+    )
+
+
+def _render_vega_term_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Render the vega term exposure panel for the current book."""
+    return _safe_render(
+        lambda: _vega_term_panel_view(
+            PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(),
+        ),
+    )
+
+
 def render(app: ProgramDashApp) -> html.Div:
     """Build the /design page: the BOOK zone and the PLANNING zone.
 
@@ -2289,6 +2335,21 @@ def render(app: ProgramDashApp) -> html.Div:
                 ],
                 className="panel",
             ),
+            html.Div(
+                [
+                    html.H3(
+                        [
+                            "Vega term exposure",
+                            basis_chip(_BASIS_BOOK_GREEKS),
+                        ],
+                    ),
+                    html.Div(
+                        _render_vega_term_panel_logic(portfolio=portfolio),
+                        id="explore-vega-term-panel",
+                    ),
+                ],
+                className="panel",
+            ),
         ],
         className="zone-exploration",
     )
@@ -2630,4 +2691,13 @@ def register_callbacks(app: ProgramDashApp) -> None:
             horizon_days=horizon_days,
             expected_return_pct=expected_return_pct,
             seed=seed,
+        )
+
+    @app.callback(
+        Output("explore-vega-term-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_vega_term_panel(_version: int) -> Component:
+        return _render_vega_term_panel_logic(
+            portfolio=app.program_state.portfolio,
         )

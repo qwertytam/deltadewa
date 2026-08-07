@@ -1357,6 +1357,57 @@ class TestMcPanel:
         assert "risk-neutral" in text
 
 
+class TestVegaTermPanel:
+    """Part X §14 — vega bucketed by maturity, a structural EXPLORATION view.
+
+    Unlike the other EXPLORATION panels it prices nothing — it reads
+    today's book Greeks — so an empty book is a real all-zero reading, not
+    an incomplete-inputs message.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        return design._render_vega_term_panel_logic(
+            portfolio=app.program_state.portfolio,
+        )
+
+    def test_renders_bucketed_vega_for_multi_maturity_book(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        portfolio = app.program_state.portfolio
+        portfolio.add_position(
+            strike_price=portfolio.spot_price,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=5),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        portfolio.add_position(
+            strike_price=portfolio.spot_price,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=200),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "Total vega" in text
+        assert "0-7 days (Weekly)" in text
+        assert "90+ days (Long-term)" in text
+
+    def test_empty_book_renders_zeros_not_a_raise(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        text = _collect_text(self._panel(app))
+
+        assert "Total vega 0.0" in text
+        assert "traceback" not in text.lower()
+
+
 class TestMonteCarloContainment:
     """The MC panel never touches the shared cache or autosave (B0 F6)."""
 
@@ -1570,8 +1621,8 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 7 PLANNING panels + 3 EXPLORATION panels share the .panel class.
-        assert page.locator(".panel").count() == 10
+        # 7 PLANNING panels + 4 EXPLORATION panels share the .panel class.
+        assert page.locator(".panel").count() == 11
 
 
 class TestExplorationZoneRendersClientSide:
