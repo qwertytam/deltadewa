@@ -78,6 +78,10 @@ class TestLoadIpsConfig:
             0.10, rel=1e-8
         )
         assert ips.convexity.crash_floor_reported is True
+        # M2.7: the shipped band is the handbook's own reading of the
+        # convexity/carry ratio (< 3 poor, 3-6 acceptable, > 6 attractive).
+        assert ips.convexity.efficiency_min_ratio == pytest.approx(3.0)
+        assert ips.convexity.efficiency_max_ratio == pytest.approx(6.0)
         assert ips.drawdown.max_tolerance_pct == pytest.approx(20.0, rel=1e-4)
         assert ips.triggers.target_delta_ratio_pct == pytest.approx(
             90.0, rel=1e-4
@@ -253,6 +257,74 @@ class TestLoadIpsConfig:
         path = _write_yaml(tmp_path, config)
 
         with pytest.raises(IpsConfigError, match="skew_reference_delta"):
+            load_ips_config(path)
+
+    def test_efficiency_band_defaults_to_the_handbook_reading(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Omitted efficiency bands fall back to the handbook's 3 / 6."""
+        # _VALID_CONFIG's convexity section carries no efficiency band.
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+
+        ips = load_ips_config(path)
+
+        assert ips.convexity.efficiency_min_ratio == pytest.approx(3.0)
+        assert ips.convexity.efficiency_max_ratio == pytest.approx(6.0)
+
+    def test_efficiency_band_round_trips_when_set(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A program running a different efficiency mandate is honoured."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "efficiency_min_ratio": 4.0,
+                "efficiency_max_ratio": 9.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        ips = load_ips_config(path)
+
+        assert ips.convexity.efficiency_min_ratio == pytest.approx(4.0)
+        assert ips.convexity.efficiency_max_ratio == pytest.approx(9.0)
+
+    def test_inverted_efficiency_band_raises(self, tmp_path: Path) -> None:
+        """min > max would make ACCEPTABLE unreachable, so it's rejected."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "efficiency_min_ratio": 6.0,
+                "efficiency_max_ratio": 3.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="efficiency_min_ratio"):
+            load_ips_config(path)
+
+    def test_negative_efficiency_min_raises(self, tmp_path: Path) -> None:
+        """A negative efficiency floor raises IpsConfigError."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "efficiency_min_ratio": -1.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="efficiency_min_ratio"):
             load_ips_config(path)
 
     def test_negative_budget_raises(self, tmp_path: Path) -> None:

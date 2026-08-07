@@ -26,6 +26,14 @@ _DEFAULT_SKEW_STEEPENING: Final[float] = 0.0
 _DEFAULT_SKEW_REFERENCE_DELTA: Final[float] = 0.10
 _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 
+# Hedge-efficiency band: crash payoff per dollar of annual carry, read against
+# the handbook's own interpretation table (docs/hedging handbook.md:4342-4348 —
+# "< 3 poor / 3 to 6 acceptable / > 6 attractive"). Policy rather than
+# presentation because it answers a mandate question ("is this hedge worth the
+# money"), the same class as the convexity band it sits beside.
+_DEFAULT_EFFICIENCY_MIN_RATIO: Final[float] = 3.0
+_DEFAULT_EFFICIENCY_MAX_RATIO: Final[float] = 6.0
+
 # Default for the delta-drift target that lives alongside the delta_drift
 # thresholds in the ``triggers`` section. A tail-hedged book is deliberately
 # net long (deep-OTM puts offset only a sliver of equity delta), so drift is
@@ -155,6 +163,13 @@ class IpsConvexity:
     keeps the flat bump), the put-delta magnitude of that wing (the anchor the
     steepening is calibrated to, e.g. ``0.10``), and whether the intrinsic-floor
     column is surfaced.
+
+    ``efficiency_min_ratio`` / ``efficiency_max_ratio`` band the hedge
+    efficiency ratio (crash payoff per dollar of annual carry — see
+    ``analysis.hedge_efficiency``). They live here rather than in ``budget``
+    because the ratio is the convexity/carry trade-off itself, and because this
+    section already carries a min/max band pair every consumer reads the same
+    way.
     """
 
     crash_scenario_pct: float
@@ -164,6 +179,8 @@ class IpsConvexity:
     skew_steepening: float = _DEFAULT_SKEW_STEEPENING
     skew_reference_delta: float = _DEFAULT_SKEW_REFERENCE_DELTA
     crash_floor_reported: bool = _DEFAULT_CRASH_FLOOR_REPORTED
+    efficiency_min_ratio: float = _DEFAULT_EFFICIENCY_MIN_RATIO
+    efficiency_max_ratio: float = _DEFAULT_EFFICIENCY_MAX_RATIO
 
 
 @dataclass(frozen=True)
@@ -360,6 +377,24 @@ def _parse_convexity(config: dict[str, Any]) -> IpsConvexity:
         section.get("crash_floor_reported", _DEFAULT_CRASH_FLOOR_REPORTED),
     )
 
+    efficiency_min_ratio = section.get(
+        "efficiency_min_ratio",
+        _DEFAULT_EFFICIENCY_MIN_RATIO,
+    )
+    efficiency_max_ratio = section.get(
+        "efficiency_max_ratio",
+        _DEFAULT_EFFICIENCY_MAX_RATIO,
+    )
+    _require_non_negative(
+        efficiency_min_ratio,
+        "convexity.efficiency_min_ratio",
+    )
+    if efficiency_min_ratio > efficiency_max_ratio:
+        raise IpsConfigError(
+            "convexity.efficiency_min_ratio must be <= efficiency_max_ratio, "
+            f"got {efficiency_min_ratio} > {efficiency_max_ratio}",
+        )
+
     return IpsConvexity(
         crash_scenario_pct=crash_scenario_pct,
         target_min_pct=target_min_pct,
@@ -368,6 +403,8 @@ def _parse_convexity(config: dict[str, Any]) -> IpsConvexity:
         skew_steepening=skew_steepening,
         skew_reference_delta=skew_reference_delta,
         crash_floor_reported=crash_floor_reported,
+        efficiency_min_ratio=efficiency_min_ratio,
+        efficiency_max_ratio=efficiency_max_ratio,
     )
 
 

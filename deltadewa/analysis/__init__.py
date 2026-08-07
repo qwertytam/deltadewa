@@ -30,6 +30,11 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
+from deltadewa.analysis.hedge_efficiency import (
+    EfficiencyVerdict,
+    HedgeEfficiency,
+    hedge_efficiency,
+)
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
     evaluate_hedge_triggers,
@@ -115,11 +120,13 @@ __all__ = [
     "DataQuality",
     "DecisionResult",
     "DecisionVerdict",
+    "EfficiencyVerdict",
     "EmpiricalCdf",
     "EntryTimingResult",
     "EntryTimingStep",
     "HedgeAdequacy",
     "HedgeCostVerdict",
+    "HedgeEfficiency",
     "HedgeSizingResult",
     "HedgeTriggerThresholds",
     "LadderRung",
@@ -171,6 +178,7 @@ __all__ = [
     "forward_vol",
     "gamma_theta_delay",
     "get_volatility_stats",
+    "hedge_efficiency",
     "new_strike_for_entry_otm",
     "percentile_of_value",
     "proportional_vol",

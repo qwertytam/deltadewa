@@ -32,6 +32,14 @@ convexity:
   skew_reference_delta: 0.10    # put-delta magnitude of that wing (the anchor the
                                 # steepening is calibrated to). Range (0, 0.5).
   crash_floor_reported: true    # surface the intrinsic-floor column
+  # Hedge efficiency = crash payoff / annual carry (handbook "Hedge Efficiency
+  # Ratio", docs/hedging handbook.md:2032; the same ratio the Carry vs.
+  # Convexity chart states in percentages at :4337). Bands are the handbook's
+  # own interpretation table at :4342-4348 — below min reads POOR, above max
+  # reads ATTRACTIVE. Policy, not presentation: this is the "is this hedge
+  # worth the money" mandate question.
+  efficiency_min_ratio: 3.0
+  efficiency_max_ratio: 6.0
 
 drawdown:
   max_tolerance_pct: 20.0
