@@ -24,15 +24,17 @@ Only ``main()``'s ``--as-of`` default reads the wall clock; everything
 downstream is a pure function of its arguments, which is what makes the
 golden-file test possible.
 
-With ``--send-email``, the digest is also sent via SendGrid
-(``deltadewa.reporting.email_sendgrid``), reading ``SENDGRID_API_KEY``,
-``REPORT_EMAIL_TO``, ``REPORT_EMAIL_FROM`` from the environment. This is
-opt-in (default off) so building the digest never requires mail
+With ``--send-email``, the digest is also sent over SMTP
+(``deltadewa.reporting.email_smtp``), reading ``SMTP_HOST``,
+``SMTP_PORT``, ``SMTP_USERNAME``, ``SMTP_PASSWORD``, ``REPORT_EMAIL_TO``,
+``REPORT_EMAIL_FROM`` from the environment — any standard SMTP relay
+works, so switching providers is a config change, not a code change.
+This is opt-in (default off) so building the digest never requires mail
 credentials — only the cron line that actually wants delivery passes the
-flag. A missing env var or a failed send both exit **2**, distinct from
-the **1** used when the report itself was refused: at that point the
-report files are already written successfully, and a delivery failure
-must never look like exit-0 success. On a confirmed send,
+flag. A missing/invalid env var or a failed send both exit **2**,
+distinct from the **1** used when the report itself was refused: at that
+point the report files are already written successfully, and a delivery
+failure must never look like exit-0 success. On a confirmed send,
 ``DIGEST_HEARTBEAT_URL`` (``deltadewa.heartbeat``) is pinged — the *only*
 path that pings it, per the dead-man's-switch design: a missing weekly
 email is exactly the kind of silence that gets rationalised as "quiet
@@ -66,9 +68,10 @@ from deltadewa.marketdata import (
     default_cache_dir,
     resolve_data_ttl,
 )
-from deltadewa.reporting.email_sendgrid import (
+from deltadewa.reporting.email_smtp import (
     EmailDeliveryError,
     EmailMessage,
+    SmtpConfig,
     send_email,
 )
 from deltadewa.reporting.program_report import (
@@ -111,7 +114,10 @@ _STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
     {"STALE", "STATIC", "UNAVAILABLE"},
 )
 
-_SENDGRID_API_KEY_ENV_VAR: Final[str] = "SENDGRID_API_KEY"
+_SMTP_HOST_ENV_VAR: Final[str] = "SMTP_HOST"
+_SMTP_PORT_ENV_VAR: Final[str] = "SMTP_PORT"
+_SMTP_USERNAME_ENV_VAR: Final[str] = "SMTP_USERNAME"
+_SMTP_PASSWORD_ENV_VAR: Final[str] = "SMTP_PASSWORD"  # ruff: ignore[hardcoded-password-string] -- var name, not a credential
 _REPORT_EMAIL_TO_ENV_VAR: Final[str] = "REPORT_EMAIL_TO"
 _REPORT_EMAIL_FROM_ENV_VAR: Final[str] = "REPORT_EMAIL_FROM"
 _DIGEST_HEARTBEAT_ENV_VAR: Final[str] = "DIGEST_HEARTBEAT_URL"
@@ -486,10 +492,12 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         default=False,
         help=(
-            "Send the digest via SendGrid after writing it. Reads "
-            f"{_SENDGRID_API_KEY_ENV_VAR}, {_REPORT_EMAIL_TO_ENV_VAR}, "
-            f"{_REPORT_EMAIL_FROM_ENV_VAR} from the environment; opt-in "
-            "so building the digest never requires mail credentials."
+            "Send the digest over SMTP after writing it. Reads "
+            f"{_SMTP_HOST_ENV_VAR}, {_SMTP_PORT_ENV_VAR}, "
+            f"{_SMTP_USERNAME_ENV_VAR}, {_SMTP_PASSWORD_ENV_VAR}, "
+            f"{_REPORT_EMAIL_TO_ENV_VAR}, {_REPORT_EMAIL_FROM_ENV_VAR} "
+            "from the environment; opt-in so building the digest never "
+            "requires mail credentials."
         ),
     )
     return parser.parse_args(argv)
@@ -503,8 +511,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         policy, or an empty book — a report built from neither is not a
         degraded report, it isn't a report); ``2`` if the digest was built
         and written but ``--send-email`` was requested and delivery
-        failed (missing env vars, or a SendGrid send failure) — distinct
-        from ``1`` since the report files did get written successfully.
+        failed (missing/invalid env vars, or an SMTP send failure) —
+        distinct from ``1`` since the report files did get written
+        successfully.
 
     """
     logging.basicConfig(level=logging.INFO)
@@ -613,16 +622,19 @@ def _send_digest_email(
     html_text: str,
     as_of: date,
 ) -> int | None:
-    """Send *digest* via SendGrid; ping the digest heartbeat on success.
+    """Send *digest* over SMTP; ping the digest heartbeat on success.
 
     Returns:
         ``None`` on a confirmed send; otherwise the exit code ``main()``
-        should return (``2`` — required env vars missing, or the send
-        itself failed).
+        should return (``2`` — required env vars missing/invalid, or the
+        send itself failed).
 
     """
     try:
-        api_key = os.environ[_SENDGRID_API_KEY_ENV_VAR]
+        host = os.environ[_SMTP_HOST_ENV_VAR]
+        port = int(os.environ[_SMTP_PORT_ENV_VAR])
+        username = os.environ[_SMTP_USERNAME_ENV_VAR]
+        password = os.environ[_SMTP_PASSWORD_ENV_VAR]
         to_addr = os.environ[_REPORT_EMAIL_TO_ENV_VAR]
         from_addr = os.environ[_REPORT_EMAIL_FROM_ENV_VAR]
     except KeyError as exc:
@@ -632,7 +644,20 @@ def _send_digest_email(
             file=sys.stderr,
         )
         return 2
+    except ValueError:
+        print(
+            f"weekly_report: --send-email requires {_SMTP_PORT_ENV_VAR} "
+            "to be an integer; the digest was written above but not sent.",
+            file=sys.stderr,
+        )
+        return 2
 
+    config = SmtpConfig(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+    )
     message = EmailMessage(
         subject=f"Weekly Hedge Digest — {digest.headline} ({as_of})",
         html_body=html_text,
@@ -640,7 +665,7 @@ def _send_digest_email(
         from_addr=from_addr,
     )
     try:
-        send_email(message, api_key=api_key)
+        send_email(message, config=config)
     except EmailDeliveryError as exc:
         _logger.error("weekly_report: email delivery FAILED: %s", exc)
         print(f"weekly_report: email delivery FAILED — {exc}", file=sys.stderr)
