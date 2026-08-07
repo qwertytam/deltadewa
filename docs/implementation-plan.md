@@ -711,7 +711,7 @@ changed how parameters travel, never what is computed.
 | **Crash-shock term structure** — one cross-sectional slope, no tenor dependence | Open (methodology §8) |
 | **`default_crash_shock()`** — prices `0.15 / 0.0 / 0.10` when `ips_convexity is None` | Open by decision: a named, documented fallback so the pre-IPS crash panel renders at all. Not a parameter default, so out of the new guard's scope. Removing it would change public behaviour of `crash_scenario_table` and `CrashPayoffDisplay`. |
 | **`_shock_to_multiplier`** (`crash_payoff.py`) — defined and tested, called nowhere | ✅ Closed: function and its test deleted in `4ed97bf` |
-| **Tier-4 metrics** #12 Liquidity Risk, #13 Delta Drift, #14 Vega Term Exposure | Open: data-blocked (see `part-x-coverage.md`) |
+| **Tier-4 metrics** #12 Liquidity Risk, #13 Delta Drift, #14 Vega Term Exposure | Open. **Corrected by the 2026-08-06 Part X re-audit:** only #12 is data-blocked. #13 (`Δ(−5%) − Δ(0)`) and #14 (vega by maturity bucket) are surfacing gaps the engine already supports — see `part-x-coverage.md`. |
 
 **Ledger — judgment calls made beyond the brief.** Recorded because each
 changed the shape of the fix, not just its wording:
