@@ -143,6 +143,55 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
     ]
 
 
+def _efficiency_sentence(result: ScenarioResult) -> html.P:
+    """Build the hedge-efficiency sentence: payoff bought per dollar of carry.
+
+    The bridge between "what does this cost" and "what do we get" — Part X
+    #5/#15, the handbook's single "is this hedge worth the money" figure.
+
+    Deliberately one plain-language sentence with no ``big-number`` and no
+    ``band_bar``: this page already carries five big numbers and two band
+    bars, and M2.4's through-line is that ``/monitor`` reads legibly cold.
+    A sixth headline would work against that.
+
+    The wording names *this scenario* because
+    :attr:`ScenarioResult.efficiency` is scenario-local — at the IPS default
+    dials it is the handbook's ratio, but the spot dial moves it.
+    """
+    efficiency = result.efficiency
+    # ``verdict`` is None exactly when ``ratio`` is (see HedgeEfficiency), but
+    # that invariant lives in a docstring, so both are checked here rather
+    # than asserted — a renderer should not be the thing that trusts it.
+    if efficiency.ratio is None or efficiency.verdict is None:
+        return html.P(
+            "Hedge efficiency — the payoff bought per dollar of carry — "
+            "can't be stated while the book has no carry: the ratio has no "
+            "denominator.",
+            className="plain-language",
+        )
+
+    if efficiency.ratio <= 0:
+        # A hedge that loses value in the crash. "Buys $-0.50 of payoff" is
+        # not a sentence, and rounding it away would hide the finding.
+        return html.P(
+            "The hedge *loses* "
+            f"{fmt.compact_currency(abs(efficiency.crash_payoff))} at this "
+            f"{fmt.signed_percent(result.spot_pct)} scenario, so annual "
+            "carry buys no payoff here at all — efficiency is negative, not "
+            "merely poor.",
+            className="plain-language",
+        )
+
+    return html.P(
+        f"Every dollar of annual carry buys "
+        f"{fmt.currency(efficiency.ratio, decimals=2)} of hedge payoff at "
+        f"this {fmt.signed_percent(result.spot_pct)} scenario — "
+        f"{efficiency.verdict.value.lower()} against the IPS "
+        f"{efficiency.band_min_ratio:g}-{efficiency.band_max_ratio:g}x band.",
+        className="plain-language",
+    )
+
+
 def _cost_panel(
     result: ScenarioResult,
     ips_config: IpsConfig,
@@ -197,6 +246,7 @@ def _cost_panel(
             "bigger share.",
             className="plain-language",
         ),
+        _efficiency_sentence(result),
     ]
 
 

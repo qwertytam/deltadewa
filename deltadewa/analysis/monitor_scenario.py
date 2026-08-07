@@ -22,6 +22,10 @@ from deltadewa.analysis.crash_repricing import (
     hedge_value,
     underlying_pnl,
 )
+from deltadewa.analysis.hedge_efficiency import (
+    HedgeEfficiency,
+    hedge_efficiency,
+)
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
@@ -52,6 +56,13 @@ class ScenarioResult:
         carry: Carry cost vs. the IPS annual budget, measured against
             ``book_notional`` (so the quantity dial moves this even though
             it doesn't move ``hedge_value_*``).
+        efficiency: ``hedge_gain`` per dollar of annual carry, read against
+            the IPS band (handbook Part X #5/#15 — see
+            :mod:`deltadewa.analysis.hedge_efficiency`). **Scenario-local**,
+            like everything else here: at the IPS default dials this is the
+            handbook's figure, but the spot dial moves ``hedge_gain``, so at
+            a shallower shock it is a smaller ratio about a smaller move.
+            Unaffected by the quantity dial, which moves neither term.
 
     """
 
@@ -66,6 +77,7 @@ class ScenarioResult:
     offset_ratio: float | None
     book_notional: float
     carry: CarryBudgetStatus
+    efficiency: HedgeEfficiency
 
 
 def build_scenario(
@@ -132,6 +144,16 @@ def build_scenario(
         book_notional=book_notional,
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
+    # Dollar form of the handbook's convexity/carry ratio. Identical to the
+    # percentage form (crash_convexity_pct / carry_pct_of_notional) whenever
+    # the quantity dial sits at portfolio.underlying_quantity, since both
+    # percentages then normalize by this same book_notional.
+    efficiency = hedge_efficiency(
+        crash_payoff=hedge_gain,
+        annual_carry=theta_annual,
+        band_min_ratio=ips_config.convexity.efficiency_min_ratio,
+        band_max_ratio=ips_config.convexity.efficiency_max_ratio,
+    )
 
     return ScenarioResult(
         spot_pct=spot_pct,
@@ -145,6 +167,7 @@ def build_scenario(
         offset_ratio=offset_ratio,
         book_notional=book_notional,
         carry=carry,
+        efficiency=efficiency,
     )
 
 

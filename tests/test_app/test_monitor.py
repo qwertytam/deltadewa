@@ -12,6 +12,7 @@ expose.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import threading
 from dataclasses import dataclass
@@ -29,7 +30,8 @@ from deltadewa.analysis.crash_repricing import (
     crash_hedge_value,
     hedge_value,
 )
-from deltadewa.analysis.monitor_scenario import build_scenario
+from deltadewa.analysis.hedge_efficiency import EfficiencyVerdict
+from deltadewa.analysis.monitor_scenario import ScenarioResult, build_scenario
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import monitor
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -555,6 +557,163 @@ class TestCostSection:
             timeout=_PAGE_LOAD_TIMEOUT_MS,
         )
         assert page.inner_text("#carry-theta-annual") == before_theta
+
+
+class TestHedgeEfficiencySentence:
+    """Part X #5/#15 on /monitor: one sentence, not a sixth headline.
+
+    Driven by calling ``_efficiency_sentence`` directly rather than through
+    a browser — it is a pure function of a ``ScenarioResult``, so a live
+    page would only slow down what it can already prove. The one thing that
+    genuinely needs the page (that the sentence is *in* the cost panel and
+    moves with the dials) is the last test in this class.
+    """
+
+    @staticmethod
+    def _scenario(
+        handle: MonitorAppHandle,
+        *,
+        spot_pct: float | None = None,
+    ) -> ScenarioResult:
+        ips_config = handle.state.ips_config
+        assert ips_config is not None
+        return build_scenario(
+            handle.state.portfolio,
+            ips_config,
+            spot_pct=(
+                ips_config.convexity.crash_scenario_pct
+                if spot_pct is None
+                else spot_pct
+            ),
+            vol_points=ips_config.convexity.crash_vol_shock,
+            quantity=handle.state.portfolio.underlying_quantity,
+        )
+
+    def test_states_the_ratio_and_its_verdict(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        result = self._scenario(monitor_app)
+        text = monitor._efficiency_sentence(result).children
+
+        assert "of hedge payoff" in text
+        assert result.efficiency.verdict.value.lower() in text
+
+    def test_names_the_scenario_not_just_the_ratio(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The figure is scenario-local, so the sentence has to say so.
+
+        Otherwise a reader who has moved the spot dial to -5% reads a much
+        smaller ratio as if it were the program's headline efficiency.
+        """
+        result = self._scenario(monitor_app, spot_pct=-5.0)
+        text = monitor._efficiency_sentence(result).children
+
+        assert "-5.0% scenario" in text
+
+    def test_quotes_the_ips_band_not_a_hardcoded_one(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        result = self._scenario(monitor_app)
+        text = monitor._efficiency_sentence(result).children
+        ips_config = monitor_app.state.ips_config
+        assert ips_config is not None
+
+        assert (
+            f"{ips_config.convexity.efficiency_min_ratio:g}-"
+            f"{ips_config.convexity.efficiency_max_ratio:g}x band"
+        ) in text
+
+    def test_zero_carry_says_why_rather_than_printing_a_number(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """An undefined ratio must never render as 0.00x or n/a."""
+        result = self._scenario(monitor_app)
+        no_carry = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=None,
+                verdict=None,
+            ),
+        )
+
+        text = monitor._efficiency_sentence(no_carry).children
+
+        assert "no denominator" in text
+        assert "x band" not in text
+
+    def test_negative_payoff_is_not_dressed_up_as_a_small_ratio(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """A hedge that loses in the crash reads as that, not as "poor"."""
+        result = self._scenario(monitor_app)
+        losing = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=-0.5,
+                crash_payoff=-50_000.0,
+                verdict=EfficiencyVerdict.POOR,
+            ),
+        )
+
+        text = monitor._efficiency_sentence(losing).children
+
+        assert "loses" in text
+        assert "$-" not in text
+
+    def test_sentence_is_in_the_cost_panel_and_moves_with_the_spot_dial(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#cost-panel", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        before = page.inner_text("#cost-panel")
+        assert "of hedge payoff" in before
+
+        spot_slider = page.locator('#spot-slider [role="slider"]')
+        spot_slider.focus()
+        for _ in range(5):
+            page.keyboard.press("ArrowRight")
+        page.wait_for_function(
+            "(before) => document.getElementById('cost-panel')"
+            ".innerText !== before",
+            arg=before,
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        assert page.inner_text("#cost-panel") != before
+
+    def test_stays_a_sentence_not_a_sixth_headline(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """M2.4's through-line: /monitor must read legibly cold.
+
+        The ratio is a bridge between the cost and payoff sections, not a
+        competing headline — so it gets no ``big-number`` and no band bar of
+        its own. Pinned because "just make it a gauge" is the natural drift.
+        """
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#cost-panel", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        efficiency_line = page.locator(
+            "#cost-panel p", has_text="of hedge payoff"
+        )
+        assert efficiency_line.count() == 1
+        assert efficiency_line.locator(".big-number").count() == 0
+        assert efficiency_line.locator(".band-bar").count() == 0
+        # The carry bar is the panel's only band bar, before and after.
+        assert page.locator("#cost-panel .band-bar").count() == 1
 
 
 class TestMonetizationUnavailableState:
