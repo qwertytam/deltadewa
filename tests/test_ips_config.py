@@ -692,6 +692,74 @@ class TestGammaDriftBands:
             load_ips_config(_write_yaml(tmp_path, config))
 
 
+class TestVegaSufficiency:
+    """The vega band is policy (Part X #4), and the section is optional."""
+
+    def test_shipped_ips_yaml_carries_the_band(self) -> None:
+        ips = load_ips_config(EXAMPLE_IPS_YAML)
+
+        assert ips.vega.sufficiency_min_pct == pytest.approx(20.0)
+        assert ips.vega.sufficiency_max_pct == pytest.approx(50.0)
+
+    def test_missing_section_falls_back_to_defaults(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """An ips.yaml written before this section existed still loads."""
+        # _VALID_CONFIG has no vega section at all.
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+
+        ips = load_ips_config(path)
+
+        assert ips.vega.sufficiency_min_pct == pytest.approx(20.0)
+        assert ips.vega.sufficiency_max_pct == pytest.approx(50.0)
+
+    def test_explicit_band_round_trips(self, tmp_path: Path) -> None:
+        config = {
+            **_VALID_CONFIG,
+            "vega": {
+                "sufficiency_min_pct": 12.5,
+                "sufficiency_max_pct": 40.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        ips = load_ips_config(path)
+
+        assert ips.vega.sufficiency_min_pct == pytest.approx(12.5)
+        assert ips.vega.sufficiency_max_pct == pytest.approx(40.0)
+
+    @pytest.mark.parametrize(
+        ("min_pct", "max_pct"),
+        [(50.0, 20.0), (20.0, 20.0)],
+    )
+    def test_non_increasing_band_raises(
+        self,
+        tmp_path: Path,
+        min_pct: float,
+        max_pct: float,
+    ) -> None:
+        """band_bar requires low < high, so a degenerate band is rejected."""
+        config = {
+            **_VALID_CONFIG,
+            "vega": {
+                "sufficiency_min_pct": min_pct,
+                "sufficiency_max_pct": max_pct,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="sufficiency_min_pct"):
+            load_ips_config(path)
+
+    def test_non_mapping_section_raises(self, tmp_path: Path) -> None:
+        config = {**_VALID_CONFIG, "vega": 20.0}
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="vega"):
+            load_ips_config(path)
+
+
 class TestSizing:
     """Tests for the ``sizing`` policy section (beta-adjusted sizing, §2499)."""
 

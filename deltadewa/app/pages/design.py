@@ -247,6 +247,31 @@ def _position_row(index: int, position: OptionPosition) -> html.Tr:
     )
 
 
+def _net_delta_readout(portfolio: OptionPortfolio) -> Component:
+    """Render Part X #10's scalar: net delta, right now.
+
+    The grid form survived the Dash rebuild (``net_delta`` is one of the
+    EXPLORATION heatmaps' metric options); the scalar the notebooks' Net
+    Hedge Summary showed did not. It belongs beside the underlying quantity
+    because that input is the other half of the same sentence — how much
+    equity is held, and how much of it the options actually offset.
+    """
+    stats = portfolio.summary_stats()
+    net_delta = stats.get("net_delta")
+    if net_delta is None:
+        return html.P(
+            "Net delta is unavailable — the book's Greeks could not be "
+            "computed.",
+            className="plain-language",
+        )
+    return html.P(
+        f"Net delta {net_delta:,.0f} against "
+        f"{portfolio.underlying_quantity:,.0f} shares of underlying — the "
+        "book's total directional exposure, options and equity combined.",
+        className="plain-language",
+    )
+
+
 def _render_position_table_logic(
     *,
     portfolio: OptionPortfolio,
@@ -776,6 +801,54 @@ def _render_market_env_panel_logic(
     return _safe_render(_build)
 
 
+def _vega_sufficiency_block(
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> Component:
+    """Render Part X #4 — is the book big enough to answer a vol spike.
+
+    Sits inside the sizing panel because it is the same question one step
+    back: sizing asks "how many contracts", this asks "does what we already
+    hold respond to volatility at all". It describes **the current book**,
+    not the sized candidate above it, and says so — otherwise the reading
+    is naturally taken for the candidate's.
+
+    The denominator is named for the same reason.
+    ``calculate_vega_sufficiency_pct`` normalizes by total portfolio value
+    (options **plus** underlying), which on a tail-hedge book is dominated
+    by the equity leg — a reader assuming the option book alone would take
+    this figure for something roughly two orders of magnitude larger.
+    """
+    band = ips_config.vega
+    value = PortfolioAnalyzer(portfolio).calculate_vega_sufficiency_pct()
+    verdict = (
+        "within band"
+        if band.sufficiency_min_pct <= value <= band.sufficiency_max_pct
+        else "outside band"
+    )
+    return html.Div(
+        [
+            html.H4("Vega sufficiency"),
+            html.P(
+                f"The book as it stands moves {fmt.percent(value)} of total "
+                "portfolio value (options plus underlying) per +10 vol "
+                f"points, against an IPS band of "
+                f"{fmt.percent(band.sufficiency_min_pct)}-"
+                f"{fmt.percent(band.sufficiency_max_pct)} ({verdict}). "
+                "This describes the current book, not the candidate sized "
+                "above.",
+                className="plain-language",
+            ),
+            band_bar(
+                value=value,
+                low=band.sufficiency_min_pct,
+                high=band.sufficiency_max_pct,
+            ),
+        ],
+        id="vega-sufficiency",
+    )
+
+
 def _sizing_panel_view(
     result: HedgeSizingResult,
     ips_config: IpsConfig,
@@ -849,24 +922,43 @@ def _render_sizing_panel_logic(
     maturity_years: float | None,
     vol_override: float | None,
 ) -> Component:
-    """Render the sizing panel for one candidate put."""
+    """Render the sizing panel: the candidate, then the book's vega reading.
+
+    The vega-sufficiency block is a sibling of the candidate rather than
+    part of :func:`_sizing_panel_view`, and is rendered *whatever* the
+    candidate does. It depends on neither the dials nor an underlying
+    position, so folding it into the candidate's own render would let an
+    unfinished dial or an empty book take Part X #4 off the page again —
+    which is the regression this restores.
+    """
+    candidate: Component
     if pct_otm is None or maturity_years is None:
-        return _incomplete(
+        candidate = _incomplete(
             "Enter a strike (% OTM) and a maturity (years) to size a "
             "candidate hedge.",
         )
+    else:
 
-    def _build() -> Component:
-        result = size_hedge(
-            portfolio,
-            ips_config,
-            candidate_pct_otm=pct_otm,
-            candidate_maturity_years=maturity_years,
-            vol=vol_override,
-        )
-        return _sizing_panel_view(result, ips_config)
+        def _build() -> Component:
+            result = size_hedge(
+                portfolio,
+                ips_config,
+                candidate_pct_otm=pct_otm,
+                candidate_maturity_years=maturity_years,
+                vol=vol_override,
+            )
+            return _sizing_panel_view(result, ips_config)
 
-    return _safe_render(_build)
+        candidate = _safe_render(_build)
+
+    return html.Div(
+        [
+            candidate,
+            _safe_render(
+                lambda: _vega_sufficiency_block(portfolio, ips_config),
+            ),
+        ],
+    )
 
 
 def _unsolvable_rung_line(rung: UnsolvableRung) -> html.P:
@@ -1407,6 +1499,10 @@ def render(app: ProgramDashApp) -> html.Div:
                     ),
                 ],
                 className="editor-field",
+            ),
+            html.Div(
+                _safe_render(lambda: _net_delta_readout(portfolio)),
+                id="net-delta-readout",
             ),
             html.H3("Add a position"),
             html.P(
@@ -2211,6 +2307,14 @@ def register_callbacks(app: ProgramDashApp) -> None:
                 ips_config.market_environment,
             ),
         )
+
+    @app.callback(
+        Output("net-delta-readout", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_net_delta(_version: int) -> Component:
+        portfolio = app.program_state.portfolio
+        return _safe_render(lambda: _net_delta_readout(portfolio))
 
     @app.callback(
         Output("plan-market-env-panel", "children"),

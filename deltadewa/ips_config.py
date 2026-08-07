@@ -60,6 +60,17 @@ _DEFAULT_GAMMA_DRIFT_HIGH_PCT: Final[float] = 5.0
 # without a ``sizing`` section reproduces the pre-beta sizing exactly.
 _DEFAULT_PORTFOLIO_BETA: Final[float] = 1.0
 
+# Vega sufficiency band, in % portfolio value change per +10 vol points (see
+# ``IpsVega``). The handbook gives this metric no numeric band — only a
+# Low<->High gauge — so these are seeded from the values
+# ``config/dashboard.yaml``'s ``vega_sufficiency`` gauge already carried
+# (``max_val: 20`` as the "high vega exposure" line, ``end: 50`` as its
+# ceiling), so that moving the metric onto a policy surface does not silently
+# change what a given reading means. They are a starting point to be set
+# deliberately per program, not a derived constant.
+_DEFAULT_VEGA_SUFFICIENCY_MIN_PCT: Final[float] = 20.0
+_DEFAULT_VEGA_SUFFICIENCY_MAX_PCT: Final[float] = 50.0
+
 # Single source for the market-environment policy bands (see
 # ``IpsMarketEnvironment``). Public because they are consumed across
 # ``analysis.market_environment``, ``analysis.health``,
@@ -212,6 +223,27 @@ class IpsSizing:
 
 
 @dataclass(frozen=True)
+class IpsVega:
+    """Vega sufficiency band — "is the book big enough to answer a vol spike".
+
+    Handbook Part X #4. The metric is the portfolio's percentage value change
+    per +10 vol points (``HealthMixin.calculate_vega_sufficiency_pct``);
+    ``sufficiency_min_pct`` is the floor below which the book will barely
+    respond to a volatility spike, and ``sufficiency_max_pct`` the ceiling
+    above which it is vega-dominated rather than convexity-driven.
+
+    This is policy, not presentation. "Is the hedge big enough" is a mandate
+    question of the same class as the convexity band, so it lives here rather
+    than in ``dashboard_config_*.yaml`` — where a copy still backs the
+    Jupyter-only gauge in ``widgets/health_dashboard.py``. Retiring that copy
+    is a ``widgets/`` change, not an M2.7 one.
+    """
+
+    sufficiency_min_pct: float = _DEFAULT_VEGA_SUFFICIENCY_MIN_PCT
+    sufficiency_max_pct: float = _DEFAULT_VEGA_SUFFICIENCY_MAX_PCT
+
+
+@dataclass(frozen=True)
 class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
@@ -277,6 +309,7 @@ class IpsConfig:
         default_factory=IpsMarketEnvironment,
     )
     sizing: IpsSizing = dataclass_field(default_factory=IpsSizing)
+    vega: IpsVega = dataclass_field(default_factory=IpsVega)
 
 
 def _require_section(config: dict[str, Any], name: str) -> dict[str, Any]:
@@ -611,6 +644,37 @@ def _parse_sizing(config: dict[str, Any]) -> IpsSizing:
     return IpsSizing(portfolio_beta=portfolio_beta)
 
 
+def _parse_vega(config: dict[str, Any]) -> IpsVega:
+    """Parse the optional ``vega`` policy section.
+
+    Optional, like ``sizing`` and ``market_environment``: a missing section
+    (or a missing field) falls back to the ``_DEFAULT_VEGA_*`` constants, so
+    every ips.yaml written before this section existed keeps loading.
+    """
+    section = config.get("vega", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError("ips.yaml 'vega' section must be a mapping")
+
+    min_pct = section.get(
+        "sufficiency_min_pct",
+        _DEFAULT_VEGA_SUFFICIENCY_MIN_PCT,
+    )
+    max_pct = section.get(
+        "sufficiency_max_pct",
+        _DEFAULT_VEGA_SUFFICIENCY_MAX_PCT,
+    )
+    if min_pct >= max_pct:
+        raise IpsConfigError(
+            "vega.sufficiency_min_pct must be < sufficiency_max_pct, got "
+            f"{min_pct} >= {max_pct}",
+        )
+
+    return IpsVega(
+        sufficiency_min_pct=min_pct,
+        sufficiency_max_pct=max_pct,
+    )
+
+
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     section = _require_section(config, "monetization")
     raw_schedule = _require_field(section, "monetization", "schedule")
@@ -685,4 +749,5 @@ def load_ips_config(path: Path) -> IpsConfig:
         monetization=_parse_monetization(config),
         market_environment=_parse_market_environment(config),
         sizing=_parse_sizing(config),
+        vega=_parse_vega(config),
     )

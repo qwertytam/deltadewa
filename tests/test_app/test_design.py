@@ -872,6 +872,148 @@ class TestMarketEnvironmentPanel:
         ) in text
 
 
+class TestVegaSufficiency:
+    """Part X #4 on /design — the only Tier-1 item the rebuild dropped."""
+
+    @staticmethod
+    def _panel(app: ProgramDashApp, **dials: float | None) -> Component:
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        return design._render_sizing_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+            pct_otm=dials.get("pct_otm", 20.0),
+            maturity_years=dials.get("maturity_years", 0.5),
+            vol_override=None,
+        )
+
+    def test_renders_beside_the_sized_candidate(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        text = _collect_text(self._panel(app))
+
+        assert "Vega sufficiency" in text
+        assert "per +10 vol points" in text
+
+    def test_bands_against_the_ips_not_dashboard_yaml(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The band is a mandate question, so it must come from ips.yaml.
+
+        dashboard.yaml still carries a vega_sufficiency gauge for the
+        Jupyter surface; reading policy from there would recreate the Mo2
+        leak M1.4 closed.
+        """
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        text = _collect_text(self._panel(app))
+
+        assert (
+            f"{ips_config.vega.sufficiency_min_pct:.1f}%-"
+            f"{ips_config.vega.sufficiency_max_pct:.1f}%"
+        ) in text
+
+    def test_names_its_denominator(self, tmp_path: Path) -> None:
+        """The metric divides by options *plus* underlying, not the book.
+
+        On a tail hedge the equity leg dominates that denominator, so a
+        reader assuming the option book alone would be out by orders of
+        magnitude.
+        """
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        text = _collect_text(self._panel(app))
+
+        assert "options plus underlying" in text
+
+    def test_says_it_describes_the_book_not_the_candidate(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        text = _collect_text(self._panel(app))
+
+        assert "not the candidate sized above" in text
+
+    def test_survives_an_unfinished_dial(self, tmp_path: Path) -> None:
+        """An incomplete candidate must not take #4 off the page.
+
+        The reading depends on neither dial, so losing it with the
+        candidate would re-open the regression this commit closes.
+        """
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        text = _collect_text(self._panel(app, pct_otm=None))
+
+        assert "Enter a strike" in text
+        assert "Vega sufficiency" in text
+
+    def test_survives_a_book_with_no_underlying(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """size_hedge raises without an underlying; this reading doesn't."""
+        app = _app_with_ips(tmp_path)
+        app.program_state.portfolio.underlying_quantity = 0.0
+        _add_starter_position(app.program_state)
+
+        text = _collect_text(self._panel(app))
+
+        assert "Vega sufficiency" in text
+
+
+class TestNetDeltaReadout:
+    """Part X #10's scalar, restored beside the underlying quantity."""
+
+    def test_renders_with_the_underlying_quantity(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        readout = design._net_delta_readout(app.program_state.portfolio)
+        text = _collect_text(readout)
+
+        assert "Net delta" in text
+        assert (
+            f"{app.program_state.portfolio.underlying_quantity:,.0f} shares"
+            in text
+        )
+
+    def test_moves_when_the_book_changes(self, tmp_path: Path) -> None:
+        """It has to track edits, or it silently goes stale after an add."""
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+        before = _collect_text(
+            design._net_delta_readout(app.program_state.portfolio),
+        )
+
+        app.program_state.add_position(
+            strike_price=4000.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=365),
+            quantity=40,
+            option_type=OptionType.PUT,
+        )
+        after = _collect_text(
+            design._net_delta_readout(app.program_state.portfolio),
+        )
+
+        assert after != before
+
+
 def _add_starter_position(state: ProgramState) -> None:
     """Add the same one-leg book every EXPLORATION test builds against."""
     state.add_position(

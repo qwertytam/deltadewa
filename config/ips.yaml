@@ -53,6 +53,21 @@ sizing:
   # single-name book. 1.0 = protected book assumed to move 1:1 with the index.
   portfolio_beta: 1.0
 
+vega:
+  # Vega sufficiency (handbook Part X #4): the book's % value change per
+  # +10 vol points. Below min the hedge barely responds to a vol spike;
+  # above max it is vega-dominated rather than convexity-driven. "Is the
+  # hedge big enough" is a mandate question — the same class as the
+  # convexity band above — so it lives here, not in dashboard.yaml.
+  #
+  # The handbook gives this metric no numeric band, only a Low<->High
+  # gauge. These values are carried over from dashboard.yaml's existing
+  # vega_sufficiency gauge so that moving the metric onto a policy surface
+  # didn't silently change what a reading means. Set them deliberately for
+  # this program rather than treating them as derived.
+  sufficiency_min_pct: 20.0
+  sufficiency_max_pct: 50.0
+
 market_environment:
   # Hedge-cost verdict policy (CHEAP/FAIR/EXPENSIVE) — these drive a decision,
   # not a display, so they live here, not in dashboard.yaml (presentation).
