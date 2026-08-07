@@ -16,9 +16,11 @@ import pytest
 
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
+    crash_convexity_pct,
     crash_hedge_value,
     crash_value_curve,
 )
+from deltadewa.analysis.hedge_efficiency import EfficiencyVerdict
 from deltadewa.analysis.monitor_scenario import (
     _OFFSET_RATIO_MATERIAL_SHOCK_PCT,
     build_scenario,
@@ -187,6 +189,143 @@ class TestQuantityDecoupling:
             != large.carry.carry_pct_of_notional
         )
         assert small.carry.theta_annual == large.carry.theta_annual
+
+
+class TestHedgeEfficiency:
+    """The scenario carries the Part X #5/#15 ratio, on the same basis."""
+
+    def test_ratio_is_hedge_gain_over_absolute_carry(self) -> None:
+        """The dollar form, straight off the two terms already on the result."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        result = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=_CRASH_PCT,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        assert result.efficiency.ratio == pytest.approx(
+            result.hedge_gain / abs(result.carry.theta_annual),
+            rel=1e-12,
+        )
+
+    def test_dollar_and_percentage_forms_are_the_same_number(self) -> None:
+        """#5 and #15 are one metric, not two.
+
+        The handbook states the ratio in dollars (:2032) and in percentages
+        (:4337). Both percentages here normalize by the same protected book,
+        so the normalizer cancels — this pins that identity rather than
+        leaving it as a docstring claim.
+        """
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        result = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=ips.convexity.crash_scenario_pct,
+            vol_points=ips.convexity.crash_vol_shock,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        convexity_pct = crash_convexity_pct(
+            portfolio,
+            shock=CrashShock.from_ips(ips.convexity),
+        )
+        percentage_form = convexity_pct / result.carry.carry_pct_of_notional
+
+        assert result.efficiency.ratio == pytest.approx(
+            percentage_form,
+            rel=1e-9,
+        )
+
+    def test_band_comes_from_the_ips_not_a_literal(self) -> None:
+        """A program running a different mandate gets a different reading."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+        default = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=_CRASH_PCT,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+        assert default.efficiency.ratio is not None
+        # A band this book cannot reach, derived from its own ratio rather
+        # than a literal — the fixture's carry is small enough that any
+        # fixed band would be a guess about the resulting magnitude.
+        unreachable = default.efficiency.ratio * 10
+        strict = dataclasses.replace(
+            ips,
+            convexity=dataclasses.replace(
+                ips.convexity,
+                efficiency_min_ratio=unreachable,
+                efficiency_max_ratio=unreachable * 2,
+            ),
+        )
+
+        demanding = build_scenario(
+            portfolio,
+            strict,
+            spot_pct=_CRASH_PCT,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        assert default.efficiency.ratio == pytest.approx(
+            demanding.efficiency.ratio,
+        )
+        assert demanding.efficiency.verdict is EfficiencyVerdict.POOR
+        assert default.efficiency.verdict is not EfficiencyVerdict.POOR
+
+    def test_quantity_dial_does_not_move_the_ratio(self) -> None:
+        """Neither term depends on the scenario book, so the ratio doesn't."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        small = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=_CRASH_PCT,
+            vol_points=_VOL_SHOCK,
+            quantity=1_000.0,
+        )
+        large = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=_CRASH_PCT,
+            vol_points=_VOL_SHOCK,
+            quantity=5_000.0,
+        )
+
+        assert small.efficiency.ratio == pytest.approx(large.efficiency.ratio)
+
+    def test_shallower_shock_gives_a_smaller_ratio(self) -> None:
+        """The ratio is scenario-local — the spot dial moves it, by design."""
+        portfolio = _make_mixed_leg_book()
+        ips = _make_ips_config()
+
+        shallow = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=-5.0,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+        crash = build_scenario(
+            portfolio,
+            ips,
+            spot_pct=_CRASH_PCT,
+            vol_points=_VOL_SHOCK,
+            quantity=portfolio.underlying_quantity,
+        )
+
+        assert shallow.efficiency.ratio is not None
+        assert crash.efficiency.ratio is not None
+        assert shallow.efficiency.ratio < crash.efficiency.ratio
 
 
 class TestNoLongPuts:

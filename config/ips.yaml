@@ -32,6 +32,14 @@ convexity:
   skew_reference_delta: 0.10    # put-delta magnitude of that wing (the anchor the
                                 # steepening is calibrated to). Range (0, 0.5).
   crash_floor_reported: true    # surface the intrinsic-floor column
+  # Hedge efficiency = crash payoff / annual carry (handbook "Hedge Efficiency
+  # Ratio", docs/hedging handbook.md:2032; the same ratio the Carry vs.
+  # Convexity chart states in percentages at :4337). Bands are the handbook's
+  # own interpretation table at :4342-4348 — below min reads POOR, above max
+  # reads ATTRACTIVE. Policy, not presentation: this is the "is this hedge
+  # worth the money" mandate question.
+  efficiency_min_ratio: 3.0
+  efficiency_max_ratio: 6.0
 
 drawdown:
   max_tolerance_pct: 20.0
@@ -44,6 +52,21 @@ sizing:
   # beta) component, so they UNDER-PROTECT idiosyncratic risk on a concentrated
   # single-name book. 1.0 = protected book assumed to move 1:1 with the index.
   portfolio_beta: 1.0
+
+vega:
+  # Vega sufficiency (handbook Part X #4): the book's % value change per
+  # +10 vol points. Below min the hedge barely responds to a vol spike;
+  # above max it is vega-dominated rather than convexity-driven. "Is the
+  # hedge big enough" is a mandate question — the same class as the
+  # convexity band above — so it lives here, not in dashboard.yaml.
+  #
+  # The handbook gives this metric no numeric band, only a Low<->High
+  # gauge. These values are carried over from dashboard.yaml's existing
+  # vega_sufficiency gauge so that moving the metric onto a policy surface
+  # didn't silently change what a reading means. Set them deliberately for
+  # this program rather than treating them as derived.
+  sufficiency_min_pct: 20.0
+  sufficiency_max_pct: 50.0
 
 market_environment:
   # Hedge-cost verdict policy (CHEAP/FAIR/EXPENSIVE) — these drive a decision,

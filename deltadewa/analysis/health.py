@@ -454,6 +454,22 @@ class HealthMixin:
     ) -> dict[str, Any]:
         """Calculate all health metrics in one call.
 
+        .. note::
+
+           **This entry point is historical.** Its only caller is
+           ``widgets/health_dashboard.py``, a Jupyter surface that CI stopped
+           gating at M2.6 when the notebook-execution and ``nbqa`` steps were
+           retired. Nothing on a shipping Dash page reads it.
+
+           Four of the gauges it assembles (``delta_drift_pct``,
+           ``net_carry_pct``, ``convexity_cliff_days``, ``hedge_success_pct``)
+           are reachable *only* through here, so they are ungated too — see
+           ``docs/part-x-coverage.md``, "Open questions", for the standing
+           decision on whether to revive, fold, or delete them. The three
+           methods with live consumers (crash convexity, vol regime, and —
+           since M2.7 — vega sufficiency) are all called directly by their
+           consumers, not through this function.
+
         Args:
             cumulative_carry_paid: Total carry paid for the hedge (default: 0.0)
             historical_vol_low: Historical low volatility for the vol-regime

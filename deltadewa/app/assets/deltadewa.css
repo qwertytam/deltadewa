@@ -225,6 +225,33 @@ body {
   background: #c62828;
 }
 
+/* Hedge rebalance triggers (TriggerStatus). Shares the roll badge's shape
+   deliberately — same visual grammar — but MONITOR is the only value the
+   two enums have in common, so the rest get their own rules. UNAVAILABLE is
+   grey rather than green: a metric that could not be measured must not read
+   as one that is fine. */
+
+.verdict-badge--ok {
+  background: #2e7d4f;
+}
+
+.verdict-badge--action {
+  background: #c62828;
+}
+
+.verdict-badge--unavailable {
+  background: #767676;
+}
+
+.trigger-actions {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.trigger-actions li {
+  margin-bottom: 4px;
+}
+
 .monetization-panel {
   margin-top: 16px;
   padding: 12px 16px;

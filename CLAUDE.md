@@ -141,20 +141,35 @@ M2.6 section for what's left to verify live. Phase 3 (docs/handbook) is next;
 **treat `docs/implementation-plan.md` as the source of truth for what to
 build there.**
 
-Only **#12 Liquidity Risk** is genuinely data-blocked — it needs per-strike
-bid/ask and open interest from a live options-chain feed, which the free
-CBOE/FRED provider doesn't return. **#13 Delta Drift** and **#14 Vega Term
-Exposure** were listed alongside it until the 2026-08-06 re-audit; both are
-**surfacing gaps, not data gaps** (§13 is `Δ(−5%) − Δ(0)`, which
-`analysis/scenarios.py` already prices; §14 is vega by maturity bucket, which
-`analysis/maturity.py` already groups for theta).
+**M2.7 has shipped**, closing the five Part X coverage regressions the
+2026-08-06 re-audit found. All of them were surfacing gaps, not engine gaps:
+**#4 Vega Sufficiency** and **#10**'s net-delta scalar are on `/design`;
+**#6**/**#7**/**#8** are a new `/design` market-environment panel that also
+carries the decision matrix (previously digest-only); **#5**/**#15** — the
+convexity÷carry ratio, which existed nowhere in the codebase — is a new
+`analysis/hedge_efficiency.py` surfaced in `/monitor`'s cost panel. M2.7 also
+gave `analysis/hedge_triggers.py` its first product consumer, by extracting a
+pure `evaluate_hedge_trigger_set` from the console-printing
+`evaluate_hedge_triggers` (whose signature and output are unchanged) and
+adding a `/design` panel for it.
 
-The re-audit also found **real coverage regressions from the Dash rebuild**:
-**#4 Vega Sufficiency** (Tier 1) and **#8 Forward Variance** have no surface at
-all, and **#6**/**#7** moved to the weekly digest only. **Read
-`docs/part-x-coverage.md` before adding or moving a dashboard panel** — it is
-the current handbook-item → surface map, and its "Deliberate exclusions"
-section records what must *not* be re-added.
+Two new IPS sections came out of that: `convexity.efficiency_min_ratio` /
+`_max_ratio` (the handbook's 3/6 hedge-efficiency band) and a `vega:` section
+for the sufficiency band. Both are policy, not presentation — see
+`docs/part-x-coverage.md`'s "Where the vega band went" for why the band moved
+out of `dashboard.yaml`.
+
+Still open: **#12 Liquidity Risk** is genuinely data-blocked (needs per-strike
+bid/ask and open interest, which the free CBOE/FRED provider doesn't return).
+**#13 Delta Drift** and **#14 Vega Term Exposure** are surfacing gaps that
+M2.7 didn't take (§13 is `Δ(−5%) − Δ(0)`, which `analysis/scenarios.py`
+already prices; §14 is vega by maturity bucket, which `analysis/maturity.py`
+already groups for theta). **#9**'s skew-beta scalar has never existed — an
+unbuilt feature, not a regression.
+
+**Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
+— it is the current handbook-item → surface map, and its "Conscious
+retirements" section records what must *not* be re-added.
 
 ## Workflow expectations
 
