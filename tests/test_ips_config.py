@@ -484,6 +484,11 @@ class TestMarketEnvironment:
         assert env.skew_high_pctile == DEFAULT_SKEW_HIGH_PCTILE
         assert env.term_contango_tolerance == DEFAULT_TERM_CONTANGO_TOLERANCE
         assert env.data_ttl_minutes == DEFAULT_DATA_TTL_MINUTES
+        # vix_* defaults are seeded from the Python literals
+        # entry_timing_tree used to hardcode, before M2.8 moved them here.
+        assert env.vix_very_high == pytest.approx(40.0)
+        assert env.vix_caution == pytest.approx(25.0)
+        assert env.vix_low == pytest.approx(15.0)
 
     def test_example_ips_yaml_market_environment(self) -> None:
         """The shipped config/ips.yaml carries the policy bands."""
@@ -495,6 +500,9 @@ class TestMarketEnvironment:
         assert env.skew_high_pctile == 75
         assert env.term_contango_tolerance == pytest.approx(0.5, rel=1e-4)
         assert env.data_ttl_minutes == pytest.approx(2160.0, rel=1e-7)
+        assert env.vix_very_high == pytest.approx(40.0)
+        assert env.vix_caution == pytest.approx(25.0)
+        assert env.vix_low == pytest.approx(15.0)
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Section values round-trip through the loader unchanged."""
@@ -507,6 +515,9 @@ class TestMarketEnvironment:
                 "skew_high_pctile": 80,
                 "term_contango_tolerance": 1.0,
                 "data_ttl_minutes": 45,
+                "vix_very_high": 35.0,
+                "vix_caution": 22.0,
+                "vix_low": 13.0,
             },
         }
         env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
@@ -517,6 +528,9 @@ class TestMarketEnvironment:
         assert env.skew_high_pctile == 80
         assert env.term_contango_tolerance == pytest.approx(1.0, rel=1e-7)
         assert env.data_ttl_minutes == pytest.approx(45.0, rel=1e-7)
+        assert env.vix_very_high == pytest.approx(35.0)
+        assert env.vix_caution == pytest.approx(22.0)
+        assert env.vix_low == pytest.approx(13.0)
 
     def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
         """vol_regime_low >= vol_regime_high raises IpsConfigError."""
@@ -582,6 +596,35 @@ class TestMarketEnvironment:
             "market_environment": {"data_ttl_minutes": -5},
         }
         with pytest.raises(IpsConfigError, match="data_ttl_minutes"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_vix_thresholds_out_of_order_raises(self, tmp_path: Path) -> None:
+        """vix_low < vix_caution < vix_very_high must hold strictly."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "vix_low": 25.0,
+                "vix_caution": 15.0,
+                "vix_very_high": 40.0,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="vix"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_vix_caution_equal_to_very_high_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Boundaries are strict, not inclusive."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {
+                "vix_low": 15.0,
+                "vix_caution": 40.0,
+                "vix_very_high": 40.0,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="vix"):
             load_ips_config(_write_yaml(tmp_path, config))
 
 

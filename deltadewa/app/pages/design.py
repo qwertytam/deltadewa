@@ -811,7 +811,12 @@ def _render_market_env_panel_logic(
         return _market_env_panel_view(
             market_env,
             decision,
-            entry_timing_tree(market_env),
+            entry_timing_tree(
+                market_env,
+                vix_very_high=ips_config.market_environment.vix_very_high,
+                vix_caution=ips_config.market_environment.vix_caution,
+                vix_low=ips_config.market_environment.vix_low,
+            ),
             ips_config.market_environment,
         )
 

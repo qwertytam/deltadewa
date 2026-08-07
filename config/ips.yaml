@@ -87,6 +87,12 @@ market_environment:
                                # be before a decision shouldn't rely on it",
                                # not a number tuned to the crontab — if ops
                                # can't meet it, STALE is the correct signal.
+  vix_very_high: 40  # VIX above this -> monetize existing hedges, buy nothing
+  vix_caution: 25    # VIX above this -> avoid new purchases except rolls
+  vix_low: 15        # VIX at/below this -> increased urgency to accumulate
+                      # These back entry_timing_tree's three stops (M2.8);
+                      # were hardcoded Python defaults before this section
+                      # existed, now required (fail-loud) at the call site.
 
 triggers:
   target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is

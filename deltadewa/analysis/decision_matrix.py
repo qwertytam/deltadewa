@@ -302,9 +302,9 @@ def decision_matrix(
 def entry_timing_tree(
     market_env: MarketEnvironment,
     *,
-    vix_very_high: float = 40.0,
-    vix_caution: float = 25.0,
-    vix_low: float = 15.0,
+    vix_very_high: float,
+    vix_caution: float,
+    vix_low: float,
     skew_high: float = DEFAULT_SKEW_HIGH_PCTILE / 100.0,
     skew_low: float = DEFAULT_SKEW_LOW_PCTILE / 100.0,
 ) -> EntryTimingResult:
@@ -334,11 +334,15 @@ def entry_timing_tree(
     Args:
         market_env: Market environment snapshot.
         vix_very_high: VIX level above which existing hedges should be
-            monetised and no new purchases made (default 40.0).
+            monetised and no new purchases made. **Required, no default**
+            (M2.8 — the M1.4/M1.5 fail-loud pattern): source from
+            ``IpsMarketEnvironment.vix_very_high``, never a hardcoded
+            literal at the call site.
         vix_caution: VIX level above which new purchases should be
-            avoided except for required rolls (default 25.0).
+            avoided except for required rolls. **Required** — see
+            ``IpsMarketEnvironment.vix_caution``.
         vix_low: VIX level at or below which accumulation urgency
-            increases (default 15.0).
+            increases. **Required** — see ``IpsMarketEnvironment.vix_low``.
         skew_high: Skew percentile (0-1) above which protection is
             expensive vs history. Defaults to the IPS single source
             ``DEFAULT_SKEW_HIGH_PCTILE`` (as a 0-1 fraction).
