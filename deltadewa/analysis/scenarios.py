@@ -1,7 +1,10 @@
 """Scenario grid generation mixin for portfolio analysis."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 import numpy as np
 import pandas as pd
@@ -10,6 +13,7 @@ from deltadewa.analysis.repricing import (
     MarketShock,
     MarketState,
     VolMapping,
+    flat_bump_vol,
     shocked_leg_option,
 )
 from deltadewa.batch_pricer import BatchPricer
@@ -17,6 +21,7 @@ from deltadewa.constants import FDGridResolution
 
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.position import OptionPosition
 
 # Maps scenario_grid() metric names to BatchPricer greek names.
 # "net_delta" maps to "delta" because BatchPricer.portfolio_greeks_at()
@@ -45,6 +50,93 @@ _SPOT_VOL_METRIC_TO_ATTR: dict[str, str] = {
     "rho": "rho",
 }
 
+# Handbook Part X §13 (docs/hedging handbook.md:4620-4630): the shock is
+# fixed at exactly -5% -- the handbook's own worked example, not a dial and
+# not the IPS crash_scenario_pct (a much larger, separately-configured
+# move). A different percentage would be a different metric, so this is a
+# constant, not a parameter.
+DELTA_DRIFT_SHOCK_PCT: Final[float] = -5.0
+
+
+@dataclass(frozen=True)
+class DeltaDriftLeg:
+    """One option leg's contribution to the book's delta drift.
+
+    Attributes:
+        position: The leg itself, for labelling (strike, type, maturity) --
+            the same "carry the position, not just its id" convention
+            :class:`~deltadewa.analysis.roll_status.RollStatusRecord` uses.
+        delta_now: The leg's position delta (shares) at today's spot.
+        delta_shocked: The leg's position delta at spot
+            ``DELTA_DRIFT_SHOCK_PCT``.
+        drift: ``delta_shocked - delta_now``.
+
+    """
+
+    position: OptionPosition
+    delta_now: float
+    delta_shocked: float
+    drift: float
+
+
+@dataclass(frozen=True)
+class DeltaDrift:
+    """Handbook Part X §13: shocked-minus-current hedge delta.
+
+    Handbook definition (docs/hedging handbook.md:4620-4630)::
+
+        Δ0 = hedge delta today
+        Δ5 = hedge delta if market falls 5%
+        Delta Drift = Δ5 - Δ0
+
+    "Hedge delta" is the **option legs' delta only** -- the underlying
+    equity leg is excluded, the same hedge-only convention
+    :mod:`~deltadewa.analysis.crash_repricing` uses for crash convexity.
+    This answers "how fast does the *hedge* respond to an early-stage
+    decline", a different question from Part X #10's net-delta scalar
+    (options plus underlying), which the ``/design`` net-delta readout
+    already covers -- do not conflate the two.
+
+    Attributes:
+        delta_now: Net hedge delta today (options only).
+        delta_shocked: Net hedge delta at spot ``DELTA_DRIFT_SHOCK_PCT``.
+        drift: ``delta_shocked - delta_now``, signed. A tail-put book's
+            drift is expected to be negative -- delta becomes more negative
+            as the market falls, which is the hedge doing its job.
+        shock_pct: The shock applied, verbatim (``DELTA_DRIFT_SHOCK_PCT``),
+            echoed back so a renderer never has to re-import the constant.
+        legs: Per-leg breakdown, in portfolio position order.
+            ``sum(leg.drift for leg in legs) == drift`` by construction.
+
+    """
+
+    delta_now: float
+    delta_shocked: float
+    drift: float
+    shock_pct: float
+    legs: tuple[DeltaDriftLeg, ...]
+
+
+def _leg_delta_at(
+    position: OptionPosition,
+    state: MarketState,
+    shock: MarketShock,
+) -> float:
+    """One leg's position delta (shares) at *shock*, volatility held flat.
+
+    Uses :func:`~deltadewa.analysis.repricing.flat_bump_vol` with
+    ``shock.vol_shock == 0.0`` so the reading isolates delta's own
+    path-dependence on spot, with no vol-regime change riding along.
+    """
+    option = shocked_leg_option(
+        position,
+        state,
+        spot=shock.shocked_spot(state),
+        volatility=flat_bump_vol(position, state, shock),
+        valuation_date=shock.shocked_valuation_date(state),
+    )
+    return option.delta() * position.quantity * position.contract_size
+
 
 class ScenariosMixin:
     """Mixin for scenario grid generation.
@@ -54,7 +146,7 @@ class ScenariosMixin:
     """
 
     if TYPE_CHECKING:
-        portfolio: "OptionPortfolio"
+        portfolio: OptionPortfolio
 
     def _create_batch_pricer(
         self,
@@ -115,6 +207,58 @@ class ScenariosMixin:
                 np.array([spot]),
                 valuation_date,
             )[0],
+        )
+
+    def calculate_delta_drift(self) -> DeltaDrift:
+        """Handbook Part X §13: hedge delta at spot -5% minus hedge delta now.
+
+        Reprices through the shared shock primitives in ``repricing.py``
+        (M2.1) -- the same ones the crash gauge and the 2D scenario grid
+        use -- rather than a third repricing path. See :class:`DeltaDrift`
+        for the exact handbook definition and the hedge-only convention.
+
+        Returns:
+            The book's hedge delta today and at ``DELTA_DRIFT_SHOCK_PCT``,
+            their signed difference, and each option leg's own contribution.
+
+        Raises:
+            ValueError: The book has no option positions -- there is no
+                hedge delta to shock.
+
+        """
+        if not self.portfolio.positions:
+            msg = "delta drift requires at least one option position to shock"
+            raise ValueError(msg)
+
+        state = MarketState.from_portfolio(self.portfolio)
+        shock = MarketShock(
+            spot_shock=DELTA_DRIFT_SHOCK_PCT / 100.0,
+            vol_shock=0.0,
+        )
+
+        legs: list[DeltaDriftLeg] = []
+        delta_now = 0.0
+        delta_shocked = 0.0
+        for position in self.portfolio.positions:
+            now = position.position_delta()
+            shocked = _leg_delta_at(position, state, shock)
+            delta_now += now
+            delta_shocked += shocked
+            legs.append(
+                DeltaDriftLeg(
+                    position=position,
+                    delta_now=now,
+                    delta_shocked=shocked,
+                    drift=shocked - now,
+                ),
+            )
+
+        return DeltaDrift(
+            delta_now=delta_now,
+            delta_shocked=delta_shocked,
+            drift=delta_shocked - delta_now,
+            shock_pct=DELTA_DRIFT_SHOCK_PCT,
+            legs=tuple(legs),
         )
 
     def _calculate_pnl_at_expiry_vectorized(
