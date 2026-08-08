@@ -25,6 +25,23 @@ RUN poetry install --only main
 
 FROM python:3.11-slim AS runtime
 
+# UID/GID the app actually runs as (docker-entrypoint.sh), fixed rather
+# than left to whatever order packages happen to install in. Default 1000
+# matches the first non-root user `adduser` creates on a fresh Ubuntu
+# droplet (docs/RUNBOOK.md §1's `deploy` user) — override at build time
+# via compose.yaml's build.args (APP_UID/APP_GID, sourced from .env) if a
+# given droplet's `deploy` UID differs; check with `id deploy`. See #220.
+ARG APP_UID=1000
+ARG APP_GID=1000
+# -m (not -M): gunicorn >=25.1 defaults its control socket to
+# $HOME/.gunicorn/ (gunicorn/config.py's ControlSocket setting) and creates
+# that directory itself at startup — a homeless user makes every start log
+# a "Permission denied: '/home/appuser'" control-server error (harmless to
+# request handling, but noisy on every boot). A real, appuser-owned home
+# lets gunicorn create it normally.
+RUN groupadd -g "${APP_GID}" appuser \
+    && useradd -u "${APP_UID}" -g "${APP_GID}" -m -s /usr/sbin/nologin appuser
+
 WORKDIR /app
 ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
@@ -32,8 +49,15 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     DELTADEWA_PORT=8050
 
 COPY --from=builder /app /app
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 8050
+
+# No USER directive: the image's default (root) is required so
+# docker-entrypoint.sh can chown the exports/ bind mount on every start
+# before dropping to appuser — see that script and issue #220.
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # --workers 1: ProgramState (deltadewa/state.py) is one shared in-memory
 # instance per process — a second worker process would fork it into a
