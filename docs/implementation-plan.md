@@ -1433,8 +1433,16 @@ surfaces.
 
 **Findings closed:**
 
-- **M8** — the digest content above (return framing from tracked start/end book
-  values, realized monetization, an as-of stamp) is shipped and golden-tested.
+- **M8 (partial — corrected post-close-out, see #171)** — the as-of stamp
+  shipped (`ReportHeader.as_of`, both renderers). Return framing did
+  *not* ship as originally claimed here: start/end book values are still
+  untracked, and §4 rendered a literal `PENDING` inside every digest even
+  though the digest's own lede stated real carry-cost numbers above it —
+  a contradiction fixed in a follow-up PR by rewiring §4 to that same
+  carry-cost framing (not book-value return) instead of duplicating it in
+  the lede. Realized monetization remains an honest placeholder, now
+  citing #70 (the issue it's actually blocked on) instead of a stale,
+  unrelated finding ID. M8 stays open until #70 lands.
 - **M5** — chain now complete end to end. The Dash-native STALE/STATIC banner
   itself shipped in M2.2, but until this milestone's refresh cron actually runs
   on the droplet, production could only ever show `UNAVAILABLE` (confirmed at
