@@ -43,7 +43,13 @@ every gate run more reliable.
 
 - **M0.1 — `CLAUDE.md` refresh.** Fix the stale "Work in progress" section (sizing
   / strike-ladder / monetization are done, tested, and wired), the handbook path
-  (`examples/` → `docs/`), and the test count (~47 → 70 files / 1,009 tests).
+  (`examples/` → `docs/`), and the test count (~47 → 70 files / 1,009
+  tests, as of the 2026-07-15 review). <!-- Every raw test/file count in
+  this doc's milestone close-outs is a dated snapshot, not the current
+  suite size — deliberately not kept fresh, because a hardcoded number
+  here re-drifts by design and no gate step catches it (this exact figure
+  did, within the same phase). See #207. Current size:
+  `poetry run pytest --co -q | tail -1`. -->
 - **M0.2 — Gate hygiene (Mi3, tooling not docs).** Resolve the ruff D203/D211 and
   D212/D213 warnings, the pylint `W0012` from ruff rule names sitting in pylint's
   disable list, the pre-commit ruff pin (`0.14.9`) vs dev-group (`>=0.5.3`), and
@@ -588,8 +594,9 @@ future **partial** re-threading instead. Also pinned: `from_ips` field round-tri
 `at_pct` preserving the vol basis, `CrashShock` having no field defaults, and its
 carrying no band fields.
 
-**Gate at close-out:** pytest **1340 passed / 2 xfailed**, mypy clean, ruff check +
-format clean, pylint **10.00/10** (the arity gate that blocked the scalar approach).
+**Gate at close-out (2026-07-26):** pytest **1340 passed / 2 xfailed**, mypy
+clean, ruff check + format clean, pylint **10.00/10** (the arity gate that
+blocked the scalar approach).
 
 ### M1.9 — One pricing-input object everywhere (candidate path + widget)
 
@@ -643,8 +650,9 @@ candidate surfaces construct via `CrashShock.from_ips`.
 **+16.098902%**; K5280 per-contract **$109,754.308967** on both paths;
 `skew = 0` V_crash **3897393.1217789161**.
 
-**Gate:** pytest **1343 passed / 2 xfailed**, mypy clean, ruff check + format
-clean, pylint **10.00/10**, nbqa ruff clean on both notebooks.
+**Gate at close-out (2026-07-26):** pytest **1343 passed / 2 xfailed**, mypy
+clean, ruff check + format clean, pylint **10.00/10**, nbqa ruff clean on
+both notebooks.
 
 **Still deferred:** see the M1.10 ledger below.
 
@@ -699,7 +707,7 @@ strike does not read the cap as a regression.
 | Canonical golden | **+16.098902%** — in-band, not re-sized |
 | K5280 per-contract | **$109,754.308967** on both paths |
 | `skew = 0` no-op | V_crash **3897393.1217789161**, byte-identical |
-| Gate | pytest **1357 / 2 xfailed**, mypy clean, ruff clean, **pylint 10.00/10**, nbqa ruff clean |
+| Gate (at close-out, 2026-07-26) | pytest **1357 / 2 xfailed**, mypy clean, ruff clean, **pylint 10.00/10**, nbqa ruff clean |
 
 Goldens are byte-identical to the pre-M1.8 baseline throughout: M1.8/M1.9/M1.10
 changed how parameters travel, never what is computed.
@@ -789,7 +797,7 @@ unshifted branch and catch a `CLOCK_SHIFT_DAYS` left set in someone's shell.
 | Bites proof — same bomb under the matrix | **red at +90** on exactly the four `TestBuildPutValuation` tests, **+0 control green** |
 | Bites proof — bomb reverted | all four shifts green, `make` exit 0 |
 | Canary negative control (probe not loaded, `CLOCK_SHIFT_DAYS=90`) | both tests fail — a probe that stops shifting cannot pass silently |
-| Gate | pytest **1361 / 2 xfailed**, mypy clean, ruff clean, **pylint 10.00/10**, nbqa ruff clean |
+| Gate (at close-out, 2026-07-27) | pytest **1361 / 2 xfailed**, mypy clean, ruff clean, **pylint 10.00/10**, nbqa ruff clean |
 
 **Verified on the pinned interpreter (2026-07-27).** Everything above was first
 measured on local Python **3.14** while both workflows pin **3.11** — and the
@@ -802,8 +810,8 @@ wheels, dispatched at `clockshift.yml`:
 
 | Leg | Ref | Run | Result |
 | --- | --- | --- | --- |
-| Full matrix, clean env | `main` @ `6fb7f61` | [30299949442](https://github.com/qwertytam/deltadewa/actions/runs/30299949442) | **all four shifts green** — `1361 passed, 2 xfailed` at +0, +90, +1000, +3000 |
-| Bites proof, #205 bomb restored | throwaway branch @ `a147534` | [30300061144](https://github.com/qwertytam/deltadewa/actions/runs/30300061144) | **+0 green** (`1361 passed`); **+90/+1000/+3000 red, exactly 4 failures**, all in `TestBuildPutValuation` |
+| Full matrix, clean env (2026-07-27) | `main` @ `6fb7f61` | [30299949442](https://github.com/qwertytam/deltadewa/actions/runs/30299949442) | **all four shifts green** — `1361 passed, 2 xfailed` at +0, +90, +1000, +3000 |
+| Bites proof, #205 bomb restored (2026-07-27) | throwaway branch @ `a147534` | [30300061144](https://github.com/qwertytam/deltadewa/actions/runs/30300061144) | **+0 green** (`1361 passed`); **+90/+1000/+3000 red, exactly 4 failures**, all in `TestBuildPutValuation` |
 
 The four, with the assertion each produced once the option had aged past its
 hardcoded `2026-10-01` expiry: `test_delta_is_negative` (`assert 0.0 < 0.0`),
@@ -855,7 +863,8 @@ nightly, the advisory job and `make test-clockshift` at once.
 Confirmed on the pinned interpreter by dispatching the matrix at
 `ci/clockshift-applied-shift-in-log`
 ([30368957981](https://github.com/qwertytam/deltadewa/actions/runs/30368957981)),
-all four legs green at `1361 passed, 2 xfailed`, each logging its own shift
+all four legs green at `1361 passed, 2 xfailed` (2026-07-28), each logging
+its own shift
 under `-q`:
 
 ```text
@@ -1021,7 +1030,8 @@ Closes **Mo6**'s stress-coverage gap.
 (explorer == crash gauge at the IPS point) and
 `TestMappingsDistinguishOnASkewedBook::test_three_mappings_give_three_different_values`
 both hold; the M1.5 `stress.py` heatmap characterization suite is unchanged; full
-gate green (`ruff`, `mypy` strict, `pylint` 10.00/10, `pytest` — 1394 passed).
+gate green (`ruff`, `mypy` strict, `pylint` 10.00/10, `pytest` — 1394
+passed at close-out, 2026-07-29).
 
 ### M2.2 — Dash skeleton + shared layer (thin app)
 
@@ -1073,7 +1083,8 @@ A running app with plumbing, before either surface is fleshed out.
 **Verified at close-out:** `dash-smoke-runner`'s first real invocation
 reports **SMOKE PASSED** (both pages boot and render with no client-side
 error, no leaked traceback); full gate green (`ruff`, `mypy deltadewa`
-strict, `ruff format`, `pylint` 10.00/10, `pytest` — 1473 passed); both
+strict, `ruff format`, `pylint` 10.00/10, `pytest` — 1473 passed at
+close-out, 2026-07-30); both
 `monitor_dashboard.ipynb` and `hedge_design.ipynb` still execute cleanly via
 `jupyter nbconvert --execute` — confirming M2.6, not M2.2, is what retires
 that CI step.
@@ -1141,7 +1152,7 @@ from the partner's laptop over the tailnet, no public port. Write a one-page
 
 **Verified at close-out** (2026-08-03, live on the provisioned droplet over
 Tailscale): `gate-runner` green (`ruff`, `mypy` strict, `pytest` — 1500
-passed, `pylint` 10.00/10); `dash-smoke-runner` green (24/24 app-level
+passed at close-out, `pylint` 10.00/10); `dash-smoke-runner` green (24/24 app-level
 tests; both pages render; banner logic for all five provenance states —
 live, cached, stale, static, unavailable — verified). On the box itself:
 `/health` returns `200` with `state_loaded: false` and
@@ -1236,7 +1247,8 @@ gauge.
   sentence under the "Crash scenario" heading. Neither needed new engine code.
 
 **Verified at close-out:** `gate-runner` green (`ruff`, `mypy` strict,
-`ruff format`, `pylint` 10.00/10, `pytest` — 1578 passed); `dash-smoke-runner`
+`ruff format`, `pylint` 10.00/10, `pytest` — 1578 passed at close-out,
+2026-08-03); `dash-smoke-runner`
 green (79/79 app-level tests, both `/monitor` and `/design` render cleanly),
 with `TestAgreement` and `TestScenarioLocalGuard` confirmed passing by exact
 node ID. Deployed live to the droplet (RUNBOOK §4) with the repo's own golden
@@ -1364,7 +1376,8 @@ reader is the operator.
   config is available at `wsgi.py`'s call site.
 
 **Verified at close-out:** `gate-runner` green (`ruff`, `mypy deltadewa`
-strict, `ruff format`, `pylint` 10.00/10, `pytest` — 1669 passed; one
+strict, `ruff format`, `pylint` 10.00/10, `pytest` — 1669 passed at
+close-out, 2026-08-04; one
 timing-sensitive perf test, `test_vol_update_faster_than_rebuild`,
 flaked once under load and passed cleanly on three immediate reruns —
 untouched by this milestone's changes, not a regression); `dash-smoke-runner`
@@ -1394,7 +1407,8 @@ live, not just in `TestPlanningZoneAgreesWithMonitor`.
 
 ### M2.6 — Headless report + cron + backup (the heartbeat)
 
-**Status: done** (code + docs; droplet deploy pending — see close-out below).
+**Status: done** — code, docs, and the live droplet deploy all verified
+(see close-out below).
 
 The Part VII board report as a parametrised, schedulable entrypoint rendering
 deterministic HTML/PDF, with **M8** content: return framing from tracked start/end
@@ -1455,7 +1469,8 @@ surfaces.
 > on the new (app + report) gate.
 
 **Verified at close-out (code):** `gate-runner` green (`ruff`, `ruff format`,
-`mypy` strict — 120 files, `pylint` 10.00/10, `pytest` — 1753 passed) against
+`mypy` strict — 120 files, `pylint` 10.00/10, `pytest` — 1753 passed at
+close-out, 2026-08-06) against
 the full (`dev`+`test` groups) install; `dash-smoke-runner` green (129/129
 app-level tests). `poetry install --only main` in a scratch venv, then
 importing `deltadewa.app.wsgi`, `marketdata.refresh`, `reporting.weekly_report`,
@@ -1467,11 +1482,26 @@ graph. `docker build`: **758 MB**, down from the M2.3 close-out's recorded
 1.32 GB (a ~43% reduction); the built image runs and `/health` responds
 correctly.
 
-**Pending:** the droplet deploy + manual job run + email/backup verification
-(RUNBOOK §4/§11/§12) — this milestone's PR needs to merge and get tagged
-first, per RUNBOOK §4's "pull a tag, not a branch" deploy discipline. This
-checkpoint entry will be updated with the real `/health` banner state, email
-delivery confirmation, and Codeberg backup commit once that happens.
+**Verified live (2026-08-09):** the droplet deploy + manual job run +
+email/backup verification (RUNBOOK §4/§11/§12) all confirmed on the
+provisioned box — the Phase 2 checkpoint above is met, not aspirational.
+Refresh cron running (6/6 series fetched); `/health` reads `CACHED` with a
+real `as_of` — the state M2.2's banner logic was built for but the M2.3
+close-out could only ever show `UNAVAILABLE` (no cron had run yet); weekly
+digest delivering via Brevo; Codeberg offsite backup pushing; both
+`REFRESH_HEARTBEAT_URL`/`DIGEST_HEARTBEAT_URL` heartbeats green.
+
+Three deploy findings surfaced during this verification, undocumented
+anywhere until now (full detail in RUNBOOK):
+
+- DigitalOcean blocks outbound SMTP on 25/465/587; port 2525 is open and
+  is what this deployment's `SMTP_PORT` uses (RUNBOOK §10).
+- Brevo requires the sending IP allowlisted — a rebuilt droplet silently
+  fails to send until its new IP is added there (RUNBOOK §7).
+- `ops/backup-exports.sh` only sets the git remote on first init; an
+  `exports/.git` restored with an HTTPS remote instead of the SSH alias
+  makes the cron push hang on a credential prompt with no TTY to answer
+  it (RUNBOOK §10).
 
 ---
 
@@ -1520,6 +1550,81 @@ gauges, `dashboard.yaml`'s now-duplicated `vega_sufficiency` block, and
 `entry_timing_tree`'s hardcoded VIX thresholds (a pre-existing policy leak of
 the M1.4 class, surfaced but not fixed here). All six are listed in
 `part-x-coverage.md`.
+
+**Verified at close-out:** `gate-runner` green (`pytest` — 1847 passed at
+close-out, 2026-08-07 — M2.8's number; M2.7 has no close-out figure
+recorded separately, since M2.8 merged 12 minutes later the same day);
+`mypy` strict, `ruff check` clean, `pylint` 10.00/10.
+
+- **#5/#15 reduce to one function.** `hedge_efficiency()`
+  (`analysis/hedge_efficiency.py:104`) computes
+  `crash_payoff / abs(annual_carry)` (`:152`) — the dollar form. Its
+  docstring (`:19-26`) shows why that's also the percentage form: both
+  `crash_repricing.crash_convexity_pct` and `carry.carry_vs_budget`
+  already normalize by the same protected book —
+  `abs(underlying_quantity * spot)` — before `hedge_efficiency` ever sees
+  the inputs, so the normalizer cancels and no second function is
+  needed. `tests/test_analysis/test_hedge_efficiency.py`'s
+  `TestHandbookWorkedExamples` pins both handbook worked examples
+  verbatim (`1.5M / 300k = 5x`, `22% / 3% = 7.3`).
+- **Vega band moved, values unchanged.** `config/ips.yaml`'s new `vega:`
+  section (`sufficiency_min_pct: 20.0`, `sufficiency_max_pct: 50.0`)
+  carries `dashboard.yaml`'s `vega_sufficiency` gauge values over
+  verbatim (`max_val: 20` → `sufficiency_min_pct`, `end: 50` →
+  `sufficiency_max_pct`) — moving the metric onto a policy surface
+  didn't silently change what a reading means. `dashboard.yaml` keeps
+  its own copy since the Jupyter gauge still reads it; retiring that
+  copy was left out on purpose (see `part-x-coverage.md`).
+- **`/monitor` stays a sentence, not a sixth headline.**
+  `_efficiency_sentence()` (`app/pages/monitor.py:146`) is a deliberate
+  `html.P`, never a `band_bar`/`big-number` — the page already carries
+  five big numbers and two band bars. Pinned by
+  `test_app/test_monitor.py::TestHedgeEfficiencySentence::test_stays_a_sentence_not_a_sixth_headline`,
+  which asserts zero `.big-number`/`.band-bar` descendants on the
+  rendered paragraph.
+
+---
+
+### M2.8 — Delta Drift, Vega Term Exposure, and the entry-timing VIX policy leak
+
+**Status: done** — PR #232, merged 2026-08-07.
+
+Closes the last two Part X items the 2026-08-06 re-audit left as
+data-blocked (they were surfacing gaps, not data gaps) and the policy leak
+M2.7 surfaced when it put the entry-timing tree on a page for the first
+time.
+
+- **§13 Delta Drift** —
+  `analysis/scenarios.ScenariosMixin.calculate_delta_drift`
+  (`scenarios.py:212`), the handbook's `Δ(−5%) − Δ(0)` (hedge-only,
+  signed; `DELTA_DRIFT_SHOCK_PCT = -5.0`, `scenarios.py:58`), summed over
+  option legs. `/design` PLANNING panel beside hedge rebalance triggers.
+- **§14 Vega Term Exposure** —
+  `analysis/maturity.MaturityMixin.calculate_vega_by_maturity`
+  (`maturity.py:114`), reusing `classify_maturity_bucket`
+  (`maturity.py:60`) via the same `add_maturity_buckets` helper
+  `carry.py:106` already applies to theta — one bucketing scheme, so the
+  theta panel (`monitor_dashboard.ipynb`, `carry_display.py`) and the new
+  vega panel (`/design` EXPLORATION) cannot disagree on bucket
+  boundaries.
+- **Policy leak.** `entry_timing_tree`'s three VIX thresholds
+  (`vix_very_high`/`vix_caution`/`vix_low`) were Python defaults;
+  `design.py` called it supplying none of them, so the rendered verdict
+  was driven by hardcoded numbers invisible to `ips.yaml`. Moved to
+  `IpsMarketEnvironment` (`ips_config.py:169-171`) and made required
+  keyword-only params with no default (`decision_matrix.py:302-310`, the
+  M1.4/M1.5 fail-loud pattern) — the function can no longer be called
+  without them. `config/ips.yaml`'s `market_environment:` section now
+  carries the three stops; `design.py:814-819` is the fixed call site.
+- **Docs.** `part-x-coverage.md` updated: §13/§14 → **PRESENT**, §12
+  (liquidity) is now the only genuinely data-blocked Part X item, tracked
+  in #156 (the options-chain feed — Tier-4 liquidity, skew-aware pricing,
+  backtesting). #9's skew-beta scalar stays explicitly "never built" —
+  not part of this milestone's brief.
+
+**Verified at close-out:** `gate-runner` green (`ruff`, `mypy` strict,
+`pylint` 10.00/10, `pytest` — 1847 passed at close-out, 2026-08-07);
+`dash-smoke-runner` green (headless `/design`, both new panels).
 
 ---
 
