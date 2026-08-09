@@ -196,6 +196,46 @@ class TestBackupExportsScript:
         assert len(log.stdout.strip().splitlines()) == 2
 
 
+class TestDubiousOwnershipBreaksThePush:
+    """Pins the #237 failure mode directly, independent of the
+    entrypoint script: if exports/ or .git/ ever ends up owned by
+    something other than the uid running this cron, git's
+    dubious-ownership guard (safe.directory, default since git 2.35.2)
+    fails every git command on the repo, and this script has no
+    fallback — the push just doesn't happen. This is the regression
+    trip-wire: if something ever starts re-owning exports/ or .git
+    again (the entrypoint or anything else), this is what actually
+    breaks, regardless of what caused it.
+
+    ``GIT_TEST_ASSUME_DIFFERENT_OWNER`` is a real git-internal test hook
+    (used by git's own test suite for this exact code path) that
+    simulates the ownership mismatch without needing to actually chown
+    to a different uid — which needs privilege this dev environment and
+    most CI runners don't reliably have.
+    """
+
+    def test_dubious_ownership_fails_the_push(self, tmp_path: Path) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+
+        (repo_dir / "exports" / "reports").mkdir()
+        (repo_dir / "exports" / "reports" / "x.md").write_text("x")
+
+        result = _run(
+            repo_dir,
+            remote,
+            {"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"},
+        )
+
+        # The exact message differs by which git subcommand hits the
+        # guard first (git-config's is more generic than git-status's),
+        # so assert on the shape — a fatal error, non-zero exit — not
+        # one specific string.
+        assert result.returncode != 0
+        assert "fatal:" in result.stderr
+
+
 class TestBackupHeartbeat:
     """BACKUP_HEARTBEAT_URL: pings on success, never on failure, never
     fails the job it's reporting on — see ops/backup-exports.sh's
