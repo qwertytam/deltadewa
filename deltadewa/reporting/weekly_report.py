@@ -8,12 +8,15 @@ Usage::
 
 Assembles the same ``ProgramReport`` the notebook builds, but **leads with
 what changed since last week** — verdict crossings, band exits, staleness —
-rather than repeating a near-identical report 52 times a year. Return
-framing shows the week's own carry cost alongside the cumulative figure
-since the first snapshot, so a single week of pure theta doesn't read as a
-loss story on its own (see ``weekly_snapshot.py`` for why that cumulative
+rather than repeating a near-identical report 52 times a year.
+``build_weekly_digest`` also enriches the embedded report's own §4 Return
+Framing with the week's carry cost alongside the cumulative figure since
+the first snapshot (see ``weekly_snapshot.py`` for why that cumulative
 figure is carry cost, not premium paid — the latter is a stock, not a
-flow, and would double-count or miss cash entirely across a roll).
+flow, and would double-count or miss cash entirely across a roll), so a
+single week of pure theta doesn't read as a loss story on its own — and so
+it renders once, in the report, not a second time in this lede (Issue
+#171).
 
 Locked policy: **send stamped-stale, never silently skip.** The staleness
 banner is always rendered, using ``MarketContextSection.data_quality`` —
@@ -48,7 +51,7 @@ import json
 import logging
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -190,6 +193,14 @@ def build_weekly_digest(
 
     No I/O, no clock — every input is supplied by the caller, which is what
     makes this deterministic and what the golden-file test calls directly.
+
+    Also enriches ``report``'s ``ReturnFramingSection`` with the same
+    weekly-carry figures computed here (Issue #171): before this, the
+    digest's own lede stated the real carry-consumption numbers in prose
+    while the embedded ``ProgramReport`` two sections further down still
+    rendered ``PENDING`` — a genuine contradiction inside one document.
+    Populating the report's own fields instead makes it the single place
+    those numbers render; the lede no longer repeats them.
     """
     worst_roll = _worst_roll_verdict(roll_records)
     if prior_snapshot is not None:
@@ -206,8 +217,20 @@ def build_weekly_digest(
     )
     cumulative_carry_cost = prior_cumulative + weekly_carry_cost
 
-    snapshot = snapshot_from_report(
+    enriched_report = replace(
         report,
+        return_framing=replace(
+            report.return_framing,
+            weekly_carry_cost=weekly_carry_cost,
+            elapsed_days=elapsed_days,
+            cumulative_carry_cost=cumulative_carry_cost,
+            cumulative_since=first_as_of,
+            premium_paid_point_in_time=report.protection.premium_paid,
+        ),
+    )
+
+    snapshot = snapshot_from_report(
+        enriched_report,
         decision_verdict=decision_verdict,
         worst_roll_verdict=worst_roll,
         first_as_of=first_as_of,
@@ -216,7 +239,7 @@ def build_weekly_digest(
     diff = diff_snapshots(prior_snapshot, snapshot)
 
     return WeeklyDigest(
-        report=report,
+        report=enriched_report,
         snapshot=snapshot,
         diff=diff,
         headline=_headline(diff, snapshot),
@@ -226,11 +249,6 @@ def build_weekly_digest(
 
 
 # ── Rendering ────────────────────────────────────────────────────────────
-
-
-def _fmt_money(value: float) -> str:
-    sign = "-" if value < 0 else ""
-    return f"{sign}${abs(value):,.0f}"
 
 
 def _changes_markdown(title: str, changes: tuple[SnapshotChange, ...]) -> str:
@@ -298,31 +316,13 @@ def render_weekly_digest_markdown(digest: WeeklyDigest) -> str:
                 "",
             ]
 
-    lines += [
-        "## Return framing",
-        "",
-        (
-            f"This week consumed **{_fmt_money(digest.weekly_carry_cost)}** "
-            f"in carry (theta) cost over {digest.elapsed_days} day(s) — "
-            "budget consumption, not a return; a tail hedge is priced to "
-            "bleed carry on a quiet week."
-        ),
-        (
-            f"**Since {s.first_as_of}:** "
-            f"{_fmt_money(s.cumulative_carry_cost)} in cumulative carry "
-            "cost consumed."
-        ),
-        (
-            f"Current book's point-in-time premium invested: "
-            f"{_fmt_money(s.premium_paid_point_in_time)} "
-            "(a snapshot of the current book's cost basis — not summed "
-            "across weeks; a roll would otherwise show as a jump, not "
-            "an accumulation)."
-        ),
-        "",
-        "---",
-        "",
-    ]
+    # Return framing (this week's/cumulative carry cost, point-in-time
+    # premium) used to be repeated here in prose — now rendered once, by
+    # the embedded report's own §4 (Issue #171: this lede's numbers used
+    # to disagree with a PENDING two sections further down the same
+    # document; program_report.build_program_report's §4 is now the
+    # single source, enriched by build_weekly_digest above).
+    lines += ["---", ""]
 
     return "\n".join(lines) + "\n" + render_markdown(digest.report)
 
@@ -373,20 +373,15 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
             f"{crossings_html}{moves_html}{quiet_html}"
         )
 
+    # Return framing (this week's/cumulative carry cost, point-in-time
+    # premium) used to be repeated here in prose — now rendered once, by
+    # the embedded report's own §4 (Issue #171; see the markdown
+    # renderer's matching comment).
     lede = f"""<h1>Weekly Digest &mdash; {digest.headline}</h1>
 <p><strong>As of:</strong> {s.as_of}</p>
 {caveat_html}
 <h2>What changed</h2>
 {change_html}
-<h2>Return framing</h2>
-<p>This week consumed <strong>{_fmt_money(digest.weekly_carry_cost)}</strong>
-in carry (theta) cost over {digest.elapsed_days} day(s) &mdash; budget
-consumption, not a return.</p>
-<p><strong>Since {s.first_as_of}:</strong>
-{_fmt_money(s.cumulative_carry_cost)} in cumulative carry cost consumed.</p>
-<p>Current book's point-in-time premium invested:
-{_fmt_money(s.premium_paid_point_in_time)} (a snapshot, not summed across
-weeks).</p>
 <hr>"""
 
     return f"""<!DOCTYPE html>

@@ -20,12 +20,6 @@ Compared against the snapshot from 2026-07-29.
 - **VIX:** 18.00 → 22.00 (+4.00)
 - **Carry as % of notional:** 1.00% → 1.15% (+0.15pp)
 
-## Return framing
-
-This week consumed **$1,400** in carry (theta) cost over 7 day(s) — budget consumption, not a return; a tail hedge is priced to bleed carry on a quiet week.
-**Since 2026-07-01:** $2,800 in cumulative carry cost consumed.
-Current book's point-in-time premium invested: $300,000 (a snapshot of the current book's cost basis — not summed across weeks; a roll would otherwise show as a jump, not an accumulation).
-
 ---
 
 # Part VII: Hedge Program Report
@@ -70,11 +64,12 @@ Current book's point-in-time premium invested: $300,000 (a snapshot of the curre
 
 | | Value |
 |---|-------|
-| Before-hedge return | PENDING |
 | Annual carry drag | −1.15% |
-| After-hedge return | PENDING |
+| Carry cost this period | $1,400 over 7 day(s) |
+| Cumulative carry cost since 2026-07-01 | $2,800 |
+| Point-in-time premium invested | $300,000 |
 
-> PENDING: start/end book values are not yet tracked; before/after-hedge returns cannot be computed.
+> Before/after-hedge total return (start/end book value) is not tracked; the figures above are carry consumption only, not a return.
 
 ## 5. Monetization Realized
 
