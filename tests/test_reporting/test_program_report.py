@@ -1,5 +1,6 @@
 """Tests for deltadewa.reporting.program_report."""
 
+import dataclasses
 import datetime
 
 import pytest
@@ -326,11 +327,24 @@ class TestBuildProgramReport:
             report.cost.carry_pct_of_notional,
         )
 
+    def test_return_framing_weekly_fields_default_none(self) -> None:
+        """The standalone builder never populates the weekly-carry fields.
+
+        Only build_weekly_digest (weekly_report.py) has a prior-week
+        baseline to compute them from — see Issue #171.
+        """
+        rf = _build().return_framing
+        assert rf.weekly_carry_cost is None
+        assert rf.elapsed_days is None
+        assert rf.cumulative_carry_cost is None
+        assert rf.cumulative_since is None
+        assert rf.premium_paid_point_in_time is None
+
     def test_monetization_label_is_placeholder(self) -> None:
-        """realized_label is always the placeholder string."""
+        """realized_label is always the placeholder string, citing #70."""
         report = _build()
-        assert "planned" in report.monetization.realized_label
-        assert "C4" in report.monetization.realized_label
+        assert "not tracked" in report.monetization.realized_label
+        assert "#70" in report.monetization.realized_label
 
     def test_monetization_schedule_steps(self) -> None:
         """schedule_steps reflects the IPS monetization schedule length."""
@@ -388,6 +402,26 @@ def _make_full_report() -> ProgramReport:
     return _build()
 
 
+def _with_weekly_carry_framing(report: ProgramReport) -> ProgramReport:
+    """Populate return_framing's weekly-carry fields (Issue #171).
+
+    Mirrors what build_weekly_digest (weekly_report.py) does to the
+    embedded report before rendering, so these tests exercise the same
+    "populated" branch a real digest hits.
+    """
+    return dataclasses.replace(
+        report,
+        return_framing=dataclasses.replace(
+            report.return_framing,
+            weekly_carry_cost=1_400.0,
+            elapsed_days=7,
+            cumulative_carry_cost=2_800.0,
+            cumulative_since=datetime.date(2026, 7, 1),
+            premium_paid_point_in_time=report.protection.premium_paid,
+        ),
+    )
+
+
 class TestRenderMarkdown:
     """Tests for render_markdown."""
 
@@ -426,6 +460,23 @@ class TestRenderMarkdown:
         md = render_markdown(_make_full_report())
         assert "PENDING" in md
 
+    def test_weekly_carry_framing_replaces_pending(self) -> None:
+        """Populated weekly-carry fields render real figures, not PENDING.
+
+        Issue #171: a digest embedding this report must never show a
+        PENDING return-framing section under one that already answered
+        the same question with real numbers.
+        """
+        md = render_markdown(_with_weekly_carry_framing(_make_full_report()))
+
+        assert "PENDING" not in md
+        assert "Carry cost this period" in md
+        assert "$1,400 over 7 day(s)" in md
+        assert "Cumulative carry cost since 2026-07-01" in md
+        assert "$2,800" in md
+        assert "Point-in-time premium invested" in md
+        assert "not a return" in md
+
     def test_static_caveat_present_when_static(self) -> None:
         """Data-quality caveat appears for STATIC data."""
         md = render_markdown(_build(data_quality=DataQuality.STATIC))
@@ -451,7 +502,8 @@ class TestRenderMarkdown:
     def test_monetization_placeholder_present(self) -> None:
         """The monetization placeholder string appears in the output."""
         md = render_markdown(_make_full_report())
-        assert "planned (C4)" in md
+        assert "not tracked" in md
+        assert "#70" in md
 
     def test_key_figures_in_output(self) -> None:
         """Cost % and budget % appear numerically in the output."""
@@ -539,10 +591,24 @@ class TestRenderHtml:
         html = render_html(_make_full_report())
         assert "PENDING" in html
 
+    def test_weekly_carry_framing_replaces_pending(self) -> None:
+        """Populated weekly-carry fields render real figures, not PENDING.
+
+        HTML counterpart of the markdown test above (Issue #171).
+        """
+        html = render_html(_with_weekly_carry_framing(_make_full_report()))
+
+        assert "PENDING" not in html
+        assert "Carry cost this period" in html
+        assert "Cumulative carry cost since 2026-07-01" in html
+        assert "Point-in-time premium invested" in html
+        assert "not a return" in html
+
     def test_monetization_placeholder_present(self) -> None:
         """Monetization placeholder string is in the HTML."""
         html = render_html(_make_full_report())
-        assert "planned (C4)" in html
+        assert "not tracked" in html
+        assert "#70" in html
 
     def test_data_quality_caveat_static(self) -> None:
         """Caveat div appears for STATIC data."""
@@ -614,7 +680,7 @@ class TestMonetizationSectionWithPlan:
     def test_realized_label_still_placeholder(self) -> None:
         """realized_label keeps the placeholder even with a plan supplied."""
         report = _build(monetization_plan=_make_plan())
-        assert "planned" in report.monetization.realized_label
+        assert "not tracked" in report.monetization.realized_label
 
     def test_advisory_not_netted_against_carry(self) -> None:
         """recommended_cumulative_sell_pct is independent of cost fields."""
@@ -663,7 +729,8 @@ class TestMonetizationSectionWithPlan:
         """Realized-label placeholder remains in HTML alongside advisory."""
         report = _build(monetization_plan=_make_plan())
         html = render_html(report)
-        assert "planned (C4)" in html
+        assert "not tracked" in html
+        assert "#70" in html
 
 
 # ── MonetizationSection without plan ─────────────────────────────────────
@@ -683,12 +750,14 @@ class TestMonetizationSectionWithoutPlan:
     def test_placeholder_renders_markdown(self) -> None:
         """Placeholder text still appears in markdown output."""
         md = render_markdown(_build())
-        assert "planned (C4)" in md
+        assert "not tracked" in md
+        assert "#70" in md
 
     def test_placeholder_renders_html(self) -> None:
         """Placeholder text still appears in HTML output."""
         html = render_html(_build())
-        assert "planned (C4)" in html
+        assert "not tracked" in html
+        assert "#70" in html
 
     def test_no_advisory_table_in_markdown(self) -> None:
         """Without a plan, the advisory table header is absent."""

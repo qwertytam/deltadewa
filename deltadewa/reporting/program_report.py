@@ -22,10 +22,26 @@ if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
 
-_MONETIZATION_PLACEHOLDER: str = "n/a — planned (C4)"
+# Cites #70 ("Track hedge historical P&L"), the issue realized-gains
+# tracking is actually gated on — not the stale "(C4)" label this used to
+# carry, which (per docs/implementation-plan.md's current finding index)
+# names an unrelated crash-spot-repricing finding.
+_MONETIZATION_PLACEHOLDER: str = (
+    "not tracked — realized-gains history isn't built (#70)"
+)
 _PENDING_NOTE: str = (
     "PENDING: start/end book values are not yet tracked; "
     "before/after-hedge returns cannot be computed."
+)
+# Shown instead of _PENDING_NOTE when ReturnFramingSection's weekly-carry
+# fields are populated (Issue #171): the figures above answer "how much
+# carry has this cost", a real and already-computed question, but not
+# "what did the hedge program return" (start/end book value) — still
+# genuinely untracked, so this stays an honest caveat, not a claim the
+# rows above it are a return.
+_WEEKLY_CARRY_NOTE: str = (
+    "Before/after-hedge total return (start/end book value) is not "
+    "tracked; the figures above are carry consumption only, not a return."
 )
 
 # Qualities worse than a fresh-enough disk-cache hit. CACHED is the healthy
@@ -133,17 +149,46 @@ class MarketContextSection:
 class ReturnFramingSection:
     """Return-attribution framing.
 
-    The carry drag is computed and available; before/after-hedge returns
-    require start/end book values that are not yet tracked and are
-    therefore PENDING.
+    The carry drag is computed and available; before/after-hedge *return*
+    (start/end book value) is not tracked and is therefore PENDING, unless
+    the weekly-carry fields below are populated.
+
+    The weekly-carry fields are ``None`` for a standalone report (Jupyter,
+    an ad hoc CLI run) — there is no prior-week baseline to integrate
+    over. :func:`~deltadewa.reporting.weekly_report.build_weekly_digest`
+    populates them from the same
+    :class:`~deltadewa.reporting.weekly_snapshot.WeeklySnapshot` figures
+    its own digest lede states in prose (Issue #171: the report must not
+    silently disagree with the digest it's embedded in). When populated,
+    the renderers show carry consumption in place of the ``PENDING``
+    before/after-hedge return rows — a real answer to a related but
+    different question, not the return itself.
 
     Attributes:
         carry_drag_annual_pct: Annual carry cost as % of book notional
             (equal to ``CostSection.carry_pct_of_notional``).
+        weekly_carry_cost: This period's carry (theta) cost in dollars,
+            integrated over ``elapsed_days``. ``None`` outside the weekly
+            digest.
+        elapsed_days: Days ``weekly_carry_cost`` was integrated over.
+            ``None`` outside the weekly digest.
+        cumulative_carry_cost: Running carry cost consumed since
+            ``cumulative_since``. ``None`` outside the weekly digest.
+        cumulative_since: The first snapshot's date — the origin of
+            ``cumulative_carry_cost``. ``None`` outside the weekly digest.
+        premium_paid_point_in_time: The current book's cost basis (a
+            snapshot, not summed across weeks — equal to
+            ``ProtectionSection.premium_paid``). ``None`` outside the
+            weekly digest.
 
     """
 
     carry_drag_annual_pct: float
+    weekly_carry_cost: float | None = None
+    elapsed_days: int | None = None
+    cumulative_carry_cost: float | None = None
+    cumulative_since: datetime.date | None = None
+    premium_paid_point_in_time: float | None = None
 
 
 @dataclass(frozen=True)
@@ -586,20 +631,54 @@ def render_markdown(report: ProgramReport) -> str:
         "",
     ]
 
-    # ── 4. Return Framing ────────────────────────────────────────────────
+    # ── 4. Return Framing ──────────────────────────────────────
     rf = report.return_framing
-    lines += [
-        "## 4. Return Framing",
-        "",
-        "| | Value |",
-        "|---|-------|",
-        "| Before-hedge return | PENDING |",
-        f"| Annual carry drag | \u2212{_fmt_pct(rf.carry_drag_annual_pct)} |",
-        "| After-hedge return | PENDING |",
-        "",
-        f"> {_PENDING_NOTE}",
-        "",
-    ]
+    lines += ["## 4. Return Framing", ""]
+    if (
+        rf.weekly_carry_cost is not None
+        and rf.elapsed_days is not None
+        and rf.cumulative_carry_cost is not None
+        and rf.cumulative_since is not None
+        and rf.premium_paid_point_in_time is not None
+    ):
+        lines += [
+            "| | Value |",
+            "|---|-------|",
+            (
+                "| Annual carry drag"
+                f" | \u2212{_fmt_pct(rf.carry_drag_annual_pct)} |"
+            ),
+            (
+                "| Carry cost this period"
+                f" | {_fmt_money(rf.weekly_carry_cost)}"
+                f" over {rf.elapsed_days} day(s) |"
+            ),
+            (
+                f"| Cumulative carry cost since {rf.cumulative_since}"
+                f" | {_fmt_money(rf.cumulative_carry_cost)} |"
+            ),
+            (
+                "| Point-in-time premium invested"
+                f" | {_fmt_money(rf.premium_paid_point_in_time)} |"
+            ),
+            "",
+            f"> {_WEEKLY_CARRY_NOTE}",
+            "",
+        ]
+    else:
+        lines += [
+            "| | Value |",
+            "|---|-------|",
+            "| Before-hedge return | PENDING |",
+            (
+                "| Annual carry drag"
+                f" | \u2212{_fmt_pct(rf.carry_drag_annual_pct)} |"
+            ),
+            "| After-hedge return | PENDING |",
+            "",
+            f"> {_PENDING_NOTE}",
+            "",
+        ]
 
     # ── 5. Monetization Realized ─────────────────────────────────────────
     m = report.monetization
@@ -802,6 +881,38 @@ def render_html_body(report: ProgramReport) -> str:
         for r in ic.rows
     )
 
+    if (
+        rf.weekly_carry_cost is not None
+        and rf.elapsed_days is not None
+        and rf.cumulative_carry_cost is not None
+        and rf.cumulative_since is not None
+        and rf.premium_paid_point_in_time is not None
+    ):
+        return_framing_html = f"""<table>
+<tr><th></th><th>Value</th></tr>
+<tr><td>Annual carry drag</td>\
+<td>&minus;{escape(_fmt_pct(rf.carry_drag_annual_pct))}</td></tr>
+<tr><td>Carry cost this period</td>\
+<td>{escape(_fmt_money(rf.weekly_carry_cost))} \
+over {rf.elapsed_days} day(s)</td></tr>
+<tr><td>Cumulative carry cost since {rf.cumulative_since}</td>\
+<td>{escape(_fmt_money(rf.cumulative_carry_cost))}</td></tr>
+<tr><td>Point-in-time premium invested</td>\
+<td>{escape(_fmt_money(rf.premium_paid_point_in_time))}</td></tr>
+</table>
+<p class="note">{escape(_WEEKLY_CARRY_NOTE)}</p>"""
+    else:
+        return_framing_html = f"""<table>
+<tr><th></th><th>Value</th></tr>
+<tr><td>Before-hedge return</td>\
+<td class="pending">PENDING</td></tr>
+<tr><td>Annual carry drag</td>\
+<td>&minus;{escape(_fmt_pct(rf.carry_drag_annual_pct))}</td></tr>
+<tr><td>After-hedge return</td>\
+<td class="pending">PENDING</td></tr>
+</table>
+<p class="note">{escape(_PENDING_NOTE)}</p>"""
+
     mon_advisory_html = ""
     if m.recommended_cumulative_sell_pct is not None:
         gain_str_h = (
@@ -876,16 +987,7 @@ def render_html_body(report: ProgramReport) -> str:
 </table>
 
 <h2>4. Return Framing</h2>
-<table>
-<tr><th></th><th>Value</th></tr>
-<tr><td>Before-hedge return</td>\
-<td class="pending">PENDING</td></tr>
-<tr><td>Annual carry drag</td>\
-<td>&minus;{escape(_fmt_pct(rf.carry_drag_annual_pct))}</td></tr>
-<tr><td>After-hedge return</td>\
-<td class="pending">PENDING</td></tr>
-</table>
-<p class="note">{escape(_PENDING_NOTE)}</p>
+{return_framing_html}
 
 <h2>5. Monetization Realized</h2>
 <p>Realized gains: <strong>{escape(m.realized_label)}</strong></p>
