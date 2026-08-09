@@ -25,6 +25,10 @@
 # commit, push) is fatal via `set -e` and must be treated as a backup
 # outage, not silently retried.
 #
+# Pings BACKUP_HEARTBEAT_URL (healthchecks.io-compatible) on both success
+# paths — a real push and a clean no-op alike — never on a failure. See
+# ping_heartbeat() below and docs/RUNBOOK.md §13.
+#
 # Overridable for testing (and for a non-default host layout) via env:
 #   DELTADEWA_REPO_DIR        — the app repo checkout (default below)
 #   DELTADEWA_BACKUP_REMOTE   — the ~/.ssh/config Host alias for Codeberg
@@ -39,6 +43,27 @@ REMOTE_ALIAS="${DELTADEWA_BACKUP_REMOTE:-codeberg-backup}"
 DEFAULT_REMOTE_URL="${REMOTE_ALIAS}:deploy_deltadewa-exports-backup.git"
 REMOTE_URL="${DELTADEWA_BACKUP_REMOTE_URL:-${DEFAULT_REMOTE_URL}}"
 EXPORTS_DIR="${REPO_DIR}/exports"
+
+# Dead-man's-switch ping (healthchecks.io-compatible), the bash-side
+# equivalent of deltadewa/heartbeat.py's ping() — this cron runs on the
+# host, outside any Python venv, so it can't reuse that module directly,
+# but the contract is the same: never fail the job it's reporting on.
+# BACKUP_HEARTBEAT_URL is deliberately NOT read from .env (see
+# .env.example's entry for it) — set it in root's crontab env or
+# /etc/deltadewa/backup.env instead (RUNBOOK §9/§10).
+ping_heartbeat() {
+    if [ -z "${BACKUP_HEARTBEAT_URL:-}" ]; then
+        echo "backup-exports: BACKUP_HEARTBEAT_URL not configured, skipping heartbeat ping"
+        return 0
+    fi
+    # `if ! curl ...` is exempt from `set -e` (a command that's the
+    # condition of an `if` never triggers it), so a ping hiccup logs and
+    # falls through rather than aborting a backup that actually succeeded.
+    if ! curl -fsS --max-time 10 -o /dev/null "${BACKUP_HEARTBEAT_URL}"; then
+        echo "backup-exports: heartbeat ping failed" >&2
+    fi
+    return 0
+}
 
 cd "${EXPORTS_DIR}"
 
@@ -66,9 +91,11 @@ git add -A
 
 if [ -z "$(git status --porcelain)" ]; then
     echo "backup-exports: nothing to commit, exports/ unchanged"
+    ping_heartbeat
     exit 0
 fi
 
 git commit -q -m "backup: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 git push origin HEAD:main
 echo "backup-exports: pushed $(git rev-parse --short HEAD)"
+ping_heartbeat

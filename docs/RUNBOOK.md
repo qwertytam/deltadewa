@@ -8,9 +8,10 @@ in DigitalOcean) is manual; everything below the click is a command.
 **M2.6 note:** cron, the offsite backup push, and the weekly digest email
 are now live — see §9–§13 below.
 
-**Ownership note (#220):** the container runs as a fixed-UID non-root
-user (`docker-entrypoint.sh`), not root — see §1's `docker compose build`
-step and §2's sanity check below.
+**Ownership note (#220, #237):** the container runs as a fixed-UID
+non-root user (`docker-entrypoint.sh`), not root — see §1's
+`docker compose build` step and §2's sanity check below. §10 has the
+full exports/.git ownership invariant #237 fixed.
 
 ---
 
@@ -265,9 +266,16 @@ Target: **under 30 minutes, nothing memorised.**
 
 # 2. Restore exports/ from the offsite Codeberg backup (see §8) — clone
 #    it directly into the repo's exports/ directory (the bind-mount
-#    source). Needs the same SSH deploy key set up as §10 describes.
-rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it yet
-git clone codeberg-backup:deploy_deltadewa-exports-backup.git \
+#    source). `sudo` is required, not optional: the SSH deploy key this
+#    needs (§10) is root-owned 0600 at /root/.ssh/codeberg_backup, so
+#    only a root-privileged clone can authenticate at all. This is also
+#    what lands the restored exports/ and exports/.git root-owned,
+#    matching the ownership invariant docker-entrypoint.sh now preserves
+#    (§10's Ownership note, #237) — `~` still resolves to /home/deploy
+#    here (expanded by deploy's own shell before sudo runs), so the
+#    destination path is unaffected, only the process's privilege is.
+sudo rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it yet
+sudo git clone codeberg-backup:deploy_deltadewa-exports-backup.git \
     ~/deltadewa/exports
 
 # 3. Bring it up
@@ -335,7 +343,10 @@ crontab -e
 ```bash
 # root's crontab (sudo crontab -e) — the offsite backup push. Separate
 # from deploy's crontab because the push credential is root-owned (§10).
+# BACKUP_HEARTBEAT_URL here (or in /etc/deltadewa/backup.env, §10) wires
+# up the third dead-man's-switch check — see §13.
 sudo crontab -e
+BACKUP_HEARTBEAT_URL=https://hc-ping.com/<uuid>
 30 3 * * * /home/deploy/deltadewa/ops/backup-exports.sh >> /var/log/deltadewa-backup.log 2>&1
 ```
 
@@ -388,12 +399,24 @@ periodically until then.
   (`deploy_deltadewa-exports-backup`), add the key's public half as a
   deploy key with **write** access.
 
-  **Ownership note (#220):** this cron runs as root, so `.git/` and any
-  other file it touches under `exports/` end up root-owned between
-  pushes — not a problem in practice, since the app only ever writes to
-  `program_state.json`, `marketdata-cache/`, and `reports/weekly/`, which
-  this cron never touches, and `docker-entrypoint.sh` re-chowns the whole
-  tree to the app's user on the container's next start/restart anyway.
+  **Ownership note (#220, fixed by #237):** this cron runs as root, so
+  `exports/.git` — and `exports/` itself, the working-tree top —
+  end up root-owned. `docker-entrypoint.sh` used to `chown -R` the
+  *entire* `exports/` tree, including both of those, to the app user on
+  every container start/restart, which silently broke this cron's next
+  push: git's dubious-ownership guard (`safe.directory`, default since
+  git 2.35.2) checks ownership of **both** the working-tree top and the
+  gitdir against the invoking euid, and a mismatch on either one is
+  fatal. Fixed in #237 — the entrypoint now chowns everything under
+  `exports/` **except** `.git/`, and never touches `exports/` itself; the
+  app gets write access via the group bit (`chgrp`, not `chown` —
+  invisible to git's owner-based check) instead of ownership.
+
+  **The resulting invariant:** the app owns its data files
+  (`program_state.json`, `marketdata-cache/`, `reports/weekly/`); root
+  owns `.git/` and `exports/` itself; neither re-owns the other's.
+  Restart the container as often as you like, run the backup cron as
+  often as you like — neither disturbs the other's ownership.
 
   **Remote-URL note:** `ops/backup-exports.sh` only runs `git remote add
   origin` inside its `if [ ! -d .git ]` first-init branch — it never
@@ -413,6 +436,10 @@ periodically until then.
   read into the `jobs` container, so anything there is exposed to every
   job command run through it; the whole point of a host-side credential
   (SSH key or this file) is that it never enters a container at all.
+  This same file (or the crontab line itself, §9) is also where
+  `BACKUP_HEARTBEAT_URL` is set — `.env.example` documents the variable
+  for discoverability, but the backup cron never reads `.env` for the
+  same reason: it's root's crontab, not the `jobs` container.
 
 This section exists because all three are plausible places to reach for
 the same kind of "just add a secret here" instinct — they are
@@ -455,19 +482,23 @@ cd ~/deltadewa/exports && git log -1 --format='%H %ci'
 curl http://<tailscale-ip>:8050/health
 ```
 
-Also check the healthchecks.io (or equivalent) dashboard — both checks
-should show green with a "last ping" time inside their schedule + grace
-window (see §13).
+Also check the healthchecks.io (or equivalent) dashboard — all three
+checks should show green with a "last ping" time inside their schedule +
+grace window (see §13).
 
 ## 13. What each heartbeat alarm means when it fires
 
-`REFRESH_HEARTBEAT_URL` and `DIGEST_HEARTBEAT_URL` (`.env`, §10) are two
-*separate* checks because the two jobs fail independently and an overdue
-alarm means something different for each — see
-`deltadewa/heartbeat.py`'s docstring for the full design rationale.
-Suggested starting grace periods (comfortably over each job's own
-schedule; tune from there): refresh — period 1 day, grace 4 hours;
-digest — period 1 week, grace 1 day.
+`REFRESH_HEARTBEAT_URL`, `DIGEST_HEARTBEAT_URL`, and
+`BACKUP_HEARTBEAT_URL` (`.env`/root's crontab, §10) are three *separate*
+checks because the three jobs fail independently and an overdue alarm
+means something different for each — see `deltadewa/heartbeat.py`'s
+docstring for the refresh/digest design rationale (`ops/backup-exports.sh`'s
+own `ping_heartbeat()` mirrors the same contract in bash, since that cron
+runs outside Python entirely). Suggested starting grace periods
+(comfortably over each job's own schedule; tune from there): refresh —
+period 1 day, grace 4 hours; digest — period 1 week, grace 1 day; backup
+— period 1 day, grace 4 hours (same cadence reasoning as refresh — it
+also runs nightly, at 03:30).
 
 - **REFRESH overdue**: the market-data refresh hasn't produced even a
   partial success (exit 0 or 1) within the grace window — either the cron
@@ -483,3 +514,13 @@ digest — period 1 week, grace 1 day.
   `~/deltadewa/logs/weekly_report.log` for a `--send-email` failure
   (missing/invalid env var, or the SMTP relay rejecting the
   credentials/quota), then re-run §11's send command by hand.
+- **BACKUP overdue**: the offsite `exports/` push (or its "nothing
+  changed" no-op) hasn't confirmed within the grace window — either
+  root's crontab entry stopped firing, or the push itself is failing.
+  Check `sudo tail -50 /var/log/deltadewa-backup.log` first — a `fatal:
+  detected dubious ownership` (or `fatal: not in a git directory`) error
+  there means `exports/` or `.git/` ended up owned by something other
+  than root; see §10's Ownership note and #237 before assuming it's a
+  network/credential problem. Otherwise re-run §11's backup command by
+  hand (`sudo ...backup-exports.sh`, no `>>` redirect, so errors print
+  directly).

@@ -17,25 +17,58 @@ prompt's example ``deltadewa.jobs.weekly_report`` path.
 
 from __future__ import annotations
 
+import http.server
 import os
 import shutil
+import socket
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
+import threading
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 _SCRIPT = Path(__file__).parent.parent.parent / "ops" / "backup-exports.sh"
 _BASH = shutil.which("bash") or "/bin/bash"
 _GIT = shutil.which("git") or "/usr/bin/git"
 
+# Vars the real environment might have set (a developer's own shell, or a
+# CI secret) that would silently make a "heartbeat unconfigured" test
+# stop being that test. Stripped from every _run() unless a test opts
+# in via extra_env.
+_HEARTBEAT_ENV_VARS = ("BACKUP_HEARTBEAT_URL",)
+
 
 def _run(
     repo_dir: Path,
     remote_url: Path | str,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
         "DELTADEWA_REPO_DIR": str(repo_dir),
         "DELTADEWA_BACKUP_REMOTE_URL": str(remote_url),
+        # GitHub-hosted Actions runners ship an unconditional
+        # `safe.directory = *` in the SYSTEM git config
+        # (/etc/gitconfig) — confirmed by inspecting a live runner —
+        # which exempts every path from the dubious-ownership guard
+        # regardless of real or GIT_TEST_ASSUME_DIFFERENT_OWNER-
+        # simulated ownership. git's own ownership check only ever
+        # consults system + global config (never repo-local, by
+        # design), so blanking both here makes this suite's git
+        # behaviour depend on the script under test, not on whatever
+        # a given CI image or developer machine happens to have
+        # baked into its own config. Without this,
+        # TestDubiousOwnershipBreaksThePush is a false negative on
+        # any host carrying that exemption.
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "",
     }
+    for var in _HEARTBEAT_ENV_VARS:
+        env.pop(var, None)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
         [_BASH, str(_SCRIPT)],
         capture_output=True,
@@ -43,6 +76,43 @@ def _run(
         env=env,
         check=False,
     )
+
+
+class _RecordingHandler(http.server.BaseHTTPRequestHandler):
+    """Records the path of every GET it receives; replies 200 empty."""
+
+    received_paths: list[str] = []  # ruff: ignore[mutable-class-default]
+
+    def do_GET(self) -> None:
+        self.__class__.received_paths.append(self.path)
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, *args: Any) -> None:
+        """Silence the default stderr access log — tests are quiet."""
+
+
+@pytest.fixture
+def heartbeat_server() -> Iterator[tuple[str, list[str]]]:
+    """A local HTTP server standing in for healthchecks.io.
+
+    No live network call and no new dependency (``http.server`` is
+    stdlib) — binds to an ephemeral loopback port and records the path
+    of every request it receives, so a test can assert a ping fired
+    without trusting curl's own exit code alone.
+    """
+    _RecordingHandler.received_paths = []
+    server = http.server.HTTPServer(("127.0.0.1", 0), _RecordingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield (
+            f"http://127.0.0.1:{server.server_port}/ping",
+            _RecordingHandler.received_paths,
+        )
+    finally:
+        server.shutdown()
+        thread.join()
 
 
 def _git(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -68,6 +138,18 @@ def _seeded_exports(tmp_path: Path) -> tuple[Path, Path]:
     exports.mkdir(parents=True)
     (exports / "program_state.json").write_text('{"positions": []}')
     return repo_dir, _bare_remote(tmp_path)
+
+
+def _closed_local_port_url() -> str:
+    """A loopback URL nothing is listening on — a reliable connection-
+    refused target, for testing the "ping fails, job doesn't" contract
+    without depending on an actual unreachable host (slow, flaky in CI).
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    return f"http://127.0.0.1:{port}/ping"
 
 
 class TestBackupExportsScript:
@@ -127,3 +209,110 @@ class TestBackupExportsScript:
         assert "pushed" in second.stdout
         log = _git("log", "--oneline", "main", cwd=remote)
         assert len(log.stdout.strip().splitlines()) == 2
+
+
+class TestDubiousOwnershipBreaksThePush:
+    """Pins the #237 failure mode directly, independent of the
+    entrypoint script: if exports/ or .git/ ever ends up owned by
+    something other than the uid running this cron, git's
+    dubious-ownership guard (safe.directory, default since git 2.35.2)
+    fails every git command on the repo, and this script has no
+    fallback — the push just doesn't happen. This is the regression
+    trip-wire: if something ever starts re-owning exports/ or .git
+    again (the entrypoint or anything else), this is what actually
+    breaks, regardless of what caused it.
+
+    ``GIT_TEST_ASSUME_DIFFERENT_OWNER`` is a real git-internal test hook
+    (used by git's own test suite for this exact code path) that
+    simulates the ownership mismatch without needing to actually chown
+    to a different uid — which needs privilege this dev environment and
+    most CI runners don't reliably have.
+    """
+
+    def test_dubious_ownership_fails_the_push(self, tmp_path: Path) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+
+        (repo_dir / "exports" / "reports").mkdir()
+        (repo_dir / "exports" / "reports" / "x.md").write_text("x")
+
+        result = _run(
+            repo_dir,
+            remote,
+            {"GIT_TEST_ASSUME_DIFFERENT_OWNER": "1"},
+        )
+
+        # The exact message differs by which git subcommand hits the
+        # guard first (git-config's is more generic than git-status's),
+        # so assert on the shape — a fatal error, non-zero exit — not
+        # one specific string.
+        assert result.returncode != 0
+        assert "fatal:" in result.stderr
+
+
+class TestBackupHeartbeat:
+    """BACKUP_HEARTBEAT_URL: pings on success, never on failure, never
+    fails the job it's reporting on — see ops/backup-exports.sh's
+    ping_heartbeat() and deltadewa/heartbeat.py's ping() for the same
+    contract on the Python side.
+    """
+
+    def test_pings_on_a_real_push(
+        self,
+        tmp_path: Path,
+        heartbeat_server: tuple[str, list[str]],
+    ) -> None:
+        url, received = heartbeat_server
+        repo_dir, remote = _seeded_exports(tmp_path)
+
+        result = _run(repo_dir, remote, {"BACKUP_HEARTBEAT_URL": url})
+
+        assert result.returncode == 0, result.stderr
+        assert "pushed" in result.stdout
+        assert received == ["/ping"]
+
+    def test_pings_on_a_clean_noop(
+        self,
+        tmp_path: Path,
+        heartbeat_server: tuple[str, list[str]],
+    ) -> None:
+        url, received = heartbeat_server
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+        received.clear()  # only care about the no-op run below
+
+        second = _run(repo_dir, remote, {"BACKUP_HEARTBEAT_URL": url})
+
+        assert second.returncode == 0, second.stderr
+        assert "nothing to commit" in second.stdout
+        assert received == ["/ping"]
+
+    def test_unconfigured_skips_the_ping_quietly(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        assert "not configured, skipping heartbeat ping" in result.stdout
+
+    def test_a_failed_ping_does_not_fail_the_job(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The push still succeeds even when the heartbeat URL refuses
+        the connection — a dead-man's switch must never itself become a
+        new way for the backup to appear to fail.
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+        unreachable = _closed_local_port_url()
+
+        result = _run(repo_dir, remote, {"BACKUP_HEARTBEAT_URL": unreachable})
+
+        assert result.returncode == 0, result.stderr
+        assert "pushed" in result.stdout
+        assert "heartbeat ping failed" in result.stderr
