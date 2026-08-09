@@ -1,6 +1,13 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      # Matches the deploy host's `deploy` user (Dockerfile's ARG
+      # APP_UID/APP_GID default to 1000, the first non-root Ubuntu user) —
+      # override via .env if `id deploy` reports something else. See #220.
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     restart: unless-stopped
     environment:
       DELTADEWA_HOST: "0.0.0.0"
@@ -33,7 +40,11 @@ services:
   # process never holds an email credential it doesn't use, and these jobs
   # keep working when the `app` container is down or restarting.
   jobs:
-    build: .
+    build:
+      context: .
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     # Gated behind a profile so a bare `docker compose up` never starts
     # this — it only ever runs via an explicit `docker compose run jobs`.
     profiles: ["jobs"]

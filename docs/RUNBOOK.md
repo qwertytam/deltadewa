@@ -8,6 +8,10 @@ in DigitalOcean) is manual; everything below the click is a command.
 **M2.6 note:** cron, the offsite backup push, and the weekly digest email
 are now live — see §9–§13 below.
 
+**Ownership note (#220):** the container runs as a fixed-UID non-root
+user (`docker-entrypoint.sh`), not root — see §1's `docker compose build`
+step and §2's sanity check below.
+
 ---
 
 ## 1. First-time setup — provision the droplet
@@ -63,6 +67,29 @@ echo "BIND_ADDR=<tailscale-ip-from-above>" > .env
 docker compose up -d --build
 ```
 
+**exports/ ownership (#220):** the container runs as a fixed-UID non-root
+user, not root, and `docker-entrypoint.sh` chowns the bind-mounted
+`exports/` tree to that user on every container start — so a fresh
+`exports/` that Docker auto-creates as `root:root` on this first `up`
+self-heals immediately, no manual `chown` needed. This only works cleanly
+if that fixed UID/GID (default `1000`, matching the first non-root user
+`adduser deploy` creates on a fresh Ubuntu box) actually matches `deploy`:
+
+```bash
+# (deploy) — confirm before the first docker compose build, or after if
+# unsure; a UID/GID mismatch here is why deploy might still see
+# Permission denied writing into exports/ directly (scp/mv, §5) even
+# though the app itself runs fine
+id deploy
+# uid=1000(deploy) gid=1000(deploy) ... -> nothing to do, default matches
+
+# If deploy's UID/GID differ from 1000, set them and rebuild:
+echo "APP_UID=$(id -u deploy)" >> .env
+echo "APP_GID=$(id -g deploy)" >> .env
+docker compose build
+docker compose up -d
+```
+
 ## 2. The exposure check — mandatory after any ports change
 
 Docker inserts published ports into the `nat` table **ahead of** any
@@ -86,6 +113,17 @@ If the public-IP curl returns JSON, stop — `BIND_ADDR` is wrong or unset
 (falls back to `127.0.0.1`, which is safe, but check `.env` exists and
 `docker compose config` shows the tailnet IP, not the fallback, before
 assuming anything).
+
+**exports/ ownership sanity check (#220)** — worth running alongside the
+above after any fresh `docker compose up`, since both catch a config
+problem before it becomes a 3am surprise:
+
+```bash
+ls -la ~/deltadewa/exports
+# expected: owned by deploy (uid 1000, or whatever APP_UID/APP_GID §1 set),
+# not root — confirms docker-entrypoint.sh's chown ran and deploy can
+# scp/mv into it directly (§5) without a manual chown workaround
+```
 
 ## 3. Client setup — what the other users do once
 
@@ -335,6 +373,13 @@ periodically until then.
   -N ""`), create a **private** repo on Codeberg
   (`deploy_deltadewa-exports-backup`), add the key's public half as a
   deploy key with **write** access.
+
+  **Ownership note (#220):** this cron runs as root, so `.git/` and any
+  other file it touches under `exports/` end up root-owned between
+  pushes — not a problem in practice, since the app only ever writes to
+  `program_state.json`, `marketdata-cache/`, and `reports/weekly/`, which
+  this cron never touches, and `docker-entrypoint.sh` re-chowns the whole
+  tree to the app's user on the container's next start/restart anyway.
 - **The optional token alternative** — `/etc/deltadewa/backup.env`
   (mode `0600`, root-owned), sourced by `ops/backup-exports.sh` if
   present. **Never** put a Codeberg token in `.env` — `env_file: .env` is
