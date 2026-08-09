@@ -242,6 +242,16 @@ curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 # blind even before the next refresh cron fires.
 ```
 
+**Email will fail until Brevo's IP allowlist is updated.** A new droplet
+means a new outbound IP, and Brevo (like most transactional-email
+providers) only accepts sends from allowlisted sending IPs — the weekly
+digest job fails to send until the new droplet's IP is added in the
+Brevo dashboard. This trips the `DIGEST_HEARTBEAT_URL` alarm (§13) on the
+next scheduled run, which is the mechanism that will actually catch it if
+this step gets missed — but don't rely on that: add the new IP to
+Brevo's allowlist as part of step 3 above, not after the first missed
+digest surfaces it.
+
 ## 8. What lives where
 
 - **`exports/`** — the only stateful directory. Bind-mounted (not a named
@@ -312,9 +322,13 @@ periodically until then.
   stdlib SMTP, so the provider is interchangeable — any SMTP relay works
   (Resend, Brevo, Amazon SES, Mailtrap, ...) by changing only these `.env`
   values, no code change. `SMTP_PORT` selects the connection mode: `465`
-  is implicit TLS/SMTPS, anything else (typically `587`) is STARTTLS. If
-  using Amazon SES, sandbox mode is fine indefinitely for this use case —
-  just verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
+  is implicit TLS/SMTPS, anything else (typically `587`) is STARTTLS.
+  **DigitalOcean blocks outbound traffic on 25/465/587 by default** — this
+  deployment uses **2525** (also STARTTLS), which DigitalOcean leaves
+  open; if a droplet's digest job hangs or times out on connect rather
+  than failing on auth, check the port before the credentials. If using
+  Amazon SES, sandbox mode is fine indefinitely for this use case — just
+  verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
   `REPORT_EMAIL_FROM`) in the SES console rather than requesting
   production access.
 - **The Codeberg SSH deploy key** — `/root/.ssh/codeberg_backup` (mode
@@ -335,6 +349,19 @@ periodically until then.
   -N ""`), create a **private** repo on Codeberg
   (`deploy_deltadewa-exports-backup`), add the key's public half as a
   deploy key with **write** access.
+
+  **Remote-URL note:** `ops/backup-exports.sh` only runs `git remote add
+  origin` inside its `if [ ! -d .git ]` first-init branch — it never
+  `set-url`s on a subsequent run. If `exports/.git` is ever created or
+  restored with an `https://` remote instead of the `codeberg-backup:`
+  SSH alias above (e.g. a manual `git clone` during §7's recovery using
+  the HTTPS form of the repo URL), the script won't notice or correct
+  it — `git push` against that remote hangs on a non-interactive
+  credential prompt under cron (no TTY, no `GIT_TERMINAL_PROMPT=0` guard
+  in the script), and the backup silently stops running. If a restore
+  ever needs the HTTPS URL for any reason, re-point the remote by hand
+  afterwards: `git -C ~/deltadewa/exports remote set-url origin
+  codeberg-backup:deploy_deltadewa-exports-backup.git`.
 - **The optional token alternative** — `/etc/deltadewa/backup.env`
   (mode `0600`, root-owned), sourced by `ops/backup-exports.sh` if
   present. **Never** put a Codeberg token in `.env` — `env_file: .env` is
