@@ -49,6 +49,21 @@ def _run(
         **os.environ,
         "DELTADEWA_REPO_DIR": str(repo_dir),
         "DELTADEWA_BACKUP_REMOTE_URL": str(remote_url),
+        # GitHub-hosted Actions runners ship an unconditional
+        # `safe.directory = *` in the SYSTEM git config
+        # (/etc/gitconfig) — confirmed by inspecting a live runner —
+        # which exempts every path from the dubious-ownership guard
+        # regardless of real or GIT_TEST_ASSUME_DIFFERENT_OWNER-
+        # simulated ownership. git's own ownership check only ever
+        # consults system + global config (never repo-local, by
+        # design), so blanking both here makes this suite's git
+        # behaviour depend on the script under test, not on whatever
+        # a given CI image or developer machine happens to have
+        # baked into its own config. Without this,
+        # TestDubiousOwnershipBreaksThePush is a false negative on
+        # any host carrying that exemption.
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "",
     }
     for var in _HEARTBEAT_ENV_VARS:
         env.pop(var, None)
