@@ -201,11 +201,24 @@ class HedgeHealthDashboard:
         self.cumulative_carry_paid = 0.0
 
     def _get_default_config(self) -> dict[str, Any]:
-        """Return the default configuration dictionary."""
+        """Return the default configuration dictionary.
+
+        OBSOLETE, along with this whole Jupyter surface — see #242. Two entries
+        below are the last copies of numbers that #241 made ips.yaml the sole
+        owner of: ``convexity_cliff_days`` (now
+        ``convexity.cliff_threshold_days``) and the ``convexity_cliff`` gauge's
+        ``min_val``/``mid_val``/``max_val`` (now ``convexity.cliff_urgent_days``
+        / ``cliff_review_days`` / ``cliff_threshold_days``). They are left here
+        rather than rewired to the IPS because rewiring them is a ``widgets/``
+        change on a surface being retired; ``/design`` already reads the policy
+        values directly. Do not treat these as the source of truth, and do not
+        copy them back into ``dashboard_config_*.yaml``.
+        """
         return {
             "parameters": {
                 "historical_vol_low": DEFAULT_VOL_REGIME_LOW,
                 "historical_vol_high": DEFAULT_VOL_REGIME_HIGH,
+                # Obsolete duplicate of convexity.cliff_threshold_days (#242).
                 "convexity_cliff_days": 180,
             },
             "metrics": {
