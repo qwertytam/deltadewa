@@ -15,7 +15,7 @@ sharing a book across tests in this module would leak state between them).
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1032,6 +1032,173 @@ class TestDeltaDriftPanel:
         assert len(drift.legs) == 1
 
 
+class TestConvexityCliffPanel:
+    """Part X "Time to Convexity Cliff" — Jupyter-only until this panel.
+
+    The last of the four Jupyter health gauges with no Dash surface, and the
+    only one of them that was a real loss rather than a recorded decision.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        return design._render_convexity_cliff_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+    @staticmethod
+    def _add_put(state: ProgramState, days: int) -> None:
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=days),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+
+    def test_renders_runway_and_verdict(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        # 400 DTE against a 180-day region start leaves ~220 days of runway,
+        # comfortably past the review line. Expected value read back from the
+        # engine rather than pinned, so the assertion survives the
+        # clock-shift probe (`make test-clockshift`) and any date-truncation
+        # difference between valuation_date and the maturity timestamp.
+        self._add_put(app.program_state, days=400)
+        expected = PortfolioAnalyzer(
+            app.program_state.portfolio,
+        ).calculate_convexity_cliff_days(
+            cliff_threshold_days=ips_config.convexity.cliff_threshold_days,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert expected > ips_config.convexity.cliff_review_days
+        assert f"{expected:,} days of runway" in text
+        assert "OK" in text
+
+    def test_no_long_puts_reads_unavailable_not_the_sentinel(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The 999 sentinel must never reach the page as a runway.
+
+        An empty book has no convexity to decay; printing "999 days" would
+        read as the safest possible book when it is the opposite.
+        """
+        app = _app_with_ips(tmp_path)
+
+        text = _collect_text(self._panel(app))
+
+        assert "does not apply" in text
+        assert "999" not in text
+
+    def test_urgent_inside_the_urgent_line(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        conv = ips_config.convexity
+        # Runway of half the urgent line.
+        self._add_put(
+            app.program_state,
+            days=conv.cliff_threshold_days + conv.cliff_urgent_days // 2,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "URGENT" in text
+
+    def test_review_between_the_two_lines(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        conv = ips_config.convexity
+        midpoint = (conv.cliff_urgent_days + conv.cliff_review_days) // 2
+        self._add_put(
+            app.program_state,
+            days=conv.cliff_threshold_days + midpoint,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "REVIEW" in text
+
+    def test_already_inside_the_region_is_not_reported_as_zero_runway(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The engine floors runway at 0, so "0 days" is ambiguous.
+
+        A put at 120 DTE and one at 30 DTE both compute 0 against a 180-day
+        region start; printing "0 days of runway" for both would imply they
+        are the same decision.
+        """
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        self._add_put(
+            app.program_state,
+            days=ips_config.convexity.cliff_threshold_days // 2,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "already inside" in text
+        assert "URGENT" in text
+        assert "0 days of runway" not in text
+        assert "0 days to the cliff" not in text
+
+    def test_states_the_ips_lines_it_graded_against(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Both lines are policy, so the panel must name them, not hide them."""
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        conv = ips_config.convexity
+        self._add_put(app.program_state, days=400)
+
+        text = _collect_text(self._panel(app))
+
+        assert f"{conv.cliff_review_days}d review" in text
+        assert f"{conv.cliff_urgent_days}d urgent" in text
+
+    def test_region_start_comes_from_policy_not_the_engine_default(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The reading must move when policy moves.
+
+        ``calculate_convexity_cliff_days`` carries its own 180-day default;
+        if the panel let that default stand, editing ips.yaml would silently
+        do nothing — the Mo2-class leak this promotion exists to close.
+        """
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        self._add_put(app.program_state, days=400)
+        analyzer = PortfolioAnalyzer(app.program_state.portfolio)
+        at_policy = analyzer.calculate_convexity_cliff_days(
+            cliff_threshold_days=ips_config.convexity.cliff_threshold_days,
+        )
+        tightened = replace(ips_config.convexity, cliff_threshold_days=300)
+
+        text = _collect_text(
+            design._render_convexity_cliff_panel_logic(
+                portfolio=app.program_state.portfolio,
+                ips_config=replace(ips_config, convexity=tightened),
+            ),
+        )
+
+        # 400 DTE against a 300-day region start leaves 120 days fewer runway
+        # than against the shipped 180-day one.
+        assert f"{at_policy - 120:,} days of runway" in text
+        assert "300 days to expiry" in text
+
+
 class TestVegaSufficiency:
     """Part X #4 on /design — the only Tier-1 item the rebuild dropped."""
 
@@ -1621,8 +1788,13 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 7 PLANNING panels + 4 EXPLORATION panels share the .panel class.
-        assert page.locator(".panel").count() == 11
+        # 8 PLANNING panels + 4 EXPLORATION panels share the .panel class.
+        # A count, not a list, so a panel disappearing fails loudly; update it
+        # when a panel is deliberately added or removed.
+        assert page.locator(".panel").count() == 12
+        # Named explicitly because the count alone can't tell a lost panel
+        # from a renamed one, and this panel closed a real regression.
+        assert page.locator("#plan-convexity-cliff-panel").count() == 1
 
 
 class TestExplorationZoneRendersClientSide:

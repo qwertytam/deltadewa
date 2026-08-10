@@ -327,6 +327,85 @@ class TestLoadIpsConfig:
         with pytest.raises(IpsConfigError, match="efficiency_min_ratio"):
             load_ips_config(path)
 
+    def test_cliff_thresholds_default_to_the_retired_gauge_values(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Omitted cliff keys reproduce dashboard.yaml's old gauge exactly.
+
+        The promotion out of presentation config must not change what a
+        reading means, so the defaults are the gauge's own 180 / 90 / 30.
+        """
+        # _VALID_CONFIG's convexity section carries no cliff keys.
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+
+        ips = load_ips_config(path)
+
+        assert ips.convexity.cliff_threshold_days == 180
+        assert ips.convexity.cliff_review_days == 90
+        assert ips.convexity.cliff_urgent_days == 30
+
+    def test_cliff_thresholds_round_trip_when_set(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A program wanting more warning before a roll is honoured."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "cliff_threshold_days": 270,
+                "cliff_review_days": 120,
+                "cliff_urgent_days": 45,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        ips = load_ips_config(path)
+
+        assert ips.convexity.cliff_threshold_days == 270
+        assert ips.convexity.cliff_review_days == 120
+        assert ips.convexity.cliff_urgent_days == 45
+
+    def test_urgent_line_past_review_line_raises(self, tmp_path: Path) -> None:
+        """URGENT must be reached after REVIEW, not before it.
+
+        Inverted, every reading inside the review window would grade URGENT
+        and the review line would be unreachable.
+        """
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "cliff_review_days": 30,
+                "cliff_urgent_days": 90,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="cliff_urgent_days"):
+            load_ips_config(path)
+
+    def test_negative_cliff_threshold_raises(self, tmp_path: Path) -> None:
+        """A negative region boundary is meaningless, so it's rejected."""
+        config = {
+            **_VALID_CONFIG,
+            "convexity": {
+                "crash_scenario_pct": -25.0,
+                "target_min_pct": 15.0,
+                "target_max_pct": 25.0,
+                "cliff_threshold_days": -10,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="cliff_threshold_days"):
+            load_ips_config(path)
+
     def test_negative_budget_raises(self, tmp_path: Path) -> None:
         """Test that a negative annual_carry_pct raises IpsConfigError."""
         config = {**_VALID_CONFIG, "budget": {"annual_carry_pct": -1.0}}

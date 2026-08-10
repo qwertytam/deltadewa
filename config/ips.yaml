@@ -40,6 +40,23 @@ convexity:
   # worth the money" mandate question.
   efficiency_min_ratio: 3.0
   efficiency_max_ratio: 6.0
+  # Convexity cliff (handbook Part X, "Time to Convexity Cliff"). A long put
+  # loses convexity quickly once its remaining maturity gets short;
+  # cliff_threshold_days is where that high-gamma region is deemed to start,
+  # and the metric reports how many days the nearest long put has before it
+  # gets there. review/urgent band the resulting runway. Policy, not
+  # presentation: "how much warning do we want before decaying convexity
+  # forces a roll" is a mandate question. Seeded verbatim from the values
+  # dashboard.yaml already used for the Jupyter gauge (180 / 90 / 30) so the
+  # promotion didn't change what a reading means.
+  #
+  # Note these sit *behind* triggers.roll_time_months (9mo ~ 274d): a book run
+  # to policy rolls at ~274 DTE, which is ~94 days of cliff runway, so this
+  # metric should normally read comfortably positive. It reading low means the
+  # roll trigger was already missed.
+  cliff_threshold_days: 180
+  cliff_review_days: 90
+  cliff_urgent_days: 30
 
 drawdown:
   max_tolerance_pct: 20.0

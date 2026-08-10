@@ -71,6 +71,18 @@ _DEFAULT_PORTFOLIO_BETA: Final[float] = 1.0
 _DEFAULT_VEGA_SUFFICIENCY_MIN_PCT: Final[float] = 20.0
 _DEFAULT_VEGA_SUFFICIENCY_MAX_PCT: Final[float] = 50.0
 
+# Convexity-cliff thresholds, in days (see ``IpsConvexity``). Seeded verbatim
+# from what ``config/dashboard.yaml`` already carried for the Jupyter-only
+# gauge — ``parameters.convexity_cliff_days: 180`` becomes the region boundary,
+# and the ``convexity_cliff`` gauge's ``mid_val: 90`` / ``min_val: 30`` become
+# the REVIEW and URGENT lines — so promoting the metric to a policy surface does
+# not silently change what a reading means. Same reasoning as the vega band
+# above: "when does decaying convexity force a decision" is a mandate question,
+# not a display choice.
+_DEFAULT_CLIFF_THRESHOLD_DAYS: Final[int] = 180
+_DEFAULT_CLIFF_REVIEW_DAYS: Final[int] = 90
+_DEFAULT_CLIFF_URGENT_DAYS: Final[int] = 30
+
 # Single source for the market-environment policy bands (see
 # ``IpsMarketEnvironment``). Public because they are consumed across
 # ``analysis.market_environment``, ``analysis.health``,
@@ -199,6 +211,19 @@ class IpsConvexity:
     because the ratio is the convexity/carry trade-off itself, and because this
     section already carries a min/max band pair every consumer reads the same
     way.
+
+    ``cliff_threshold_days`` / ``cliff_review_days`` / ``cliff_urgent_days``
+    are the convexity-cliff policy (handbook Part X, "Time to Convexity
+    Cliff"; ``HealthMixin.calculate_convexity_cliff_days``). The first is the
+    *region boundary* — the remaining maturity at which a long put is treated
+    as having entered the high-gamma zone where convexity decays quickly — and
+    it is the value the metric is computed against. The other two band the
+    resulting runway: at or below ``cliff_review_days`` the cliff is close
+    enough to plan a roll, at or below ``cliff_urgent_days`` it is imminent.
+
+    Unlike every other band in this class these are **one-sided**: more runway
+    is unambiguously better, so there is no upper bound above which a reading
+    turns bad. Consumers must not render them as a two-sided good-zone band.
     """
 
     crash_scenario_pct: float
@@ -210,6 +235,9 @@ class IpsConvexity:
     crash_floor_reported: bool = _DEFAULT_CRASH_FLOOR_REPORTED
     efficiency_min_ratio: float = _DEFAULT_EFFICIENCY_MIN_RATIO
     efficiency_max_ratio: float = _DEFAULT_EFFICIENCY_MAX_RATIO
+    cliff_threshold_days: int = _DEFAULT_CLIFF_THRESHOLD_DAYS
+    cliff_review_days: int = _DEFAULT_CLIFF_REVIEW_DAYS
+    cliff_urgent_days: int = _DEFAULT_CLIFF_URGENT_DAYS
 
 
 @dataclass(frozen=True)
@@ -446,6 +474,26 @@ def _parse_convexity(config: dict[str, Any]) -> IpsConvexity:
             f"got {efficiency_min_ratio} > {efficiency_max_ratio}",
         )
 
+    cliff_threshold_days = int(
+        section.get("cliff_threshold_days", _DEFAULT_CLIFF_THRESHOLD_DAYS),
+    )
+    cliff_review_days = int(
+        section.get("cliff_review_days", _DEFAULT_CLIFF_REVIEW_DAYS),
+    )
+    cliff_urgent_days = int(
+        section.get("cliff_urgent_days", _DEFAULT_CLIFF_URGENT_DAYS),
+    )
+    _require_non_negative(
+        cliff_threshold_days, "convexity.cliff_threshold_days"
+    )
+    _require_non_negative(cliff_review_days, "convexity.cliff_review_days")
+    _require_non_negative(cliff_urgent_days, "convexity.cliff_urgent_days")
+    if cliff_urgent_days > cliff_review_days:
+        raise IpsConfigError(
+            "convexity.cliff_urgent_days must be <= cliff_review_days, got "
+            f"{cliff_urgent_days} > {cliff_review_days}",
+        )
+
     return IpsConvexity(
         crash_scenario_pct=crash_scenario_pct,
         target_min_pct=target_min_pct,
@@ -456,6 +504,9 @@ def _parse_convexity(config: dict[str, Any]) -> IpsConvexity:
         crash_floor_reported=crash_floor_reported,
         efficiency_min_ratio=efficiency_min_ratio,
         efficiency_max_ratio=efficiency_max_ratio,
+        cliff_threshold_days=cliff_threshold_days,
+        cliff_review_days=cliff_review_days,
+        cliff_urgent_days=cliff_urgent_days,
     )
 
 
