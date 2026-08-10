@@ -1626,6 +1626,44 @@ time.
 `pylint` 10.00/10, `pytest` — 1847 passed at close-out, 2026-08-07);
 `dash-smoke-runner` green (headless `/design`, both new panels).
 
+### Fix — refresh job's silent no-op (post-M2.8, pre-Phase 3)
+
+**Status: done** — branch `fix/refresh-job-silent-noop`.
+
+`refresh.py`'s cron built its `CboeFredProvider` with the same TTL the
+read-only app reads with, so `_request_with_fallback` returned a within-TTL
+disk-cache hit before ever attempting a live fetch — the job still logged
+"Refreshed N/N series" and exited 0 with `fetched_at` frozen. Fixed with an
+explicit `force_fetch` constructor flag (bypasses the fresh-cache
+short-circuit; decoupled from the app's read-side TTL, which is untouched)
+and a corrected `refresh_all()` counting rule: only `Source.LIVE` counts as
+refreshed, so a `CACHED`/`STALE` result logs as "NOT refreshed" and can no
+longer stand in for a real observation. **Exit 0 now means what it always
+should have** — all six series fetched live — so partial (exit 1) is a more
+frequent, and more honest, reading than before; the heartbeat still pings on
+0 and 1, so this doesn't change alerting, only what the log shows.
+
+**A fourth instance of the same defect shape.** Every occurrence below is a
+policy or config value that kept the surface reporting normally while
+silently not doing what that surface implied:
+
+| Where | Value | Silent behaviour |
+| --- | --- | --- |
+| M1.4/M1.5 | `crash_vol_shock` | repriced **spot-only** |
+| M1.8 | `skew_reference_delta` | ignored the **IPS wing anchor** |
+| M2.1 | vol mapping (implicit per repricing path, pre-`VolMapping`) | **25.4%** underreport on the grid knob vs. the crash gauge |
+| this fix | refresh job's fetch | a cache hit stood in for a live observation; `fetched_at` stopped advancing behind a green exit code |
+
+M1.10 closed the pricing-side occurrences with a structural, package-wide
+guard (`test_crash_pricing_contract.py`'s AST scan against any
+crash-pricing-parameter default, anywhere in the package). This fix has no
+equivalent — `force_fetch` is one flag at one call site, not a scanned class
+of parameters, so the mitigation here is narrower than M1.10's. Four
+occurrences across two unrelated subsystems (the pricing engine, the
+market-data refresh job) is enough evidence to treat "a value that silently
+degrades while the surface still reports success" as a defect class worth
+checking for deliberately during review — not discovering a fifth time.
+
 ---
 
 ## Phase 3 — Docs & handbook (post-migration, per your call)

@@ -172,6 +172,7 @@ class CboeFredProvider:
         fred_api_key: str | None = None,
         *,
         read_only: bool = False,
+        force_fetch: bool = False,
     ) -> None:
         """Initialize the provider.
 
@@ -179,7 +180,8 @@ class CboeFredProvider:
             cache_dir: Directory for the disk cache. Defaults to
                 ``default_cache_dir()`` (``DELTADEWA_CACHE_DIR`` if set,
                 else ``~/.cache/deltadewa/marketdata/``).
-            ttl: How long a cached value is considered fresh.
+            ttl: How long a cached value is considered fresh. Only
+                consulted when *force_fetch* is ``False``.
             session: Optional ``requests.Session`` to use (for testing or
                 custom transport config). Defaults to a new ``Session``.
             fred_api_key: Reserved for future use of FRED's JSON API; the
@@ -191,14 +193,37 @@ class CboeFredProvider:
                 all. For a process (the Dash app) that must never depend
                 on network reachability; a separate cron job is what's
                 expected to keep the cache warm.
+            force_fetch: When ``True``, skip the fresh-cache short-circuit
+                on every request and always attempt a live fetch — a
+                success still writes through to the cache and returns
+                ``LIVE``; a failure still falls back to the last cached
+                value as ``STALE`` (or raises ``MarketDataError`` if none
+                exists), exactly as when *force_fetch* is ``False``. For
+                the writer process that is supposed to keep the cache
+                warm (``deltadewa.marketdata.refresh``): *ttl* is a
+                read-side staleness policy for consumers like the
+                read-only Dash app, not a write-side throttle on the
+                process whose entire job is to re-observe. Mutually
+                exclusive with *read_only* — there is nothing to force
+                when live fetches are structurally disabled.
+
+        Raises:
+            ValueError: If both *force_fetch* and *read_only* are
+                ``True``.
 
         """
+        if force_fetch and read_only:
+            raise ValueError(
+                "force_fetch and read_only are mutually exclusive: "
+                "read_only forbids the live fetch force_fetch demands",
+            )
         if cache_dir is None:
             cache_dir = default_cache_dir()
         self._cache = _DiskCache(cache_dir=cache_dir, ttl=ttl)
         self._session = session or requests.Session()
         self._fred_api_key = fred_api_key
         self._read_only = read_only
+        self._force_fetch = force_fetch
 
     @property
     def is_read_only(self) -> bool:
@@ -324,14 +349,18 @@ class CboeFredProvider:
         Each branch is labelled with the ``Source`` it actually represents,
         rather than the provider's type — a stale-cache fallback must not be
         indistinguishable from a fresh download at the return.
+
+        Skips the fresh-cache check below entirely when constructed with
+        ``force_fetch=True`` — see the constructor docstring.
         """
-        cached = self._cache.get(cache_key)
-        if cached is not None:
-            return _Fetched(
-                series=_as_series(cached.value),
-                source=Source.CACHED,
-                fetched_at=cached.fetched_at,
-            )
+        if not self._force_fetch:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                return _Fetched(
+                    series=_as_series(cached.value),
+                    source=Source.CACHED,
+                    fetched_at=cached.fetched_at,
+                )
 
         if self._read_only:
             stale = self._cache.get_stale(cache_key)
