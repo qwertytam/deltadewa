@@ -303,6 +303,70 @@ class TestReadOnlyMode:
         assert session.get.call_count == 1
 
 
+class TestForceFetch:
+    """force_fetch=True bypasses the fresh-cache short-circuit.
+
+    The refresh cron's contract: TTL governs when a *reader* should treat
+    a value as stale, not when this *writer* should bother re-observing.
+    """
+
+    def test_fresh_cache_still_triggers_a_fetch(self, tmp_path) -> None:
+        """A within-TTL cache hit does not stop force_fetch from fetching."""
+        warm_session = MagicMock(spec=requests.Session)
+        warm_session.get.return_value = _mock_response(_SPX_CSV)
+        CboeFredProvider(cache_dir=tmp_path, session=warm_session).get_spot(
+            "SPX",
+        )
+
+        # A different value, so a stale read (vs. a genuine re-fetch)
+        # would be caught by the assertion below, not just the call count.
+        forced_session = MagicMock(spec=requests.Session)
+        forced_session.get.return_value = _mock_response(
+            "DATE,SPX\n06/16/2026,5100.0\n",
+        )
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=forced_session,
+            force_fetch=True,
+        )
+
+        spot = provider.get_spot("SPX")
+
+        assert forced_session.get.call_count == 1
+        assert spot.value == pytest.approx(5100.0, rel=1e-2)
+        assert spot.source is Source.LIVE
+
+    def test_failure_still_falls_back_to_stale(self, tmp_path) -> None:
+        """force_fetch still degrades to the last cached value on failure."""
+        warm_session = MagicMock(spec=requests.Session)
+        warm_session.get.return_value = _mock_response(_SPX_CSV)
+        CboeFredProvider(cache_dir=tmp_path, session=warm_session).get_spot(
+            "SPX",
+        )
+
+        failing_session = MagicMock(spec=requests.Session)
+        failing_session.get.side_effect = requests.ConnectionError("offline")
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=failing_session,
+            force_fetch=True,
+        )
+
+        spot = provider.get_spot("SPX")
+
+        assert spot.value == pytest.approx(5000.0, rel=1e-2)
+        assert spot.source is Source.STALE
+
+    def test_force_fetch_with_read_only_raises(self, tmp_path) -> None:
+        """The combination is nonsensical: nothing to force under read_only."""
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            CboeFredProvider(
+                cache_dir=tmp_path,
+                force_fetch=True,
+                read_only=True,
+            )
+
+
 class TestCboeFredProviderProvenance:
     """Each fetch path must label itself for what it actually did."""
 

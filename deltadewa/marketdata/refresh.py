@@ -14,14 +14,31 @@ schedule would instead leave a 72-hour Friday-to-Monday gap that the TTL
 would have to absorb, which is what turns a cache-warming cron into a
 policy problem.
 
+This job always attempts a live fetch for every series, regardless of the
+on-disk cache's freshness — the market-data TTL (``ips.yaml``'s
+``market_environment.data_ttl_minutes``, resolved via ``resolve_data_ttl``)
+governs when the *read-only* Dash app should treat a cached value as
+stale, not when this writer should bother re-observing. A within-TTL
+cache hit here must never stand in for the job actually running: on a
+daily cron against a multi-hour TTL, that would mean this job silently
+no-ops every other run, still logging success and still pinging the
+heartbeat, while ``fetched_at`` stops advancing behind a green exit code.
+The provider is constructed with ``force_fetch=True`` for exactly this
+reason (see ``CboeFredProvider``'s constructor docstring).
+
 Each series is fetched independently: one failure never aborts the run,
 and a failed series' previous cache entry is left untouched — the disk
 cache only writes on a successful fetch, so there is nothing to poison or
-blank. The exit code summarizes the run:
+blank. Only a ``Source.LIVE`` result counts as refreshed — a ``CACHED``
+result (should not occur given ``force_fetch=True``, but is not trusted
+blindly either) or a ``STALE`` fallback (the live fetch ran and failed)
+both count the same as an outright failure here, even though each is a
+usable value a reader could still consult. The exit code summarizes the
+run:
 
     0   every series refreshed live
-    1   some series refreshed, some failed (partial)
-    2   every series failed
+    1   some series refreshed live, some did not (partial)
+    2   no series refreshed live
 
 FRED's VIXCLS series publishes with a lag, so an early-morning run
 reporting exit 1 with only the VIX-derived series unavailable is a
@@ -55,6 +72,7 @@ from deltadewa.marketdata import (
     CboeFredProvider,
     MarketDataError,
     Observation,
+    Source,
     default_cache_dir,
     resolve_data_ttl,
 )
@@ -79,6 +97,18 @@ def _series(
     ``vix_term_structure``, ``skew_index``, ``skew_percentile``) plus
     ``vix_history`` (``analysis.health``) and ``spot`` (``dashboard.session``)
     — every key the app or notebook path may read is warmed here.
+
+    Two pairs listed separately here share a single disk-cache key —
+    ``vix``/``vix_history`` both write ``"vix_fred"``, ``skew_index``/
+    ``skew_percentile`` both write ``"spot_SKEW"`` (see
+    ``CboeFredProvider._request_vix``/``_request_skew``). With
+    ``force_fetch=True`` each name in a pair still issues its own live
+    request — the second call's result simply overwrites the first's
+    with an (almost always identical) fresh observation — so a full run
+    costs two upstream hits per pair rather than one. Harmless at daily
+    cadence and well inside FRED/CBOE's limits, but a real behaviour
+    change from the pre-``force_fetch`` world where the second call was
+    a same-run cache hit and no second request went out.
     """
     return [
         ("vix", provider.get_vix),
@@ -97,31 +127,46 @@ def refresh_all(provider: MarketDataProvider, symbol: str) -> tuple[int, int]:
     the underlying disk cache only writes on success, so a failed series
     simply retains whatever it last cached.
 
+    Only a series whose ``Observation.source`` comes back ``Source.LIVE``
+    counts toward the returned tally. ``CACHED`` and ``STALE`` are both
+    real, usable values a caller could still read — but neither one is a
+    refresh, and counting either as one is exactly the silent-no-op bug
+    this function exists not to repeat.
+
     Args:
         provider: A live (``read_only=False``) provider to fetch through.
         symbol: Underlying symbol to warm the spot cache for.
 
     Returns:
-        ``(succeeded, total)`` series counts.
+        ``(refreshed, total)`` series counts — ``refreshed`` counts only
+        ``Source.LIVE`` results.
 
     """
     series = _series(provider, symbol)
-    succeeded = 0
+    refreshed = 0
     for name, fetch in series:
         try:
             observation = fetch()
         except MarketDataError as exc:
             _logger.warning("%s: FAILED — %s", name, exc)
             continue
-        succeeded += 1
-        _logger.info(
-            "%s: %s as_of=%s fetched_at=%s",
-            name,
-            observation.source,
-            observation.as_of,
-            observation.fetched_at,
-        )
-    return succeeded, len(series)
+        if observation.source is Source.LIVE:
+            refreshed += 1
+            _logger.info(
+                "%s: refreshed live, as_of=%s fetched_at=%s",
+                name,
+                observation.as_of,
+                observation.fetched_at,
+            )
+        else:
+            _logger.warning(
+                "%s: NOT refreshed (%s, as_of=%s fetched_at=%s)",
+                name,
+                observation.source,
+                observation.as_of,
+                observation.fetched_at,
+            )
+    return refreshed, len(series)
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -162,10 +207,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """Refresh every market-data series the app depends on.
 
+    Always attempts a live fetch for each series regardless of the
+    on-disk cache's freshness — see the module docstring for why a
+    within-TTL cache hit must never stand in for this job having run.
+
     Returns:
         Process exit code: ``0`` if every series refreshed live, ``1`` if
-        some succeeded and some failed (partial), ``2`` if every series
-        failed.
+        some did and some didn't (partial — a stale fallback or a hard
+        failure), ``2`` if none did.
 
     """
     logging.basicConfig(level=logging.INFO)
@@ -186,16 +235,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     provider = CboeFredProvider(
         cache_dir=cache_dir,
+        # Inert for this job: force_fetch below bypasses the TTL check
+        # that would otherwise consult it. Still resolved and passed
+        # through so --ips-path/load_ips_config above isn't dead code,
+        # and so the constructor's ttl/force_fetch contract stays
+        # visible from this call site.
         ttl=resolve_data_ttl(ips_config),
         read_only=False,
+        force_fetch=True,
     )
 
-    succeeded, total = refresh_all(provider, args.symbol)
-    _logger.info("Refreshed %d/%d series", succeeded, total)
+    refreshed, total = refresh_all(provider, args.symbol)
+    _logger.info("Refreshed %d/%d series live", refreshed, total)
 
-    if succeeded == total:
+    if refreshed == total:
         exit_code = 0
-    elif succeeded == 0:
+    elif refreshed == 0:
         exit_code = 2
     else:
         exit_code = 1

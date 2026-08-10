@@ -81,8 +81,14 @@ class TestRefreshAll:
         tmp_path: Path,
     ) -> None:
         """A clean successful run leaves every series CACHED for a reader."""
+        # force_fetch=True, matching what main() always constructs — two
+        # pairs of series here share a cache key (vix/vix_history;
+        # skew_index/skew_percentile), so without it the second of each
+        # pair would see the first's just-written entry as a same-run
+        # CACHED hit rather than fetching live.
         writer = CboeFredProvider(
             cache_dir=tmp_path,
+            force_fetch=True,
             session=_dispatching_session(),
         )
 
@@ -117,8 +123,12 @@ class TestRefreshAll:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """VIXCLS down, CBOE up: vix + vix_history fail, four others don't."""
+        # force_fetch=True, matching main(): skew_index/skew_percentile
+        # share a cache key, so without it the second would read the
+        # first's same-run entry as CACHED rather than fetching live.
         provider = CboeFredProvider(
             cache_dir=tmp_path,
+            force_fetch=True,
             session=_dispatching_session(
                 fail_url_substrings=frozenset({"VIXCLS"})
             ),
@@ -133,6 +143,77 @@ class TestRefreshAll:
         # The successful series are still on disk.
         assert (tmp_path / "spot_SPX.json").exists()
         assert (tmp_path / "spot_SKEW.json").exists()
+
+    def test_warm_cache_within_ttl_still_fetches_live(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """force_fetch=True: a within-TTL cache must not stop the refresh.
+
+        Pins the silent-no-op bug directly: a plain re-run against a cache
+        that's still fresh (default 15-minute TTL, well within window)
+        must still hit the network and advance ``fetched_at`` — not
+        quietly return CACHED for everything.
+        """
+        warm_provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        refresh_all(warm_provider, "SPX")
+        before = json.loads(
+            (tmp_path / "spot_SPX.json").read_text(),
+        )["fetched_at"]
+
+        forced_session = _dispatching_session()
+        forced_provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=forced_session,
+        )
+
+        refreshed, total = refresh_all(forced_provider, "SPX")
+
+        assert (refreshed, total) == (6, 6)
+        # Not a fixed count: vix_term_structure fans out over five legs, so
+        # a full run issues more than six HTTP requests. What matters here
+        # is only that the warm cache didn't suppress the attempt.
+        assert forced_session.get.call_count > 0
+        after = json.loads(
+            (tmp_path / "spot_SPX.json").read_text(),
+        )["fetched_at"]
+        assert after > before
+
+    def test_cached_result_does_not_count_as_refreshed(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A plain (force_fetch=False) within-TTL cache hit isn't a refresh.
+
+        Proves the counting contract independent of ``force_fetch``: even
+        a genuinely ``CACHED`` result — no live fetch attempted at all —
+        must not be reported as a refresh.
+        """
+        warm_provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=_dispatching_session(),
+        )
+        refresh_all(warm_provider, "SPX")
+
+        cached_session = _dispatching_session()
+        cached_provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=cached_session,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            refreshed, total = refresh_all(cached_provider, "SPX")
+
+        assert (refreshed, total) == (0, 6)
+        assert cached_session.get.call_count == 0
+        assert "NOT refreshed" in caplog.text
+        assert "CACHED" in caplog.text
 
     def test_failed_series_does_not_poison_a_prior_cache_entry(
         self,
@@ -184,8 +265,13 @@ class TestMain:
 
     def test_exit_code_zero_on_full_success(self, tmp_path: Path) -> None:
         """All-series success is exit 0."""
+        # force_fetch=True: the mock below replaces CboeFredProvider
+        # wholesale, so this provider — not main()'s own construction —
+        # is what actually runs; it must be built the way main() builds
+        # its real one to be a faithful stand-in.
         provider = CboeFredProvider(
             cache_dir=tmp_path,
+            force_fetch=True,
             session=_dispatching_session(),
         )
         with patch.object(
@@ -243,7 +329,51 @@ class TestMain:
         mock_provider.assert_called_once()
         _, kwargs = mock_provider.call_args
         assert kwargs["read_only"] is False
+        assert kwargs["force_fetch"] is True
         assert kwargs["cache_dir"] == tmp_path
+
+    def test_total_failure_with_warm_cache_leaves_it_intact_and_exits_two(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A warm cache + total live-fetch failure: STALE everywhere, exit 2.
+
+        ``force_fetch=True`` (wired by ``main()``) means a live-fetch
+        failure against an existing cache degrades to STALE rather than
+        raising — still not a refresh, still exit 2 — and the cache
+        itself must be untouched, since ``_cache.set()`` only ever runs on
+        a successful fetch. Complements
+        ``test_exit_code_two_on_total_failure``, which exercises the
+        raise-based path against a cold, empty cache.
+        """
+        warm_provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=_dispatching_session(),
+        )
+        refresh_all(warm_provider, "SPX")
+        before = {
+            path.name: path.read_text() for path in tmp_path.glob("*.json")
+        }
+
+        failing_session = MagicMock(spec=requests.Session)
+        failing_session.get.side_effect = requests.ConnectionError("offline")
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=failing_session,
+            force_fetch=True,
+        )
+        with patch.object(
+            refresh_module,
+            "CboeFredProvider",
+            return_value=provider,
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 2
+        after = {
+            path.name: path.read_text() for path in tmp_path.glob("*.json")
+        }
+        assert after == before
 
     def test_missing_ips_path_falls_back_to_default_ttl(
         self,
@@ -253,6 +383,7 @@ class TestMain:
         """A missing --ips-path warns and still runs, never raises."""
         provider = CboeFredProvider(
             cache_dir=tmp_path,
+            force_fetch=True,
             session=_dispatching_session(),
         )
         with (
@@ -287,6 +418,7 @@ class TestMainHeartbeat:
         monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
         provider = CboeFredProvider(
             cache_dir=tmp_path,
+            force_fetch=True,
             session=_dispatching_session(),
         )
         with (
