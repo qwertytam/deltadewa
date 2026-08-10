@@ -6,38 +6,35 @@
 `HedgeHealthDashboard` (`deltadewa/widgets/health_dashboard.py`) uses for
 its seven health metrics. It's presentation-only — it changes how the
 dashboard displays health, not the underlying numbers or program policy.
-(Carry budget, convexity targets, roll/monetization triggers belong in
-`config/ips.yaml` instead; see [yaml-config-guide.md](yaml-config-guide.md).)
 
-## Two top-level sections
+**Nothing in this file decides anything.** Every value is gauge geometry:
+where an axis starts and ends, and where it changes colour. Any threshold
+that answers a mandate question — carry budget, convexity targets, the vega
+sufficiency band, when decaying convexity forces a roll, whether vol is
+cheap, roll/monetization triggers — is policy and belongs in
+`config/ips.yaml`; see [yaml-config-guide.md](yaml-config-guide.md). A policy
+number copied into this file is the leak M1.4 closed and #241 closed again.
+
+## Top-level sections
 
 ```yaml
-parameters:
-  historical_vol_low: 0.15
-  historical_vol_high: 0.35
-  convexity_cliff_days: 180
-
 metrics:
   net_carry: { ... }
   crash_convexity: { ... }
   # ...five more
 ```
 
-### `parameters`
+`metrics` is the only section the shipped file uses. A `parameters` section
+is still merged if present, but the shipped `config/dashboard.yaml` carries
+none: its keys were all either policy that moved to `ips.yaml` or widget
+constructor arguments.
 
-| Key | Meaning |
+| Former `parameters` key | Where it lives now |
 | --- | --- |
-| `historical_vol_low` | 25th-percentile IV — feeds the Volatility Regime metric's "cheap" end |
-| `historical_vol_high` | 75th-percentile IV — feeds the Volatility Regime metric's "expensive" end |
-| `convexity_cliff_days` | Days-to-maturity threshold for the Time to Convexity Cliff metric's high-gamma warning window |
-| `skew_low_pctile` | SKEW-index percentile (0-100) below which skew reads as benign — fed to `assess_market_environment` as `skew_bands[0]` |
-| `skew_high_pctile` | SKEW-index percentile (0-100) above which skew reads as stressed/expensive — fed to `assess_market_environment` as `skew_bands[1]` |
-| `term_contango_tolerance` | VIX-point gap below which front/3M differences are treated as noise (FLAT) rather than a real slope — fed to `assess_market_environment` as `term_tolerance` |
-
-The three `skew_*` / `term_*` keys configure `assess_market_environment`
-(`deltadewa/analysis/market_environment.py`) directly — they are
-calculation inputs, not display settings. Any key absent from the file
-falls back to the function's own hardcoded default.
+| `convexity_cliff_days` | `convexity.cliff_threshold_days` in `ips.yaml` (#241) |
+| `skew_low_pctile` / `skew_high_pctile` | `market_environment.skew_low_pctile` / `skew_high_pctile` in `ips.yaml` |
+| `term_contango_tolerance` | `market_environment.term_contango_tolerance` in `ips.yaml` |
+| `historical_vol_low` / `historical_vol_high` | `HedgeHealthDashboard(...)` constructor arguments, defaulted from `ips_config.DEFAULT_VOL_REGIME_LOW` / `_HIGH` — the same constants backing `market_environment.vol_regime_low` / `_high` |
 
 ### `metrics`
 
@@ -61,19 +58,40 @@ the red→amber→green band edges on the `start`–`end` gauge.
 | `net_carry` | Annualized theta as % of underlying value | -10.0 to 10.0 | -5.0 / 0.0 / 2.0 | `false` |
 | `crash_convexity` | Hedge P&L at the IPS crash scenario (`convexity.crash_scenario_pct`), as % of underlying | -30.0 to 30.0 | -10.0 / 0.0 / 10.0 | `false` |
 | `vega_sufficiency` | Portfolio % change per +10 vol shock | -50.0 to 50.0 | -20.0 / 0.0 / 20.0 | `false` |
-| `delta_drift` | Net hedge delta as % of equity delta | -50.0 to 50.0 | -20.0 / 0.0 / 20.0 | `false` |
-| `convexity_cliff` | Days until long puts enter the high-gamma region | 0 to 365 | 30 / 90 / 180 | `false` |
+| `delta_drift` | \|deviation\| from the target net-delta ratio, in pp | 0.0 to 30.0 | 5.0 / 7.5 / 10.0 | **`true`** |
+| `convexity_cliff` | Days until long puts enter the high-gamma region | 0 to 365 | *(policy — see below)* | `false` |
 | `vol_regime` | Current IV percentile (0=cheap, 100=expensive) | 0 to 100 | 25 / 50 / 75 | **`true`** |
 | `hedge_success` | Hedge P&L vs. cumulative carry paid | -200 to 200 | -100 / 0 / 100 | `false` |
 
-`vol_regime` is the one metric that inverts: a **low** IV percentile
-(cheap vol, below `min_val`) is good/green, a **high** percentile
-(expensive vol, above `max_val`) is bad/red — backwards from every other
-metric here, where low is bad and high is good.
+`vol_regime` and `delta_drift` are the two metrics that invert. For
+`vol_regime` a **low** IV percentile (cheap vol, below `min_val`) is
+good/green and a **high** percentile (expensive vol, above `max_val`) is
+bad/red; for `delta_drift` a small deviation from target is good. Both are
+backwards from the rest, where low is bad and high is good.
+
+Two rows deserve a closer look, because both have been mistaken for policy:
+
+- **`convexity_cliff` carries no bands here.** Its grading lines are policy
+  and live in `ips.yaml` as `convexity.cliff_urgent_days` (30),
+  `cliff_review_days` (90) and `cliff_threshold_days` (180) — the last of
+  which also sets where the high-gamma region begins. `#241` removed the
+  duplicate copy; the Dash `/design` convexity cliff panel reads the IPS
+  values directly, and this gauge falls back to the widget's hardcoded
+  defaults, obsolete along with the Jupyter surface (#242).
+- **`vega_sufficiency` here is not the vega sufficiency band.** This is a
+  signed, symmetric display axis (-50 to +50, green above +20, nothing bad
+  above it). The policy band is `vega.sufficiency_min_pct` /
+  `sufficiency_max_pct` in `ips.yaml`, is one-sided, and sits on a
+  low-single-digit scale — real books read +1.8% to +2.7%, because the
+  metric divides by total portfolio value including the equity leg. M2.7
+  seeded the IPS band from this gauge's `max_val: 20` and `end: 50`, which
+  produced a band no book could reach; #241 recalibrated it. Do not read one
+  as the other.
 
 Values shown are the shipped defaults
-(`HedgeHealthDashboard._get_default_config()`, also reproduced verbatim
-and commented in `examples/dashboard/dashboard_config_default.yaml`).
+(`HedgeHealthDashboard._get_default_config()`, also reproduced and
+commented in `examples/dashboard/dashboard_config_default.yaml` — with the
+`convexity_cliff` bands omitted there, since they are policy).
 
 ## How it's loaded
 
@@ -96,23 +114,21 @@ use it.
 - **`dashboard_config_aggressive.yaml`** — every band is widened and
   shifted to tolerate more risk: e.g. `crash_convexity.min_val` relaxes
   from -10.0 to -15.0 (alerts later on a worse crash loss),
-  `convexity_cliff_days` drops from 180 to 120 (shorter warning window),
   `vol_regime.max_val` rises from 75 to 80 (tolerates pricier vol before
-  flagging red). For market environment: `skew_low_pctile` drops to 20
-  and `skew_high_pctile` rises to 80 (wider benign zone before flagging
-  stressed skew), `term_contango_tolerance` rises to 1.0 (requires a
-  larger front/3M gap before calling the curve CONTANGO or
-  BACKWARDATION). Pick this for active trading where you're comfortable
+  flagging red). Pick this for active trading where you're comfortable
   riding closer to the edge before the dashboard flags it.
 - **`dashboard_config_conservative.yaml`** — every band tightens: e.g.
   `crash_convexity.min_val` tightens from -10.0 to -5.0 (alerts sooner),
-  `convexity_cliff_days` rises from 180 to 240 (earlier warning),
   `vol_regime.max_val` drops from 75 to 70 (flags red sooner on expensive
-  vol). For market environment: `skew_low_pctile` rises to 30 and
-  `skew_high_pctile` drops to 70 (flags stressed skew sooner),
-  `term_contango_tolerance` drops to 0.25 (detects even small slopes as
-  real). Pick this for risk-averse mandates where you want alerts to fire
+  vol). Pick this for risk-averse mandates where you want alerts to fire
   earlier and hold the book to a higher bar.
+
+**A preset only changes the display.** An aggressive or conservative
+*posture* is a policy choice, so the thresholds that go with it are not in
+these files — each preset's header lists the `ips.yaml` keys to set
+alongside it (`convexity.cliff_*`, `vega.sufficiency_*`,
+`market_environment.*`). Copying a preset over `config/dashboard.yaml`
+without setting those changes how the book is drawn, not how it is run.
 
 ## Tune your own
 

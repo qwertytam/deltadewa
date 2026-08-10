@@ -62,23 +62,36 @@ _DEFAULT_PORTFOLIO_BETA: Final[float] = 1.0
 
 # Vega sufficiency band, in % portfolio value change per +10 vol points (see
 # ``IpsVega``). The handbook gives this metric no numeric band — only a
-# Low<->High gauge — so these are seeded from the values
-# ``config/dashboard.yaml``'s ``vega_sufficiency`` gauge already carried
-# (``max_val: 20`` as the "high vega exposure" line, ``end: 50`` as its
-# ceiling), so that moving the metric onto a policy surface does not silently
-# change what a given reading means. They are a starting point to be set
-# deliberately per program, not a derived constant.
-_DEFAULT_VEGA_SUFFICIENCY_MIN_PCT: Final[float] = 20.0
-_DEFAULT_VEGA_SUFFICIENCY_MAX_PCT: Final[float] = 50.0
+# Low<->High gauge — so it has to be calibrated to the scale the metric
+# actually produces.
+#
+# M2.7 seeded it from ``config/dashboard.yaml``'s ``vega_sufficiency`` gauge
+# (``max_val: 20`` and ``end: 50``) on the assumption that the gauge's numbers
+# were a band. They were not: that gauge is a *signed, symmetric* display axis
+# (-50..+50, green above +20, nothing bad above it), so ``end: 50`` was an axis
+# bound rather than a ceiling. The resulting 20-50 band was unreachable — the
+# shipped example books price at +1.8% to +2.7%, and no denominator brings them
+# near 20 (option-book-relative they are ~1200-1800%), so ``/design`` read
+# "outside band" on every book in the repo (#241).
+#
+# These values are calibrated instead to the metric as implemented, normalizing
+# by total portfolio value (options **plus** underlying): ``spx_tail_20m``, the
+# canonical SPX book, reads +2.70%, and ``spx_protective_put`` +2.29%. The band
+# brackets that with room either side. Still a starting point to be set
+# deliberately per program, not a derived constant — but one a real book can sit
+# inside.
+_DEFAULT_VEGA_SUFFICIENCY_MIN_PCT: Final[float] = 1.5
+_DEFAULT_VEGA_SUFFICIENCY_MAX_PCT: Final[float] = 4.0
 
 # Convexity-cliff thresholds, in days (see ``IpsConvexity``). Seeded verbatim
-# from what ``config/dashboard.yaml`` already carried for the Jupyter-only
-# gauge — ``parameters.convexity_cliff_days: 180`` becomes the region boundary,
-# and the ``convexity_cliff`` gauge's ``mid_val: 90`` / ``min_val: 30`` become
-# the REVIEW and URGENT lines — so promoting the metric to a policy surface does
-# not silently change what a reading means. Same reasoning as the vega band
-# above: "when does decaying convexity force a decision" is a mandate question,
-# not a display choice.
+# from what ``config/dashboard.yaml`` carried for the Jupyter-only gauge before
+# #241 removed it — ``parameters.convexity_cliff_days: 180`` became the region
+# boundary, and the ``convexity_cliff`` gauge's ``mid_val: 90`` / ``min_val:
+# 30`` became the REVIEW and URGENT lines — so promoting the metric to a policy
+# surface did not silently change what a reading means. Unlike the vega band
+# above, those three genuinely were grading lines, so the carry-over was sound;
+# "when does decaying convexity force a decision" is a mandate question, not a
+# display choice.
 _DEFAULT_CLIFF_THRESHOLD_DAYS: Final[int] = 180
 _DEFAULT_CLIFF_REVIEW_DAYS: Final[int] = 90
 _DEFAULT_CLIFF_URGENT_DAYS: Final[int] = 30
@@ -278,11 +291,16 @@ class IpsVega:
     respond to a volatility spike, and ``sufficiency_max_pct`` the ceiling
     above which it is vega-dominated rather than convexity-driven.
 
-    This is policy, not presentation. "Is the hedge big enough" is a mandate
-    question of the same class as the convexity band, so it lives here rather
-    than in ``dashboard_config_*.yaml`` — where a copy still backs the
-    Jupyter-only gauge in ``widgets/health_dashboard.py``. Retiring that copy
-    is a ``widgets/`` change, not an M2.7 one.
+    Read the band's scale off ``_DEFAULT_VEGA_SUFFICIENCY_MIN_PCT`` before
+    setting it: the metric divides by total portfolio value (options *plus*
+    underlying), which on a tail hedge is dominated by the equity leg, so real
+    readings are low single-digit percentages. A band in the tens cannot be hit.
+
+    This is policy, not presentation, and since #241 it lives here **only**.
+    "Is the hedge big enough" is a mandate question of the same class as the
+    convexity band. ``dashboard_config_*.yaml``'s ``vega_sufficiency`` block is
+    display geometry for the Jupyter gauge and never was this band — see the
+    constants above for why conflating the two produced an unreachable one.
     """
 
     sufficiency_min_pct: float = _DEFAULT_VEGA_SUFFICIENCY_MIN_PCT

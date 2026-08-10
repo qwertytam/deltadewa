@@ -148,7 +148,7 @@ The five regressions the 2026-08-06 re-audit found, and what closed each.
 
 | Regression | Was | Now |
 | --- | --- | --- |
-| **#4 Vega Sufficiency** — the only Tier-1 item with no surface anywhere | `calculate_vega_sufficiency_pct` intact and tested, reachable only via `calculate_health_metrics` → Jupyter | `/design` sizing panel. Band promoted from `dashboard.yaml` to a new `IpsVega` section — see [Where the vega band went](#where-the-vega-band-went) |
+| **#4 Vega Sufficiency** — the only Tier-1 item with no surface anywhere | `calculate_vega_sufficiency_pct` intact and tested, reachable only via `calculate_health_metrics` → Jupyter | `/design` sizing panel. Band promoted from `dashboard.yaml` to a new `IpsVega` section, then recalibrated by #241 because the promoted numbers were unreachable — see [Where the vega band went](#where-the-vega-band-went) |
 | **#8 Forward Variance** — computed every request, then discarded | `MarketEnvironment.forward_vol_front_3m` computed on every `/monitor` and `/design` request and never read | `/design` *Market environment*, as a level with no band |
 | **#6 / #7** — weekly and by email only | Digest `MarketContextSection` only | `/design` *Market environment*, banded against the IPS. Still in the digest too |
 | **#5 / #15** — the ratio existed nowhere in the codebase | Both axes surfaced separately; the division computed on no surface, in no module | `analysis/hedge_efficiency.py` + `/monitor`'s cost panel |
@@ -169,16 +169,35 @@ grounds that "is the hedge big enough to answer a vol spike" is a mandate
 question of the same class as the convexity band — and that reading policy
 from presentation config is the Mo2 leak M1.4 closed.
 
-Two consequences worth knowing:
+The promotion was right, but **the numbers it carried over were not** — see
+issue #241, which corrected them. The cautionary tale of the whole exercise:
 
-- The defaults in the new `vega:` section are **carried over verbatim** from
-  `dashboard.yaml`'s gauge (`max_val: 20` → `sufficiency_min_pct`, `end: 50`
-  → `sufficiency_max_pct`), so moving the metric did not silently change what
-  a reading means. They are a starting point, not a derived constant.
+- M2.7 carried the defaults over verbatim from `dashboard.yaml`'s gauge
+  (`max_val: 20` → `sufficiency_min_pct`, `end: 50` → `sufficiency_max_pct`)
+  so that moving the metric would not silently change what a reading means.
+  But that gauge is a **signed, symmetric display axis** (−50…+50, green
+  above +20, nothing bad above it), not a band: `end: 50` was the axis bound.
+- The resulting 20–50 band was **unreachable**. The metric divides by total
+  portfolio value — options *plus* underlying — and on a tail hedge the
+  equity leg dominates that denominator, so the shipped books price at
+  **+1.8% to +2.7%** (`spx_tail_20m` +2.70%, `spx_protective_put` +2.29%).
+  No denominator rescues it: option-book-relative they read ~1200–1800%.
+  `/design` therefore said "outside band" for every book in the repo, with
+  the `band_bar` needle pinned off the left edge, for the life of M2.7.
+- #241 recalibrated the band to **1.5–4.0**, bracketing the canonical book,
+  and `tests/test_ips_config.py` now pins the *scale* — retune the values
+  freely, but a band the canonical book cannot sit inside is a bug.
 - `dashboard.yaml` **keeps** its `vega_sufficiency` block, because the
-  Jupyter gauge still reads it. The two now coexist. Retiring the
-  presentation copy is a `widgets/` change and was left out of M2.7
-  deliberately; see [Open questions](#open-questions).
+  Jupyter gauge still reads it — but it is now annotated as an axis, not a
+  band. It is also mis-scaled for the metric it plots (a +2.7% reading sits
+  on the midpoint of a ±50 axis); rescaling it is a `widgets/` change on the
+  surface #242 retires, so it was left alone.
+
+**The lesson for the next promotion.** Gauge geometry and a policy band are
+not the same kind of number even when they sit under the same key name.
+Before carrying a threshold from presentation to policy, price a real book
+and confirm the reading lands inside the band — "verbatim" preserves the
+digits, not the meaning.
 
 ## Conscious retirements
 
@@ -314,7 +333,11 @@ M2.7 used for the vega band: `dashboard.yaml` held both the region boundary
 (`convexity_cliff`'s `mid_val: 90` / `min_val: 30`). All three are now
 `IpsConvexity.cliff_threshold_days` / `cliff_review_days` /
 `cliff_urgent_days`, **carried over verbatim** so the promotion did not change
-what a reading means. A test pins that the panel grades against the IPS value
+what a reading means. Unlike the vega band, the carry-over was sound here:
+those three *were* grading lines on a one-sided day-count axis, not a signed
+display range, so the digits meant the same thing on both sides of the move.
+Issue #241 then removed the presentation copies, making the IPS the sole
+owner. A test pins that the panel grades against the IPS value
 rather than letting `calculate_convexity_cliff_days`'s own 180-day default
 stand — the failure mode where editing `ips.yaml` silently does nothing.
 
@@ -345,13 +368,28 @@ Not decided by M2.7 or M2.8, and not blocking anything.
    last consumer when `widgets/health_dashboard.py` goes. The first is a real
    metric with no Dash home; the other two are the Jupyter aggregator itself
    and have no meaning off that surface.
-2. **`dashboard.yaml`'s `vega_sufficiency` block**, now duplicated by
-   `IpsVega` — and its `convexity_cliff` gauge plus
-   `parameters.convexity_cliff_days`, now duplicated by `IpsConvexity`. Both
-   pairs coexist because `widgets/health_dashboard.py` still reads the
-   presentation copy. Retiring them is a `widgets/` change and was left out
-   here deliberately, on the same grounds M2.7 left the vega copy alone: it
-   goes with the notebooks, not before them.
+2. **`delta_drift`'s gauge band in `dashboard.yaml`** (`min_val: 5.0` /
+   `max_val: 10.0`) exactly duplicates `triggers.delta_drift_warn_pct` /
+   `delta_drift_action_pct`. Pre-existing, and the last policy number left in
+   presentation config after #241 — which closed the `vega_sufficiency` and
+   `convexity_cliff` cases and confirmed `vol_regime`, `net_carry` and
+   `crash_convexity` only *look* duplicated (different metrics and sign
+   conventions that happen to share a digit). Left open because it goes with
+   the notebooks, not before them.
+
+   Whoever takes it should fix a second defect in the same block: all three
+   `examples/dashboard/*.yaml` profiles still describe `delta_drift` as a
+   **signed symmetric axis** (−50…+50, `invert_colors: false`), which
+   `config/dashboard.yaml` has not been since the metric became |deviation
+   from target| on a one-sided 0–30 inverted axis. The examples misrepresent
+   the metric, not just its band. Do not fix them by copying the shipped
+   numbers across — that re-adds the duplication; remove the grading lines
+   the way #241 did for `convexity_cliff`.
+3. **The widget's hardcoded config fallback.**
+   `HedgeHealthDashboard._get_default_config()` still holds the cliff numbers
+   #241 removed from the YAML files, so removing a key there falls back to a
+   private copy rather than to policy. Annotated as obsolete pending #242
+   rather than rewired, since `/design` already reads the IPS directly.
 
 `entry_timing_tree`'s hardcoded VIX thresholds (item 3 in earlier revisions
 of this list) are resolved, not open: M2.8 moved them to
