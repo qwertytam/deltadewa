@@ -36,7 +36,9 @@ from deltadewa.reporting.weekly_report import (
 from deltadewa.reporting.weekly_snapshot import WeeklySnapshot
 
 _GOLDEN_PATH = Path(__file__).parent / "goldens" / "weekly_digest.md"
-_EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
+_EXAMPLE_IPS_YAML = (
+    Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
+)  # #245: real config/ips.yaml is gitignored; use the tracked example.
 # Relative maturity_days (not an absolute maturity_date), so this fixture
 # stays valid at any valuation date — including under make test-clockshift's
 # forward-shifted clock. spx_protective_put.yaml's absolute 2027-06-17

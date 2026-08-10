@@ -96,9 +96,14 @@ commented in `examples/dashboard/dashboard_config_default.yaml` — with the
 ## How it's loaded
 
 `start_session()` (`deltadewa/dashboard/session.py`) reads
-`config/dashboard.yaml` automatically. Missing or invalid → a warning and
+`config/dashboard.yaml` automatically. `config/dashboard.yaml` is gitignored
+— it holds this program's real presentation values, not shipped (#245); copy
+`config/dashboard.example.yaml` there to customize, per the
+[YAML Configuration Guide](yaml-config-guide.md). Missing or invalid → a
+warning naming the file and pointing at the `.example`, and
 `ctx.dashboard_config` is `None`; `HedgeHealthDashboard` then falls back to
-its built-in defaults, which are identical to the values above.
+its built-in defaults, which are identical to the values above — so leaving
+it uncopied is harmless, unlike `config/ips.yaml`.
 
 Separately, `HedgeHealthDashboard.display_config_loader()` renders a
 FileUpload widget in the notebook for layering an ad hoc YAML/JSON config
