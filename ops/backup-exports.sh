@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # ops/backup-exports.sh — nightly offsite push of exports/ to a private
-# Codeberg repo. Run from root's cron (see docs/RUNBOOK.md "Cron setup").
+# git remote. Run from root's cron (see docs/RUNBOOK.md "Cron setup").
+#
+# The remote itself is never named or defaulted here — see BACKUP_REMOTE
+# below (#243). Which host/account/repo this actually points at is an
+# operational value, not something this public repo should carry; it
+# lives in the private ops doc and on the droplet only.
 #
 # The push credential is host-side only — an SSH deploy key at
-# /root/.ssh/codeberg_backup (0600), referenced via a ~/.ssh/config Host
+# /root/.ssh/backup_deploy_key (0600), referenced via a ~/.ssh/config Host
 # alias — and never enters a container. compose.yaml's `env_file: .env`
 # is read by the `jobs` container; a credential placed in .env would be
 # exposed to every job command run through it. This script and its key
@@ -30,19 +35,35 @@
 # ping_heartbeat() below and docs/RUNBOOK.md §13.
 #
 # Overridable for testing (and for a non-default host layout) via env:
-#   DELTADEWA_REPO_DIR        — the app repo checkout (default below)
-#   DELTADEWA_BACKUP_REMOTE   — the ~/.ssh/config Host alias for Codeberg
-#   DELTADEWA_BACKUP_REMOTE_URL — full remote URL override, bypassing the
-#                                 alias entirely (used by the test suite
-#                                 to point at a local bare repo — git push
-#                                 mechanics don't care that it isn't SSH)
+#   DELTADEWA_REPO_DIR — the app repo checkout (default below)
+#
+# Required, no default (#243 — a hardcoded remote here would be exactly
+# the kind of leak #245 fixed for config/ips.yaml):
+#   BACKUP_REMOTE — the full destination git remote URL (an ~/.ssh/config
+#                   Host alias form like `<alias>:<repo>.git`, or a full
+#                   https:// URL). Never read from .env (same host-only
+#                   boundary as BACKUP_HEARTBEAT_URL — set it in root's
+#                   crontab or /etc/deltadewa/backup.env, see RUNBOOK.md
+#                   §10 — both are sourced/checked below before use).
+#                   Reconciled against exports/.git's actual origin on
+#                   every run, not just at first init — see the
+#                   remote-reconcile block below.
 set -euo pipefail
 
 REPO_DIR="${DELTADEWA_REPO_DIR:-/home/deploy/deltadewa}"
-REMOTE_ALIAS="${DELTADEWA_BACKUP_REMOTE:-codeberg-backup}"
-DEFAULT_REMOTE_URL="${REMOTE_ALIAS}:deploy_deltadewa-exports-backup.git"
-REMOTE_URL="${DELTADEWA_BACKUP_REMOTE_URL:-${DEFAULT_REMOTE_URL}}"
 EXPORTS_DIR="${REPO_DIR}/exports"
+
+# Optional token-based alternative to the SSH deploy key described above —
+# root-owned 0600, NEVER .env (compose reads that and would expose it to
+# containers). Sourced first, before BACKUP_REMOTE is required below, so
+# a deploy that sets BACKUP_REMOTE (and/or BACKUP_HEARTBEAT_URL) only in
+# this file rather than in root's crontab still works.
+if [ -f /etc/deltadewa/backup.env ]; then
+    # shellcheck disable=SC1091
+    source /etc/deltadewa/backup.env
+fi
+
+: "${BACKUP_REMOTE:?BACKUP_REMOTE is not set — see docs/RUNBOOK.md §10 (or the private ops doc) for the offsite backup remote URL}"
 
 # Dead-man's-switch ping (healthchecks.io-compatible), the bash-side
 # equivalent of deltadewa/heartbeat.py's ping() — this cron runs on the
@@ -71,7 +92,23 @@ if [ ! -d .git ]; then
     echo "backup-exports: initializing exports/ as its own git repo" >&2
     git init -q
     git checkout -q -b main
-    git remote add origin "${REMOTE_URL}"
+fi
+
+# Reconcile the origin remote on every run, not just at first init — a
+# stale/incorrect origin (e.g. left over from a manual restore that used
+# a different URL form than BACKUP_REMOTE — see RUNBOOK.md §10's
+# Remote-URL note) used to go unnoticed and unfixed indefinitely (#243).
+# Same `if` exemption from `set -e` as ping_heartbeat() above: a failed
+# `git remote get-url` (no remote configured yet) is the expected
+# first-init case, not an error.
+if git remote get-url origin >/dev/null 2>&1; then
+    CURRENT_REMOTE="$(git remote get-url origin)"
+    if [ "${CURRENT_REMOTE}" != "${BACKUP_REMOTE}" ]; then
+        echo "backup-exports: origin remote changed (${CURRENT_REMOTE} -> ${BACKUP_REMOTE}), updating" >&2
+        git remote set-url origin "${BACKUP_REMOTE}"
+    fi
+else
+    git remote add origin "${BACKUP_REMOTE}"
 fi
 
 # Set on every run, not just init — a restored `git clone` (RUNBOOK §7)
@@ -79,13 +116,6 @@ fi
 # no global git config either.
 git config user.email "deltadewa-backup@localhost"
 git config user.name "deltadewa-backup"
-
-# Optional token-based alternative to the SSH deploy key above — root-owned
-# 0600, NEVER .env (compose reads that and would expose it to containers).
-if [ -f /etc/deltadewa/backup.env ]; then
-    # shellcheck disable=SC1091
-    source /etc/deltadewa/backup.env
-fi
 
 git add -A
 

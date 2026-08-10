@@ -264,18 +264,19 @@ Target: **under 30 minutes, nothing memorised.**
 # 1. New droplet, repeat section 1 in full, up to (not including) the
 #    final `docker compose up -d --build`
 
-# 2. Restore exports/ from the offsite Codeberg backup (see §8) — clone
+# 2. Restore exports/ from the offsite backup remote (see §8) — clone
 #    it directly into the repo's exports/ directory (the bind-mount
 #    source). `sudo` is required, not optional: the SSH deploy key this
-#    needs (§10) is root-owned 0600 at /root/.ssh/codeberg_backup, so
+#    needs (§10) is root-owned 0600 at /root/.ssh/backup_deploy_key, so
 #    only a root-privileged clone can authenticate at all. This is also
 #    what lands the restored exports/ and exports/.git root-owned,
 #    matching the ownership invariant docker-entrypoint.sh now preserves
 #    (§10's Ownership note, #237) — `~` still resolves to /home/deploy
 #    here (expanded by deploy's own shell before sudo runs), so the
 #    destination path is unaffected, only the process's privilege is.
+#    The actual remote URL is BACKUP_REMOTE — see private ops doc.
 sudo rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it yet
-sudo git clone codeberg-backup:deploy_deltadewa-exports-backup.git \
+sudo git clone <BACKUP_REMOTE — see private ops doc> \
     ~/deltadewa/exports
 
 # 3. Bring it up
@@ -288,15 +289,15 @@ curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 # blind even before the next refresh cron fires.
 ```
 
-**Email will fail until Brevo's IP allowlist is updated.** A new droplet
-means a new outbound IP, and Brevo (like most transactional-email
-providers) only accepts sends from allowlisted sending IPs — the weekly
-digest job fails to send until the new droplet's IP is added in the
-Brevo dashboard. This trips the `DIGEST_HEARTBEAT_URL` alarm (§13) on the
-next scheduled run, which is the mechanism that will actually catch it if
-this step gets missed — but don't rely on that: add the new IP to
-Brevo's allowlist as part of step 3 above, not after the first missed
-digest surfaces it.
+**Email will fail until the SMTP relay's IP allowlist is updated.** A new
+droplet means a new outbound IP, and most transactional-email providers
+only accept sends from allowlisted sending IPs — the weekly digest job
+fails to send until the new droplet's IP is added on the relay's side
+(see private ops doc for which provider and dashboard). This trips the
+`DIGEST_HEARTBEAT_URL` alarm (§13) on the next scheduled run, which is
+the mechanism that will actually catch it if this step gets missed — but
+don't rely on that: add the new IP to the allowlist as part of step 3
+above, not after the first missed digest surfaces it.
 
 ## 8. What lives where
 
@@ -312,11 +313,12 @@ digest surfaces it.
   needs to survive a rebuild.
 - **Offsite backup**: `exports/` is *itself* a standalone git repo (nested
   inside this repo's already-gitignored `exports/`, so there's no
-  submodule conflict), pushed nightly by root's cron to a private
-  Codeberg repo — see §9 (cron), §10 (the SSH deploy key), §12 (verifying
-  the last push). `age` encryption is a deliberate follow-up, not done
-  yet: a backup you can't decrypt is worse than one you can, and adding
-  it needs an explicit key-escrow step first.
+  submodule conflict), pushed nightly by root's cron to a private offsite
+  git remote (`BACKUP_REMOTE` — see §10, and the private ops doc for
+  which host/repo) — see §9 (cron), §10 (the SSH deploy key), §12
+  (verifying the last push). `age` encryption is a deliberate follow-up,
+  not done yet: a backup you can't decrypt is worse than one you can, and
+  adding it needs an explicit key-escrow step first.
 
 ## 9. Cron setup
 
@@ -343,16 +345,26 @@ crontab -e
 ```bash
 # root's crontab (sudo crontab -e) — the offsite backup push. Separate
 # from deploy's crontab because the push credential is root-owned (§10).
-# BACKUP_HEARTBEAT_URL here (or in /etc/deltadewa/backup.env, §10) wires
-# up the third dead-man's-switch check — see §13.
+# BACKUP_REMOTE is required — the script fails loudly at the first line
+# if it's unset (#243); see §10 for why neither value below goes in
+# .env or gets hardcoded in the script. BACKUP_HEARTBEAT_URL wires up
+# the third dead-man's-switch check — see §13.
 sudo crontab -e
-BACKUP_HEARTBEAT_URL=https://hc-ping.com/<uuid>
+BACKUP_REMOTE=<see private ops doc>
+BACKUP_HEARTBEAT_URL=<see private ops doc>
 30 3 * * * /home/deploy/deltadewa/ops/backup-exports.sh >> /var/log/deltadewa-backup.log 2>&1
 ```
 
-Log rotation isn't set up yet — `logs/` and `/var/log/deltadewa-backup.log`
-will grow unbounded until a follow-up adds `logrotate` config; check
-periodically until then.
+**Log rotation (#244)** — install once, as root:
+
+```bash
+sudo cp ops/logrotate-deltadewa.conf /etc/logrotate.d/deltadewa
+```
+
+Rotates `~/deltadewa/logs/*.log` and `/var/log/deltadewa-backup.log`
+weekly, keeping 8 compressed generations (~2 months) — see the config
+file's own header comment for why no `postrotate`/`copytruncate` is
+needed here.
 
 ## 10. Secrets — three separate homes, don't mix them up
 
@@ -370,34 +382,36 @@ periodically until then.
   The email transport (`deltadewa/reporting/email_smtp.py`) is plain
   stdlib SMTP, so the provider is interchangeable — any SMTP relay works
   (Resend, Brevo, Amazon SES, Mailtrap, ...) by changing only these `.env`
-  values, no code change. `SMTP_PORT` selects the connection mode: `465`
-  is implicit TLS/SMTPS, anything else (typically `587`) is STARTTLS.
-  **DigitalOcean blocks outbound traffic on 25/465/587 by default** — this
-  deployment uses **2525** (also STARTTLS), which DigitalOcean leaves
-  open; if a droplet's digest job hangs or times out on connect rather
-  than failing on auth, check the port before the credentials. If using
+  values, no code change; see the private ops doc for which provider and
+  port this deployment actually uses. `SMTP_PORT` selects the connection
+  mode: `465` is implicit TLS/SMTPS, anything else (typically `587`) is
+  STARTTLS. **DigitalOcean blocks outbound traffic on 25/465/587 by
+  default** — pick a relay/port combination DigitalOcean leaves open; if
+  a droplet's digest job hangs or times out on connect rather than
+  failing on auth, check the port before the credentials. If using
   Amazon SES, sandbox mode is fine indefinitely for this use case — just
   verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
   `REPORT_EMAIL_FROM`) in the SES console rather than requesting
   production access.
-- **The Codeberg SSH deploy key** — `/root/.ssh/codeberg_backup` (mode
-  `0600`, root-owned), referenced by a `~/.ssh/config` alias so
-  `ops/backup-exports.sh` never hardcodes the key path:
+- **The offsite backup SSH deploy key** — `/root/.ssh/backup_deploy_key`
+  (mode `0600`, root-owned), referenced by a `~/.ssh/config` alias so
+  `ops/backup-exports.sh` never hardcodes the key path, and by
+  `BACKUP_REMOTE` (§9) so it never hardcodes the remote either (#243):
 
   ```text
   # /root/.ssh/config
-  Host codeberg-backup
-      HostName codeberg.org
+  Host backup-remote
+      HostName <see private ops doc>
       User git
-      IdentityFile /root/.ssh/codeberg_backup
+      IdentityFile /root/.ssh/backup_deploy_key
       IdentitiesOnly yes
   ```
 
   Provisioning (once, manual, same spirit as §1's droplet click-through):
-  generate the key (`ssh-keygen -t ed25519 -f /root/.ssh/codeberg_backup
-  -N ""`), create a **private** repo on Codeberg
-  (`deploy_deltadewa-exports-backup`), add the key's public half as a
-  deploy key with **write** access.
+  generate the key (`ssh-keygen -t ed25519 -f /root/.ssh/backup_deploy_key
+  -N ""`), create a **private** repo on your chosen git host — see private
+  ops doc for which provider and the exact repo name — add the key's
+  public half as a deploy key with **write** access.
 
   **Ownership note (#220, fixed by #237):** this cron runs as root, so
   `exports/.git` — and `exports/` itself, the working-tree top —
@@ -418,28 +432,30 @@ periodically until then.
   Restart the container as often as you like, run the backup cron as
   often as you like — neither disturbs the other's ownership.
 
-  **Remote-URL note:** `ops/backup-exports.sh` only runs `git remote add
-  origin` inside its `if [ ! -d .git ]` first-init branch — it never
-  `set-url`s on a subsequent run. If `exports/.git` is ever created or
-  restored with an `https://` remote instead of the `codeberg-backup:`
-  SSH alias above (e.g. a manual `git clone` during §7's recovery using
-  the HTTPS form of the repo URL), the script won't notice or correct
-  it — `git push` against that remote hangs on a non-interactive
-  credential prompt under cron (no TTY, no `GIT_TERMINAL_PROMPT=0` guard
-  in the script), and the backup silently stops running. If a restore
-  ever needs the HTTPS URL for any reason, re-point the remote by hand
-  afterwards: `git -C ~/deltadewa/exports remote set-url origin
-  codeberg-backup:deploy_deltadewa-exports-backup.git`.
+  **Remote-URL note (#243):** `ops/backup-exports.sh` reconciles
+  `exports/.git`'s `origin` against `BACKUP_REMOTE` on **every** run, not
+  just at first init — if they differ (e.g. `exports/.git` was created or
+  restored with a different URL form than `BACKUP_REMOTE`, such as a
+  manual `git clone` during §7's recovery using the HTTPS form of the
+  repo URL instead of the SSH alias above), the script runs `git remote
+  set-url` itself and logs that it changed, rather than silently pushing
+  against a stale remote or hanging on a non-interactive credential
+  prompt under cron (no TTY). `BACKUP_REMOTE` itself is required with no
+  default or fallback — the script fails loudly at the top if it's unset,
+  rather than reusing whatever happened to be configured from a previous
+  run.
 - **The optional token alternative** — `/etc/deltadewa/backup.env`
   (mode `0600`, root-owned), sourced by `ops/backup-exports.sh` if
-  present. **Never** put a Codeberg token in `.env` — `env_file: .env` is
-  read into the `jobs` container, so anything there is exposed to every
-  job command run through it; the whole point of a host-side credential
-  (SSH key or this file) is that it never enters a container at all.
-  This same file (or the crontab line itself, §9) is also where
-  `BACKUP_HEARTBEAT_URL` is set — `.env.example` documents the variable
-  for discoverability, but the backup cron never reads `.env` for the
-  same reason: it's root's crontab, not the `jobs` container.
+  present, before `BACKUP_REMOTE` is even checked for (so this file alone
+  is enough to satisfy it). **Never** put the backup-remote credential in
+  `.env` — `env_file: .env` is read into the `jobs` container, so
+  anything there is exposed to every job command run through it; the
+  whole point of a host-side credential (SSH key or this file) is that it
+  never enters a container at all. This same file (or the crontab line
+  itself, §9) is also where `BACKUP_REMOTE` and `BACKUP_HEARTBEAT_URL`
+  are set — `.env.example` documents both for discoverability, but the
+  backup cron never reads `.env` for the same reason: it's root's
+  crontab, not the `jobs` container.
 
 This section exists because all three are plausible places to reach for
 the same kind of "just add a secret here" instinct — they are
