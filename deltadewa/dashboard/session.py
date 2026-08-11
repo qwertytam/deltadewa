@@ -132,7 +132,7 @@ def start_session(
     *,
     role: str = "combined",
     globals_dict: dict[str, Any],
-    ips_path: Path = Path("config/ips.yaml"),
+    ips_path: str | Path = Path("config/ips.yaml"),
     dashboard_path: Path = Path("config/dashboard.yaml"),
     use_live_market_data: bool = False,
     export_dir: Path | None = None,
@@ -153,7 +153,8 @@ def start_session(
             If it already contains a ``portfolio`` (e.g. set up by an
             earlier cell), that object is reused; otherwise a fresh empty
             one is created via ``create_empty_portfolio()``.
-        ips_path: Path to the hedge program policy file. If missing or
+        ips_path: Path to the hedge program policy file; ``str`` or ``Path``,
+            matching ``load_ips_config`` (#182). If missing or
             invalid, ``ips_config`` is ``None`` and the session still
             starts — this never raises.
         dashboard_path: Path to the gauge presentation config (gauge

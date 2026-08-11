@@ -834,11 +834,16 @@ def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     return IpsMonetization(schedule=tuple(steps))
 
 
-def load_ips_config(path: Path) -> IpsConfig:
+def load_ips_config(path: str | Path) -> IpsConfig:
     """Load and validate a hedge program policy file into an ``IpsConfig``.
 
     Args:
-        path: Path to the ``ips.yaml`` file.
+        path: Path to the ``ips.yaml`` file. A ``str`` is accepted and
+            normalized to a ``Path`` on entry — the annotation states what
+            the function takes rather than leaving a ``str`` caller to
+            discover ``AttributeError: 'str' object has no attribute
+            'exists'`` at the first filesystem call (#182). This matches
+            ``PortfolioSerializer``'s loaders, which already accept both.
 
     Returns:
         Fully validated ``IpsConfig``.
@@ -850,6 +855,10 @@ def load_ips_config(path: Path) -> IpsConfig:
     """
     if not YAML_AVAILABLE:
         raise IpsConfigError("PyYAML is not installed; cannot load ips.yaml")
+
+    # Normalized once, at the boundary, so every use below — including the
+    # error messages, which name the file — sees the same Path.
+    path = Path(path)
 
     if not path.exists():
         raise IpsConfigError(

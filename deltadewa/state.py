@@ -88,7 +88,7 @@ class ProgramState:
         cls,
         export_dir: Path,
         *,
-        ips_path: Path = Path("config/ips.yaml"),
+        ips_path: str | Path = Path("config/ips.yaml"),
         default_exercise_style: ExerciseStyle | None = None,
     ) -> ProgramState:
         """Load the shared program state from ``export_dir``.
@@ -100,7 +100,8 @@ class ProgramState:
         Args:
             export_dir: Directory holding the shared state file (and where
                 autosaves are written).
-            ips_path: Path to the hedge program policy file. If missing or
+            ips_path: Path to the hedge program policy file; ``str`` or
+                ``Path``, matching ``load_ips_config`` (#182). If missing or
                 invalid, ``ips_config`` is ``None`` and loading still
                 succeeds — this never raises for that reason.
             default_exercise_style: Exercise style applied to positions in
