@@ -129,8 +129,8 @@ _DEFAULT_VIX_LOW: Final[float] = 15.0
 # (see IpsMarketEnvironment's dataclass default and resolve_data_ttl's
 # ips_config=None fallback, both of which resolve here) — 15 minutes suits
 # fetch-on-demand local use, but a deployment refreshed by cron needs a TTL
-# exceeding its refresh interval (see config/ips.yaml, 2160 = 36h for a
-# daily refresh), or every read will be STALE. A missing/unreadable
+# exceeding its refresh interval (roughly 1.5x it — a daily refresh wants
+# something past 24h), or every read will be STALE. A missing/unreadable
 # ips.yaml on a cron-refreshed deployment hits this fallback, not a loud
 # error, so it fails as silent permanent-STALE rather than a config error.
 DEFAULT_DATA_TTL_MINUTES: Final[float] = 15.0

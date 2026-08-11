@@ -23,10 +23,17 @@
   `examples/dashboard/`). Nothing reads these automatically. Portfolios
   are loaded by importing the file through a widget; `ips`/`dashboard`
   presets are loaded by copying them over the corresponding file in
-  `config/`. Distinct from `config/*.example.yaml`: the presets here are
-  alternate postures (aggressive/conservative/default) with example
-  numbers throughout; the `config/` templates are the one-time bootstrap
-  step before either exists.
+  `config/`. Distinct from `config/*.example.yaml`, which are the
+  canonical one-time bootstrap templates: `examples/dashboard/` holds
+  alternate presentation postures (aggressive/conservative/default), and
+  `examples/ips/ips_default.yaml` is an illustration of the IPS schema
+  carrying the *same* placeholder numbers as `config/ips.example.yaml`.
+
+  **Nothing under `examples/` is this program's policy.** It used to be:
+  `ips_default.yaml` shipped a byte-for-byte copy of the live
+  `config/ips.yaml` until #249. Do not re-sync it against the live file —
+  the repo deliberately carries one set of example policy numbers, not
+  two that can drift back together.
 
 ## Portfolios
 
@@ -124,8 +131,12 @@ against the export directory, as before.
 missing or fails validation, the session still starts — `ctx.ips_config`
 is `None` and a warning is logged; nothing raises.
 
-Presets live in `examples/ips/` (e.g. `ips_default.yaml`) — copy one over
-`config/ips.yaml` to use it. The schema (program identity, pricing style,
+To bootstrap the file, copy the canonical template —
+`cp config/ips.example.yaml config/ips.yaml` — then edit every field it
+marks `EXAMPLE VALUE`. `examples/ips/ips_default.yaml` is a second copy of
+those same placeholder numbers, kept as a standalone illustration of the
+schema; it is not a distinct posture and is not this program's policy
+(#249). The schema (program identity, pricing style,
 budget, convexity targets, drawdown tolerance, roll/rally/monetization
 triggers) is defined and validated in `deltadewa/ips_config.py` — see that
 module for the authoritative field list and validation rules rather than a
@@ -181,9 +192,12 @@ The TTL is policy, not a provider constant: it comes from
 `market_environment.data_ttl_minutes` in `ips.yaml` — the CACHED/STALE
 boundary is "how old may data be before a decision shouldn't rely on it,"
 which is a program decision. The provider's own constructor default
-(15 minutes) only applies when no `ips.yaml` is available. The shipped
-`config/ips.yaml` sets it to 2160 (36h) to match M2.6's daily refresh cron
-with headroom for ordinary jitter — see the comment there.
+(15 minutes) only applies when no `ips.yaml` is available. Set it to
+roughly 1.5x your own refresh cadence — a deployment on M2.6's daily
+market-data cron wants a TTL comfortably past 24h, so ordinary cron
+jitter doesn't flap the banner while one fully-missed refresh still reads
+STALE. `config/ips.example.yaml` ships an illustrative value; your own
+`config/ips.yaml` is gitignored and not shipped (#245).
 
 ### Offline fallback
 
