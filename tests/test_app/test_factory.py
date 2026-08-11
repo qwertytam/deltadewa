@@ -19,7 +19,9 @@ from deltadewa.marketdata import CboeFredProvider, StaticProvider
 from deltadewa.state import ProgramState
 
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
-_EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
+_EXAMPLE_IPS_YAML = (
+    Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
+)  # #245: real config/ips.yaml is gitignored; use the tracked example.
 
 
 def _state(tmp_path: Path) -> ProgramState:

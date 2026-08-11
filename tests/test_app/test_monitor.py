@@ -44,7 +44,9 @@ if TYPE_CHECKING:
     from playwright.sync_api import Browser, Page
 
 _PAGE_LOAD_TIMEOUT_MS = 10_000
-_EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
+_EXAMPLE_IPS_YAML = (
+    Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
+)  # #245: real config/ips.yaml is gitignored; use the tracked example.
 _NUMBER_RE = re.compile(r"[+-]?\$[+-]?[\d,]+(?:\.\d+)?")
 
 

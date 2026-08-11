@@ -16,7 +16,12 @@ from deltadewa.constants import DAYS_PER_YEAR, ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsTriggers, load_ips_config
 from deltadewa.portfolio.core import OptionPortfolio
 
-EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
+EXAMPLE_IPS_YAML = (
+    Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
+)
+# #245: the real config/ips.yaml is gitignored, so these tests (which only
+# compare mapped-vs-source fields, never a pinned value) exercise the
+# tracked config/ips.example.yaml instead.
 
 
 def _mock_portfolio(

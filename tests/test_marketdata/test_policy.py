@@ -11,7 +11,9 @@ from deltadewa.ips_config import DEFAULT_DATA_TTL_MINUTES, load_ips_config
 from deltadewa.marketdata import default_cache_dir, resolve_data_ttl
 from deltadewa.marketdata._policy import _CACHE_DIR_ENV_VAR
 
-_EXAMPLE_IPS_YAML = Path(__file__).parent.parent.parent / "config" / "ips.yaml"
+_EXAMPLE_IPS_YAML = (
+    Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
+)  # #245: real config/ips.yaml is gitignored; use the tracked example.
 
 
 class TestDefaultCacheDir:

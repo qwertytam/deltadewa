@@ -1,12 +1,14 @@
 # Default Hedge Health Dashboard Configuration
 # This file shows the default configuration values used by the dashboard.
 # Modify these values to customize threshold behavior for your use case.
-
-parameters:
-  # Convexity cliff threshold (days)
-  convexity_cliff_days: 180   # Alert when puts enter high-gamma region within this many days
-  # Vol-regime band + hedge-cost verdict thresholds (skew / term structure)
-  # are policy, not presentation — see market_environment in ips.yaml.
+#
+# PRESENTATION ONLY — gauge geometry, nothing decided here. Thresholds that
+# answer a mandate question are policy and live in config/ips.yaml. Removed by
+# #241 and now owned there: parameters.convexity_cliff_days and the
+# convexity_cliff gauge's min/mid/max_val, which became
+# convexity.cliff_threshold_days / cliff_review_days / cliff_urgent_days.
+# Vol-regime and hedge-cost verdict thresholds were already policy — see
+# market_environment in ips.yaml.
 
 metrics:
   # 1. Net Carry (Theta) - Annualized theta as % of underlying
@@ -29,6 +31,8 @@ metrics:
     invert_colors: false
 
   # 3. Vega Exposure - Portfolio % change per +10 vol shock
+  #    A signed display axis, NOT the vega sufficiency policy band — that is
+  #    vega: in ips.yaml, one-sided and on a low-single-digit scale (#241).
   vega_sufficiency:
     start: -50.0
     end: 50.0
@@ -47,12 +51,12 @@ metrics:
     invert_colors: false
 
   # 5. Time to Convexity Cliff - Days until puts enter high-gamma region
+  #    Axis geometry only — the 30/90/180 grading lines are policy, set as
+  #    convexity.cliff_urgent_days / cliff_review_days / cliff_threshold_days
+  #    in ips.yaml (#241).
   convexity_cliff:
     start: 0
     end: 365
-    min_val: 30               # Red: imminent cliff (<30 days)
-    mid_val: 90               # Yellow: approaching
-    max_val: 180              # Green: plenty of time
     invert_colors: false
 
   # 6. Volatility Regime - Current IV percentile (0=cheap, 100=expensive)

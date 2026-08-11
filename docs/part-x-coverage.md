@@ -3,6 +3,12 @@
 Maps every item in [Handbook Part X — Institutional Hedge Dashboards](hedging%20handbook.md#part-x--institutional-hedge-dashboards)
 to its implementation in this codebase.
 
+**Updated 2026-08-10**, when planning the notebook retirement traced the four
+remaining Jupyter-only health gauges and found one — the convexity cliff — with
+no Dash surface and no recorded decision to drop it. It is now on `/design`;
+see [The notebook-retirement audit](#the-notebook-retirement-audit) for the
+other three, two of which needed nothing.
+
 **Updated 2026-08-07, after M2.8.** The 2026-08-06 re-audit found five
 coverage regressions from the M2.4/M2.5 Dash rebuild — panels the notebooks
 had that the Dash pages did not, with no decision recorded anywhere to drop
@@ -42,9 +48,9 @@ Three zones:
   readout**, guarded import/export.
 - *PLANNING* — market environment, sizing (with the **vega sufficiency**
   block), strike ladder, roll planner, **hedge rebalance triggers**,
-  **delta drift** (M2.8), monetization. Most price the crash-skew (IPS
-  anchor) basis; the three that do not carry their own basis chip (see
-  [Basis chips](#basis-chips)).
+  **delta drift** (M2.8), **convexity cliff**, monetization. Most price the
+  crash-skew (IPS anchor) basis; those that do not carry their own basis chip
+  (see [Basis chips](#basis-chips)).
 - *EXPLORATION* — spot×vol heatmap, time×price heatmap, Monte Carlo
   distribution, **vega term exposure** (M2.8). The three stress surfaces
   are on the proportional-vol (GBM) basis and carry a **metric dropdown**
@@ -77,6 +83,7 @@ default is chipped:
 | `basis: live market data` | Market environment | Reprices nothing — reads the feed. |
 | `basis: book Greeks at today's market` | Hedge rebalance triggers (PLANNING); vega term exposure (EXPLORATION) | Reads the book's Greeks unshocked. |
 | `basis: spot -5%, flat vol (not the IPS crash)` | Delta drift | Reprices at the handbook's own fixed §13 shock, distinct from the IPS crash anchor every other PLANNING panel prices. |
+| `basis: position maturities (nothing priced)` | Convexity cliff | Touches no market input at all — compares each long put's maturity against the valuation date. Cannot honestly carry even the book-Greeks chip. |
 
 ## Status legend
 
@@ -110,6 +117,7 @@ default is chipped:
 | 14 | Vega Term Exposure | 4 | `/design` EXPLORATION — **Vega term exposure** | `analysis/maturity.MaturityMixin.calculate_vega_by_maturity` | **PRESENT** (M2.8) |
 | 15 | Hedge Efficiency Ratio | 4 | `/monitor` `_cost_panel`; digest `ProtectionSection.payoff_ratio` | Same function as #5 — see below | **PRESENT** (M2.7) |
 | — | Part VII Board/IC report | — | Weekly digest email | `reporting/program_report.py` | **RETIRED** from the dashboard — see [Conscious retirements](#conscious-retirements) |
+| — | Time to Convexity Cliff | — | `/design` PLANNING — **Convexity cliff** | `analysis/health.HealthMixin.calculate_convexity_cliff_days`; lines from `IpsConvexity.cliff_*` | **PRESENT** (notebook-retirement audit) |
 | — | Sizing workbench | — | `/design` PLANNING | `analysis/sizing.size_hedge` | **PRESENT** |
 | — | Strike ladder builder | — | `/design` PLANNING | `analysis/strike_ladder.build_strike_ladder` | **PRESENT** |
 | — | Roll planner | — | `/design` PLANNING | `analysis/roll_planner.build_roll_plan` | **PRESENT** |
@@ -140,7 +148,7 @@ The five regressions the 2026-08-06 re-audit found, and what closed each.
 
 | Regression | Was | Now |
 | --- | --- | --- |
-| **#4 Vega Sufficiency** — the only Tier-1 item with no surface anywhere | `calculate_vega_sufficiency_pct` intact and tested, reachable only via `calculate_health_metrics` → Jupyter | `/design` sizing panel. Band promoted from `dashboard.yaml` to a new `IpsVega` section — see [Where the vega band went](#where-the-vega-band-went) |
+| **#4 Vega Sufficiency** — the only Tier-1 item with no surface anywhere | `calculate_vega_sufficiency_pct` intact and tested, reachable only via `calculate_health_metrics` → Jupyter | `/design` sizing panel. Band promoted from `dashboard.yaml` to a new `IpsVega` section, then recalibrated by #241 because the promoted numbers were unreachable — see [Where the vega band went](#where-the-vega-band-went) |
 | **#8 Forward Variance** — computed every request, then discarded | `MarketEnvironment.forward_vol_front_3m` computed on every `/monitor` and `/design` request and never read | `/design` *Market environment*, as a level with no band |
 | **#6 / #7** — weekly and by email only | Digest `MarketContextSection` only | `/design` *Market environment*, banded against the IPS. Still in the digest too |
 | **#5 / #15** — the ratio existed nowhere in the codebase | Both axes surfaced separately; the division computed on no surface, in no module | `analysis/hedge_efficiency.py` + `/monitor`'s cost panel |
@@ -161,16 +169,35 @@ grounds that "is the hedge big enough to answer a vol spike" is a mandate
 question of the same class as the convexity band — and that reading policy
 from presentation config is the Mo2 leak M1.4 closed.
 
-Two consequences worth knowing:
+The promotion was right, but **the numbers it carried over were not** — see
+issue #241, which corrected them. The cautionary tale of the whole exercise:
 
-- The defaults in the new `vega:` section are **carried over verbatim** from
-  `dashboard.yaml`'s gauge (`max_val: 20` → `sufficiency_min_pct`, `end: 50`
-  → `sufficiency_max_pct`), so moving the metric did not silently change what
-  a reading means. They are a starting point, not a derived constant.
+- M2.7 carried the defaults over verbatim from `dashboard.yaml`'s gauge
+  (`max_val: 20` → `sufficiency_min_pct`, `end: 50` → `sufficiency_max_pct`)
+  so that moving the metric would not silently change what a reading means.
+  But that gauge is a **signed, symmetric display axis** (−50…+50, green
+  above +20, nothing bad above it), not a band: `end: 50` was the axis bound.
+- The resulting 20–50 band was **unreachable**. The metric divides by total
+  portfolio value — options *plus* underlying — and on a tail hedge the
+  equity leg dominates that denominator, so the shipped books price at
+  **+1.8% to +2.7%** (`spx_tail_20m` +2.70%, `spx_protective_put` +2.29%).
+  No denominator rescues it: option-book-relative they read ~1200–1800%.
+  `/design` therefore said "outside band" for every book in the repo, with
+  the `band_bar` needle pinned off the left edge, for the life of M2.7.
+- #241 recalibrated the band to **1.5–4.0**, bracketing the canonical book,
+  and `tests/test_ips_config.py` now pins the *scale* — retune the values
+  freely, but a band the canonical book cannot sit inside is a bug.
 - `dashboard.yaml` **keeps** its `vega_sufficiency` block, because the
-  Jupyter gauge still reads it. The two now coexist. Retiring the
-  presentation copy is a `widgets/` change and was left out of M2.7
-  deliberately; see [Open questions](#open-questions).
+  Jupyter gauge still reads it — but it is now annotated as an axis, not a
+  band. It is also mis-scaled for the metric it plots (a +2.7% reading sits
+  on the midpoint of a ±50 axis); rescaling it is a `widgets/` change on the
+  surface #242 retires, so it was left alone.
+
+**The lesson for the next promotion.** Gauge geometry and a policy band are
+not the same kind of number even when they sit under the same key name.
+Before carrying a threshold from presentation to policy, price a real book
+and confirm the reading lands inside the band — "verbatim" preserves the
+digits, not the meaning.
 
 ## Conscious retirements
 
@@ -268,9 +295,9 @@ which the app instantiates, so the module is on a shipping path:
 | `calculate_vega_sufficiency_pct` | `/design` sizing panel — **live since M2.7** |
 | `calculate_health_metrics` | `widgets/health_dashboard.py` (Jupyter) only |
 | `calculate_overall_health_score` | `widgets/health_dashboard.py` (Jupyter) only |
-| `calculate_delta_drift_pct` | `calculate_health_metrics` only → Jupyter |
+| `calculate_delta_drift_pct` | `calculate_health_metrics` → Jupyter; the underlying `delta_drift_from_target` also backs `/design`'s hedge-trigger delta row — **live** |
 | `calculate_net_carry_pct` | `calculate_health_metrics` only → Jupyter |
-| `calculate_convexity_cliff_days` | `calculate_health_metrics` only → Jupyter |
+| `calculate_convexity_cliff_days` | `/design` convexity cliff panel — **live** |
 | `calculate_hedge_success_pct` | `calculate_health_metrics` only → Jupyter (deliberate — M2.4 finding **M2**) |
 
 `calculate_health_metrics` is a **historical** consumer path: `widgets/` is
@@ -281,16 +308,88 @@ records this at the function.
 **`analysis/crash_payoff.crash_scenario_table` / `crash_payoff_ratio`** —
 kept deliberately; see [Conscious retirements](#conscious-retirements).
 
+## The notebook-retirement audit
+
+Planning to retire the notebooks forced Open questions #1 below. Each of the
+four Jupyter-only health gauges was traced to find whether a Dash surface
+already covered it. The answers were not uniform, and the distinction is the
+point — only one was a real loss:
+
+| Gauge | Dash equivalent | Outcome |
+| --- | --- | --- |
+| Vega sufficiency | `/design` sizing panel, since M2.7 | Nothing to do |
+| Delta drift (health form) | `/design` hedge-trigger delta row, via `delta_drift_from_target` | Nothing to do. Only the *gauge form* (a needle against bands) is lost; the number and its verdict are on the page. Not to be confused with §13, which has its own panel |
+| Convexity cliff | **None** | **Ported** — new `/design` PLANNING panel; see below |
+| Hedge success | **None**, deliberately | Stays retired. Not a surfacing gap: it cannot compute a real value without the position-history layer ([#70](https://github.com/qwertytam/deltadewa/issues/70)), so porting it would ship the permanently-neutral gauge M2.4 finding **M2** rejected. Already under [Conscious retirements](#conscious-retirements) |
+
+**The convexity cliff was the one genuine loss** — surfaced nowhere on Dash,
+with no decision recorded anywhere to drop it, which is exactly the state this
+document exists to make impossible. It is now a `/design` PLANNING panel
+reading `calculate_convexity_cliff_days`.
+
+Its thresholds moved from presentation config to policy on the same reasoning
+M2.7 used for the vega band: `dashboard.yaml` held both the region boundary
+(`parameters.convexity_cliff_days: 180`) and the gauge's grading lines
+(`convexity_cliff`'s `mid_val: 90` / `min_val: 30`). All three are now
+`IpsConvexity.cliff_threshold_days` / `cliff_review_days` /
+`cliff_urgent_days`, **carried over verbatim** so the promotion did not change
+what a reading means. Unlike the vega band, the carry-over was sound here:
+those three *were* grading lines on a one-sided day-count axis, not a signed
+display range, so the digits meant the same thing on both sides of the move.
+Issue #241 then removed the presentation copies, making the IPS the sole
+owner. A test pins that the panel grades against the IPS value
+rather than letting `calculate_convexity_cliff_days`'s own 180-day default
+stand — the failure mode where editing `ips.yaml` silently does nothing.
+
+Two things about this panel are deliberately unlike its neighbours:
+
+- **No band bar.** The metric is one-sided — more runway is better without
+  limit — so a two-sided good-zone bar would read a very long-dated book as
+  "outside band". It gets a verdict sentence instead, in the hedge-trigger
+  panel's OK/REVIEW/URGENT vocabulary. `IpsConvexity`'s docstring says so at
+  the fields.
+- **A fifth basis chip**, `basis: position maturities (nothing priced)`. The
+  cliff reads no market input whatsoever — only maturity dates against the
+  valuation date — so it cannot honestly carry even the book-Greeks chip.
+
+The no-long-puts case is reported as "does not apply", not as the sentinel's
+numeric value: `calculate_convexity_cliff_days` returns 999 there, and a page
+printing "999 days" would read an unhedged book as the safest possible one.
+That sentinel is now the named `health.NO_LONG_PUTS_CLIFF_DAYS` rather than a
+literal at both ends, and a test asserts `999` never reaches the page.
+
 ## Open questions
 
 Not decided by M2.7 or M2.8, and not blocking anything.
 
-1. **The four remaining Jupyter-only health gauges** — revive on a Dash page,
-   fold into `roll_status.py`, or delete. They are ungated as things stand,
-   which is the part that will eventually force the question.
-2. **`dashboard.yaml`'s `vega_sufficiency` block**, now duplicated by
-   `IpsVega`. Retiring it means changing `widgets/health_dashboard.py` to
-   read the IPS, which is a `widgets/` change.
+1. **The remaining Jupyter-only health gauges.** Resolved for the four audited
+   above. What is left is narrower: `calculate_net_carry_pct`,
+   `calculate_health_metrics`, and `calculate_overall_health_score` lose their
+   last consumer when `widgets/health_dashboard.py` goes. The first is a real
+   metric with no Dash home; the other two are the Jupyter aggregator itself
+   and have no meaning off that surface.
+2. **`delta_drift`'s gauge band in `dashboard.yaml`** (`min_val: 5.0` /
+   `max_val: 10.0`) exactly duplicates `triggers.delta_drift_warn_pct` /
+   `delta_drift_action_pct`. Pre-existing, and the last policy number left in
+   presentation config after #241 — which closed the `vega_sufficiency` and
+   `convexity_cliff` cases and confirmed `vol_regime`, `net_carry` and
+   `crash_convexity` only *look* duplicated (different metrics and sign
+   conventions that happen to share a digit). Left open because it goes with
+   the notebooks, not before them.
+
+   Whoever takes it should fix a second defect in the same block: all three
+   `examples/dashboard/*.yaml` profiles still describe `delta_drift` as a
+   **signed symmetric axis** (−50…+50, `invert_colors: false`), which
+   `config/dashboard.yaml` has not been since the metric became |deviation
+   from target| on a one-sided 0–30 inverted axis. The examples misrepresent
+   the metric, not just its band. Do not fix them by copying the shipped
+   numbers across — that re-adds the duplication; remove the grading lines
+   the way #241 did for `convexity_cliff`.
+3. **The widget's hardcoded config fallback.**
+   `HedgeHealthDashboard._get_default_config()` still holds the cliff numbers
+   #241 removed from the YAML files, so removing a key there falls back to a
+   private copy rather than to policy. Annotated as obsolete pending #242
+   rather than rewired, since `/design` already reads the IPS directly.
 
 `entry_timing_tree`'s hardcoded VIX thresholds (item 3 in earlier revisions
 of this list) are resolved, not open: M2.8 moved them to

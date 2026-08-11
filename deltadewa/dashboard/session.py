@@ -74,7 +74,10 @@ def _load_dashboard_config(
     (default) and JSON, dispatched by file suffix.
     """
     if not path.exists():
-        reporter.warning(f"dashboard.yaml not found at {path}, using defaults")
+        reporter.warning(
+            f"dashboard.yaml not found at {path}, using built-in defaults "
+            "— copy config/dashboard.example.yaml there to customize (#245)",
+        )
         return None
 
     try:
