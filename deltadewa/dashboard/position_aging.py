@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from deltadewa.clock import days_between
 from deltadewa.reporting import ConsoleReporter
 
 if TYPE_CHECKING:
@@ -73,10 +74,13 @@ class PositionAgingDisplay:
                 utc=True,
             )
 
-            # vectorized days to expiry as integer days
-            df_positions["days_to_expiry"] = (
-                df_positions["maturity"] - today
-            ).dt.days
+            # Calendar-date difference, matching the priced tenor: subtracting
+            # the timestamps floored the count a day low whenever the valuation
+            # date carried a time of day (#182).
+            as_of = today
+            df_positions["days_to_expiry"] = df_positions["maturity"].apply(
+                lambda x: days_between(as_of, x),
+            )
 
             df_positions["urgency"] = df_positions.sort_values(
                 "days_to_expiry",

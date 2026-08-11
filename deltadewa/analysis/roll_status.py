@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.clock import days_between
 from deltadewa.constants import OptionType
 from deltadewa.valuation import OptionValuation
 
@@ -262,7 +263,7 @@ def evaluate_roll_status(
     records: list[RollStatusRecord] = []
 
     for position in portfolio.positions:
-        days_to_maturity = (position.option.maturity_date - as_of).days
+        days_to_maturity = days_between(as_of, position.option.maturity_date)
 
         time_trigger = _time_trigger_verdict(
             days_to_maturity,

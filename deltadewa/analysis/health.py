@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa import constants as const
 from deltadewa.analysis.crash_repricing import CrashShock, crash_convexity_pct
+from deltadewa.clock import days_between
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
@@ -322,9 +323,10 @@ class HealthMixin:
             is_long = pos.quantity > 0
 
             if is_put and is_long:
-                days_to_maturity = (
-                    pos.option.maturity_date - self.portfolio.valuation_date
-                ).days
+                days_to_maturity = days_between(
+                    self.portfolio.valuation_date,
+                    pos.option.maturity_date,
+                )
                 # Calculate days until entering high-gamma region
                 days_until_cliff = days_to_maturity - cliff_threshold_days
                 min_days = min(min_days, max(0, days_until_cliff))

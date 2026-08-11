@@ -9,6 +9,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from deltadewa import constants as const
+from deltadewa.clock import days_between
 from deltadewa.colours import DEFAULT_PALETTE
 from deltadewa.utils import abs_sum
 
@@ -74,11 +75,11 @@ class ThetaChartsMixin:
         df_carry = df.copy()
 
         # Days to expiry measured against the portfolio's (what-if) valuation
-        # date, not the wall clock. The maturity column is a tz-naive string,
-        # so localize the tz-aware valuation date away before subtracting.
-        as_of = pd.Timestamp(self.portfolio.valuation_date).tz_localize(None)
+        # date, not the wall clock, and as a calendar-date difference so the
+        # bucket boundaries land where the pricing engine puts them (#182).
+        as_of = self.portfolio.valuation_date
         df_carry["days_to_expiry"] = df_carry["maturity"].apply(
-            lambda x: (pd.to_datetime(x) - as_of).days,
+            lambda x: days_between(as_of, pd.to_datetime(x)),
         )
 
         # Maturity buckets

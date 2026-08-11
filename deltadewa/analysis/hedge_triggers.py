@@ -29,6 +29,7 @@ import pandas as pd
 
 import deltadewa.constants as const
 from deltadewa.analysis.health import delta_drift_from_target
+from deltadewa.clock import days_between
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -402,7 +403,8 @@ def evaluate_hedge_trigger_set(
 
     days_to_nearest_expiry = (
         min(
-            (pos.option.maturity_date - now).days for pos in portfolio.positions
+            days_between(now, pos.option.maturity_date)
+            for pos in portfolio.positions
         )
         if portfolio.positions
         else 999
@@ -410,7 +412,7 @@ def evaluate_hedge_trigger_set(
     near_expiry_positions = [
         pos
         for pos in portfolio.positions
-        if (pos.option.maturity_date - now).days < t.expiry_urgent_days
+        if days_between(now, pos.option.maturity_date) < t.expiry_urgent_days
     ]
 
     theta_cost_per_day = abs(stats["total_theta"])
@@ -503,7 +505,7 @@ def evaluate_hedge_triggers(
     near_expiry_positions = [
         pos
         for pos in portfolio.positions
-        if (pos.option.maturity_date - now).days < t.expiry_urgent_days
+        if days_between(now, pos.option.maturity_date) < t.expiry_urgent_days
     ]
     theta_cost_per_day = abs(stats["total_theta"])
     theta_annual_cost = theta_cost_per_day * const.DAYS_PER_YEAR
@@ -639,16 +641,16 @@ def _print_expiry_trigger(  # pylint: disable=too-many-arguments  # a printer ov
         )
 
         # Per-position details inside the soon-but-not-urgent window. The
-        # maturity column is a tz-naive string; localize *now* (the tz-aware
-        # valuation date) away so the subtraction stays naive-vs-naive.
+        # maturity column is a date string; `days_between` compares calendar
+        # dates, so the tz-stripping dance this used to need is gone and the
+        # count matches the scalar triggers above exactly (#182).
         df_positions = portfolio.to_dataframe()
         if (
             not df_positions.empty
             and "days_to_expiry" not in df_positions.columns
         ):
-            as_of = pd.Timestamp(now).tz_localize(None)
             df_positions["days_to_expiry"] = df_positions["maturity"].apply(
-                lambda x: (pd.to_datetime(x) - as_of).days,
+                lambda x: days_between(now, pd.to_datetime(x)),
             )
         urgent_theta = (
             df_positions[df_positions["days_to_expiry"] < t.expiry_urgent_days][
@@ -681,7 +683,7 @@ def _print_expiry_trigger(  # pylint: disable=too-many-arguments  # a printer ov
             f"<{t.expiry_urgent_days} days - IMMEDIATE ACTION REQUIRED",
         )
         for pos in near_expiry_positions:
-            days_left = (pos.option.maturity_date - now).days
+            days_left = days_between(now, pos.option.maturity_date)
             reporter.warning(
                 f"    {pos.option.option_type.upper()} "
                 f"${pos.option.strike_price:.0f} expires in {days_left}d",

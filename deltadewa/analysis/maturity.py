@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Final
 
 import pandas as pd
 
+from deltadewa.clock import days_between
+
 if TYPE_CHECKING:
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -97,11 +99,11 @@ class MaturityMixin:
         df = df.copy()
 
         # Days to expiry measured against the portfolio's (what-if) valuation
-        # date, not the wall clock. The maturity column is a tz-naive string,
-        # so localize the tz-aware valuation date away before subtracting.
-        as_of = pd.Timestamp(self.portfolio.valuation_date).tz_localize(None)
+        # date, not the wall clock, and as a calendar-date difference so the
+        # bucket boundaries land where the pricing engine puts them (#182).
+        as_of = self.portfolio.valuation_date
         df["days_to_expiry"] = df["maturity"].apply(
-            lambda x: (pd.to_datetime(x) - as_of).days,
+            lambda x: days_between(as_of, pd.to_datetime(x)),
         )
 
         # Classify into buckets

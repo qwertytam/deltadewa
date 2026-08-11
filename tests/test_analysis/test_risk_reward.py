@@ -296,7 +296,7 @@ class TestFormatRiskRewardSummaryCharacterization:
         )
         portfolio.add_position(
             strike_price=100.0,
-            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            maturity_date=portfolio.valuation_date + timedelta(days=30),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -339,7 +339,7 @@ class TestFormatRiskRewardSummaryCharacterization:
         )
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            maturity_date=portfolio.valuation_date + timedelta(days=30),
             quantity=-1,
             option_type=OptionType.CALL,
         )
@@ -385,7 +385,7 @@ class TestFormatRiskRewardSummaryCharacterization:
             underlying_quantity=100.0,
             default_exercise_style=ExerciseStyle.AMERICAN,
         )
-        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        maturity = portfolio.valuation_date + timedelta(days=30)
         portfolio.add_position(
             strike_price=95.0,
             maturity_date=maturity,
@@ -495,7 +495,7 @@ class TestFormatRiskRewardSummaryCharacterization:
         )
         portfolio.add_position(
             strike_price=95.0,
-            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            maturity_date=portfolio.valuation_date + timedelta(days=30),
             quantity=1,
             option_type=OptionType.PUT,
         )
@@ -540,13 +540,24 @@ class TestFormatRiskRewardSummaryCharacterization:
         """Short-strike-lower / long-strike-higher call spread: the
         naked short leg makes both loss and profit read as unlimited
         (profit unlimited comes from the long call leg), net_debit < 0.
+
+        The two Monte Carlo lines moved in #182, and the old golden was
+        the wrong one. This test asked for ``timedelta(days=30)`` but
+        captured the maturity *before* constructing the portfolio, so
+        the portfolio's own ``now()`` landed microseconds later and
+        ``(maturity - valuation).days`` floored the tenor to **29**.
+        The golden pinned 88.2% / $2.49 — a 29-day option. Anchoring the
+        tenor on the valuation date gives the 30 days the test always
+        meant, and 87.9% / $-0.41 is what the old engine produced for a
+        genuine 30-day spread. The pricing lines above are unchanged,
+        because QuantLib never saw the floored count.
         """
-        maturity = datetime.now(tz=UTC) + timedelta(days=30)
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.3,
             default_exercise_style=ExerciseStyle.AMERICAN,
         )
+        maturity = portfolio.valuation_date + timedelta(days=30)
         portfolio.add_position(
             strike_price=110.0,
             maturity_date=maturity,
@@ -578,8 +589,8 @@ class TestFormatRiskRewardSummaryCharacterization:
                 "  Breakeven Points: $113.72",
                 "",
                 "PROBABILITY ANALYSIS:",
-                "  Chance of Profit: 88.2% (risk-neutral drift)",
-                "  Expected Value: $2.49 (probabilistic weighted average)",
+                "  Chance of Profit: 87.9% (risk-neutral drift)",
+                "  Expected Value: $-0.41 (probabilistic weighted average)",
                 "",
                 "=" * 80,
             ],

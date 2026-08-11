@@ -13,6 +13,7 @@ from typing import Any
 
 import pandas as pd
 
+from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting import PortfolioLogger
@@ -358,6 +359,7 @@ class PortfolioSerializer:
         filepath: str | Path,
         create_portfolio: bool = True,
         default_exercise_style: ExerciseStyle | None = None,
+        valuation_date: dt | None = None,
     ) -> dict[str, Any]:
         """Import portfolio from JSON file.
 
@@ -371,6 +373,11 @@ class PortfolioSerializer:
             the portfolio will have default_exercise_style=None and
             add_position() will raise ValueError for positions without an
             explicit style.
+            valuation_date: as-of date for the load, mirroring
+            ``import_from_yaml``.  Callers holding an ``IpsConfig`` should
+            pass the program's trading date so the book is priced against
+            the market's day rather than the server's (#182).  Defaults to
+            the program trading date in the default timezone.
 
         Returns:
             dict with portfolio data (and 'portfolio' key if
@@ -397,6 +404,7 @@ class PortfolioSerializer:
             volatility=market_params["volatility"],
             risk_free_rate=market_params["risk_free_rate"],
             dividend_yield=market_params["dividend_yield"],
+            valuation_date=valuation_date or program_trading_date(),
             symbol=market_params.get("symbol", "UNKNOWN"),
             default_exercise_style=default_exercise_style,
             contract_size=market_params["contract_size"],
@@ -515,8 +523,10 @@ class PortfolioSerializer:
 
         # One as-of for the whole load: the portfolio's valuation date and the
         # anchor for relative maturities must agree, or a load straddling
-        # midnight would price a 548-day tenor as 549/365.
-        as_of = valuation_date or dt.now(tz=datetime.UTC)
+        # midnight would price a 548-day tenor as 549/365. Since #182 this is
+        # the program's trading date (midnight in the program timezone), which
+        # removes the straddle entirely rather than just making it consistent.
+        as_of = valuation_date or program_trading_date()
 
         # Create new portfolio
         imported_portfolio = OptionPortfolio(

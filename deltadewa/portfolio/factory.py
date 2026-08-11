@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ def create_demo_portfolio() -> OptionPortfolio:
         default_exercise_style=ExerciseStyle.EUROPEAN,
     )
 
-    today = datetime.now(tz=UTC)
+    today = program_trading_date()
     # Short-dated call
     p.add_position(
         strike_price=100.0,
@@ -119,7 +120,7 @@ def create_default_portfolio() -> OptionPortfolio:
 
     portfolio.positions.clear()
 
-    now = datetime.now(tz=UTC)
+    now = program_trading_date()
     for pos_config in default_config["positions"]:
         if "maturity_date" in pos_config:
             # Absolute date specified

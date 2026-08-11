@@ -1,11 +1,11 @@
 """Core portfolio management and mixin composition."""
 
-import datetime
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from deltadewa.clock import days_between, program_trading_date
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
@@ -66,7 +66,10 @@ class OptionPortfolioBase:
         self.volatility = volatility
         self.risk_free_rate = risk_free_rate
         self.dividend_yield = dividend_yield
-        self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
+        # The program's trading date, not the server's instant: midnight in
+        # the program timezone, so the book prices the same all day and the
+        # day rolls with the market rather than with UTC (#182).
+        self.valuation_date = valuation_date or program_trading_date()
         self.symbol = symbol
         self.default_exercise_style = default_exercise_style
         self.contract_size = contract_size
@@ -552,8 +555,8 @@ class OptionPortfolioBase:
         furthest_maturity = self.get_furtherest_maturity()
         if furthest_maturity is None:
             return None
-        delta = furthest_maturity - self.valuation_date
-        return max(delta.days, 0)  # Ensure non-negative
+        days = days_between(self.valuation_date, furthest_maturity)
+        return max(days, 0)  # Ensure non-negative
 
 
 # Final composed class with all mixins
