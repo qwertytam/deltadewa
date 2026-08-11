@@ -36,6 +36,8 @@
 #
 # Overridable for testing (and for a non-default host layout) via env:
 #   DELTADEWA_REPO_DIR — the app repo checkout (default below)
+#   DELTADEWA_BACKUP_ENV_FILE — path to the optional token-alternative
+#                   file described below (default below)
 #
 # Required, no default (#243 — a hardcoded remote here would be exactly
 # the kind of leak #245 fixed for config/ips.yaml):
@@ -47,20 +49,50 @@
 #                   §10 — both are sourced/checked below before use).
 #                   Reconciled against exports/.git's actual origin on
 #                   every run, not just at first init — see the
-#                   remote-reconcile block below.
+#                   remote-reconcile block below. If BOTH the crontab
+#                   environment and backup.env set this (or
+#                   BACKUP_HEARTBEAT_URL), the environment wins (#253) —
+#                   a plain `source` has no notion of "already set", it
+#                   just assigns, so a bare `if [ -f ... ]; then source
+#                   ...; fi` used to let the file silently clobber an
+#                   operator's explicit `BACKUP_REMOTE=... ./backup-
+#                   exports.sh`. See the pre-source capture below.
 set -euo pipefail
 
 REPO_DIR="${DELTADEWA_REPO_DIR:-/home/deploy/deltadewa}"
 EXPORTS_DIR="${REPO_DIR}/exports"
+BACKUP_ENV_FILE="${DELTADEWA_BACKUP_ENV_FILE:-/etc/deltadewa/backup.env}"
 
 # Optional token-based alternative to the SSH deploy key described above —
 # root-owned 0600, NEVER .env (compose reads that and would expose it to
 # containers). Sourced first, before BACKUP_REMOTE is required below, so
 # a deploy that sets BACKUP_REMOTE (and/or BACKUP_HEARTBEAT_URL) only in
 # this file rather than in root's crontab still works.
-if [ -f /etc/deltadewa/backup.env ]; then
-    # shellcheck disable=SC1091
-    source /etc/deltadewa/backup.env
+#
+# Environment beats file (#253): capture whatever the environment already
+# had *before* sourcing, then restore it afterwards if it was non-empty —
+# `source` would otherwise let the file overwrite an explicitly-set
+# `BACKUP_REMOTE=... ./backup-exports.sh` silently.
+if [ -f "${BACKUP_ENV_FILE}" ]; then
+    PRE_SOURCE_BACKUP_REMOTE="${BACKUP_REMOTE:-}"
+    PRE_SOURCE_BACKUP_HEARTBEAT_URL="${BACKUP_HEARTBEAT_URL:-}"
+
+    # shellcheck disable=SC1090
+    source "${BACKUP_ENV_FILE}"
+
+    if [ -n "${PRE_SOURCE_BACKUP_REMOTE}" ]; then
+        BACKUP_REMOTE="${PRE_SOURCE_BACKUP_REMOTE}"
+        echo "backup-exports: BACKUP_REMOTE from environment (overriding backup.env)"
+    elif [ -n "${BACKUP_REMOTE:-}" ]; then
+        echo "backup-exports: BACKUP_REMOTE from backup.env"
+    fi
+
+    if [ -n "${PRE_SOURCE_BACKUP_HEARTBEAT_URL}" ]; then
+        BACKUP_HEARTBEAT_URL="${PRE_SOURCE_BACKUP_HEARTBEAT_URL}"
+        echo "backup-exports: BACKUP_HEARTBEAT_URL from environment (overriding backup.env)"
+    elif [ -n "${BACKUP_HEARTBEAT_URL:-}" ]; then
+        echo "backup-exports: BACKUP_HEARTBEAT_URL from backup.env"
+    fi
 fi
 
 : "${BACKUP_REMOTE:?BACKUP_REMOTE is not set — see docs/RUNBOOK.md §10 (or the private ops doc) for the offsite backup remote URL}"

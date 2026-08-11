@@ -488,6 +488,19 @@ needed here.
   backup cron never reads `.env` for the same reason: it's root's
   crontab, not the `jobs` container.
 
+  **The crontab line and this file are not interchangeable (#253):** the
+  crontab environment always wins if both set `BACKUP_REMOTE` and/or
+  `BACKUP_HEARTBEAT_URL` — `ops/backup-exports.sh` captures whatever the
+  environment already had before sourcing `backup.env` and restores it
+  afterwards, so the file can only *fill in* a value the crontab left
+  unset, never override one. The script logs which source won on every
+  run (`BACKUP_REMOTE from environment (overriding backup.env)` or
+  `BACKUP_REMOTE from backup.env`), so a mismatch between what you
+  expect and what actually ran is visible in the cron log rather than
+  silent. Before #253 this was a plain `source`, which has no notion of
+  "already set" — it just assigned, so `backup.env` silently clobbered
+  an explicit crontab-line value.
+
 This section exists because all three are plausible places to reach for
 the same kind of "just add a secret here" instinct — they are
 deliberately not interchangeable.
