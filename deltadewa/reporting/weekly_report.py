@@ -159,6 +159,10 @@ class WeeklyDigest:
         elapsed_days: Days this ``weekly_carry_cost`` was integrated over
             (actual gap to the prior snapshot, or a nominal week on the
             first run).
+        backup_heartbeat_warning: Human-readable caveat when
+            ``ops/backup-exports.sh``'s last heartbeat ping failed, or
+            ``None`` when it's unconfigured, unavailable, or last
+            succeeded (#252). See ``_read_backup_heartbeat_warning``.
 
     """
 
@@ -168,6 +172,7 @@ class WeeklyDigest:
     headline: str
     weekly_carry_cost: float
     elapsed_days: int
+    backup_heartbeat_warning: str | None = None
 
 
 def _headline(diff: SnapshotDiff, snapshot: WeeklySnapshot) -> str:
@@ -188,11 +193,17 @@ def build_weekly_digest(
     roll_records: Sequence[RollStatusRecord],
     prior_snapshot: WeeklySnapshot | None,
     as_of: date,
+    backup_heartbeat_warning: str | None = None,
 ) -> WeeklyDigest:
     """Pure assembly: report + verdicts + prior baseline -> a WeeklyDigest.
 
     No I/O, no clock — every input is supplied by the caller, which is what
     makes this deterministic and what the golden-file test calls directly.
+    ``backup_heartbeat_warning`` is no exception: ``main()`` reads it from
+    disk (see ``_read_backup_heartbeat_warning``) and passes the resulting
+    string (or ``None``) in here — this function still does no I/O of its
+    own. Defaults to ``None`` so every existing caller, including the
+    golden-file test, is unaffected.
 
     Also enriches ``report``'s ``ReturnFramingSection`` with the same
     weekly-carry figures computed here (Issue #171): before this, the
@@ -245,6 +256,7 @@ def build_weekly_digest(
         headline=_headline(diff, snapshot),
         weekly_carry_cost=weekly_carry_cost,
         elapsed_days=elapsed_days,
+        backup_heartbeat_warning=backup_heartbeat_warning,
     )
 
 
@@ -281,6 +293,9 @@ def render_weekly_digest_markdown(digest: WeeklyDigest) -> str:
             ),
             "",
         ]
+
+    if digest.backup_heartbeat_warning:
+        lines += [f"> ⚠ **{digest.backup_heartbeat_warning}**", ""]
 
     lines += ["## What changed", ""]
     if diff.is_first_run:
@@ -351,6 +366,13 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
             "data.</div>"
         )
 
+    backup_heartbeat_html = ""
+    if digest.backup_heartbeat_warning:
+        backup_heartbeat_html = (
+            f'<div class="caveat">&#9888;&#160;<strong>'
+            f"{digest.backup_heartbeat_warning}</strong></div>"
+        )
+
     if diff.is_first_run:
         change_html = (
             "<p>This is the first snapshot — there is no prior week to "
@@ -380,6 +402,7 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
     lede = f"""<h1>Weekly Digest &mdash; {digest.headline}</h1>
 <p><strong>As of:</strong> {s.as_of}</p>
 {caveat_html}
+{backup_heartbeat_html}
 <h2>What changed</h2>
 {change_html}
 <hr>"""
@@ -446,6 +469,51 @@ def _write_snapshot(export_dir: Path, snapshot: WeeklySnapshot) -> Path:
     path = weekly_dir / f"snapshot-{snapshot.as_of.isoformat()}.json"
     path.write_text(json.dumps(snapshot.to_json_dict(), indent=2))
     return path
+
+
+_BACKUP_HEARTBEAT_STATUS_FILENAME: Final[str] = ".backup-heartbeat-status.json"
+
+
+def _read_backup_heartbeat_warning(export_dir: Path) -> str | None:
+    """Surface ``ops/backup-exports.sh``'s last heartbeat failure (#252).
+
+    That script runs as root, outside this app's Python environment
+    entirely, and never fails its own job on a heartbeat-ping failure —
+    matching this package's own ``deltadewa.heartbeat.ping()`` contract:
+    a monitoring hiccup must not read as a backup outage. That deliberate
+    silence would otherwise make a broken ``BACKUP_HEARTBEAT_URL``
+    invisible, so the bash script records a small marker on failure
+    (cleared on the next successful ping) at *export_dir* — the one
+    filesystem path both that root cron and this `jobs` container share
+    (``compose.yaml`` bind-mounts only ``exports/``, not the repo root).
+
+    Returns:
+        A human-readable caveat string when the marker is present and
+        readable; ``None`` otherwise (no failure recorded, or the marker
+        itself is missing/corrupt — treated as "nothing to report" rather
+        than raised, since this is a best-effort surfacing, not the
+        digest's core content).
+
+    """
+    status_path = export_dir / _BACKUP_HEARTBEAT_STATUS_FILENAME
+    if not status_path.exists():
+        return None
+    try:
+        data = json.loads(status_path.read_text(encoding="utf-8"))
+        failed_at = data["failed_at"]
+    except (OSError, ValueError, KeyError) as exc:
+        _logger.warning(
+            "Unreadable backup heartbeat status file %s: %s",
+            status_path,
+            exc,
+        )
+        return None
+    return (
+        f"Offsite backup heartbeat ping failed as of {failed_at} (see "
+        "ops/backup-exports.sh, RUNBOOK.md §13) — the nightly exports/ "
+        "backup itself may still be fine; only the dead-man's-switch "
+        "ping did not go through."
+    )
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────
@@ -590,6 +658,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         roll_records=roll_records,
         prior_snapshot=prior_snapshot,
         as_of=as_of,
+        backup_heartbeat_warning=_read_backup_heartbeat_warning(
+            args.export_dir,
+        ),
     )
 
     weekly_dir = _snapshot_dir(args.export_dir)

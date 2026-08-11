@@ -63,6 +63,14 @@ REPO_DIR="${DELTADEWA_REPO_DIR:-/home/deploy/deltadewa}"
 EXPORTS_DIR="${REPO_DIR}/exports"
 BACKUP_ENV_FILE="${DELTADEWA_BACKUP_ENV_FILE:-/etc/deltadewa/backup.env}"
 
+# Where a heartbeat-ping failure gets recorded so the weekly digest can
+# surface it (#252 — see ping_heartbeat() below). exports/ is the only
+# filesystem path both this root cron and the `deploy`-run `jobs`
+# container share (compose.yaml bind-mounts only exports/, not the repo
+# root), so that's where this has to live despite being cron metadata
+# rather than portfolio data; deltadewa.reporting.weekly_report reads it.
+BACKUP_HEARTBEAT_STATUS_FILE="${EXPORTS_DIR}/.backup-heartbeat-status.json"
+
 # Optional token-based alternative to the SSH deploy key described above —
 # root-owned 0600, NEVER .env (compose reads that and would expose it to
 # containers). Sourced first, before BACKUP_REMOTE is required below, so
@@ -100,10 +108,20 @@ fi
 # Dead-man's-switch ping (healthchecks.io-compatible), the bash-side
 # equivalent of deltadewa/heartbeat.py's ping() — this cron runs on the
 # host, outside any Python venv, so it can't reuse that module directly,
-# but the contract is the same: never fail the job it's reporting on.
+# but the contract is the same: never fail the job it's reporting on. A
+# ping failure (curl exit, or a non-2xx like 400) stays exit-0 here too —
+# flipping that would mean an unrelated monitoring hiccup starts reading
+# as a backup outage, which is worse than the thing it's meant to catch.
 # BACKUP_HEARTBEAT_URL is deliberately NOT read from .env (see
 # .env.example's entry for it) — set it in root's crontab env or
 # /etc/deltadewa/backup.env instead (RUNBOOK §9/§10).
+#
+# "Never fails the job" must not mean "never visible" (#252) — a curl 400
+# used to disappear into stderr of a root cron nobody tails, so broken
+# monitoring was itself unmonitored. On failure this now also records a
+# marker in BACKUP_HEARTBEAT_STATUS_FILE that the weekly digest reads and
+# surfaces (deltadewa.reporting.weekly_report); a later successful ping
+# clears it, so a one-off blip doesn't alarm forever. See RUNBOOK.md §13.
 ping_heartbeat() {
     if [ -z "${BACKUP_HEARTBEAT_URL:-}" ]; then
         echo "backup-exports: BACKUP_HEARTBEAT_URL not configured, skipping heartbeat ping"
@@ -112,8 +130,47 @@ ping_heartbeat() {
     # `if ! curl ...` is exempt from `set -e` (a command that's the
     # condition of an `if` never triggers it), so a ping hiccup logs and
     # falls through rather than aborting a backup that actually succeeded.
-    if ! curl -fsS --max-time 10 -o /dev/null "${BACKUP_HEARTBEAT_URL}"; then
+    if curl -fsS --max-time 10 -o /dev/null "${BACKUP_HEARTBEAT_URL}"; then
+        rm -f "${BACKUP_HEARTBEAT_STATUS_FILE}" || true
+    else
         echo "backup-exports: heartbeat ping failed" >&2
+        # Best-effort: a failure writing this marker (e.g. a permissions
+        # hiccup) must not itself abort a backup that already succeeded,
+        # same spirit as the ping failure it's recording.
+        printf '{"failed_at": "%s", "url_var": "BACKUP_HEARTBEAT_URL"}\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > "${BACKUP_HEARTBEAT_STATUS_FILE}" 2>/dev/null || true
+    fi
+    return 0
+}
+
+# On the clean-tree (nothing-to-commit) path, verify the remote actually
+# has what we think it has before pinging the heartbeat (#252). An
+# unchanged working tree only means there's nothing NEW to push — it says
+# nothing about whether a PREVIOUS run's push actually landed. Before
+# this, every no-op run pinged unconditionally, so a push that silently
+# failed to land (and then stopped generating new local changes to flag
+# it) could report green indefinitely. Reachability failure and a real
+# SHA mismatch are both treated as fatal, not just "skip the ping" — a
+# broken remote or an unlanded push is exactly the outage this
+# dead-man's-switch exists to catch.
+verify_remote_matches_head() {
+    local local_head
+    local remote_head
+    # Declared and assigned separately (not `local x=$(...)`) — bash's
+    # `local` swallows the command substitution's own exit status when
+    # combined on one line, which would defeat the `if !` check below.
+    if ! local_head="$(git rev-parse HEAD 2>/dev/null)"; then
+        echo "backup-exports: no commits yet in exports/.git to verify, not pinging heartbeat" >&2
+        return 1
+    fi
+    if ! remote_head="$(git ls-remote --exit-code origin main 2>/dev/null | cut -f1)"; then
+        echo "backup-exports: could not reach origin to verify remote HEAD, not pinging heartbeat" >&2
+        return 1
+    fi
+    if [ "${remote_head}" != "${local_head}" ]; then
+        echo "backup-exports: remote main (${remote_head}) does not match local HEAD (${local_head}) — an earlier push did not land" >&2
+        return 1
     fi
     return 0
 }
@@ -153,8 +210,11 @@ git add -A
 
 if [ -z "$(git status --porcelain)" ]; then
     echo "backup-exports: nothing to commit, exports/ unchanged"
-    ping_heartbeat
-    exit 0
+    if verify_remote_matches_head; then
+        ping_heartbeat
+        exit 0
+    fi
+    exit 1
 fi
 
 git commit -q -m "backup: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
