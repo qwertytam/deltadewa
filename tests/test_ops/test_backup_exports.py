@@ -325,6 +325,98 @@ class TestBackupHeartbeat:
         assert "heartbeat ping failed" in result.stderr
 
 
+class TestCleanTreeHeartbeatVerification:
+    """#252: the clean-tree (nothing-to-commit) path must not ping the
+    heartbeat on faith alone — it has to confirm the remote actually has
+    what the local HEAD thinks it pushed. The four-case matrix:
+
+    1. clean tree, remote reachable, SHA matches -> ping fires, exit 0.
+    2. clean tree, remote reachable, SHA mismatch -> no ping, exit != 0.
+    3. clean tree, remote unreachable -> no ping, exit != 0.
+    4. dirty tree, push succeeds -> ping still fires (unaffected;
+       commit-then-push order is untouched by this fix, see lines
+       128-131 and the module's push-failure contract).
+    """
+
+    def test_reachable_and_equal_pings_and_succeeds(
+        self,
+        tmp_path: Path,
+        heartbeat_server: tuple[str, list[str]],
+    ) -> None:
+        url, received = heartbeat_server
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+
+        result = _run(repo_dir, remote, {"BACKUP_HEARTBEAT_URL": url})
+
+        assert result.returncode == 0, result.stderr
+        assert "nothing to commit" in result.stdout
+        assert received == ["/ping"]
+
+    def test_reachable_but_mismatched_fails_without_pinging(
+        self,
+        tmp_path: Path,
+        heartbeat_server: tuple[str, list[str]],
+    ) -> None:
+        url, received = heartbeat_server
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+
+        # Simulate an earlier push that silently didn't land: a local
+        # commit exists that the remote never received, while the
+        # working tree itself is clean (nothing new to add/commit) —
+        # exactly the state a failed `git push` after a successful
+        # `git commit` leaves behind.
+        exports = repo_dir / "exports"
+        _git(
+            "commit",
+            "--allow-empty",
+            "-q",
+            "-m",
+            "phantom: never pushed",
+            cwd=exports,
+        )
+
+        result = _run(repo_dir, remote, {"BACKUP_HEARTBEAT_URL": url})
+
+        assert result.returncode != 0
+        assert "does not match local HEAD" in result.stderr
+        assert received == []
+
+    def test_unreachable_remote_fails_without_pinging(
+        self,
+        tmp_path: Path,
+        heartbeat_server: tuple[str, list[str]],
+    ) -> None:
+        url, received = heartbeat_server
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+        shutil.rmtree(remote)  # the remote is now unreachable
+
+        result = _run(repo_dir, remote, {"BACKUP_HEARTBEAT_URL": url})
+
+        assert result.returncode != 0
+        assert "could not reach origin" in result.stderr
+        assert received == []
+
+    def test_dirty_tree_push_still_pings_unaffected_by_this_fix(
+        self,
+        tmp_path: Path,
+        heartbeat_server: tuple[str, list[str]],
+    ) -> None:
+        url, received = heartbeat_server
+        repo_dir, remote = _seeded_exports(tmp_path)
+
+        result = _run(repo_dir, remote, {"BACKUP_HEARTBEAT_URL": url})
+
+        assert result.returncode == 0, result.stderr
+        assert "pushed" in result.stdout
+        assert received == ["/ping"]
+
+
 class TestBackupRemoteRequired:
     """BACKUP_REMOTE (#243): no default, no hardcoded fallback — a real
     offsite repo name has no business being a literal in a public script

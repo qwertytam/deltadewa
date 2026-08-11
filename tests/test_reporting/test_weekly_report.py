@@ -26,6 +26,7 @@ from deltadewa.reporting.program_report import (
     ReturnFramingSection,
 )
 from deltadewa.reporting.weekly_report import (
+    _read_backup_heartbeat_warning,
     _worst_roll_verdict,
     build_weekly_digest,
     load_prior_snapshot,
@@ -363,6 +364,133 @@ class TestStaleBanner:
         assert 'class="caveat"' not in html
 
 
+class TestBackupHeartbeatCaveat:
+    """The #252 backup-heartbeat caveat: rendered only when
+    ``backup_heartbeat_warning`` is set, in both formats — same pattern
+    as ``TestStaleBanner``'s DATA QUALITY banner.
+    """
+
+    def test_markdown_caveat_absent_by_default(self) -> None:
+        report = _make_report(within_budget=True)
+        digest = build_weekly_digest(
+            report=report,
+            decision_verdict="MAINTAIN",
+            roll_records=(),
+            prior_snapshot=None,
+            as_of=_AS_OF,
+        )
+
+        md = render_weekly_digest_markdown(digest)
+
+        assert "backup" not in md.lower()
+
+    def test_markdown_caveat_present_when_warning_set(self) -> None:
+        report = _make_report(within_budget=True)
+        digest = build_weekly_digest(
+            report=report,
+            decision_verdict="MAINTAIN",
+            roll_records=(),
+            prior_snapshot=None,
+            as_of=_AS_OF,
+            backup_heartbeat_warning="Offsite backup heartbeat ping "
+            "failed as of 2026-08-04T03:00:12Z",
+        )
+
+        md = render_weekly_digest_markdown(digest)
+
+        assert (
+            "Offsite backup heartbeat ping failed as of "
+            "2026-08-04T03:00:12Z" in md
+        )
+
+    def test_html_caveat_absent_by_default(self) -> None:
+        report = _make_report(within_budget=True)
+        digest = build_weekly_digest(
+            report=report,
+            decision_verdict="MAINTAIN",
+            roll_records=(),
+            prior_snapshot=None,
+            as_of=_AS_OF,
+        )
+
+        html = render_weekly_digest_html(digest)
+
+        assert "backup" not in html.lower()
+
+    def test_html_caveat_present_when_warning_set(self) -> None:
+        report = _make_report(within_budget=True)
+        digest = build_weekly_digest(
+            report=report,
+            decision_verdict="MAINTAIN",
+            roll_records=(),
+            prior_snapshot=None,
+            as_of=_AS_OF,
+            backup_heartbeat_warning="Offsite backup heartbeat ping failed",
+        )
+
+        html = render_weekly_digest_html(digest)
+
+        assert html.count('class="caveat"') == 1
+        assert "Offsite backup heartbeat ping failed" in html
+
+    def test_both_caveats_can_render_together(self) -> None:
+        report = _make_report(data_quality="STALE", within_budget=True)
+        digest = build_weekly_digest(
+            report=report,
+            decision_verdict="MAINTAIN",
+            roll_records=(),
+            prior_snapshot=None,
+            as_of=_AS_OF,
+            backup_heartbeat_warning="Offsite backup heartbeat ping failed",
+        )
+
+        html = render_weekly_digest_html(digest)
+
+        # program_report's own body also uses class="caveat" elsewhere
+        # (unrelated to either banner), so assert both banners' own text
+        # is present rather than an exact, brittle site-wide count.
+        assert "DATA QUALITY: STALE" in html
+        assert "Offsite backup heartbeat ping failed" in html
+
+
+class TestReadBackupHeartbeatWarning:
+    """_read_backup_heartbeat_warning() — the #252 status-file reader."""
+
+    def test_missing_file_returns_none(self, tmp_path: Path) -> None:
+        assert _read_backup_heartbeat_warning(tmp_path) is None
+
+    def test_present_and_valid_returns_a_warning(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / ".backup-heartbeat-status.json").write_text(
+            json.dumps(
+                {
+                    "failed_at": "2026-08-04T03:00:12Z",
+                    "url_var": "BACKUP_HEARTBEAT_URL",
+                },
+            ),
+        )
+
+        warning = _read_backup_heartbeat_warning(tmp_path)
+
+        assert warning is not None
+        assert "2026-08-04T03:00:12Z" in warning
+        assert "ops/backup-exports.sh" in warning
+
+    def test_corrupt_file_returns_none(self, tmp_path: Path) -> None:
+        (tmp_path / ".backup-heartbeat-status.json").write_text("not json")
+
+        assert _read_backup_heartbeat_warning(tmp_path) is None
+
+    def test_missing_expected_key_returns_none(self, tmp_path: Path) -> None:
+        (tmp_path / ".backup-heartbeat-status.json").write_text(
+            json.dumps({"unexpected": "shape"}),
+        )
+
+        assert _read_backup_heartbeat_warning(tmp_path) is None
+
+
 class TestFirstRunRendering:
     """A first run states there's no baseline, in both formats."""
 
@@ -565,6 +693,42 @@ class TestMainCli:
         assert "Compared against the snapshot from 2026-08-05" in (
             second_digest_md
         )
+
+    def test_surfaces_a_backup_heartbeat_failure_marker(
+        self,
+        seeded_export_dir: _MainFixture,
+    ) -> None:
+        """#252: main() reads ops/backup-exports.sh's status file and
+        surfaces it in the written digest — the end-to-end path from a
+        root cron failure to something a reader of the digest sees.
+        """
+        export_dir = seeded_export_dir.export_dir
+        (export_dir / ".backup-heartbeat-status.json").write_text(
+            json.dumps(
+                {
+                    "failed_at": "2026-08-04T03:00:12Z",
+                    "url_var": "BACKUP_HEARTBEAT_URL",
+                },
+            ),
+        )
+
+        exit_code = main(
+            [
+                "--export-dir",
+                str(export_dir),
+                "--ips-path",
+                str(_EXAMPLE_IPS_YAML),
+                "--as-of",
+                "2026-08-05",
+            ],
+        )
+        assert exit_code == 0
+
+        digest_md = (
+            export_dir / "reports" / "weekly" / "digest-2026-08-05.md"
+        ).read_text(encoding="utf-8")
+        assert "Offsite backup heartbeat ping failed" in digest_md
+        assert "2026-08-04T03:00:12Z" in digest_md
 
 
 class TestMainSendEmail:

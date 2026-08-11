@@ -583,4 +583,24 @@ also runs nightly, at 03:30).
   than root; see §10's Ownership note and #237 before assuming it's a
   network/credential problem. Otherwise re-run §11's backup command by
   hand (`sudo ...backup-exports.sh`, no `>>` redirect, so errors print
-  directly).
+  directly). **A no-op run only pings after confirming the remote (#252):**
+  on the "nothing to commit" path the script now runs `git ls-remote`
+  against `origin main` and compares it to local `HEAD` before pinging —
+  a genuinely unreachable remote or a SHA mismatch (an earlier push that
+  silently didn't land) both fail the run and skip the ping, rather than
+  reporting green on an unchanged local tree alone. Look for `does not
+  match local HEAD` or `could not reach origin` in the log for that
+  failure mode specifically.
+
+**A failed heartbeat ping is not itself a backup failure (#252)** —
+`ping_heartbeat()` stays exit-0 on a ping failure (a curl error or a
+non-2xx like 400), same contract as `deltadewa/heartbeat.py`'s `ping()`:
+a monitoring hiccup must not read as a backup outage. That silence used
+to make a broken `BACKUP_HEARTBEAT_URL` invisible, so a ping failure now
+also writes `exports/.backup-heartbeat-status.json` (cleared on the next
+successful ping) — the weekly digest reads it and shows a caveat banner
+("Offsite backup heartbeat ping failed as of ...") when present. If you
+see that banner but the `sudo tail .../deltadewa-backup.log` history
+shows real pushes/no-ops landing, the backup itself is fine — only
+`BACKUP_HEARTBEAT_URL` needs attention (dead URL, expired healthchecks.io
+check, DNS).
