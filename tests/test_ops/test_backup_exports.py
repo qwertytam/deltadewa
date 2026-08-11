@@ -2,7 +2,7 @@
 
 No shell-test framework exists in this repo, so this drives the actual
 script via ``subprocess`` against a scratch ``DELTADEWA_REPO_DIR`` and a
-local **bare** git repo standing in for the Codeberg remote — ``git
+local **bare** git repo standing in for the offsite backup remote — ``git
 push`` mechanics don't care that the remote is local rather than SSH, so
 this exercises the real success/failure paths with no network involved.
 
@@ -42,13 +42,12 @@ _HEARTBEAT_ENV_VARS = ("BACKUP_HEARTBEAT_URL",)
 
 def _run(
     repo_dir: Path,
-    remote_url: Path | str,
+    remote_url: Path | str | None,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
         "DELTADEWA_REPO_DIR": str(repo_dir),
-        "DELTADEWA_BACKUP_REMOTE_URL": str(remote_url),
         # GitHub-hosted Actions runners ship an unconditional
         # `safe.directory = *` in the SYSTEM git config
         # (/etc/gitconfig) — confirmed by inspecting a live runner —
@@ -67,6 +66,14 @@ def _run(
     }
     for var in _HEARTBEAT_ENV_VARS:
         env.pop(var, None)
+    # Stripped unconditionally (not just via _HEARTBEAT_ENV_VARS' opt-in
+    # pattern) so a developer's own shell or a CI secret can never
+    # silently supply BACKUP_REMOTE and mask
+    # TestBackupRemoteRequired — every test must set it explicitly via
+    # remote_url, the one exception being that class itself.
+    env.pop("BACKUP_REMOTE", None)
+    if remote_url is not None:
+        env["BACKUP_REMOTE"] = str(remote_url)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
@@ -316,3 +323,64 @@ class TestBackupHeartbeat:
         assert result.returncode == 0, result.stderr
         assert "pushed" in result.stdout
         assert "heartbeat ping failed" in result.stderr
+
+
+class TestBackupRemoteRequired:
+    """BACKUP_REMOTE (#243): no default, no hardcoded fallback — a real
+    offsite repo name has no business being a literal in a public script
+    (the same leak #245 fixed for ``config/ips.yaml``), so this must fail
+    loudly rather than push nowhere or reuse a stale remote.
+    """
+
+    def test_unset_fails_loudly(self, tmp_path: Path) -> None:
+        repo_dir, _ = _seeded_exports(tmp_path)
+
+        result = _run(repo_dir, None)
+
+        assert result.returncode != 0
+        assert "BACKUP_REMOTE" in result.stderr
+
+
+class TestBackupRemoteReconciliation:
+    """The origin remote is reconciled against BACKUP_REMOTE on every
+    run, not just at first init (#243) — a stale origin (e.g. left over
+    from a restore that used a different URL form) used to go unnoticed
+    and unfixed indefinitely; see RUNBOOK.md §10's Remote-URL note.
+    """
+
+    def test_changed_remote_is_corrected_and_pushed_to(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote_a = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote_a)
+        assert first.returncode == 0, first.stderr
+
+        remote_b_dir = tmp_path / "b"
+        remote_b_dir.mkdir()
+        remote_b = _bare_remote(remote_b_dir)
+        (repo_dir / "exports" / "reports").mkdir()
+        (repo_dir / "exports" / "reports" / "x.md").write_text("x")
+
+        second = _run(repo_dir, remote_b)
+
+        assert second.returncode == 0, second.stderr
+        assert "origin remote changed" in second.stderr
+        exports = repo_dir / "exports"
+        current_origin = _git(
+            "remote",
+            "get-url",
+            "origin",
+            cwd=exports,
+        ).stdout.strip()
+        assert current_origin == str(remote_b)
+
+        # remote_b never saw this history before, so the push carries the
+        # full two-commit log (the first run's commit plus this one) —
+        # not just the new commit.
+        log_b = _git("log", "--oneline", "main", cwd=remote_b)
+        assert len(log_b.stdout.strip().splitlines()) == 2
+        # remote_a never receives the second push at all — it's still
+        # exactly where the first run left it.
+        log_a = _git("log", "--oneline", "main", cwd=remote_a)
+        assert len(log_a.stdout.strip().splitlines()) == 1
