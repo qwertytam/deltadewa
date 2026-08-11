@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from dash import html
 
 from deltadewa.analysis.market_environment import DataQuality
+from deltadewa.clock import program_now
 
 if TYPE_CHECKING:
     from deltadewa.analysis.market_environment import MarketEnvironment
@@ -44,8 +45,15 @@ def _stamp_text(environment: MarketEnvironment) -> str:
     """Return the quiet, always-present as-of/quality line."""
     if environment.as_of is None:
         return f"No as-of date ({environment.data_quality.value})"
-    as_of = environment.as_of.strftime("%Y-%m-%d %H:%M UTC")
-    return f"Data as of {as_of} ({environment.data_quality.value})"
+    # Shown in the program's timezone, with the zone named rather than
+    # assumed. A US desk reading "14:30 UTC" has to do the conversion in
+    # their head to judge whether a feed is stale (#182); the abbreviation
+    # comes from the zone itself, so it tracks DST.
+    local = environment.as_of.astimezone(program_now().tzinfo)
+    return (
+        f"Data as of {local:%Y-%m-%d %H:%M %Z} "
+        f"({environment.data_quality.value})"
+    )
 
 
 def build_chrome(environment: MarketEnvironment) -> html.Div:

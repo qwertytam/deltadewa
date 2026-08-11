@@ -78,6 +78,14 @@ with a test — not in a widget or a notebook cell.
   own default; select the style upstream (config / portfolio).
 - Program thresholds (carry budget, convexity targets, drawdown tolerance, roll and
   monetization triggers) are policy — they belong in `ips.yaml`, not hardcoded.
+- **The program's day comes from `deltadewa/clock.py`, never from `datetime.now()`.**
+  `program_trading_date()` is midnight in `ips.yaml`'s `program.timezone`
+  (default `America/New_York`) and seeds every default valuation date;
+  `days_between()` is the only day count, because QuantLib prices on calendar
+  dates and subtracting timestamps floors the result a day low. Both were #182:
+  a UTC clock repriced the book a day forward at 20:00 ET, and the floored count
+  crossed the expiry triggers a day early. New code that needs "today" or "days
+  to expiry" calls these, not the stdlib.
 - Presentation settings stay in `dashboard_config_*.yaml`. Keep policy and
   presentation config separate.
 

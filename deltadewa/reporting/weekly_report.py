@@ -65,6 +65,7 @@ from deltadewa.analysis import (
     decision_matrix,
     evaluate_roll_status,
 )
+from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
 from deltadewa.marketdata import (
     CboeFredProvider,
@@ -581,11 +582,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     logging.basicConfig(level=logging.INFO)
     args = _parse_args(argv)
-    as_of: date = args.as_of if args.as_of is not None else date.today()
-    period_label = args.period_label or f"Week of {as_of}"
 
     state = ProgramState.load(args.export_dir, ips_path=args.ips_path)
     ips_config = state.ips_config
+
+    # `date.today()` was the last naive clock read in the package: a local
+    # date on whatever the host's timezone happened to be, which on the
+    # UTC droplet running the cron dated a Sunday-evening digest to Monday
+    # (#182). The digest's as-of now follows the same program clock the
+    # book is priced on, so the snapshot it writes and the prior snapshot
+    # it compares against are on one calendar.
+    as_of: date = (
+        args.as_of
+        if args.as_of is not None
+        else program_trading_date(
+            ips_config.program.timezone if ips_config is not None else None,
+        ).date()
+    )
+    period_label = args.period_label or f"Week of {as_of}"
+
     if ips_config is None:
         print(
             f"weekly_report: {args.ips_path} unavailable; refusing to "

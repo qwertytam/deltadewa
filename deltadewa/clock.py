@@ -38,6 +38,7 @@ from zoneinfo import ZoneInfo
 __all__ = [
     "DEFAULT_PROGRAM_TIMEZONE",
     "days_between",
+    "program_now",
     "program_trading_date",
 ]
 
@@ -71,6 +72,25 @@ def program_trading_date(
     zone = tz if tz is not None else DEFAULT_PROGRAM_TIMEZONE
     moment = now.astimezone(zone) if now is not None else dt.now(tz=zone)
     return moment.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def program_now(tz: ZoneInfo | None = None) -> dt:
+    """Return the current instant, expressed in the program's timezone.
+
+    For timestamps a human reads or sorts by — export filenames, the
+    market-data as-of stamp — where the time of day is the point.
+    :func:`program_trading_date` is the one to use for anything a
+    calculation consumes.
+
+    Args:
+        tz: The program's timezone. Defaults to
+            :data:`DEFAULT_PROGRAM_TIMEZONE`.
+
+    Returns:
+        A timezone-aware ``datetime`` at the current instant in ``tz``.
+
+    """
+    return dt.now(tz=tz if tz is not None else DEFAULT_PROGRAM_TIMEZONE)
 
 
 def days_between(as_of: dt, maturity: dt) -> int:
