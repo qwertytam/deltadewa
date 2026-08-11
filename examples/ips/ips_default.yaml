@@ -1,4 +1,24 @@
-# ips.yaml — hedge program policy (the "what we're allowed/aiming to do")
+# ips_default.yaml — an ILLUSTRATIVE IPS preset (#249)
+#
+# NOTHING HERE IS THIS PROGRAM'S POLICY. Every number below is example data,
+# chosen to be a plausible-but-fictional starting point. It was not, and must
+# never again be, kept in sync with the live config/ips.yaml — that is exactly
+# the leak #249 closed: this file shipped a byte-for-byte copy of the real
+# policy (program name, carry budget, convexity targets, roll/drift triggers)
+# in a public repo for months.
+#
+# The numbers here are deliberately identical to config/ips.example.yaml, so
+# the repo carries ONE set of example policy numbers rather than two that can
+# drift apart again. If you are bootstrapping a new install, copy that file
+# instead — it is the canonical template and carries the fuller per-field
+# commentary:
+#
+#   cp config/ips.example.yaml config/ips.yaml
+#
+# Fields marked EXAMPLE VALUE are real policy choices with no code fallback
+# (deltadewa/ips_config.py has no default for them) — change every one of them
+# before running against a real book. Unmarked fields equal the built-in
+# default that module falls back to when the field is omitted.
 #
 # This is the source of truth for hedge program thresholds AND the
 # pricing-engine default exercise style. Unlike dashboard_config_*.yaml
@@ -8,7 +28,7 @@
 # consumers.
 
 program:
-  name: "SPX tail hedge — personal"
+  name: "SPX tail hedge — example program"  # EXAMPLE VALUE
   instrument: SPX            # underlying
 
 pricing:
@@ -16,21 +36,25 @@ pricing:
 
 budget:
   # Premium budget, % of portfolio / yr. Handbook family-office benchmark is
-  # 0.5-1.5%, with 1% "a practical ceiling" — the shipped default sits at that
-  # ceiling, not above it. Raise deliberately in policy if your program runs a
-  # larger carry.
+  # 0.5-1.5%, with 1% "a practical ceiling". EXAMPLE VALUE sits at that
+  # ceiling as a reasonable starting point — raise or lower deliberately in
+  # policy for your own program's carry tolerance.
   annual_carry_pct: 1.0
 
 convexity:
-  crash_scenario_pct: -25.0     # single source of truth for the crash move
-  target_min_pct: 15.0
-  target_max_pct: 25.0
+  crash_scenario_pct: -20.0     # EXAMPLE VALUE — the crash move you're
+                                 # hedging against; single source of truth
+                                 # for it. -20% to -30% is a common tail-
+                                 # hedge design range.
+  target_min_pct: 10.0          # EXAMPLE VALUE
+  target_max_pct: 20.0          # EXAMPLE VALUE
   crash_vol_shock: 0.15         # flat additive vol bump at the crash spot (M1.2)
-  skew_steepening: 0.10         # extra vol reached at each leg's own ~10-delta
-                                # wing, capped there and interpolated below it
-                                # (M1.7; methodology §2). 0.0 keeps the flat bump.
+  skew_steepening: 0.08         # EXAMPLE VALUE — extra vol reached at each
+                                 # leg's own ~10-delta wing, capped there and
+                                 # interpolated below it (M1.7; methodology
+                                 # §2). 0.0 keeps the flat bump.
   skew_reference_delta: 0.10    # put-delta magnitude of that wing (the anchor the
-                                # steepening is calibrated to). Range (0, 0.5).
+                                 # steepening is calibrated to). Range (0, 0.5).
   crash_floor_reported: true    # surface the intrinsic-floor column
   # Hedge efficiency = crash payoff / annual carry (handbook's interpretation
   # table). Below min reads POOR, above max reads ATTRACTIVE.
@@ -45,7 +69,7 @@ convexity:
   cliff_urgent_days: 30
 
 drawdown:
-  max_tolerance_pct: 20.0
+  max_tolerance_pct: 15.0    # EXAMPLE VALUE
 
 sizing:
   # Beta-adjusted hedge sizing (handbook §2499). The hedge is sized against the
@@ -53,7 +77,8 @@ sizing:
   # not estimated here — recalc it at least annually (or on a >10% position
   # change) and set it in policy. SPX puts hedge only the systematic (market-
   # beta) component, so they UNDER-PROTECT idiosyncratic risk on a concentrated
-  # single-name book. 1.0 = protected book assumed to move 1:1 with the index.
+  # single-name book. 1.0 = protected book assumed to move 1:1 with the index,
+  # the sensible starting point before you've computed your book's real beta.
   portfolio_beta: 1.0
 
 vega:
@@ -61,10 +86,11 @@ vega:
   # points. Below min the hedge barely responds to a vol spike; above max it is
   # vega-dominated rather than convexity-driven.
   #
-  # MIND THE SCALE. The metric divides by total portfolio value (options *plus*
-  # underlying), so on a tail hedge — where the equity leg dominates — real
-  # readings are low single digits, not tens. A band in the tens cannot be hit
-  # (#241). The handbook gives no numeric band, so set these deliberately.
+  # MIND THE SCALE. The metric divides by total portfolio value (options
+  # *plus* underlying), so on a tail hedge — where the equity leg dominates —
+  # real readings are low single digits, not tens. A band in the tens cannot
+  # be hit (#241). The handbook gives no numeric band, so set these
+  # deliberately for your program.
   sufficiency_min_pct: 1.5
   sufficiency_max_pct: 4.0
 
@@ -76,37 +102,43 @@ market_environment:
   skew_low_pctile: 25          # SKEW percentile (0-100); below = benign skew
   skew_high_pctile: 75         # SKEW percentile (0-100); above = stressed skew
   term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
-  data_ttl_minutes: 15         # how long a fetched value stays trustworthy;
-                               # past this a cache hit reads STALE, not CACHED.
-                               # 15 minutes suits fetch-on-demand local use; a
-                               # deployment refreshed by cron needs a TTL
-                               # exceeding its refresh interval (see
-                               # config/ips.yaml, 2160 = 36h for a daily
-                               # refresh), or every read will be STALE.
+  data_ttl_minutes: 1440       # EXAMPLE VALUE — how long a fetched value
+                                # stays trustworthy; past this a cache hit
+                                # reads STALE, not CACHED. Set this to
+                                # ~1.5x your own market-data refresh
+                                # cadence (e.g. a cron running every 24h
+                                # wants a TTL a bit past 24h), or every read
+                                # will be STALE right before the next
+                                # refresh.
+  vix_very_high: 40  # VIX above this -> monetize existing hedges, buy nothing
+  vix_caution: 25    # VIX above this -> avoid new purchases except rolls
+  vix_low: 15        # VIX at/below this -> increased urgency to accumulate
+                      # These back entry_timing_tree's three stops (M2.8).
 
 triggers:
-  target_delta_ratio_pct: 90.0   # intended net-delta-to-equity ratio; drift is
-                                  # deviation (pp) from this, not from neutrality
-  delta_drift_warn_pct: 5.0      # pp of drift from target -> MONITOR
-  delta_drift_action_pct: 10.0   # pp of drift from target -> ACTION
-  theta_cost_excellent_pct: 1.0  # annual theta % below this -> EXCELLENT
-  theta_cost_acceptable_pct: 2.0 # ...below this -> ACCEPTABLE, else EXPENSIVE
-  expiry_urgent_days: 7          # DTE below this -> URGENT (roll immediately)
-  expiry_soon_days: 21           # DTE below this -> plan rolls SOON
-  roll_time_months: 9.0          # roll when maturity below this
-  rally_rebalance_pct: 15.0      # market rally that forces a re-strike review
-  strike_drift_max_otm_pct: 45.0
+  target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is
+                                   # measured (in pp) as deviation from this, not
+                                   # from full delta-neutrality
+  delta_drift_warn_pct: 4.0        # EXAMPLE VALUE — pp of drift from target -> MONITOR
+  delta_drift_action_pct: 8.0      # EXAMPLE VALUE — pp of drift from target -> ACTION
+  theta_cost_excellent_pct: 1.0    # annual theta % below this -> EXCELLENT
+  theta_cost_acceptable_pct: 1.5   # EXAMPLE VALUE — ...below this -> ACCEPTABLE, else EXPENSIVE
+  expiry_urgent_days: 7            # DTE below this -> URGENT (roll immediately)
+  expiry_soon_days: 21             # DTE below this -> plan rolls SOON
+  roll_time_months: 6.0          # EXAMPLE VALUE — roll when maturity below this
+  rally_rebalance_pct: 12.0      # EXAMPLE VALUE — market rally that forces a re-strike review
+  strike_drift_max_otm_pct: 40.0 # EXAMPLE VALUE
   roll_review_buffer: 1.5        # REVIEW fires within roll_time_months * this
   strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
                                        # of strike_drift_max_otm_pct
   # Gamma drift = % of the hedged equity that net delta shifts per 1% spot move
   # (|gamma|*spot/|underlying_qty|); book-size-independent. A tail hedge is
-  # deliberately gamma-light (canonical SPX book ~1.3% -> LOW).
+  # typically gamma-light.
   gamma_drift_moderate_pct: 2.0  # drift below this -> LOW, above -> MODERATE
   gamma_drift_high_pct: 5.0      # drift above this -> HIGH (active rebalancing)
 
 monetization:
-  schedule:                      # hedge-gain -> fraction to sell
-    - {gain_pct: 100, sell_pct: 25}
-    - {gain_pct: 200, sell_pct: 25}
-    - {gain_pct: 400, sell_pct: 25}
+  schedule:                      # EXAMPLE VALUE — hedge-gain -> fraction to sell
+    - {gain_pct: 100, sell_pct: 20}
+    - {gain_pct: 250, sell_pct: 20}
+    - {gain_pct: 500, sell_pct: 20}

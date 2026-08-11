@@ -267,8 +267,11 @@ and `/design` render an explicit "No IPS policy is loaded" screen; the weekly
 digest refuses to build). Copy the example rather than relying on that
 fallback — it means the app is running without your program's real policy.
 
-Presets live in `examples/ips/` and `examples/dashboard/`. Copy one over the
-corresponding `config/` file to activate it.
+Alternate presentation postures live in `examples/dashboard/` — copy one over
+`config/dashboard.yaml` to activate it. For the IPS, start from
+`config/ips.example.yaml` above; `examples/ips/ips_default.yaml` illustrates the
+same schema with the same placeholder numbers. Nothing under `examples/` is this
+program's real policy (#249).
 
 ## Project Structure
 
