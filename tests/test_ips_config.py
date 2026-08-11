@@ -2,10 +2,12 @@
 
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 import yaml
 
+from deltadewa.clock import DEFAULT_PROGRAM_TIMEZONE
 from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import (
     DEFAULT_DATA_TTL_MINUTES,
@@ -62,6 +64,69 @@ def _write_yaml(
 
 class TestLoadIpsConfig:
     """Tests for load_ips_config."""
+
+    def test_timezone_defaults_to_the_us_equity_calendar(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """An IPS with no ``timezone`` gets the exchange's, not the server's.
+
+        The default is deliberately not UTC: a program that never names a
+        timezone is still hedging SPX on the US calendar (#182).
+        """
+        config = dict(_VALID_CONFIG)
+
+        program = load_ips_config(_write_yaml(tmp_path, config)).program
+
+        assert program.timezone == DEFAULT_PROGRAM_TIMEZONE
+
+    def test_timezone_is_read_from_policy(self, tmp_path: Path) -> None:
+        """A program on another exchange sets its own trading calendar."""
+        config = dict(_VALID_CONFIG)
+        config["program"] = {**config["program"], "timezone": "Europe/London"}
+
+        program = load_ips_config(_write_yaml(tmp_path, config)).program
+
+        assert program.timezone == ZoneInfo("Europe/London")
+
+    def test_unknown_timezone_is_a_policy_error(self, tmp_path: Path) -> None:
+        """A typo'd zone fails loudly rather than silently falling back.
+
+        Silently defaulting would price the book on a calendar the policy
+        did not ask for, which is the class of quiet wrongness #182 exists
+        to remove.
+        """
+        config = dict(_VALID_CONFIG)
+        config["program"] = {**config["program"], "timezone": "Mars/Olympus"}
+
+        with pytest.raises(IpsConfigError, match=r"program\.timezone"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_accepts_a_plain_string_path(self) -> None:
+        """A ``str`` path loads, like the serializer's loaders (#182).
+
+        Was: ``AttributeError: 'str' object has no attribute 'exists'`` —
+        found while writing verification scripts for the review that filed
+        the issue, which is exactly the "obvious" way to call it.
+        """
+        from_str = load_ips_config(str(EXAMPLE_IPS_YAML))
+        from_path = load_ips_config(EXAMPLE_IPS_YAML)
+
+        assert from_str == from_path
+
+    def test_string_path_to_a_missing_file_raises_ips_config_error(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The missing-file guard still fires, and still names the file.
+
+        Accepting ``str`` must not turn a clear policy error into an
+        ``AttributeError`` from somewhere deeper in the loader.
+        """
+        missing = str(tmp_path / "nope.yaml")
+
+        with pytest.raises(IpsConfigError, match=r"ips\.yaml not found"):
+            load_ips_config(missing)
 
     def test_loads_example_ips_yaml(self) -> None:
         """Test that the tracked config/ips.example.yaml loads (#245)."""

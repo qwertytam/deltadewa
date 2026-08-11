@@ -129,6 +129,22 @@ fails validation the loader **raises**, and every consumer degrades visibly
 rather than silently: `/monitor` and `/design` render an explicit "No IPS
 policy is loaded" screen and the weekly digest refuses to build.
 
+### `program.timezone` — the trading calendar
+
+`program.timezone` (default `America/New_York`) is the market calendar the
+program's day follows. It is **policy, not presentation**: QuantLib takes its
+valuation date from the calendar fields of a timezone-aware datetime, so this
+setting decides which day's close every position is priced against.
+
+Before #182 the program's day was implicitly UTC, which rolled the whole book
+forward at 20:00 New York — a US desk reviewing the book after dinner saw a
+21-day SPX put drop 7.3% in value from the clock alone, with no market move
+behind it. Set this to the exchange your program actually trades on.
+
+An unrecognised zone is a load error, not a silent fallback: pricing the book
+on a calendar the policy did not ask for is exactly the quiet wrongness the
+loader exists to prevent.
+
 To bootstrap the file, copy the canonical template —
 `cp config/ips.example.yaml config/ips.yaml` — then edit every field it
 marks `EXAMPLE VALUE`. `examples/ips/ips_default.yaml` is a second copy of

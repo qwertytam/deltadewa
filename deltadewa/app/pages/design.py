@@ -72,6 +72,7 @@ from deltadewa.analysis.strike_ladder import build_strike_ladder
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.clock import program_now
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.monte_carlo import drift_measure_label
 from deltadewa.state import ConfirmationRequiredError
@@ -516,7 +517,14 @@ def _export_logic(*, state: ProgramState) -> tuple[Any, Component]:
     Read-only — doesn't touch ``book-version``, correctly outside the
     "failed mutation" concern entirely.
     """
-    filename = f"design-export-{datetime.now(tz=UTC):%Y%m%dT%H%M%S}.json"
+    # Stamped in the program's timezone: the file name is what a human
+    # sorts and cites, so it should read as the desk's clock, not UTC.
+    stamp = program_now(
+        state.ips_config.program.timezone
+        if state.ips_config is not None
+        else None,
+    )
+    filename = f"design-export-{stamp:%Y%m%dT%H%M%S}.json"
     try:
         path = state.export_snapshot(filename)
     except Exception:  # pylint: disable=broad-exception-caught

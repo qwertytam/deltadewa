@@ -30,6 +30,7 @@
 program:
   name: "SPX tail hedge — example program"  # EXAMPLE VALUE
   instrument: SPX            # underlying
+  timezone: America/New_York # market calendar the program's day follows (#182)
 
 pricing:
   exercise_style: EUROPEAN   # SPX/XSP = EUROPEAN (cash-settled); SPY/stocks = AMERICAN

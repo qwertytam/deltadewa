@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 
+from deltadewa.clock import days_between
 from deltadewa.constants import FDGridResolution, OptionType
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
@@ -600,7 +601,7 @@ class BatchPricer:
         expired: list[tuple[int, OptionPosition]] = []
         live: list[tuple[int, OptionPosition]] = []
         for pos_idx, position in enumerate(self.positions):
-            days = (position.option.maturity_date - valuation_date).days
+            days = days_between(valuation_date, position.option.maturity_date)
             if days <= 0:
                 expired.append((pos_idx, position))
             else:

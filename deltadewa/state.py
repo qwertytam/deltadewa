@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from deltadewa import create_empty_portfolio
+from deltadewa.clock import program_trading_date
 from deltadewa.constants import OptionType
 from deltadewa.ips_config import IpsConfigError, load_ips_config
 from deltadewa.persistence import PortfolioSerializer
@@ -87,7 +88,7 @@ class ProgramState:
         cls,
         export_dir: Path,
         *,
-        ips_path: Path = Path("config/ips.yaml"),
+        ips_path: str | Path = Path("config/ips.yaml"),
         default_exercise_style: ExerciseStyle | None = None,
     ) -> ProgramState:
         """Load the shared program state from ``export_dir``.
@@ -99,7 +100,8 @@ class ProgramState:
         Args:
             export_dir: Directory holding the shared state file (and where
                 autosaves are written).
-            ips_path: Path to the hedge program policy file. If missing or
+            ips_path: Path to the hedge program policy file; ``str`` or
+                ``Path``, matching ``load_ips_config`` (#182). If missing or
                 invalid, ``ips_config`` is ``None`` and loading still
                 succeeds — this never raises for that reason.
             default_exercise_style: Exercise style applied to positions in
@@ -112,25 +114,10 @@ class ProgramState:
         serializer = PortfolioSerializer(export_dir=export_dir)
         state_path = export_dir / STATE_FILENAME
 
-        loaded_from: Path | None
-        if state_path.exists():
-            result = serializer.import_from_json(
-                state_path,
-                default_exercise_style=default_exercise_style,
-            )
-            portfolio = result["portfolio"]
-            loaded_from = state_path
-            _logger.info("Loaded shared program state from %s", state_path)
-        else:
-            portfolio = create_empty_portfolio(
-                default_exercise_style=default_exercise_style,
-            )
-            loaded_from = None
-            _logger.info(
-                "No saved state at %s — starting an empty book",
-                state_path,
-            )
-
+        # Policy is read before the book, because the book's valuation date
+        # depends on it: `program.timezone` decides which day's close the
+        # positions are priced against (#182). Without an IPS the program
+        # falls back to the US equity calendar, not to the server's UTC.
         try:
             ips_config = load_ips_config(ips_path)
         except IpsConfigError as exc:
@@ -139,6 +126,31 @@ class ProgramState:
                 exc,
             )
             ips_config = None
+
+        as_of = program_trading_date(
+            ips_config.program.timezone if ips_config is not None else None,
+        )
+
+        loaded_from: Path | None
+        if state_path.exists():
+            result = serializer.import_from_json(
+                state_path,
+                default_exercise_style=default_exercise_style,
+                valuation_date=as_of,
+            )
+            portfolio = result["portfolio"]
+            loaded_from = state_path
+            _logger.info("Loaded shared program state from %s", state_path)
+        else:
+            portfolio = create_empty_portfolio(
+                default_exercise_style=default_exercise_style,
+                valuation_date=as_of,
+            )
+            loaded_from = None
+            _logger.info(
+                "No saved state at %s — starting an empty book",
+                state_path,
+            )
 
         return cls(
             portfolio=portfolio,

@@ -17,6 +17,7 @@ from deltadewa.analysis.repricing import (
     shocked_leg_option,
 )
 from deltadewa.batch_pricer import BatchPricer
+from deltadewa.clock import days_between
 from deltadewa.constants import FDGridResolution
 
 if TYPE_CHECKING:
@@ -511,7 +512,7 @@ class ScenariosMixin:
             # at the SHOCKED date, not today's — a days_forward grid that
             # lands on expiry gets the same shortcut a today grid would.
             all_at_expiry = all(
-                (pos.option.maturity_date - shocked_date).days == 0
+                days_between(shocked_date, pos.option.maturity_date) == 0
                 for pos in positions
             )
             if all_at_expiry:

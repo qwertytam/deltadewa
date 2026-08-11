@@ -11,6 +11,7 @@ from scipy import stats
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.clock import days_between
 from deltadewa.colours import DEFAULT_PALETTE
 
 # Import centralized formatters
@@ -326,7 +327,7 @@ class PnLChartsMixin:
             )
             days_to_maturity = max(
                 1,
-                (min_maturity - self.portfolio.valuation_date).days,
+                days_between(self.portfolio.valuation_date, min_maturity),
             )
             return float(days_to_maturity / const.DAYS_PER_YEAR)
         # Default to 30 days

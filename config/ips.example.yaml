@@ -27,6 +27,11 @@
 program:
   name: "SPX tail hedge — example program"  # EXAMPLE VALUE
   instrument: SPX            # underlying
+  # The market calendar the program trades on. This decides which day's close
+  # a position is priced against, so it moves numbers, not just labels: with a
+  # UTC clock the whole book repriced a day forward at 20:00 New York (#182).
+  # Defaults to America/New_York; set it to your own exchange's timezone.
+  timezone: America/New_York
 
 pricing:
   exercise_style: EUROPEAN   # SPX/XSP = EUROPEAN (cash-settled); SPY/stocks = AMERICAN

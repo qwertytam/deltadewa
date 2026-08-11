@@ -1,6 +1,5 @@
 """American option pricing using QuantLib with Bjerksund-Stensland model."""
 
-import datetime
 import warnings
 from datetime import datetime as dt
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 import QuantLib as QtLib
 
 from deltadewa import constants as const
+from deltadewa.clock import days_between, program_trading_date
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.greeks_cache import GreeksCache
 from deltadewa.warnings import ClosedFormAccuracyWarning
@@ -95,7 +95,7 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
         self.risk_free_rate = float(risk_free_rate)
         self.dividend_yield = float(dividend_yield)
         self.option_type = option_type
-        self.valuation_date = valuation_date or dt.now(tz=datetime.UTC)
+        self.valuation_date = valuation_date or program_trading_date()
         self.exercise_style = exercise_style
         self.grid_resolution = grid_resolution
         self.use_closed_form = use_closed_form
@@ -139,7 +139,7 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
         if self.exercise_style == ExerciseStyle.EUROPEAN:
             return None
 
-        days_to_expiry = (self.maturity_date - self.valuation_date).days
+        days_to_expiry = days_between(self.valuation_date, self.maturity_date)
         reasons: list[str] = []
 
         deep_itm_ratio = 1.0 / self._CF_ITM_THRESHOLD

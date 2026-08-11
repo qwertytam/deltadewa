@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import ipywidgets as widgets
 
+from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
@@ -161,7 +162,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         expiry_input = widgets.DatePicker(
-            value=dt.now(tz=datetime.UTC).date() + timedelta(days=30),
+            value=program_trading_date().date() + timedelta(days=30),
             description="Expiry:",
             style={"description_width": "120px"},
             layout=widgets.Layout(width="300px"),
@@ -735,7 +736,7 @@ class PortfolioWidgets(ExportControlsMixin, HeatmapControlsMixin):
         )
 
         new_maturity = widgets.DatePicker(
-            value=dt.now(tz=datetime.UTC).date()
+            value=program_trading_date().date()
             + timedelta(days=default_days_forward),
             description="New Maturity:",
             style={"description_width": "150px"},

@@ -5,13 +5,14 @@ and scenario assumptions across the deltadewa dashboard.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
 import ipywidgets as widgets
 
 from deltadewa import constants as const
+from deltadewa.clock import program_trading_date
 from deltadewa.colours import DEFAULT_PALETTE
 
 
@@ -74,7 +75,7 @@ class GlobalAssumptions:
 
         """
         if valuation_date is None:
-            valuation_date = datetime.now(tz=UTC)
+            valuation_date = program_trading_date()
 
         # Market parameters
         spot_min = spot_price * (1 - spot_range_pct / 100)

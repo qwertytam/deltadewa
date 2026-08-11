@@ -152,6 +152,16 @@ conformant book; the regime figure is a real percentile or honestly named.
   `include_underlying` default mismatch between scalar and vectorized P&L;
   silently-dropped unsolvable ladder rungs; IPS `annual_carry_pct` default
   `2.0` → `1.0` (align to the handbook family-office ceiling it cites).
+
+  **Mi4 closed by Stage 4.4 (#182).** This line only ever scoped the naive-DTE
+  item, which M1.4/#195 made moot; the `load_ips_config` path-typing and
+  UTC-display halves were never assigned to a milestone, which made the index
+  read as more closed than it was. Stage 4.4 took all three, and found the
+  defect underneath the first: M1.4 had corrected the *base* of the day count
+  (wall clock → `valuation_date`) but left the timestamp subtraction, which
+  floored every displayed DTE a day below the tenor the book was priced on.
+  `deltadewa/clock.py` is now the single source for both the program's trading
+  date and its day counts. Currency configurability is split out as #264.
 - **Crash vol-shock single-source** — tie `crash_vol_shock` to
   `crash_scenario_pct` so the two cannot diverge: when a crash scenario is
   supplied, the vol shock must be sourced from the IPS too. Remove the independent

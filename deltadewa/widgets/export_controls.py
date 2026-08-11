@@ -7,13 +7,13 @@ in the deltadewa dashboard.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import ipywidgets as widgets
 from ipyfilechooser import FileChooser
 
+from deltadewa.clock import program_now
 from deltadewa.config import (
     create_export_dir_widget as _create_export_dir_widget,
 )
@@ -454,7 +454,7 @@ class ExportControlsMixin:
 
                     ts = ""
                     if inc_timestamp:
-                        ts = datetime.now(tz=UTC).strftime("_%Y%m%d_%H%M%S")
+                        ts = program_now().strftime("_%Y%m%d_%H%M%S")
 
                     # Add extension if not present
                     if not filename.endswith(f".{file_format}"):

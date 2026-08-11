@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 from IPython.display import display
 
+from deltadewa.clock import days_between
 from deltadewa.colours import DEFAULT_PALETTE
 
 if TYPE_CHECKING:
@@ -44,13 +45,11 @@ class PositionDetailDisplay:
             display_df.index = pd.Index(range(1, len(display_df) + 1))
 
             # Days to maturity measured against the portfolio's (what-if)
-            # valuation date, not the wall clock. The maturity column is a
-            # tz-naive string, so localize the tz-aware valuation date away.
-            as_of = pd.Timestamp(
-                self._portfolio.valuation_date,
-            ).tz_localize(None)
+            # valuation date, not the wall clock, and as a calendar-date
+            # difference so the column agrees with the priced tenor (#182).
+            as_of = self._portfolio.valuation_date
             display_df["days_to_maturity"] = display_df["maturity"].apply(
-                lambda x: (pd.to_datetime(x) - as_of).days,
+                lambda x: days_between(as_of, pd.to_datetime(x)),
             )
 
             # Normalize option `type` and `exercise_style` for user-friendly

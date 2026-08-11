@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 from deltadewa import OptionPortfolio
+from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.persistence import (
     YAML_AVAILABLE,
@@ -807,8 +808,18 @@ class TestYamlRoundtrip:
             tzinfo=UTC,
         )
 
-    def test_yaml_valuation_date_defaults_to_now(self, tmp_path) -> None:
-        """Omitting the as-of keeps the production behaviour: load as of now."""
+    def test_yaml_valuation_date_defaults_to_program_date(
+        self,
+        tmp_path,
+    ) -> None:
+        """Omitting the as-of loads as of the program's trading date.
+
+        Was ``datetime.now(tz=UTC)`` before #182, asserted to within 60
+        seconds. The default is now midnight in the program timezone, so
+        the assertion is on the date rather than the instant — a load at
+        21:00 New York must still be the New York trading day, not the
+        UTC one that has already rolled over.
+        """
         config = {
             "market_parameters": {
                 "spot_price": 100.0,
@@ -837,10 +848,7 @@ class TestYamlRoundtrip:
             "portfolio"
         ]
 
-        drift = abs(
-            (portfolio.valuation_date - datetime.now(tz=UTC)).total_seconds(),
-        )
-        assert drift < 60
+        assert portfolio.valuation_date == program_trading_date()
         # And the relative maturity is anchored on that same as-of.
         assert portfolio.positions[
             0

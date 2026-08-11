@@ -8,6 +8,7 @@ import numpy as np
 
 from deltadewa import constants as const
 from deltadewa.batch_pricer import BatchPricer
+from deltadewa.clock import days_between
 
 if TYPE_CHECKING:
     from deltadewa.portfolio._protocols import _PortfolioProtocol
@@ -266,7 +267,7 @@ class MonteCarloMixin:
                 )
                 days_to_expiry = max(
                     min_time_horizon,
-                    (min_maturity - self.valuation_date).days,
+                    days_between(self.valuation_date, min_maturity),
                 )
             else:
                 days_to_expiry = const.CALENDAR_DAYS_PER_MONTH  # Default

@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any, Final
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from deltadewa.clock import DEFAULT_PROGRAM_TIMEZONE
 from deltadewa.constants import ExerciseStyle
 
 # Defaults for the crash-repricing knobs that live alongside
@@ -153,10 +155,17 @@ class IpsConfigError(ValueError):
 
 @dataclass(frozen=True)
 class IpsProgram:
-    """Identifies the hedge program and its underlying instrument."""
+    """Identifies the hedge program, its instrument, and its trading day.
+
+    ``timezone`` is policy rather than presentation: it decides which day's
+    close a position is priced against, so it changes numbers, not just
+    labels. Before #182 the program's day was implicitly UTC, which rolled
+    the whole book forward at 20:00 America/New_York. See ``deltadewa.clock``.
+    """
 
     name: str
     instrument: str
+    timezone: ZoneInfo = DEFAULT_PROGRAM_TIMEZONE
 
 
 @dataclass(frozen=True)
@@ -406,9 +415,21 @@ def _require_non_negative(value: float, label: str) -> None:
 
 def _parse_program(config: dict[str, Any]) -> IpsProgram:
     section = _require_section(config, "program")
+    raw_tz = section.get("timezone")
+    if raw_tz is None:
+        timezone = DEFAULT_PROGRAM_TIMEZONE
+    else:
+        try:
+            timezone = ZoneInfo(str(raw_tz))
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise IpsConfigError(
+                f"program.timezone must be an IANA timezone name (e.g. "
+                f"'America/New_York'), got '{raw_tz}'",
+            ) from exc
     return IpsProgram(
         name=_require_field(section, "program", "name"),
         instrument=_require_field(section, "program", "instrument"),
+        timezone=timezone,
     )
 
 
@@ -813,11 +834,16 @@ def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     return IpsMonetization(schedule=tuple(steps))
 
 
-def load_ips_config(path: Path) -> IpsConfig:
+def load_ips_config(path: str | Path) -> IpsConfig:
     """Load and validate a hedge program policy file into an ``IpsConfig``.
 
     Args:
-        path: Path to the ``ips.yaml`` file.
+        path: Path to the ``ips.yaml`` file. A ``str`` is accepted and
+            normalized to a ``Path`` on entry — the annotation states what
+            the function takes rather than leaving a ``str`` caller to
+            discover ``AttributeError: 'str' object has no attribute
+            'exists'`` at the first filesystem call (#182). This matches
+            ``PortfolioSerializer``'s loaders, which already accept both.
 
     Returns:
         Fully validated ``IpsConfig``.
@@ -829,6 +855,10 @@ def load_ips_config(path: Path) -> IpsConfig:
     """
     if not YAML_AVAILABLE:
         raise IpsConfigError("PyYAML is not installed; cannot load ips.yaml")
+
+    # Normalized once, at the boundary, so every use below — including the
+    # error messages, which name the file — sees the same Path.
+    path = Path(path)
 
     if not path.exists():
         raise IpsConfigError(
