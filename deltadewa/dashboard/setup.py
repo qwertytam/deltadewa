@@ -13,7 +13,6 @@ widget
 
 from __future__ import annotations
 
-import datetime
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from deltadewa.analysis.volatility import get_volatility_stats
+from deltadewa.clock import program_trading_date
 from deltadewa.ips_config import IpsConfig
 from deltadewa.marketdata import MarketDataError, MarketDataProvider
 from deltadewa.portfolio.core import OptionPortfolio
@@ -389,6 +389,6 @@ def setup_dashboard(
         "portfolio_imported": portfolio_imported,
         "global_assumptions": global_assumptions,
         "assumptions_link_cb": assumptions_link_cb,
-        "today": datetime.datetime.now(tz=datetime.UTC),
+        "today": program_trading_date(),
         "export_dir": _export_dir,
     }

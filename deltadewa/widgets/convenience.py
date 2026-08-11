@@ -6,9 +6,13 @@ focused on wiring/translation logic only.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
+from deltadewa.clock import (
+    DEFAULT_PROGRAM_TIMEZONE,
+    program_trading_date,
+)
 from deltadewa.portfolio.core import OptionPortfolioBase
 from deltadewa.widgets.assumptions import GlobalAssumptions
 
@@ -38,12 +42,14 @@ def link_portfolio_to_assumptions(
         # Valuation date widget stores a date; convert to datetime
         val_date_widget = assumptions.valuation_date.value
         if val_date_widget is None:
-            valuation_date = datetime.now(tz=UTC)
+            valuation_date = program_trading_date()
         else:
+            # Midnight in the program timezone, matching the default above
+            # and every other valuation date in the package (#182).
             valuation_date = datetime.combine(
                 val_date_widget,
                 datetime.min.time(),
-                tzinfo=UTC,
+                tzinfo=DEFAULT_PROGRAM_TIMEZONE,
             )
 
         # Update portfolio market fields and refresh positions
