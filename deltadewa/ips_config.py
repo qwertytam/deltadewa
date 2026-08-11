@@ -827,7 +827,12 @@ def load_ips_config(path: Path) -> IpsConfig:
         raise IpsConfigError("PyYAML is not installed; cannot load ips.yaml")
 
     if not path.exists():
-        raise IpsConfigError(f"ips.yaml not found at {path}")
+        raise IpsConfigError(
+            f"ips.yaml not found at {path} — this file holds your program's "
+            "real policy and is gitignored (#245), so it's never shipped. "
+            "Copy config/ips.example.yaml to "
+            f"{path} and fill in your own program's values.",
+        )
 
     try:
         with Path.open(path, "r", encoding="utf-8") as f:

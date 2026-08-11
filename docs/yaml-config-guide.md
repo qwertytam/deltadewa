@@ -6,12 +6,27 @@
 
 - **`config/`** — live files the app reads automatically at startup
   (`config/ips.yaml`, `config/dashboard.yaml`). Edit these in place to
-  change behaviour.
+  change behaviour. Both hold this program's *real* policy/presentation
+  values and are gitignored, not shipped (#245) — before either exists,
+  copy the tracked templates:
+
+  ```bash
+  cp config/ips.example.yaml config/ips.yaml
+  cp config/dashboard.example.yaml config/dashboard.yaml
+  ```
+
+  A missing `config/ips.yaml` isn't silently patched over with the example's
+  placeholder numbers — `load_ips_config` raises, naming the file and
+  pointing at the `.example`, and every consumer degrades visibly from
+  there (see the README's Configuration section).
 - **`examples/`** — sample files (`examples/portfolios/`, `examples/ips/`,
   `examples/dashboard/`). Nothing reads these automatically. Portfolios
   are loaded by importing the file through a widget; `ips`/`dashboard`
   presets are loaded by copying them over the corresponding file in
-  `config/`.
+  `config/`. Distinct from `config/*.example.yaml`: the presets here are
+  alternate postures (aggressive/conservative/default) with example
+  numbers throughout; the `config/` templates are the one-time bootstrap
+  step before either exists.
 
 ## Portfolios
 

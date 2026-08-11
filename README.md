@@ -99,7 +99,16 @@ poetry install
 ```
 
 <!-- markdownlint-disable-next-line -->
-4. Activate the virtual environment:
+4. Copy the config templates and fill in your own program's policy (they
+   hold real values and are gitignored — see [Configuration](#configuration)):
+
+```bash
+cp config/ips.example.yaml config/ips.yaml
+cp config/dashboard.example.yaml config/dashboard.yaml
+```
+
+<!-- markdownlint-disable-next-line -->
+5. Activate the virtual environment:
 
 ```bash
 poetry shell
@@ -236,14 +245,30 @@ print(
 
 ## Configuration
 
+`config/ips.yaml` and `config/dashboard.yaml` hold this program's real policy
+and presentation values — they are gitignored, not shipped (#245), mirroring
+the repo's `.env` / `.env.example` split. Copy the tracked templates and fill
+in your own numbers before running anything:
+
+```bash
+cp config/ips.example.yaml config/ips.yaml
+cp config/dashboard.example.yaml config/dashboard.yaml
+```
+
 | File | Purpose | Guide |
 |---|---|---|
 | `config/ips.yaml` | Program policy — carry budget, convexity targets, drawdown tolerance, roll/monetization triggers | [yaml-config-guide.md](docs/yaml-config-guide.md) |
 | `config/dashboard.yaml` | Health-gauge thresholds and color bands (presentation only) | [dashboard-config-guide.md](docs/dashboard-config-guide.md) |
 
+A missing `config/dashboard.yaml` falls back to sensible built-in defaults —
+never a hard failure. A missing `config/ips.yaml` is different: the loader
+raises, and every consumer degrades *visibly* rather than silently (`/monitor`
+and `/design` render an explicit "No IPS policy is loaded" screen; the weekly
+digest refuses to build). Copy the example rather than relying on that
+fallback — it means the app is running without your program's real policy.
+
 Presets live in `examples/ips/` and `examples/dashboard/`. Copy one over the
-corresponding `config/` file to activate it. Both files are optional — missing or
-invalid → a warning and sensible defaults, never a hard failure.
+corresponding `config/` file to activate it.
 
 ## Project Structure
 
@@ -262,8 +287,10 @@ deltadewa/
 │   ├── persistence.py     # PortfolioSerializer (YAML/JSON round-trip)
 │   └── valuation.py       # OptionValuation (QuantLib pricing engine)
 ├── config/
-│   ├── ips.yaml           # program policy (edit in place)
-│   └── dashboard.yaml     # health-gauge thresholds (edit in place)
+│   ├── ips.example.yaml       # template — copy to ips.yaml and fill in
+│   ├── dashboard.example.yaml # template — copy to dashboard.yaml and fill in
+│   ├── ips.yaml           # program policy (gitignored — real values, #245)
+│   └── dashboard.yaml     # health-gauge thresholds (gitignored — real values)
 ├── examples/
 │   ├── portfolios/        # spx_protective_put.yaml, spy_collar.yaml, …
 │   ├── ips/               # policy presets

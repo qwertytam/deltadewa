@@ -18,7 +18,10 @@ from deltadewa.ips_config import (
     load_ips_config,
 )
 
-EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.yaml"
+EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.example.yaml"
+# #245: the real config/ips.yaml is gitignored (it holds this program's real
+# policy), so the tracked config/ips.example.yaml — a documented placeholder
+# template, not real values — is what these "shipped file" tests exercise.
 
 _VALID_CONFIG: dict[str, Any] = {
     "program": {"name": "SPX tail hedge", "instrument": "SPX"},
@@ -61,32 +64,33 @@ class TestLoadIpsConfig:
     """Tests for load_ips_config."""
 
     def test_loads_example_ips_yaml(self) -> None:
-        """Test that the shipped config/ips.yaml loads successfully."""
+        """Test that the tracked config/ips.example.yaml loads (#245)."""
         ips = load_ips_config(EXAMPLE_IPS_YAML)
 
         assert ips.program.instrument == "SPX"
         assert ips.pricing.exercise_style == ExerciseStyle.EUROPEAN
-        # Handbook family-office carry ceiling is 1% (Mi6); shipped default.
+        # Handbook family-office carry ceiling is 1% (Mi6); example default.
         assert ips.budget.annual_carry_pct == pytest.approx(1.0, rel=1e-7)
-        assert ips.convexity.target_min_pct == pytest.approx(15.0, rel=1e-4)
-        assert ips.convexity.target_max_pct == pytest.approx(25.0, rel=1e-4)
+        assert ips.convexity.target_min_pct == pytest.approx(10.0, rel=1e-4)
+        assert ips.convexity.target_max_pct == pytest.approx(20.0, rel=1e-4)
         assert ips.convexity.crash_vol_shock == pytest.approx(0.15, rel=1e-4)
-        # M1.6: the shipped default adopts the skew-calibrated crash shock.
-        assert ips.convexity.skew_steepening == pytest.approx(0.10, rel=1e-8)
+        # #245's example uses its own placeholder, distinct from the 0.0
+        # dataclass default, to show the field is meant to be set.
+        assert ips.convexity.skew_steepening == pytest.approx(0.08, rel=1e-8)
         # M1.7: the steepening is anchored to each leg's ~10-delta wing.
         assert ips.convexity.skew_reference_delta == pytest.approx(
             0.10, rel=1e-8
         )
         assert ips.convexity.crash_floor_reported is True
-        # M2.7: the shipped band is the handbook's own reading of the
+        # M2.7: the example band is the handbook's own reading of the
         # convexity/carry ratio (< 3 poor, 3-6 acceptable, > 6 attractive).
         assert ips.convexity.efficiency_min_ratio == pytest.approx(3.0)
         assert ips.convexity.efficiency_max_ratio == pytest.approx(6.0)
-        assert ips.drawdown.max_tolerance_pct == pytest.approx(20.0, rel=1e-4)
+        assert ips.drawdown.max_tolerance_pct == pytest.approx(15.0, rel=1e-4)
         assert ips.triggers.target_delta_ratio_pct == pytest.approx(
             90.0, rel=1e-4
         )
-        assert ips.triggers.delta_drift_warn_pct == pytest.approx(5.0, rel=1e-7)
+        assert ips.triggers.delta_drift_warn_pct == pytest.approx(4.0, rel=1e-7)
         assert len(ips.monetization.schedule) == 3
         assert ips.monetization.schedule[0].gain_pct == 100
 
@@ -572,7 +576,7 @@ class TestMarketEnvironment:
         assert env.vix_low == pytest.approx(15.0)
 
     def test_example_ips_yaml_market_environment(self) -> None:
-        """The shipped config/ips.yaml carries the policy bands."""
+        """The tracked config/ips.example.yaml carries the policy bands."""
         env = load_ips_config(EXAMPLE_IPS_YAML).market_environment
 
         assert env.vol_regime_low == pytest.approx(0.15, rel=1e-4)
@@ -580,7 +584,7 @@ class TestMarketEnvironment:
         assert env.skew_low_pctile == 25
         assert env.skew_high_pctile == 75
         assert env.term_contango_tolerance == pytest.approx(0.5, rel=1e-4)
-        assert env.data_ttl_minutes == pytest.approx(2160.0, rel=1e-7)
+        assert env.data_ttl_minutes == pytest.approx(1440.0, rel=1e-7)
         assert env.vix_very_high == pytest.approx(40.0)
         assert env.vix_caution == pytest.approx(25.0)
         assert env.vix_low == pytest.approx(15.0)
@@ -723,7 +727,7 @@ class TestExpiryThetaTriggers:
         assert triggers.theta_cost_excellent_pct == pytest.approx(1.0, rel=1e-7)
 
     def test_example_ips_yaml_expiry_theta(self) -> None:
-        """The shipped config/ips.yaml carries the new trigger keys."""
+        """The tracked config/ips.example.yaml carries the trigger keys."""
         triggers = load_ips_config(EXAMPLE_IPS_YAML).triggers
 
         assert triggers.expiry_urgent_days == 7
@@ -819,7 +823,7 @@ class TestGammaDriftBands:
 class TestVegaSufficiency:
     """The vega band is policy (Part X #4), and the section is optional."""
 
-    def test_shipped_ips_yaml_carries_the_band(self) -> None:
+    def test_example_ips_yaml_carries_the_band(self) -> None:
         ips = load_ips_config(EXAMPLE_IPS_YAML)
 
         assert ips.vega.sufficiency_min_pct == pytest.approx(1.5)
@@ -916,7 +920,7 @@ class TestSizing:
         )
 
     def test_example_ips_yaml_sizing(self) -> None:
-        """The shipped config/ips.yaml carries portfolio_beta 1.0."""
+        """The tracked config/ips.example.yaml carries portfolio_beta 1.0."""
         assert load_ips_config(
             EXAMPLE_IPS_YAML
         ).sizing.portfolio_beta == pytest.approx(1.0, rel=1e-7)

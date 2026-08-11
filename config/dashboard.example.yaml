@@ -1,13 +1,19 @@
-# Default Hedge Health Dashboard Configuration
-# This file shows the default configuration values used by the dashboard.
-# Modify these values to customize threshold behavior for your use case.
+# dashboard.example.yaml — template for config/dashboard.yaml (#245)
+#
+# config/dashboard.yaml is gitignored (see .gitignore, "#245"). Copy this
+# file to config/dashboard.yaml to use it, or leave it uncopied — a missing
+# file falls back to these exact values anyway (they match
+# HedgeHealthDashboard's built-in defaults), so copying only matters once
+# you want to change something.
+#
+#   cp config/dashboard.example.yaml config/dashboard.yaml
 #
 # PRESENTATION ONLY. Every value here is gauge geometry — where an axis starts
 # and ends, and where it changes colour. Nothing here decides anything. Any
 # threshold that answers a mandate question ("is the hedge big enough", "when
 # does decaying convexity force a roll", "is vol cheap") is policy and lives in
-# config/ips.yaml. Keeping a copy of a policy number here is the leak M1.4
-# closed and #241 closed again — do not re-add one.
+# config/ips.yaml (see ips.example.yaml). Keeping a copy of a policy number
+# here is the leak M1.4 closed and #241 closed again — do not re-add one.
 #
 # Removed from this file by #241, now owned by ips.yaml:
 #   parameters.convexity_cliff_days  -> convexity.cliff_threshold_days
@@ -39,10 +45,10 @@ metrics:
   #    NOT the vega sufficiency policy band — that is vega: in ips.yaml, and it
   #    is a one-sided magnitude band on a low-single-digit scale. This is a
   #    signed, symmetric display axis, and it is mis-scaled for the metric it
-  #    plots: real books read +1.8% to +2.7%, which is a needle sitting on the
-  #    midpoint of a -50..+50 axis. Left as-is deliberately — rescaling it is a
-  #    widgets/ change on the Jupyter surface being retired (#242), and #241
-  #    mistook these numbers for the policy band once already.
+  #    plots: real books read low single digits, which is a needle sitting near
+  #    the midpoint of a -50..+50 axis. Left as-is deliberately — rescaling it
+  #    is a widgets/ change on the Jupyter surface being retired (#242), and
+  #    #241 mistook these numbers for the policy band once already.
   vega_sufficiency:
     start: -50.0
     end: 50.0
