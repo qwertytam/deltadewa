@@ -341,6 +341,90 @@ class TestBackupRemoteRequired:
         assert "BACKUP_REMOTE" in result.stderr
 
 
+class TestBackupEnvPrecedence:
+    """#253: an explicitly-set environment variable must beat
+    ``backup.env`` — a plain ``source`` has no notion of "already set",
+    it just assigns, so a bare ``if [ -f ... ]; then source ...; fi``
+    used to let the file silently clobber an operator's explicit
+    ``BACKUP_REMOTE=... ./backup-exports.sh``. ``DELTADEWA_BACKUP_ENV_FILE``
+    (added alongside the fix) points the script at a scratch file instead
+    of the real ``/etc/deltadewa/backup.env``, so this doesn't need root
+    or touch the real host path.
+    """
+
+    def _write_backup_env_file(
+        self,
+        tmp_path: Path,
+        *,
+        remote: str | None,
+        heartbeat_url: str | None = None,
+    ) -> Path:
+        env_file = tmp_path / "backup.env"
+        lines = []
+        if remote is not None:
+            lines.append(f"BACKUP_REMOTE={remote}")
+        if heartbeat_url is not None:
+            lines.append(f"BACKUP_HEARTBEAT_URL={heartbeat_url}")
+        env_file.write_text("\n".join(lines) + "\n")
+        return env_file
+
+    def test_env_set_and_file_set_env_wins(self, tmp_path: Path) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        file_remote = tmp_path / "file-remote-does-not-exist.git"
+        env_file = self._write_backup_env_file(
+            tmp_path,
+            remote=str(file_remote),
+        )
+
+        result = _run(
+            repo_dir,
+            remote,  # the real (env) remote — must be the one used
+            {"DELTADEWA_BACKUP_ENV_FILE": str(env_file)},
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "pushed" in result.stdout
+        assert (
+            "BACKUP_REMOTE from environment (overriding backup.env)"
+            in result.stdout
+        )
+        log = _git("log", "--oneline", "main", cwd=remote)
+        assert log.stdout.strip() != ""
+
+    def test_env_unset_and_file_set_file_used(self, tmp_path: Path) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        env_file = self._write_backup_env_file(tmp_path, remote=str(remote))
+
+        result = _run(
+            repo_dir,
+            None,  # no BACKUP_REMOTE in the environment
+            {"DELTADEWA_BACKUP_ENV_FILE": str(env_file)},
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "pushed" in result.stdout
+        assert "BACKUP_REMOTE from backup.env" in result.stdout
+        log = _git("log", "--oneline", "main", cwd=remote)
+        assert log.stdout.strip() != ""
+
+    def test_env_set_and_file_absent_env_used(self, tmp_path: Path) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        missing_env_file = tmp_path / "no-such-backup.env"
+
+        result = _run(
+            repo_dir,
+            remote,
+            {"DELTADEWA_BACKUP_ENV_FILE": str(missing_env_file)},
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "pushed" in result.stdout
+        # No file was sourced, so there's no precedence decision to log.
+        assert "overriding backup.env" not in result.stdout
+        log = _git("log", "--oneline", "main", cwd=remote)
+        assert log.stdout.strip() != ""
+
+
 class TestBackupRemoteReconciliation:
     """The origin remote is reconciled against BACKUP_REMOTE on every
     run, not just at first init (#243) — a stale origin (e.g. left over
