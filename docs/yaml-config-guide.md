@@ -110,26 +110,24 @@ There's no per-position `symbol` override — every position uses
 
 ### Loading a portfolio
 
-Both `monitor_dashboard.ipynb` and `hedge_design.ipynb` have an **Import
-Portfolio** cell (a file-upload + filename-entry widget,
-`PortfolioWidgets.display_import()` in `deltadewa/widgets/export_controls.py`).
-This is the only way a portfolio YAML/JSON file gets into a session —
-nothing is auto-detected at startup. If you don't import anything, Monitor
-starts with an empty book and Design falls back to a small built-in demo
-portfolio.
+`/design`'s BOOK zone has a guarded **Import portfolio** control
+(`deltadewa/app/import_portfolio.py`). This is the only way a portfolio
+YAML/JSON file gets into the app — nothing is auto-detected at startup.
+The import is confirm-gated, because it replaces the shared `ProgramState`
+book rather than opening a private session copy.
 
 The filename field accepts a path, not just a bare name — e.g.
 `examples/portfolios/spy_collar.yaml` loads that example directly, relative
-to the notebook's working directory, without copying it into the export
+to the process working directory, without copying it into the export
 directory first. A bare name like `portfolio_book.json` still resolves
-against the export directory, as before.
+against the export directory.
 
 ## IPS policy (`config/ips.yaml`)
 
-`start_session()` (`deltadewa/dashboard/session.py`) loads
-`config/ips.yaml` by default (`ips_path` parameter). If the file is
-missing or fails validation, the session still starts — `ctx.ips_config`
-is `None` and a warning is logged; nothing raises.
+The Dash app loads `config/ips.yaml` at startup. If the file is missing or
+fails validation the loader **raises**, and every consumer degrades visibly
+rather than silently: `/monitor` and `/design` render an explicit "No IPS
+policy is loaded" screen and the weekly digest refuses to build.
 
 To bootstrap the file, copy the canonical template —
 `cp config/ips.example.yaml config/ips.yaml` — then edit every field it
@@ -144,27 +142,29 @@ duplicate copy here.
 
 ## Dashboard config (`config/dashboard.yaml`)
 
-`start_session()` also loads `config/dashboard.yaml` by default
-(`dashboard_path` parameter), the same way: missing or invalid → a warning
-and `ctx.dashboard_config` is `None`, never a hard failure. This config
-feeds `HedgeHealthDashboard`'s gauge ranges (crash convexity, vega
-sufficiency, delta drift, etc.).
+**Nothing reads this file.** Its only consumer was `HedgeHealthDashboard`
+(`widgets/health_dashboard.py`), the Jupyter gauge wall, deleted in Stage
+4.3 along with the notebooks. The file, its `.example` template and the
+`examples/dashboard/` presets are kept pending a decision on whether the
+Dash pages should read banded gauge geometry from config — see
+`part-x-coverage.md`, "Stage 4.3". Editing it changes nothing today.
 
-Presets live in `examples/dashboard/`. See
-[dashboard-config-guide.md](dashboard-config-guide.md) for the schema.
+Note that gauge *bands* which turned out to be policy have already been
+promoted out of here into `ips.yaml` (#241): the vega sufficiency band and
+the convexity-cliff lines. See `part-x-coverage.md`, "Where the vega band
+went", before moving any number in the other direction.
+
+See [dashboard-config-guide.md](dashboard-config-guide.md) for the schema.
 
 ## Live market data
 
-By default both notebooks use **static/offline data** seeded from the
-loaded portfolio's own values. No network calls are made in this mode and
+By default the app uses **static/offline data** seeded from the loaded
+portfolio's own values. No network calls are made in this mode and
 offline/gated runs are fully deterministic.
 
-To pull live end-of-day data, set the toggle near the top of the setup
-cell before running `start_session`:
-
-```python
-_USE_LIVE = True  # set True for live CBOE/FRED market data (needs internet)
-```
+Live end-of-day data is enabled per-deployment rather than per-session —
+see the RUNBOOK for the market-data refresh cron, which populates the
+shared disk cache described below.
 
 ### Endpoints
 

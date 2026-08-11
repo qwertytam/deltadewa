@@ -2,10 +2,18 @@
 
 > **Navigation:** [README](../README.md) · [yaml-config-guide.md](yaml-config-guide.md) · [hedging handbook.md](hedging%20handbook.md)
 
+⚠️ **This file currently has no reader.** `config/dashboard.yaml`'s only
+consumer was `HedgeHealthDashboard` (`widgets/health_dashboard.py`), the
+Jupyter gauge wall, deleted in Stage 4.3 with the notebooks. The file, its
+`.example` template, the `examples/dashboard/` presets and this guide are kept
+pending a decision on whether the Dash pages should read banded gauge geometry
+from config — see [part-x-coverage.md](part-x-coverage.md), "Stage 4.3".
+**Editing it changes nothing today.** The schema below is documented as-was.
+
 `config/dashboard.yaml` controls the gauge ranges and color thresholds
-`HedgeHealthDashboard` (`deltadewa/widgets/health_dashboard.py`) uses for
-its seven health metrics. It's presentation-only — it changes how the
-dashboard displays health, not the underlying numbers or program policy.
+the Jupyter gauge wall used for its seven health metrics. It's
+presentation-only — it changes how the dashboard displays health, not the
+underlying numbers or program policy.
 
 **Nothing in this file decides anything.** Every value is gauge geometry:
 where an axis starts and ends, and where it changes colour. Any threshold

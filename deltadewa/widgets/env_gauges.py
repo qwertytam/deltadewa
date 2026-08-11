@@ -2,9 +2,8 @@
 
 Provides :func:`build_env_gauges`, which renders a pre-computed
 :class:`~deltadewa.analysis.market_environment.MarketEnvironment` as
-three horizontal gauge cards using the same
-:class:`~deltadewa.widgets.gauges.GaugeIndicator` component used by
-:class:`~deltadewa.widgets.health_dashboard.HedgeHealthDashboard`.
+three horizontal gauge cards using the
+:class:`~deltadewa.widgets.gauges.GaugeIndicator` component.
 """
 
 from __future__ import annotations
@@ -20,7 +19,8 @@ from deltadewa.colours import DEFAULT_PALETTE
 from .gauges import GaugeConfig, GaugeIndicator
 
 # Breakpoints for 0-100 percentile gauges.
-# Match the vol_regime config in health_dashboard.py (25 / 50 / 75).
+# These matched the vol_regime gauge in health_dashboard.py (25 / 50 / 75),
+# deleted in Stage 4.3; they are now this module's own.
 _PCTILE_MIN: float = 25.0
 _PCTILE_MID: float = 50.0
 _PCTILE_MAX: float = 75.0
@@ -118,9 +118,8 @@ def build_env_gauges(env: MarketEnvironment) -> widgets.HTML:
     """Render Tier-2 environment gauges from a pre-computed MarketEnvironment.
 
     Builds three horizontal gauge cards for vol regime percentile, skew
-    percentile, and 1m-3m forward vol, using the same
-    :class:`~deltadewa.widgets.gauges.GaugeIndicator` component as
-    :class:`~deltadewa.widgets.health_dashboard.HedgeHealthDashboard`.
+    percentile, and 1m-3m forward vol, using the
+    :class:`~deltadewa.widgets.gauges.GaugeIndicator` component.
 
     Must NOT call the market-data provider or
     :func:`~deltadewa.analysis.market_environment.assess_market_environment`

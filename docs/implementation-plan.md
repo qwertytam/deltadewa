@@ -29,7 +29,8 @@ working document: drive Claude Code through it one milestone at a time.
   is deliberately **outside** this list — see there for why. (`nbqa ruff` +
   headless notebook execution were part of this gate until M2.6 retired them
   from CI — the app + report tests now cover both notebook surfaces; see
-  M2.6's close-out for the coverage mapping.)
+  M2.6's close-out for the coverage mapping. Stage 4.3 then deleted the
+  notebooks and the `nbqa`/`nbstripout`/`jupytext` toolchain outright.)
 - Read the sibling module before adding to it; match its style.
 
 ---

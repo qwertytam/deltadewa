@@ -710,26 +710,37 @@ class TestCalculateHealthMetricsDisablingContract:
         assert set(metrics.keys()) == expected_keys
 
 
+def _score_metric(
+    actual: float | None,
+    min_val: float,
+    max_val: float,
+    *,
+    invert_colors: bool = False,
+) -> SimpleNamespace:
+    """A metric object shaped the way calculate_overall_health_score reads it.
+
+    These tests used to build real ``HedgeHealthMetric`` instances from
+    ``widgets/health_dashboard.py``. Stage 4.3 deleted that module, and the
+    scorer never needed it: it is annotated ``dict[str, Any]`` and touches
+    only the four attributes below — ``name``/``description``/``start``/
+    ``end``/``unit`` were carried purely to satisfy the widget's
+    constructor. Building the real contract here rather than importing a
+    gauge class keeps the test honest about what the function requires.
+    """
+    return SimpleNamespace(
+        actual=actual,
+        min_val=min_val,
+        max_val=max_val,
+        invert_colors=invert_colors,
+    )
+
+
 class TestCalculateOverallHealthScore:
     """Aggregation score: normal values within band, boundaries, degenerate."""
 
     def test_normal_value_in_middle_of_band(self) -> None:
         """Metric at mid-range → score around 50 (depending on direction)."""
-        from deltadewa.widgets.health_dashboard import HedgeHealthMetric
-
-        metrics = {
-            "test": HedgeHealthMetric(
-                name="test",
-                description="test",
-                start=0,
-                end=100,
-                min_val=0,
-                mid_val=50,
-                max_val=100,
-                actual=50.0,
-                invert_colors=False,
-            ),
-        }
+        metrics = {"test": _score_metric(50.0, min_val=0, max_val=100)}
 
         analyzer = _analyzer()
         score = analyzer.calculate_overall_health_score(metrics)
@@ -737,21 +748,7 @@ class TestCalculateOverallHealthScore:
 
     def test_boundary_at_min_val_exact(self) -> None:
         """actual == min_val exactly → score = 0 (non-inverted)."""
-        from deltadewa.widgets.health_dashboard import HedgeHealthMetric
-
-        metrics = {
-            "test": HedgeHealthMetric(
-                name="test",
-                description="test",
-                start=0,
-                end=100,
-                min_val=25,
-                mid_val=50,
-                max_val=75,
-                actual=25.0,
-                invert_colors=False,
-            ),
-        }
+        metrics = {"test": _score_metric(25.0, min_val=25, max_val=75)}
 
         analyzer = _analyzer()
         score = analyzer.calculate_overall_health_score(metrics)
@@ -759,21 +756,7 @@ class TestCalculateOverallHealthScore:
 
     def test_boundary_at_max_val_exact(self) -> None:
         """actual == max_val exactly → score = 100 (non-inverted)."""
-        from deltadewa.widgets.health_dashboard import HedgeHealthMetric
-
-        metrics = {
-            "test": HedgeHealthMetric(
-                name="test",
-                description="test",
-                start=0,
-                end=100,
-                min_val=25,
-                mid_val=50,
-                max_val=75,
-                actual=75.0,
-                invert_colors=False,
-            ),
-        }
+        metrics = {"test": _score_metric(75.0, min_val=25, max_val=75)}
 
         analyzer = _analyzer()
         score = analyzer.calculate_overall_health_score(metrics)
@@ -781,18 +764,11 @@ class TestCalculateOverallHealthScore:
 
     def test_inverted_colors_min_val_exact(self) -> None:
         """Inverted: actual == min_val → score = 100 (inverted)."""
-        from deltadewa.widgets.health_dashboard import HedgeHealthMetric
-
         metrics = {
-            "test": HedgeHealthMetric(
-                name="test",
-                description="test",
-                start=0,
-                end=100,
+            "test": _score_metric(
+                5.0,
                 min_val=5,
-                mid_val=50,
                 max_val=95,
-                actual=5.0,
                 invert_colors=True,
             ),
         }
@@ -803,18 +779,11 @@ class TestCalculateOverallHealthScore:
 
     def test_inverted_colors_max_val_exact(self) -> None:
         """Inverted: actual == max_val → score = 0 (inverted)."""
-        from deltadewa.widgets.health_dashboard import HedgeHealthMetric
-
         metrics = {
-            "test": HedgeHealthMetric(
-                name="test",
-                description="test",
-                start=0,
-                end=100,
+            "test": _score_metric(
+                95.0,
                 min_val=5,
-                mid_val=50,
                 max_val=95,
-                actual=95.0,
                 invert_colors=True,
             ),
         }
@@ -825,31 +794,9 @@ class TestCalculateOverallHealthScore:
 
     def test_multiple_metrics_averaged(self) -> None:
         """Multiple metrics → averaged score."""
-        from deltadewa.widgets.health_dashboard import HedgeHealthMetric
-
         metrics = {
-            "m1": HedgeHealthMetric(
-                name="m1",
-                description="",
-                start=0,
-                end=100,
-                min_val=0,
-                mid_val=50,
-                max_val=100,
-                actual=100.0,
-                invert_colors=False,
-            ),
-            "m2": HedgeHealthMetric(
-                name="m2",
-                description="",
-                start=0,
-                end=100,
-                min_val=0,
-                mid_val=50,
-                max_val=100,
-                actual=0.0,
-                invert_colors=False,
-            ),
+            "m1": _score_metric(100.0, min_val=0, max_val=100),
+            "m2": _score_metric(0.0, min_val=0, max_val=100),
         }
 
         analyzer = _analyzer()
@@ -859,31 +806,9 @@ class TestCalculateOverallHealthScore:
 
     def test_metric_actual_none_skipped_in_average(self) -> None:
         """Metrics with actual=None are skipped (unavailable gauges)."""
-        from deltadewa.widgets.health_dashboard import HedgeHealthMetric
-
         metrics = {
-            "available": HedgeHealthMetric(
-                name="available",
-                description="",
-                start=0,
-                end=100,
-                min_val=0,
-                mid_val=50,
-                max_val=100,
-                actual=100.0,
-                invert_colors=False,
-            ),
-            "unavailable": HedgeHealthMetric(
-                name="unavailable",
-                description="",
-                start=0,
-                end=100,
-                min_val=0,
-                mid_val=50,
-                max_val=100,
-                actual=None,
-                invert_colors=False,
-            ),
+            "available": _score_metric(100.0, min_val=0, max_val=100),
+            "unavailable": _score_metric(None, min_val=0, max_val=100),
         }
 
         analyzer = _analyzer()

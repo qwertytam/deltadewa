@@ -124,9 +124,10 @@ _logger = logging.getLogger(__name__)
 
 _REQUIRED_ADD_FIELDS_MSG = "Strike, maturity, and quantity are required."
 
-# PLANNING zone: dial defaults, matching hedge_design.ipynb's own notebook-
-# cell literals — the same starting point the notebook's sizing/ladder
-# cells used, now dial defaults instead of hardcoded cell values.
+# PLANNING zone: dial defaults. Carried over from the sizing/ladder cells of
+# hedge_design.ipynb, which Stage 4.3 deleted — these are the starting point
+# that notebook hardcoded, kept here as adjustable dial defaults. They are
+# presentation, not policy: nothing grades against them.
 _DEFAULT_SIZING_PCT_OTM = 20.0
 _DEFAULT_SIZING_MATURITY_YEARS = 0.5
 _DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
@@ -154,8 +155,9 @@ _BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"
 # cannot honestly carry even the book-Greeks chip.
 _BASIS_MATURITY_CALENDAR = "basis: position maturities (nothing priced)"
 
-# EXPLORATION zone: dial defaults, matching hedge_design.ipynb's own
-# GlobalAssumptions/StressDashboard notebook-cell literals.
+# EXPLORATION zone: dial defaults, carried over from the
+# GlobalAssumptions/StressDashboard cell literals of hedge_design.ipynb
+# (deleted in Stage 4.3). Presentation, not policy.
 _DEFAULT_SPOTVOL_SPOT_PCT = 50.0
 _DEFAULT_SPOTVOL_VOL_PCT = 50.0
 _DEFAULT_SPOTVOL_RESOLUTION = 21  # matches the measured 21x21 grid (F4)

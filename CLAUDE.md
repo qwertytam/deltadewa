@@ -5,13 +5,19 @@ Project memory for Claude Code. Read this before making changes.
 ## What this is
 
 `deltadewa` is an options hedging dashboard for a single-name **SPX** tail-hedge
-program. Pricing is done with **QuantLib**; the UI is two Jupyter notebooks —
-`monitor_dashboard.ipynb` (read-mostly book review, for routine checks and
-IC/board reporting) and `hedge_design.ipynb` (the workbench: position editor,
-roll planning, stress testing) — built from `ipywidgets`, `matplotlib`, and
-`plotly`. Both call `start_session(role=..., globals_dict=globals())` from
-`deltadewa.dashboard`. Notebooks are a thin orchestration layer — all real
-logic lives in the package.
+program. Pricing is done with **QuantLib**; the UI is a **Dash app**
+(`deltadewa/app/`) with two pages — `/monitor` (read-mostly book review, for
+routine checks and IC/board reporting) and `/design` (the workbench: position
+editor, roll planning, stress testing) — plus an emailed weekly digest
+(`deltadewa/reporting/weekly_report.py`). Pages are a thin orchestration
+layer — all real logic lives in the package.
+
+**There are no notebooks.** Stage 4.3 retired `monitor_dashboard.ipynb` and
+`hedge_design.ipynb` once `/monitor` and `/design` covered them; see
+`docs/part-x-coverage.md`, "Stage 4.3", for the parity record and what was
+deliberately dropped. `deltadewa/widgets/` and `deltadewa/dashboard/` are the
+leftover Jupyter layer — still tested, no product consumer, do not build on
+them.
 
 ## Environment & commands
 
@@ -27,7 +33,6 @@ Python `>=3.11,<4.0`, managed with **Poetry**. Run everything through `poetry ru
 - Design/refactor smells: `poetry run pylint deltadewa` — covers duplicate-code, cyclic-import, and
   complexity limits; `tests/` and notebooks are intentionally out of scope for now
 - Format: `poetry run ruff format .` — **line length is 80**
-- Lint/type-check notebooks: `poetry run nbqa ruff <notebook>` / `poetry run nbqa mypy <notebook>`
 - Clock-shift determinism probe: `make test-clockshift` — runs the suite under a +0/+90/+1000/+3000
   day clock to catch tests that assert wall-clock-dependent values. **Not part of the gate**: it
   swaps `datetime.datetime` for a subclass that C extensions hold pointers to, so a dependency bump
@@ -102,22 +107,22 @@ with a test — not in a widget or a notebook cell.
 
 ## Notebooks
 
-- Outputs are stripped on commit by a **one-way nbstripout git filter** (see
-  `.gitattributes`: `*.ipynb filter=nbstripout-commit`). Never commit notebook
-  outputs; the filter handles it, but don't fight it.
-- `jupytext` is available if you need to diff/edit notebooks as scripts.
-- Keep notebook cells short — construct a widget/display from the package and show it.
+There are none, and none should be added. Stage 4.3 deleted both notebooks and
+the whole `nbstripout` / `nbqa` / `jupytext` toolchain with them — there is no
+output filter, no notebook lint step, and no `.gitattributes`. New UI goes on
+a Dash page under `deltadewa/app/pages/`.
 
 ## Work in progress
 
 The foundation is done and the handbook's Part X panels are built: a
 `marketdata/` provider interface (free CBOE/FRED backend), an `ips.yaml` program
-config, a Roll Status panel, and the notebook split into `monitor_dashboard.ipynb`
-and `hedge_design.ipynb`. The **sizing workbench, strike-ladder builder, and
-monetization planner are also done, tested, and wired** — each is its own
-`analysis/`-layer module (`sizing.py`, `strike_ladder.py`, `monetization.py`, with
-`roll_planner.py`) driving a panel in `hedge_design.ipynb` and, since M2.5, the
-Dash `/design` page's PLANNING zone. See `docs/part-x-coverage.md` for the full
+config, and a Roll Status panel. The **sizing workbench, strike-ladder builder,
+and monetization planner are also done, tested, and wired** — each is its own
+`analysis/`-layer module (`sizing.py`, `strike_ladder.py`, `monetization.py`)
+driving a panel in the Dash `/design` page's PLANNING zone since M2.5.
+`roll_planner.py` is the exception: it is built and tested but **has no
+consumer** — `/design`'s "Roll planner" panel is the roll *table*
+(`roll_status.py`). Wiring it is #258. See `docs/part-x-coverage.md` for the full
 handbook-item → implementation map and `docs/hedging handbook.md` for the cited
 sections.
 
@@ -129,11 +134,13 @@ closing Phase 2: the weekly digest (`reporting/weekly_report.py`,
 provider-agnostic SMTP delivery), the market-data refresh job, the offsite
 `exports/` backup, and a
 two-check dead-man's-switch are all built, tested, and documented (RUNBOOK
-§9–13). The notebook-execution and `nbqa` CI steps are retired — the app and
-report test suites now cover both surfaces the notebooks used to (see the
-M2.6 close-out in `docs/implementation-plan.md` for the coverage mapping);
-the notebook files themselves are unchanged and still work locally, just no
-longer CI-gated. Jupyter/notebook and Playwright moved out of the main
+§9–13). The notebook-execution and `nbqa` CI steps were retired here — the app
+and report test suites cover both surfaces the notebooks used to (see the
+M2.6 close-out in `docs/implementation-plan.md` for the coverage mapping).
+**Stage 4.3 then deleted the notebooks themselves**, along with `example.py`,
+`setup_nbstripout.sh` and the `nbstripout`/`nbqa`/`jupytext` toolchain; the
+parity record and the six items it disposed of are in
+`docs/part-x-coverage.md`, "Stage 4.3". Jupyter/notebook and Playwright moved out of the main
 Poetry dependency group into `dev`/`test`, shrinking the production image
 from 1.32 GB to 758 MB. The droplet deploy of this milestone is pending on
 this PR merging and a release tag being cut — see `docs/implementation-plan.md`'s
@@ -199,7 +206,7 @@ don't fix):
 
 - **fast-processor** — quick lookups, symbol searches, module summaries. Use for the
   "orient" step so file contents don't fill the main context.
-- **gate-runner** — the code gate: ruff, format, mypy, pytest, nbqa. Use after an
+- **gate-runner** — the code gate: ruff, format, mypy, pytest, pylint. Use after an
   implementation step.
 - **dash-smoke-runner** — the app/integration gate: brings the Dash app up headless
   and runs the app-level smoke / Playwright suite. Use after a UI step. Distinct from

@@ -120,7 +120,7 @@ default is chipped:
 | — | Time to Convexity Cliff | — | `/design` PLANNING — **Convexity cliff** | `analysis/health.HealthMixin.calculate_convexity_cliff_days`; lines from `IpsConvexity.cliff_*` | **PRESENT** (notebook-retirement audit) |
 | — | Sizing workbench | — | `/design` PLANNING | `analysis/sizing.size_hedge` | **PRESENT** |
 | — | Strike ladder builder | — | `/design` PLANNING | `analysis/strike_ladder.build_strike_ladder` | **PRESENT** |
-| — | Roll planner | — | `/design` PLANNING | `analysis/roll_planner.build_roll_plan` | **PRESENT** |
+| — | Roll planner | — | `/design` PLANNING — *Roll planner* | `analysis/roll_status.evaluate_roll_status` — **not** `roll_planner` | **PARTIAL** — the panel is the roll *table*; `analysis/roll_planner.build_roll_plan` has no consumer. See [Stage 4.3](#stage-43--the-notebook-retirement) |
 | — | Monetization planner | — | `/design` PLANNING + `/monitor` *Decisions* | `analysis/monetization.build_monetization_plan` | **PRESENT** |
 
 **Note on #5 and #15.** These are **one number**, not two. The handbook
@@ -293,17 +293,17 @@ which the app instantiates, so the module is on a shipping path:
 | `calculate_crash_convexity_pct` | `crash_payoff`, `roll_status`, `crash_repricing`, `/design`'s market-environment panel — **live** |
 | `calculate_vol_regime_percentile` | `market_environment` — **live** |
 | `calculate_vega_sufficiency_pct` | `/design` sizing panel — **live since M2.7** |
-| `calculate_health_metrics` | `widgets/health_dashboard.py` (Jupyter) only |
-| `calculate_overall_health_score` | `widgets/health_dashboard.py` (Jupyter) only |
-| `calculate_delta_drift_pct` | `calculate_health_metrics` → Jupyter; the underlying `delta_drift_from_target` also backs `/design`'s hedge-trigger delta row — **live** |
-| `calculate_net_carry_pct` | `calculate_health_metrics` only → Jupyter |
+| `calculate_health_metrics` | **nothing** — its one caller, `widgets/health_dashboard.py`, was deleted in Stage 4.3 |
+| `calculate_overall_health_score` | **nothing** — same |
+| `calculate_delta_drift_pct` | `calculate_health_metrics` → nothing; the underlying `delta_drift_from_target` also backs `/design`'s hedge-trigger delta row — **live** |
+| `calculate_net_carry_pct` | **nothing** — `calculate_health_metrics` only |
 | `calculate_convexity_cliff_days` | `/design` convexity cliff panel — **live** |
-| `calculate_hedge_success_pct` | `calculate_health_metrics` only → Jupyter (deliberate — M2.4 finding **M2**) |
+| `calculate_hedge_success_pct` | **nothing** — `calculate_health_metrics` only (deliberate — M2.4 finding **M2**) |
 
-`calculate_health_metrics` is a **historical** consumer path: `widgets/` is
-Jupyter-only, and M2.6 retired the notebook-execution and `nbqa` CI steps, so
-nothing behind that entry point is gated any more. `analysis/health.py`
-records this at the function.
+Stage 4.3 took the last consumer of that entry point rather than merely
+un-gating it, and all three orphaned methods were **kept deliberately** — see
+[`analysis/health.py`'s three orphans](#analysishealthpys-three-orphans) for
+the reasoning. `analysis/health.py` records it at each function.
 
 **`analysis/crash_payoff.crash_scenario_table` / `crash_payoff_ratio`** —
 kept deliberately; see [Conscious retirements](#conscious-retirements).
@@ -358,24 +358,149 @@ printing "999 days" would read an unhedged book as the safest possible one.
 That sentinel is now the named `health.NO_LONG_PUTS_CLIFF_DAYS` rather than a
 literal at both ends, and a test asserts `999` never reaches the page.
 
+## Stage 4.3 — the notebook retirement
+
+`monitor_dashboard.ipynb`, `hedge_design.ipynb`, `example.py` and
+`setup_nbstripout.sh` are gone, along with the `nbstripout` / `nbqa` /
+`jupytext` tooling, the `.gitattributes` output filter, and the gate's
+notebook-lint step. `deltadewa/widgets/health_dashboard.py` went with them
+(closing [#242](https://github.com/qwertytam/deltadewa/issues/242)).
+
+The parity pass that preceded the deletion is below. **Six items had no Dash
+equivalent and no recorded decision.** Two were retired here; four became
+issues. Nothing was dropped without one or the other — which is the whole
+point of doing this before the deletion rather than after.
+
+### Retired here
+
+**The consolidated Greeks chart** (`visualization.plot_greeks_consolidated`,
+Monitor cell 28). A matplotlib bar chart of the book's Greeks by position.
+*Rationale:* `/design` EXPLORATION already answers the question it was asked
+— how each Greek behaves — and answers it better, as a spot×vol surface with
+a metric dropdown (`STRESS_METRICS`) rather than a single static snapshot.
+The chart function and its tests are kept; only the surface is retired.
+
+**The session change log** (`dashboard/changelog_display.py`, both notebooks).
+*Rationale:* the display was a `ConsoleReporter` print of a per-session,
+kernel-lifetime log — a form that does not survive the move to a persistent,
+shared, server-side `ProgramState`. **The data is not retired.**
+`ProgramState` constructs its own `PortfolioLogger` at `state.py:82` and
+threads it through mutation and import (`state.py:187`, `:213`), backed by
+`reporting/audit.py`'s `PortfolioChangeTracker` — so every edit made through
+`/design` is still being recorded. What is retired is the view of it, and
+rebuilding that view for the persistent model is
+[#262](https://github.com/qwertytam/deltadewa/issues/262).
+
+### Deferred, with an issue
+
+| What | Where it was | Issue |
+| --- | --- | --- |
+| Roll planner — the `ROLL_NOW`/`DELAY`/`HOLD` action, proposed target strike, and roll-up cost to it | Design cell 21, via `analysis/roll_planner.build_roll_plan` | [#258](https://github.com/qwertytam/deltadewa/issues/258) |
+| Position aging & expiration calendar | Monitor cell 41, `dashboard/position_aging.py` | [#259](https://github.com/qwertytam/deltadewa/issues/259) |
+| Portfolio volatility profile | Design cell 36, `dashboard/volatility_profile.py` + `analysis/volatility.get_volatility_stats` | [#260](https://github.com/qwertytam/deltadewa/issues/260) |
+| Portfolio shape guard on import | Cell 5 of **both** notebooks, `analysis/portfolio_shape.classify_portfolio_shape` | [#261](https://github.com/qwertytam/deltadewa/issues/261) |
+
+### The roll planner was a false PRESENT
+
+Worth recording separately, because it is the failure mode this document
+exists to prevent, found *in* this document. The coverage table listed **Roll
+planner — `/design` PLANNING — `analysis/roll_planner.build_roll_plan` —
+PRESENT**. The panel on `/design` titled "Roll planner" renders
+`roll_status.evaluate_roll_status` (`app/pages/design.py:61`, `:1186-1193`);
+it has never called `build_roll_plan`, which had no consumer outside the
+notebook. A reader checking parity against the table would have concluded the
+notebook could be deleted safely, and would have been wrong.
+
+The lesson is narrower than "the table was stale": the row was wrong because a
+**panel title matched a module name**. `roll_planner.py` and the "Roll planner"
+panel sound like the same thing and are not — the panel is the roll *table*
+(`roll_status.py`), and `roll_planner.py` is the proposal layer above it. When
+filling in the *Analysis backing* column, read the import, don't match the
+name. The row is now PARTIAL, and [#258](https://github.com/qwertytam/deltadewa/issues/258)
+restores it.
+
+### What survived unchanged
+
+Verified present at a named `deltadewa/app/**` line, not assumed: crash
+convexity curve, scenario numbers, cost of carry and hedge efficiency, market
+environment (#6/#7/#8), decision matrix and entry timing, net delta, vega
+sufficiency, delta drift, convexity cliff, hedge triggers, position editor,
+sizing, strike ladder, monetization, position detail, all three stress
+surfaces, Monte Carlo and the P&L distribution.
+
+Already-recorded retirements re-confirmed rather than re-litigated: the Part
+VII report (now the digest), the discrete scenario table (now the curve), the
+hedge-success gauge, and the delta-drift *gauge form*. All four are under
+[Conscious retirements](#conscious-retirements) or the
+[notebook-retirement audit](#the-notebook-retirement-audit) above.
+
+Two lower-severity losses are noted without an issue: `build_env_gauges`, the
+gauge form of market-environment numbers that are on `/design` in full (the
+same gauge-form-only loss recorded for delta drift), and
+`MonteCarloStalenessWidget`, which warned that cached MC results predated a
+portfolio edit — moot on `/design`, which recomputes in-callback rather than
+caching across edits.
+
+### `config/dashboard.yaml` now has no reader
+
+A consequence of deleting `health_dashboard.py`, recorded because it is not
+obvious and nothing fails to announce it. That widget was the **only**
+consumer of the gauge presentation config. `dashboard/session.py` still loads
+it into `SessionContext.dashboard_config`, and nothing reads the result. So
+`config/dashboard.yaml`, `config/dashboard.example.yaml`, the three
+`examples/dashboard/` presets, and `docs/dashboard-config-guide.md` all now
+describe a file the running app never opens. The IPS is the sole config the
+Dash app loads.
+
+Left in place rather than deleted, because the decision (delete the config
+surface, or give the presets a Dash consumer) belongs with whoever takes
+[#259](https://github.com/qwertytam/deltadewa/issues/259)/[#260](https://github.com/qwertytam/deltadewa/issues/260)
+— those are the panels most likely to want banded gauge geometry back. This
+also subsumes Open question #2 below.
+
+### `analysis/health.py`'s three orphans
+
+`calculate_net_carry_pct`, `calculate_health_metrics` and
+`calculate_overall_health_score` lost their last consumer with the widget.
+**All three are kept**, annotated as unconsumed at the function, on the same
+reasoning as `crash_payoff.crash_scenario_table`: net carry is a real metric
+with no Dash home and re-deriving it later is work, the aggregator is the
+expensive part to rebuild if a Dash health surface is ever wanted, and all
+three stay unit-tested meanwhile. This resolves Open question #1.
+
+`calculate_overall_health_score` no longer depends on any gauge class — it was
+always duck-typed on four attributes (`actual`, `min_val`, `max_val`,
+`invert_colors`), and its tests now build that contract directly instead of
+importing `HedgeHealthMetric`.
+
+### The Jupyter layer itself
+
+`deltadewa/widgets/` (11 modules) and `deltadewa/dashboard/` (12) survive,
+minus `health_dashboard.py`. They have **no product consumer** — the two
+notebooks were it — and are annotated as such at `widgets/__init__.py`. They
+are still gated: ~245 of the suite's tests cover them. Retiring the layer is a
+separate decision from retiring the notebooks and was deliberately not bundled
+here.
+
 ## Open questions
 
 Not decided by M2.7 or M2.8, and not blocking anything.
 
-1. **The remaining Jupyter-only health gauges.** Resolved for the four audited
-   above. What is left is narrower: `calculate_net_carry_pct`,
-   `calculate_health_metrics`, and `calculate_overall_health_score` lose their
-   last consumer when `widgets/health_dashboard.py` goes. The first is a real
-   metric with no Dash home; the other two are the Jupyter aggregator itself
-   and have no meaning off that surface.
+1. ~~**The remaining Jupyter-only health gauges.**~~ **Resolved in Stage
+   4.3** — all three are kept and annotated as unconsumed. See
+   [`analysis/health.py`'s three orphans](#analysishealthpys-three-orphans).
 2. **`delta_drift`'s gauge band in `dashboard.yaml`** (`min_val: 5.0` /
    `max_val: 10.0`) exactly duplicates `triggers.delta_drift_warn_pct` /
    `delta_drift_action_pct`. Pre-existing, and the last policy number left in
    presentation config after #241 — which closed the `vega_sufficiency` and
    `convexity_cliff` cases and confirmed `vol_regime`, `net_carry` and
    `crash_convexity` only *look* duplicated (different metrics and sign
-   conventions that happen to share a digit). Left open because it goes with
-   the notebooks, not before them.
+   conventions that happen to share a digit).
+
+   **Largely moot since Stage 4.3**: nothing reads `dashboard.yaml` at all now
+   (see [above](#configdashboardyaml-now-has-no-reader)), so the duplicate
+   cannot mislead a running surface — only a reader. It stays listed because
+   the file is still tracked and still documented.
 
    Whoever takes it should fix a second defect in the same block: all three
    `examples/dashboard/*.yaml` profiles still describe `delta_drift` as a
@@ -385,11 +510,11 @@ Not decided by M2.7 or M2.8, and not blocking anything.
    the metric, not just its band. Do not fix them by copying the shipped
    numbers across — that re-adds the duplication; remove the grading lines
    the way #241 did for `convexity_cliff`.
-3. **The widget's hardcoded config fallback.**
-   `HedgeHealthDashboard._get_default_config()` still holds the cliff numbers
-   #241 removed from the YAML files, so removing a key there falls back to a
-   private copy rather than to policy. Annotated as obsolete pending #242
-   rather than rewired, since `/design` already reads the IPS directly.
+3. ~~**The widget's hardcoded config fallback.**~~ **Resolved in Stage 4.3** —
+   `HedgeHealthDashboard._get_default_config()` held cliff numbers #241 had
+   removed from the YAML files, so a removed key fell back to a private copy
+   rather than to policy. The widget is deleted, taking the private copy with
+   it; `/design` reads the IPS directly.
 
 `entry_timing_tree`'s hardcoded VIX thresholds (item 3 in earlier revisions
 of this list) are resolved, not open: M2.8 moved them to

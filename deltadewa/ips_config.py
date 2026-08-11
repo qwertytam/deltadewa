@@ -2,8 +2,12 @@
 
 The IPS ("Investment Policy Statement") config is the single source of
 truth for hedge program thresholds and the pricing-engine default exercise
-style — distinct from ``dashboard_config_*.yaml`` (loaded by
-``widgets/health_dashboard.py``), which is presentation-only (gauge ranges).
+style — distinct from ``dashboard_config_*.yaml``, which is
+presentation-only (gauge ranges).
+
+``dashboard_config_*.yaml`` currently has **no reader**: its only consumer
+was ``widgets/health_dashboard.py``, deleted in Stage 4.3 with the
+notebooks. The IPS is now the sole config the shipping Dash app loads.
 """
 
 from __future__ import annotations
@@ -99,7 +103,7 @@ _DEFAULT_CLIFF_URGENT_DAYS: Final[int] = 30
 # Single source for the market-environment policy bands (see
 # ``IpsMarketEnvironment``). Public because they are consumed across
 # ``analysis.market_environment``, ``analysis.health``,
-# ``analysis.decision_matrix``, and ``widgets.health_dashboard`` — no consumer
+# and ``analysis.decision_matrix`` — no consumer
 # redefines a band literal. The vol-regime band is decimal implied vol; the skew
 # band is a percentile on 0-100 (converted to a 0-1 fraction at the consumer
 # edge); the term tolerance is in VIX points.

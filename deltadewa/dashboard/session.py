@@ -67,11 +67,18 @@ def _load_dashboard_config(
     path: Path,
     reporter: ConsoleReporter,
 ) -> dict[str, Any] | None:
-    """Load HedgeHealthDashboard presentation config, never raising.
+    """Load the gauge presentation config, never raising.
 
     Returns ``None`` (after a reporter warning) if the file is missing,
     unreadable, malformed, or its root isn't a mapping. Supports YAML
     (default) and JSON, dispatched by file suffix.
+
+    .. note::
+
+       Nothing reads the result any more. ``HedgeHealthDashboard`` was the
+       only consumer of ``SessionContext.dashboard_config`` and Stage 4.3
+       deleted it with the notebooks, so this loader, ``config/dashboard.yaml``
+       and the ``examples/dashboard/`` presets are all currently unread.
     """
     if not path.exists():
         reporter.warning(
@@ -149,9 +156,10 @@ def start_session(
         ips_path: Path to the hedge program policy file. If missing or
             invalid, ``ips_config`` is ``None`` and the session still
             starts — this never raises.
-        dashboard_path: Path to the ``HedgeHealthDashboard`` presentation
-            config (gauge ranges). If missing or invalid, ``dashboard_config``
-            is ``None`` and the session still starts — this never raises.
+        dashboard_path: Path to the gauge presentation config (gauge
+            ranges). If missing or invalid, ``dashboard_config`` is ``None``
+            and the session still starts — this never raises. Since Stage
+            4.3 nothing reads the loaded value; see ``_load_dashboard_config``.
         use_live_market_data: If ``True``, attempt ``CboeFredProvider``
             (live CBOE/FRED data — delayed/end-of-day, subject to the
             source's redistribution restrictions). On ``MarketDataError``
