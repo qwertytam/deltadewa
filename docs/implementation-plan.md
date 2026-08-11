@@ -1575,6 +1575,32 @@ recorded separately, since M2.8 merged 12 minutes later the same day);
   didn't silently change what a reading means. `dashboard.yaml` keeps
   its own copy since the Jupyter gauge still reads it; retiring that
   copy was left out on purpose (see `part-x-coverage.md`).
+
+  **Superseded by #241 (2026-08-10): the band is now 1.5 / 4.0.** The
+  carried-over values were not a band. `dashboard.yaml`'s gauge is a
+  signed, symmetric display axis (−50…+50, green above +20, nothing bad
+  above it), so `end: 50` was an axis bound, not a ceiling. The metric
+  divides by total portfolio value — options *plus* underlying — and the
+  equity leg dominates that denominator on a tail hedge, so the shipped
+  books price at +1.8% to +2.7% (`spx_tail_20m` +2.70%). The 20–50 band
+  was unreachable and `/design` read "outside band" for every book in the
+  repo for the life of M2.7. `tests/test_ips_config.py::TestVegaSufficiency`
+  now pins the *scale* rather than the values. See
+  `part-x-coverage.md`'s "Where the vega band went".
+
+- **#241 also made `ips.yaml` the sole owner of the cliff thresholds.**
+  `parameters.convexity_cliff_days` and the `convexity_cliff` gauge's
+  `min_val`/`mid_val`/`max_val` are gone from `config/dashboard.yaml` and
+  all three `examples/dashboard/*.yaml` profiles;
+  `convexity.cliff_threshold_days` / `cliff_review_days` /
+  `cliff_urgent_days` are the only definition. Unlike the vega case the
+  carry-over itself was sound — those three were genuine grading lines on
+  a one-sided day-count axis. `widgets/health_dashboard.py`'s hardcoded
+  fallback still holds a copy, annotated obsolete pending #242 rather than
+  rewired, since that surface is being retired. `delta_drift`'s gauge band
+  (`min_val: 5.0` / `max_val: 10.0`, duplicating
+  `triggers.delta_drift_warn_pct` / `delta_drift_action_pct`) is the one
+  policy-in-presentation duplication left, and goes with the notebooks.
 - **`/monitor` stays a sentence, not a sixth headline.**
   `_efficiency_sentence()` (`app/pages/monitor.py:146`) is a deliberate
   `html.P`, never a `band_bar`/`big-number` — the page already carries

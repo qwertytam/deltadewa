@@ -1,9 +1,11 @@
 """The `/design` page: editor (BOOK), planners (PLANNING), stress (EXPLORATION).
 
 BOOK: add/remove positions, the underlying quantity, and guarded
-import/export. PLANNING: the four read-only planners — sizing, strike
-ladder, roll, monetization — each a thin wrapper over its `analysis/`
-function, all pricing the same IPS crash basis `/monitor`'s gauge uses.
+import/export. PLANNING: the read-only planners — sizing, strike ladder,
+roll, monetization — each a thin wrapper over its `analysis/` function,
+pricing the same IPS crash basis `/monitor`'s gauge uses, alongside the
+panels that read a different basis and chip themselves accordingly
+(market environment, hedge triggers, delta drift, convexity cliff).
 EXPLORATION: the three notebook stress surfaces — spot/vol heatmap,
 time/price heatmap, Monte Carlo distribution — priced on a *different*
 basis (proportional vol, a generic GBM move) than PLANNING's crash-skew;
@@ -48,6 +50,7 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
+from deltadewa.analysis.health import NO_LONG_PUTS_CLIFF_DAYS
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerThresholds,
     evaluate_hedge_trigger_set,
@@ -108,7 +111,11 @@ if TYPE_CHECKING:
         UnsolvableRung,
     )
     from deltadewa.app.factory import ProgramDashApp
-    from deltadewa.ips_config import IpsConfig, IpsMarketEnvironment
+    from deltadewa.ips_config import (
+        IpsConfig,
+        IpsConvexity,
+        IpsMarketEnvironment,
+    )
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
     from deltadewa.state import ProgramState
@@ -141,6 +148,11 @@ _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
 # -5% spot shock (Part X §13), not the IPS crash anchor -- a distinct basis
 # from every other PLANNING panel.
 _BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"
+# Nor does the convexity cliff panel, which is the only PLANNING panel that
+# touches no market input whatsoever: it compares each long put's maturity date
+# against the valuation date. Nothing is priced and no Greek is read, so it
+# cannot honestly carry even the book-Greeks chip.
+_BASIS_MATURITY_CALENDAR = "basis: position maturities (nothing priced)"
 
 # EXPLORATION zone: dial defaults, matching hedge_design.ipynb's own
 # GlobalAssumptions/StressDashboard notebook-cell literals.
@@ -1341,6 +1353,100 @@ def _render_delta_drift_panel_logic(
     )
 
 
+def _cliff_verdict(days: int, conv: IpsConvexity) -> str:
+    """Grade the cliff runway against the IPS review/urgent lines.
+
+    One-sided by construction: more runway is better without limit, so there
+    is no "too far from the cliff" verdict and deliberately no band bar. The
+    vocabulary matches the hedge-trigger panel's so the two read consistently
+    when a reader scans down the zone.
+    """
+    if days <= conv.cliff_urgent_days:
+        return "URGENT"
+    if days <= conv.cliff_review_days:
+        return "REVIEW"
+    return "OK"
+
+
+def _convexity_cliff_panel_view(days: int, conv: IpsConvexity) -> Component:
+    """Render Part X's "Time to Convexity Cliff" for the current book.
+
+    Sits after delta drift because it answers the same rebalancing question on
+    the calendar axis: not how the hedge behaves if spot moves now, but how
+    long the book keeps the convexity it was bought for. A tail hedge that is
+    still nominally in place can already have stopped paying off in a crash.
+
+    The no-long-puts case is reported as unavailable rather than as the
+    sentinel's numeric value — see
+    :data:`~deltadewa.analysis.health.NO_LONG_PUTS_CLIFF_DAYS`.
+    """
+    if days == NO_LONG_PUTS_CLIFF_DAYS:
+        return html.P(
+            "The book holds no long puts, so there is no hedge convexity to "
+            "decay and this metric does not apply.",
+            className="plain-language",
+        )
+    lead = (
+        "A long put loses convexity quickly once its remaining maturity gets "
+        f"short. Counting from {conv.cliff_threshold_days} days to expiry as "
+        "the start of that high-gamma region, "
+    )
+    if days == 0:
+        # The engine floors the runway at zero, so it cannot say how far past
+        # the boundary a leg already is: a put at 120 DTE and one at 30 DTE
+        # both read 0 against a 180-day region. Saying "already inside"
+        # rather than "0 days" keeps the panel from implying the two are the
+        # same decision, without claiming a number it doesn't have.
+        return html.Div(
+            [
+                html.P(
+                    lead + "the nearest long put in the book is already "
+                    "inside it.",
+                    className="plain-language",
+                ),
+                html.P(
+                    "Past the cliff — URGENT. Convexity is already decaying; "
+                    "the roll trigger should have fired first "
+                    f"({conv.cliff_review_days}d review, "
+                    f"{conv.cliff_urgent_days}d urgent).",
+                    className="env-verdict",
+                ),
+            ],
+        )
+    verdict = _cliff_verdict(days, conv)
+    return html.Div(
+        [
+            html.P(
+                lead + "the nearest long put in the book has "
+                f"{days:,} days of runway before it gets there.",
+                className="plain-language",
+            ),
+            html.P(
+                f"{days:,} days to the cliff — {verdict} against the IPS "
+                f"lines ({conv.cliff_review_days}d review, "
+                f"{conv.cliff_urgent_days}d urgent).",
+                className="env-verdict",
+            ),
+        ],
+    )
+
+
+def _render_convexity_cliff_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> Component:
+    """Render the convexity cliff panel for the current book."""
+    return _safe_render(
+        lambda: _convexity_cliff_panel_view(
+            PortfolioAnalyzer(portfolio).calculate_convexity_cliff_days(
+                cliff_threshold_days=ips_config.convexity.cliff_threshold_days,
+            ),
+            ips_config.convexity,
+        ),
+    )
+
+
 def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
     """One row of the IPS monetization schedule."""
     return html.Tr(
@@ -1683,9 +1789,10 @@ def _render_vega_term_panel_logic(
 def render(app: ProgramDashApp) -> html.Div:
     """Build the /design page: the BOOK zone and the PLANNING zone.
 
-    BOOK is the editor (add/remove, import/export); PLANNING is the four
-    read-only planners (sizing, strike ladder, roll, monetization), all
-    priced on the same IPS crash basis ``/monitor``'s gauge uses. Built
+    BOOK is the editor (add/remove, import/export); PLANNING is the
+    read-only planners (sizing, strike ladder, roll, monetization) priced on
+    the same IPS crash basis ``/monitor``'s gauge uses, plus the panels
+    carrying their own basis chip. Built
     fresh per request from ``app.program_state``/``app.ips_config`` — no
     module-level singleton, so this page's content actually differs from
     ``/monitor``'s (``test_pages.py``'s distinctness assertion).
@@ -1862,8 +1969,10 @@ def render(app: ProgramDashApp) -> html.Div:
             html.P(
                 "Every panel below that prices the book prices the IPS "
                 "crash — the same basis /monitor's gauge uses. Those agree "
-                "with /monitor to the cent. Panels reading live market data "
-                "rather than repricing the book carry their own chip.",
+                "with /monitor to the cent. Any panel on a different basis — "
+                "reading the live feed, the book's Greeks unshocked, another "
+                "shock, or just the position calendar — carries its own "
+                "chip.",
                 className="plain-language",
             ),
             html.Div(
@@ -2028,6 +2137,24 @@ def render(app: ProgramDashApp) -> html.Div:
                     html.Div(
                         _render_delta_drift_panel_logic(portfolio=portfolio),
                         id="plan-delta-drift-panel",
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
+                    html.H3(
+                        [
+                            "Convexity cliff",
+                            basis_chip(_BASIS_MATURITY_CALENDAR),
+                        ],
+                    ),
+                    html.Div(
+                        _render_convexity_cliff_panel_logic(
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                        ),
+                        id="plan-convexity-cliff-panel",
                     ),
                 ],
                 className="panel",
@@ -2366,7 +2493,7 @@ def render(app: ProgramDashApp) -> html.Div:
 
 
 def register_callbacks(app: ProgramDashApp) -> None:
-    """Wire the BOOK zone's six mutating callbacks and PLANNING's four reads.
+    """Wire the BOOK zone's mutating callbacks and the read-only panels.
 
     A no-op when ``app.ips_config is None`` — mirrors ``render()``'s own
     page-level gate, so a gated page has nothing wired to a mutator
@@ -2582,6 +2709,16 @@ def register_callbacks(app: ProgramDashApp) -> None:
     def _render_delta_drift_panel(_version: int) -> Component:
         return _render_delta_drift_panel_logic(
             portfolio=app.program_state.portfolio,
+        )
+
+    @app.callback(
+        Output("plan-convexity-cliff-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_convexity_cliff_panel(_version: int) -> Component:
+        return _render_convexity_cliff_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
         )
 
     @app.callback(

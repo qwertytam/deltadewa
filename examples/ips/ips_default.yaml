@@ -32,6 +32,17 @@ convexity:
   skew_reference_delta: 0.10    # put-delta magnitude of that wing (the anchor the
                                 # steepening is calibrated to). Range (0, 0.5).
   crash_floor_reported: true    # surface the intrinsic-floor column
+  # Hedge efficiency = crash payoff / annual carry (handbook's interpretation
+  # table). Below min reads POOR, above max reads ATTRACTIVE.
+  efficiency_min_ratio: 3.0
+  efficiency_max_ratio: 6.0
+  # Convexity cliff: cliff_threshold_days is where the high-gamma region is
+  # deemed to start, and the metric reports the nearest long put's runway
+  # before it gets there; review/urgent band that runway. Owned here only —
+  # dashboard.yaml's gauge carries the axis, not these lines (#241).
+  cliff_threshold_days: 180
+  cliff_review_days: 90
+  cliff_urgent_days: 30
 
 drawdown:
   max_tolerance_pct: 20.0
@@ -44,6 +55,18 @@ sizing:
   # beta) component, so they UNDER-PROTECT idiosyncratic risk on a concentrated
   # single-name book. 1.0 = protected book assumed to move 1:1 with the index.
   portfolio_beta: 1.0
+
+vega:
+  # Vega sufficiency (handbook Part X #4): the book's % value change per +10 vol
+  # points. Below min the hedge barely responds to a vol spike; above max it is
+  # vega-dominated rather than convexity-driven.
+  #
+  # MIND THE SCALE. The metric divides by total portfolio value (options *plus*
+  # underlying), so on a tail hedge — where the equity leg dominates — real
+  # readings are low single digits, not tens. A band in the tens cannot be hit
+  # (#241). The handbook gives no numeric band, so set these deliberately.
+  sufficiency_min_pct: 1.5
+  sufficiency_max_pct: 4.0
 
 market_environment:
   # Hedge-cost verdict policy (CHEAP/FAIR/EXPENSIVE) — these drive a decision,

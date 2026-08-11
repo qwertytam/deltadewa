@@ -65,6 +65,15 @@ cd deltadewa
 # exposure check (§2) for why this is the actual security boundary.
 echo "BIND_ADDR=<tailscale-ip-from-above>" > .env
 
+# config/ips.yaml and config/dashboard.yaml hold this program's real policy
+# and are gitignored (#245) — the clone above does not include them. Copy
+# the templates and fill in your real numbers before the first build, or
+# the app comes up with no policy loaded (§5's "No IPS policy is loaded"
+# screen) rather than failing the build.
+cp config/ips.example.yaml config/ips.yaml
+cp config/dashboard.example.yaml config/dashboard.yaml
+# edit config/ips.yaml (and optionally config/dashboard.yaml) now
+
 docker compose up -d --build
 ```
 
@@ -137,6 +146,25 @@ No VPN client config, no port, no password beyond the Tailscale login.
 
 ## 4. Routine ops
 
+**One-time, the first deploy past #245 only:** before that tag's
+`git checkout`, `config/ips.yaml` and `config/dashboard.yaml` are still
+git-tracked on this droplet; after it, they're gitignored and no longer
+shipped by any tag. `git checkout` deletes a tracked file from the working
+tree when the target tag no longer tracks it — so checking out that tag
+straight will silently wipe your live policy out from under the running
+container. Back the two files up first, checkout, then put them back
+(they're untracked from then on, so this is a one-time step, not a
+per-deploy one):
+
+```bash
+cp config/ips.yaml config/dashboard.yaml /tmp/
+git fetch --tags
+git checkout <the #245 tag or later>
+cp /tmp/ips.yaml /tmp/dashboard.yaml config/
+docker compose build   # COPY config ./config bakes the restored files in
+docker compose up -d
+```
+
 ```bash
 # Deploy an update — pull a TAG, not main, so what's running is
 # always a known, reviewed point, not whatever HEAD happens to be
@@ -204,12 +232,15 @@ an explicit "unavailable" rather than a number:
 
 **IPS policy file.** `config/ips.yaml` is baked into the image at build
 time (`COPY config ./config` in the `Dockerfile`) — it is *not* on the
-`exports/` bind mount. If it's missing or invalid, `/monitor` renders a
-single "No IPS policy is loaded" screen in place of the crash-led content
-(there's no partial-policy state — see `docker compose logs -f app` for
-why it was skipped); to change it, edit `config/ips.yaml` in the repo
-clone and rebuild (`docker compose build`) — a live container won't pick
-up a host-side edit to it.
+`exports/` bind mount, and it's gitignored (#245): the clone doesn't
+include it, and `git checkout`/`git pull` never touch it once it exists
+here (see §4's one-time note for the transition). If it's missing or
+invalid, `/monitor` renders a single "No IPS policy is loaded" screen in
+place of the crash-led content (there's no partial-policy state — see
+`docker compose logs -f app` for why it was skipped); to change it, edit
+`config/ips.yaml` directly on the droplet and rebuild
+(`docker compose build`) — a live container won't pick up a host-side edit
+to it, and there's nothing to commit or push.
 
 **Verify:**
 

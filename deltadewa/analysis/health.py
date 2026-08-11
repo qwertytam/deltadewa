@@ -22,6 +22,12 @@ if TYPE_CHECKING:
 # literal lives here; callers pass the policy value in.
 VOL_REGIME_LOOKBACK_DAYS: Final[int] = 252
 
+# Returned by ``calculate_convexity_cliff_days`` when the book holds no long
+# puts, i.e. there is no convexity to decay and the metric does not apply. Named
+# so consumers test for "not applicable" instead of comparing against a literal;
+# it is a sentinel, not a runway of 999 days, and must never be rendered as one.
+NO_LONG_PUTS_CLIFF_DAYS: Final[int] = 999
+
 
 class VolRegimeBasis(StrEnum):
     """How a vol-regime figure was derived.
@@ -292,10 +298,10 @@ class HealthMixin:
 
         Returns:
             Days until nearest long put enters high-gamma region.
-            Returns 999 if no long puts exist.
+            Returns :data:`NO_LONG_PUTS_CLIFF_DAYS` if no long puts exist.
 
         """
-        min_days = 999
+        min_days = NO_LONG_PUTS_CLIFF_DAYS
 
         for pos in self.portfolio.positions:
             # Check for long puts (negative quantity for puts means short)
