@@ -6,14 +6,14 @@
 # Install Poetry
 curl -sSL https://install.python-poetry.org | python3 -
 
-# Install dependencies (includes nbstripout in dev)
+# Install dependencies
 poetry install --with dev
 
 # Activate environment
 poetry shell
 
-# Configure nbstripout (prevents repeated cell outputs)
-./setup_nbstripout.sh
+# Copy the config templates and fill in your own policy
+cp config/ips.example.yaml config/ips.yaml
 ```
 
 ## Quick Examples
@@ -96,40 +96,35 @@ print(scenario_df[["spot_price", "value"]])
 
 ### Example 4: Interactive Dashboards
 
-The dashboard is split into two notebooks, each for a different audience
-and workflow. See `README.md`'s Dashboard Organization section for the
-full panel list.
-
-#### Monitor & Report — `monitor_dashboard.ipynb`
+The Dash app serves two pages, each for a different audience and workflow.
+Start it with:
 
 ```bash
-jupyter lab monitor_dashboard.ipynb
+poetry run python -m deltadewa.app
 ```
+
+See `README.md`'s Dashboard Organization section for the full panel list.
+
+#### Monitor & Report — <http://127.0.0.1:8050/monitor>
 
 Read-mostly view of the current book, for routine checks and IC/board
-reporting. Starts **empty** — load a portfolio via the import widget.
+reporting.
 
-1. **Load a portfolio**: import via JSON/YAML
-2. **Review health**: Net Hedge Summary, Hedge Health, Roll Status,
-   Hedge Decision Triggers
-3. **Review detail**: Cost of Carry, Position Aging, Position Detail,
-   Consolidated Greeks
-4. **Stress snapshot**: a single current-structure spot x vol heatmap
+1. **Crash scenario**: spot/vol/quantity dials, payoff curve, scenario numbers
+2. **Cost**: carry against the IPS budget, plus the hedge-efficiency reading
+3. **Decisions**: per-position roll verdicts with reasons, monetization schedule
+4. **Position detail**: the collapsed per-leg ledger
 
-#### Design & Roll — `hedge_design.ipynb`
-
-```bash
-jupyter lab hedge_design.ipynb
-```
+#### Design & Roll — <http://127.0.0.1:8050/design>
 
 Workbench mode: load a book and design changes to it.
 
-1. **Build/edit**: Position Editor, editable scenario assumptions
-2. **Plan a roll**: candidate roll-up costs via `analysis.roll_status`
-3. **Stress-test**: eager Monte Carlo run, time x price / spot x vol
-   heatmaps, Risk/Reward summary, Volatility Profile
-4. *(stubbed, future work)* Sizing workbench, strike ladder builder,
-   monetization planner
+1. **BOOK**: position editor, underlying quantity, net-delta readout,
+   guarded import/export
+2. **PLANNING**: market environment, sizing, strike ladder, roll table,
+   hedge rebalance triggers, delta drift, convexity cliff, monetization
+3. **EXPLORATION**: spot x vol and time x price heatmaps, Monte Carlo
+   distribution, vega term exposure
 
 ## Common Use Cases
 
@@ -220,6 +215,7 @@ print(f"Annual time decay: ${annual_theta:.2f}")
 
 ## Further Reading
 
-- See `example.py` for a complete working example
 - See `README.md` for detailed documentation
-- See `monitor_dashboard.ipynb` / `hedge_design.ipynb` for interactive analysis
+- Run `poetry run python -m deltadewa.app` and open `/monitor` or `/design`
+  for interactive analysis
+- See `docs/part-x-coverage.md` for the handbook-item → surface map

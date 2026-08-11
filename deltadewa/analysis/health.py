@@ -181,6 +181,19 @@ class HealthMixin:
     def calculate_net_carry_pct(self) -> float | None:
         """Calculate net carry (theta) as annualized % of underlying value.
 
+        .. note::
+
+           **No product consumer since Stage 4.3.** Its last caller was
+           ``calculate_health_metrics`` → ``widgets/health_dashboard.py``,
+           the Jupyter gauge wall, deleted with the notebooks. Kept —
+           deliberately, on the same reasoning as
+           ``analysis/crash_payoff.crash_scenario_table`` — because it is a
+           real metric with no Dash home, not scaffolding: re-deriving it
+           later is work, and it stays unit-tested meanwhile. It is *not*
+           the carry number ``/monitor`` shows; that is
+           ``analysis/carry.carry_vs_budget``, which normalizes differently.
+           See ``docs/part-x-coverage.md``, "Stage 4.3".
+
         Returns:
             Annualized theta as percentage of underlying value (positive =
             earning carry, negative = paying carry), or ``None`` when the
@@ -405,6 +418,14 @@ class HealthMixin:
     ) -> float:
         """Calculate an overall health score (0-100) based on all metrics.
 
+        .. note::
+
+           **No product consumer since Stage 4.3**, which deleted the
+           Jupyter gauge wall that aggregated into it. The ``metrics``
+           values are duck-typed: only ``actual``, ``min_val``, ``max_val``
+           and ``invert_colors`` are read, so it no longer depends on any
+           gauge class. Kept and tested; see ``docs/part-x-coverage.md``.
+
         Args:
             metrics: dictionary containing metric configurations with keys:
                 - actual: Actual metric value
@@ -462,19 +483,22 @@ class HealthMixin:
 
         .. note::
 
-           **This entry point is historical.** Its only caller is
-           ``widgets/health_dashboard.py``, a Jupyter surface that CI stopped
-           gating at M2.6 when the notebook-execution and ``nbqa`` steps were
-           retired. Nothing on a shipping Dash page reads it.
+           **This entry point has no consumer at all since Stage 4.3.** It
+           had exactly one — ``widgets/health_dashboard.py``, the Jupyter
+           gauge wall — and that module was deleted with the notebooks.
+           Nothing on a shipping Dash page has ever read it.
 
-           Four of the gauges it assembles (``delta_drift_pct``,
-           ``net_carry_pct``, ``convexity_cliff_days``, ``hedge_success_pct``)
-           are reachable *only* through here, so they are ungated too — see
-           ``docs/part-x-coverage.md``, "Open questions", for the standing
-           decision on whether to revive, fold, or delete them. The three
-           methods with live consumers (crash convexity, vol regime, and —
-           since M2.7 — vega sufficiency) are all called directly by their
-           consumers, not through this function.
+           It is kept rather than deleted because it is the only assembled
+           view of the health metrics, and rebuilding the assembly is the
+           expensive part if a Dash health surface is ever wanted. Two of
+           the gauges it collects are now unreachable any other way
+           (``net_carry_pct``, ``hedge_success_pct``); the rest are called
+           directly by their live consumers — crash convexity, vol regime,
+           vega sufficiency (M2.7), convexity cliff and delta drift (M2.8) —
+           not through this function. ``hedge_success_pct`` additionally
+           stays deliberately unsurfaced (M2.4 finding **M2**: it cannot
+           compute a real value without the position-history layer, #70).
+           See ``docs/part-x-coverage.md``, "Stage 4.3".
 
         Args:
             cumulative_carry_paid: Total carry paid for the hedge (default: 0.0)

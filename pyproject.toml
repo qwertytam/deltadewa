@@ -95,18 +95,17 @@ dev = [
 	"debugpy (>=1.8.19,<2.0.0)",
 	"mypy>=1.10",
 	"types-PyYAML>=6.0",
-	"nbstripout (>=0.9.0,<0.10.0)",
-	"nbqa (>=1.9.1,<2.0.0)",
 	"pylint (>=4.0.4,<5.0.0)",
-	"jupytext (>=1.19.1,<2.0.0)",
 	"pytest>=7.4.0",
 	"pandas-stubs>=2.3.3.251201",
 	"pytest-cov (>=7.1.0,<8.0.0)",
-	# Notebook UI runtime — only used interactively via `poetry run
-	# jupyter ...`; unused at container runtime (deltadewa/app/ is the
-	# production surface). Never imported by app/ or reporting/ — see
-	# docs/implementation-plan.md's M2.6 close-out for the import-graph
-	# check that confirmed this split is safe.
+	# ipywidgets/ipyfilechooser back the surviving deltadewa/widgets/ +
+	# deltadewa/dashboard/ modules and their tests. Stage 4.3 deleted the
+	# two notebooks that were those modules' only product consumer, so
+	# jupyter/jupyterlab/notebook/jupyter-server/nbconvert below now have
+	# nothing to run — they are kept only because the widget test suite
+	# still imports the ipywidgets stack. Retiring that layer retires
+	# these with it; see docs/part-x-coverage.md, "Stage 4.3".
 	"jupyter>=1.0.0",
 	"jupyterlab (>=4.5.7,<5.0.0)",
 	"ipywidgets>=8.1.0",

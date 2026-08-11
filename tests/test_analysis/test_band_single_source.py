@@ -30,9 +30,10 @@ health = importlib.import_module("deltadewa.analysis.health")
 market_environment = importlib.import_module(
     "deltadewa.analysis.market_environment",
 )
-health_dashboard = importlib.import_module(
-    "deltadewa.widgets.health_dashboard",
-)
+# ``deltadewa.widgets.health_dashboard`` was a fifth guarded module until
+# Stage 4.3 deleted it. It was the Jupyter gauge wall — the surface that
+# held the duplicated band literals this guard was written for — so its
+# removal shrinks the guard's scope rather than weakening it.
 
 # The old duplicate band pairs, in the forms they appeared as source literals.
 # Pair forms (not bare values) so the crash-vol-shock docstring's lone ``0.15``
@@ -44,7 +45,7 @@ _BANNED_PAIRS = (
     "(0.30, 0.70)",
     "0.15-0.35",
 )
-_MODULES = (health, market_environment, decision_matrix, health_dashboard)
+_MODULES = (health, market_environment, decision_matrix)
 
 
 def test_no_duplicate_band_pair_literal_survives() -> None:

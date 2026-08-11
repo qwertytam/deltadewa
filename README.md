@@ -1,21 +1,18 @@
 # deltadewa
 
-SPX tail-risk hedging system — two Jupyter dashboards, IPS-driven, QuantLib-priced.
+SPX tail-risk hedging system — a two-page Dash app, IPS-driven, QuantLib-priced.
 
 ## Overview
 
-`deltadewa` is a Jupyter-based hedging dashboard for a single-name **SPX tail-risk /
-downside-protection** program. Two notebooks share the same underlying package, each
-targeting a different audience:
+`deltadewa` is a hedging dashboard for a single-name **SPX tail-risk /
+downside-protection** program. One Dash app (`deltadewa/app/`) serves two pages off a
+shared server-side `ProgramState`, each targeting a different audience:
 
-- **`monitor_dashboard.ipynb` — Monitor & Report**: read-mostly view of the current book
-  for routine checks and IC/board reporting. Covers handbook Tiers 1–4 and the Part VII
-  program report.
-- **`hedge_design.ipynb` — Hedge Design**: the analyst's workbench — position editor, roll
-  planner, sizing workbench, strike ladder builder, monetization planner, and decision
-  matrix.
+- **`/monitor` — Monitor & Report**: read-mostly view of the current book for routine
+  checks and IC/board reporting, led by the crash scenario.
+- **`/design` — Hedge Design**: the analyst's workbench — position editor, roll table,
+  sizing workbench, strike ladder builder, monetization planner, and decision matrix.
 
-Both call `start_session(role=..., globals_dict=globals())` from `deltadewa.dashboard`.
 The program policy lives in `config/ips.yaml` (carry budget, convexity targets, drawdown
 tolerance, roll and monetization triggers). Methodology is drawn from
 [`docs/hedging handbook.md`](docs/hedging%20handbook.md).
@@ -31,11 +28,12 @@ optional live CBOE/FRED pull that falls back gracefully on network failure.
 - **Market-environment tiers** — VIX term structure (contango / flat / backwardation),
   SKEW-index percentile, vol-regime percentile
 - **Roll Status** — per-position moneyness drift, time decay, and roll-up cost ladder
-- **Seven hedge-health gauges** with configurable thresholds (`config/dashboard.yaml`)
-- **Sizing workbench, strike ladder builder, monetization planner** — done; drive
-  a panel in `hedge_design.ipynb` and the Dash `/design` page's PLANNING zone
+- **Vega sufficiency, delta drift, convexity cliff** — banded against IPS policy on
+  `/design`
+- **Sizing workbench, strike ladder builder, monetization planner** — drive the
+  `/design` page's PLANNING zone
 - **Decision matrix** — structured roll / monetization / re-risk checklist
-- **Program report** — IC/board format (Monitor dashboard)
+- **Program report** — IC/board format, delivered as the emailed weekly digest
 - **IPS policy contract** — carry budget, convexity and drawdown targets, roll/rally/
   monetization triggers (`config/ips.yaml`)
 - **Live CBOE/FRED market data** (optional; disk-cached with a policy-driven TTL
@@ -114,106 +112,49 @@ cp config/dashboard.example.yaml config/dashboard.yaml
 poetry shell
 ```
 
-### Jupyter Notebook Output Management
-
-This repository uses `nbstripout` to keep notebook outputs out of version control while
-preserving them locally.
-
-**Initial Setup:**
-
-```bash
-# Install dev dependencies (includes nbstripout)
-poetry install --with dev
-
-# Configure one-way filter (commit-only)
-./setup_nbstripout.sh
-
-# Or manually:
-git config filter.nbstripout-commit.clean 'nbstripout'
-git config filter.nbstripout-commit.smudge 'cat'
-git config filter.nbstripout-commit.required true
-```
-
-**Why one-way filtering?**
-
-- Outputs are stripped when you **commit** (keeps repo clean)
-- Outputs are preserved when you **checkout/pull** (no duplicates)
-- Prevents repeated cell outputs in VSCode when pulling agent changes
-
-**If you see repeated outputs:** You need to run the setup script above.
-
 ## Dashboard Organization
 
-The dashboard is split into two notebooks, each with its own audience and purpose. Both
-call `start_session(role=..., globals_dict=globals())` from `deltadewa.dashboard` and
-share the same underlying package — only the panels and setup differ.
+The Dash app serves two pages off one shared server-side `ProgramState`, each with
+its own audience and purpose.
 
-#### 📋 `monitor_dashboard.ipynb` — Monitor & Report
+### 📋 `/monitor` — Monitor & Report
 
-Read-mostly view of the current book, for routine checks and IC/board reporting. Starts
-**empty** — load a portfolio explicitly via the import widget. No position editor.
+Read-mostly view of the current book, for routine checks and IC/board reporting.
 
-- Net Hedge Summary, Hedge Health, Roll Status, Hedge Decision Triggers
-- Cost of Carry, Position Aging, Position Detail
-- Consolidated Greeks view
-- A single current-structure stress snapshot (spot × vol heatmap)
-- Session Change Log and export
+- Crash scenario explorer — spot/vol/quantity dials, payoff curve, scenario numbers
+- Cost panel, including the hedge-efficiency reading
+- Decisions — per-position roll verdicts with reasons, monetization schedule
+- Position detail ledger (collapsed)
 
-#### 🛠️ `hedge_design.ipynb` — Hedge Design
+### 🛠️ `/design` — Hedge Design
 
-Workbench mode: load a book and design changes to it.
+Workbench mode: load a book and design changes to it. Three zones:
 
-- Position Editor, editable scenario assumptions
-- Roll planner (candidate roll-up costs via `analysis.roll_status`)
-- Sizing workbench, strike ladder builder, monetization planner — done; also on
-  the Dash `/design` page's PLANNING zone
-- Eager Monte Carlo run, full stress tooling (time × price / spot × vol heatmaps),
-  Risk/Reward summary, Volatility Profile
-- Session Change Log and export
+- **BOOK** — position editor, underlying quantity with net-delta readout,
+  guarded import/export
+- **PLANNING** — market environment, sizing (with vega sufficiency), strike
+  ladder, roll table, hedge rebalance triggers, delta drift, convexity cliff,
+  monetization
+- **EXPLORATION** — spot × vol and time × price heatmaps, Monte Carlo
+  distribution, vega term exposure
 
-### Launch Jupyter Dashboard
+Plus the **weekly digest** (`deltadewa/reporting/weekly_report.py`) — an emailed
+report carrying the Part VII board/IC format, the decision matrix and market context.
 
-Start the Monitor dashboard (read-only book review):
+### Launch the dashboard
 
 ```bash
-jupyter lab monitor_dashboard.ipynb
+poetry run python -m deltadewa.app
 ```
 
-Start the Hedge Design dashboard (construction + stress testing):
-
-```bash
-jupyter lab hedge_design.ipynb
-```
+Then open <http://127.0.0.1:8050/monitor> or `/design`.
 
 ## Quick Start
 
 The canonical SPX tail-hedge book is in `examples/portfolios/spx_protective_put.yaml` —
 two tranches of OTM long puts against a 1,000-unit SPX notional, with European exercise
 style, entry tracking, and realistic implied-vol skew. Import it via the
-**Import Portfolio** widget at the top of each notebook.
-
-### Session bootstrap
-
-```python
-# Paste into the notebook setup cell, then run all cells.
-from deltadewa.dashboard import start_session
-
-ctx = start_session(role="monitor", globals_dict=globals())
-# Use the Import Portfolio widget to load a YAML book, e.g.:
-#   examples/portfolios/spx_protective_put.yaml
-```
-
-```python
-# For live CBOE/FRED market data (optional; falls back offline on network error):
-ctx = start_session(
-    role="monitor",
-    globals_dict=globals(),
-    use_live_market_data=True,
-)
-```
-
-The `role` argument (`"monitor"` or `"design"`) is stored on the returned
-`SessionContext` for later use.
+**Import portfolio** control in `/design`'s BOOK zone.
 
 ### Per-position volatility
 
@@ -236,7 +177,7 @@ position's vol proportionally to a vega-weighted portfolio average. Use
 ```python
 from deltadewa.analysis import get_volatility_stats
 
-stats = get_volatility_stats(ctx.portfolio)
+stats = get_volatility_stats(portfolio)
 print(f"Vega-weighted avg: {stats['avg_volatility']:.2%}")
 print(
     f"Vol range:         {stats['min_volatility']:.2%} – {stats['max_volatility']:.2%}"
@@ -258,17 +199,23 @@ cp config/dashboard.example.yaml config/dashboard.yaml
 | File | Purpose | Guide |
 |---|---|---|
 | `config/ips.yaml` | Program policy — carry budget, convexity targets, drawdown tolerance, roll/monetization triggers | [yaml-config-guide.md](docs/yaml-config-guide.md) |
-| `config/dashboard.yaml` | Health-gauge thresholds and color bands (presentation only) | [dashboard-config-guide.md](docs/dashboard-config-guide.md) |
+| `config/dashboard.yaml` | Gauge thresholds and color bands (presentation only) — **currently unread**, see below | [dashboard-config-guide.md](docs/dashboard-config-guide.md) |
 
-A missing `config/dashboard.yaml` falls back to sensible built-in defaults —
-never a hard failure. A missing `config/ips.yaml` is different: the loader
+**`config/dashboard.yaml` has no reader right now.** Its only consumer was the
+Jupyter gauge wall (`widgets/health_dashboard.py`), deleted in Stage 4.3 with
+the notebooks. The file, its template, the `examples/dashboard/` presets and
+their guide are all kept pending a decision on whether the Dash pages should
+read banded gauge geometry from config — see `docs/part-x-coverage.md`,
+"Stage 4.3". Copying it changes nothing today. The IPS is the only config the
+running app loads.
+
+A missing `config/ips.yaml` is different: the loader
 raises, and every consumer degrades *visibly* rather than silently (`/monitor`
 and `/design` render an explicit "No IPS policy is loaded" screen; the weekly
 digest refuses to build). Copy the example rather than relying on that
 fallback — it means the app is running without your program's real policy.
 
-Alternate presentation postures live in `examples/dashboard/` — copy one over
-`config/dashboard.yaml` to activate it. For the IPS, start from
+Alternate presentation postures live in `examples/dashboard/`. For the IPS, start from
 `config/ips.example.yaml` above; `examples/ips/ips_default.yaml` illustrates the
 same schema with the same placeholder numbers. Nothing under `examples/` is this
 program's real policy (#249).
@@ -279,31 +226,32 @@ program's real policy (#249).
 deltadewa/
 ├── deltadewa/
 │   ├── analysis/          # metrics: carry, health, hedge triggers, market env, roll status, vol
-│   ├── dashboard/         # start_session(), session bootstrap, widget wiring
+│   ├── app/               # the Dash app: factory.py, chrome.py, pages/{monitor,design}.py
 │   ├── marketdata/        # CboeFredProvider, StaticProvider, provider interface
 │   ├── portfolio/         # domain model: position.py, core.py, Monte Carlo, risk, factory
-│   ├── reporting/         # ConsoleReporter, PortfolioLogger
+│   ├── reporting/         # weekly digest, program report, ConsoleReporter, PortfolioLogger
 │   ├── visualization/     # chart builders
-│   ├── widgets/           # Jupyter UI widgets
+│   ├── dashboard/         # legacy Jupyter layer — no product consumer (see #242)
+│   ├── widgets/           # legacy Jupyter widgets — no product consumer
 │   ├── constants.py       # ExerciseStyle enum and shared constants
 │   ├── ips_config.py      # IPS policy schema and loader
 │   ├── persistence.py     # PortfolioSerializer (YAML/JSON round-trip)
+│   ├── state.py           # ProgramState — the shared server-side book + IPS state
 │   └── valuation.py       # OptionValuation (QuantLib pricing engine)
 ├── config/
 │   ├── ips.example.yaml       # template — copy to ips.yaml and fill in
-│   ├── dashboard.example.yaml # template — copy to dashboard.yaml and fill in
+│   ├── dashboard.example.yaml # template (currently unread — see below)
 │   ├── ips.yaml           # program policy (gitignored — real values, #245)
-│   └── dashboard.yaml     # health-gauge thresholds (gitignored — real values)
+│   └── dashboard.yaml     # gauge thresholds (gitignored; currently unread)
 ├── examples/
 │   ├── portfolios/        # spx_protective_put.yaml, spy_collar.yaml, …
 │   ├── ips/               # policy presets
 │   └── dashboard/         # gauge-threshold presets
 ├── docs/
 │   ├── hedging handbook.md
+│   ├── part-x-coverage.md # handbook-item → surface map; read before moving a panel
 │   ├── yaml-config-guide.md
 │   └── dashboard-config-guide.md
-├── monitor_dashboard.ipynb
-├── hedge_design.ipynb
 ├── pyproject.toml
 └── tests/
 ```
@@ -311,12 +259,11 @@ deltadewa/
 ## Dependencies
 
 - **QuantLib-Python**: Quantitative finance library for option pricing
-- **Jupyter/JupyterLab**: Interactive notebook environment
+- **Dash**: the web UI (`/monitor`, `/design`)
 - **pandas**: Data manipulation and analysis
 - **numpy**: Numerical computing
-- **matplotlib**: Static visualizations
 - **plotly**: Interactive charts
-- **ipywidgets**: Interactive dashboard widgets
+- **gunicorn**: production WSGI server
 
 ## Contributing
 

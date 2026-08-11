@@ -2,10 +2,18 @@
 
 > **Navigation:** [README](../README.md) · [yaml-config-guide.md](yaml-config-guide.md) · [hedging handbook.md](hedging%20handbook.md)
 
+⚠️ **This file currently has no reader.** `config/dashboard.yaml`'s only
+consumer was `HedgeHealthDashboard` (`widgets/health_dashboard.py`), the
+Jupyter gauge wall, deleted in Stage 4.3 with the notebooks. The file, its
+`.example` template, the `examples/dashboard/` presets and this guide are kept
+pending a decision on whether the Dash pages should read banded gauge geometry
+from config — see [part-x-coverage.md](part-x-coverage.md), "Stage 4.3".
+**Editing it changes nothing today.** The schema below is documented as-was.
+
 `config/dashboard.yaml` controls the gauge ranges and color thresholds
-`HedgeHealthDashboard` (`deltadewa/widgets/health_dashboard.py`) uses for
-its seven health metrics. It's presentation-only — it changes how the
-dashboard displays health, not the underlying numbers or program policy.
+the Jupyter gauge wall used for its seven health metrics. It's
+presentation-only — it changes how the dashboard displays health, not the
+underlying numbers or program policy.
 
 **Nothing in this file decides anything.** Every value is gauge geometry:
 where an axis starts and ends, and where it changes colour. Any threshold
@@ -34,7 +42,7 @@ constructor arguments.
 | `convexity_cliff_days` | `convexity.cliff_threshold_days` in `ips.yaml` (#241) |
 | `skew_low_pctile` / `skew_high_pctile` | `market_environment.skew_low_pctile` / `skew_high_pctile` in `ips.yaml` |
 | `term_contango_tolerance` | `market_environment.term_contango_tolerance` in `ips.yaml` |
-| `historical_vol_low` / `historical_vol_high` | `HedgeHealthDashboard(...)` constructor arguments, defaulted from `ips_config.DEFAULT_VOL_REGIME_LOW` / `_HIGH` — the same constants backing `market_environment.vol_regime_low` / `_high` |
+| `historical_vol_low` / `historical_vol_high` | were `HedgeHealthDashboard(...)` constructor arguments (class deleted in Stage 4.3), defaulted from `ips_config.DEFAULT_VOL_REGIME_LOW` / `_HIGH` — the same constants still backing `market_environment.vol_regime_low` / `_high` |
 
 ### `metrics`
 
@@ -88,33 +96,31 @@ Two rows deserve a closer look, because both have been mistaken for policy:
   produced a band no book could reach; #241 recalibrated it. Do not read one
   as the other.
 
-Values shown are the shipped defaults
-(`HedgeHealthDashboard._get_default_config()`, also reproduced and
+Values shown were the shipped defaults, from the deleted
+`HedgeHealthDashboard._get_default_config()`. They are still reproduced and
 commented in `examples/dashboard/dashboard_config_default.yaml` — with the
-`convexity_cliff` bands omitted there, since they are policy).
+`convexity_cliff` bands omitted there, since they are policy.
 
 ## How it's loaded
 
-`start_session()` (`deltadewa/dashboard/session.py`) reads
-`config/dashboard.yaml` automatically. `config/dashboard.yaml` is gitignored
-— it holds this program's real presentation values, not shipped (#245); copy
-`config/dashboard.example.yaml` there to customize, per the
-[YAML Configuration Guide](yaml-config-guide.md). Missing or invalid → a
-warning naming the file and pointing at the `.example`, and
-`ctx.dashboard_config` is `None`; `HedgeHealthDashboard` then falls back to
-its built-in defaults, which are identical to the values above — so leaving
-it uncopied is harmless, unlike `config/ips.yaml`.
+**It isn't, by anything that runs.** `deltadewa/dashboard/session.py`'s
+`_load_dashboard_config` still parses `config/dashboard.yaml` into
+`SessionContext.dashboard_config` — and nothing reads that field. The two
+consumers this section used to describe, `HedgeHealthDashboard`'s
+built-in-default fallback and its `display_config_loader()` FileUpload
+widget, were deleted with the class in Stage 4.3. Neither `/monitor` nor
+`/design` has ever read this file.
 
-Separately, `HedgeHealthDashboard.display_config_loader()` renders a
-FileUpload widget in the notebook for layering an ad hoc YAML/JSON config
-on top at runtime — independent of, and on top of, whatever
-`start_session` already loaded.
+`config/dashboard.yaml` remains gitignored, holding this program's real
+presentation values rather than being shipped (#245); `config/dashboard.example.yaml`
+is the tracked template. Copying it is harmless and currently inert.
 
 ## Aggressive vs. conservative presets
 
 `examples/dashboard/` ships two alternate presets alongside the default.
-Neither is loaded automatically — copy one over `config/dashboard.yaml` to
-use it.
+Nothing loads them — see the note at the top of this guide. Copying one over
+`config/dashboard.yaml` changes no rendered output today; they are kept as a
+record of the intended postures.
 
 - **`dashboard_config_aggressive.yaml`** — every band is widened and
   shifted to tolerate more risk: e.g. `crash_convexity.min_val` relaxes
