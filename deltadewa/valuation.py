@@ -541,6 +541,29 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
         """Calculate time value of the option."""
         return self.price() - self.intrinsic_value()
 
+    def sync_global_evaluation_date(self) -> None:
+        """Re-assert this option's date on QuantLib's global ``Settings``.
+
+        ``_setup_quantlib()`` writes ``Settings.instance().evaluationDate``
+        once, at construction. Every term structure it builds is pinned to
+        ``ql_valuation_date``, so the global is *not* read again when
+        pricing — with one exception that matters: ``isExpired()`` reads it
+        live. If the global has since advanced past this option's maturity,
+        ``NPV()`` and every Greek silently return ``0.0`` rather than
+        raising, even though this object's own dates are untouched and
+        correct.
+
+        Callers that hold an ``OptionValuation`` across an interval in
+        which some *other* construction may have moved the global — most
+        obviously a cache, see ``BatchPricer._get_or_create_cached_option``
+        — must call this before reading results back. It is a no-op when
+        the global already matches, so it costs nothing on the common path
+        and avoids a needless observer invalidation when it does not.
+        """
+        settings = QtLib.Settings.instance()
+        if settings.evaluationDate != self.ql_valuation_date:
+            settings.evaluationDate = self.ql_valuation_date
+
     def update_spot_price(self, new_spot_price: float) -> None:
         """Update the spot price and recalculate."""
         # Ensure spot remains strictly positive for QuantLib engines

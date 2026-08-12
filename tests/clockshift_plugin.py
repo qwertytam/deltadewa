@@ -19,6 +19,20 @@ a type that C extensions hold pointers to. It runs nightly against ``main``
 ``tests/test_clockshift_canary.py`` is this plugin's self-test: it fails if the
 shift does not reach library code, so a green matrix means something.
 
+What this probe does **not** cover (#180). It moves one global — Python's wall
+clock — and catches tests whose asserted values silently depend on "now". It
+says nothing about QuantLib's *other* global, ``Settings.instance()
+.evaluationDate``, which ``valuation.py``'s ``_setup_quantlib()`` writes on
+every construction. The two are independent: shifting the wall clock moves the
+valuation date and every maturity together, so their relationship — which is
+what ``isExpired()`` reads — is exactly preserved under any shift. That is why
+the probe ran clean over ``BatchPricer``'s threaded tests (it does reach them;
+they derive their dates from ``now()``) while a cache hit could still leave the
+QuantLib global parked past a maturity and quietly price a leg at zero. The gap
+was never thread coverage. Global QuantLib state has no probe; the direct
+regression tests in ``tests/test_batch_pricer.py``'s
+``TestCachedOptionEvaluationDate`` stand in for one.
+
 The default shift is 0, deliberately: a bare ``-p`` load is the control run,
 and the plugin and the canary read the same environment variable with the same
 default, so they can never disagree about how far the clock moved.
