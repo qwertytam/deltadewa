@@ -162,10 +162,10 @@ def classify_vix_regime(
     for 18%) and is converted to decimal before comparing against the
     decimal *low*/*high* band.
 
-    The label cuts at percentile 25/75 -- the same breakpoints
-    ``config/dashboard.yaml``'s ``vol_regime`` gauge already uses
-    (``min_val: 25`` green/cheap, ``max_val: 75`` red/expensive), so
-    this label agrees with what the existing Hedge Health gauge shows.
+    The label cuts at percentile 25/75 -- the breakpoints the retired
+    ``config/dashboard.yaml`` ``vol_regime`` gauge used (``min_val: 25``
+    green/cheap, ``max_val: 75`` red/expensive), carried forward so the
+    label keeps the meaning that gauge established (#279).
 
     Args:
         vix: Current VIX level, in vol points.

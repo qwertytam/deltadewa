@@ -1745,6 +1745,34 @@ checking for deliberately during review — not discovering a fifth time.
 - Add CHANGELOG / CONTRIBUTING / SECURITY; fix the LICENSE author vs repo-owner
   mismatch.
 
+### Stage 4.4 — the Jupyter layer retirement (#279) — DONE
+
+Stage 4.3 deleted the notebooks but deliberately left the layer they drove.
+#279 closed it: `deltadewa/dashboard/` (12 modules), `deltadewa/widgets/` (11),
+`deltadewa/config.py`, their 253 tests, the symbols they were the last caller
+of, the unread `dashboard_config_*.yaml` surface, and the whole
+ipywidgets/Jupyter dependency stack (`poetry.lock` 166 → 80 packages; IPython
+no longer installed). Full record in `docs/part-x-coverage.md`, "The Jupyter
+layer itself — retired (#279)".
+
+Close-out numbers (dated snapshot, per the note at the top of this doc — use
+`poetry run pytest --co -q | tail -1` for the current figure): 1987 → 1729
+tests, mypy 123 → 97 source files, `tests/test_app` unchanged at 203/203 with
+both pages rendering. The production image is unaffected — the Dockerfile
+installs `--only main` and Stage 4.3 already took that win.
+
+Two findings were recorded rather than acted on, both now in
+`part-x-coverage.md`:
+
+- `triggers.rally_rebalance_pct` is validated, documented and handbook-backed
+  but read by nothing — the only IPS key with no reader. The key stays;
+  building the trigger is a separate issue.
+- **A second orphan set**: the matplotlib half of `deltadewa/visualization/` —
+  `base.py` (`OptionCharts`) and its five mixins, plus `convenience.py` and
+  `_protocols.py`. 8 modules, ~2,760 lines, 51 tests, no importer outside
+  `visualization/` and its own tests. Retiring it is what would let
+  `matplotlib` and `pillow` go; kept out of #279 to keep that PR reviewable.
+
 ---
 
 ## Deferred — backlog, not in this plan

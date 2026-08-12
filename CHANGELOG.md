@@ -17,7 +17,32 @@ history for that record instead.
 
 ## [Unreleased]
 
-No changes merged to `main` since the `v0.7.0` tag yet.
+### Removed
+
+- **#279** — the leftover Jupyter layer is retired: `deltadewa/dashboard/`
+  (12 modules), `deltadewa/widgets/` (11), `deltadewa/config.py`, their 253
+  tests, the symbols they were the last caller of
+  (`formatters/gradients.py` and `formatters/html.py` whole, plus
+  `create_diverging_style`, `apply_table_preset`, `update_export_dir`,
+  `create_default_portfolio`, `get_days_to_furthest_maturity` and
+  `StaticProvider.from_assumptions`), the unread
+  `dashboard_config_*.yaml` presentation surface (template, four
+  `examples/dashboard/` presets, and `docs/dashboard-config-guide.md`), and
+  the entire ipywidgets/Jupyter dependency stack — `poetry.lock` drops from
+  166 to 80 packages and IPython is no longer installed at all.
+
+  Stage 4.3 had deleted the notebooks that were this layer's only product
+  consumer but deliberately left the layer itself; this closes that. The
+  orphaning was verified **import-path-qualified**, because three retired
+  modules shared a bare name with a live `analysis/` module
+  (`roll_status.py`, `position_aging.py`, `stress.py`). Symbols that lost
+  their last caller but were kept are annotated at the function.
+
+  Two findings are recorded rather than acted on: `triggers.rally_rebalance_pct`
+  is validated and documented but read by nothing (the handbook's "Rule 2 —
+  Market Rally Rebalance Trigger" was never built), and the matplotlib half
+  of `deltadewa/visualization/` is a second orphan set of the same shape.
+  See `docs/part-x-coverage.md`.
 
 ## [0.7.0] - 2026-08-11
 
