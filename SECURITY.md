@@ -33,10 +33,11 @@ coverage as itself worth reporting.
 - **[#245](https://github.com/qwertytam/deltadewa/issues/245)** —
   `config/ips.yaml` and `config/dashboard.yaml` were tracked with this
   program's real policy values (carry budget, convexity targets, program
-  name), not template data. Fixed going forward: both are now gitignored,
+  name), not template data. Fixed going forward: both were gitignored,
   with `config/ips.example.yaml` / `config/dashboard.example.yaml` as the
   tracked templates (#248) — this is the origin of the `*.example.yaml`
-  convention stated above. **Still open**: the fix is forward-only: every
+  convention stated above. (#279 later retired the `dashboard.yaml` surface
+  entirely; only the IPS pair remains.) **Still open**: the fix is forward-only: every
   past revision of those real values remains visible in this public
   repo's git history. Closing this needs an actual decision — private
   repo, history rewrite, or a written accepted-risk sign-off — not just
@@ -65,10 +66,9 @@ coverage as itself worth reporting.
 multi-tenant or internet-facing service by default. Beyond the standing
 rule above, the main categories worth reporting:
 
-- A way for `config/ips.yaml` or `config/dashboard.yaml` (gitignored,
-  never shipped — see `docs/yaml-config-guide.md`) to leak into a tracked
-  file, a log line, or an exported artifact that isn't meant to carry
-  them.
+- A way for `config/ips.yaml` (gitignored, never shipped — see
+  `docs/yaml-config-guide.md`) to leak into a tracked file, a log line, or
+  an exported artifact that isn't meant to carry it.
 - A way for the deployed Dash app to expose portfolio data, IPS policy, or
   market-data credentials to an unauthenticated or unintended caller.
 - A credential or secret committed to the repository or its history.

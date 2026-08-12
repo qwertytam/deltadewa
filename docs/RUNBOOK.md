@@ -65,14 +65,14 @@ cd deltadewa
 # exposure check (§2) for why this is the actual security boundary.
 echo "BIND_ADDR=<tailscale-ip-from-above>" > .env
 
-# config/ips.yaml and config/dashboard.yaml hold this program's real policy
-# and are gitignored (#245) — the clone above does not include them. Copy
-# the templates and fill in your real numbers before the first build, or
-# the app comes up with no policy loaded (§5's "No IPS policy is loaded"
-# screen) rather than failing the build.
+# config/ips.yaml holds this program's real policy and is gitignored (#245)
+# — the clone above does not include it. Copy the template and fill in your
+# real numbers before the first build, or the app comes up with no policy
+# loaded (§5's "No IPS policy is loaded" screen) rather than failing the
+# build. (#279 retired the companion config/dashboard.yaml; the IPS is now
+# the only config the app loads.)
 cp config/ips.example.yaml config/ips.yaml
-cp config/dashboard.example.yaml config/dashboard.yaml
-# edit config/ips.yaml (and optionally config/dashboard.yaml) now
+# edit config/ips.yaml now
 
 docker compose up -d --build
 ```
@@ -148,7 +148,9 @@ No VPN client config, no port, no password beyond the Tailscale login.
 
 **One-time, the first deploy past #245 only:** before that tag's
 `git checkout`, `config/ips.yaml` and `config/dashboard.yaml` are still
-git-tracked on this droplet; after it, they're gitignored and no longer
+git-tracked on this droplet (#279 has since retired `dashboard.yaml`
+altogether — if the droplet is already past #245, back up `ips.yaml` alone
+and skip the rest of this step); after it, they're gitignored and no longer
 shipped by any tag. `git checkout` deletes a tracked file from the working
 tree when the target tag no longer tracks it — so checking out that tag
 straight will silently wipe your live policy out from under the running

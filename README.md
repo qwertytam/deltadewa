@@ -102,7 +102,6 @@ poetry install
 
 ```bash
 cp config/ips.example.yaml config/ips.yaml
-cp config/dashboard.example.yaml config/dashboard.yaml
 ```
 
 <!-- markdownlint-disable-next-line -->
@@ -186,28 +185,24 @@ print(
 
 ## Configuration
 
-`config/ips.yaml` and `config/dashboard.yaml` hold this program's real policy
-and presentation values — they are gitignored, not shipped (#245), mirroring
-the repo's `.env` / `.env.example` split. Copy the tracked templates and fill
-in your own numbers before running anything:
+`config/ips.yaml` holds this program's real policy values — it is gitignored,
+not shipped (#245), mirroring the repo's `.env` / `.env.example` split. Copy the
+tracked template and fill in your own numbers before running anything:
 
 ```bash
 cp config/ips.example.yaml config/ips.yaml
-cp config/dashboard.example.yaml config/dashboard.yaml
 ```
 
 | File | Purpose | Guide |
 |---|---|---|
 | `config/ips.yaml` | Program policy — carry budget, convexity targets, drawdown tolerance, roll/monetization triggers | [yaml-config-guide.md](docs/yaml-config-guide.md) |
-| `config/dashboard.yaml` | Gauge thresholds and color bands (presentation only) — **currently unread**, see below | [dashboard-config-guide.md](docs/dashboard-config-guide.md) |
 
-**`config/dashboard.yaml` has no reader right now.** Its only consumer was the
-Jupyter gauge wall (`widgets/health_dashboard.py`), deleted in Stage 4.3 with
-the notebooks. The file, its template, the `examples/dashboard/` presets and
-their guide are all kept pending a decision on whether the Dash pages should
-read banded gauge geometry from config — see `docs/part-x-coverage.md`,
-"Stage 4.3". Copying it changes nothing today. The IPS is the only config the
-running app loads.
+**The IPS is the only config the app loads.** There was a second,
+presentation-only `config/dashboard.yaml` carrying gauge geometry; it lost its
+last reader in Stage 4.3 and its last loader in #279, which retired the file,
+its template, the `examples/dashboard/` presets and their guide. Its policy
+content had already migrated into the IPS — see `docs/part-x-coverage.md`,
+"`config/dashboard.yaml` had no reader — and then no loader (#279)".
 
 A missing `config/ips.yaml` is different: the loader
 raises, and every consumer degrades *visibly* rather than silently (`/monitor`
@@ -215,9 +210,9 @@ and `/design` render an explicit "No IPS policy is loaded" screen; the weekly
 digest refuses to build). Copy the example rather than relying on that
 fallback — it means the app is running without your program's real policy.
 
-Alternate presentation postures live in `examples/dashboard/`. For the IPS, start from
-`config/ips.example.yaml` above; `examples/ips/ips_default.yaml` illustrates the
-same schema with the same placeholder numbers. Nothing under `examples/` is this
+For the IPS, start from `config/ips.example.yaml` above;
+`examples/ips/ips_default.yaml` illustrates the same schema with the same
+placeholder numbers. Nothing under `examples/` is this
 program's real policy (#249).
 
 ## Project Structure
@@ -231,27 +226,21 @@ deltadewa/
 │   ├── portfolio/         # domain model: position.py, core.py, Monte Carlo, risk, factory
 │   ├── reporting/         # weekly digest, program report, ConsoleReporter, PortfolioLogger
 │   ├── visualization/     # chart builders
-│   ├── dashboard/         # legacy Jupyter layer — no product consumer (see #242)
-│   ├── widgets/           # legacy Jupyter widgets — no product consumer
 │   ├── constants.py       # ExerciseStyle enum and shared constants
 │   ├── ips_config.py      # IPS policy schema and loader
 │   ├── persistence.py     # PortfolioSerializer (YAML/JSON round-trip)
 │   ├── state.py           # ProgramState — the shared server-side book + IPS state
 │   └── valuation.py       # OptionValuation (QuantLib pricing engine)
 ├── config/
-│   ├── ips.example.yaml       # template — copy to ips.yaml and fill in
-│   ├── dashboard.example.yaml # template (currently unread — see below)
-│   ├── ips.yaml           # program policy (gitignored — real values, #245)
-│   └── dashboard.yaml     # gauge thresholds (gitignored; currently unread)
+│   ├── ips.example.yaml   # template — copy to ips.yaml and fill in
+│   └── ips.yaml           # program policy (gitignored — real values, #245)
 ├── examples/
 │   ├── portfolios/        # spx_protective_put.yaml, spy_collar.yaml, …
-│   ├── ips/               # policy presets
-│   └── dashboard/         # gauge-threshold presets
+│   └── ips/               # policy presets
 ├── docs/
 │   ├── hedging handbook.md
 │   ├── part-x-coverage.md # handbook-item → surface map; read before moving a panel
-│   ├── yaml-config-guide.md
-│   └── dashboard-config-guide.md
+│   └── yaml-config-guide.md
 ├── pyproject.toml
 └── tests/
 ```
