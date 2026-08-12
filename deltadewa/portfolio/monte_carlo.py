@@ -247,8 +247,8 @@ class MonteCarloMixin:
                 ``"real_world"``.
             persist_cache: When ``True`` (default), caches the result on
                 ``self.monte_carlo_results`` as before — existing callers
-                (``visualization/pnl_charts.py``, ``widgets/summary.py``)
-                read that attribute directly rather than the return value.
+                (``visualization/pnl_charts.py``) read that attribute
+                directly rather than the return value.
                 Pass ``False`` for a scenario-local run (e.g. a what-if
                 horizon or expected-return override) that must not
                 overwrite the shared cache other panels read; the full

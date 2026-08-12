@@ -380,7 +380,7 @@ def evaluate_hedge_trigger_set(
     Args:
         portfolio: Live ``OptionPortfolio``. Never mutated.
         thresholds: Optional :class:`HedgeTriggerThresholds`. Pass ``None``
-            for the notebook defaults; production callers should pass
+            for the built-in defaults; production callers should pass
             ``HedgeTriggerThresholds.from_ips(ips_config.triggers)`` so no
             threshold comes from a dataclass literal.
 
@@ -485,7 +485,7 @@ def evaluate_hedge_triggers(
         ``ConsoleReporter`` for headers, status messages, and dividers.
     thresholds:
         Optional :class:`HedgeTriggerThresholds` to override the defaults.
-        Pass ``None`` (or omit) to use the same values as the notebook.
+        Pass ``None`` (or omit) to use the built-in defaults.
 
     Returns
     -------

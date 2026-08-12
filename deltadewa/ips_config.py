@@ -5,9 +5,10 @@ truth for hedge program thresholds and the pricing-engine default exercise
 style — distinct from ``dashboard_config_*.yaml``, which is
 presentation-only (gauge ranges).
 
-``dashboard_config_*.yaml`` currently has **no reader**: its only consumer
-was ``widgets/health_dashboard.py``, deleted in Stage 4.3 with the
-notebooks. The IPS is now the sole config the shipping Dash app loads.
+``dashboard_config_*.yaml`` has neither a reader nor a loader: its only
+consumer was ``widgets/health_dashboard.py``, deleted in Stage 4.3 with the
+notebooks, and #279 deleted the Jupyter session loader that still parsed it.
+The IPS is the sole config the shipping Dash app loads.
 """
 
 from __future__ import annotations

@@ -14,14 +14,6 @@ from .portfolio.core import OptionPortfolio
 from .portfolio.factory import create_empty_portfolio
 from .valuation import OptionValuation
 
-# InteractiveOutput/PortfolioWidgets deliberately NOT re-exported here:
-# they pull in the notebook-only widgets/ package (ipywidgets), which
-# would make importing anything under `deltadewa` — including the
-# production `deltadewa.app` — require ipywidgets. Import them from
-# `deltadewa.widgets` directly (matches `deltadewa.formatters`' own
-# "import from submodules directly" convention). Confirmed unused
-# anywhere in this repo before removing.
-
 __all__ = [
     "BUSINESS_DAYS_PER_YEAR",
     "DAYS_PER_WEEK",

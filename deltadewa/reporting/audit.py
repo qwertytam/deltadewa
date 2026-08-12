@@ -15,7 +15,7 @@ PortfolioLogger(name)
 PortfolioChangeTracker(portfolio, logger, reporter)
     .reset(portfolio)        — seed / re-seed the baseline snapshot
     .track()                 — diff current state vs last snapshot, log change
-    .as_callback()           — return a zero-arg callable for widget wiring
+    .as_callback()           — return a zero-arg callable for callback wiring
 """
 
 from __future__ import annotations
@@ -211,9 +211,7 @@ class PortfolioChangeTracker:
     -------
     >>> tracker = PortfolioChangeTracker(portfolio, portfolio_changelog,
     reporter)
-    >>> position_editor = portfolio_widgets.create_position_editor(
-    ...     on_change_callback=tracker.as_callback()
-    ... )
+    >>> on_edit = tracker.as_callback()  # call after each position edit
 
     """
 
