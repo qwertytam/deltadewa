@@ -1,4 +1,11 @@
-"""American option pricing using QuantLib with Bjerksund-Stensland model."""
+"""Option pricing using QuantLib.
+
+Supports both American (Bjerksund-Stensland / finite-difference) and
+European (analytic Black-Scholes) exercise styles — see
+:class:`OptionValuation`. SPX options are cash-settled and
+European-exercise; American is correct only for SPY/single-name
+underlyings.
+"""
 
 import warnings
 from datetime import datetime as dt
@@ -42,7 +49,12 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
     """
 
     # Numerical differentiation parameters
-    _SPOT_BUMP = 0.01  # Bump size for delta/gamma calculation
+    # Relative, not absolute (#185 item 3): an absolute $0.01 bump is
+    # negligible on a ~6,600-level index like SPX but oversized on a
+    # low-priced underlying. Both delta/gamma fallback sites below scale
+    # this by spot_price to get the actual bump, floored so a near-zero
+    # spot doesn't collapse it to nothing.
+    _SPOT_BUMP_RELATIVE = 0.0001  # 1bp of spot, for delta/gamma fallback
     _VOL_BUMP = 0.01  # Bump size for vega calculation
 
     # Closed-form accuracy thresholds
@@ -341,7 +353,7 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
             return self.option.delta()
         except RuntimeError:
             # If delta not available, compute numerically
-            h = self._SPOT_BUMP
+            h = max(self.spot_price * self._SPOT_BUMP_RELATIVE, 1e-6)
             original_spot = self.spot_price
             up_spot = max(original_spot + h, 1e-8)
             down_spot = max(original_spot - h, 1e-8)
@@ -361,8 +373,19 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
         try:
             return self.option.gamma()
         except RuntimeError:
-            # If gamma not available, compute numerically
-            h = self._SPOT_BUMP
+            # If gamma not available, compute numerically via two nested
+            # _compute_delta() calls. #185 item 2 flagged a hypothetical
+            # double-fallback: if both nested calls landed on
+            # _compute_delta()'s own expiry branch and disagreed on
+            # moneyness, this would silently return 0 instead of a real
+            # gamma. That branch is structurally unreachable from here —
+            # this function already returned 0.0 above if
+            # _is_expired_or_at_expiry(), and that check reads
+            # self.valuation_date/self.maturity_date, neither of which the
+            # spot bump below touches, so a nested _compute_delta() call
+            # sees the same not-expired result and falls through to its
+            # own (numeric or analytic) delta, never the expiry branch.
+            h = max(self.spot_price * self._SPOT_BUMP_RELATIVE, 1e-6)
             original_spot = self.spot_price
             up_spot = max(original_spot + h, 1e-8)
             down_spot = max(original_spot - h, 1e-8)

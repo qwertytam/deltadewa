@@ -1300,3 +1300,59 @@ class TestBatchPricerThreading:
 
         pricer_neg = _pricer(portfolio, max_workers=-5)
         assert pricer_neg.max_workers == 1
+
+    def test_parallel_theta_matches_sequential(self) -> None:
+        """Theta specifically, in parallel (#180).
+
+        Pins the actual safety invariant the corrected batch_pricer.py
+        comment documents: every worker spawned by one
+        portfolio_greeks_at() call shares the same valuation_date, so the
+        unsynchronized ``Settings.instance().evaluationDate`` writes each
+        ``OptionValuation`` construction makes are concurrent but
+        idempotent. This does not follow from the (false) "the global is
+        never touched" claim the comment used to make.
+        """
+        portfolio = _make_multi_position_portfolio(n=4)
+        spots = np.linspace(80.0, 120.0, 15)
+        valuation_date = dt.now(tz=datetime.UTC)
+
+        seq = _pricer(portfolio, max_workers=1).portfolio_greeks_at(
+            spots,
+            valuation_date,
+            greeks=("theta",),
+        )
+        par = _pricer(portfolio, max_workers=4).portfolio_greeks_at(
+            spots,
+            valuation_date,
+            greeks=("theta",),
+        )
+
+        assert np.allclose(seq["theta"], par["theta"], rtol=1e-6)
+
+    def test_parallel_greeks_match_sequential_repeated(self) -> None:
+        """Repeat the parallel-vs-sequential comparison several times.
+
+        The construction race in ``_get_or_create_cached_option()`` is
+        real (unsynchronized concurrent writes to the global
+        evaluationDate); it is safe only because it is idempotent here.
+        A single run could get lucky on scheduling — repetition raises
+        confidence this isn't a rarely-triggered corruption that one pass
+        would miss.
+        """
+        portfolio = _make_multi_position_portfolio(n=6)
+        spots = np.linspace(80.0, 120.0, 25)
+        valuation_date = dt.now(tz=datetime.UTC)
+
+        seq = _pricer(portfolio, max_workers=1).portfolio_greeks_at(
+            spots,
+            valuation_date,
+            greeks=("theta", "delta"),
+        )
+        for _ in range(20):
+            par = _pricer(portfolio, max_workers=6).portfolio_greeks_at(
+                spots,
+                valuation_date,
+                greeks=("theta", "delta"),
+            )
+            assert np.allclose(seq["theta"], par["theta"], rtol=1e-6)
+            assert np.allclose(seq["delta"], par["delta"], rtol=1e-6)

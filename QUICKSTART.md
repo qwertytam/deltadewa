@@ -18,23 +18,31 @@ cp config/ips.example.yaml config/ips.yaml
 
 ## Quick Examples
 
-### Example 1: Price a Single American Option
+### Example 1: Price a Single Option
+
+SPX options are cash-settled and European-exercise (see CLAUDE.md's domain
+rules), so this prices a European put directly through `OptionValuation` —
+the same engine every position in the app is priced with. Use
+`ExerciseStyle.AMERICAN` only for single-name/SPY-style options.
 
 ```python
-import datetime
-from datetime import datetime as dt
 from datetime import timedelta
-from deltadewa import AmericanOption
 
-# Create an American put option
-put = AmericanOption(
+from deltadewa import OptionValuation
+from deltadewa.clock import program_trading_date
+from deltadewa.constants import ExerciseStyle, OptionType
+
+today = program_trading_date()
+
+put = OptionValuation(
     spot_price=100.0,
     strike_price=95.0,
-    maturity_date=dt.now(datetime.UTC) + timedelta(days=30),
+    maturity_date=today + timedelta(days=30),
     volatility=0.25,
     risk_free_rate=0.05,
     dividend_yield=0.02,
-    option_type="put",
+    exercise_style=ExerciseStyle.EUROPEAN,
+    option_type=OptionType.PUT,
 )
 
 # Get price and Greeks
@@ -48,7 +56,10 @@ print(f"Theta: ${put.theta():.4f}/day")
 ### Example 2: Build and Analyze a Portfolio
 
 ```python
+from datetime import timedelta
+
 from deltadewa import OptionPortfolio
+from deltadewa.constants import ExerciseStyle, OptionType
 
 # Create portfolio with a notional position
 portfolio = OptionPortfolio(
@@ -57,12 +68,16 @@ portfolio = OptionPortfolio(
     volatility=0.25,
     risk_free_rate=0.05,
     dividend_yield=0.02,
+    # Positions added via add_position() fall back to this when they
+    # don't set their own exercise_style — required, or add_position()
+    # raises ValueError. SPX portfolios always want EUROPEAN.
+    default_exercise_style=ExerciseStyle.EUROPEAN,
 )
 
 # Add protective puts
-maturity = dt.now(datetime.UTC) + timedelta(days=60)
-portfolio.add_position(95.0, maturity, 10, "put")
-portfolio.add_position(100.0, maturity, 5, "put")
+maturity = portfolio.valuation_date + timedelta(days=60)
+portfolio.add_position(95.0, maturity, 10, OptionType.PUT)
+portfolio.add_position(100.0, maturity, 5, OptionType.PUT)
 
 # Get portfolio analytics
 stats = portfolio.summary_stats()
@@ -73,6 +88,8 @@ print(f"Delta Adjustment: {stats['delta_adjustment']:.0f} shares")
 ```
 
 ### Example 3: Run Scenario Analysis
+
+Continuing from Example 2's `portfolio`:
 
 ```python
 import numpy as np
@@ -131,14 +148,24 @@ Workbench mode: load a book and design changes to it.
 ### Protective Collar Strategy
 
 ```python
+from datetime import timedelta
+
+from deltadewa import OptionPortfolio
+from deltadewa.constants import ExerciseStyle, OptionType
+
 # Long underlying position
-portfolio = OptionPortfolio(underlying_quantity=1000, spot_price=100)
+portfolio = OptionPortfolio(
+    underlying_quantity=1000,
+    spot_price=100,
+    default_exercise_style=ExerciseStyle.EUROPEAN,
+)
+maturity_30d = portfolio.valuation_date + timedelta(days=30)
 
 # Buy protective puts (downside protection)
-portfolio.add_position(95, maturity_30d, 10, "put")
+portfolio.add_position(95, maturity_30d, 10, OptionType.PUT)
 
 # Sell covered calls (income generation)
-portfolio.add_position(105, maturity_30d, -10, "call")
+portfolio.add_position(105, maturity_30d, -10, OptionType.CALL)
 
 stats = portfolio.summary_stats()
 print(f"Protected range: $95 - $105")
@@ -146,6 +173,8 @@ print(f"Net cost: ${stats['total_value']:.2f}")
 ```
 
 ### Delta Hedging
+
+Continuing from the collar's `portfolio`:
 
 ```python
 # Check hedge effectiveness
@@ -161,6 +190,8 @@ else:
 ```
 
 ### Monitor Time Decay
+
+Continuing from the same `portfolio`:
 
 ```python
 # Check daily theta

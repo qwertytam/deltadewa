@@ -267,11 +267,17 @@ deltadewa/
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+setup, gate, and workflow expectations.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## License
 
-See LICENSE file for details.
+See LICENSE file for details. See [CHANGELOG.md](CHANGELOG.md) for
+release history.
 
 ## References
 
