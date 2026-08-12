@@ -20,6 +20,12 @@ WEEKS_PER_YEAR: Final[float] = DAYS_PER_YEAR / DAYS_PER_WEEK
 # Common market convention for trading/business days in a year
 TRADING_DAYS_PER_YEAR: Final[int] = 252
 BUSINESS_DAYS_PER_YEAR: Final[int] = 252
+# A 30-day month approximation (#185 item 6): a 9-month roll window
+# resolves to 270 days rather than the calendar-accurate ~274, a ~4-day
+# systematic bias in roll-timing math (roll_planner.py). Deliberately left
+# unchanged here — #258 is already touching that line to wire the roll
+# planner up, and is the right place to correct it alongside a golden-
+# value review rather than as an isolated docs-pass edit.
 CALENDAR_DAYS_PER_MONTH: Final[int] = 30
 
 # Logging action types for portfolio changes

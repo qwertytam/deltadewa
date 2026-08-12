@@ -567,7 +567,12 @@ class OptionPortfolio(
     MonteCarloMixin,
     OptionPortfolioBase,
 ):
-    """Manages a portfolio of American options with hedge analysis.
+    """Manages a portfolio of options with hedge analysis.
+
+    Each position sets its own exercise style (or inherits
+    ``default_exercise_style``) — American and European positions can
+    coexist in the same portfolio. SPX positions must use
+    ``ExerciseStyle.EUROPEAN``.
 
     This class combines all portfolio functionality through mixins:
     - Core portfolio management (OptionPortfolioBase)

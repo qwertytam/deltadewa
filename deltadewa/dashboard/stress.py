@@ -1,9 +1,11 @@
 """Stress Dashboard module for the deltadewa options management dashboard.
 
-This module encapsulates the stress-testing logic used by both
+This module encapsulated the stress-testing logic used by both
 monitor_dashboard.ipynb (a single current-structure snapshot) and
-hedge_design.ipynb (the full stress workbench), providing three main
-capabilities:
+hedge_design.ipynb (the full stress workbench). Both notebooks were
+retired in Stage 4.3; this module is part of the leftover Jupyter layer
+(``dashboard/``/``widgets/``) with no product consumer — see CLAUDE.md.
+It provides three main capabilities:
   - Time vs Price heatmap  (create_time_heatmap)
   - Spot vs Volatility heatmap  (create_spot_vol_heatmap)
   - Risk / Reward summary from Monte Carlo results (display_risk_reward_summary)
