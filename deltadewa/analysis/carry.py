@@ -229,6 +229,14 @@ class CarryMixin:
             timeframe with multi-index (category, source) and columns for
             different time periods
 
+        Note:
+            **No caller since #279.** Its only call site was the retired
+            Jupyter carry display. ``/monitor`` surfaces carry only as the
+            scalar ``carry.carry_pct_of_notional``, so this per-leg
+            breakdown is on no page — the nearest thing #279 found to a
+            genuine surfacing gap, and a candidate panel rather than dead
+            code. See ``docs/part-x-coverage.md``.
+
         """
         carry_metrics = self.calculate_carry_metrics()
 

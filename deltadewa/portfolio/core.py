@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from deltadewa.clock import days_between, program_trading_date
+from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
@@ -343,7 +343,13 @@ class OptionPortfolioBase:
         )
 
     def get_positions(self) -> list[dict[str, Any]]:
-        """Return positions in a format suitable for widgets/UI."""
+        """Return positions as plain dicts, suitable for a UI layer.
+
+        Note:
+            No caller since #279 retired the Jupyter position editor. Kept
+            as a tested, general-purpose accessor.
+
+        """
         return [
             {
                 "option_type": pos.option.option_type,
@@ -549,14 +555,6 @@ class OptionPortfolioBase:
         if not self.positions:
             return None
         return max(pos.option.maturity_date for pos in self.positions)
-
-    def get_days_to_furthest_maturity(self) -> int | None:
-        """Get days until the furthest maturity date."""
-        furthest_maturity = self.get_furtherest_maturity()
-        if furthest_maturity is None:
-            return None
-        days = days_between(self.valuation_date, furthest_maturity)
-        return max(days, 0)  # Ensure non-negative
 
 
 # Final composed class with all mixins
