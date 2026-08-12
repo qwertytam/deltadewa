@@ -222,6 +222,9 @@ don't fix):
 - **doc-sync-checker** — audits CLAUDE.md / README / `docs/implementation-plan.md`
   against the repo and flags drift (test counts, version, milestone status, dead
   references). Run before a milestone and after a merge.
+- **secret-scanner** — scans the working tree for operational values that must not
+  land in this public repo (see SECURITY.md's standing rule). Run before any commit
+  that touches config, ops scripts, or RUNBOOK/docs.
 
 `.claude/` is gitignored, so the agent *files* aren't versioned — **this section is
 the versioned record of the convention.** Keep it current if the agents change.
