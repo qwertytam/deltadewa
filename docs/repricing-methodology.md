@@ -41,8 +41,8 @@ construct the crash state:
 
 | Quantity | Rule | Source |
 |---|---|---|
-| Crash spot | $S_{\text{crash}} = S_0 (1 + m)$ | `ips.crash.scenario_move` (default **−0.25**) |
-| Crash vol (per leg) | $\sigma_{i,\text{crash}} = \sigma_{i,\text{today}} + \Delta\sigma + \kappa\, w_i$ | `ips.crash.vol_shock` (**+0.15**, flat ATM base) + `ips.crash.skew_steepening` (**+0.10**, deep-OTM tail) anchored at `ips.crash.skew_reference_delta` (**0.10**) |
+| Crash spot | $S_{\text{crash}} = S_0 (1 + m)$ | `convexity.crash_scenario_pct` — signed **percent** of spot (e.g. **-25.0**, *not* a decimal fraction); required, no default. $m$ is the decimal fraction $m = \text{crash\_scenario\_pct} / 100$. |
+| Crash vol (per leg) | $\sigma_{i,\text{crash}} = \sigma_{i,\text{today}} + \Delta\sigma + \kappa\, w_i$ | `convexity.crash_vol_shock` — additive **decimal** vol (default **0.15**, flat ATM base) + `convexity.skew_steepening` — additive **decimal** vol (default **0.0**, deep-OTM tail; the §4 worked example sets it to **0.10**) anchored at `convexity.skew_reference_delta` — **decimal** put-delta magnitude in (0, 0.5) (default **0.10**) |
 | Rate / dividend | held at today's values | — |
 | Time to maturity | **unchanged** ($t_0$ fixed) | — |
 | Engine | European closed form (QuantLib `AnalyticEuropeanEngine` = Black–Scholes) | README: American forbidden for SPX |
@@ -88,13 +88,15 @@ the safe direction for a tail program. It is calibrated from the historical
 episodes alone, not to any book's target band (see §5, and the rationale in
 `docs/implementation-plan.md`).
 
-**`ips.crash.scenario_move`, `.vol_shock`, and `.skew_steepening` are each a single
-source of truth** across every crash panel — the health gauge, the scenario table,
-the summary ladder, and the roll-status trigger all read the same knobs, so a
-crash number is identical across surfaces at equal depth. This removes the
-−20% / −25% split (**Mo1**); no panel carries its own constant.
-`skew_reference_delta` — the wing the steepening anchors to — defaults to 0.10 and
-is IPS-configurable; the book surfaces consume that default today (§8).
+**`convexity.crash_scenario_pct`, `.crash_vol_shock`, `.skew_steepening`, and
+`.skew_reference_delta` are each a single source of truth** across every crash
+panel — the health gauge, the scenario table, the summary ladder, and the
+roll-status trigger all read the same four knobs via one `CrashShock` (§5/§8),
+so a crash number is identical across surfaces at equal depth. This removes
+the −20% / −25% split (**Mo1**); no panel carries its own constant.
+`skew_reference_delta` — the wing the steepening anchors to — is
+IPS-configurable and defaults to 0.10; every surface now consumes the
+configured value, not a hardcoded fallback (§8).
 
 ---
 
@@ -173,13 +175,13 @@ further netted the equity loss on top, which is how a conformant book once read 
 
 ## 5. IPS parameters
 
-| Key | Default | Notes |
-|---|---|---|
-| `ips.crash.scenario_move` | `-0.25` | **Single source** for every crash panel (Mo1). |
-| `ips.crash.vol_shock` | `+0.15` | Flat additive bump (ATM base). See calibration note. |
-| `ips.crash.skew_steepening` | `+0.10` | Extra vol reached at each leg's own ~10-delta wing over ATM — capped there, interpolated (linear in log-moneyness) below it (M1.6/M1.7). `0.0` recovers the flat bump. See calibration note. |
-| `ips.crash.skew_reference_delta` | `0.10` | Put-delta magnitude of the wing the steepening anchors to — the per-leg reference at which the steepening reaches full $\kappa$ (M1.7). |
-| `ips.crash.floor_reported` | `true` | Whether to surface the intrinsic-floor column. Shipped as `convexity.crash_floor_reported`; `false` drops the floor from `/design`'s sizing panel, the only live surface that reports it (#273). |
+| Key | Unit | Default | Notes |
+|---|---|---|---|
+| `convexity.crash_scenario_pct` | percent of spot (e.g. `-25.0`) | *(none — required)* | **Single source** for every crash panel (Mo1). Must be negative. |
+| `convexity.crash_vol_shock` | decimal additive vol | `0.15` | Flat additive bump (ATM base). See calibration note. |
+| `convexity.skew_steepening` | decimal additive vol | `0.0` | Extra vol reached at each leg's own ~10-delta wing over ATM — capped there, interpolated (linear in log-moneyness) below it (M1.6/M1.7). `0.0` recovers the flat bump; the §4 worked example sets it to `0.10`. See calibration note. |
+| `convexity.skew_reference_delta` | decimal put-delta magnitude, in (0, 0.5) | `0.10` | Put-delta magnitude of the wing the steepening anchors to — the per-leg reference at which the steepening reaches full $\kappa$ (M1.7). |
+| `convexity.crash_floor_reported` | boolean | `true` | Whether to surface the intrinsic-floor column. `false` drops the floor from `/design`'s sizing panel, the only live surface that reports it (#273). |
 
 **How these reach the pricer (M1.8/M1.9).** The four *pricing* keys above travel as
 one frozen `CrashShock` value object (`analysis/crash_repricing.py`), built with
@@ -228,13 +230,13 @@ errs toward less apparent protection, the safe direction for a tail program.
 
 - **`analysis/health.py`** — replace the `include_underlying` / intrinsic crash path
   with §3: hedge-only, repriced, instantaneous. Anchor the scenario at
-  `ips.crash.scenario_move`.
+  `convexity.crash_scenario_pct`.
 - **`analysis/candidate.py`** (sizing + strike ladder) — reprice candidates at the
   crash state per §3 (**C4**); keep intrinsic as the floor column only.
 - **`roll_status.py`** convexity trigger — no change needed; it consumes the
   corrected metric and stops firing spuriously once the number is right.
 - **Mo1 single-source** — `health.py` default (`0.80`), the README figure, and
-  `dashboard.yaml` all defer to `ips.crash.scenario_move`; delete the local
+  `dashboard.yaml` all defer to `convexity.crash_scenario_pct`; delete the local
   constants.
 
 ---
@@ -261,18 +263,18 @@ errs toward less apparent protection, the safe direction for a tail program.
    strike and tenor versus its own ~10-delta wing, so adding a deeper put leaves a
    shallower leg's crash vol unchanged, and a *candidate* priced at a held strike
    reproduces that held leg's per-contract crash value exactly (M1.7).
-6. **Single-source** — changing `ips.crash.scenario_move`, `.vol_shock`, or
-   `.skew_steepening` moves the health gauge, the scenario table, the summary
-   ladder, and the roll trigger together (identical at equal depth).
-   `skew_reference_delta` is not yet threaded from the IPS into those book surfaces
-   (they use its 0.10 default — §8); no observable difference at that default.
+6. **Single-source** — changing `convexity.crash_scenario_pct`,
+   `.crash_vol_shock`, `.skew_steepening`, or `.skew_reference_delta` moves the
+   health gauge, the scenario table, the summary ladder, and the roll trigger
+   together (identical at equal depth) — all four travel as one `CrashShock`
+   (§5/§8).
 
 ---
 
 ## 8. Known simplifications (documented, not defects)
 
 - **Skew steepening — implemented and unified (M1.6/M1.7).** The deep-OTM wing
-  steepens above ATM via `ips.crash.skew_steepening` (§2), so the shock no longer
+  steepens above ATM via `convexity.skew_steepening` (§2), so the shock no longer
   understates convexity on the lowest strikes. Two earlier limitations are now
   **resolved**:
   - **Composition-dependence — RESOLVED (M1.7, `b1f4e3d`).** M1.6 anchored the
