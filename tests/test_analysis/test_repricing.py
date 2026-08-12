@@ -15,12 +15,14 @@ from __future__ import annotations
 import ast
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
 
 from deltadewa.analysis import crash_repricing as cr
 from deltadewa.analysis import scenarios as scenarios_module
+from deltadewa.analysis import stress as stress_module
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.cache import (
     ScenarioGridCache,
@@ -37,9 +39,11 @@ from deltadewa.analysis.repricing import (
     reprice_portfolio,
 )
 from deltadewa.constants import ExerciseStyle, OptionType
-from deltadewa.dashboard import stress as stress_module
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.visualization import (
+    stress_charts_plotly as stress_charts_module,
+)
 
 # Same fixture, same as-of date, and the same shock knobs as the M2.1
 # planning measurement (spot -25%, vol +0.15, skew +0.10 @ 10-delta) — the
@@ -425,7 +429,7 @@ class TestNoMutationSurvivesInTheScenarioPath:
     leaving a window where a mid-loop read or an exception could observe
     the shocked state). Guard against a regression reintroducing a direct
     ``.valuation_date = ...`` assignment in either the pure spot/vol grid
-    or the dashboard render it backs.
+    or any live module on the spot/vol path.
 
     Scope note: this AST check only catches literal attribute-assignment
     syntax. It does NOT — and is not meant to — catch
@@ -448,28 +452,29 @@ class TestNoMutationSurvivesInTheScenarioPath:
             and target.attr == "valuation_date"
         ]
 
-    def test_scenarios_module_never_assigns_valuation_date(self) -> None:
+    @pytest.mark.parametrize(
+        "module",
+        [scenarios_module, stress_module, stress_charts_module],
+        ids=["analysis.scenarios", "analysis.stress", "stress_charts_plotly"],
+    )
+    def test_spot_vol_path_never_assigns_valuation_date(
+        self,
+        module: ModuleType,
+    ) -> None:
+        """No module on the /design spot/vol path may mutate the date.
+
+        #279 retired ``dashboard/stress.py``, whose
+        ``_render_spot_vol_heatmap`` was the original state-leak site
+        (stress.py:897-920). The guard moves to the three live modules that
+        replaced it, so the regression it caught stays caught: the pure grid
+        derives the shocked date from ``MarketShock.days_forward`` instead of
+        mutating the portfolio.
+        """
         tree = ast.parse(
-            Path(scenarios_module.__file__).read_text(encoding="utf-8"),
+            Path(module.__file__ or "").read_text(encoding="utf-8"),
         )
         assert not self._valuation_date_assignments(tree), (
-            "scenarios.py must never assign .valuation_date — the pure "
-            "grid derives the shocked date from MarketShock.days_forward "
-            "instead of mutating the portfolio"
-        )
-
-    def test_render_spot_vol_heatmap_never_assigns_valuation_date(self) -> None:
-        tree = ast.parse(
-            Path(stress_module.__file__).read_text(encoding="utf-8"),
-        )
-        render_fn = next(
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef)
-            and node.name == "_render_spot_vol_heatmap"
-        )
-        assert not self._valuation_date_assignments(render_fn), (
-            "_render_spot_vol_heatmap must never assign "
-            "portfolio.valuation_date — this is the exact former state-leak "
-            "site (stress.py:897-920), now designed out rather than patched"
+            f"{module.__name__} must never assign .valuation_date — the "
+            "pure grid derives the shocked date from "
+            "MarketShock.days_forward instead of mutating the portfolio"
         )
