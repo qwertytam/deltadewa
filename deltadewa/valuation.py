@@ -433,6 +433,11 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
         Returns:
             float: Theta value ($ per calendar day)
 
+        Raises:
+            RuntimeError: If the configured pricing engine does not
+                populate theta. Unlike vega and rho there is deliberately
+                no numeric fallback — see below.
+
         """
         # At or past expiry, theta is zero (no time decay)
         if self._is_expired_or_at_expiry():
@@ -441,21 +446,27 @@ class OptionValuation:  # pylint: disable=too-many-instance-attributes  # QuantL
             # QuantLib returns annualized theta, convert to per calendar day
             # Using 365 days (not 252) per industry standard
             return self.option.theta() / const.DAYS_PER_YEAR
-        except RuntimeError:
-            # If theta not available, compute numerically
-            # Move evaluation date forward by 1 day
-            current_date = QtLib.Settings.instance().evaluationDate
-            QtLib.Settings.instance().evaluationDate = (
-                current_date
-                + QtLib.Period(
-                    1,
-                    QtLib.Days,
-                )
+        except RuntimeError as exc:
+            # No numeric fallback here, unlike _compute_vega/_compute_rho
+            # (#266). All three engines this class constructs — analytic
+            # (European), FD and Bjerksund-Stensland (American) — populate
+            # theta, because it is a derivative in the time dimension that
+            # closed-form and grid engines both carry natively; only the
+            # parameter-bump Greeks go unset on the FD engine. The old
+            # fallback bumped the global Settings.instance().evaluationDate
+            # and re-read NPV(), but _setup_quantlib builds every term
+            # structure against a fixed reference date, so nothing
+            # repriced: it returned 0.0 for every option. Carry and
+            # hedge-efficiency divide by theta, so a loud failure beats a
+            # silent zero — and this drops the unsynchronized global-state
+            # mutation #180 flagged.
+            msg = (
+                f"Pricing engine for this {self.exercise_style.value} "
+                f"option (use_closed_form={self.use_closed_form}) did not "
+                f"provide theta: {exc}. There is no numeric fallback by "
+                f"design (#266)."
             )
-            price_tomorrow = self.option.NPV()
-            QtLib.Settings.instance().evaluationDate = current_date
-            price_today = self.option.NPV()
-            return price_tomorrow - price_today
+            raise RuntimeError(msg) from exc
 
     def _compute_rho(self) -> float:
         """Compute option rho."""
