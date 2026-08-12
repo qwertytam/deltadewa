@@ -6,6 +6,7 @@ import pytest
 
 from deltadewa.analysis.volatility import (
     apply_proportional_volatility_shift,
+    build_volatility_profile,
     calculate_portfolio_avg_volatility,
     get_volatility_stats,
     restore_volatilities,
@@ -534,3 +535,159 @@ class TestGetVolatilityStats:
         # avg_volatility should call calculate_portfolio_avg_volatility
         manual_avg = calculate_portfolio_avg_volatility(portfolio)
         assert stats["avg_volatility"] == pytest.approx(manual_avg, abs=0.001)
+
+
+class TestBuildVolatilityProfile:
+    """Test cases for build_volatility_profile function."""
+
+    def test_empty_portfolio_returns_none(self) -> None:
+        """Test that an empty portfolio returns None, not an empty profile."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+        )
+
+        assert build_volatility_profile(portfolio) is None
+
+    def test_single_position_sits_at_average(self) -> None:
+        """Test that a lone position's relative_to_avg is exactly 1.0."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+            volatility=0.30,
+        )
+
+        profile = build_volatility_profile(portfolio)
+
+        assert profile is not None
+        assert profile.avg_volatility == pytest.approx(0.30, abs=0.001)
+        assert len(profile.positions) == 1
+        detail = profile.positions[0]
+        assert detail.index == 0
+        assert detail.option_type == OptionType.CALL
+        assert detail.strike_price == pytest.approx(105.0)
+        assert detail.volatility == pytest.approx(0.30, abs=0.001)
+        assert detail.is_custom is True
+        assert detail.relative_to_avg == pytest.approx(1.0, abs=0.001)
+
+    def test_summary_numbers_match_get_volatility_stats(self) -> None:
+        """Test that the profile's summary numbers are not re-derived."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+            volatility=0.30,
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.PUT,
+            volatility=0.20,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+
+        stats = get_volatility_stats(portfolio)
+        profile = build_volatility_profile(portfolio)
+
+        assert profile is not None
+        assert profile.avg_volatility == pytest.approx(
+            stats["avg_volatility"],
+        )
+        assert profile.min_volatility == pytest.approx(
+            stats["min_volatility"],
+        )
+        assert profile.max_volatility == pytest.approx(
+            stats["max_volatility"],
+        )
+        assert profile.volatility_range == pytest.approx(
+            stats["volatility_range"],
+        )
+
+    def test_relative_to_avg_computed_per_position(self) -> None:
+        """Test that each position's ratio to the average is correct."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+            volatility=0.30,
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.PUT,
+            volatility=0.20,
+        )
+
+        profile = build_volatility_profile(portfolio)
+
+        assert profile is not None
+        avg = profile.avg_volatility
+        for detail in profile.positions:
+            assert detail.relative_to_avg == pytest.approx(
+                detail.volatility / avg,
+                abs=1e-6,
+            )
+
+    def test_custom_flag_and_order_preserved(self) -> None:
+        """Test that is_custom and position order match the portfolio."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=100.0,
+            volatility=0.25,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        portfolio.add_position(
+            strike_price=105.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+            volatility=0.30,
+        )
+        portfolio.add_position(
+            strike_price=95.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        profile = build_volatility_profile(portfolio)
+
+        assert profile is not None
+        assert [d.index for d in profile.positions] == [0, 1]
+        assert [d.strike_price for d in profile.positions] == [105.0, 95.0]
+        assert profile.positions[0].is_custom is True
+        assert profile.positions[1].is_custom is False

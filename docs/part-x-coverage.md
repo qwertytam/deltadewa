@@ -397,8 +397,50 @@ rebuilding that view for the persistent model is
 | --- | --- | --- |
 | Roll planner — the `ROLL_NOW`/`DELAY`/`HOLD` action, proposed target strike, and roll-up cost to it | Design cell 21, via `analysis/roll_planner.build_roll_plan` | [#258](https://github.com/qwertytam/deltadewa/issues/258) |
 | Position aging & expiration calendar | Monitor cell 41, `dashboard/position_aging.py` | [#259](https://github.com/qwertytam/deltadewa/issues/259) |
-| Portfolio volatility profile | Design cell 36, `dashboard/volatility_profile.py` + `analysis/volatility.get_volatility_stats` | [#260](https://github.com/qwertytam/deltadewa/issues/260) |
+| ~~Portfolio volatility profile~~ | Design cell 36, `dashboard/volatility_profile.py` + `analysis/volatility.get_volatility_stats` | [#260](https://github.com/qwertytam/deltadewa/issues/260) — **Restored**, see [below](#the-volatility-profile-is-restored-260) |
 | ~~Portfolio shape guard on import~~ | Cell 5 of **both** notebooks, `analysis/portfolio_shape.classify_portfolio_shape` | [#261](https://github.com/qwertytam/deltadewa/issues/261) — **Restored**, see [below](#the-shape-guard-is-restored-261) |
+
+### The volatility profile is restored (#260)
+
+The notebook cell (`dashboard/volatility_profile.VolatilityProfileDisplay`,
+Design cell 36) printed the vega-weighted average volatility, the min–max
+range across positions, and each leg's own volatility with a `(custom)`
+marker. It read `analysis/volatility.get_volatility_stats`, which stayed
+intact and tested through Stage 4.3 but had no product consumer —
+`VolatilityProfileDisplay` itself is left as-is, read-but-not-built-on
+Jupyter-era code, per this file's standing convention for `dashboard/`.
+
+Why this one mattered beyond parity: every EXPLORATION surface on
+`/design` (spot/vol heatmap, time/price heatmap, Monte Carlo) reprices with
+`analysis/repricing.proportional_vol`, which scales every leg's volatility
+by the same factor so the vega-weighted average lands wherever the grid
+axis asks — but that average, and the skew it's computed from, was
+invisible. Users were reading stress grids whose central assumption they
+couldn't see.
+
+`get_volatility_stats` still returns exactly what it always did (unchanged
+— `widgets/summary.py` and `dashboard/setup.py` still call it). New in
+`analysis/volatility.py`: `build_volatility_profile`, which wraps
+`get_volatility_stats`'s summary numbers with a `relative_to_avg` ratio per
+position — the same ratio `apply_proportional_volatility_shift` preserves
+for every leg when the average moves — and returns `None` for an empty
+portfolio (mirroring `get_volatility_stats`'s own empty-dict convention,
+rather than the vega-term panel's zero-filled-reading convention: there is
+no meaningful average with no positions).
+
+The new "Volatility profile" panel sits **first** in `/design`'s
+EXPLORATION zone — above the three stress grids, framed as what feeds them
+rather than a standalone statistic — carrying its own basis chip
+(`basis: each leg's stored volatility (nothing shocked)`) since, like the
+vega term exposure panel, it reads the book structurally and shocks
+nothing.
+
+This also answers the open question the
+["`config/dashboard.yaml` now has no reader"](#configdashboardyaml-now-has-no-reader)
+section left for #259/#260: #260 did not revive the retired
+gauge-presentation config. The panel uses the same table/paragraph
+presentation every other EXPLORATION/PLANNING panel uses — no gauge
+geometry needed.
 
 ### The shape guard is restored (#261)
 
@@ -475,9 +517,11 @@ Dash app loads.
 
 Left in place rather than deleted, because the decision (delete the config
 surface, or give the presets a Dash consumer) belongs with whoever takes
-[#259](https://github.com/qwertytam/deltadewa/issues/259)/[#260](https://github.com/qwertytam/deltadewa/issues/260)
-— those are the panels most likely to want banded gauge geometry back. This
-also subsumes Open question #2 below.
+[#259](https://github.com/qwertytam/deltadewa/issues/259) — the remaining
+panel that might want banded gauge geometry back.
+[#260](https://github.com/qwertytam/deltadewa/issues/260) declined it; see
+["The volatility profile is restored"](#the-volatility-profile-is-restored-260).
+This also subsumes Open question #2 below.
 
 ### `analysis/health.py`'s three orphans
 
