@@ -5266,14 +5266,16 @@ policy, not presentation, and belong in the IPS rather than in dashboard config.
 | `crash_vol_shock` | Flat additive volatility bump as a decimal (e.g. `0.15`). |
 | `skew_steepening` | Extra volatility reached at each leg's own wing, on top of the flat bump. `0.0` recovers the flat bump. |
 | `skew_reference_delta` | Put-delta magnitude of the wing the steepening is anchored to (e.g. `0.10`). Only consulted when `skew_steepening` is non-zero. |
-| `crash_floor_reported` | Whether to surface the intrinsic-floor column. Presentation of a computed figure, not a pricing input — it stays off `CrashShock`. See the caveat below. |
+| `crash_floor_reported` | Whether to surface the intrinsic-floor column. Presentation of a computed figure, not a pricing input — it stays off `CrashShock`. |
 
-> **`crash_floor_reported` is currently inert.** Its only reader is the retired
-> Jupyter display layer, which has no product consumer. The live `/design`
-> sizing panel renders the per-contract intrinsic floor unconditionally, without
-> consulting the key — so setting it to `false` does not hide anything today.
-> The floor is still computed correctly and still labelled as a floor; it is the
-> opt-out that is not wired.
+> **The floor is an opt-out.** `crash_floor_reported: false` removes the
+> per-contract intrinsic floor from `/design`'s sizing panel — the only live
+> surface that reports it — leaving every other figure unchanged. The default
+> is `true`. A program may reasonably decline it: the floor reads far below the
+> repriced payoff (2.5× against 17.5× in the worked example above), so a reader
+> who mistakes it for the headline understates the protection on offer. The key
+> was inert until #273 wired it to that panel; before then its only reader was
+> the retired Jupyter display layer.
 
 **Calibrating the volatility inputs.** In 2008 and 2020 index-put implied
 volatilities expanded roughly +20 to +40 points at the peak; `+0.15` is a

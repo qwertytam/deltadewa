@@ -179,7 +179,7 @@ further netted the equity loss on top, which is how a conformant book once read 
 | `ips.crash.vol_shock` | `+0.15` | Flat additive bump (ATM base). See calibration note. |
 | `ips.crash.skew_steepening` | `+0.10` | Extra vol reached at each leg's own ~10-delta wing over ATM — capped there, interpolated (linear in log-moneyness) below it (M1.6/M1.7). `0.0` recovers the flat bump. See calibration note. |
 | `ips.crash.skew_reference_delta` | `0.10` | Put-delta magnitude of the wing the steepening anchors to — the per-leg reference at which the steepening reaches full $\kappa$ (M1.7). |
-| `ips.crash.floor_reported` | `true` | Whether to surface the intrinsic-floor column. |
+| `ips.crash.floor_reported` | `true` | Whether to surface the intrinsic-floor column. Shipped as `convexity.crash_floor_reported`; `false` drops the floor from `/design`'s sizing panel, the only live surface that reports it (#273). |
 
 **How these reach the pricer (M1.8/M1.9).** The four *pricing* keys above travel as
 one frozen `CrashShock` value object (`analysis/crash_repricing.py`), built with
