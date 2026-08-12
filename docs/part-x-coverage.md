@@ -47,7 +47,8 @@ Three zones:
 - *BOOK* — position editor, underlying quantity with its **net-delta
   readout**, guarded import/export.
 - *PLANNING* — market environment, sizing (with the **vega sufficiency**
-  block), strike ladder, roll planner, **hedge rebalance triggers**,
+  block), strike ladder, **roll plan** + roll status by tranche,
+  **hedge rebalance triggers**,
   **delta drift** (M2.8), **convexity cliff**, monetization. Most price the
   crash-skew (IPS anchor) basis; those that do not carry their own basis chip
   (see [Basis chips](#basis-chips)).
@@ -79,7 +80,7 @@ default is chipped:
 
 | Chip | Panels | What it means |
 | --- | --- | --- |
-| `basis: crash-skew (IPS anchor)` | Sizing, strike ladder, roll planner, monetization | Reprices the book at the IPS crash. Agrees with `/monitor` to the cent. |
+| `basis: crash-skew (IPS anchor)` | Sizing, strike ladder, roll plan, roll status by tranche, monetization | Reprices the book at the IPS crash. Agrees with `/monitor` to the cent. |
 | `basis: live market data` | Market environment | Reprices nothing — reads the feed. |
 | `basis: book Greeks at today's market` | Hedge rebalance triggers, position aging (PLANNING); vega term exposure (EXPLORATION) | Reads the book's Greeks unshocked. |
 | `basis: spot -5%, flat vol (not the IPS crash)` | Delta drift | Reprices at the handbook's own fixed §13 shock, distinct from the IPS crash anchor every other PLANNING panel prices. |
@@ -111,7 +112,7 @@ default is chipped:
 | 8 | Forward Variance Level | 2 | `/design` PLANNING — *Market environment* | `analysis/market_environment.forward_vol` → `MarketEnvironment.forward_vol_front_3m` | **PRESENT** (M2.7) |
 | 9 | Skew Exposure / Beta | 3 | `/design` EXPLORATION — `vega` heatmap metric | `visualization/stress_charts_plotly.STRESS_METRICS["vega"]` | **PARTIAL** — the ∂V/∂skew scalar is **NEVER BUILT**, see below |
 | 10 | Net Delta Exposure | 3 | `/design` BOOK — `_net_delta_readout`; grid form via the `net_delta` heatmap metric | `portfolio/greeks.net_delta` via `summary_stats()` | **PRESENT** (M2.7) |
-| 11 | Hedge Rebalance Triggers | 3 | `/monitor` — *Decisions*; `/design` PLANNING — *Roll planner*, **Hedge rebalance triggers**, *Monetization* | `analysis/roll_status.evaluate_roll_status`, `analysis/hedge_triggers.evaluate_hedge_trigger_set`, `analysis/monetization`, `analysis/roll_planner` | **PRESENT** — both trigger sets now live (see note) |
+| 11 | Hedge Rebalance Triggers | 3 | `/monitor` — *Decisions*; `/design` PLANNING — *Roll plan*, *Roll status by tranche*, **Hedge rebalance triggers**, *Monetization* | `analysis/roll_status.evaluate_roll_status`, `analysis/roll_planner.build_roll_plan`, `analysis/hedge_triggers.evaluate_hedge_trigger_set`, `analysis/monetization` | **PRESENT** — both trigger sets now live (see note); `roll_planner` gained its consumer in #258 |
 | 12 | Liquidity Risk | 4 | none | none — needs per-strike bid/ask and open interest | **OUTSTANDING** — genuinely data-blocked |
 | 13 | Delta Drift | 4 | `/design` PLANNING — **Delta drift** | `analysis/scenarios.ScenariosMixin.calculate_delta_drift` | **PRESENT** (M2.8) |
 | 14 | Vega Term Exposure | 4 | `/design` EXPLORATION — **Vega term exposure** | `analysis/maturity.MaturityMixin.calculate_vega_by_maturity` | **PRESENT** (M2.8) |
@@ -120,7 +121,8 @@ default is chipped:
 | — | Time to Convexity Cliff | — | `/design` PLANNING — **Convexity cliff** | `analysis/health.HealthMixin.calculate_convexity_cliff_days`; lines from `IpsConvexity.cliff_*` | **PRESENT** (notebook-retirement audit) |
 | — | Sizing workbench | — | `/design` PLANNING | `analysis/sizing.size_hedge` | **PRESENT** |
 | — | Strike ladder builder | — | `/design` PLANNING | `analysis/strike_ladder.build_strike_ladder` | **PRESENT** |
-| — | Roll planner | — | `/design` PLANNING — *Roll planner* | `analysis/roll_status.evaluate_roll_status` — **not** `roll_planner` | **PARTIAL** — the panel is the roll *table*; `analysis/roll_planner.build_roll_plan` has no consumer. See [Stage 4.3](#stage-43--the-notebook-retirement) |
+| — | Roll plan (action, target strike, roll-up cost) | — | `/design` PLANNING — **Roll plan** | `analysis/roll_planner.build_roll_plan` | **PRESENT** (#258) |
+| — | Roll status by tranche (per-trigger grades) | — | `/design` PLANNING — **Roll status by tranche** | `analysis/roll_status.evaluate_roll_status` | **PRESENT** |
 | — | Monetization planner | — | `/design` PLANNING + `/monitor` *Decisions* | `analysis/monetization.build_monetization_plan` | **PRESENT** |
 | — | Position aging & expiration calendar | — | `/design` PLANNING — **Position aging** | `analysis/position_aging.evaluate_position_aging`; every bucket boundary from `IpsTriggers` | **PRESENT** (#259) |
 
@@ -396,7 +398,7 @@ rebuilding that view for the persistent model is
 
 | What | Where it was | Issue |
 | --- | --- | --- |
-| Roll planner — the `ROLL_NOW`/`DELAY`/`HOLD` action, proposed target strike, and roll-up cost to it | Design cell 21, via `analysis/roll_planner.build_roll_plan` | [#258](https://github.com/qwertytam/deltadewa/issues/258) |
+| ~~Roll planner — the `ROLL_NOW`/`DELAY`/`HOLD` action, proposed target strike, and roll-up cost to it~~ | Design cell 21, via `analysis/roll_planner.build_roll_plan` | [#258](https://github.com/qwertytam/deltadewa/issues/258) — **Restored**, see [below](#the-roll-plan-is-restored-258) |
 | ~~Position aging & expiration calendar~~ | Monitor cell 41, `dashboard/position_aging.py` | [#259](https://github.com/qwertytam/deltadewa/issues/259) — **Restored**, see [below](#position-aging-is-restored-259) |
 | ~~Portfolio volatility profile~~ | Design cell 36, `dashboard/volatility_profile.py` + `analysis/volatility.get_volatility_stats` | [#260](https://github.com/qwertytam/deltadewa/issues/260) — **Restored**, see [below](#the-volatility-profile-is-restored-260) |
 | ~~Portfolio shape guard on import~~ | Cell 5 of **both** notebooks, `analysis/portfolio_shape.classify_portfolio_shape` | [#261](https://github.com/qwertytam/deltadewa/issues/261) — **Restored**, see [below](#the-shape-guard-is-restored-261) |
@@ -410,14 +412,15 @@ Jupyter-era code, per this file's standing convention for `dashboard/`.
 
 New in `analysis/position_aging.py`: `evaluate_position_aging`, driving a
 **Position aging** panel in `/design`'s PLANNING zone, immediately after the
-roll planner.
+roll panels.
 
 **Why `/design` and not `/monitor`.** `/monitor`'s `_position_detail_table`
 already carries a raw per-leg DTE column, and its docstring reserves that
 table as the plain ledger rather than a second risk narrative. The question
 the panel answers — *when does this book start rolling off, and how much at
 a time* — is a roll-planning question, and the two upper buckets are the
-same window the roll planner grades against, so the panel belongs beside it.
+same window the roll status table grades against, so the panel belongs
+beside it.
 No bucketed DTE was added to `/monitor`.
 
 **The thresholds — what must not be re-added.** The retired widget hardcoded
@@ -461,8 +464,8 @@ the grading *and* the printed window together. The retired widget's
 
 Also deliberately not carried across: the pandas `print` presentation, the
 emoji tier markers, and the per-leg "→ ACTION: roll this position" advice
-(the roll planner already issues that verdict, with its three trigger
-reasons).
+(the roll status table already issues that verdict, with its three trigger
+reasons, and the roll plan turns it into an action).
 
 ### The volatility profile is restored (#260)
 
@@ -544,7 +547,48 @@ panel sound like the same thing and are not — the panel is the roll *table*
 (`roll_status.py`), and `roll_planner.py` is the proposal layer above it. When
 filling in the *Analysis backing* column, read the import, don't match the
 name. The row is now PARTIAL, and [#258](https://github.com/qwertytam/deltadewa/issues/258)
-restores it.
+restores it — see [below](#the-roll-plan-is-restored-258), including the
+rename that removes the title/module collision for good.
+
+### The roll plan is restored (#258)
+
+`analysis/roll_planner.build_roll_plan` now drives a **Roll plan** panel in
+`/design`'s PLANNING zone, one row per long put: the `ROLL_NOW`/`DELAY`/`HOLD`
+action, the proposed `target_strike`, the `roll_up_cost` to reach it, the
+position's gamma and theta, and the rationale. Two rows in the coverage table
+now, not one, because there are two panels and two questions.
+
+**The naming collision is gone.** The panel that renders
+`roll_status.evaluate_roll_status` is now titled **"Roll status by tranche"**,
+and only the panel backed by `roll_planner.py` is called a plan. Each states
+its relationship to the other in its own body text, so two adjacent tables of
+verdicts cannot be read as one set: the plan says it is built on the status
+table's grades, and the table says it is the evidence under the plan.
+
+**A correctness fix came first.** `gamma_theta_delay` implemented only two of
+the handbook's three conditions for deferring a roll (`hedging handbook.md`,
+Rule 1's gamma/theta note): it checked that the position was outside the
+mandatory roll window and that crash convexity was still in the IPS band, but
+**not that the put had moved nearer the money** — which is the entire basis for
+the deferral. As written it would return `DELAY` for a put pushed *further* OTM
+by a rally, whose delta has collapsed and which is accumulating no gamma at
+all. That is the handbook's Rule 2 (Market Rally Rebalance Trigger), where the
+sanctioned action is to roll up. Surfacing it unfixed would have told the
+operator to sit on a live rally trigger while citing a gamma position that did
+not exist.
+
+Notably `roll_status.evaluate_roll_status` already had the condition right —
+its drift-suppression guard tests `drift_pct < 0`. The two layers stated the
+same policy differently, and only the lower one was correct. They now share the
+one three-part test, and both branches are pinned by tests
+(`tests/test_analysis/test_roll_planner.py`, `TestGammaThetaDelay` plus the
+rallied/declined scenario pair) — the rallied case previously asserted `DELAY`
+and now asserts `ROLL_NOW`.
+
+`DELAY` renders its reasoning inline, naming all three conditions against the
+IPS values they were measured on (roll window from `triggers.roll_time_months`,
+band from `convexity.target_min_pct`/`target_max_pct`), and carries its own
+badge colour rather than reusing HOLD's — a deferral is not an all-clear.
 
 ### What survived unchanged
 

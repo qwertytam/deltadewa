@@ -66,6 +66,7 @@ from deltadewa.analysis.position_aging import (
     evaluate_position_aging,
 )
 from deltadewa.analysis.repricing import proportional_vol
+from deltadewa.analysis.roll_planner import build_roll_plan
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.analysis.stress import (
@@ -113,6 +114,7 @@ if TYPE_CHECKING:
         MonetizationPlan,
         MonetizationStepStatus,
     )
+    from deltadewa.analysis.roll_planner import RollPlanRecord
     from deltadewa.analysis.roll_status import MoneynessDrift, RollStatusRecord
     from deltadewa.analysis.scenarios import DeltaDrift, DeltaDriftLeg
     from deltadewa.analysis.sizing import HedgeSizingResult
@@ -1197,11 +1199,27 @@ def _roll_record_row(record: RollStatusRecord) -> html.Tr:
 
 
 def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
-    """Render the per-position roll table."""
+    """Render the per-position roll table.
+
+    The evidence layer under the roll plan above: every position (not
+    just long puts) and every trigger reading behind its verdict.
+    """
+    intro = html.P(
+        "The evidence behind the roll plan above — every position in "
+        "the book, and how each of its three IPS triggers reads. The "
+        "plan turns these grades into an action; this table is where "
+        "you check one.",
+        className="plain-language",
+    )
     if not records:
-        return html.P(
-            "No positions in the book yet.",
-            className="plain-language",
+        return html.Div(
+            [
+                intro,
+                html.P(
+                    "No positions in the book yet.",
+                    className="plain-language",
+                ),
+            ],
         )
 
     header = html.Tr(
@@ -1217,9 +1235,14 @@ def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
         ],
     )
     rows = [_roll_record_row(record) for record in records]
-    return html.Table(
-        [html.Thead(header), html.Tbody(rows)],
-        className="planning-table",
+    return html.Div(
+        [
+            intro,
+            html.Table(
+                [html.Thead(header), html.Tbody(rows)],
+                className="planning-table",
+            ),
+        ],
     )
 
 
@@ -1228,9 +1251,115 @@ def _render_roll_panel_logic(
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
 ) -> Component:
-    """Render the roll planner for every position in the book."""
+    """Render the roll status table for every position in the book."""
     return _safe_render(
         lambda: _roll_panel_view(evaluate_roll_status(portfolio, ips_config)),
+    )
+
+
+def _roll_plan_row(record: RollPlanRecord) -> html.Tr:
+    """One long put's recommended action, proposal, and reasoning.
+
+    The reasoning cell is not decoration. ``DELAY`` is a recommendation
+    to *not* act on a trigger that has fired, so it has to arrive with
+    its justification attached or it reads as the tool losing the
+    signal.
+    """
+    position = record.position
+    strike_text = (
+        f"{record.target_strike:,.0f}"
+        if record.target_strike is not None
+        else "n/a"
+    )
+    cost_text = (
+        fmt.signed_currency(record.roll_up_cost)
+        if record.roll_up_cost is not None
+        else "n/a"
+    )
+    return html.Tr(
+        [
+            html.Td(
+                html.Span(
+                    record.action.value.replace("_", " "),
+                    className=(
+                        "verdict-badge verdict-badge--"
+                        f"{record.action.value.lower()}"
+                    ),
+                ),
+            ),
+            html.Td(
+                f"{position.option.option_type.value} "
+                f"{position.option.strike_price:,.0f}",
+            ),
+            html.Td(strike_text),
+            html.Td(cost_text),
+            html.Td(f"{record.gamma:,.4f} / {record.theta:,.2f}"),
+            html.Td(record.rationale, className="plan-rationale"),
+        ],
+    )
+
+
+def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
+    """Render the per-put roll plan: action, proposal, and reasoning.
+
+    Deliberately a separate panel from the roll status table below it,
+    and deliberately not a second opinion on the same question. The
+    table grades each tranche's three triggers; this turns those grades
+    into one action per long put, applying the handbook's gamma/theta
+    nuance that the table's verdicts have no vocabulary for — and says
+    what to roll *to* and what that would cost.
+    """
+    intro = html.P(
+        "One recommended action per long put — what to roll it to, and "
+        "what that roll would cost. Built on the same trigger grades as "
+        "the roll status table below, so the two never disagree: this "
+        "panel adds the handbook's gamma/theta judgement, which is the "
+        "only thing that can turn a fired trigger into DELAY.",
+        className="plain-language",
+    )
+    if not records:
+        return html.Div(
+            [
+                intro,
+                html.P(
+                    "No long puts in the book yet.",
+                    className="plain-language",
+                ),
+            ],
+        )
+
+    header = html.Tr(
+        [
+            html.Th("Action"),
+            html.Th("Position"),
+            html.Th("Target strike"),
+            html.Th("Roll-up cost"),
+            html.Th("Gamma / theta"),
+            html.Th("Reasoning"),
+        ],
+    )
+    return html.Div(
+        [
+            intro,
+            html.Table(
+                [
+                    html.Thead(header),
+                    html.Tbody([_roll_plan_row(r) for r in records]),
+                ],
+                className="planning-table",
+            ),
+        ],
+    )
+
+
+def _render_roll_plan_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> Component:
+    """Render the roll plan for every long put in the book."""
+    return _safe_render(
+        lambda: _roll_plan_panel_view(build_roll_plan(portfolio, ips_config)),
     )
 
 
@@ -1371,8 +1500,8 @@ def _position_aging_panel_view(aging: PositionAging) -> Component:
                 "Every window comes from ips.yaml — expiry_urgent_days, "
                 "expiry_soon_days, and the roll window "
                 "(roll_time_months x roll_review_buffer). The two roll "
-                "buckets are the same window the roll planner grades "
-                "against, so the two panels cannot disagree.",
+                "buckets are the same window the roll status table "
+                "grades against, so the two panels cannot disagree.",
                 className="plain-language",
             ),
             bucket_table,
@@ -1427,20 +1556,20 @@ def _hedge_trigger_row(trigger: HedgeTriggerReason) -> html.Tr:
 def _hedge_triggers_panel_view(triggers: HedgeTriggerSet) -> Component:
     """Render the book-level rebalance triggers, each with its reasoning.
 
-    Deliberately **not** merged into the roll planner directly above it,
-    despite the shared vocabulary: the roll table asks "should this tranche
-    be replaced" per position, while these four ask "is the book still
-    hedged the way policy says" for the book as a whole. They are different
-    questions with different thresholds, and a combined table would imply
-    one verdict where there are two.
+    Deliberately **not** merged into the roll panels above, despite the
+    shared vocabulary: the roll plan and its status table ask "should
+    this tranche be replaced" per position, while these four ask "is the
+    book still hedged the way policy says" for the book as a whole. They
+    are different questions with different thresholds, and a combined
+    table would imply one verdict where there are two.
     """
     header = html.Tr(
         [html.Th("Status"), html.Th("Trigger"), html.Th("Reading vs policy")],
     )
     children: list[Component] = [
         html.P(
-            "Book-level rebalance triggers — distinct from the roll planner "
-            "above, which judges each tranche separately. These ask whether "
+            "Book-level rebalance triggers — distinct from the roll panels "
+            "above, which judge each tranche separately. These ask whether "
             "the book as a whole is still hedged the way the IPS says.",
             className="plain-language",
         ),
@@ -2380,7 +2509,25 @@ def render(app: ProgramDashApp) -> html.Div:
             ),
             html.Div(
                 [
-                    html.H3(["Roll planner", basis_chip(_BASIS_CRASH_SKEW)]),
+                    html.H3(["Roll plan", basis_chip(_BASIS_CRASH_SKEW)]),
+                    html.Div(
+                        _render_roll_plan_panel_logic(
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                        ),
+                        id="plan-roll-plan-panel",
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
+                    html.H3(
+                        [
+                            "Roll status by tranche",
+                            basis_chip(_BASIS_CRASH_SKEW),
+                        ],
+                    ),
                     html.Div(
                         _render_roll_panel_logic(
                             portfolio=portfolio,
@@ -3002,6 +3149,16 @@ def register_callbacks(app: ProgramDashApp) -> None:
             ips_config=ips_config,
             target_deltas_raw=target_deltas_raw,
             maturities_years_raw=maturities_years_raw,
+        )
+
+    @app.callback(
+        Output("plan-roll-plan-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_roll_plan_panel(_version: int) -> Component:
+        return _render_roll_plan_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
         )
 
     @app.callback(

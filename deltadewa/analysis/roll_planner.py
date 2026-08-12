@@ -4,8 +4,10 @@ Converts the HOLD/MONITOR/REVIEW/ROLL verdict produced by
 :func:`~deltadewa.analysis.roll_status.evaluate_roll_status` into a
 concrete :class:`RollAction` (ROLL_NOW, DELAY, or HOLD) for each long
 protective put, applying the handbook gamma/theta nuance: defer a
-mechanical roll when the position is outside the mandatory roll window
-and crash convexity is still within the IPS target band.
+mechanical roll only when the position is outside the mandatory roll
+window, has moved nearer the money since entry, and crash convexity is
+still within the IPS target band.  See :func:`gamma_theta_delay` for why
+the middle condition is load-bearing.
 """
 
 from __future__ import annotations
@@ -41,7 +43,10 @@ class RollAction(StrEnum):
     """A trigger has fired and immediate action is warranted."""
 
     DELAY = "DELAY"
-    """A trigger fired but the gamma/theta nuance says defer the roll."""
+    """A trigger fired but the gamma/theta nuance says defer the roll.
+
+    Only reachable when the put is gaining gamma — never on a rally.
+    """
 
     HOLD = "HOLD"
     """No trigger is active; no action needed."""
@@ -94,29 +99,57 @@ def gamma_theta_delay(
     *,
     months_to_maturity: float,
     convexity_now_pct: float,
+    drift_pct: float | None,
     ips_triggers: IpsTriggers,
     ips_convexity: IpsConvexity,
 ) -> bool:
     """Return True when the gamma/theta nuance says to defer the roll.
 
-    Delay the mechanical roll when the position has NOT yet entered the
-    mandatory roll window (``months_to_maturity > roll_time_months``)
-    AND crash convexity is still within the IPS target band.  The
-    rationale is to keep collecting gamma and convexity before paying
-    theta to roll.
+    The handbook ("Rule 1 — Time-Based Roll", the gamma/theta trade-off
+    note) sanctions deferring a roll on three conditions, all required:
+
+    1. the time trigger is not yet urgent — the position has not
+       entered the mandatory roll window
+       (``months_to_maturity > roll_time_months``);
+    2. **the put has moved meaningfully nearer to the money**
+       (``drift_pct < 0``) — this is the whole basis for the deferral,
+       because a put drifting toward the strike is accumulating
+       favourable gamma that a mechanical roll would throw away;
+    3. the key check — crash convexity at current spot still meets the
+       IPS target band.
+
+    Condition 2 is not optional garnish. Without it the deferral also
+    catches the *opposite* case: a put pushed further OTM by a market
+    rally, whose delta has collapsed and which is accumulating no gamma
+    at all. That is the handbook's "Rule 2 — Market Rally Rebalance
+    Trigger", where the sanctioned action is to roll up, not to wait.
+    Deferring there would recommend inaction on a live rally trigger
+    while citing a gamma position that does not exist.
+
+    This is the same three-part test
+    :func:`~deltadewa.analysis.roll_status.evaluate_roll_status` applies
+    when it suppresses a drift-only ROLL to MONITOR; the two layers
+    state one policy, deliberately.
 
     Args:
         months_to_maturity: Calendar months remaining to expiry.
         convexity_now_pct: Current portfolio crash-convexity percent.
+        drift_pct: Signed change in %OTM since entry (see
+            :class:`~deltadewa.analysis.roll_status.MoneynessDrift`) —
+            negative means the option has moved nearer the money.
+            ``None`` when the position has no recorded ``entry_spot``,
+            which cannot support a deferral: the gamma story is
+            unverifiable, so the roll stands.
         ips_triggers: IPS trigger thresholds (supplies
             ``roll_time_months``).
         ips_convexity: IPS convexity target band (supplies
             ``target_min_pct`` / ``target_max_pct``).
 
     Returns:
-        ``True`` when both conditions hold and the roll should be
-        deferred; ``False`` when the roll window has been breached or
-        convexity is outside the target band.
+        ``True`` only when all three conditions hold and the roll should
+        be deferred; ``False`` when the roll window has been breached,
+        convexity is outside the target band, or the option has not
+        moved nearer the money.
 
     """
     not_in_roll_window = months_to_maturity > ips_triggers.roll_time_months
@@ -125,7 +158,8 @@ def gamma_theta_delay(
         <= convexity_now_pct
         <= ips_convexity.target_max_pct
     )
-    return not_in_roll_window and in_target_band
+    nearer_the_money = drift_pct is not None and drift_pct < 0
+    return not_in_roll_window and in_target_band and nearer_the_money
 
 
 def _roll_now_rationale(
@@ -146,8 +180,42 @@ def _roll_now_rationale(
         )
     drift = record.moneyness.drift_pct
     if drift is not None and abs(drift) > ips_triggers.strike_drift_max_otm_pct:
-        return f"Strike drift {drift:+.1f}% OTM exceeded threshold."
+        direction = "further OTM" if drift > 0 else "nearer the money"
+        return (
+            f"Strike drift {drift:+.1f}% ({direction}) exceeded the"
+            f" {ips_triggers.strike_drift_max_otm_pct:.0f}% threshold."
+        )
     return f"Roll recommended ({record.verdict})."
+
+
+def _delay_rationale(
+    record: RollStatusRecord,
+    *,
+    months_to_maturity: float,
+    convexity_now_pct: float,
+    ips_triggers: IpsTriggers,
+    ips_convexity: IpsConvexity,
+) -> str:
+    """Spell out all three conditions that earned a DELAY.
+
+    A bare "DELAY" on a fired trigger reads as the tool ignoring a live
+    signal, so name each leg of :func:`gamma_theta_delay`'s test against
+    the IPS value it was measured on. Every threshold quoted here comes
+    from *ips_triggers* / *ips_convexity* — none is a literal.
+    """
+    drift = record.moneyness.drift_pct
+    nearer_pct = abs(drift) if drift is not None else 0.0
+    return (
+        f"Roll warranted ({record.verdict}) but deferring:"
+        f" the put has moved {nearer_pct:.1f}% nearer the money since"
+        " entry, so it is gaining gamma;"
+        f" {months_to_maturity:.1f} mo to expiry is still outside the"
+        f" {ips_triggers.roll_time_months:.0f} mo roll window;"
+        f" and crash convexity {convexity_now_pct:.1f}% is inside the"
+        f" {ips_convexity.target_min_pct:.0f}-"
+        f"{ips_convexity.target_max_pct:.0f}% IPS target band."
+        " Revisit when any of the three stops holding."
+    )
 
 
 def build_roll_plan(
@@ -249,6 +317,7 @@ def build_roll_plan(
         if actionable and gamma_theta_delay(
             months_to_maturity=months_to_maturity,
             convexity_now_pct=convexity_now_pct,
+            drift_pct=record.moneyness.drift_pct,
             ips_triggers=ips_triggers,
             ips_convexity=ips_convexity,
         ):
@@ -262,11 +331,12 @@ def build_roll_plan(
         if action == RollAction.HOLD:
             rationale = "No trigger active; holding."
         elif action == RollAction.DELAY:
-            rationale = (
-                f"Roll warranted ({record.verdict}) but deferring"
-                f" — {months_to_maturity:.1f} mo to expiry,"
-                f" convexity {convexity_now_pct:.1f}%"
-                " within target band."
+            rationale = _delay_rationale(
+                record,
+                months_to_maturity=months_to_maturity,
+                convexity_now_pct=convexity_now_pct,
+                ips_triggers=ips_triggers,
+                ips_convexity=ips_convexity,
             )
         else:
             rationale = _roll_now_rationale(record, ips_triggers)
