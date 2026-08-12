@@ -61,6 +61,23 @@ body {
   color: #7a0000;
 }
 
+/* Portfolio-shape notice: quiet unless the book is non-conforming (#261) */
+
+.shape-notice:empty {
+  display: none;
+}
+
+.shape-notice {
+  border-left: 4px solid #b45309;
+  background: #fffbeb;
+  color: #78350f;
+  padding: 10px 14px;
+  margin: 12px 0;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 /* No-IPS state */
 
 .no-ips-message {

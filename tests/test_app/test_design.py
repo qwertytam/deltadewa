@@ -388,6 +388,55 @@ class TestBasisChip:
         assert text.count(design._BASIS_CRASH_SKEW) == 5
 
 
+class TestShapeNotice:
+    """#261: the shape guard, restored — quiet unless the book is off-shape."""
+
+    def test_conforming_book_is_quiet_on_initial_render(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        app.program_state.set_underlying_quantity(1_000.0)
+        _add_starter_position(app.program_state)
+
+        layout = design.render(app)
+
+        notice = _find_component(layout, "shape-notice")
+        assert notice is not None
+        assert notice.children is None
+
+    def test_empty_book_is_quiet_on_initial_render(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        notice = _find_component(layout, "shape-notice")
+        assert notice is not None
+        assert notice.children is None
+
+    def test_non_conforming_book_shows_the_notice_on_initial_render(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        # A long put with no underlying set — non-conforming.
+        _add_starter_position(app.program_state)
+
+        layout = design.render(app)
+
+        notice = _find_component(layout, "shape-notice")
+        assert notice is not None
+        assert "No underlying position to protect" in _collect_text(notice)
+
+    def test_book_version_callback_is_wired(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+
+        assert any("shape-notice" in key for key in app.callback_map)
+
+
 class TestSizingPanel:
     """Sizing: rationale + answer, reacts to input, matches the engine."""
 

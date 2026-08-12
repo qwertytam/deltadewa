@@ -30,6 +30,7 @@ from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.shape_notice import shape_notice_text
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
 if TYPE_CHECKING:
@@ -553,6 +554,11 @@ def render(app: ProgramDashApp) -> html.Div:
     return html.Div(
         [
             html.H1("Monitor"),
+            html.Div(
+                shape_notice_text(portfolio),
+                id="shape-notice",
+                className="shape-notice",
+            ),
             scenario_explorer,
             _decisions_section(records, plan),
             _position_detail_table(records, portfolio),

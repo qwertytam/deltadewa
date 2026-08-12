@@ -18,10 +18,12 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from deltadewa.analysis.portfolio_shape import classify_portfolio_shape
 from deltadewa.state import STATE_FILENAME, ProgramState
 
 _DEFAULT_EXPORT_DIR = Path("exports")
 _DEFAULT_IPS_PATH = Path("config/ips.yaml")
+_NOTICE_RULE_WIDTH = 70
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -66,6 +68,29 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _warn_if_non_conforming(state: ProgramState) -> None:
+    """Print a loud, un-scrollable-past warning for a non-conforming book.
+
+    Restores #261: this ran once per session as a notebook cell
+    (``classify_portfolio_shape``, commit ``73cf8da``) before Stage 4.3
+    deleted the notebooks without a replacement. A non-conforming book is a
+    warning, not a failure — the operator may have imported it
+    deliberately — so this never affects the exit code; it just makes sure
+    the warning can't be missed in a ``docker exec`` log.
+    """
+    shape = classify_portfolio_shape(state.portfolio)
+    if shape.is_conforming:
+        return
+    rule = "!" * _NOTICE_RULE_WIDTH
+    print(rule, file=sys.stderr)
+    print(
+        f"WARNING: non-conforming portfolio shape ({shape.reason})",
+        file=sys.stderr,
+    )
+    print(shape.notice, file=sys.stderr)
+    print(rule, file=sys.stderr)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Import a portfolio YAML into ``<export-dir>/program_state.json``.
 
@@ -103,6 +128,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"Loaded {len(state.portfolio.positions)} position(s) from "
         f"{args.portfolio_path} into {dest}",
     )
+    _warn_if_non_conforming(state)
     return 0
 
 

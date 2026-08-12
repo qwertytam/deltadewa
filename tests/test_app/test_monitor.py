@@ -208,6 +208,52 @@ def monitor_app_paid_gain(
 
 
 @pytest.fixture(scope="module")
+def monitor_app_conforming(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[MonitorAppHandle]:
+    """Boot a real /monitor app whose book is a conforming protective put.
+
+    Unlike ``monitor_app`` (puts + a short call, no underlying set — off
+    -shape by construction), this sets an underlying quantity, so #261's
+    shape notice has a quiet case to be tested against too.
+    """
+    export_dir = tmp_path_factory.mktemp("monitor_app_conforming")
+    state = ProgramState.load(
+        export_dir,
+        ips_path=_EXAMPLE_IPS_YAML,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    state.portfolio.spot_price = 5000.0
+    state.set_underlying_quantity(1_000.0)
+    state.add_position(
+        strike_price=4500.0,
+        maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+        quantity=10,
+        option_type=OptionType.PUT,
+    )
+    market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
+    app = create_app(
+        state=state,
+        market_data=market_data,
+        ips_config=state.ips_config,
+    )
+
+    server = make_server("127.0.0.1", 0, app.server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield MonitorAppHandle(
+            url=f"http://127.0.0.1:{server.server_port}",
+            state=state,
+            app=app,
+            export_dir=export_dir,
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+@pytest.fixture(scope="module")
 def browser() -> Iterator[Browser]:
     """A headless Chromium instance shared across this module's tests."""
     with sync_playwright() as playwright:
@@ -889,6 +935,56 @@ class TestCollapsedPositionTable:
             expected_value,
             abs=1.0,
         )
+
+
+class TestShapeNotice:
+    """#261: the shape guard, restored — quiet unless the book is off-shape."""
+
+    def test_non_conforming_book_shows_the_notice(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """``monitor_app``'s book has puts but no underlying set."""
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            ".shape-notice",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        text = page.locator(".shape-notice").inner_text()
+        assert "No underlying position to protect" in text
+
+    def test_conforming_book_is_quiet(
+        self,
+        page: Page,
+        monitor_app_conforming: MonitorAppHandle,
+    ) -> None:
+        page.goto(
+            f"{monitor_app_conforming.url}/monitor",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        # #react-entry-point is the pre-render mount point — it exists in
+        # the raw HTML shell before the pathname callback populates the
+        # page, so waiting on it alone races the client-side render (the
+        # same trap TestNoIpsRender's comment above documents, and the one
+        # the clock-shift-probe memory flags). The notice div is empty
+        # here (CSS hides it via .shape-notice:empty), so the default
+        # visible-wait would time out — wait for it merely attached
+        # instead, which is what "the route callback has actually run"
+        # means for a div with no visible content.
+        page.wait_for_selector(
+            ".shape-notice",
+            state="attached",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        # An empty <div> is still in the DOM (a fixed id for the
+        # book-version-driven callback on /design; harmless here) — CSS
+        # hides it via .shape-notice:empty, so it must not be visible.
+        assert page.locator(".shape-notice").count() == 1
+        assert not page.locator(".shape-notice").is_visible()
+        assert "Portfolio shape:" not in page.content()
 
 
 class TestNoIpsRender:
