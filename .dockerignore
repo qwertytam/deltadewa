@@ -9,7 +9,6 @@ __pycache__
 .coverage
 tests/
 exports/
-*.ipynb
 docs/
 examples/
 .github/

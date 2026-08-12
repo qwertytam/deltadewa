@@ -1,5 +1,7 @@
 """Tests for deltadewa.utils module - print and formatting utilities."""
 
+import pytest
+
 from deltadewa.reporting.console import ConsoleReporter
 
 
@@ -211,3 +213,25 @@ class TestProgressBar:
         reporter.progress(0, 100)
         captured = capsys.readouterr()
         assert "0.0%" in captured.out
+
+
+class TestNotebookOnlyMethod:
+    """#279 removed the Jupyter stack, so IPython is genuinely absent.
+
+    ``clear_and_print`` defers its IPython import so the rest of
+    ``ConsoleReporter`` — and everything importing it via
+    ``deltadewa.reporting`` — stays usable without it. Pin the labelled
+    error, so a future refactor cannot turn it into a bare
+    ModuleNotFoundError at import time.
+    """
+
+    def test_clear_and_print_raises_a_labelled_import_error(self) -> None:
+        """It explains itself rather than leaking a bare import failure."""
+        with pytest.raises(ImportError, match="IPython is required"):
+            ConsoleReporter().clear_and_print("x")
+
+    def test_the_rest_of_the_reporter_still_works(self, capsys) -> None:
+        """The deferred import must not affect any other method."""
+        ConsoleReporter(width=10).header("OK", char="=")
+
+        assert "=" * 10 in capsys.readouterr().out

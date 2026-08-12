@@ -1,5 +1,8 @@
 """Tests for deltadewa.formatters module - centralized formatting functions."""
 
+import pandas as pd
+
+from deltadewa.formatters import dataframes
 from deltadewa.formatters.values import (
     format_currency,
     format_currency_for_axis,
@@ -206,3 +209,29 @@ class TestFormatNumberAutoPrecision:
         """Test boundary at 0.1."""
         assert format_number_auto_precision(0.1) == "0.1000"
         assert format_number_auto_precision(0.09999) == "0.099990"
+
+
+class TestNotebookDegradation:
+    """#279 removed the Jupyter stack, so IPython is genuinely absent.
+
+    ``dataframes.py`` has always guarded its ``IPython.display`` import and
+    fallen back to ``print``, but nothing exercised the fallback while the
+    notebook toolchain was installed. It is now the only path, and it is what
+    keeps the production image importable — so it gets a test.
+    """
+
+    def test_ipython_is_not_available(self) -> None:
+        """The guarded import resolves to the fallback, not a hard failure."""
+        assert dataframes.IPYTHON_AVAILABLE is False
+
+    def test_display_dataframe_summary_falls_back_to_print(
+        self,
+        capsys,
+    ) -> None:
+        """The summary still prints the frame without IPython.display."""
+        df = pd.DataFrame({"a": [1, 2, 3]})
+
+        dataframes.display_dataframe_summary(df)
+
+        out = capsys.readouterr().out
+        assert "3 rows x 1 columns" in out
