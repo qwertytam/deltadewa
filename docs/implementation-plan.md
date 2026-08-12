@@ -1718,7 +1718,15 @@ checking for deliberately during review — not discovering a fifth time.
   a real safety test.
 - Handbook additions the review flagged: a **repricing-methodology appendix**
   (the ambiguity that let C1/C4 happen — a "reprice at −25% with +X vol points"
-  worked example), an SPX deep-OTM **execution** section, concentrated
+  worked example) — **done**, as the handbook's `A4 Crash Repricing
+  Methodology`, describing the shipped engine (skew treatment, `CrashShock`,
+  the no-defaults rule) with engine-derived goldens. Writing it surfaced
+  three drifts in `docs/repricing-methodology.md` — §5's IPS key paths name a
+  `crash:` section and key names that do not exist, §2/§7 still claim
+  `skew_reference_delta` is unthreaded (M1.8 threaded it), and
+  `crash_floor_reported` now has no live consumer — **not yet fixed there**;
+  the appendix documents the shipped reality instead. Still open: an SPX
+  deep-OTM **execution** section, concentrated
   single-name **basis/beta** guidance, the §1256 **wash-sale** correction, a
   **cash/margin** section, and quantified **put-spread vs outright** economics.
   Reconcile the Quick Start "1–2%" vs benchmark "0.5–1.5% / 1% ceiling" tension.
