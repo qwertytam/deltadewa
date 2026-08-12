@@ -104,6 +104,41 @@ class TestLocalRng:
         # If the MC had used the global RNG, this draw would have advanced.
         assert got_next == expected_next
 
+    def test_different_seeds_give_different_draws(self) -> None:
+        """Distinct seeds must produce distinct paths (#180).
+
+        The companion to ``test_seeded_runs_are_reproducible``: together
+        they pin that ``random_seed`` actually reaches the Generator.
+        A local ``default_rng`` that ignored its argument would satisfy
+        reproducibility on its own.
+        """
+        pf = _book()
+        r1 = pf.run_monte_carlo_simulation(num_simulations=2000, random_seed=7)
+        r2 = pf.run_monte_carlo_simulation(num_simulations=2000, random_seed=8)
+        assert not np.array_equal(r1["simulated_pnls"], r2["simulated_pnls"])
+
+    def test_seed_choice_survives_an_interleaved_run(self) -> None:
+        """Seed 7 gives the same paths either side of a seed-8 run.
+
+        A ``Generator`` held as shared state, rather than built per call,
+        would drift here even though each individual call looked
+        reproducible.
+        """
+        pf = _book()
+        first = pf.run_monte_carlo_simulation(
+            num_simulations=2000,
+            random_seed=7,
+        )
+        pf.run_monte_carlo_simulation(num_simulations=2000, random_seed=8)
+        again = pf.run_monte_carlo_simulation(
+            num_simulations=2000,
+            random_seed=7,
+        )
+        np.testing.assert_array_equal(
+            first["simulated_pnls"],
+            again["simulated_pnls"],
+        )
+
     def test_unseeded_runs_vary(self) -> None:
         """random_seed=None yields different draws across runs."""
         pf = _book()

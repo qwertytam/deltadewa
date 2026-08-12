@@ -249,8 +249,12 @@ class TestMonteCarloMixin:
 
     def test_vectorized_vs_scalar_consistency(self) -> None:
         """Test that vectorized results are consistent with scalar approach."""
-        np.random.seed(42)  # For reproducibility
-
+        # No global seeding here: the Monte Carlo path builds its own
+        # local default_rng, so np.random.seed() never reached it. The
+        # assertions below are on vectorized_pnl_at_expiry, which is
+        # deterministic anyway. Left as a comment because the old
+        # `np.random.seed(42)  # For reproducibility` line read as if it
+        # were load-bearing (#180).
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.2,
