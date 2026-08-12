@@ -98,17 +98,21 @@ def _series(
     ``vix_history`` (``analysis.health``) and ``spot`` (``dashboard.session``)
     — every key the app or notebook path may read is warmed here.
 
-    Two pairs listed separately here share a single disk-cache key —
-    ``vix``/``vix_history`` both write ``"vix_fred"``, ``skew_index``/
-    ``skew_percentile`` both write ``"spot_SKEW"`` (see
-    ``CboeFredProvider._request_vix``/``_request_skew``). With
-    ``force_fetch=True`` each name in a pair still issues its own live
-    request — the second call's result simply overwrites the first's
-    with an (almost always identical) fresh observation — so a full run
-    costs two upstream hits per pair rather than one. Harmless at daily
-    cadence and well inside FRED/CBOE's limits, but a real behaviour
-    change from the pre-``force_fetch`` world where the second call was
-    a same-run cache hit and no second request went out.
+    One pair listed separately here shares a single disk-cache key —
+    ``vix``/``vix_history`` both write ``"vix_fred"`` (see
+    ``CboeFredProvider._request_vix``). ``skew_index``/``skew_percentile``
+    used to share ``"spot_SKEW"`` the same way; #185 item 1 gave
+    ``_request_skew`` its own ``"skew_percentile_history"`` key so the two
+    readings no longer overwrite each other's cache entry, even though
+    they currently fetch the same underlying CBOE SKEW series. For the
+    ``vix`` pair that still shares a key: with ``force_fetch=True`` each
+    name still issues its own live request — the second call's result
+    simply overwrites the first's with an (almost always identical) fresh
+    observation — so a full run costs two upstream hits for that pair
+    rather than one. Harmless at daily cadence and well inside FRED's
+    limits, but a real behaviour change from the pre-``force_fetch`` world
+    where the second call was a same-run cache hit and no second request
+    went out.
     """
     return [
         ("vix", provider.get_vix),

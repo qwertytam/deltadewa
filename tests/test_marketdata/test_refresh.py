@@ -81,11 +81,11 @@ class TestRefreshAll:
         tmp_path: Path,
     ) -> None:
         """A clean successful run leaves every series CACHED for a reader."""
-        # force_fetch=True, matching what main() always constructs — two
-        # pairs of series here share a cache key (vix/vix_history;
-        # skew_index/skew_percentile), so without it the second of each
-        # pair would see the first's just-written entry as a same-run
-        # CACHED hit rather than fetching live.
+        # force_fetch=True, matching what main() always constructs — the
+        # vix/vix_history pair shares a cache key, so without it the
+        # second would see the first's just-written entry as a same-run
+        # CACHED hit rather than fetching live. (skew_index/skew_percentile
+        # used to share one too, before #185 item 1 split them.)
         writer = CboeFredProvider(
             cache_dir=tmp_path,
             force_fetch=True,
@@ -123,9 +123,9 @@ class TestRefreshAll:
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """VIXCLS down, CBOE up: vix + vix_history fail, four others don't."""
-        # force_fetch=True, matching main(): skew_index/skew_percentile
-        # share a cache key, so without it the second would read the
-        # first's same-run entry as CACHED rather than fetching live.
+        # force_fetch=True, matching main(): vix/vix_history share a cache
+        # key, so without it the second would read the first's same-run
+        # entry as CACHED rather than fetching live.
         provider = CboeFredProvider(
             cache_dir=tmp_path,
             force_fetch=True,
@@ -143,6 +143,7 @@ class TestRefreshAll:
         # The successful series are still on disk.
         assert (tmp_path / "spot_SPX.json").exists()
         assert (tmp_path / "spot_SKEW.json").exists()
+        assert (tmp_path / "skew_percentile_history.json").exists()
 
     def test_warm_cache_within_ttl_still_fetches_live(
         self,

@@ -276,8 +276,13 @@ class CboeFredProvider:
         )
 
     def _request_skew(self) -> _Fetched:
+        # Distinct cache key from _get_cboe_spot("SKEW")'s "spot_SKEW" (#185
+        # item 1): both currently fetch the same CBOE SKEW series, but the
+        # spot reading and the percentile-rank reading are different
+        # consumers with no reason to be forced onto the same TTL/refresh
+        # if one of them ever needs to diverge (e.g. a longer lookback).
         return self._request_with_fallback(
-            "spot_SKEW",
+            "skew_percentile_history",
             lambda: self._fetch_cboe_history("SKEW"),
         )
 
