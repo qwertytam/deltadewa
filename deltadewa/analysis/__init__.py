@@ -64,6 +64,17 @@ from deltadewa.analysis.portfolio_shape import (
     PortfolioShape,
     classify_portfolio_shape,
 )
+from deltadewa.analysis.position_aging import (
+    AgedPosition,
+    ExpiryBoundaries,
+    ExpiryBucketLabel,
+    ExpiryBucketTotal,
+    ExpiryCalendarEntry,
+    PositionAging,
+    classify_expiry_bucket,
+    evaluate_position_aging,
+    expiry_boundaries,
+)
 from deltadewa.analysis.repricing import (
     MarketShock,
     MarketState,
@@ -117,6 +128,7 @@ from deltadewa.analysis.strike_ladder import (
 from deltadewa.analysis.volatility import get_volatility_stats
 
 __all__ = [
+    "AgedPosition",
     "CandidateMetrics",
     "CrashConvexityResult",
     "CrashScenarioRow",
@@ -128,6 +140,10 @@ __all__ = [
     "EmpiricalCdf",
     "EntryTimingResult",
     "EntryTimingStep",
+    "ExpiryBoundaries",
+    "ExpiryBucketLabel",
+    "ExpiryBucketTotal",
+    "ExpiryCalendarEntry",
     "HedgeAdequacy",
     "HedgeCostVerdict",
     "HedgeEfficiency",
@@ -144,6 +160,7 @@ __all__ = [
     "PnlHistogram",
     "PortfolioAnalyzer",
     "PortfolioShape",
+    "PositionAging",
     "PremiumBasis",
     "RegimeLabel",
     "RollAction",
@@ -165,6 +182,7 @@ __all__ = [
     "build_spot_vol_grid_spec",
     "build_strike_ladder",
     "build_time_price_grid_spec",
+    "classify_expiry_bucket",
     "classify_portfolio_shape",
     "classify_vix_regime",
     "compute_crash_convexity",
@@ -181,7 +199,9 @@ __all__ = [
     "evaluate_candidate",
     "evaluate_hedge_trigger_set",
     "evaluate_hedge_triggers",
+    "evaluate_position_aging",
     "evaluate_roll_status",
+    "expiry_boundaries",
     "flat_bump_vol",
     "forward_vol",
     "gamma_theta_delay",
