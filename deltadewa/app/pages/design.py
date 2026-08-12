@@ -72,6 +72,7 @@ from deltadewa.analysis.strike_ladder import build_strike_ladder
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.shape_notice import shape_notice_text
 from deltadewa.clock import program_now
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.monte_carlo import drift_measure_label
@@ -2508,7 +2509,17 @@ def render(app: ProgramDashApp) -> html.Div:
     )
 
     return html.Div(
-        [html.H1("Design"), book_zone, planning_zone, exploration_zone],
+        [
+            html.H1("Design"),
+            html.Div(
+                shape_notice_text(portfolio),
+                id="shape-notice",
+                className="shape-notice",
+            ),
+            book_zone,
+            planning_zone,
+            exploration_zone,
+        ],
         className="page page-design",
     )
 
@@ -2763,6 +2774,17 @@ def register_callbacks(app: ProgramDashApp) -> None:
     def _render_net_delta(_version: int) -> Component:
         portfolio = app.program_state.portfolio
         return _safe_render(lambda: _net_delta_readout(portfolio))
+
+    @app.callback(
+        Output("shape-notice", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_shape_notice(_version: int) -> str | None:
+        # Restores #261: /design can change the book's shape (add/remove a
+        # position) without a re-import, so this has to watch book-version
+        # like every other read-only panel on this page, not just render
+        # once at page load.
+        return shape_notice_text(app.program_state.portfolio)
 
     @app.callback(
         Output("plan-market-env-panel", "children"),

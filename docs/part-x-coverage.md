@@ -398,7 +398,28 @@ rebuilding that view for the persistent model is
 | Roll planner — the `ROLL_NOW`/`DELAY`/`HOLD` action, proposed target strike, and roll-up cost to it | Design cell 21, via `analysis/roll_planner.build_roll_plan` | [#258](https://github.com/qwertytam/deltadewa/issues/258) |
 | Position aging & expiration calendar | Monitor cell 41, `dashboard/position_aging.py` | [#259](https://github.com/qwertytam/deltadewa/issues/259) |
 | Portfolio volatility profile | Design cell 36, `dashboard/volatility_profile.py` + `analysis/volatility.get_volatility_stats` | [#260](https://github.com/qwertytam/deltadewa/issues/260) |
-| Portfolio shape guard on import | Cell 5 of **both** notebooks, `analysis/portfolio_shape.classify_portfolio_shape` | [#261](https://github.com/qwertytam/deltadewa/issues/261) |
+| ~~Portfolio shape guard on import~~ | Cell 5 of **both** notebooks, `analysis/portfolio_shape.classify_portfolio_shape` | [#261](https://github.com/qwertytam/deltadewa/issues/261) — **Restored**, see [below](#the-shape-guard-is-restored-261) |
+
+### The shape guard is restored (#261)
+
+The notebook cell (`_shape = classify_portfolio_shape(portfolio)`, commit
+`73cf8da`) ran once per session and printed an amber notice when the book
+wasn't a downside-protection structure. It had zero product consumers from
+Stage 4.3 until now.
+
+Two surfaces, both driven by `classify_portfolio_shape` directly — no new
+conformance criteria invented:
+
+- **The CLI** (`app/import_portfolio.py`, RUNBOOK §5) prints
+  `shape.notice` to stderr, in an un-scrollable-past `!`-rule banner, when a
+  successful import leaves a non-conforming book. Exit code stays `0` — a
+  non-conforming book is a warning, not a failure.
+- **Both pages** render a `shape-notice` element right under their `H1`,
+  built by the new `app/shape_notice.shape_notice_text`. Quiet (an empty
+  `<div>`, hidden by CSS) for a conforming book or an empty pre-load one;
+  `/design`'s copy also re-renders on every `book-version` bump, since
+  `/design` can change the book's shape (add/remove a position) without a
+  re-import (RUNBOOK §6) — the CLI notice alone can't catch that.
 
 ### The roll planner was a false PRESENT
 
