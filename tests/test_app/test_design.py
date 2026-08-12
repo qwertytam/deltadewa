@@ -40,6 +40,7 @@ from deltadewa.analysis.market_environment import (
 )
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
+from deltadewa.app import format as fmt
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import design
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -481,6 +482,81 @@ class TestSizingPanel:
 
         text = _collect_text(panel)
         assert f"{expected.contracts_needed:,} contracts needed" in text
+
+    def test_intrinsic_floor_shown_when_the_ips_opts_in(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#273: ``convexity.crash_floor_reported`` true surfaces the floor."""
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+        assert ips_config.convexity.crash_floor_reported is True
+
+        panel = design._render_sizing_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            pct_otm=20.0,
+            maturity_years=0.5,
+            vol_override=None,
+        )
+        expected = size_hedge(
+            state.portfolio,
+            ips_config,
+            candidate_pct_otm=20.0,
+            candidate_maturity_years=0.5,
+        )
+
+        floor = fmt.currency(
+            expected.per_contract_intrinsic_floor,
+            decimals=2,
+        )
+        assert f"(intrinsic floor {floor})" in _collect_text(panel)
+
+    def test_intrinsic_floor_hidden_when_the_ips_opts_out(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#273: setting the key false must actually hide the floor.
+
+        The key was inert before this — it had one reader, in the retired
+        Jupyter display layer, so the only live surface rendered the floor
+        whatever the IPS said.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+        opted_out = replace(
+            ips_config,
+            convexity=replace(
+                ips_config.convexity,
+                crash_floor_reported=False,
+            ),
+        )
+
+        panel = design._render_sizing_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=opted_out,
+            pct_otm=20.0,
+            maturity_years=0.5,
+            vol_override=None,
+        )
+        expected = size_hedge(
+            state.portfolio,
+            opted_out,
+            candidate_pct_otm=20.0,
+            candidate_maturity_years=0.5,
+        )
+
+        text = _collect_text(panel)
+        assert "intrinsic floor" not in text
+        # Only the floor goes: the rest of the candidate still renders.
+        assert f"{expected.contracts_needed:,} contracts needed" in text
+        assert fmt.currency(expected.per_contract_payoff, decimals=2) in text
 
 
 class TestStrikeLadderPanel:

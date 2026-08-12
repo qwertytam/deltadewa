@@ -1724,7 +1724,9 @@ checking for deliberately during review — not discovering a fifth time.
   three drifts in `docs/repricing-methodology.md` — §5's IPS key paths name a
   `crash:` section and key names that do not exist, §2/§7 still claim
   `skew_reference_delta` is unthreaded (M1.8 threaded it), and
-  `crash_floor_reported` now has no live consumer — **not yet fixed there**;
+  `crash_floor_reported` had no live consumer (#273 has since wired it to
+  `/design`'s sizing panel, so that third one is closed) — the first two are
+  **not yet fixed there**;
   the appendix documents the shipped reality instead. Still open: an SPX
   deep-OTM **execution** section, concentrated
   single-name **basis/beta** guidance, the §1256 **wash-sale** correction, a

@@ -229,7 +229,9 @@ class IpsConvexity:
     of that bump and capped at each leg's own ~10-delta wing (M1.6/M1.7; ``0.0``
     keeps the flat bump), the put-delta magnitude of that wing (the anchor the
     steepening is calibrated to, e.g. ``0.10``), and whether the intrinsic-floor
-    column is surfaced.
+    column is surfaced. ``crash_floor_reported`` is presentation policy and so
+    stays off ``CrashShock``; ``False`` drops the floor from ``/design``'s
+    sizing panel, the only live surface that reports it (#273).
 
     ``efficiency_min_ratio`` / ``efficiency_max_ratio`` band the hedge
     efficiency ratio (crash payoff per dollar of annual carry — see

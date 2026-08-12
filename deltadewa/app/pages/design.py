@@ -897,13 +897,24 @@ def _sizing_panel_view(
     result: HedgeSizingResult,
     ips_config: IpsConfig,
 ) -> Component:
-    """Render one sized candidate: the rationale first, then the answer."""
+    """Render one sized candidate: the rationale first, then the answer.
+
+    The intrinsic floor is a labelled conservative lower bound, surfaced only
+    when the IPS opts in (``convexity.crash_floor_reported``) and never the
+    headline — it reads far below the repriced payoff (2.5x against 17.5x in
+    the handbook's worked example), so a program may reasonably keep it off
+    the page rather than risk it being read as the protection on offer. See
+    ``docs/repricing-methodology.md`` §3/§5.
+    """
     conv = ips_config.convexity
     carry_verdict = "within" if result.within_budget else "over"
     convexity_verdict = "within" if result.meets_convexity_target else "over"
-    intrinsic_floor_text = fmt.currency(
-        result.per_contract_intrinsic_floor,
-        decimals=2,
+    intrinsic_floor_text = (
+        " (intrinsic floor "
+        + fmt.currency(result.per_contract_intrinsic_floor, decimals=2)
+        + ")"
+        if conv.crash_floor_reported
+        else ""
     )
     return html.Div(
         [
@@ -923,7 +934,7 @@ def _sizing_panel_view(
                 f"{result.candidate_maturity_years:.2f}y to expiry — "
                 "crash payoff "
                 f"{fmt.currency(result.per_contract_payoff, decimals=2)}"
-                f"/contract (intrinsic floor {intrinsic_floor_text}), "
+                f"/contract{intrinsic_floor_text}, "
                 f"carry {fmt.currency(result.per_contract_carry, decimals=2)}"
                 "/contract/year.",
                 className="plain-language",
