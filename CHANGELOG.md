@@ -9,7 +9,7 @@ Entries are grouped by the milestone they actually shipped under
 conventional-commit type, since that's how the work happened and how a
 milestone-level "what changed" question gets answered fastest. Each entry
 cites the PR(s) it shipped in. Reconstructed from `git log` against the
-`v0.4.0`–`v0.6.0` tags and `docs/implementation-plan.md`; pre-`v0.4.0`
+`v0.4.0`–`v0.7.0` tags and `docs/implementation-plan.md`; pre-`v0.4.0`
 history (`v0.3.0-correctness` and earlier — most of Phase 1, `M1.1`–`M1.5`)
 predates this file and is not backfilled, to avoid a reconstruction that
 drifts from what actually happened. See the `v*` git tags and their PR
@@ -17,8 +17,12 @@ history for that record instead.
 
 ## [Unreleased]
 
-Changes merged to `main` since the `v0.6.0` tag, not yet in a tagged
-release:
+No changes merged to `main` since the `v0.7.0` tag yet.
+
+## [0.7.0] - 2026-08-11
+
+Phase 3 close-out work merged since `v0.6.0` — clock/day-count
+correctness, the notebook retirement, and the defect-driven docs pass:
 
 - **#182** — `deltadewa/clock.py`, a single program trading-day source
   (`program_trading_date`, `days_between`) replacing ad hoc
@@ -45,6 +49,24 @@ release:
   (#254), environment beating `backup.env` for `BACKUP_REMOTE`/
   `HEARTBEAT_URL` precedence (#255), and verifying the remote before
   pinging the heartbeat on a clean-tree backup run (#256).
+- **Stage 4.5 — Phase 3 defect-driven docs** (#170, #179, #180, #185, #268)
+  — `QUICKSTART.md`'s examples rewritten against the real API (every one
+  crashed on import; #170); stale American-only/notebook-era references
+  corrected in `valuation.py`, `OptionPortfolio`, and the dead `dashboard/`
+  layer (#179); `BatchPricer`'s false thread-safety claim corrected — safe
+  today because concurrent workers share one valuation date, not because
+  the global `evaluationDate` goes untouched, and `OptionValuation`'s
+  numeric theta fallback additionally mutating it mid-computation was
+  flagged, not fixed (#180, tracked separately as #266); four `#185`
+  negligible-nits items (cache-key collision between VIX and SKEW spot
+  reads, a relative rather than absolute spot bump, a proof the
+  double-fallback-returns-0 gamma path is unreachable) plus the flaky
+  `test_monitor.py` DTE assertion found by `gate-runner` mid-verification
+  (#267, now closed).
+- `CHANGELOG.md` (this file), `CONTRIBUTING.md`, `SECURITY.md` added —
+  none existed before (#185 item 5, #269). `SECURITY.md` names #245 as
+  the still-open git-history remediation decision rather than presupposing
+  it resolved.
 
 ## [0.6.0] - 2026-08-10
 
@@ -107,7 +129,8 @@ Phase 1 close-out and the start of Phase 2, tagged together:
 - **M2.2 — Dash skeleton + shared layer** (#212) — the two-page app
   scaffold and `state.ProgramState`. Observation provenance (#213).
 
-[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/qwertytam/deltadewa/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/qwertytam/deltadewa/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/qwertytam/deltadewa/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/qwertytam/deltadewa/compare/v0.4.1...v0.4.2
