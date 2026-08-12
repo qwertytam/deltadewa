@@ -1,7 +1,10 @@
 """Carry / Theta-decay display module for the deltadewa options dashboard.
 
-Encapsulates the ~100-line Theta Decay & Carry Analysis section of
-``monitor_dashboard.ipynb`` into a single callable class.
+Encapsulated the ~100-line Theta Decay & Carry Analysis section of
+``monitor_dashboard.ipynb`` into a single callable class. The notebook
+was retired in Stage 4.3; this module is part of the leftover Jupyter
+layer (``dashboard/``/``widgets/``) with no product consumer — see
+CLAUDE.md.
 
 The class is deliberately thin: it delegates all computation to
 ``PortfolioAnalyzer`` (``CarryMixin``) and all table styling to

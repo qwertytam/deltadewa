@@ -117,7 +117,7 @@ class MonteCarloStalenessWidget:
                 f"""font-size: 13px; opacity: 0.95;">
                         → Results below may not reflect your current """
                 f"""portfolio<br>
-                        → Re-run the Monte Carlo cell in MODE 0 or """
+                        → Re-run the Monte Carlo simulation or """
                 f"""click the button
                         below
                     </p>

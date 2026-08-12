@@ -1,8 +1,10 @@
 """Dashboard setup and initialisation utilities.
 
 This module encapsulates the boilerplate that previously lived in the first
-few cells of the dashboard notebook, shared by both monitor_dashboard.ipynb
-and hedge_design.ipynb via ``start_session()``:
+few cells of ``monitor_dashboard.ipynb`` and ``hedge_design.ipynb``,
+shared via ``start_session()``. Both notebooks were retired in Stage 4.3;
+this module is part of the leftover Jupyter layer (``dashboard/``/
+``widgets/``) with no product consumer — see CLAUDE.md:
 
 - ``configure_display_defaults()``  — pandas / matplotlib environment setup
 - ``initialize_portfolio()``        — detect-imported-or-load-default logic
@@ -310,7 +312,7 @@ def setup_dashboard(
     ips_config: IpsConfig | None = None,
     auto_load_default: bool = True,
 ) -> dict[str, Any]:
-    """Run the full MODE 0 setup sequence and return a context dict.
+    """Run the full dashboard setup sequence and return a context dict.
 
     This is a convenience wrapper that calls, in order:
 
