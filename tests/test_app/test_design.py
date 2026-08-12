@@ -44,6 +44,7 @@ from deltadewa.analysis.position_aging import (
     ExpiryBucketLabel,
     expiry_boundaries,
 )
+from deltadewa.analysis.roll_planner import RollAction, build_roll_plan
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.app import format as fmt
@@ -390,8 +391,9 @@ class TestBasisChip:
 
         text = str(design.render(app))
 
-        # Zone header + sizing + ladder + roll + monetization.
-        assert text.count(design._BASIS_CRASH_SKEW) == 5
+        # Zone header + sizing + ladder + roll plan + roll status +
+        # monetization.
+        assert text.count(design._BASIS_CRASH_SKEW) == 6
 
 
 class TestShapeNotice:
@@ -684,8 +686,12 @@ class TestStrikeLadderPanel:
         assert _collect_text(narrow) != _collect_text(wide)
 
 
-class TestRollPlanner:
-    """Roll: all three per-trigger reasons (G3), not just the summary."""
+class TestRollStatusTable:
+    """Roll status: all three per-trigger reasons (G3), not the summary.
+
+    The evidence table, distinct from the roll *plan* panel above it
+    (see :class:`TestRollPlanPanel`).
+    """
 
     def test_all_three_trigger_reasons_appear(self, tmp_path: Path) -> None:
         app = _app_with_ips(tmp_path)
@@ -788,6 +794,140 @@ class TestRollPlanner:
         )
 
         assert "no positions in the book yet" in _collect_text(panel).lower()
+
+
+class TestRollPlanPanel:
+    """#258 — the decision layer over the roll status table.
+
+    The table says a tranche is triggered; the plan says what to do
+    about it, what to roll to, and what that costs. These pin that the
+    three things ``build_roll_plan`` adds actually reach the page, and
+    that the panel says how it relates to the table beneath it.
+    """
+
+    def _app_with_put(
+        self,
+        tmp_path: Path,
+        *,
+        strike_price: float = 4500.0,
+        days: int = 180,
+    ) -> ProgramDashApp:
+        app = _app_with_ips(tmp_path)
+        app.program_state.set_underlying_quantity(1_000.0)
+        app.program_state.add_position(
+            strike_price=strike_price,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=days),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        return app
+
+    def _panel(self, app: ProgramDashApp) -> Component:
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        return design._render_roll_plan_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+    def test_action_target_strike_and_cost_all_render(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The three things the roll table cannot show."""
+        app = self._app_with_put(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        expected = build_roll_plan(app.program_state.portfolio, ips_config)[0]
+
+        text = _collect_text(self._panel(app))
+
+        assert expected.action.value.replace("_", " ") in text
+        assert expected.rationale in text
+        if expected.target_strike is not None:
+            assert f"{expected.target_strike:,.0f}" in text
+        if expected.roll_up_cost is not None:
+            assert fmt.signed_currency(expected.roll_up_cost) in text
+
+    def test_states_its_relationship_to_the_roll_table(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Two adjacent verdict tables must not read as one.
+
+        The plan is a layer *over* the status table's grades, not a
+        second opinion on them.
+        """
+        text = _collect_text(self._panel(self._app_with_put(tmp_path)))
+
+        assert "roll status table below" in text
+
+    def test_no_action_is_a_bare_verdict_word(self, tmp_path: Path) -> None:
+        """Every row carries its reasoning — the zone's convention."""
+        app = self._app_with_put(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        text = _collect_text(self._panel(app))
+
+        for record in build_roll_plan(app.program_state.portfolio, ips_config):
+            assert record.rationale in text
+            assert len(record.rationale) > len(record.action.value)
+
+    def test_delay_row_renders_its_reasoning_and_own_badge(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """DELAY is a recommendation to sit on a fired trigger.
+
+        Unexplained it is indistinguishable from the tool dropping the
+        signal, so the row must carry the rationale text. The badge also
+        has to be its own class rather than falling back to the roll
+        table's HOLD styling — a deferral is not an all-clear. The
+        rationale's *content* is pinned in
+        ``tests/test_analysis/test_roll_planner.py``; this pins that the
+        view renders it.
+        """
+        app = self._app_with_put(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        base = build_roll_plan(app.program_state.portfolio, ips_config)[0]
+        deferred = replace(
+            base,
+            action=RollAction.DELAY,
+            rationale="Roll warranted (ROLL) but deferring: gaining gamma.",
+        )
+
+        row = design._roll_plan_row(deferred)
+        markup = str(row)
+
+        assert deferred.rationale in _collect_text(row)
+        assert "verdict-badge--delay" in markup
+        assert "DELAY" in _collect_text(row)
+
+    def test_empty_book_says_no_long_puts(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+
+        text = _collect_text(self._panel(app)).lower()
+
+        assert "no long puts in the book yet" in text
+
+    def test_panel_renders_without_error_on_mixed_book(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A short call in the book must not break the put-only plan."""
+        app = self._app_with_put(tmp_path)
+        app.program_state.add_position(
+            strike_price=5500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=90),
+            quantity=-5,
+            option_type=OptionType.CALL,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "traceback" not in text.lower()
 
 
 class TestPositionAgingPanel:
@@ -1196,7 +1336,7 @@ class TestHedgeTriggersPanel:
         """
         text = _collect_text(self._panel(self._hedged_app(tmp_path)))
 
-        assert "distinct from the roll planner" in text
+        assert "distinct from the roll panels" in text
 
     def test_empty_book_reads_as_unmeasured_not_healthy(
         self,
@@ -2127,13 +2267,18 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 9 PLANNING panels + 5 EXPLORATION panels share the .panel class.
+        # 10 PLANNING panels + 5 EXPLORATION panels share the .panel class.
         # A count, not a list, so a panel disappearing fails loudly; update it
         # when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 14
+        assert page.locator(".panel").count() == 15
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1
+        # #258 split the roll plan (the decision) from the roll status
+        # table (the evidence). Both must be present and distinct — the
+        # count alone would be satisfied by either one twice.
+        assert page.locator("#plan-roll-plan-panel").count() == 1
+        assert page.locator("#plan-roll-panel").count() == 1
 
 
 class TestExplorationZoneRendersClientSide:

@@ -260,6 +260,26 @@ body {
   background: #767676;
 }
 
+/* Roll plan actions (RollAction). Same badge grammar again. ROLL_NOW
+   shares the roll table's red because it is the same call. DELAY is
+   deliberately NOT green: it defers a trigger that really did fire, so
+   it must not read as "all clear" — it is a considered pause, and the
+   reasoning cell beside it says on what grounds. */
+
+.verdict-badge--roll_now {
+  background: #c62828;
+}
+
+.verdict-badge--delay {
+  background: #7a5ea8;
+}
+
+.plan-rationale {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  min-width: 22ch;
+}
+
 .trigger-actions {
   margin: 12px 0 0;
   padding-left: 20px;

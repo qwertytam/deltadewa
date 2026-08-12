@@ -147,55 +147,76 @@ class TestGammaThetaDelay:
             target_max_pct=target_max_pct,
         )
 
-    def test_outside_window_and_in_band_returns_true(self) -> None:
-        """Not in the roll window + convexity in band → delay."""
-        result = gamma_theta_delay(
-            months_to_maturity=3.0,
-            convexity_now_pct=20.0,
-            ips_triggers=self._triggers(roll_time_months=1.0),
+    def _delay(
+        self,
+        *,
+        months_to_maturity: float = 3.0,
+        convexity_now_pct: float = 20.0,
+        drift_pct: float | None = -5.0,
+        roll_time_months: float = 1.0,
+    ) -> bool:
+        """Call gamma_theta_delay with all three conditions satisfied.
+
+        Defaults sit squarely in the delay case — outside the roll
+        window, convexity mid-band, put nearer the money — so each test
+        varies exactly one condition.
+        """
+        return gamma_theta_delay(
+            months_to_maturity=months_to_maturity,
+            convexity_now_pct=convexity_now_pct,
+            drift_pct=drift_pct,
+            ips_triggers=self._triggers(roll_time_months=roll_time_months),
             ips_convexity=self._convexity(15.0, 25.0),
         )
-        assert result is True
+
+    def test_all_three_conditions_met_returns_true(self) -> None:
+        """Outside window + convexity in band + nearer the money → delay."""
+        assert self._delay() is True
 
     def test_inside_roll_window_returns_false(self) -> None:
-        """Inside the roll window overrides the convexity check."""
-        result = gamma_theta_delay(
-            months_to_maturity=0.5,
-            convexity_now_pct=20.0,
-            ips_triggers=self._triggers(roll_time_months=1.0),
-            ips_convexity=self._convexity(15.0, 25.0),
-        )
-        assert result is False
+        """Inside the roll window overrides the other two checks."""
+        assert self._delay(months_to_maturity=0.5) is False
 
     def test_exactly_at_roll_window_boundary_returns_false(self) -> None:
         """Equality is not 'outside' — delay requires strictly greater."""
-        result = gamma_theta_delay(
-            months_to_maturity=1.0,
-            convexity_now_pct=20.0,
-            ips_triggers=self._triggers(roll_time_months=1.0),
-            ips_convexity=self._convexity(15.0, 25.0),
-        )
-        assert result is False
+        assert self._delay(months_to_maturity=1.0) is False
 
     def test_convexity_below_min_returns_false(self) -> None:
         """Convexity out of band (too low) → don't delay; need to roll."""
-        result = gamma_theta_delay(
-            months_to_maturity=3.0,
-            convexity_now_pct=10.0,
-            ips_triggers=self._triggers(roll_time_months=1.0),
-            ips_convexity=self._convexity(15.0, 25.0),
-        )
-        assert result is False
+        assert self._delay(convexity_now_pct=10.0) is False
 
     def test_convexity_above_max_returns_false(self) -> None:
         """Convexity out of band (too high) → don't delay."""
-        result = gamma_theta_delay(
-            months_to_maturity=3.0,
-            convexity_now_pct=30.0,
-            ips_triggers=self._triggers(roll_time_months=1.0),
-            ips_convexity=self._convexity(15.0, 25.0),
-        )
-        assert result is False
+        assert self._delay(convexity_now_pct=30.0) is False
+
+    # ------------------------------------------------------------------
+    # Handbook condition (b): "the put has moved meaningfully nearer to
+    # the money". Without it the deferral also fires on a market rally,
+    # recommending inaction on a live Rule 2 rebalance trigger while
+    # citing gamma the position is not accumulating.
+    # ------------------------------------------------------------------
+
+    def test_drifted_further_otm_returns_false(self) -> None:
+        """A rallied put is losing gamma, not gaining it → never delay."""
+        assert self._delay(drift_pct=+8.0) is False
+
+    def test_zero_drift_returns_false(self) -> None:
+        """Unmoved put has no gamma story; 'nearer' is strict."""
+        assert self._delay(drift_pct=0.0) is False
+
+    def test_unknown_drift_returns_false(self) -> None:
+        """No entry_spot → gamma story unverifiable → the roll stands."""
+        assert self._delay(drift_pct=None) is False
+
+    def test_rally_is_not_rescued_by_a_healthy_convexity_band(self) -> None:
+        """Convexity in band does not license deferring a rally trigger.
+
+        This is the inversion the surface must never show: every other
+        condition is comfortable, so only the drift sign separates
+        "defer, you are gaining gamma" from "roll up, you are not".
+        """
+        assert self._delay(drift_pct=-0.1) is True
+        assert self._delay(drift_pct=+0.1) is False
 
 
 # ---------------------------------------------------------------------------
@@ -259,11 +280,17 @@ class TestBuildRollPlan:
         assert rec.roll_up_cost is not None
         assert rec.roll_up_cost != pytest.approx(0.0)
 
-    def test_rallied_outside_window_convexity_in_band_yields_delay(
+    def test_rallied_outside_window_in_band_yields_roll_now(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Outside roll window + convexity in band → DELAY action."""
+        """A rallied put is never deferred, however healthy the band.
+
+        The put has drifted *further* OTM (+13%), so the handbook's
+        gamma/theta deferral does not apply — this is Rule 2's market
+        rally rebalance trigger and the sanctioned action is to roll up.
+        Deferring here would sit on a live signal.
+        """
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()  # 90 days >> 30-day window
         portfolio = _portfolio_with(pos)
@@ -276,7 +303,99 @@ class TestBuildRollPlan:
 
         records = build_roll_plan(portfolio, ips)
 
+        assert records[0].action == RollAction.ROLL_NOW
+        assert "further OTM" in records[0].rationale
+
+    # ------------------------------------------------------------------
+    # Scenario B: market has declined, put is nearer the money
+    #   entry_spot=100, current spot=90, strike=80
+    #   entry_otm=20%, current_otm≈11%, drift≈-8.9%
+    #   With max_drift=10% and review_fraction=0.75 the drift trigger is
+    #   REVIEW, which is actionable but not suppressed by roll_status.
+    # ------------------------------------------------------------------
+
+    def _declined_position(self, days_to_maturity: int = 90) -> OptionPosition:
+        """Put that has moved nearer the money after a 10% decline."""
+        return _make_put(
+            spot_price=90.0,
+            strike_price=80.0,
+            days_to_maturity=days_to_maturity,
+            entry_spot=100.0,
+        )
+
+    def test_nearer_the_money_outside_window_in_band_yields_delay(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The handbook's sanctioned deferral: gaining gamma → DELAY."""
+        _patch_convexity(monkeypatch, 20.0)
+        pos = self._declined_position()
+        portfolio = _portfolio_with(pos)
+        ips = _make_ips_config(
+            roll_time_months=1.0,
+            strike_drift_max_otm_pct=10.0,
+            strike_drift_review_fraction=0.75,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+        )
+
+        records = build_roll_plan(portfolio, ips)
+
+        assert records[0].verdict in (RollVerdict.REVIEW, RollVerdict.ROLL)
         assert records[0].action == RollAction.DELAY
+
+    def test_delay_rationale_names_all_three_conditions(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """DELAY explains itself: gamma, roll window, and convexity band.
+
+        A bare verdict word on a fired trigger is not actionable, so the
+        rationale must carry the IPS values it was measured against.
+        """
+        _patch_convexity(monkeypatch, 20.0)
+        pos = self._declined_position()
+        portfolio = _portfolio_with(pos)
+        ips = _make_ips_config(
+            roll_time_months=1.0,
+            strike_drift_max_otm_pct=10.0,
+            strike_drift_review_fraction=0.75,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+        )
+
+        rationale = build_roll_plan(portfolio, ips)[0].rationale
+
+        assert "nearer the money" in rationale
+        assert "gamma" in rationale
+        assert "roll window" in rationale
+        # The IPS band, not a hardcoded one.
+        assert "15-25% IPS target band" in rationale
+
+    def test_unknown_drift_is_not_deferred(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No entry_spot → no gamma story → ROLL_NOW, not DELAY.
+
+        Time trigger sits in the REVIEW buffer (40d vs a 30d window,
+        1.5x buffer), so the verdict is actionable while the position is
+        still outside the mandatory window — isolating the drift leg.
+        """
+        _patch_convexity(monkeypatch, 20.0)
+        pos = _make_put(days_to_maturity=40, entry_spot=None)
+        portfolio = _portfolio_with(pos)
+        ips = _make_ips_config(
+            roll_time_months=1.0,
+            roll_review_buffer=1.5,
+            target_min_pct=15.0,
+            target_max_pct=25.0,
+        )
+
+        records = build_roll_plan(portfolio, ips)
+
+        assert records[0].verdict == RollVerdict.REVIEW
+        assert records[0].action == RollAction.ROLL_NOW
 
     def test_inside_roll_window_yields_roll_now(
         self,
