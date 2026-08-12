@@ -51,10 +51,44 @@ class BatchPricer:
 
     Thread safety note
     ------------------
-    Only ``SimpleQuote.setValue()`` is called inside worker threads — a
-    pure in-process value write with no QuantLib global side-effects.
-    The global ``Settings.instance().evaluationDate`` is never touched
-    inside workers, so threading is safe here.
+    The global ``Settings.instance().evaluationDate`` **is** touched inside
+    worker threads: every ``OptionValuation`` construction sets it
+    unconditionally (``valuation.py``'s ``_setup_quantlib()``), and
+    ``_get_or_create_cached_option()`` constructs on a cache miss from
+    inside ``_sweep_parallel``/``_sweep_parallel_greeks``, unsynchronized.
+
+    What actually makes this safe: every worker spawned by one
+    ``portfolio_values_at()``/``portfolio_greeks_at()`` call is invoked with
+    the *same* ``valuation_date`` argument — the date is a call parameter,
+    not per-position — so the unsynchronized writes are concurrent but
+    idempotent, every writer stores the identical value. This class does
+    nothing to prevent two *different* calls (different ``valuation_date``s)
+    from running concurrently against the same ``BatchPricer`` instance;
+    that would race for real. No current caller does this —
+    ``PortfolioAnalyzer.scenario_grid()`` sweeps its time points
+    sequentially on the main thread, one ``portfolio_*_at()`` call at a
+    time — but nothing in this class enforces it.
+
+    Post-construction, ``update_spot_price()`` — the actual per-spot sweep
+    call inside worker threads — is pure ``SimpleQuote.setValue()``, with
+    no QuantLib global side-effects, matching the original claim for that
+    part of the hot path.
+
+    One further hazard the above doesn't cover: ``OptionValuation``'s
+    numeric theta fallback (``_compute_theta``, used when the engine's
+    analytic ``theta()`` raises ``RuntimeError``) bumps the global
+    evaluationDate forward by a day mid-computation and restores it —
+    unlike delta/gamma/rho's fallbacks, which bump a local ``SimpleQuote``
+    and touch no global state. That branch is unreachable with the FD,
+    closed-form, and analytic engines this class currently selects
+    (verified directly against each), so it does not fire in practice
+    today. If a future engine change makes it reachable, it would race the
+    same way this note used to deny — and, independently of the race, it
+    currently returns a wrong answer even single-threaded (#266):
+    the term structures built in ``_setup_quantlib()`` use a fixed
+    reference date baked in at construction, not a live read of
+    ``Settings.instance().evaluationDate()``, so bumping the global
+    afterward does not reprice the option at all.
     """
 
     def __init__(
