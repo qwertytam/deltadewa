@@ -174,13 +174,24 @@ for the sufficiency band. Both are policy, not presentation — see
 `docs/part-x-coverage.md`'s "Where the vega band went" for why the band moved
 out of `dashboard.yaml`.
 
+**M2.8 has shipped**, closing the two Part X items M2.7 left as surfacing
+gaps rather than data gaps, plus a policy leak M2.7 exposed by putting the
+entry-timing tree on a page for the first time. **§13 Delta Drift** is
+`analysis/scenarios.ScenariosMixin.calculate_delta_drift` — the handbook's
+`Δ(−5%) − Δ(0)`, hedge-only and signed — on `/design`'s PLANNING panel
+beside the hedge rebalance triggers. **§14 Vega Term Exposure** is
+`analysis/maturity.MaturityMixin.calculate_vega_by_maturity`, reusing the
+same maturity-bucketing helper `carry.py` already applies to theta, on
+`/design`'s EXPLORATION panel. The policy leak: `entry_timing_tree`'s VIX
+thresholds were Python defaults, invisible to `ips.yaml`; they moved to
+`IpsMarketEnvironment`'s `market_environment:` section as required
+keyword-only params with no default, so the function can no longer be
+called without them.
+
 Still open: **#12 Liquidity Risk** is genuinely data-blocked (needs per-strike
 bid/ask and open interest, which the free CBOE/FRED provider doesn't return).
-**#13 Delta Drift** and **#14 Vega Term Exposure** are surfacing gaps that
-M2.7 didn't take (§13 is `Δ(−5%) − Δ(0)`, which `analysis/scenarios.py`
-already prices; §14 is vega by maturity bucket, which `analysis/maturity.py`
-already groups for theta). **#9**'s skew-beta scalar has never existed — an
-unbuilt feature, not a regression.
+**#9**'s skew-beta scalar has never existed — an unbuilt feature, not a
+regression.
 
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map, and its "Conscious
