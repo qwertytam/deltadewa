@@ -5,6 +5,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import QuantLib as QtLib
 
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.valuation import OptionValuation
@@ -802,3 +803,127 @@ class TestAmericanEuropeanParity:
 
         # Golden table value: 95.39; tolerance: ±0.5%
         assert price == pytest.approx(95.39, rel=0.005)
+
+
+class TestThetaHasNoNumericFallback:
+    """#266: theta fails loudly rather than returning a silent zero.
+
+    The removed fallback bumped the global
+    ``Settings.instance().evaluationDate`` and re-read ``NPV()``, but
+    ``_setup_quantlib`` builds every term structure against a fixed
+    reference date, so nothing repriced: it returned 0.0 for every
+    option. It was also unreachable — all three engines this codebase
+    constructs populate theta natively. These tests hold both halves of
+    that finding, since no test exercised the branch before.
+    """
+
+    @staticmethod
+    def _atm_put(
+        exercise_style: ExerciseStyle,
+        *,
+        use_closed_form: bool = False,
+    ) -> OptionValuation:
+        """Build a 30-day ATM put in the given engine configuration."""
+        return OptionValuation(
+            spot_price=100.0,
+            strike_price=100.0,
+            maturity_date=datetime(2026, 8, 25, tzinfo=UTC),
+            volatility=0.20,
+            risk_free_rate=0.05,
+            dividend_yield=0.02,
+            exercise_style=exercise_style,
+            option_type=OptionType.PUT,
+            valuation_date=datetime(2026, 7, 26, tzinfo=UTC),
+            use_closed_form=use_closed_form,
+        )
+
+    @pytest.mark.parametrize(
+        ("exercise_style", "use_closed_form"),
+        [
+            (ExerciseStyle.EUROPEAN, False),  # AnalyticEuropeanEngine
+            (ExerciseStyle.AMERICAN, False),  # FdBlackScholesVanillaEngine
+            (ExerciseStyle.AMERICAN, True),  # BjerksundStensland
+        ],
+    )
+    def test_every_engine_populates_theta_natively(
+        self,
+        exercise_style: ExerciseStyle,
+        *,
+        use_closed_form: bool,
+    ) -> None:
+        """No supported engine needs a fallback.
+
+        This is the reachability claim that justified deleting the
+        fallback outright rather than repairing it. Unlike vega and rho —
+        which the FD engine genuinely leaves unset — theta is a
+        derivative in the time dimension that closed-form and grid
+        engines both carry. If a QuantLib upgrade ever breaks this, the
+        assertion fails here instead of surfacing as a mispriced book.
+        """
+        option = self._atm_put(
+            exercise_style,
+            use_closed_form=use_closed_form,
+        )
+
+        # Raw engine call, deliberately bypassing the wrapper.
+        assert option.option.theta() < 0.0
+
+    def test_engine_failure_raises_instead_of_returning_zero(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A theta-less engine propagates, naming the configuration."""
+
+        def _no_theta(_self: QtLib.VanillaOption) -> float:
+            msg = "theta not provided"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(QtLib.VanillaOption, "theta", _no_theta)
+        option = self._atm_put(ExerciseStyle.EUROPEAN)
+
+        with pytest.raises(RuntimeError) as excinfo:
+            option.theta()
+
+        message = str(excinfo.value)
+        assert "did not provide theta" in message
+        assert "#266" in message
+        assert "european" in message.lower()
+        # The engine's own reason is chained, not swallowed.
+        assert "theta not provided" in message
+        assert isinstance(excinfo.value.__cause__, RuntimeError)
+
+    def test_engine_failure_also_raises_via_batch_greeks(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The batch path does not swallow the failure either.
+
+        ``greeks()`` fans out through ``GreeksCache.compute_all``; a
+        consumer reading the batch dict must not receive a theta key
+        holding a fabricated zero.
+        """
+
+        def _no_theta(_self: QtLib.VanillaOption) -> float:
+            msg = "theta not provided"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(QtLib.VanillaOption, "theta", _no_theta)
+        option = self._atm_put(ExerciseStyle.EUROPEAN)
+
+        with pytest.raises(RuntimeError, match="did not provide theta"):
+            option.greeks()
+
+    def test_theta_is_real_decay_not_zero(self) -> None:
+        """The regression itself, pinned to a hand-checked value.
+
+        Cross-checked against an independent Black-Scholes put-theta
+        implementation (not QuantLib):
+        ``-S*e^-qT*n(d1)*sigma/(2*sqrt(T)) + r*K*e^-rT*N(-d2)
+        - q*S*e^-qT*N(-d1)`` with S=K=100, T=30/365, sigma=0.20, r=0.05,
+        q=0.02 gives -12.3369542943 annualized, i.e. -0.0337998748 per
+        calendar day. The two agree to 10 decimal places. The old
+        fallback returned 0.0 here.
+        """
+        option = self._atm_put(ExerciseStyle.EUROPEAN)
+
+        assert option.theta() == pytest.approx(-0.0337998748, abs=1e-9)
