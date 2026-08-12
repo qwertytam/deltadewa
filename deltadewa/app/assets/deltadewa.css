@@ -505,6 +505,12 @@ body {
   font-size: 0.85rem;
 }
 
+/* Position aging: a bucket holding no legs is a real reading, not missing
+   data, so it stays in the ladder — dimmed, not dropped. */
+.aging-row--empty {
+  color: #8a8a8a;
+}
+
 /* /design: EXPLORATION zone — stress heatmaps, MC distribution */
 
 .zone-exploration {

@@ -81,7 +81,7 @@ default is chipped:
 | --- | --- | --- |
 | `basis: crash-skew (IPS anchor)` | Sizing, strike ladder, roll planner, monetization | Reprices the book at the IPS crash. Agrees with `/monitor` to the cent. |
 | `basis: live market data` | Market environment | Reprices nothing — reads the feed. |
-| `basis: book Greeks at today's market` | Hedge rebalance triggers (PLANNING); vega term exposure (EXPLORATION) | Reads the book's Greeks unshocked. |
+| `basis: book Greeks at today's market` | Hedge rebalance triggers, position aging (PLANNING); vega term exposure (EXPLORATION) | Reads the book's Greeks unshocked. |
 | `basis: spot -5%, flat vol (not the IPS crash)` | Delta drift | Reprices at the handbook's own fixed §13 shock, distinct from the IPS crash anchor every other PLANNING panel prices. |
 | `basis: position maturities (nothing priced)` | Convexity cliff | Touches no market input at all — compares each long put's maturity against the valuation date. Cannot honestly carry even the book-Greeks chip. |
 
@@ -122,6 +122,7 @@ default is chipped:
 | — | Strike ladder builder | — | `/design` PLANNING | `analysis/strike_ladder.build_strike_ladder` | **PRESENT** |
 | — | Roll planner | — | `/design` PLANNING — *Roll planner* | `analysis/roll_status.evaluate_roll_status` — **not** `roll_planner` | **PARTIAL** — the panel is the roll *table*; `analysis/roll_planner.build_roll_plan` has no consumer. See [Stage 4.3](#stage-43--the-notebook-retirement) |
 | — | Monetization planner | — | `/design` PLANNING + `/monitor` *Decisions* | `analysis/monetization.build_monetization_plan` | **PRESENT** |
+| — | Position aging & expiration calendar | — | `/design` PLANNING — **Position aging** | `analysis/position_aging.evaluate_position_aging`; every bucket boundary from `IpsTriggers` | **PRESENT** (#259) |
 
 **Note on #5 and #15.** These are **one number**, not two. The handbook
 states the ratio in dollars at `hedging handbook.md:2032` (#15) and in
@@ -396,9 +397,72 @@ rebuilding that view for the persistent model is
 | What | Where it was | Issue |
 | --- | --- | --- |
 | Roll planner — the `ROLL_NOW`/`DELAY`/`HOLD` action, proposed target strike, and roll-up cost to it | Design cell 21, via `analysis/roll_planner.build_roll_plan` | [#258](https://github.com/qwertytam/deltadewa/issues/258) |
-| Position aging & expiration calendar | Monitor cell 41, `dashboard/position_aging.py` | [#259](https://github.com/qwertytam/deltadewa/issues/259) |
+| ~~Position aging & expiration calendar~~ | Monitor cell 41, `dashboard/position_aging.py` | [#259](https://github.com/qwertytam/deltadewa/issues/259) — **Restored**, see [below](#position-aging-is-restored-259) |
 | ~~Portfolio volatility profile~~ | Design cell 36, `dashboard/volatility_profile.py` + `analysis/volatility.get_volatility_stats` | [#260](https://github.com/qwertytam/deltadewa/issues/260) — **Restored**, see [below](#the-volatility-profile-is-restored-260) |
 | ~~Portfolio shape guard on import~~ | Cell 5 of **both** notebooks, `analysis/portfolio_shape.classify_portfolio_shape` | [#261](https://github.com/qwertytam/deltadewa/issues/261) — **Restored**, see [below](#the-shape-guard-is-restored-261) |
+
+### Position aging is restored (#259)
+
+The notebook cell (`dashboard/position_aging.PositionAgingDisplay`, Monitor
+cell 41) bucketed each leg by expiry urgency and printed an expiration
+calendar. `PositionAgingDisplay` itself is left as-is, read-but-not-built-on
+Jupyter-era code, per this file's standing convention for `dashboard/`.
+
+New in `analysis/position_aging.py`: `evaluate_position_aging`, driving a
+**Position aging** panel in `/design`'s PLANNING zone, immediately after the
+roll planner.
+
+**Why `/design` and not `/monitor`.** `/monitor`'s `_position_detail_table`
+already carries a raw per-leg DTE column, and its docstring reserves that
+table as the plain ledger rather than a second risk narrative. The question
+the panel answers — *when does this book start rolling off, and how much at
+a time* — is a roll-planning question, and the two upper buckets are the
+same window the roll planner grades against, so the panel belongs beside it.
+No bucketed DTE was added to `/monitor`.
+
+**The thresholds — what must not be re-added.** The retired widget hardcoded
+a five-grade ladder at 7 / 14 / 21 / 45 days. Those were **not** ported, and
+**no new IPS key was added** for them. Two reasons:
+
+1. The handbook has no five-grade DTE ladder. Its expiry policy is expressed
+   in *months* — "Roll trigger: maturity < 9 months remaining" (Part VII,
+   Rule 1 — Time-Based Roll, restated in every Part VIII sizing example).
+   Nothing anywhere makes 14d or 45d a decision boundary, so promoting them
+   to `ips.yaml` would have invented policy this program does not have.
+2. The ladder was short-dated vocabulary applied to a book of 12–18 month
+   puts rolled at 9 months. Every leg would have sat in "LONG-TERM 45d+" for
+   essentially its whole life; the panel would have been constant-valued.
+
+All four boundaries therefore come from keys `IpsTriggers` **already** owned:
+
+| Bucket | IPS source |
+| --- | --- |
+| URGENT | `triggers.expiry_urgent_days` |
+| SOON | `triggers.expiry_soon_days` |
+| ROLL DUE | `triggers.roll_time_months` x `const.CALENDAR_DAYS_PER_MONTH` |
+| ROLL REVIEW | ROLL DUE x `triggers.roll_review_buffer` |
+
+The upper two are exactly the window
+`roll_status._time_trigger_verdict` grades against, so the aging panel and
+the roll table **agree by construction** — the handbook's rule that two
+panels disagreeing on the same quantity is a bug, not a modelling choice.
+`classify_expiry_bucket` also keeps each boundary's *comparison* as its
+owning consumer already wrote it (`<` for the urgent count in
+`hedge_triggers.py`, `<=` for the roll window in `roll_status.py`);
+normalising them would have put a leg in ROLL DUE here while the roll table
+still said HOLD.
+
+**Labels carry no numbers.** `ExpiryBucketLabel` is `URGENT` / `SOON` /
+`ROLL DUE` / `ROLL REVIEW` / `LONG-TERM`. The day windows are rendered by
+the panel from the resolved `ExpiryBoundaries`, so an `ips.yaml` edit moves
+the grading *and* the printed window together. The retired widget's
+`"URGENT (<7d)"` label is precisely the failure this avoids — the same trap
+["Where the vega band went"](#where-the-vega-band-went) records.
+
+Also deliberately not carried across: the pandas `print` presentation, the
+emoji tier markers, and the per-leg "→ ACTION: roll this position" advice
+(the roll planner already issues that verdict, with its three trigger
+reasons).
 
 ### The volatility profile is restored (#260)
 

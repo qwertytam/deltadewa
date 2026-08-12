@@ -38,6 +38,12 @@ from deltadewa.analysis.market_environment import (
     RegimeLabel,
     TermShape,
 )
+from deltadewa.analysis.position_aging import (
+    BUCKET_ORDER,
+    ExpiryBoundaries,
+    ExpiryBucketLabel,
+    expiry_boundaries,
+)
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.app import format as fmt
@@ -782,6 +788,136 @@ class TestRollPlanner:
         )
 
         assert "no positions in the book yet" in _collect_text(panel).lower()
+
+
+class TestPositionAgingPanel:
+    """#259 — per-leg expiry buckets and the expiration calendar.
+
+    Sits beside the roll planner because it reads the same roll-timing IPS
+    keys. The assertions below deliberately pin that the *windows* are
+    rendered from the IPS rather than from a literal in the view.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        return design._render_position_aging_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+    def test_empty_book_shows_incomplete_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        assert "add a position" in _collect_text(self._panel(app)).lower()
+
+    def test_renders_every_bucket_and_the_calendar(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        for label in BUCKET_ORDER:
+            assert label.value in text
+        assert "Expiration calendar" in text
+        assert "Theta/day" in text
+
+    def test_windows_come_from_the_ips_not_a_literal(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The printed windows must track the loaded IPS's own boundaries."""
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        boundaries = expiry_boundaries(ips_config.triggers)
+
+        text = _collect_text(self._panel(app))
+
+        assert f"< {boundaries.urgent_days}d" in text
+        assert f"> {boundaries.roll_review_days}d" in text
+
+    def test_collapsed_window_reads_as_unreachable_not_inverted(self) -> None:
+        """A degenerate-but-legal IPS must not print an inverted range.
+
+        ``expiry_boundaries`` clamps rather than raising, so a
+        ``roll_review_buffer`` of 1.0 leaves ROLL REVIEW with no days in it.
+        """
+        boundaries = ExpiryBoundaries(
+            urgent_days=7,
+            soon_days=21,
+            roll_due_days=270,
+            roll_review_days=270,
+        )
+
+        text = design._expiry_window_text(
+            ExpiryBucketLabel.ROLL_REVIEW,
+            boundaries,
+        )
+
+        assert text == "none (IPS windows meet)"
+
+    def test_calendar_groups_legs_sharing_an_expiry(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        maturity = datetime.now(tz=UTC) + timedelta(days=180)
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=maturity,
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        app.program_state.add_position(
+            strike_price=4200.0,
+            maturity_date=maturity,
+            quantity=-4,
+            option_type=OptionType.PUT,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert text.count(maturity.strftime("%Y-%m-%d")) == 1
+        assert "+6" in text
+
+    def test_recomputes_after_book_edit(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+
+        before = _collect_text(self._panel(app))
+
+        app.program_state.add_position(
+            strike_price=4300.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=400),
+            quantity=5,
+            option_type=OptionType.PUT,
+        )
+
+        assert _collect_text(self._panel(app)) != before
 
 
 class TestMonetizationPanel:
@@ -1991,10 +2127,10 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 8 PLANNING panels + 5 EXPLORATION panels share the .panel class.
+        # 9 PLANNING panels + 5 EXPLORATION panels share the .panel class.
         # A count, not a list, so a panel disappearing fails loudly; update it
         # when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 13
+        assert page.locator(".panel").count() == 14
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1

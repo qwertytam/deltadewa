@@ -57,6 +57,14 @@ from deltadewa.analysis.hedge_triggers import (
 )
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.monetization import build_monetization_plan
+from deltadewa.analysis.position_aging import (
+    ExpiryBoundaries,
+    ExpiryBucketLabel,
+    ExpiryBucketTotal,
+    ExpiryCalendarEntry,
+    PositionAging,
+    evaluate_position_aging,
+)
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
@@ -1226,6 +1234,172 @@ def _render_roll_panel_logic(
     )
 
 
+def _day_range_text(low: int, high: int) -> str:
+    """Format an inclusive day range, naming a collapsed one as empty.
+
+    ``expiry_boundaries`` clamps its upper boundaries to keep the ladder
+    monotonic rather than raising, so a legal-but-degenerate IPS (a short
+    ``roll_time_months``, or a ``roll_review_buffer`` of 1.0) can leave a
+    bucket with no days in it at all. Printing the arithmetic range would
+    read as an inverted window; say the bucket is unreachable instead.
+    """
+    if low > high:
+        return "none (IPS windows meet)"
+    return f"{low}-{high}d"
+
+
+def _expiry_window_text(
+    label: ExpiryBucketLabel,
+    boundaries: ExpiryBoundaries,
+) -> str:
+    """Spell out the day window *label* covers, from *boundaries*.
+
+    The bucket labels deliberately carry no numbers (see
+    :class:`~deltadewa.analysis.position_aging.ExpiryBucketLabel`) — this is
+    where the IPS-resolved boundaries become visible, so editing
+    ``ips.yaml`` moves both the grading and the printed window. The
+    inclusive/exclusive edges here mirror
+    :func:`~deltadewa.analysis.position_aging.classify_expiry_bucket`
+    exactly.
+    """
+    windows = {
+        ExpiryBucketLabel.URGENT: f"< {boundaries.urgent_days}d",
+        ExpiryBucketLabel.SOON: _day_range_text(
+            boundaries.urgent_days,
+            boundaries.soon_days - 1,
+        ),
+        ExpiryBucketLabel.ROLL_DUE: _day_range_text(
+            boundaries.soon_days,
+            boundaries.roll_due_days,
+        ),
+        ExpiryBucketLabel.ROLL_REVIEW: _day_range_text(
+            boundaries.roll_due_days + 1,
+            boundaries.roll_review_days,
+        ),
+        ExpiryBucketLabel.LONG_TERM: f"> {boundaries.roll_review_days}d",
+    }
+    return windows[label]
+
+
+def _aging_bucket_row(
+    total: ExpiryBucketTotal,
+    boundaries: ExpiryBoundaries,
+) -> html.Tr:
+    """One bucket's window, leg count and the size rolling off in it."""
+    return html.Tr(
+        [
+            html.Td(total.label.value),
+            html.Td(_expiry_window_text(total.label, boundaries)),
+            html.Td(f"{total.legs}"),
+            html.Td(f"{total.contracts:+,}" if total.contracts else "0"),
+            html.Td(fmt.currency(total.position_value)),
+            html.Td(fmt.signed_currency(total.position_theta)),
+        ],
+        className="aging-row--empty" if total.legs == 0 else None,
+    )
+
+
+def _aging_calendar_row(entry: ExpiryCalendarEntry) -> html.Tr:
+    """One dated roll-off: every leg sharing this maturity."""
+    return html.Tr(
+        [
+            html.Td(entry.maturity_date.strftime("%Y-%m-%d")),
+            html.Td(f"{entry.days_to_expiry}d"),
+            html.Td(entry.bucket.value),
+            html.Td(f"{entry.legs}"),
+            html.Td(f"{entry.contracts:+,}"),
+            html.Td(fmt.currency(entry.position_value)),
+            html.Td(fmt.signed_currency(entry.position_theta)),
+        ],
+    )
+
+
+def _position_aging_panel_view(aging: PositionAging) -> Component:
+    """Render the bucket summary and the expiration calendar."""
+    if not aging.positions:
+        return _incomplete(
+            "Add a position in the BOOK zone to see the roll-off schedule.",
+        )
+
+    bucket_table = html.Table(
+        [
+            html.Thead(
+                html.Tr(
+                    [
+                        html.Th("Bucket"),
+                        html.Th("Window"),
+                        html.Th("Legs"),
+                        html.Th("Contracts"),
+                        html.Th("Value"),
+                        html.Th("Theta/day"),
+                    ],
+                ),
+            ),
+            html.Tbody(
+                [
+                    _aging_bucket_row(total, aging.boundaries)
+                    for total in aging.buckets
+                ],
+            ),
+        ],
+        className="planning-table",
+    )
+    calendar_table = html.Table(
+        [
+            html.Thead(
+                html.Tr(
+                    [
+                        html.Th("Expiry"),
+                        html.Th("DTE"),
+                        html.Th("Bucket"),
+                        html.Th("Legs"),
+                        html.Th("Contracts"),
+                        html.Th("Value"),
+                        html.Th("Theta/day"),
+                    ],
+                ),
+            ),
+            html.Tbody(
+                [_aging_calendar_row(entry) for entry in aging.calendar],
+            ),
+        ],
+        className="planning-table",
+    )
+    return html.Div(
+        [
+            html.P(
+                "Every window comes from ips.yaml — expiry_urgent_days, "
+                "expiry_soon_days, and the roll window "
+                "(roll_time_months x roll_review_buffer). The two roll "
+                "buckets are the same window the roll planner grades "
+                "against, so the two panels cannot disagree.",
+                className="plain-language",
+            ),
+            bucket_table,
+            html.H4("Expiration calendar"),
+            html.P(
+                "One row per expiry date — how much of the book rolls off "
+                "at a time.",
+                className="plain-language",
+            ),
+            calendar_table,
+        ],
+    )
+
+
+def _render_position_aging_panel_logic(
+    *,
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> Component:
+    """Render the per-leg expiry buckets and expiration calendar."""
+    return _safe_render(
+        lambda: _position_aging_panel_view(
+            evaluate_position_aging(portfolio, ips_config),
+        ),
+    )
+
+
 def _hedge_trigger_row(trigger: HedgeTriggerReason) -> html.Tr:
     """One rebalance trigger: status badge, name, and the reason for it.
 
@@ -2220,6 +2394,21 @@ def render(app: ProgramDashApp) -> html.Div:
             html.Div(
                 [
                     html.H3(
+                        ["Position aging", basis_chip(_BASIS_BOOK_GREEKS)],
+                    ),
+                    html.Div(
+                        _render_position_aging_panel_logic(
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                        ),
+                        id="plan-position-aging-panel",
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
+                    html.H3(
                         [
                             "Hedge rebalance triggers",
                             basis_chip(_BASIS_BOOK_GREEKS),
@@ -2821,6 +3010,16 @@ def register_callbacks(app: ProgramDashApp) -> None:
     )
     def _render_roll_panel(_version: int) -> Component:
         return _render_roll_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+    @app.callback(
+        Output("plan-position-aging-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_position_aging_panel(_version: int) -> Component:
+        return _render_position_aging_panel_logic(
             portfolio=app.program_state.portfolio,
             ips_config=ips_config,
         )
