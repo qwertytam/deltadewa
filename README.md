@@ -267,11 +267,18 @@ deltadewa/
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+gate a change must pass and the project's actual workflow.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability and this
+repo's standing rule on operational values.
 
 ## License
 
-See LICENSE file for details.
+See [LICENSE](LICENSE) file for details. See
+[CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## References
 
