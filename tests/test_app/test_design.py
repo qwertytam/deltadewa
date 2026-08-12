@@ -1478,6 +1478,82 @@ def _add_starter_position(state: ProgramState) -> None:
     )
 
 
+class TestVolatilityProfilePanel:
+    """#260 — the book's volatility profile the EXPLORATION grids scale.
+
+    Structural, like the vega term exposure panel, but (unlike it) there
+    is no meaningful all-zero reading for an empty book, so it gates the
+    same way spot/vol, time/price, and MC do.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        return design._render_volatility_profile_panel_logic(
+            portfolio=app.program_state.portfolio,
+        )
+
+    def test_empty_book_shows_incomplete_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        assert "add a position" in _collect_text(self._panel(app)).lower()
+
+    def test_renders_average_range_and_per_leg_skew(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        portfolio = app.program_state.portfolio
+        portfolio.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+            volatility=0.30,
+        )
+        portfolio.add_position(
+            strike_price=4700.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=5,
+            option_type=OptionType.CALL,
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "Vega-weighted average" in text
+        assert "% of avg" in text
+        assert "(custom)" in text
+        assert "PUT 4,500" in text
+        assert "CALL 4,700" in text
+
+    def test_recomputes_after_book_edit(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        app.program_state.portfolio.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+            volatility=0.30,
+        )
+
+        before = _collect_text(self._panel(app))
+
+        app.program_state.portfolio.add_position(
+            strike_price=4700.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=5,
+            option_type=OptionType.CALL,
+            volatility=0.18,
+        )
+
+        after = _collect_text(self._panel(app))
+
+        assert before != after
+        assert "CALL 4,700" in after
+
+
 class TestSpotVolPanel:
     """The spot x vol heatmap panel: proportional-vol basis, reactive."""
 
@@ -1915,10 +1991,10 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 8 PLANNING panels + 4 EXPLORATION panels share the .panel class.
+        # 8 PLANNING panels + 5 EXPLORATION panels share the .panel class.
         # A count, not a list, so a panel disappearing fails loudly; update it
         # when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 12
+        assert page.locator(".panel").count() == 13
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1

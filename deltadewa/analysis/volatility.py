@@ -5,15 +5,20 @@ volatility, including vega-weighted averaging, proportional scaling, and
 statistical analysis.
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 if TYPE_CHECKING:
+    from deltadewa.constants import OptionType
     from deltadewa.portfolio.core import OptionPortfolio
 
 __all__ = [
+    "PositionVolatilityDetail",
+    "VolatilityProfile",
     "apply_proportional_volatility_shift",
+    "build_volatility_profile",
     "calculate_portfolio_avg_volatility",
     "get_volatility_stats",
     "restore_volatilities",
@@ -222,3 +227,103 @@ def get_volatility_stats(
         "portfolio_volatility": portfolio.volatility,
         "volatility_range": max(volatilities) - min(volatilities),
     }
+
+
+@dataclass(frozen=True)
+class PositionVolatilityDetail:
+    """One position's volatility against the book's vega-weighted average.
+
+    Attributes:
+        index: Position index within ``portfolio.positions`` (matches the
+            row order the `/design` BOOK zone editor shows).
+        option_type: CALL or PUT.
+        strike_price: The position's strike.
+        volatility: This position's own volatility (decimal).
+        is_custom: Whether this position carries a custom volatility
+            rather than the portfolio default.
+        relative_to_avg: ``volatility / avg_volatility`` -- 1.0 sits
+            exactly at the vega-weighted average, 1.2 is 20% above it.
+            This is the same ratio
+            :func:`apply_proportional_volatility_shift` preserves for
+            every leg when a proportional vol shift moves the average to
+            a new level -- the skew being held constant.
+
+    """
+
+    index: int
+    option_type: "OptionType"
+    strike_price: float
+    volatility: float
+    is_custom: bool
+    relative_to_avg: float
+
+
+@dataclass(frozen=True)
+class VolatilityProfile:
+    """The book's volatility profile: average, range, and per-leg skew.
+
+    Attributes:
+        avg_volatility: Vega-weighted average volatility (decimal) -- the
+            level ``analysis.repricing.proportional_vol`` scales every
+            EXPLORATION grid's vol axis against.
+        min_volatility: Minimum volatility across positions.
+        max_volatility: Maximum volatility across positions.
+        volatility_range: ``max_volatility - min_volatility``.
+        positions: Per-position detail, in ``portfolio.positions`` order.
+
+    """
+
+    avg_volatility: float
+    min_volatility: float
+    max_volatility: float
+    volatility_range: float
+    positions: tuple[PositionVolatilityDetail, ...]
+
+
+def build_volatility_profile(
+    portfolio: "OptionPortfolio",
+) -> VolatilityProfile | None:
+    """Build the display-ready volatility profile for a portfolio.
+
+    Delegates to :func:`get_volatility_stats` for the summary numbers --
+    one computation, not two -- and adds each position's volatility
+    relative to the vega-weighted average, the skew the book actually
+    carries (as opposed to the flat ``volatility`` in
+    ``market_parameters``).
+
+    Args:
+        portfolio: OptionPortfolio instance.
+
+    Returns:
+        ``None`` for an empty portfolio, mirroring
+        :func:`get_volatility_stats`'s own empty-dict convention -- with
+        no positions there is no average to compare legs against.
+        Otherwise a :class:`VolatilityProfile`.
+
+    """
+    stats = get_volatility_stats(portfolio)
+    if not stats:
+        return None
+
+    avg_vol = stats["avg_volatility"]
+    positions = tuple(
+        PositionVolatilityDetail(
+            index=i,
+            option_type=position.option.option_type,
+            strike_price=position.option.strike_price,
+            volatility=position.option.volatility,
+            is_custom=position.custom_volatility,
+            relative_to_avg=(
+                position.option.volatility / avg_vol if avg_vol else 1.0
+            ),
+        )
+        for i, position in enumerate(portfolio.positions)
+    )
+
+    return VolatilityProfile(
+        avg_volatility=avg_vol,
+        min_volatility=stats["min_volatility"],
+        max_volatility=stats["max_volatility"],
+        volatility_range=stats["volatility_range"],
+        positions=positions,
+    )
