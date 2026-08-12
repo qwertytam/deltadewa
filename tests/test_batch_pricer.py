@@ -8,6 +8,7 @@ from datetime import timedelta
 
 import numpy as np
 import pytest
+import QuantLib as QtLib
 
 import deltadewa.batch_pricer as _batch_pricer_module
 import deltadewa.valuation as _valuation_module
@@ -1311,6 +1312,10 @@ class TestBatchPricerThreading:
         ``OptionValuation`` construction makes are concurrent but
         idempotent. This does not follow from the (false) "the global is
         never touched" claim the comment used to make.
+
+        Post-#266 this is the only remaining writer: the numeric theta
+        fallback that also bumped the global is gone, so theta no longer
+        mutates QuantLib state at all.
         """
         portfolio = _make_multi_position_portfolio(n=4)
         spots = np.linspace(80.0, 120.0, 15)
@@ -1334,10 +1339,11 @@ class TestBatchPricerThreading:
 
         The construction race in ``_get_or_create_cached_option()`` is
         real (unsynchronized concurrent writes to the global
-        evaluationDate); it is safe only because it is idempotent here.
-        A single run could get lucky on scheduling — repetition raises
-        confidence this isn't a rarely-triggered corruption that one pass
-        would miss.
+        evaluationDate). Within one call it is safe because every worker
+        writes the same date and ``_partition_positions()`` has already
+        removed anything expired at it. A single run could get lucky on
+        scheduling — repetition raises confidence this isn't a
+        rarely-triggered corruption that one pass would miss.
         """
         portfolio = _make_multi_position_portfolio(n=6)
         spots = np.linspace(80.0, 120.0, 25)
@@ -1356,3 +1362,165 @@ class TestBatchPricerThreading:
             )
             assert np.allclose(seq["theta"], par["theta"], rtol=1e-6)
             assert np.allclose(seq["delta"], par["delta"], rtol=1e-6)
+
+
+class TestCachedOptionEvaluationDate:
+    """Cache hits must restore the global evaluationDate (#180).
+
+    The global is inert for pricing — ``_setup_quantlib()`` pins every
+    term structure to a construction-time reference date, so moving it
+    leaves ``NPV()`` bit-identical. The single exception is
+    ``isExpired()``, which reads it live: with the global past a
+    position's maturity, that position's price and Greeks come back
+    ``0.0`` silently, no exception raised.
+
+    A cache hit constructs nothing, so before the fix nothing reset the
+    global on that path and revisiting an earlier date after the sweep
+    had moved past a maturity dropped that leg to zero.
+    """
+
+    @staticmethod
+    def _early_and_late() -> tuple[dt, dt]:
+        """Two dates straddling the first maturities of the n=4 book."""
+        early = dt.now(tz=datetime.UTC)
+        # Maturities are +30/+40/+50/+60d, so +45d expires the first two
+        # while leaving the last two live.
+        return early, early + timedelta(days=45)
+
+    def test_revisiting_earlier_date_after_expiry_crossed(self) -> None:
+        """A cache hit at an earlier date reprices, it does not zero out."""
+        portfolio = _make_multi_position_portfolio(n=4)
+        pricer = _pricer(portfolio)
+        spots = np.array([100.0])
+        early, late = self._early_and_late()
+
+        cold = pricer.portfolio_values_at(spots, early)[0]
+        # Advances the global past the +30d and +40d maturities.
+        pricer.portfolio_values_at(spots, late)
+        warm = pricer.portfolio_values_at(spots, early)[0]
+
+        # Pre-fix this lost the two short legs entirely.
+        assert warm == pytest.approx(cold, rel=1e-12)
+
+    def test_revisited_date_matches_a_fresh_pricer(self) -> None:
+        """The warm value is right, not merely self-consistent."""
+        portfolio = _make_multi_position_portfolio(n=4)
+        spots = np.array([95.0, 100.0, 105.0])
+        early, late = self._early_and_late()
+
+        baseline = _pricer(portfolio).portfolio_values_at(spots, early)
+
+        pricer = _pricer(portfolio)
+        pricer.portfolio_values_at(spots, early)
+        pricer.portfolio_values_at(spots, late)
+        warm = pricer.portfolio_values_at(spots, early)
+
+        assert np.allclose(warm, baseline, rtol=1e-12)
+
+    def test_greeks_survive_the_same_round_trip(self) -> None:
+        """The Greeks path shares the cache, so it shares the hazard."""
+        portfolio = _make_multi_position_portfolio(n=4)
+        spots = np.array([100.0])
+        early, late = self._early_and_late()
+
+        baseline = _pricer(portfolio).portfolio_greeks_at(
+            spots,
+            early,
+            greeks=("delta", "gamma"),
+        )
+
+        pricer = _pricer(portfolio)
+        pricer.portfolio_greeks_at(spots, early, greeks=("delta", "gamma"))
+        pricer.portfolio_greeks_at(spots, late, greeks=("delta", "gamma"))
+        warm = pricer.portfolio_greeks_at(
+            spots,
+            early,
+            greeks=("delta", "gamma"),
+        )
+
+        assert np.allclose(warm["delta"], baseline["delta"], rtol=1e-12)
+        assert np.allclose(warm["gamma"], baseline["gamma"], rtol=1e-12)
+
+    def test_non_monotonic_date_sweep_is_stable(self) -> None:
+        """Interleaved dates on one instance all price correctly (#180).
+
+        The issue asked for interleaved dates to be pinned. Two details
+        decide whether this test can see the bug at all.
+
+        Every expected value is computed up front, on its own pricer,
+        *before* the shared sweep starts: building a fresh pricer
+        mid-loop would itself reset the global evaluationDate and mask
+        what is being tested.
+
+        The order also matters. A revisit only misprices if the global
+        is sitting past a maturity at that moment, so each repeat here
+        directly follows a later date — ``+0`` after ``+45`` (past the
+        +30d and +40d legs) and ``+5`` after ``+55`` (past three of the
+        four). A revisit that merely follows an *earlier* date passes
+        either way and proves nothing.
+        """
+        portfolio = _make_multi_position_portfolio(n=4)
+        spots = np.array([100.0])
+        base = dt.now(tz=datetime.UTC)
+        # Maturities: +30/+40/+50/+60d.
+        offsets = [0, 5, 45, 0, 55, 5, 20, 45]
+
+        expected = {
+            offset: _pricer(portfolio).portfolio_values_at(
+                spots,
+                base + timedelta(days=offset),
+            )
+            for offset in sorted(set(offsets))
+        }
+
+        pricer = _pricer(portfolio)
+        for offset in offsets:
+            got = pricer.portfolio_values_at(
+                spots,
+                base + timedelta(days=offset),
+            )
+            assert np.allclose(got, expected[offset], rtol=1e-12), (
+                f"offset +{offset}d diverged on the shared pricer"
+            )
+
+    def test_interleaved_dates_across_threads(self) -> None:
+        """Parallel sweeps at a date that has already been revisited.
+
+        Combines the two mechanisms: worker threads writing the global
+        concurrently, on a cache that has already been pushed past an
+        expiry by a later date.
+        """
+        portfolio = _make_multi_position_portfolio(n=6)
+        spots = np.linspace(90.0, 110.0, 12)
+        early, late = self._early_and_late()
+
+        baseline = _pricer(portfolio).portfolio_values_at(spots, early)
+
+        pricer = _pricer(portfolio, max_workers=4)
+        pricer.portfolio_values_at(spots, early)
+        pricer.portfolio_values_at(spots, late)
+        for _ in range(10):
+            warm = pricer.portfolio_values_at(spots, early)
+            assert np.allclose(warm, baseline, rtol=1e-9)
+
+    def test_sync_is_a_noop_when_the_global_already_matches(self) -> None:
+        """The guard avoids a needless observer invalidation."""
+        portfolio = _make_atm_call_portfolio()
+        pricer = _pricer(portfolio)
+        spots = np.array([100.0])
+        when = dt.now(tz=datetime.UTC)
+
+        first = pricer.portfolio_values_at(spots, when)[0]
+        opt, is_new = pricer._get_or_create_cached_option(  # pylint: disable=protected-access
+            0,
+            portfolio.positions[0],
+            when,
+        )
+        assert not is_new
+        before = QtLib.Settings.instance().evaluationDate
+        opt.sync_global_evaluation_date()
+        assert QtLib.Settings.instance().evaluationDate == before
+        assert pricer.portfolio_values_at(spots, when)[0] == pytest.approx(
+            first,
+            rel=1e-12,
+        )

@@ -52,43 +52,50 @@ class BatchPricer:
     Thread safety note
     ------------------
     The global ``Settings.instance().evaluationDate`` **is** touched inside
-    worker threads: every ``OptionValuation`` construction sets it
+    worker threads. Every ``OptionValuation`` construction sets it
     unconditionally (``valuation.py``'s ``_setup_quantlib()``), and
     ``_get_or_create_cached_option()`` constructs on a cache miss from
     inside ``_sweep_parallel``/``_sweep_parallel_greeks``, unsynchronized.
+    Post-#266 that is the *only* write left in the pricing layer: the
+    numeric theta fallback that used to bump the global mid-computation
+    was deleted, so no Greek mutates it any more.
 
-    What actually makes this safe: every worker spawned by one
-    ``portfolio_values_at()``/``portfolio_greeks_at()`` call is invoked with
-    the *same* ``valuation_date`` argument — the date is a call parameter,
-    not per-position — so the unsynchronized writes are concurrent but
-    idempotent, every writer stores the identical value. This class does
-    nothing to prevent two *different* calls (different ``valuation_date``s)
-    from running concurrently against the same ``BatchPricer`` instance;
-    that would race for real. No current caller does this —
-    ``PortfolioAnalyzer.scenario_grid()`` sweeps its time points
-    sequentially on the main thread, one ``portfolio_*_at()`` call at a
-    time — but nothing in this class enforces it.
+    Why the writes are nearly harmless. An ``OptionValuation`` does not
+    read the global back when pricing. ``_setup_quantlib()`` pins every
+    term structure (``FlatForward``, ``BlackConstantVol``) to a reference
+    date baked in at construction, so moving the global afterwards leaves
+    ``NPV()`` bit-identical — verified directly: shifting it forward,
+    backward, or by a day returns the same price to the last decimal.
+    That is also why #266's fallback silently returned 0.0. The per-spot
+    sweep in the worker threads is pure ``SimpleQuote.setValue()`` and
+    touches no global state at all.
 
-    Post-construction, ``update_spot_price()`` — the actual per-spot sweep
-    call inside worker threads — is pure ``SimpleQuote.setValue()``, with
-    no QuantLib global side-effects, matching the original claim for that
-    part of the hot path.
+    The one exception, and it is the whole hazard: ``isExpired()`` *does*
+    read the global live. If it has advanced past a position's maturity,
+    that position's ``NPV()`` and every Greek return ``0.0`` — silently,
+    with no exception, while the object's own dates remain correct. So
+    the risk here was never a torn or racing price; it is a position
+    quietly valued at zero.
 
-    One further hazard the above doesn't cover: ``OptionValuation``'s
-    numeric theta fallback (``_compute_theta``, used when the engine's
-    analytic ``theta()`` raises ``RuntimeError``) bumps the global
-    evaluationDate forward by a day mid-computation and restores it —
-    unlike delta/gamma/rho's fallbacks, which bump a local ``SimpleQuote``
-    and touch no global state. That branch is unreachable with the FD,
-    closed-form, and analytic engines this class currently selects
-    (verified directly against each), so it does not fire in practice
-    today. If a future engine change makes it reachable, it would race the
-    same way this note used to deny — and, independently of the race, it
-    currently returns a wrong answer even single-threaded (#266):
-    the term structures built in ``_setup_quantlib()`` use a fixed
-    reference date baked in at construction, not a live read of
-    ``Settings.instance().evaluationDate()``, so bumping the global
-    afterward does not reprice the option at all.
+    Two things contain it. Within a single call, every worker gets the
+    *same* ``valuation_date`` (it is a call parameter, not per-position)
+    and ``_partition_positions()`` has already routed anything expired at
+    that date to the vectorized intrinsic path, so the concurrent writes
+    are idempotent and no live position can see an expired global. Across
+    calls, a cache hit constructs nothing and would leave the global
+    wherever the last miss put it; ``_get_or_create_cached_option()``
+    therefore re-asserts it on every hit. Without that, revisiting an
+    earlier date after the global had passed a position's maturity
+    dropped that position to zero — reproducible, and previously live.
+
+    What is still *not* enforced: two concurrent ``portfolio_*_at()``
+    calls at different ``valuation_date``s against one instance. The
+    cache-hit re-assertion narrows but does not close that window, since
+    a miss in one call can still move the global under the other. No
+    current caller does it — ``PortfolioAnalyzer.scenario_grid()`` sweeps
+    time points sequentially on the main thread, one call at a time, and
+    ``monte_carlo`` builds a private pricer — but this class does not
+    prevent it. Treat a ``BatchPricer`` instance as single-caller.
     """
 
     def __init__(
@@ -402,7 +409,15 @@ class BatchPricer:
 
         with self._cache_lock:
             if cache_key in self._cache:
-                return self._cache[cache_key], False
+                opt = self._cache[cache_key]
+                # A cache hit constructs nothing, so nothing would otherwise
+                # restore the global evaluationDate to this option's date.
+                # Left alone, a hit at an earlier date after the global has
+                # advanced past this position's maturity reads back 0.0 for
+                # price and every Greek — silently. Re-asserting under the
+                # lock also serialises the write against concurrent hits.
+                opt.sync_global_evaluation_date()
+                return opt, False
 
         # Suppress the warning during construction; the caller emits it.
         with warnings.catch_warnings():
