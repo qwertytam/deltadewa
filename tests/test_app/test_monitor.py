@@ -964,8 +964,18 @@ class TestShapeNotice:
             f"{monitor_app_conforming.url}/monitor",
             timeout=_PAGE_LOAD_TIMEOUT_MS,
         )
+        # #react-entry-point is the pre-render mount point — it exists in
+        # the raw HTML shell before the pathname callback populates the
+        # page, so waiting on it alone races the client-side render (the
+        # same trap TestNoIpsRender's comment above documents, and the one
+        # the clock-shift-probe memory flags). The notice div is empty
+        # here (CSS hides it via .shape-notice:empty), so the default
+        # visible-wait would time out — wait for it merely attached
+        # instead, which is what "the route callback has actually run"
+        # means for a div with no visible content.
         page.wait_for_selector(
-            "#react-entry-point",
+            ".shape-notice",
+            state="attached",
             timeout=_PAGE_LOAD_TIMEOUT_MS,
         )
 
