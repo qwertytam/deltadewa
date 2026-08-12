@@ -268,16 +268,17 @@ deltadewa/
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the
-setup, gate, and workflow expectations.
+gate a change must pass and the project's actual workflow.
 
 ## Security
 
-See [SECURITY.md](SECURITY.md) to report a vulnerability.
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability and this
+repo's standing rule on operational values.
 
 ## License
 
-See LICENSE file for details. See [CHANGELOG.md](CHANGELOG.md) for
-release history.
+See [LICENSE](LICENSE) file for details. See
+[CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## References
 
