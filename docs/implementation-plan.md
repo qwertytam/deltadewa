@@ -1705,6 +1705,33 @@ checking for deliberately during review — not discovering a fifth time.
 
 ## Phase 3 — Docs & handbook (post-migration, per your call)
 
+**Status: done** — PRs #268 (Stage 4.5: #170/#179/#180/#185), #269 (the meta
+files), #270 (the A4 appendix), #275 (the version bump), with the residue
+closed in Phase 4's M4.6/M4.7. What actually landed is written up there,
+since the work ran inside Phase 4 rather than before it.
+
+**The item list below was written on 2026-07-15 with the rest of this plan,
+and was partly overtaken by the time it was executed.** Two of its premises
+were stale: the README's test-file count (the `~47 test files` figure M0.1
+had already corrected once — the suite passed 1,900 during Phase 4), and
+the `100% matplotlib` chart-stack claim in #179. The tree actually holds 8
+matplotlib modules against 3 plotly ones, and **no current doc asserted
+either figure**, so there was nothing to correct — the checklist item
+outlived the drift it was filed against. Stage 4.5 therefore re-ran
+`doc-sync-checker` against the tree as it stood and fixed what came back,
+rather than working the July list line by line; the per-item disposition is
+in the close-out comment on #179. The version line below is the same
+failure in miniature: it targeted 0.1.0 → 0.2.0, was rewritten to
+0.4.2 → 0.5.0, and the bump that actually shipped was 0.6.0 → 0.7.0.
+
+**Still open, and moved to the backlog rather than carried here:** the
+handbook's *content* additions beyond A4 — the SPX deep-OTM execution
+section, the concentrated single-name basis/beta guidance (and the crash-beta
+gap below), the §1256 wash-sale correction, the cash/margin section, the
+quantified put-spread vs outright economics, and the Quick Start "1–2%" vs
+benchmark "0.5–1.5%" reconciliation. Phase 3 closed the *drift*; the missing
+methodology is a writing task, not a sync task.
+
 - README (chart stack, feature status, `__version__` 0.4.2 → 0.5.0 — this
   line originally targeted 0.1.0 → 0.2.0 and had already drifted three
   releases behind by M2.6; re-check the actual current version in
@@ -1747,6 +1774,447 @@ checking for deliberately during review — not discovering a fifth time.
 
 ---
 
+## Phase 4 — Exposure, ops correctness, and the notebook retirement
+
+**Shipped**, 2026-08-10 → 2026-08-12, across ~25 PRs. Released as 0.6.0
+(#251) and 0.7.0 (#275).
+
+**This phase was not in the plan, and the name records why.** The 2026-07-15
+review that produced this document looked for engine defects, UI-migration
+risk and doc drift. It did not treat **public-repo exposure** or
+**false-green monitoring** as risk classes at all — so neither appears
+anywhere in Phases 0–3, and neither could have been scheduled. Every
+milestone below was opened by a defect found after the fact, most of them
+while doing something else: #241 arrived as a tidy-up request and turned out
+to be a band no book could sit inside; #243 arrived as a one-line ops nit and
+turned out to be the first of four; #245 arrived because someone read the
+repo as a stranger would.
+
+The one milestone here that *was* foreseeable — M4.4, retiring the notebooks
+— is also the one that behaved: it followed M2.7's lesson, ran a parity pass
+before deleting anything, and converted what it found into issues rather than
+losses. That contrast is the phase's main lesson and is written up under
+"The defect class" below.
+
+### M4.0 — The private ops doc and the RUNBOOK scrub
+
+Groundwork rather than a PR of its own: the constraint the rest of the phase
+enforced. Three issues filed the same day (#243, #244, #245) had one thing in
+common — **this repository is public and was being written as though it were
+not.** The resolution was to put operational values in a private ops doc off
+the repo, and have tracked files reference it.
+
+PR #250 carried the scrub: brand names, hostname, repo name, SSH alias, key
+path and the deployment's SMTP port came out of `docs/RUNBOOK.md`, each
+replaced with a placeholder and a "see private ops doc" pointer (8 of them
+now). A grep across the tree confirmed no literal droplet name existed
+anywhere to scrub. The rule was written down later, in `SECURITY.md` (#269),
+naming the three incidents that established it.
+
+**Left open, deliberately:** this document's own historical mentions. It is a
+dev log, not a live procedure, and rewriting history in the same PR that
+changes procedure makes both harder to review. That is Stage 5's call, and
+this milestone's record deliberately keeps it that way.
+
+### M4.1 — #241: `ips.yaml` as sole owner of the vega and cliff bands (PR #247)
+
+The issue asked to de-duplicate `dashboard.yaml`'s `vega_sufficiency` block
+against `ips.yaml`'s `vega:` section. **Tracing the consumers first showed the
+premise was wrong and hid a worse bug.** The two files never carried the same
+band. M2.7 had seeded the IPS band from the gauge's `max_val: 20` and
+`end: 50`, but that gauge is a *signed, symmetric display axis* (−50…+50,
+green above +20, nothing bad above it) — `end: 50` was an axis bound, not a
+ceiling. The resulting 20–50 band was unreachable: the metric divides by
+total portfolio value, options *plus* underlying, and the equity leg
+dominates that denominator on a tail hedge, so the shipped books price at
++1.8% to +2.7%. **`/design` read "outside band" for every book in the repo,
+needle pinned off the left edge, for the entire life of M2.7.**
+
+Recalibrated to 1.5 / 4.0. The new test pins the **scale, not the values** —
+retune the band freely, but one the canonical book cannot sit inside is a
+bug, not a policy.
+
+The genuine #241-shaped duplication was next door, and this branch created it
+one commit earlier: `parameters.convexity_cliff_days` and the gauge's
+`min_val`/`mid_val`/`max_val` (30/90/180) really were grading lines and
+really were copied. `convexity.cliff_*` is now the only definition.
+
+The same PR ported the **convexity cliff** to `/design`. Auditing the four
+Jupyter-only health gauges before retiring the notebooks found three needed
+nothing (vega sufficiency and delta drift were already surfaced; hedge
+success is deliberately omitted per M2.4's finding M2, since it cannot
+compute a real value without the position-history layer, #70) and one — the
+cliff — was surfaced nowhere with no decision recorded to drop it. Two
+departures from the neighbouring panels: no band bar, because the metric is
+one-sided and a two-sided bar would read a long-dated book as "outside band";
+and a fifth basis chip, "position maturities (nothing priced)", because the
+cliff reads no market input and cannot honestly carry the book-Greeks chip.
+Two engine readings the page must not repeat verbatim: the no-long-puts
+sentinel (999) would render an *unhedged* book as the safest possible one,
+and the runway floors at 0, so 120 DTE and 30 DTE both compute 0 — reported
+as "already inside" rather than "0 days".
+
+**Verified at close-out:** `pytest` 1878 passed, `mypy` strict on 121 files,
+`ruff` clean, `pylint` 10.00/10; 169 app tests green with the vega panel
+stating the new 1.5%–4.0% band.
+
+### M4.2 — #245: config templating (PR #248), and #249, the miss it left (PR #257)
+
+**#245.** `config/ips.yaml` and `config/dashboard.yaml` held this program's
+real policy, tracked in a public repo with full history. Both are now
+gitignored behind `config/*.example.yaml` templates, mirroring the existing
+`.env`/`.env.example` split. Every value with no code-level fallback became a
+documented placeholder; values that already equal a public code default were
+kept and labelled as such, since repeating a number already in the source
+discloses nothing.
+
+The instructive part is how the test dependency was found. **Nine test files
+depended on the real `config/ips.yaml` at its default path, and only two
+named it in a form a literal `grep` would find** — the rest assembled the
+path from separate `"config"` / `"ips.yaml"` string joins, invisible to that
+search. They were found by physically removing the real files and running the
+suite, not by static search. Confirmed against a simulated clean checkout:
+full suite green with both files absent, and the app booted from nothing but
+the two `.example` files.
+
+**#249 — the same policy, mirrored somewhere the audit didn't look.**
+`examples/ips/ips_default.yaml` was never example data. It was seeded from
+the real `config/ips.yaml` at the first IPS commit and *kept in sync with it
+as policy changed*, so the public repo shipped the live program name, carry
+budget, convexity targets and every trigger, byte-for-byte. #245's audit had
+covered two files by name and missed it. Several leaked values are handbook
+constants this program adopted rather than bespoke choices, unremarkable
+individually — **it was the whole file matching at once, plus the program
+name, that identified the program.** `tests/test_example_configs.py` now
+pins whole-file equality against the canonical template plus each of the nine
+enumerated values, since a *partial* re-sync is the realistic regression.
+
+Neither PR removes the values from git history. That is Stage 5.
+
+### M4.3 — #243/#244: backup self-heal and log rotation (PRs #250, #254, #255, #256)
+
+**#243** — `ops/backup-exports.sh` hardcoded a real backup-repo name as its
+fallback default, and only ran `git remote add` at first init, so **a later
+URL change silently had no effect**. `BACKUP_REMOTE` is now required with no
+default (`:?`, the fail-loud idiom `compose.yaml` already used), and the
+script reconciles `exports/.git`'s origin against it on every run.
+
+**#244** — `ops/logrotate-deltadewa.conf`, two stanzas because the deploy-
+owned and root-owned logs cannot share a `create` line. No
+`postrotate`/`copytruncate`: every writer is a short-lived cron invocation
+that reopens with `>>`.
+
+**Then the field testing started, and found three more.** PR #254: logrotate
+runs as root, judged the deploy-owned log directory to have insecure
+permissions, and **silently skipped rotation** — so #244 shipped without
+working. A one-line `su deploy deploy` fixed it; confirmed in production,
+where `refresh.log` and `digest.log` were being skipped. PR #255 (#253):
+`/etc/deltadewa/backup.env` was read with a plain `source`, which has no
+notion of "already set" — the file silently overrode an explicitly-set
+`BACKUP_REMOTE`, making the crontab-inline home inert and field overrides
+impossible. The environment now wins, and the script logs which source did.
+PR #256 (#252): the clean-tree path pinged the heartbeat **unconditionally**,
+so a push that had failed to land on some earlier run — and then stopped
+generating local changes to flag it — could report green indefinitely. An
+unchanged working tree only means there is nothing *new* to push, never that
+a *previous* push landed. It now compares `git ls-remote` against local HEAD
+before pinging. The same PR closed the "broken monitoring is itself
+unmonitored" gap: a failed ping stays exit-0 (a monitoring hiccup must never
+read as a backup outage) but now writes a status file that the weekly digest
+surfaces as a caveat banner.
+
+**#254, #253 and #252 were all found by running the #243 fix on the droplet,
+not by reviewing it.** See "The defect class" below.
+
+### M4.4 — #242: the notebook retirement (PR #263)
+
+Deletes `monitor_dashboard.ipynb`, `hedge_design.ipynb`, `example.py`,
+`setup_nbstripout.sh`, the `nbstripout`/`nbqa`/`jupytext` toolchain, the
+`.gitattributes` output filter, the gate's notebook-lint step, and
+`widgets/health_dashboard.py`.
+
+**A parity pass ran before any deletion, per the M2.7 lesson that a deletion
+milestone's risk is silently dropping a surface** — and it earned its keep.
+Six items had no Dash equivalent and no recorded decision. Two were retired
+with rationale (the consolidated Greeks chart, superseded by `/design`'s
+stress surfaces; the session change-log *display* — the log itself is still
+recorded by `ProgramState`). Four became issues, and all four shipped in
+M4.8: #258, #259, #260, #261, plus #262 for a Dash change-log view.
+
+The pass also found **a false PRESENT in `part-x-coverage.md`**: the table
+credited `/design`'s "Roll planner" panel to `roll_planner.build_roll_plan`,
+but the panel rendered `roll_status.evaluate_roll_status`, and
+`build_roll_plan` had never had a consumer outside the notebook. **The row
+was wrong because a panel title matched a module name.** Corrected to
+PARTIAL; #258 restored it for real.
+
+**Recorded consequence:** `config/dashboard.yaml` now has no reader at all —
+the deleted widget was its only consumer. The file, its template, the
+presets and their guide are kept and flagged pending a decision, rather than
+left looking live. `deltadewa/dashboard/` and `deltadewa/widgets/` survive
+minus the one module, annotated as having no product consumer; retiring that
+layer is a separate decision (#279, 21 modules) and was deliberately not
+bundled here.
+
+### M4.5 — #182: the trading clock, calendar day counts, config path typing (PR #265)
+
+The program's "today" was `datetime.now(tz=UTC)`, and QuantLib takes its
+valuation date from `.day`/`.month`/`.year` — so the whole book rolled
+forward at 20:00 America/New_York. **A US family office reviewing the book
+after dinner saw a 7.3% drop on a 21-day SPX put from the clock alone, with
+no market move behind it.**
+
+Two defects, one root cause: *a date-valued concept carried in a timestamp.*
+`program.timezone` in `ips.yaml` (policy — it changes numbers) decides which
+day's close the book prices against; `deltadewa/clock.py` is the single seed;
+and every day count goes through `days_between`, because subtracting
+timestamps **floored the result a day low**, which crossed
+`expiry_urgent_days` and `expiry_soon_days` a day early.
+
+One golden moved, and had been wrong before:
+`test_call_spread_net_credit_both_unlimited` asked for a 30-day spread but
+captured the maturity *before* building the portfolio, so the tenor floored
+to 29 and the golden pinned a 29-day option's values. Every tenor in that
+class is now anchored on the valuation date, so no golden depends on the hour
+it runs.
+
+Two smaller items rode along. `load_ips_config(path: Path)` called
+`path.exists()` directly, so the obvious call — passing a string — died with
+`AttributeError`; the review that filed #182 hit this writing its own
+verification scripts. And display timestamps moved onto a new `program_now()`:
+the as-of banner names the zone (`17:00 EDT`, not `21:00 UTC`), export
+filenames stamp in program time, and `weekly_report`'s `--as-of` default —
+`date.today()`, the last naive clock read in the package — **dated a
+Sunday-evening digest to Monday on the UTC droplet.**
+
+**Deliberately left on UTC:** the market-data cache TTL, the Monte Carlo
+staleness threshold, `exported_at`, and audit-log timestamps. Those measure
+elapsed time or record an instant, which is what UTC is for — the bug was
+only ever in treating a *date* as an instant.
+
+### M4.6 — Phase 3's docs, executed (PRs #268, #269, #270, #275)
+
+Four PRs, one paragraph each, because they did the obvious thing and it
+worked.
+
+**#268 (Stage 4.5)** — the defect-driven docs pass: #170's QUICKSTART rewrite
+(the first example imported a nonexistent `AmericanOption`, so **every
+example crashed on its first import**; all four now run verbatim against the
+package, which was checked rather than assumed), #179's stale American-only
+and notebook-era references, #180's false thread-safety claim in
+`batch_pricer.py`, and #185's negligible-nits batch (a shared cache key that
+let two readings overwrite each other, a spot bump made relative to spot
+rather than an absolute 0.01, and a proof-by-comment that a hypothetical
+double-fallback is structurally unreachable).
+
+**#269** — the meta files: `CHANGELOG.md` reconstructed from git history with
+every version/date pair verified against its tag, `CONTRIBUTING.md`
+documenting the gate (pylint's bar is the full 10.00, not a clean exit) and
+the sub-agent workflow, and `SECURITY.md` naming the three exposure
+incidents. Pre-v0.4.0 history is deliberately not backfilled, to avoid a
+reconstruction that drifts from what happened.
+
+**#270** — the **A4 Crash Repricing Methodology** appendix, closing the Phase
+3 handbook item. Part VI defines crash convexity but leaves `V_crash`'s
+mechanics unspecified — *the ambiguity that let C1 and C4 happen.* Written as
+a description of the shipped engine rather than a restatement of the spec:
+every figure in the worked example is the engine's own output. Writing it
+surfaced three drifts in `docs/repricing-methodology.md`, recorded and
+**deliberately not fixed there** — correcting a normative spec is a separate
+call. They became #271/#272/#273, closed in M4.7.
+
+**#275** — the 0.7.0 bump. The `doc-sync-checker` run ahead of it surfaced
+two items and they were filed separately rather than folded in (#274, and the
+close of #267).
+
+**Verified at close-out:** `pytest` 1905 passed, `mypy` clean, `ruff` clean,
+`pylint` 10.00/10; `secret-scanner` clean.
+
+### M4.7 — The defect residue (PRs #276, #277, #278, #280, #281)
+
+**#266 (PR #276) — theta came back 0.0.** `_compute_theta`'s numeric fallback
+bumped the global `evaluationDate` and re-read `NPV()` to get a one-day price
+difference. That never worked: `_setup_quantlib` builds every term structure
+against a fixed reference date, so **`NPV()` does not observe the singleton**
+— `price_tomorrow == price_today` exactly, on a 30d ATM put whose true theta
+is −1.995/day. It was also unreachable: all three engines populate theta
+natively (63/63 cases), because theta is a time derivative both closed-form
+and grid engines carry. So the branch was **dead code hiding a wrong
+answer.** Deleted rather than repaired — carry and hedge-efficiency divide by
+theta, so a loud failure beats a silent zero.
+
+**#180 (PR #277) — three documentation items, one live defect underneath.**
+The real hazard was never the torn price the old comment worried about; an
+`OptionValuation` does not read the global back when pricing. The one live
+read is `isExpired()`, and with the global past a position's maturity that
+leg's NPV and every Greek **return 0.0 silently, no exception, while the
+object's own dates stay correct.** Reachable, because a cache hit constructs
+nothing and so nothing reset the global on that path: on a 4-leg book,
+pricing at +0d, then +45d, then +0d again returned **497.30 against a true
+818.58** — the two short legs simply gone. Fixed by re-asserting the date on
+every cache hit, under the existing cache lock. Note for anyone trusting the
+probe: **the clock-shift matrix cannot catch this class at all**, because it
+moves the wall clock, which shifts valuation date and maturities *together*
+and so preserves exactly the relationship `isExpired()` reads.
+
+**#179/#274 (PR #278) — doc drift, re-derived rather than replayed.** The
+July checklist was run through a fresh `doc-sync-checker` pass instead of
+item by item; most bullets were moot. Two real items came back, both in
+CLAUDE.md. A finding was recorded but not fixed: **none of the 8 matplotlib
+visualization modules has a live consumer** now that the notebooks are gone —
+tested but orphaned. Also deliberately left: this document's ~12 hardcoded
+"N passed" counts, which are dated historical snapshots rather than live
+claims, and rewriting a changelog-style history to stay current would fight
+its own purpose.
+
+**#273 (PR #280) — an IPS flag with no effect.** `crash_floor_reported` had
+exactly one reader, in the Jupyter layer #263 had just orphaned. The only
+live surface that reports the floor, `/design`'s sizing panel, bound
+`ips_config.convexity` but rendered the floor text unconditionally — **so
+setting the key `false` changed nothing a user could see.** The policy it
+expresses is real: the floor reads 2.5x against the repriced 17.5x, so a
+program may reasonably decline to put it on the page rather than risk it
+being read as the protection on offer.
+
+**#271/#272 (PR #281) — a spec that cited a schema that does not exist.**
+`repricing-methodology.md` §5 named an `ips.crash.*` namespace; the shipped
+keys live under `convexity:`, and the units were wrong too
+(`crash_scenario_pct` is a signed percent, not the decimal fraction the
+formula uses). §2/§7 still claimed `skew_reference_delta` was unthreaded,
+contradicting §8's own RESOLVED record for M1.8.
+
+**Verified at close-out:** `pytest` 1919 passed (PR #277), `mypy` clean,
+`ruff` clean, `pylint` 10.00/10, and the **full clock-shift matrix green at
++0/+90/+1000/+3000**; `doc-sync-checker` 0 drift on PR #281.
+
+### M4.8 — Notebook parity: the four issues M4.4 opened (PRs #282–#285)
+
+**#261 (PR #282) — the portfolio shape guard.** It ran once per notebook
+session until Stage 4.3 deleted both notebooks without replacing it. Restored
+on two surfaces: a CLI stderr banner on import (exit stays 0 — this is a
+warning, not a failure) and a persistent, CSS-quiet indicator on both pages.
+`/design`'s copy updates on every book-version bump, since `/design` can
+change a book's shape without re-importing it. No new conformance criteria —
+it reuses the existing `classify_portfolio_shape`.
+
+**#260 (PR #283) — the volatility profile.** `get_volatility_stats` was
+intact and tested but had no product consumer, so the vega-weighted average
+that every EXPLORATION grid reprices against was invisible to the people
+reading those grids. The panel sits *first* in EXPLORATION — above the grids
+it explains, not as a standalone statistic.
+
+**#259 (PR #284) — position aging and the expiration calendar.** The
+interesting part is the threshold decision: the buckets were reduced to ones
+`IpsTriggers` already supports rather than the widget's literal 7/14/21/45,
+because the handbook expresses expiry policy in *months* and promoting
+14d/45d to new IPS keys **would have invented policy the program does not
+have** (and that ladder is short-dated vocabulary a 12–18 month put book
+would never leave "LONG-TERM" in). The upper two boundaries are exactly
+`roll_status`'s own roll window, so the aging panel and the roll table agree
+by construction, and the labels carry no day numbers — an `ips.yaml` edit
+moves both together.
+
+**#258 (PR #285) — the roll plan, and a correctness fix under it.**
+`build_roll_plan` — the false PRESENT M4.4 found — now drives a real panel.
+Wiring it surfaced a bug in `gamma_theta_delay`: it was **missing the
+handbook's "put has moved nearer the money" condition**, so it would defer a
+roll on a *rally* trigger, citing gamma the position was not accumulating.
+Both branches are now pinned. The two panel titles are kept deliberately
+distinct — **"Roll plan"** (the decision) versus **"Roll status by tranche"**
+(the evidence) — because a title matching a module name is precisely what
+produced the false PRESENT.
+
+**The git log is misleading here, and this is the record that corrects it.**
+PR **#286 is an empty duplicate of #284** — zero files changed
+(`git diff 3bc7490 9edf269` returns nothing). The log shows two commits with
+identical subject lines 91 minutes apart, which reads as two separate pieces
+of work on #259. It is one. **#284 is the real merge.**
+
+**Verified at close-out:** `pytest` 1987 passed, `pylint` 10.00/10, `ruff`
+and `mypy` clean; 203 app tests green with `/design` rendering its full panel
+set; `policy-leak-checker` and `secret-scanner` CLEAN on each of the four.
+
+### The defect class this phase kept finding
+
+More useful to a future reader than the milestone list above. Phase 4 found
+the same shape five more times, in two flavours.
+
+**Silent no-op config surfaces** — a setting a user can set, that does
+nothing:
+
+| Issue | The surface | What it silently didn't do |
+| --- | --- | --- |
+| #243 | `BACKUP_REMOTE` | changing the remote URL had **no effect** — set only at first init |
+| #253 | `BACKUP_REMOTE` via environment | an explicit override was **silently replaced** by `backup.env` |
+| #273 | `convexity.crash_floor_reported` | setting it `false` changed **nothing on the page** |
+
+**Plausible-wrong-answer computations** — a number that is not obviously
+broken, and is wrong:
+
+| Issue | The reading | Why it was plausible |
+| --- | --- | --- |
+| #252 | backup heartbeat **green** | it never contacted the remote at all |
+| #266 | theta **≈ 0** | term structures never repriced, so the bump was a no-op |
+
+Add #241's unreachable vega band (every book "outside band" for a whole
+milestone) and #180's legs silently valued at 0.0, and the pattern is not
+subtle.
+
+**The through-line: this codebase's characteristic failure mode is silence,
+not error.** Nothing crashed. No exception was raised, no exit code went
+non-zero, no log line said anything was wrong. In every case the surface kept
+reporting normally while the thing behind it was inert or wrong. That is a
+direct consequence of how much of this system is *policy read from config and
+rendered to a page* — a layer where the natural failure is "the value was
+never consulted", which looks exactly like "the value was consulted and
+everything is fine".
+
+This extends the table under "Fix — refresh job's silent no-op" above, which
+recorded four occurrences and concluded they were "enough evidence to treat
+this as a defect class worth checking for deliberately during review — not
+discovering a fifth time." **Phase 4 discovered it five more times.** The
+prediction was right and the mitigation was too weak: M1.10's structural
+guard works because it is an AST scan over a *closed* set of pricing
+parameters, and there is no equivalent scan for "config key with no live
+reader" or "computation whose input never moves".
+
+**And three of the four ops bugs were found by testing the fix, not by
+reviewing the code.** #254, #253 and #252 all came out of running #243's fix
+on the droplet. Review reads what the code says; only execution reveals what
+it does *not* do. For this defect class specifically — where the symptom is
+absence — **reading is close to useless and running is close to sufficient.**
+The practical rule: when a fix touches a config surface or a monitoring path,
+budget for a field test, because the code review will pass.
+
+### The exposure audit needed three passes
+
+Recorded separately because it is the same lesson in a different domain, and
+it is **directly relevant to Stage 5.**
+
+1. **#245 fixed the files that were noticed.** `config/ips.yaml` and
+   `config/dashboard.yaml` — the two files anyone would name if asked where
+   the config lives.
+2. **#249 found the same policy mirrored somewhere else.**
+   `examples/ips/ips_default.yaml` had been seeded from the real config and
+   kept in sync as policy changed. It was not on the list because it was
+   filed under "examples", and #245's audit had covered files by name.
+3. **Only the third pass audited the class.** #249's PR re-ran the audit over
+   *the whole tracked tree* rather than patching the one file that got
+   noticed — `examples/dashboard/*`, `examples/portfolios/*`, test fixtures,
+   docstrings, both notebooks, `docs/`. That pass found the remaining hits
+   (two prose references quoting a live TTL) and, more importantly, produced
+   the first statement of coverage anyone could rely on.
+
+**The lesson for Stage 5:** the first two passes each fixed what they were
+pointed at and each *felt* complete. An audit scoped to named files cannot
+tell you what it missed — only an audit scoped to the *class* of value can.
+Stage 5 rewrites git history, which is a one-shot, hard-to-repeat operation;
+it must be scoped as pass 3, not pass 1. The `secret-scanner` sub-agent
+exists because of this sequence, and the standing rule in `SECURITY.md` is
+its written form.
+
+---
+
 ## Deferred — backlog, not in this plan
 
 Only the first is genuinely blocked. The 2026-08-06 re-audit reclassified
@@ -1773,6 +2241,33 @@ them, but nothing is stopping them.
   skew, which `crash_repricing.crash_skew_vol` can express but nothing
   drives.
 
+Opened during Phase 4 and deliberately not taken there:
+
+- **#156 — options-chain feed (D2: Tier-4 liquidity, skew-aware pricing,
+  backtesting).** The blocker behind **#12** above; the free CBOE/FRED
+  provider returns index-level series only. Everything data-blocked in this
+  plan is waiting on this one issue.
+- **#70 — track hedge historical P&L.** The position-history layer. Also the
+  blocker behind the **hedge-success gauge**, which M2.4 (finding M2)
+  deliberately omitted and M4.1's gauge audit re-confirmed as omitted: it
+  cannot compute a real value without this. The one Jupyter-era gauge with no
+  Dash home for a reason.
+- **#262 — surface the session change log in the Dash app.** From M4.4's
+  parity pass: `ProgramState` still *records* the change log
+  (`state.py:82`); only the notebook's *display* of it went. The fifth of the
+  five parity items, and the only one M4.8 did not take.
+- **#264 — make the currency symbol configurable.** Raised out of #182 and
+  explicitly not taken there: the hardcoded `$` is a design constraint rather
+  than a defect, already centralized behind `formatters.values`, and for a
+  single-currency SPX program the config surface would cost more than it
+  buys. Filed so the decision is recorded rather than re-litigated.
+
+Two more Phase 4 leftovers are tracked in their own issues rather than
+listed here: **#279** (retire `dashboard/` + `widgets/` as one batch — 21
+modules with zero product consumers, plus the 8 orphaned matplotlib modules
+M4.7 found) and **#246** (move the handbook to its own public repo, with
+stable anchors instead of line-number citations).
+
 ---
 
 ## Finding → milestone index (coverage check)
@@ -1795,3 +2290,28 @@ them, but nothing is stopping them.
 | Mo2     | M1.4                                         |             |                                              |
 | Mo3     | M1.4 (logic) + M2.5 (UI inputs)              |             |                                              |
 | Mo4     | M1.3                                         |             |                                              |
+
+### Phase 4 findings
+
+None of these came from the 2026-07-15 review — every one was found after it,
+most while doing something else. That is the point of the separate table: the
+review's finding set was not the population of defects in this codebase, and
+a future audit should not treat a closed index as coverage.
+
+| Finding | Milestone                              | Finding | Milestone                                    |
+| ------- | -------------------------------------- | ------- | -------------------------------------------- |
+| #241    | M4.1 (PR #247)                         | #253    | M4.3 (PR #255) — found field-testing #243    |
+| #242    | M4.4 (PR #263)                         | #258    | M4.8 (PR #285) — + `gamma_theta_delay` fix   |
+| #243    | M4.0/M4.3 (PR #250)                    | #259    | M4.8 (PR #284; **#286 is an empty dup**)     |
+| #244    | M4.3 (PRs #250, #254)                  | #260    | M4.8 (PR #283)                               |
+| #245    | M4.0/M4.2 (PR #248); history → Stage 5 | #261    | M4.8 (PR #282)                               |
+| #249    | M4.2 (PR #257) — the pass-2 miss       | #266    | M4.7 (PR #276)                               |
+| #252    | M4.3 (PR #256) — found field-testing   | #267    | M4.6 (PR #269)                               |
+| #170    | M4.6 (PR #268)                         | #271    | M4.7 (PR #281)                               |
+| #179    | M4.6 (PR #268) + M4.7 (PR #278)        | #272    | M4.7 (PR #281)                               |
+| #180    | M4.6 (docs) + M4.7 (PR #277, the bug)  | #273    | M4.7 (PR #280)                               |
+| #182    | M4.5 (PR #265)                         | #274    | M4.7 (PR #278)                               |
+| #185    | M4.6 (PR #268); items 4/7 → issue only | #279    | deferred — see backlog                       |
+
+Deferred, not closed: **#156**, **#70**, **#262**, **#264**, **#246** — all
+in the backlog section above.
