@@ -34,6 +34,7 @@ from deltadewa.analysis.hedge_efficiency import EfficiencyVerdict
 from deltadewa.analysis.monitor_scenario import ScenarioResult, build_scenario
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import monitor
+from deltadewa.clock import days_between
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
 from deltadewa.state import ProgramState
@@ -867,9 +868,16 @@ class TestCollapsedPositionTable:
         assert cells.nth(2).inner_text() == (
             position.option.maturity_date.strftime("%Y-%m-%d")
         )
-        expected_dte = (
-            position.option.maturity_date - portfolio.valuation_date
-        ).days
+        # days_between(), not raw subtraction (#267): the fixture's
+        # maturity_date carries today's time-of-day, and subtracting it
+        # from the midnight valuation_date floors a day short exactly
+        # like the bug #182 fixed in the app itself — the panel renders
+        # DTE via days_between(), so the test must compute it the same
+        # way to avoid a time-of-day-dependent flake.
+        expected_dte = days_between(
+            portfolio.valuation_date,
+            position.option.maturity_date,
+        )
         assert cells.nth(3).inner_text() == f"{expected_dte}d"
         assert cells.nth(4).inner_text() == f"{position.quantity:,.0f}"
 
