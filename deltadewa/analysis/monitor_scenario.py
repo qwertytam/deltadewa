@@ -57,8 +57,12 @@ class ScenarioResult:
             ``book_notional`` (so the quantity dial moves this even though
             it doesn't move ``hedge_value_*``).
         efficiency: ``hedge_gain`` per dollar of annual carry, read against
-            the IPS band (handbook Part X #5/#15 — see
-            :mod:`deltadewa.analysis.hedge_efficiency`). **Scenario-local**,
+            the IPS band (handbook Part X #5/#15 — `HER Metric
+            <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#her-metric>`_
+            / `Mathematical Definition of the Ratio
+            <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#mathematical-definition-of-the-ratio>`_
+            — see :mod:`deltadewa.analysis.hedge_efficiency`).
+            **Scenario-local**,
             like everything else here: at the IPS default dials this is the
             handbook's figure, but the spot dial moves ``hedge_gain``, so at
             a shallower shock it is a smaller ratio about a smaller move.

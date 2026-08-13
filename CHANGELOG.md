@@ -39,8 +39,10 @@ history for that record instead.
   their last caller but were kept are annotated at the function.
 
   Two findings are recorded rather than acted on: `triggers.rally_rebalance_pct`
-  is validated and documented but read by nothing (the handbook's "Rule 2 —
-  Market Rally Rebalance Trigger" was never built), and the matplotlib half
+  is validated and documented but read by nothing (the handbook's ["Rule 2 —
+  Market Rally Rebalance
+  Trigger"](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-2--market-rally-rebalance-trigger)
+  was never built), and the matplotlib half
   of `deltadewa/visualization/` is a second orphan set of the same shape.
   See `docs/part-x-coverage.md`.
 

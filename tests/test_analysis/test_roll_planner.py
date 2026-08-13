@@ -190,10 +190,11 @@ class TestGammaThetaDelay:
         assert self._delay(convexity_now_pct=30.0) is False
 
     # ------------------------------------------------------------------
-    # Handbook condition (b): "the put has moved meaningfully nearer to
-    # the money". Without it the deferral also fires on a market rally,
-    # recommending inaction on a live Rule 2 rebalance trigger while
-    # citing gamma the position is not accumulating.
+    # Handbook (https://github.com/qwertytam/deltadewa-handbook) condition
+    # (b): "the put has moved meaningfully nearer to the money". Without it
+    # the deferral also fires on a market rally, recommending inaction on a
+    # live Rule 2 rebalance trigger while citing gamma the position is not
+    # accumulating.
     # ------------------------------------------------------------------
 
     def test_drifted_further_otm_returns_false(self) -> None:

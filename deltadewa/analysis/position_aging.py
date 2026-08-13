@@ -68,7 +68,8 @@ class ExpiryBoundaries:
             ``triggers.roll_time_months`` converted at
             ``const.CALENDAR_DAYS_PER_MONTH``. At or below this, ROLL DUE.
             This is the handbook's own roll trigger ("maturity < 9 months
-            remaining", Part VII Rule 1).
+            remaining", `Part VII Rule 1 — Time-Based Roll
+            <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-1--time-based-roll>`_).
         roll_review_days: ``roll_due_days * triggers.roll_review_buffer``.
             At or below this, ROLL REVIEW; beyond it, LONG-TERM.
 

@@ -95,9 +95,11 @@ class TestIpsDefaultPreset:
         """None of the specific values #249 enumerated survive here.
 
         These are the pre-#245 real ``config/ips.yaml`` numbers quoted in
-        the issue. Several are also handbook defaults (the handbook's own
-        roll-at-9-months and 45%-OTM lines, and the methodology's -25%
-        crash), so any one of them alone is unremarkable — it is the whole
+        the issue. Several are also `handbook
+        <https://github.com/qwertytam/deltadewa-handbook>`_ defaults (the
+        handbook's own roll-at-9-months and 45%-OTM lines, and the
+        methodology's -25% crash), so any one of them alone is unremarkable
+        — it is the whole
         file matching that identified the program. They are pinned
         individually anyway, because a partial re-sync is the realistic
         regression, not a wholesale file copy.

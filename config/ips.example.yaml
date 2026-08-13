@@ -36,6 +36,8 @@ pricing:
   exercise_style: EUROPEAN   # SPX/XSP = EUROPEAN (cash-settled); SPY/stocks = AMERICAN
 
 budget:
+  # "Handbook" in the comments below is
+  # https://github.com/qwertytam/deltadewa-handbook (HANDBOOK.md).
   # Premium budget, % of portfolio / yr. Handbook family-office benchmark is
   # 0.5-1.5%, with 1% "a practical ceiling". EXAMPLE VALUE sits at that
   # ceiling as a reasonable starting point — raise or lower deliberately in

@@ -337,7 +337,9 @@ class TestDeltaDrift:
         )
         assert drift.shock_pct == pytest.approx(-5.0)
         # A long put's delta becomes more negative as spot falls -- the
-        # hedge activating, per the handbook's own worked example.
+        # hedge activating, per the handbook's
+        # (https://github.com/qwertytam/deltadewa-handbook) own worked
+        # example.
         assert drift.drift < 0.0
 
     def test_per_leg_drift_sums_to_total(self) -> None:

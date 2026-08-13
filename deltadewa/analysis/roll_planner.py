@@ -3,7 +3,8 @@
 Converts the HOLD/MONITOR/REVIEW/ROLL verdict produced by
 :func:`~deltadewa.analysis.roll_status.evaluate_roll_status` into a
 concrete :class:`RollAction` (ROLL_NOW, DELAY, or HOLD) for each long
-protective put, applying the handbook gamma/theta nuance: defer a
+protective put, applying the `handbook
+<https://github.com/qwertytam/deltadewa-handbook>`_ gamma/theta nuance: defer a
 mechanical roll only when the position is outside the mandatory roll
 window, has moved nearer the money since entry, and crash convexity is
 still within the IPS target band.  See :func:`gamma_theta_delay` for why
@@ -105,8 +106,10 @@ def gamma_theta_delay(
 ) -> bool:
     """Return True when the gamma/theta nuance says to defer the roll.
 
-    The handbook ("Rule 1 — Time-Based Roll", the gamma/theta trade-off
-    note) sanctions deferring a roll on three conditions, all required:
+    The handbook (`"Rule 1 — Time-Based Roll"
+    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-1--time-based-roll>`_,
+    the gamma/theta trade-off note) sanctions deferring a roll on three
+    conditions, all required:
 
     1. the time trigger is not yet urgent — the position has not
        entered the mandatory roll window
@@ -121,8 +124,10 @@ def gamma_theta_delay(
     Condition 2 is not optional garnish. Without it the deferral also
     catches the *opposite* case: a put pushed further OTM by a market
     rally, whose delta has collapsed and which is accumulating no gamma
-    at all. That is the handbook's "Rule 2 — Market Rally Rebalance
-    Trigger", where the sanctioned action is to roll up, not to wait.
+    at all. That is the handbook's `"Rule 2 — Market Rally Rebalance
+    Trigger"
+    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-2--market-rally-rebalance-trigger>`_,
+    where the sanctioned action is to roll up, not to wait.
     Deferring there would recommend inaction on a live rally trigger
     while citing a gamma position that does not exist.
 
