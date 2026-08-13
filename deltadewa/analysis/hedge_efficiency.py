@@ -10,20 +10,25 @@ crash payoff it already has.
 **Part X items #5 and #15 are the same number here, not two metrics.** The
 handbook states the ratio twice:
 
-- ``Hedge Efficiency = Crash payoff / Annual carry`` in dollars
-  (``docs/hedging handbook.md:2032``, item #15), and
-- ``Carry-Convexity Ratio = Convexity / Carry`` in percentages
-  (``docs/hedging handbook.md:4337``, item #5), also given as
-  ``Crash payoff % / Annual carry %`` at ``:2036``.
+- ``Hedge Efficiency = Crash payoff / Annual carry`` in dollars, item #15
+  (handbook `HER Metric
+  <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#her-metric>`_),
+  and
+- ``Carry-Convexity Ratio = Convexity / Carry`` in percentages, item #5
+  (handbook `Mathematical Definition of the Ratio
+  <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#mathematical-definition-of-the-ratio>`_),
+  also given as ``Crash payoff % / Annual carry %`` in the same HER Metric
+  section above.
 
 In this codebase both percentages normalize by the *same* protected book —
 :func:`~deltadewa.analysis.crash_repricing.crash_convexity_pct` and
 :func:`~deltadewa.analysis.carry.carry_vs_budget` each divide by
 ``abs(underlying_quantity * spot)`` — so the normalizer cancels and the
 percentage form reduces exactly to the dollar form. One function serves both
-items. (The handbook's own example dashboard at ``:4131-4156`` prints
-``Convexity/carry ratio: 7.5`` and ``Hedge efficiency: 6.3x`` as if they were
-different figures; on a common normalizer they cannot be.)
+items. (The handbook's own `Example of a Full Dashboard
+<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#example-of-a-full-dashboard>`_
+prints ``Convexity/carry ratio: 7.5`` and ``Hedge efficiency: 6.3x`` as if
+they were different figures; on a common normalizer they cannot be.)
 
 The band is policy, not presentation: it answers a mandate question ("is this
 hedge worth the money"), so it comes from ``ips.yaml``'s ``convexity`` section
@@ -39,9 +44,10 @@ from enum import StrEnum
 class EfficiencyVerdict(StrEnum):
     """Reading of the efficiency ratio against the IPS band.
 
-    Names follow the handbook's own interpretation table
-    (``docs/hedging handbook.md:4342-4348``): below the band is a poor hedge,
-    inside it is acceptable, above it is attractive.
+    Names follow the handbook's own `Interpretation of the Ratio
+    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#interpretation-of-the-ratio>`_
+    table: below the band is a poor hedge, inside it is acceptable, above it
+    is attractive.
     """
 
     POOR = "POOR"

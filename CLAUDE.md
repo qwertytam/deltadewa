@@ -145,8 +145,12 @@ row a false PRESENT. Keep the two titles distinct. #258 also corrected
 money" condition and so would defer a roll on a *rally* trigger; see
 `docs/part-x-coverage.md`, "The roll plan is restored (#258)".
 See `docs/part-x-coverage.md` for the full
-handbook-item → implementation map and `docs/hedging handbook.md` for the cited
-sections.
+handbook-item → implementation map and the
+[deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo
+(`HANDBOOK.md`, #246) for the cited sections — the handbook was extracted
+out of this repo's `docs/` into its own public repo so it can be read and
+cited without pulling in the hedge-program internals; see `docs/part-x-coverage.md`'s
+intro for how citations into it are anchored.
 
 The engine-correctness fixes and the Dash migration of both notebooks are done:
 `/monitor` (M2.4, the crash-led read-mostly review) and `/design` (M2.5, the
@@ -238,8 +242,10 @@ bid/ask and open interest, which the free CBOE/FRED provider doesn't return).
 regression.
 
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
-— it is the current handbook-item → surface map, and its "Conscious
-retirements" section records what must *not* be re-added.
+— it is the current handbook-item → surface map (mapping into the public
+[deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,
+by anchor rather than line number), and its "Conscious retirements" section
+records what must *not* be re-added.
 
 ## Workflow expectations
 

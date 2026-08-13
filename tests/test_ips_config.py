@@ -975,7 +975,11 @@ class TestVegaSufficiency:
 
 
 class TestSizing:
-    """Tests for the ``sizing`` policy section (beta-adjusted sizing, §2499)."""
+    """Tests for the ``sizing`` policy section.
+
+    Handbook `Beta-Adjusted Hedge Sizing
+    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_.
+    """
 
     def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
         """A config without a sizing section defaults portfolio_beta to 1.0."""

@@ -14,8 +14,10 @@ shared server-side `ProgramState`, each targeting a different audience:
   sizing workbench, strike ladder builder, monetization planner, and decision matrix.
 
 The program policy lives in `config/ips.yaml` (carry budget, convexity targets, drawdown
-tolerance, roll and monetization triggers). Methodology is drawn from
-[`docs/hedging handbook.md`](docs/hedging%20handbook.md).
+tolerance, roll and monetization triggers). Methodology is drawn from the
+[deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo
+(`HANDBOOK.md`), extracted out of this repo's `docs/` so it can be read and
+reused on its own.
 
 Market data defaults to **fully offline** (seeded from the loaded portfolio), with an
 optional live CBOE/FRED pull that falls back gracefully on network failure.
@@ -238,7 +240,6 @@ deltadewa/
 │   ├── portfolios/        # spx_protective_put.yaml, spy_collar.yaml, …
 │   └── ips/               # policy presets
 ├── docs/
-│   ├── hedging handbook.md
 │   ├── part-x-coverage.md # handbook-item → surface map; read before moving a panel
 │   └── yaml-config-guide.md
 ├── pyproject.toml
@@ -271,8 +272,8 @@ See [LICENSE](LICENSE) file for details. See
 
 ## References
 
-- [`docs/hedging handbook.md`](docs/hedging%20handbook.md) — methodology source of truth
-  for the hedging program
+- [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) —
+  methodology source of truth for the hedging program
 - [QuantLib Documentation](https://www.quantlib.org/)
 - Bjerksund, P., and Stensland, G. (1993). "Closed-Form Approximation of American
   Options"

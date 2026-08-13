@@ -1,10 +1,11 @@
 """Tests for the hedge efficiency ratio (Part X items #5 / #15).
 
 The band values used throughout are the handbook's own (3 / 6, from
-``docs/hedging handbook.md:4342-4348``), and the two worked examples are
-lifted from the handbook rather than invented, so a failure here means the
-implementation drifted from the cited definition — not that a fixture went
-stale.
+`Interpretation of the Ratio
+<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#interpretation-of-the-ratio>`_),
+and the two worked examples are lifted from the handbook rather than
+invented, so a failure here means the implementation drifted from the cited
+definition — not that a fixture went stale.
 """
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ from deltadewa.analysis.hedge_efficiency import (
 )
 
 # The handbook's interpretation table: < 3 poor, 3 to 6 acceptable, > 6
-# attractive (docs/hedging handbook.md:4342-4348).
+# attractive
+# (https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#interpretation-of-the-ratio).
 _BAND_MIN = 3.0
 _BAND_MAX = 6.0
 
@@ -37,14 +39,21 @@ class TestHandbookWorkedExamples:
     """Both examples the handbook computes by hand, reproduced exactly."""
 
     def test_dollar_form_example(self) -> None:
-        """``1.5M / 300k = 5x`` (docs/hedging handbook.md:2044-2050)."""
+        """``1.5M / 300k = 5x``.
+
+        Handbook `Hedge Efficiency Dollar Worked Example
+        <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#hedge-efficiency-dollar-worked-example>`_.
+        """
         result = _efficiency(1_500_000.0, -300_000.0)
 
         assert result.ratio == pytest.approx(5.0)
         assert result.verdict is EfficiencyVerdict.ACCEPTABLE
 
     def test_percentage_form_example(self) -> None:
-        """``22% / 3% = 7.3`` (docs/hedging handbook.md:4336-4340).
+        """``22% / 3% = 7.3``.
+
+        Handbook `Convexity Carry Worked Example
+        <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#convexity-carry-worked-example>`_.
 
         The percentage form is the same division on a common normalizer, so
         the function takes the two percentages unchanged and must produce the

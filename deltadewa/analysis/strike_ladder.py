@@ -1,7 +1,12 @@
 """Delta-based strike/maturity ladder for the deltadewa hedge program.
 
-Implements handbook §2642 (Strike Selection), §2764 (Delta-Based Strike
-Selection), and §2801 (Maturity Selection) as three composable pieces:
+Implements handbook `Strike Selection
+<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#strike-selection>`_,
+`Delta-Based Strike Selection
+<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#delta-based-strike-selection>`_,
+and `Maturity Selection
+<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#maturity-selection>`_
+as three composable pieces:
 
 * :func:`strike_for_delta` — solves for the strike whose put-delta magnitude
   equals a given target, using :func:`scipy.optimize.brentq`.
@@ -290,8 +295,10 @@ def build_strike_ladder(
         )
         raise ValueError(msg)
     # Beta-adjusted (SPX-equivalent) notional the hedge is sized against
-    # (handbook §2499); equals book_notional at beta 1.0. Carry budget stays on
-    # the true book value — the premium budget is a fraction of actual wealth.
+    # (handbook Beta-Adjusted Hedge Sizing —
+    # https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing);
+    # equals book_notional at beta 1.0. Carry budget stays on the true book
+    # value — the premium budget is a fraction of actual wealth.
     portfolio_beta = ips_config.sizing.portfolio_beta
     beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
     carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
