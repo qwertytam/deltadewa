@@ -1,6 +1,6 @@
 # YAML Configuration Guide
 
-> **Navigation:** [README](../README.md) · [part-x-coverage.md](part-x-coverage.md) · [hedging handbook.md](hedging%20handbook.md)
+> **Navigation:** [README](../README.md) · [part-x-coverage.md](part-x-coverage.md) · [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook)
 
 `deltadewa` uses YAML in two unrelated ways. Keeping them straight matters:
 

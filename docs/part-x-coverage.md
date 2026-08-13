@@ -1,7 +1,17 @@
 # Part X coverage audit
 
-Maps every item in [Handbook Part X — Institutional Hedge Dashboards](hedging%20handbook.md#part-x--institutional-hedge-dashboards)
+Maps every item in [Handbook Part X — Institutional Hedge
+Dashboards](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#part-x--institutional-hedge-dashboards)
 to its implementation in this codebase.
+
+**The handbook lives in a separate public repo**,
+[qwertytam/deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook)
+(#246) — this file maps *into* that repo, not into a local `docs/` file.
+Every handbook reference below is a link with a stable anchor
+(`HANDBOOK.md#some-heading`), not a line number: headings don't renumber
+when the handbook is edited, line numbers do. If a link 404s, the handbook's
+heading was renamed — search the handbook for the wording instead of
+trusting the old anchor text.
 
 **Updated 2026-08-10**, when planning the notebook retirement traced the four
 remaining Jupyter-only health gauges and found one — the convexity cliff — with
@@ -127,14 +137,18 @@ default is chipped:
 | — | Position aging & expiration calendar | — | `/design` PLANNING — **Position aging** | `analysis/position_aging.evaluate_position_aging`; every bucket boundary from `IpsTriggers` | **PRESENT** (#259) |
 
 **Note on #5 and #15.** These are **one number**, not two. The handbook
-states the ratio in dollars at `hedging handbook.md:2032` (#15) and in
-percentages at `:4337`/`:2036` (#5); in this codebase `crash_convexity_pct`
+states the ratio in dollars at [HER
+Metric](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#her-metric)
+(#15) and in percentages at [Mathematical Definition of the
+Ratio](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#mathematical-definition-of-the-ratio)
+(#5); in this codebase `crash_convexity_pct`
 and `carry_vs_budget` both normalize by `abs(underlying_quantity * spot)`, so
 the normalizer cancels and the two forms are identical. One function,
 `analysis/hedge_efficiency.hedge_efficiency`, serves both, and
 `tests/test_analysis/test_monitor_scenario.py` pins the identity rather than
-leaving it as a docstring claim. The handbook's own example dashboard
-(`:4131-4156`) prints 7.5 and 6.3 as if they differed; on a common
+leaving it as a docstring claim. The handbook's own [Example of a Full
+Dashboard](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#example-of-a-full-dashboard)
+prints 7.5 and 6.3 as if they differed; on a common
 normalizer they cannot.
 
 **Note on #11.** Two *distinct* trigger sets are now live and are
@@ -275,7 +289,9 @@ data gaps — both closed in M2.8. See the coverage table above:
 `carry.py`'s `theta_by_bucket` can never disagree on where a boundary falls.
 
 > Do not wire `health.delta_drift_from_target` /
-> `HealthMixin.calculate_delta_drift_pct` for handbook #13. Despite the
+> `HealthMixin.calculate_delta_drift_pct` for handbook [#13. Delta
+> Drift](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#13-delta-drift).
+> Despite the
 > name, it implements a different metric — signed deviation from a target
 > net-delta ratio — and it backs the `/design` hedge-trigger panel's delta
 > row, not this one.
@@ -566,13 +582,16 @@ verdicts cannot be read as one set: the plan says it is built on the status
 table's grades, and the table says it is the evidence under the plan.
 
 **A correctness fix came first.** `gamma_theta_delay` implemented only two of
-the handbook's three conditions for deferring a roll (`hedging handbook.md`,
-Rule 1's gamma/theta note): it checked that the position was outside the
+the handbook's three conditions for deferring a roll ([Rule 1 — Time-Based
+Roll](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-1--time-based-roll)'s
+gamma/theta note): it checked that the position was outside the
 mandatory roll window and that crash convexity was still in the IPS band, but
 **not that the put had moved nearer the money** — which is the entire basis for
 the deferral. As written it would return `DELAY` for a put pushed *further* OTM
 by a rally, whose delta has collapsed and which is accumulating no gamma at
-all. That is the handbook's Rule 2 (Market Rally Rebalance Trigger), where the
+all. That is the handbook's [Rule 2 — Market Rally Rebalance
+Trigger](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-2--market-rally-rebalance-trigger),
+where the
 sanctioned action is to roll up. Surfacing it unfixed would have told the
 operator to sit on a live rally trigger while citing a gamma position that did
 not exist.
@@ -780,8 +799,9 @@ deletion**, and the only key in the IPS with no reader at all.
 It is declared required with no default (`ips_config.py:349`), validated
 (`ips_config.py:578`), documented as settable in `config/ips.example.yaml` and
 `examples/ips/ips_default.yaml` ("market rally that forces a re-strike
-review"), and backed by the handbook's "Rule 2 — Market Rally Rebalance
-Trigger". `HedgeTriggerThresholds.from_ips` maps nine trigger fields and skips
+review"), and backed by the handbook's [Rule 2 — Market Rally Rebalance
+Trigger](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-2--market-rally-rebalance-trigger).
+`HedgeTriggerThresholds.from_ips` maps nine trigger fields and skips
 this one — while its docstring claimed *"Every threshold the IPS defines is
 mapped here"*. That docstring is corrected; the claim was the reason the gap
 survived review.

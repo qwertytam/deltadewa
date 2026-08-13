@@ -34,8 +34,9 @@ _DEFAULT_SKEW_REFERENCE_DELTA: Final[float] = 0.10
 _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 
 # Hedge-efficiency band: crash payoff per dollar of annual carry, read against
-# the handbook's own interpretation table (docs/hedging handbook.md:4342-4348 —
-# "< 3 poor / 3 to 6 acceptable / > 6 attractive"). Policy rather than
+# the handbook's own Interpretation of the Ratio table
+# (https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#interpretation-of-the-ratio
+# — "< 3 poor / 3 to 6 acceptable / > 6 attractive"). Policy rather than
 # presentation because it answers a mandate question ("is this hedge worth the
 # money"), the same class as the convexity band it sits beside.
 _DEFAULT_EFFICIENCY_MIN_RATIO: Final[float] = 3.0
@@ -278,7 +279,10 @@ class IpsDrawdown:
 
 @dataclass(frozen=True)
 class IpsSizing:
-    """Hedge-sizing policy inputs (handbook §2499 — Beta-Adjusted Sizing).
+    """Hedge-sizing policy inputs.
+
+    Handbook `Beta-Adjusted Hedge Sizing
+    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_.
 
     ``portfolio_beta`` is the protected book's beta versus SPX. The hedge
     notional the sizing framework works against is

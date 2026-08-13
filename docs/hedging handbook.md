@@ -2038,6 +2038,8 @@ or using percentage terms
 
 $\text{Hedge Efficiency} = \frac{\text{Crash payoff \%}}{\text{Annual carry \%}}$
 
+<a id="hedge-efficiency-dollar-worked-example"></a>
+
 *Example:*
 
 For:
@@ -4338,6 +4340,8 @@ See [Crash Convexity](#crash-convexity) and [Theta Carry](#theta-carry--insuranc
 ##### Mathematical Definition of the Ratio
 
 $\text{Carry-Convexity Ratio} = \frac{\text{Convexity}}{\text{Carry}}$
+
+<a id="convexity-carry-worked-example"></a>
 
 If crash convexity at −25% SPX is 22% and annual carry is 3%, then the ratio is:
 

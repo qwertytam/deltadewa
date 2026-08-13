@@ -1,4 +1,7 @@
-"""Staged hedge-gain monetization planner — handbook Part VIII §3729.
+"""Staged hedge-gain monetization planner.
+
+Handbook Part VIII, `Typical Monetization Triggers
+<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#typical-monetization-triggers>`_.
 
 Evaluates the IPS monetization schedule against the current hedge book and
 produces a recommended sell programme.  No positions are altered; every

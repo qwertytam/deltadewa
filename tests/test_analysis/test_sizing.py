@@ -379,7 +379,11 @@ class TestSizeHedge:
 
 
 class TestBetaAdjustedNotional:
-    """The pure beta-adjusted-notional helper (handbook §2499)."""
+    """The pure beta-adjusted-notional helper.
+
+    Handbook `Beta-Adjusted Hedge Sizing
+    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_.
+    """
 
     def test_beta_one_is_identity(self) -> None:
         """Beta 1.0 leaves the book notional unchanged."""
