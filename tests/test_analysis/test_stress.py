@@ -1,11 +1,11 @@
 """Tests for deltadewa.analysis.stress — the M2.1 stress-panel compute seam.
 
-Extracted from StressDashboard (dashboard/stress.py) so grid orchestration
-and Monte Carlo risk/reward statistics are callable with no notebook/widget
-dependency. Several of these pin behaviour that used to be characterised
-only as standalone arithmetic in tests/test_dashboard/test_stress.py,
-disconnected from any real function — moving here strengthens that
-coverage to exercise the actual extracted code.
+Extracted from the retired StressDashboard (the Jupyter layer, deleted in
+#279) so grid orchestration and Monte Carlo risk/reward statistics are
+callable with no notebook/widget dependency. Several of these pin behaviour
+that used to be characterised only as standalone arithmetic in that layer's
+own test suite, disconnected from any real function — moving here
+strengthened that coverage to exercise the actual extracted code.
 """
 
 from __future__ import annotations
@@ -202,7 +202,7 @@ class TestBuildTimePriceGridSpec:
     def test_time_axis_truncation_dedup_shortens_columns(self) -> None:
         """linspace(...).astype(int) truncates, so a short-dated portfolio
         produces fewer time points than num_time_steps requested (moved
-        from tests/test_dashboard/test_stress.py — now exercises the real
+        from the retired Jupyter stress suite — now exercises the real
         extracted function instead of standalone arithmetic)."""
         spec = build_time_price_grid_spec(
             spot_range_pct=0.10,

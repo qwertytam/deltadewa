@@ -12,12 +12,13 @@ editor, roll planning, stress testing) — plus an emailed weekly digest
 (`deltadewa/reporting/weekly_report.py`). Pages are a thin orchestration
 layer — all real logic lives in the package.
 
-**There are no notebooks.** Stage 4.3 retired `monitor_dashboard.ipynb` and
-`hedge_design.ipynb` once `/monitor` and `/design` covered them; see
-`docs/part-x-coverage.md`, "Stage 4.3", for the parity record and what was
-deliberately dropped. `deltadewa/widgets/` and `deltadewa/dashboard/` are the
-leftover Jupyter layer — still tested, no product consumer, do not build on
-them.
+**There are no notebooks, and no Jupyter layer.** Stage 4.3 retired
+`monitor_dashboard.ipynb` and `hedge_design.ipynb` once `/monitor` and
+`/design` covered them; see `docs/part-x-coverage.md`, "Stage 4.3", for the
+parity record and what was deliberately dropped. #279 then deleted the layer
+they drove — `deltadewa/widgets/`, `deltadewa/dashboard/`, `deltadewa/config.py`
+and the whole ipywidgets/Jupyter dependency stack. Do not re-add any of it; see
+`docs/part-x-coverage.md`, "The Jupyter layer itself — retired (#279)".
 
 ## Environment & commands
 
@@ -31,7 +32,7 @@ Python `>=3.11,<4.0`, managed with **Poetry**. Run everything through `poetry ru
   typings/ are excluded from strict checking via per-module overrides.
 - Lint: `poetry run ruff check .`
 - Design/refactor smells: `poetry run pylint deltadewa` — covers duplicate-code, cyclic-import, and
-  complexity limits; `tests/` and notebooks are intentionally out of scope for now
+  complexity limits; `tests/` is intentionally out of scope for now
 - Format: `poetry run ruff format .` — **line length is 80**
 - Clock-shift determinism probe: `make test-clockshift` — runs the suite under a +0/+90/+1000/+3000
   day clock to catch tests that assert wall-clock-dependent values. **Not part of the gate**: it
@@ -46,7 +47,7 @@ green, `poetry run ruff check .` must be clean, and `poetry run pylint deltadewa
 
 ## Architecture (keep UI thin)
 
-The package is layered. Put logic in the lower layers; keep widgets dumb.
+The package is layered. Put logic in the lower layers; keep the UI dumb.
 
 - `portfolio/` — domain model and pricing. `position.py` (`OptionPosition`),
   `core.py` (`OptionPortfolio`), Monte Carlo, risk, factory.
@@ -55,11 +56,9 @@ The package is layered. Put logic in the lower layers; keep widgets dumb.
   `ExerciseStyle.EUROPEAN` (analytic Black–Scholes). Enum is in `constants.py`.
 - `analysis/` — metrics and decision logic: `health.py`, `hedge_triggers.py`,
   `carry.py`, `volatility.py`. **New metric/decision code goes here, UI-free.**
-- `dashboard/` + `widgets/` — Jupyter UI only. `setup.py` wires a session together.
 - `app/` — the Dash app (Phase 2 rebuild). `factory.py` builds the two-page
   (`/monitor`, `/design`) app over the shared `state.ProgramState`; `chrome.py`
   is the provenance banner shared by both pages; `pages/` holds page layouts.
-  Distinct from `dashboard/`/`widgets/`, which stay Jupyter-only.
 - `state.py` — `ProgramState`, the single shared server-side portfolio + IPS
   state backing the Dash app (dirty-flag autosave to `exports/`, confirm-gated
   destructive ops/import). Not per-session — one hedge program, one instance.
@@ -68,7 +67,7 @@ The package is layered. Put logic in the lower layers; keep widgets dumb.
 - `reporting/` — console/text output.
 
 Rule of thumb: if it has a number in it, it belongs in `analysis/` or `portfolio/`
-with a test — not in a widget or a notebook cell.
+with a test — not in a page callback.
 
 ## Domain rules that matter
 
@@ -86,8 +85,10 @@ with a test — not in a widget or a notebook cell.
   a UTC clock repriced the book a day forward at 20:00 ET, and the floored count
   crossed the expiry triggers a day early. New code that needs "today" or "days
   to expiry" calls these, not the stdlib.
-- Presentation settings stay in `dashboard_config_*.yaml`. Keep policy and
-  presentation config separate.
+- `ips.yaml` is the only config the app loads. The `dashboard_config_*.yaml`
+  gauge-presentation surface was retired in #279 — its policy had already
+  migrated into the IPS and its last loader went with the Jupyter layer.
+  Do not reintroduce a second config file without a reader.
 
 ## Code conventions (ruff is strict — preview mode, large rule set)
 
@@ -104,12 +105,12 @@ with a test — not in a widget or a notebook cell.
 ## Testing
 
 - Tests live in `tests/`, mirroring the package (`tests/test_portfolio/`,
-  `tests/test_dashboard/`, `tests/test_visualization/`). For the current size run
+  `tests/test_app/`, `tests/test_visualization/`). For the current size run
   `poetry run pytest --co -q | tail -1` — don't write the number down here. A
   literal has rotted twice already (M0.1 corrected it once, to a figure that was
   wrong again within the phase) and nothing in the gate can catch it.
 - Add or extend tests for every behaviour change. Pricing/metric logic must have
-  unit tests with crafted inputs; UI widgets get lighter smoke tests.
+  unit tests with crafted inputs; Dash pages get lighter smoke tests.
 - Prefer deterministic tests — no live network calls (mock HTTP; use static/offline
   providers for any market-data code).
 
@@ -117,8 +118,14 @@ with a test — not in a widget or a notebook cell.
 
 There are none, and none should be added. Stage 4.3 deleted both notebooks and
 the whole `nbstripout` / `nbqa` / `jupytext` toolchain with them — there is no
-output filter, no notebook lint step, and no `.gitattributes`. New UI goes on
-a Dash page under `deltadewa/app/pages/`.
+output filter, no notebook lint step, and no `.gitattributes`. #279 then removed
+the runtime side: no `ipywidgets`, `ipyfilechooser`, `jupyter`, `jupyterlab`,
+`notebook`, `jupyter-server` or `nbconvert` in any dependency group, and
+**IPython is not installed at all**. Two product modules degrade gracefully
+without it and are tested for it (`formatters/dataframes.py`'s
+`IPYTHON_AVAILABLE` fallback and `ConsoleReporter.clear_and_print`'s labelled
+`ImportError`) — keep that property. New UI goes on a Dash page under
+`deltadewa/app/pages/`.
 
 ## Work in progress
 
@@ -157,7 +164,8 @@ M2.6 close-out in `docs/implementation-plan.md` for the coverage mapping).
 parity record and the six items it disposed of are in
 `docs/part-x-coverage.md`, "Stage 4.3". Jupyter/notebook and Playwright moved out of the main
 Poetry dependency group into `dev`/`test`, shrinking the production image
-from 1.32 GB to 758 MB. The droplet deploy of this milestone is pending on
+from 1.32 GB to 758 MB (**#279 has since deleted the Jupyter half of that
+`dev` group outright** — see below). The droplet deploy of this milestone is pending on
 this PR merging and a release tag being cut — see `docs/implementation-plan.md`'s
 M2.6 section for what's left to verify live. **Phase 3 (docs/handbook) and
 Phase 4 (exposure, ops correctness, the notebook retirement) have both since
@@ -195,6 +203,34 @@ thresholds were Python defaults, invisible to `ips.yaml`; they moved to
 `IpsMarketEnvironment`'s `market_environment:` section as required
 keyword-only params with no default, so the function can no longer be
 called without them.
+
+**#279 has shipped**, retiring the leftover Jupyter layer: `dashboard/` (12
+modules), `widgets/` (11), `config.py`, their 253 tests, the symbols they were
+the last caller of (`formatters/gradients.py` and `formatters/html.py` whole,
+plus five individual functions), the `dashboard_config_*.yaml` presentation
+surface, and the entire ipywidgets/Jupyter dependency stack (`poetry.lock`
+166 → 80 packages). Orphaning was verified **import-path-qualified**, because
+three retired modules shared a bare name with a live `analysis/` module —
+`roll_status.py`, `position_aging.py`, `stress.py`. Symbols that lost their
+last caller but were kept are annotated at the function; four sweep candidates
+were false positives and are recorded as such. See
+`docs/part-x-coverage.md`, "The Jupyter layer itself — retired (#279)".
+
+Two follow-ups came out of it, neither acted on:
+
+- **`triggers.rally_rebalance_pct` is validated but read by nothing** —
+  required with no default, in both example YAMLs, handbook-backed ("Rule 2 —
+  Market Rally Rebalance Trigger"), and skipped by
+  `HedgeTriggerThresholds.from_ips`. Pre-existing, and the only IPS key with no
+  reader. The key stays (thresholds are policy); the trigger needs building.
+- **A second orphan set: the matplotlib half of `visualization/`.** `base.py`
+  (`OptionCharts`) and its five mixins (`crash_charts`, `greeks_charts`,
+  `pnl_charts`, `scenarios`, `theta_charts`), plus `convenience.py` and
+  `_protocols.py` — 8 modules, ~2,760 lines, 51 tests, **no importer outside
+  `visualization/` and its own tests**. The live chart modules are the three
+  `*_plotly` ones. Retiring this set is what would let `matplotlib` and
+  `pillow` go; it was deliberately kept out of #279 to keep that PR
+  reviewable.
 
 Still open: **#12 Liquidity Risk** is genuinely data-blocked (needs per-strike
 bid/ask and open interest, which the free CBOE/FRED provider doesn't return).

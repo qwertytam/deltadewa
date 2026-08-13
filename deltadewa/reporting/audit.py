@@ -15,7 +15,7 @@ PortfolioLogger(name)
 PortfolioChangeTracker(portfolio, logger, reporter)
     .reset(portfolio)        — seed / re-seed the baseline snapshot
     .track()                 — diff current state vs last snapshot, log change
-    .as_callback()           — return a zero-arg callable for widget wiring
+    .as_callback()           — return a zero-arg callable for callback wiring
 """
 
 from __future__ import annotations
@@ -141,7 +141,13 @@ class PortfolioLogger:
         return len(self.changelog)
 
     def get_number_of_snapshots(self) -> int:
-        """Get the number of portfolio snapshots in the changelog."""
+        """Get the number of portfolio snapshots in the changelog.
+
+        Note:
+            No caller since #279 retired the Jupyter changelog display.
+            Kept as a tested accessor over a changelog the app does use.
+
+        """
         return sum(
             1
             for entry in self.changelog
@@ -164,7 +170,12 @@ class PortfolioLogger:
         self,
         exclude: list[PortfolioAction] | None = None,
     ) -> dict[PortfolioAction, int]:
-        """Get a count of log entries by action type."""
+        """Get a count of log entries by action type.
+
+        Note:
+            No caller since #279 retired the Jupyter changelog display.
+
+        """
         counts: dict[PortfolioAction, int] = {}
         for entry in self.changelog:
             action = entry["action"]
@@ -174,7 +185,12 @@ class PortfolioLogger:
         return counts
 
     def get_total_delta_impact(self) -> float:
-        """Calculate the total delta impact across all log entries."""
+        """Calculate the total delta impact across all log entries.
+
+        Note:
+            No caller since #279 retired the Jupyter changelog display.
+
+        """
         return float(
             sum(
                 entry["impact_delta"]
@@ -211,9 +227,7 @@ class PortfolioChangeTracker:
     -------
     >>> tracker = PortfolioChangeTracker(portfolio, portfolio_changelog,
     reporter)
-    >>> position_editor = portfolio_widgets.create_position_editor(
-    ...     on_change_callback=tracker.as_callback()
-    ... )
+    >>> on_edit = tracker.as_callback()  # call after each position edit
 
     """
 

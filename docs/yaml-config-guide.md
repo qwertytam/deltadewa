@@ -1,33 +1,29 @@
 # YAML Configuration Guide
 
-> **Navigation:** [README](../README.md) · [dashboard-config-guide.md](dashboard-config-guide.md) · [hedging handbook.md](hedging%20handbook.md)
+> **Navigation:** [README](../README.md) · [part-x-coverage.md](part-x-coverage.md) · [hedging handbook.md](hedging%20handbook.md)
 
 `deltadewa` uses YAML in two unrelated ways. Keeping them straight matters:
 
-- **`config/`** — live files the app reads automatically at startup
-  (`config/ips.yaml`, `config/dashboard.yaml`). Edit these in place to
-  change behaviour. Both hold this program's *real* policy/presentation
-  values and are gitignored, not shipped (#245) — before either exists,
-  copy the tracked templates:
+- **`config/`** — the live file the app reads automatically at startup
+  (`config/ips.yaml`). Edit it in place to change behaviour. It holds this
+  program's *real* policy values and is gitignored, not shipped (#245) —
+  before it exists, copy the tracked template:
 
   ```bash
   cp config/ips.example.yaml config/ips.yaml
-  cp config/dashboard.example.yaml config/dashboard.yaml
   ```
 
   A missing `config/ips.yaml` isn't silently patched over with the example's
   placeholder numbers — `load_ips_config` raises, naming the file and
   pointing at the `.example`, and every consumer degrades visibly from
   there (see the README's Configuration section).
-- **`examples/`** — sample files (`examples/portfolios/`, `examples/ips/`,
-  `examples/dashboard/`). Nothing reads these automatically. Portfolios
-  are loaded by importing the file through a widget; `ips`/`dashboard`
-  presets are loaded by copying them over the corresponding file in
-  `config/`. Distinct from `config/*.example.yaml`, which are the
-  canonical one-time bootstrap templates: `examples/dashboard/` holds
-  alternate presentation postures (aggressive/conservative/default), and
-  `examples/ips/ips_default.yaml` is an illustration of the IPS schema
-  carrying the *same* placeholder numbers as `config/ips.example.yaml`.
+- **`examples/`** — sample files (`examples/portfolios/`, `examples/ips/`).
+  Nothing reads these automatically. Portfolios are loaded by importing the
+  file through `/design`; IPS presets are loaded by copying them over
+  `config/ips.yaml`. Distinct from `config/ips.example.yaml`, which is the
+  canonical one-time bootstrap template: `examples/ips/ips_default.yaml` is
+  an illustration of the IPS schema carrying the *same* placeholder numbers
+  as `config/ips.example.yaml`.
 
   **Nothing under `examples/` is this program's policy.** It used to be:
   `ips_default.yaml` shipped a byte-for-byte copy of the live
@@ -156,21 +152,20 @@ triggers) is defined and validated in `deltadewa/ips_config.py` — see that
 module for the authoritative field list and validation rules rather than a
 duplicate copy here.
 
-## Dashboard config (`config/dashboard.yaml`)
+## Dashboard config (`config/dashboard.yaml`) — retired
 
-**Nothing reads this file.** Its only consumer was `HedgeHealthDashboard`
-(`widgets/health_dashboard.py`), the Jupyter gauge wall, deleted in Stage
-4.3 along with the notebooks. The file, its `.example` template and the
-`examples/dashboard/` presets are kept pending a decision on whether the
-Dash pages should read banded gauge geometry from config — see
-`part-x-coverage.md`, "Stage 4.3". Editing it changes nothing today.
+There is no second config file. `config/dashboard.yaml` held gauge
+presentation geometry for `HedgeHealthDashboard`
+(`widgets/health_dashboard.py`), the Jupyter gauge wall; that widget went in
+Stage 4.3, its loader went in #279, and #279 retired the file, its
+`.example` template, the `examples/dashboard/` presets and their guide.
 
-Note that gauge *bands* which turned out to be policy have already been
-promoted out of here into `ips.yaml` (#241): the vega sufficiency band and
-the convexity-cliff lines. See `part-x-coverage.md`, "Where the vega band
-went", before moving any number in the other direction.
-
-See [dashboard-config-guide.md](dashboard-config-guide.md) for the schema.
+The gauge *bands* that turned out to be policy had already been promoted
+into `ips.yaml` (#241 and M2.7): the vega sufficiency band and the
+convexity-cliff lines. Only geometry was lost, and #259/#260 both declined
+to bring it back. See `part-x-coverage.md`,
+"`config/dashboard.yaml` had no reader — and then no loader (#279)", and
+"Where the vega band went", before adding a second config file.
 
 ## Live market data
 

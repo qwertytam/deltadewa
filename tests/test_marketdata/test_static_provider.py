@@ -7,7 +7,6 @@ from deltadewa.marketdata import (
     Source,
     StaticProvider,
 )
-from deltadewa.widgets.assumptions import GlobalAssumptions
 
 
 class TestStaticProvider:
@@ -103,22 +102,6 @@ class TestStaticProvider:
         history.append(-1.0)
 
         assert provider.get_vix_history().value == [10.0, 20.0]
-
-    def test_from_assumptions_seeds_spot_price(self) -> None:
-        """Test that from_assumptions seeds the spot price from a widget."""
-        assumptions = GlobalAssumptions(spot_price=4200.0)
-
-        provider = StaticProvider.from_assumptions(assumptions, symbol="SPX")
-
-        assert provider.get_spot("SPX").value == pytest.approx(4200.0)
-
-    def test_from_assumptions_values_are_still_static(self) -> None:
-        """User-entered assumptions are synthetic, not observed."""
-        assumptions = GlobalAssumptions(spot_price=4200.0)
-
-        provider = StaticProvider.from_assumptions(assumptions, symbol="SPX")
-
-        assert provider.get_spot("SPX").source is Source.STATIC
 
     def test_is_read_only_is_always_true(self) -> None:
         """StaticProvider performs no I/O, so it is trivially read-only."""

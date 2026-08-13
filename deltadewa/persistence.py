@@ -84,16 +84,6 @@ class PortfolioSerializer:
         )
         return {"json": json_files, "yaml": yaml_files}
 
-    def update_export_dir(self, new_dir: str | Path) -> None:
-        """Update the export directory and ensure it exists.
-
-        Args:
-            new_dir: New directory path for exports
-
-        """
-        self.export_dir = Path(new_dir)
-        self.export_dir.mkdir(parents=True, exist_ok=True)
-
     @staticmethod
     def detect_file_format(filepath: str | Path) -> str | None:
         """Detect portfolio file format from extension.
@@ -244,6 +234,12 @@ class PortfolioSerializer:
         Returns:
             dict with paths to saved files
 
+        Note:
+            No caller since #279 retired the Jupyter export controls. The
+            live export path is ``export_to_json`` / ``import_from_json``
+            (see ``state.py``); this is kept as a tested serializer with an
+            obvious future "export" consumer on the Dash side.
+
         """
         filename_prefix = Path(filename).stem
 
@@ -330,6 +326,10 @@ class PortfolioSerializer:
             portfolio: OptionPortfolio instance
             changelog: PortfolioLogger instance
             filename: output filename
+
+        Note:
+            No caller since #279 retired the Jupyter export controls; kept
+            alongside ``export_to_csv`` for the same reason.
 
         Returns:
             Path to saved file, or None if YAML not available

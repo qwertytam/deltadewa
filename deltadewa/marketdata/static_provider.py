@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from deltadewa.marketdata._errors import MarketDataUnavailableError
 from deltadewa.marketdata._observation import Observation
-
-if TYPE_CHECKING:
-    from deltadewa.widgets.assumptions import GlobalAssumptions
 
 _DEFAULT_VIX_TERM_STRUCTURE = {
     "VIX9D": 15.5,
@@ -24,7 +20,7 @@ _DEFAULT_VIX_TERM_STRUCTURE = {
 class StaticProvider:
     """No-network ``MarketDataProvider`` backed by explicit values.
 
-    Default provider for tests and offline/notebook use — fully
+    Default provider for tests and offline use — fully
     deterministic, performs no I/O. Every value is returned as a
     ``Source.STATIC`` ``Observation`` with no timestamps: a synthetic number
     has no observation date, and saying so is the honest answer rather than a
@@ -58,24 +54,6 @@ class StaticProvider:
     def is_read_only(self) -> bool:
         """Always ``True`` — ``StaticProvider`` performs no I/O at all."""
         return True
-
-    @classmethod
-    def from_assumptions(
-        cls,
-        assumptions: GlobalAssumptions,
-        symbol: str = "SPX",
-    ) -> StaticProvider:
-        """Build a provider from a ``GlobalAssumptions`` widget's values.
-
-        Args:
-            assumptions: Widget holding current market parameter values.
-            symbol: Symbol to associate with ``assumptions.spot_price``.
-
-        Returns:
-            A ``StaticProvider`` seeded from the widget's current values.
-
-        """
-        return cls(spot_prices={symbol: assumptions.spot_price.value})
 
     def get_spot(self, symbol: str) -> Observation[float]:
         """Return the spot price registered for *symbol*.

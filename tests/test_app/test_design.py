@@ -1635,9 +1635,9 @@ class TestVegaSufficiency:
     ) -> None:
         """The band is a mandate question, so it must come from ips.yaml.
 
-        dashboard.yaml still carries a vega_sufficiency gauge for the
-        Jupyter surface; reading policy from there would recreate the Mo2
-        leak M1.4 closed.
+        dashboard.yaml used to carry a vega_sufficiency gauge for the
+        Jupyter surface (both retired in #279); reading policy from a
+        presentation file would recreate the Mo2 leak M1.4 closed.
         """
         app = _app_with_ips(tmp_path)
         _add_starter_position(app.program_state)

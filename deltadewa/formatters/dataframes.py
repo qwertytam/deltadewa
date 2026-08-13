@@ -3,10 +3,12 @@
 This module provides consistent styling and formatting functions for DataFrames:
 - Core display preparation and styling helpers
 - High-level formatters for portfolio, Greeks, and scenario analysis
-- Pivot table and diverging style creation
+- Pivot table formatting
 - Conditional formatting (negative values, max/min highlighting)
-- Table styling presets
 - Export and display utilities
+
+``create_diverging_style`` and ``apply_table_preset`` were retired with the
+Jupyter layer in #279 — both were reached only from that layer.
 
 All functions work with pandas DataFrames and Styler objects.
 """
@@ -25,7 +27,6 @@ from typing import (
 import pandas as pd
 
 from deltadewa.colours import DEFAULT_PALETTE
-from deltadewa.formatters.values import format_currency_for_df
 
 if TYPE_CHECKING:
     from pandas.io.formats.style import Styler
@@ -372,93 +373,6 @@ def format_scenario_dataframe(
 # ============================================================================
 
 
-def create_diverging_style(
-    df: pd.DataFrame,
-    value_columns: list[str],
-    cmap: str = "RdYlGn",
-    title_case: bool = True,
-    currency_columns: list[str] | None = None,
-) -> Styler:
-    """Create DataFrame style with diverging colormap and consistent formatting.
-
-    This function creates a styled DataFrame with a diverging color scale
-    centered at zero (negative=red, zero=white, positive=green) and consistent
-    currency formatting across all tables.
-
-    Args:
-        df: DataFrame to style
-        value_columns: Columns to apply diverging color scale
-        cmap: Colormap (default: 'RdYlGn' for red-yellow-green diverging)
-        title_case: Convert columns to title case
-        currency_columns: Columns to format as currency (default: value_columns)
-
-    Returns:
-        Styled DataFrame with diverging colors and currency formatting
-
-    """
-    df_styled = df.copy()
-
-    # Title case columns if requested
-    if title_case:
-        # Ensure assignment uses an Index[str] to satisfy type checkers (avoid
-        # assigning list[str] to Index)
-        df_styled.columns = pd.Index(
-            [str(c).replace("_", " ").title() for c in df_styled.columns],
-        )
-        value_columns = [c.replace("_", " ").title() for c in value_columns]
-        if currency_columns:
-            currency_columns = [
-                c.replace("_", " ").title() for c in currency_columns
-            ]
-
-    if currency_columns is None:
-        currency_columns = value_columns
-
-    # Create styler
-    styler = df_styled.style
-
-    # Apply diverging colormap to each value column
-    for col in value_columns:
-        if col not in df_styled.columns:
-            continue
-
-        col_data = df_styled[col]
-        vmin = col_data.min()
-        vmax = col_data.max()
-
-        # Skip if all same value
-        if vmin == vmax:
-            continue
-
-        # Create diverging norm with zero at center
-        # This ensures: negative=red, zero=white, positive=green
-        abs_max = max(abs(vmin), abs(vmax))
-        styler = styler.background_gradient(
-            subset=[col],
-            cmap=cmap,
-            vmin=-abs_max,
-            vmax=abs_max,
-            axis=0,
-        )
-
-    # Format currency columns with consistent formatting
-    format_dict: dict[Any, str | Callable[[object], str]] = {}
-    for col in currency_columns:
-        if col in df_styled.columns:
-            format_dict[col] = format_currency_for_df
-
-    if format_dict:
-        styler = styler.format(
-            cast(
-                "dict[Any, str | Callable[[object], str] | None]",
-                format_dict,
-            ),
-            na_rep="-",
-        )
-
-    return styler
-
-
 def format_pivot_table(
     pivot: pd.DataFrame,
     format_str: str = "{:,.2f}",
@@ -589,95 +503,6 @@ def highlight_max_min(
 # ============================================================================
 
 
-def apply_table_preset(styler: Styler, preset: str = "default") -> Styler:
-    """Apply predefined table styling presets.
-
-    Args:
-        styler: Pandas Styler object
-        preset: Preset name ('default', 'minimal', 'fancy', 'compact')
-
-    Returns:
-        Styler with preset applied
-
-    """
-    if preset == "minimal":
-        styles = [
-            {"selector": "table", "props": [("border-collapse", "collapse")]},
-            {
-                "selector": "th",
-                "props": [
-                    ("border-bottom", "2px solid #000"),
-                    ("text-align", "left"),
-                    ("padding", "8px"),
-                ],
-            },
-            {
-                "selector": "td",
-                "props": [
-                    ("border-bottom", "1px solid #ddd"),
-                    ("padding", "8px"),
-                ],
-            },
-        ]
-    elif preset == "fancy":
-        styles = [
-            {
-                "selector": "table",
-                "props": [
-                    ("border-collapse", "collapse"),
-                    ("box-shadow", "0 2px 4px rgba(0,0,0,0.1)"),
-                ],
-            },
-            {
-                "selector": "th",
-                "props": [
-                    ("background-color", DEFAULT_PALETTE.dark_background),
-                    ("color", DEFAULT_PALETTE.white),
-                    ("padding", "12px"),
-                    ("text-align", "left"),
-                    ("font-weight", "bold"),
-                ],
-            },
-            {
-                "selector": "tr:nth-child(even)",
-                "props": [
-                    ("background-color", DEFAULT_PALETTE.very_light_grey),
-                ],
-            },
-            {
-                "selector": "td",
-                "props": [
-                    ("padding", "10px"),
-                    ("border-bottom", "1px solid #ddd"),
-                ],
-            },
-        ]
-    elif preset == "compact":
-        styles = [
-            {"selector": "table", "props": [("font-size", "12px")]},
-            {"selector": "th, td", "props": [("padding", "4px")]},
-        ]
-    else:  # default
-        styles = [
-            {"selector": "table", "props": [("border-collapse", "collapse")]},
-            {
-                "selector": "th",
-                "props": [
-                    ("background-color", DEFAULT_PALETTE.very_light_grey),
-                    ("padding", "8px"),
-                    ("text-align", "left"),
-                    ("border", "1px solid #ddd"),
-                ],
-            },
-            {
-                "selector": "td",
-                "props": [("padding", "8px"), ("border", "1px solid #ddd")],
-            },
-        ]
-
-    return styler.set_table_styles(styles)  # type: ignore[arg-type]
-
-
 # ============================================================================
 # Export/Display Utilities
 # ============================================================================
@@ -751,8 +576,6 @@ def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10) -> None:
 __all__ = [
     "apply_format_dict",
     "apply_gradient_style",
-    "apply_table_preset",
-    "create_diverging_style",
     "display_dataframe_summary",
     "format_greeks_dataframe",
     "format_pivot_table",

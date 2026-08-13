@@ -249,6 +249,15 @@ def recompute_concentration(
     pair supplied alongside *pnls_clean*; this recomputes both from the
     sample itself.
 
+    Note:
+        **No caller since #279.** Its only call site was the retired Jupyter
+        stress dashboard, which recomputed after filtering the sample. The
+        live ``/design`` distribution panel surfaces ``concentration_pct``
+        straight from ``portfolio/monte_carlo.py``, so this is redundant
+        rather than a missing surface. Kept and tested because it is the
+        documented primitive for the recompute-after-filter case; delete it
+        if that case never returns.
+
     Args:
         pnls_clean: Finite simulated P&L values.
         most_common_pnl: ``(value, count)`` of the modal outcome, or

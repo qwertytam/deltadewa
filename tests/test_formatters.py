@@ -1,6 +1,8 @@
 """Tests for deltadewa.formatters module - centralized formatting functions."""
 
-from deltadewa.formatters.html import format_html_badge, format_html_metric
+import pandas as pd
+
+from deltadewa.formatters import dataframes
 from deltadewa.formatters.values import (
     format_currency,
     format_currency_for_axis,
@@ -151,103 +153,6 @@ class TestFormatSpotWithPct:
         assert "-10%" in result
 
 
-class TestFormatHtmlBadge:
-    """Test cases for format_html_badge function."""
-
-    def test_format_html_badge_basic(self) -> None:
-        """Test HTML badge formatting."""
-        result = format_html_badge("Label", "Value")
-        assert "Label" in result
-        assert "Value" in result
-        assert "display:inline-block" in result
-
-    def test_format_html_badge_colors(self) -> None:
-        """Test HTML badge with different colors."""
-        result = format_html_badge("Label", "Value", color="positive")
-        assert "Label" in result
-        assert "Value" in result
-
-
-class TestFormatHtmlMetric:
-    """Test cases for format_html_metric function."""
-
-    def test_format_html_metric_number(self) -> None:
-        """Test HTML metric formatting for numbers."""
-        result = format_html_metric("Delta", 12345.67, format_type="number")
-        assert "Delta" in result
-        # Should format as "12.35K" (compact notation for values >= 10000)
-        assert "12.35K" in result
-
-    def test_format_html_metric_number_delegates_compact(self) -> None:
-        """Test format_html_metric.
-
-        Test that format_html_metric delegates to format_number with
-        compact=True.
-        """
-        # Values < 1000 should not be compact
-        result = format_html_metric("Small", 500.0, format_type="number")
-        assert "500.00" in result
-        # Values >= 1000 should use compact notation
-        result = format_html_metric("Large", 50000.0, format_type="number")
-        assert "50.00K" in result
-        # Very large values should use M notation
-        result = format_html_metric(
-            "VeryLarge",
-            5000000.0,
-            format_type="number",
-        )
-        assert "5.00M" in result
-
-    def test_format_html_metric_currency(self) -> None:
-        """Test HTML metric formatting for currency."""
-        result = format_html_metric("Value", 1000000, format_type="currency")
-        assert "Value" in result
-        # Should format as $1.00M
-        assert "$1.00M" in result
-
-    def test_format_html_metric_percentage(self) -> None:
-        """Test HTML metric formatting for percentages."""
-        result = format_html_metric(
-            "Volatility",
-            0.25,
-            format_type="percentage",
-        )
-        assert "Volatility" in result
-        assert "%" in result
-
-    def test_format_html_metric_near_zero(self) -> None:
-        """Test HTML metric formatting for near-zero values."""
-        # Currency at threshold boundary (0.01)
-        result = format_html_metric("Value", 0.01, format_type="currency")
-        # At exactly threshold, should format normally (not as ~$0)
-        assert "$0.01" in result
-        assert "~$0" not in result
-
-        # Currency below threshold
-        result = format_html_metric("Value", 0.001, format_type="currency")
-        assert "$ -" in result
-
-        # Percentage at threshold boundary (0.0001 = 0.01%)
-        # At exactly threshold, should format normally (not as ~0%)
-        result = format_html_metric("Change", 0.0001, format_type="percentage")
-        assert "0.01%" in result
-        assert "~0%" not in result
-
-        # Percentage below threshold should show as ~0%
-        result = format_html_metric("Change", 0.00001, format_type="percentage")
-        assert "- %" in result
-
-        # Number at threshold boundary (0.01)
-        result = format_html_metric("Delta", 0.01, format_type="number")
-        # At exactly threshold, should format normally
-        assert "0.01" in result
-        assert "~0" not in result
-
-        # Number below threshold
-        result = format_html_metric("Delta", 0.001, format_type="number")
-        assert "-" in result
-
-
 class TestFormatNumberAutoPrecision:
     """Test cases for format_number_auto_precision function."""
 
@@ -304,3 +209,29 @@ class TestFormatNumberAutoPrecision:
         """Test boundary at 0.1."""
         assert format_number_auto_precision(0.1) == "0.1000"
         assert format_number_auto_precision(0.09999) == "0.099990"
+
+
+class TestNotebookDegradation:
+    """#279 removed the Jupyter stack, so IPython is genuinely absent.
+
+    ``dataframes.py`` has always guarded its ``IPython.display`` import and
+    fallen back to ``print``, but nothing exercised the fallback while the
+    notebook toolchain was installed. It is now the only path, and it is what
+    keeps the production image importable — so it gets a test.
+    """
+
+    def test_ipython_is_not_available(self) -> None:
+        """The guarded import resolves to the fallback, not a hard failure."""
+        assert dataframes.IPYTHON_AVAILABLE is False
+
+    def test_display_dataframe_summary_falls_back_to_print(
+        self,
+        capsys,
+    ) -> None:
+        """The summary still prints the frame without IPython.display."""
+        df = pd.DataFrame({"a": [1, 2, 3]})
+
+        dataframes.display_dataframe_summary(df)
+
+        out = capsys.readouterr().out
+        assert "3 rows x 1 columns" in out

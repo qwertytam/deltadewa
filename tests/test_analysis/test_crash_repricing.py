@@ -47,7 +47,6 @@ from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
-from deltadewa.widgets.summary import NetHedgeSummary
 
 # §4 worked-example crash state.
 _APPENDIX_SPOT = 6600.0
@@ -1035,28 +1034,22 @@ class TestRepricedInvariant:
 
 
 class TestConsistencyAcrossSurfaces:
-    """§7.5 — one basis: gauge == scenario table == summary ladder.
+    """§7.5 — one basis: gauge == scenario table == roll trigger.
 
     Exercised under the shipped skew-aware shock (``_APPENDIX_SKEW``): every
     surface reads the same ``IpsConvexity.skew_steepening`` and the same book
     tail, so the deep-OTM steepening must reach them identically.
+
+    #279 retired the Jupyter summary ladder, which was a fourth surface here.
+    It was a thin wrapper over ``crash_convexity_pct`` and contributed no
+    independent arithmetic, so its removal drops a surface from the contract
+    without weakening the basis the remaining three are pinned to.
     """
 
-    def test_summary_rung_equals_health_gauge_and_helper(self) -> None:
-        """The summary -20% rung equals the gauge and the helper exactly."""
+    def test_health_gauge_equals_the_helper(self) -> None:
+        """The gauge delegates to the helper rather than re-deriving."""
         portfolio = _make_appendix_book()
         vol_shock = _APPENDIX_VOL_SHOCK
-
-        summary = NetHedgeSummary(
-            portfolio,
-            shock=CrashShock(
-                crash_scenario_pct=_APPENDIX_PCT,
-                crash_vol_shock=vol_shock,
-                skew_steepening=_APPENDIX_SKEW,
-                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
-            ),
-        )
-        rungs = dict(summary._crash_convexity_rungs())
 
         analyzer = PortfolioAnalyzer(portfolio)
         gauge = analyzer.calculate_crash_convexity_pct(
@@ -1077,8 +1070,7 @@ class TestConsistencyAcrossSurfaces:
             ),
         )
 
-        assert rungs[-20.0] == pytest.approx(gauge)
-        assert rungs[-20.0] == pytest.approx(helper)
+        assert gauge == pytest.approx(helper)
 
     def test_scenario_table_convexity_equals_gauge(self) -> None:
         """The scenario table's convexity column matches the health gauge."""
@@ -1117,16 +1109,15 @@ class TestConsistencyAcrossSurfaces:
 
         assert ips_row.convexity_pct == pytest.approx(gauge)
 
-    def test_all_four_surfaces_agree_at_equal_depth(self) -> None:
-        """Gauge == roll trigger == summary ladder == scenario table at -20%.
+    def test_all_three_surfaces_agree_at_equal_depth(self) -> None:
+        """Gauge == roll trigger == scenario table at -20%.
 
         The full single-basis contract under the shipped skew-aware shock:
         driven from one IPS, the health gauge, the roll trigger's convexity,
-        the summary ladder's -20% rung, and the crash_payoff scenario table's
-        -20% row must all agree at the same crash depth. -20% is the one depth
-        present in every surface (the summary ladder gridpoints, the
-        scenario-table defaults, the gauge, and — via ``crash_scenario_pct`` —
-        the roll trigger).
+        and the crash_payoff scenario table's -20% row must all agree at the
+        same crash depth. -20% is the one depth present in every surface (the
+        scenario-table defaults, the gauge, and — via ``crash_scenario_pct``
+        — the roll trigger).
         """
         portfolio = _make_appendix_book()
         ips = _make_appendix_ips(crash_scenario_pct=-20.0)
@@ -1142,16 +1133,6 @@ class TestConsistencyAcrossSurfaces:
             ),
         )
         roll = evaluate_roll_status(portfolio, ips)[0].crash_convexity_pct
-        summary = NetHedgeSummary(
-            portfolio,
-            shock=CrashShock(
-                crash_scenario_pct=_APPENDIX_PCT,
-                crash_vol_shock=vol_shock,
-                skew_steepening=skew,
-                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
-            ),
-        )
-        rung = dict(summary._crash_convexity_rungs())[-20.0]
         table = compute_crash_convexity(
             portfolio,
             shock=CrashShock(
@@ -1168,9 +1149,8 @@ class TestConsistencyAcrossSurfaces:
             if r.shock_pct == pytest.approx(-20.0, rel=1e-4)
         )
 
-        # All four surfaces read the same convexity at the same depth.
+        # All three surfaces read the same convexity at the same depth.
         assert roll == pytest.approx(gauge)
-        assert rung == pytest.approx(gauge)
         assert table_row.convexity_pct == pytest.approx(gauge)
         # ...and the skew-aware path is actually exercised: a flat bump at this
         # book/depth is a materially different (lower) number, so the agreement
@@ -1443,15 +1423,6 @@ class TestNoLegacyBasisInConvexityPaths:
         assert "include_underlying" not in source
         assert "calculate_pnl_at_expiry" not in source
 
-    def test_summary_ladder_source_is_repriced(self) -> None:
-        """The summary crash-convexity ladder drops the old basis."""
-        source = inspect.getsource(
-            NetHedgeSummary._crash_convexity_rungs,
-        )
-
-        assert "include_underlying" not in source
-        assert "calculate_pnl_at_expiry" not in source
-
     def test_crash_payoff_headline_source_is_repriced(self) -> None:
         """compute_crash_convexity's headline drops the old basis."""
         source = inspect.getsource(compute_crash_convexity)
@@ -1464,7 +1435,7 @@ class TestNoLegacyBasisInConvexityPaths:
 
         The enforcement point, inherited from ``crash_vol_shock`` (M1.4/M1.5)
         and ``skew_steepening`` (M1.7) and now covering the whole basis: no
-        site (gauge, roll trigger, summary ladder) can reprice spot-only, flat,
+        site (gauge, roll trigger, scenario table) can reprice spot-only, flat,
         or against a stand-in wing by omission.
         """
         param = inspect.signature(
@@ -1531,7 +1502,6 @@ class TestNoLegacyBasisInConvexityPaths:
             compute_crash_convexity,
             crash_payoff_ratio,
             evaluate_candidate,
-            NetHedgeSummary.__init__,
         )
 
         for fn in entry_points:
@@ -1547,7 +1517,6 @@ class TestNoLegacyBasisInConvexityPaths:
             compute_crash_convexity,
             crash_payoff_ratio,
             evaluate_candidate,
-            NetHedgeSummary.__init__,
         )
 
         for fn in entry_points:

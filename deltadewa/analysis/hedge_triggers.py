@@ -123,8 +123,20 @@ class HedgeTriggerThresholds:
     def from_ips(cls, triggers: IpsTriggers) -> HedgeTriggerThresholds:
         """Build thresholds from an ``IpsTriggers`` section.
 
-        Every threshold the IPS defines is mapped here — no policy value is left
-        on a dataclass literal.
+        Every threshold this dataclass carries is mapped here — no policy
+        value is left on a dataclass literal.
+
+        Note:
+            This is *not* the whole of ``IpsTriggers``. ``roll_time_months``,
+            ``strike_drift_max_otm_pct``, ``strike_drift_review_fraction``
+            and ``roll_review_buffer`` are roll policy, consumed by
+            ``roll_planner``/``roll_status`` rather than here. But
+            ``rally_rebalance_pct`` is consumed by **nothing** — the
+            handbook's "Rule 2 — Market Rally Rebalance Trigger" has never
+            been built, and the earlier wording of this docstring ("every
+            threshold the IPS defines") is why that went unnoticed. See
+            ``docs/part-x-coverage.md``.
+
         """
         return cls(
             target_delta_ratio_pct=triggers.target_delta_ratio_pct,
@@ -380,7 +392,7 @@ def evaluate_hedge_trigger_set(
     Args:
         portfolio: Live ``OptionPortfolio``. Never mutated.
         thresholds: Optional :class:`HedgeTriggerThresholds`. Pass ``None``
-            for the notebook defaults; production callers should pass
+            for the built-in defaults; production callers should pass
             ``HedgeTriggerThresholds.from_ips(ips_config.triggers)`` so no
             threshold comes from a dataclass literal.
 
@@ -485,7 +497,7 @@ def evaluate_hedge_triggers(
         ``ConsoleReporter`` for headers, status messages, and dividers.
     thresholds:
         Optional :class:`HedgeTriggerThresholds` to override the defaults.
-        Pass ``None`` (or omit) to use the same values as the notebook.
+        Pass ``None`` (or omit) to use the built-in defaults.
 
     Returns
     -------

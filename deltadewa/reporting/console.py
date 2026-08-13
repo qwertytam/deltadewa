@@ -36,7 +36,12 @@ class ConsoleReporter:
         print(char * self.width)
 
     def subheader(self, title: str) -> None:
-        """Print a formatted subsection header."""
+        """Print a formatted subsection header.
+
+        Note:
+            No caller since #279; kept as part of the reporter API.
+
+        """
         self.header(title, char="-")
 
     def divider(self, char: str = "-") -> None:

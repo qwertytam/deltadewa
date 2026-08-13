@@ -495,7 +495,7 @@ class TestCalculateDeltaDriftPct:
     def test_boundary_at_delta_drift_warn_pct(self) -> None:
         """Result landing exactly at IPS warn threshold (5.0 pp).
 
-        IPS value from tests/test_dashboard/test_setup.py.
+        IPS value from the retired Jupyter setup suite (#279).
         drift = net_delta / underlying * 100 - target
         For drift = 5.0: net_delta/underlying*100 = target + 5
         If target=90, then net_delta/100*100 = 95
@@ -553,7 +553,7 @@ class TestCalculateNetCarryPct:
         not by calculate_net_carry_pct itself, but the crossing is the
         policy-meaningful point to pin.
 
-        IPS theta_cost_acceptable_pct = 2.0 from test_dashboard/test_setup.py
+        IPS theta_cost_acceptable_pct = 2.0 from the retired setup suite
         For 2.0 pct: theta = 2.0 * underlying / DAYS_PER_YEAR / 100
         = 2.0 * 10_000 / 365 / 100 ≈ 0.548
         """

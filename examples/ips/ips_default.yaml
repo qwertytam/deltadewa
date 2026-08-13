@@ -20,12 +20,11 @@
 # before running against a real book. Unmarked fields equal the built-in
 # default that module falls back to when the field is omitted.
 #
-# This is the source of truth for hedge program thresholds AND the
-# pricing-engine default exercise style. Unlike dashboard_config_*.yaml
-# (presentation-only gauge ranges), changing this file changes program
-# behaviour: see deltadewa/ips_config.py for the loader and
-# deltadewa/analysis/hedge_triggers.py / deltadewa/dashboard/setup.py for
-# consumers.
+# This is the only config the app loads, and the source of truth for hedge
+# program thresholds AND the pricing-engine default exercise style. Changing
+# this file changes program behaviour: see deltadewa/ips_config.py for the
+# loader and deltadewa/analysis/hedge_triggers.py for consumers. (There was
+# once a presentation-only dashboard_config_*.yaml; #279 retired it.)
 
 program:
   name: "SPX tail hedge — example program"  # EXAMPLE VALUE
@@ -64,7 +63,7 @@ convexity:
   # Convexity cliff: cliff_threshold_days is where the high-gamma region is
   # deemed to start, and the metric reports the nearest long put's runway
   # before it gets there; review/urgent band that runway. Owned here only —
-  # dashboard.yaml's gauge carries the axis, not these lines (#241).
+  # promoted out of the retired dashboard.yaml gauge (#241, #279).
   cliff_threshold_days: 180
   cliff_review_days: 90
   cliff_urgent_days: 30
@@ -97,7 +96,7 @@ vega:
 
 market_environment:
   # Hedge-cost verdict policy (CHEAP/FAIR/EXPENSIVE) — these drive a decision,
-  # not a display, so they live here, not in dashboard.yaml (presentation).
+  # not a display, so they belong here rather than in presentation config.
   vol_regime_low: 0.15         # decimal IV; VIX/100 at/below = cheap-vol regime
   vol_regime_high: 0.35        # decimal IV; VIX/100 at/above = high-vol regime
   skew_low_pctile: 25          # SKEW percentile (0-100); below = benign skew

@@ -503,7 +503,7 @@ vega term exposure panel, it reads the book structurally and shocks
 nothing.
 
 This also answers the open question the
-["`config/dashboard.yaml` now has no reader"](#configdashboardyaml-now-has-no-reader)
+["`config/dashboard.yaml` had no reader"](#configdashboardyaml-had-no-reader--and-then-no-loader-279)
 section left for #259/#260: #260 did not revive the retired
 gauge-presentation config. The panel uses the same table/paragraph
 presentation every other EXPLORATION/PLANNING panel uses — no gauge
@@ -612,24 +612,43 @@ same gauge-form-only loss recorded for delta drift), and
 portfolio edit — moot on `/design`, which recomputes in-callback rather than
 caching across edits.
 
-### `config/dashboard.yaml` now has no reader
+### `config/dashboard.yaml` had no reader — and then no loader (#279)
 
 A consequence of deleting `health_dashboard.py`, recorded because it is not
 obvious and nothing fails to announce it. That widget was the **only**
-consumer of the gauge presentation config. `dashboard/session.py` still loads
-it into `SessionContext.dashboard_config`, and nothing reads the result. So
-`config/dashboard.yaml`, `config/dashboard.example.yaml`, the three
-`examples/dashboard/` presets, and `docs/dashboard-config-guide.md` all now
-describe a file the running app never opens. The IPS is the sole config the
-Dash app loads.
+consumer of the gauge presentation config. After Stage 4.3
+`dashboard/session.py` still loaded it into `SessionContext.dashboard_config`
+and nothing read the result; #279 deleted that loader too, so the surface had
+neither a reader nor a parser.
 
-Left in place rather than deleted, because the decision (delete the config
-surface, or give the presets a Dash consumer) belongs with whoever takes
-[#259](https://github.com/qwertytam/deltadewa/issues/259) — the remaining
-panel that might want banded gauge geometry back.
-[#260](https://github.com/qwertytam/deltadewa/issues/260) declined it; see
-["The volatility profile is restored"](#the-volatility-profile-is-restored-260).
-This also subsumes Open question #2 below.
+Stage 4.3 left the files in place because the decision (delete the config
+surface, or give the presets a Dash consumer) belonged with whoever took
+[#259](https://github.com/qwertytam/deltadewa/issues/259) or
+[#260](https://github.com/qwertytam/deltadewa/issues/260) — the two panels that
+might have wanted banded gauge geometry back. **Both have now landed and both
+declined it**, so #279 retired the surface: `config/dashboard.example.yaml`,
+the four `examples/dashboard/` presets, `docs/dashboard-config-guide.md`, and
+the `.gitignore` / `SECURITY.md` / `README.md` entries for the untracked
+`config/dashboard.yaml`.
+
+Removal is safe rather than lossy because the **policy** in those files had
+already migrated to the IPS; only gauge *geometry* (`start`, `end`, `min_val`,
+`mid_val`, `max_val`, `invert_colors`) was lost, and that is what #259/#260
+declined. All 47 keys were checked, per gauge block:
+
+| gauge block | where its policy lives now |
+|---|---|
+| `vega_sufficiency` | `IpsVega.sufficiency_min_pct` / `_max_pct` (M2.7; the migration is recorded at `ips_config.py:74`) |
+| `convexity_cliff` | `IpsConvexity.cliff_threshold_days` / `_review_days` / `_urgent_days`, seeded verbatim (`ips_config.py:93`) |
+| `vol_regime` | `IpsMarketEnvironment.vol_regime_low` / `_high` (`analysis/market_environment.py:166`) |
+| `crash_convexity` | `IpsConvexity.target_min_pct` / `_max_pct` |
+| `delta_drift` | `IpsTriggers.delta_drift_warn_pct` / `_action_pct` |
+| `net_carry` | `IpsBudget.annual_carry_pct` |
+| `hedge_success` | none, and none needed — `health.calculate_hedge_success_pct` is a computed percentage the handbook gives no band, and it is already surfaced |
+
+This resolves Open question #2 below, including its second defect (the presets
+misrepresenting `delta_drift` as a signed symmetric axis): the presets are
+gone, so there is nothing left to misrepresent it.
 
 ### `analysis/health.py`'s three orphans
 
@@ -646,14 +665,136 @@ always duck-typed on four attributes (`actual`, `min_val`, `max_val`,
 `invert_colors`), and its tests now build that contract directly instead of
 importing `HedgeHealthMetric`.
 
-### The Jupyter layer itself
+### The Jupyter layer itself — retired (#279)
 
-`deltadewa/widgets/` (11 modules) and `deltadewa/dashboard/` (12) survive,
-minus `health_dashboard.py`. They have **no product consumer** — the two
-notebooks were it — and are annotated as such at `widgets/__init__.py`. They
-are still gated: ~245 of the suite's tests cover them. Retiring the layer is a
-separate decision from retiring the notebooks and was deliberately not bundled
-here.
+Stage 4.3 left `deltadewa/widgets/` and `deltadewa/dashboard/` in the tree
+because retiring them was a separate decision from retiring the notebooks.
+[#279](https://github.com/qwertytam/deltadewa/issues/279) took that decision.
+
+**Removed:** `deltadewa/dashboard/` (12 modules), `deltadewa/widgets/` (11),
+`deltadewa/config.py`, `tests/test_dashboard/` (185 tests, incl. its
+directory-scoped `conftest.py`), `tests/test_widgets/` (60) and
+`tests/test_config.py` (8) — 24 modules, ~11,400 lines, **253 tests**. The
+whole ipywidgets/Jupyter dependency stack went with it (`poetry.lock` 166 → 80
+packages).
+
+`deltadewa/config.py` was not in the issue's inventory. It sat at the package
+root, imported `ipywidgets` at module scope, contained only widget code
+(`ExportDirVBox`, `create_export_dir_widget`, `get_export_dir_from_widget`) and
+was imported solely by `widgets/export_controls.py`. It is unrelated to
+`ips.yaml` and to `dashboard_config_*.yaml`.
+
+**What it surfaced, and where each reading lives now.** Every panel in the
+layer had already been re-surfaced or consciously dropped by M2.4–M2.8 and
+Stage 4.3 — that work is recorded above, and #279 was the deletion that
+followed it, not a fresh parity pass. The audit that preceded it verified the
+orphaning **import-path-qualified**, which mattered: three retired modules
+shared a bare name with a live `analysis/` module
+(`roll_status.py`, `position_aging.py`, `stress.py`), so a name-based search
+reports live consumers for retired code. Every live consumer of those three
+imports `deltadewa.analysis`; the `dashboard/` versions were reached only from
+`dashboard/__init__.py`'s re-export and their own tests.
+
+**No IPS key was orphaned by the deletion.** All 47 leaf policy keys were
+swept (fields of the `Ips*` dataclasses, references partitioned surviving vs
+retired). Every key the layer read retains a surviving product reader.
+`crash_floor_reported` — the [#273](https://github.com/qwertytam/deltadewa/issues/273)
+key whose only reader was `dashboard/crash_payoff_display.py` — had already
+been wired to `app/pages/design.py:937` by #273's own fix.
+
+**One pre-existing gap surfaced by that sweep:** see
+[`triggers.rally_rebalance_pct`](#triggersrally_rebalance_pct-is-validated-but-unread).
+
+**Four test suites outside the deleted directories** reached into the layer and
+were unhooked first, in their own commit, so the gate was green before anything
+was deleted. Three were not in the issue's inventory. The one worth recording:
+`test_repricing.py` AST-parsed `dashboard/stress.py` to assert
+`_render_spot_vol_heatmap` never assigned `portfolio.valuation_date` — the
+former state-leak site. Rather than delete the guard with the module, it was
+parametrized over the three live modules on the `/design` spot/vol path
+(`analysis/scenarios.py`, `analysis/stress.py`,
+`visualization/stress_charts_plotly.py`), all of which pass. The regression it
+was written to catch is still caught, on the surface that ships.
+
+`NetHedgeSummary` was a fourth surface in the §7.5 one-basis contract in
+`test_crash_repricing.py`. Its `_crash_convexity_rungs` was a thin wrapper over
+`crash_convexity_pct` and contributed no independent arithmetic, so dropping it
+removes a *surface* from the contract without weakening the *basis* — the
+gauge, roll trigger and scenario table still cross-check.
+
+**`StaticProvider.from_assumptions` went with it.** It was the only
+product-code thread into the layer (a `TYPE_CHECKING` import of
+`GlobalAssumptions`), its entire body was
+`cls(spot_prices={symbol: assumptions.spot_price.value})`, and its only callers
+ever were its own two tests. Re-typing it against a local protocol was
+considered and rejected: the protocol would have to encode a nested
+`.spot_price.value` shape that only an `ipywidgets.FloatSlider` has, leaving a
+protocol with no implementer — a new orphan of exactly the kind #279 exists to
+close. Callers use `StaticProvider(spot_prices={...})` directly.
+
+### The symbols the layer was the last caller of (#279)
+
+Deleting the layer left surviving public functions with no caller. Left alone
+they reproduce #273's defect one layer down: tested, exported code that reads
+as live and is not. Disposed of on the same reasoning as
+[`analysis/health.py`'s three orphans](#analysishealthpys-three-orphans).
+
+**Deleted** — zero tests, zero live path, unmistakable ipywidgets plumbing:
+`formatters/gradients.py` (whole module, 5 functions, no test anywhere in the
+repo; its Plotly replacement is recorded at `stress_charts_plotly.py:80`),
+`formatters/html.py` (whole module — both functions emitted HTML strings for an
+`ipywidgets.HTML`, while the Dash pages build `html.Span` with CSS classes),
+`formatters/dataframes.py`'s `create_diverging_style` and `apply_table_preset`,
+`persistence.update_export_dir`, `portfolio/factory.create_default_portfolio`
+(distinct from `create_empty_portfolio`, which `deltadewa/__init__.py`
+re-exports and which stays), and `portfolio/core.get_days_to_furthest_maturity`.
+
+**Kept and annotated at the function**, so none of them reads as live:
+`persistence.export_to_csv` / `export_to_yaml` (the live path is
+`export_to_json` / `import_from_json`), `audit`'s three changelog accessors,
+`console.subheader`, `core.get_positions`, and two in `analysis/` —
+`stress.recompute_concentration` (redundant, not missing: `/design` already
+surfaces `concentration_pct` from `portfolio/monte_carlo.py`) and
+`carry.create_theta_summary_table`.
+
+`create_theta_summary_table` is the nearest thing #279 found to a genuine
+surfacing gap. `/monitor` shows carry only as the scalar
+`carry.carry_pct_of_notional`, so this per-leg theta breakdown is on no page.
+It is a **candidate panel**, not dead code, and is annotated as such.
+
+**Four sweep candidates were false positives** and are deliberately untouched.
+Recorded so a later pass does not "finish the job" wrongly:
+`formatters.format_currency_for_axis` (five live `visualization/` callers — it
+is passed bare to `FuncFormatter`, so call-syntax searches miss it),
+`volatility.get_volatility_stats` (live via `build_volatility_profile`),
+`crash_payoff.default_crash_shock` (live internal call), and
+`ProgramState.update_position` / `set_volatility` — where the retired-layer
+hits called `OptionPortfolio`'s **same-named** methods, the same bare-name
+collision the import-path qualification above exists to catch.
+
+### `triggers.rally_rebalance_pct` is validated but unread
+
+Found by #279's #273-style key sweep. **Pre-existing — not caused by the
+deletion**, and the only key in the IPS with no reader at all.
+
+It is declared required with no default (`ips_config.py:349`), validated
+(`ips_config.py:578`), documented as settable in `config/ips.example.yaml` and
+`examples/ips/ips_default.yaml` ("market rally that forces a re-strike
+review"), and backed by the handbook's "Rule 2 — Market Rally Rebalance
+Trigger". `HedgeTriggerThresholds.from_ips` maps nine trigger fields and skips
+this one — while its docstring claimed *"Every threshold the IPS defines is
+mapped here"*. That docstring is corrected; the claim was the reason the gap
+survived review.
+
+**The key is kept.** Thresholds are policy and belong in `ips.yaml`, so this is
+a surfacing gap to build, not dead schema to delete — the opposite disposition
+from `dashboard_config_*.yaml` below, where the policy had already migrated.
+Building the trigger is its own issue; #279 did not widen to cover it.
+
+Not to be mis-fixed: `strike_drift_max_otm_pct` and
+`strike_drift_review_fraction` *do* have live readers in
+`analysis/roll_status.py`. The strike-**drift** trigger exists; the
+rally-**level** one does not.
 
 ## Open questions
 
@@ -662,27 +803,11 @@ Not decided by M2.7 or M2.8, and not blocking anything.
 1. ~~**The remaining Jupyter-only health gauges.**~~ **Resolved in Stage
    4.3** — all three are kept and annotated as unconsumed. See
    [`analysis/health.py`'s three orphans](#analysishealthpys-three-orphans).
-2. **`delta_drift`'s gauge band in `dashboard.yaml`** (`min_val: 5.0` /
-   `max_val: 10.0`) exactly duplicates `triggers.delta_drift_warn_pct` /
-   `delta_drift_action_pct`. Pre-existing, and the last policy number left in
-   presentation config after #241 — which closed the `vega_sufficiency` and
-   `convexity_cliff` cases and confirmed `vol_regime`, `net_carry` and
-   `crash_convexity` only *look* duplicated (different metrics and sign
-   conventions that happen to share a digit).
-
-   **Largely moot since Stage 4.3**: nothing reads `dashboard.yaml` at all now
-   (see [above](#configdashboardyaml-now-has-no-reader)), so the duplicate
-   cannot mislead a running surface — only a reader. It stays listed because
-   the file is still tracked and still documented.
-
-   Whoever takes it should fix a second defect in the same block: all three
-   `examples/dashboard/*.yaml` profiles still describe `delta_drift` as a
-   **signed symmetric axis** (−50…+50, `invert_colors: false`), which
-   `config/dashboard.yaml` has not been since the metric became |deviation
-   from target| on a one-sided 0–30 inverted axis. The examples misrepresent
-   the metric, not just its band. Do not fix them by copying the shipped
-   numbers across — that re-adds the duplication; remove the grading lines
-   the way #241 did for `convexity_cliff`.
+2. ~~**`delta_drift`'s gauge band in `dashboard.yaml`.**~~ **Resolved in
+   #279** — the whole gauge-presentation surface is deleted, so neither the
+   duplicated band nor the presets' misrepresentation of `delta_drift` as a
+   signed symmetric axis can mislead a reader. See
+   [`config/dashboard.yaml` had no reader](#configdashboardyaml-had-no-reader--and-then-no-loader-279).
 3. ~~**The widget's hardcoded config fallback.**~~ **Resolved in Stage 4.3** —
    `HedgeHealthDashboard._get_default_config()` held cliff numbers #241 had
    removed from the YAML files, so a removed key fell back to a private copy

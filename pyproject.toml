@@ -33,10 +33,6 @@ strict = true
 exclude = ["^tests/", "^typings/"]
 
 [[tool.mypy.overrides]]
-module = ["ipywidgets", "ipywidgets.*", "ipyfilechooser", "ipyfilechooser.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = ["plotly", "plotly.*"]
 ignore_missing_imports = true
 
@@ -99,28 +95,25 @@ dev = [
 	"pytest>=7.4.0",
 	"pandas-stubs>=2.3.3.251201",
 	"pytest-cov (>=7.1.0,<8.0.0)",
-	# ipywidgets/ipyfilechooser back the surviving deltadewa/widgets/ +
-	# deltadewa/dashboard/ modules and their tests. Stage 4.3 deleted the
-	# two notebooks that were those modules' only product consumer, so
-	# jupyter/jupyterlab/notebook/jupyter-server/nbconvert below now have
-	# nothing to run — they are kept only because the widget test suite
-	# still imports the ipywidgets stack. Retiring that layer retires
-	# these with it; see docs/part-x-coverage.md, "Stage 4.3".
-	"jupyter>=1.0.0",
-	"jupyterlab (>=4.5.7,<5.0.0)",
-	"ipywidgets>=8.1.0",
-	"ipyfilechooser>=0.6.0,<0.7.0",
+	# The whole ipywidgets/Jupyter stack went with deltadewa/widgets/ +
+	# deltadewa/dashboard/ in #279 — the layer was its only consumer, and
+	# Stage 4.3 had already deleted the notebooks. Removed there: jupyter,
+	# jupyterlab, notebook, jupyter-server, nbconvert, ipywidgets,
+	# ipyfilechooser, seaborn, and the mistune/bleach/tornado/pip pins that
+	# existed only to hold that stack's transitives to patched versions.
+	#
+	# matplotlib STAYS: it is imported at module scope by ten
+	# deltadewa/visualization/ submodules and by formatters/values.py, and
+	# tests/test_visualization/ exercises them. It is `dev` rather than main
+	# because visualization/__init__.py carries no re-exports and the app
+	# imports only the *_plotly submodules, so matplotlib is never on the
+	# production import path (Dockerfile installs --only main).
 	"matplotlib>=3.7.0",
-	"seaborn>=0.13.2",
-	"nbconvert (>=7.17.1,<8.0.0)",
-	"jupyter-server (>=2.18,<3.0)",
-	"notebook (>=7.5.6,<8.0.0)",
-	"mistune (>=3.2.1,<4.0.0)",
+	# Kept for transitive-pin hygiene, but NOT Jupyter residue — both are
+	# required by packages that survive: pillow by matplotlib, pygments by
+	# pytest (a main dependency).
 	"pillow (>=12.2,<13.0)",
 	"pygments (>=2.20,<3.0)",
-	"bleach (>=6.3,<7.0)",
-	"pip (>=26.1,<27.0)",
-	"tornado (>=6.5.5,<7.0.0)",
 ]
 # Test-only: the Playwright browser driver behind tests/test_app's Dash
 # smoke suite. Unused at container runtime.
@@ -161,7 +154,9 @@ disable = [
 	"too-few-public-methods",
 	# R0917 always co-fires with R0913; keeping one source of truth for arity
 	"too-many-positional-arguments",
-	# C0302 large but cohesive widget/dashboard modules are acceptable
+	# C0302 — app/pages/design.py (~3350 lines) and
+	# reporting/program_report.py (~1000) are large but cohesive, and both
+	# exceed pylint's 1000-line default
 	"too-many-lines",
 ]
 

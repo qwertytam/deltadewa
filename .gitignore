@@ -54,13 +54,11 @@ exports/
 # Keep example configs but ignore user's custom config
 portfolio_config.yaml
 
-# Real hedge program policy / dashboard presentation config — holds this
-# program's actual live values (carry budget, convexity targets, gauge
-# thresholds), not template data. Copy config/ips.example.yaml /
-# config/dashboard.example.yaml to these paths and fill in your own
-# program's numbers (#245).
+# Real hedge program policy — holds this program's actual live values (carry
+# budget, convexity targets, roll/monetization triggers), not template data.
+# Copy config/ips.example.yaml to this path and fill in your own program's
+# numbers (#245). The companion config/dashboard.yaml was retired in #279.
 config/ips.yaml
-config/dashboard.yaml
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
