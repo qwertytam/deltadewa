@@ -524,8 +524,10 @@ def _html_or_dash(value: str | None) -> str:
 def render_markdown(report: ProgramReport) -> str:
     """Render a ProgramReport as a Markdown string.
 
-    Sections follow the Part VII handbook format, separated by horizontal
-    rules.  The IPS compliance block is a Markdown pipe table.  Pass/fail
+    Sections follow the `Part VII
+    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#part-vii--designing-a-tail-hedge-program>`_
+    handbook format, separated by horizontal rules.  The IPS compliance
+    block is a Markdown pipe table.  Pass/fail
     uses ✓/✗ symbols.  A blockquote caveat is injected in the
     market-context section when data quality is STATIC or UNAVAILABLE.
 

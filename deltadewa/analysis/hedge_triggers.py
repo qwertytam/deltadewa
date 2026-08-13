@@ -132,10 +132,11 @@ class HedgeTriggerThresholds:
             and ``roll_review_buffer`` are roll policy, consumed by
             ``roll_planner``/``roll_status`` rather than here. But
             ``rally_rebalance_pct`` is consumed by **nothing** — the
-            handbook's "Rule 2 — Market Rally Rebalance Trigger" has never
-            been built, and the earlier wording of this docstring ("every
-            threshold the IPS defines") is why that went unnoticed. See
-            ``docs/part-x-coverage.md``.
+            handbook's `"Rule 2 — Market Rally Rebalance Trigger"
+            <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-2--market-rally-rebalance-trigger>`_
+            has never been built, and the earlier wording of this docstring
+            ("every threshold the IPS defines") is why that went unnoticed.
+            See ``docs/part-x-coverage.md``.
 
         """
         return cls(

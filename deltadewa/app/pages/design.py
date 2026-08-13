@@ -163,8 +163,10 @@ _BASIS_LIVE_MARKET_DATA = "basis: live market data"
 # with no crash shock applied at all.
 _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
 # Nor does the delta drift panel: it reprices at the handbook's own fixed
-# -5% spot shock (Part X §13), not the IPS crash anchor -- a distinct basis
-# from every other PLANNING panel.
+# -5% spot shock (Part X #13 --
+# https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#13-delta-drift),
+# not the IPS crash anchor -- a distinct basis from every other PLANNING
+# panel.
 _BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"
 # Nor does the convexity cliff panel, which is the only PLANNING panel that
 # touches no market input whatsoever: it compares each long put's maturity date
