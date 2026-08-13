@@ -167,9 +167,10 @@ Poetry dependency group into `dev`/`test`, shrinking the production image
 from 1.32 GB to 758 MB (**#279 has since deleted the Jupyter half of that
 `dev` group outright** — see below). The droplet deploy of this milestone is pending on
 this PR merging and a release tag being cut — see `docs/implementation-plan.md`'s
-M2.6 section for what's left to verify live. Phase 3 (docs/handbook) is next;
-**treat `docs/implementation-plan.md` as the source of truth for what to
-build there.**
+M2.6 section for what's left to verify live. **Phase 3 (docs/handbook) and
+Phase 4 (exposure, ops correctness, the notebook retirement) have both since
+shipped** — see those sections of `docs/implementation-plan.md`, which stays
+the source of truth for what to build next.
 
 **M2.7 has shipped**, closing the five Part X coverage regressions the
 2026-08-06 re-audit found. All of them were surfacing gaps, not engine gaps:
