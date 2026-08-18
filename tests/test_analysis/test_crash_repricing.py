@@ -6,6 +6,22 @@ expiry), instantaneous. §4's worked example is the regression anchor; the
 remaining tests guard the C1 (hedge-only) and C4 (repriced) invariants and the
 single-basis consistency across the health gauge, the crash scenario table, and
 the summary crash-convexity ladder.
+
+.. warning::
+
+   The §4 worked-example goldens pinned here are duplicated, as a summary, in
+   the handbook repository's Appendix A4:
+
+     https://qwertytam.github.io/deltadewa-handbook/appendices/a4-crash-repricing-methodology/#worked-example
+
+   No CI in either repository compares them, so changing a golden below
+   silently puts A4 out of date. **If you change any pinned figure in this
+   file, open the matching handbook pull request in the same session** and
+   update A4's reconciliation stamp, which records the commit of
+   ``docs/repricing-methodology.md`` it was last checked against.
+
+   The two documents were last reconciled on 2026-08-18; A4 was corrected on
+   that date to match ``v_today`` and the flat-bump crash value pinned here.
 """
 
 from __future__ import annotations
@@ -269,6 +285,10 @@ class TestAppendixGoldenValues:
     each leg's own ~10-delta wing (M1.7); these anchors are the post-M1.7 §4
     goldens. The flat-bump baseline (``+18.0%`` / ``13.1x``) is pinned
     separately by :class:`TestSkewSteepeningNoOp` at ``skew=0.0``.
+
+    These goldens are mirrored in the handbook's Appendix A4 worked example.
+    Changing one here requires the matching handbook change — see the module
+    docstring.
     """
 
     def test_hedge_values_within_tolerance(self) -> None:

@@ -1,0 +1,104 @@
+name: Handbook links
+
+# Checks every link into the published handbook, including its #fragment.
+#
+# Deliberately NOT part of the PR gate. These URLs point at a separate
+# repository's deployed site, so they break without anything here changing —
+# and they can fail transiently while that site is mid-deploy. Gating pull
+# requests on a third party's availability blocks work that is not wrong.
+# The handbook repo checks its own outbound links on the same monthly
+# cadence; this is the mirror of that for links pointing the other way.
+
+on:
+  schedule:
+    # 06:00 UTC on the first of each month.
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check handbook links
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Collect and check handbook URLs
+        run: |
+          set -uo pipefail
+
+          # Collect every handbook URL in the tree. The character class stops
+          # at the closing paren of a Markdown link and at trailing prose
+          # punctuation, then a second pass trims anything left over.
+          mapfile -t urls < <(
+            grep -rhoE 'https://qwertytam\.github\.io/deltadewa-handbook[^][:space:]")'"'"'<>]*' . \
+              --exclude-dir=.git \
+              --exclude-dir=.venv \
+              --exclude-dir=node_modules \
+              | sed -E 's/[.,;:]+$//' \
+              | sort -u
+          )
+
+          if [ "${#urls[@]}" -eq 0 ]; then
+            echo "No handbook URLs found — nothing to check."
+            exit 0
+          fi
+
+          echo "Found ${#urls[@]} unique handbook URL(s)."
+          echo
+
+          failed=0
+
+          for url in "${urls[@]}"; do
+            page="${url%%#*}"
+            frag=""
+            case "$url" in
+              *"#"*) frag="${url#*#}" ;;
+            esac
+
+            body="$(curl -sSL --max-time 30 --retry 3 --retry-delay 5 \
+                          -w '\nHTTP_STATUS:%{http_code}' "$page" 2>/dev/null)" || {
+              echo "FAIL  unreachable        $url"
+              failed=1
+              continue
+            }
+
+            status="${body##*HTTP_STATUS:}"
+            if [ "$status" != "200" ]; then
+              echo "FAIL  HTTP $status          $url"
+              failed=1
+              continue
+            fi
+
+            if [ -z "$frag" ]; then
+              echo "ok    page               $url"
+              continue
+            fi
+
+            # Material renders each heading as <h_ id="slug">. A missing
+            # fragment is the failure mode this workflow exists for: the page
+            # still returns 200, so a plain URL check would call it healthy.
+            if printf '%s' "$body" | grep -qE "id=[\"']${frag}[\"']"; then
+              echo "ok    page + anchor      $url"
+            else
+              echo "FAIL  anchor not found   $url"
+              echo "                         page loads, but no element has id=\"${frag}\""
+              failed=1
+            fi
+          done
+
+          echo
+          if [ "$failed" -ne 0 ]; then
+            echo "One or more handbook links are broken."
+            echo "Anchors are heading slugs: punctuation deleted, lowercased,"
+            echo "runs of whitespace and hyphens collapsed to a single hyphen."
+            echo "An em dash is deleted, not turned into a hyphen. A page whose"
+            echo "title comes from front matter has no anchor at all."
+            echo "See docs/part-x-coverage.md for the convention."
+            exit 1
+          fi
+
+          echo "All handbook links resolve, anchors included."
