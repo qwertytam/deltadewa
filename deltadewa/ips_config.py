@@ -345,6 +345,18 @@ class IpsTriggers:
     ``gamma_drift_moderate_pct`` / ``gamma_drift_high_pct`` band the gamma
     trigger. It fires on gamma *drift* — the % of the hedged equity that net
     delta shifts per 1% spot move — not raw gamma, which scales with book size.
+
+    ``roll_time_months`` is maturity **remaining**, never time elapsed since
+    entry: the roll fires once an option has this many months left to run, so
+    a smaller value rolls later in its life. The name alone does not say which
+    referent is meant, and the two are not interchangeable — an 18-month put
+    rolled on the elapsed reading lands in the 6-9 month theta-acceleration
+    zone the handbook warns against. Consumers agree with this reading:
+    ``roll_status.evaluate_roll_status`` compares ``days_to_maturity``, which
+    ``clock.days_between`` computes as ``maturity_date - as_of``. See the
+    handbook's `Typical Hedge Program Targets
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/typical-hedge-program-targets/>`_,
+    which owns the roll-interval band.
     """
 
     delta_drift_warn_pct: float
