@@ -163,8 +163,9 @@ the normalizer cancels and the two forms are identical. One function,
 `tests/test_analysis/test_monitor_scenario.py` pins the identity rather than
 leaving it as a docstring claim. The handbook's own [Example of a Full
 Dashboard](https://qwertytam.github.io/deltadewa-handbook/part-10/introduction/#example-of-a-full-dashboard)
-prints 7.5 and 6.3 as if they differed; on a common
-normalizer they cannot.
+used to print 7.5 and 6.3 as if they differed; it has since been corrected to
+print a single figure (`Hedge efficiency ratio: 13.3`), consistent with a
+common normalizer.
 
 **Note on #11.** Two *distinct* trigger sets are now live and are
 deliberately not merged. `roll_status.py` judges each tranche — "should this
