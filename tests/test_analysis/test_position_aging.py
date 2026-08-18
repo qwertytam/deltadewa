@@ -219,7 +219,7 @@ class TestAgreementWithRollStatus:
     The two upper buckets read the same IPS keys as
     ``roll_status._time_trigger_verdict``; these guard that they stay in
     step, which the `handbook
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#part-x--institutional-hedge-dashboards>`_
+    <https://qwertytam.github.io/deltadewa-handbook/part-10/>`_
     (Part X close) requires of any two panels grading the same quantity.
     """
 

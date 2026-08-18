@@ -978,7 +978,7 @@ class TestSizing:
     """Tests for the ``sizing`` policy section.
 
     Handbook `Beta-Adjusted Hedge Sizing
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_.
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_.
     """
 
     def test_defaults_when_section_absent(self, tmp_path: Path) -> None:

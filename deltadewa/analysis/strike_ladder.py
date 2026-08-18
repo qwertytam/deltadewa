@@ -1,11 +1,11 @@
 """Delta-based strike/maturity ladder for the deltadewa hedge program.
 
 Implements handbook `Strike Selection
-<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#strike-selection>`_,
+<https://qwertytam.github.io/deltadewa-handbook/part-7/strike-selection/>`_,
 `Delta-Based Strike Selection
-<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#delta-based-strike-selection>`_,
+<https://qwertytam.github.io/deltadewa-handbook/part-7/delta-based-strike-selection/>`_,
 and `Maturity Selection
-<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#maturity-selection>`_
+<https://qwertytam.github.io/deltadewa-handbook/part-7/maturity-selection/>`_
 as three composable pieces:
 
 * :func:`strike_for_delta` — solves for the strike whose put-delta magnitude
@@ -296,7 +296,7 @@ def build_strike_ladder(
         raise ValueError(msg)
     # Beta-adjusted (SPX-equivalent) notional the hedge is sized against
     # (handbook Beta-Adjusted Hedge Sizing —
-    # https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing);
+    # https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/);
     # equals book_notional at beta 1.0. Carry budget stays on the true book
     # value — the premium budget is a fraction of actual wealth.
     portfolio_beta = ips_config.sizing.portfolio_beta

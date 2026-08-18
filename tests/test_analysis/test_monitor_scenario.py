@@ -216,9 +216,9 @@ class TestHedgeEfficiency:
         """#5 and #15 are one metric, not two.
 
         The handbook states the ratio in dollars (`HER Metric
-        <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#her-metric>`_)
+        <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#her-metric>`_)
         and in percentages (`Mathematical Definition of the Ratio
-        <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#mathematical-definition-of-the-ratio>`_).
+        <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_).
         Both percentages here normalize by the same protected book, so the
         normalizer cancels — this pins that identity rather than leaving it
         as a docstring claim.

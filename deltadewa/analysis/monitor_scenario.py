@@ -58,9 +58,9 @@ class ScenarioResult:
             it doesn't move ``hedge_value_*``).
         efficiency: ``hedge_gain`` per dollar of annual carry, read against
             the IPS band (handbook Part X #5/#15 — `HER Metric
-            <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#her-metric>`_
+            <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#her-metric>`_
             / `Mathematical Definition of the Ratio
-            <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#mathematical-definition-of-the-ratio>`_
+            <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_
             — see :mod:`deltadewa.analysis.hedge_efficiency`).
             **Scenario-local**,
             like everything else here: at the IPS default dials this is the

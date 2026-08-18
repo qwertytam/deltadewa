@@ -12,11 +12,11 @@ handbook states the ratio twice:
 
 - ``Hedge Efficiency = Crash payoff / Annual carry`` in dollars, item #15
   (handbook `HER Metric
-  <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#her-metric>`_),
+  <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#her-metric>`_),
   and
 - ``Carry-Convexity Ratio = Convexity / Carry`` in percentages, item #5
   (handbook `Mathematical Definition of the Ratio
-  <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#mathematical-definition-of-the-ratio>`_),
+  <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_),
   also given as ``Crash payoff % / Annual carry %`` in the same HER Metric
   section above.
 
@@ -26,7 +26,7 @@ In this codebase both percentages normalize by the *same* protected book —
 ``abs(underlying_quantity * spot)`` — so the normalizer cancels and the
 percentage form reduces exactly to the dollar form. One function serves both
 items. (The handbook's own `Example of a Full Dashboard
-<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#example-of-a-full-dashboard>`_
+<https://qwertytam.github.io/deltadewa-handbook/part-10/introduction/#example-of-a-full-dashboard>`_
 prints ``Convexity/carry ratio: 7.5`` and ``Hedge efficiency: 6.3x`` as if
 they were different figures; on a common normalizer they cannot be.)
 
@@ -45,7 +45,7 @@ class EfficiencyVerdict(StrEnum):
     """Reading of the efficiency ratio against the IPS band.
 
     Names follow the handbook's own `Interpretation of the Ratio
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#interpretation-of-the-ratio>`_
+    <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio>`_
     table: below the band is a poor hedge, inside it is acceptable, above it
     is attractive.
     """

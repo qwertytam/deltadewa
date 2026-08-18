@@ -525,7 +525,7 @@ def render_markdown(report: ProgramReport) -> str:
     """Render a ProgramReport as a Markdown string.
 
     Sections follow the `Part VII
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#part-vii--designing-a-tail-hedge-program>`_
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/>`_
     handbook format, separated by horizontal rules.  The IPS compliance
     block is a Markdown pipe table.  Pass/fail
     uses ✓/✗ symbols.  A blockquote caveat is injected in the
