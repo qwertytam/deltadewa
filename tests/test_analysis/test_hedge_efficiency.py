@@ -2,10 +2,17 @@
 
 The band values used throughout are the handbook's own (3 / 6, from
 `Interpretation of the Ratio
-<https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio>`_),
+<https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio>`_),
 and the two worked examples are lifted from the handbook rather than
 invented, so a failure here means the implementation drifted from the cited
 definition — not that a fixture went stale.
+
+Every handbook link in this file is **pinned to version 0.1**, which is what
+makes the sentence above true: these tests assert the handbook's figures, so
+the citation has to name the text those figures were taken from. Against the
+moving root, a band or worked example revised upstream would turn a passing
+test into one that cites a page contradicting it. Drop the ``/0.1/`` segment
+to read the current version of any of them.
 """
 
 from __future__ import annotations
@@ -20,7 +27,7 @@ from deltadewa.analysis.hedge_efficiency import (
 
 # The handbook's interpretation table: < 3 poor, 3 to 6 acceptable, > 6
 # attractive
-# (https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio).
+# (https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio).
 _BAND_MIN = 3.0
 _BAND_MAX = 6.0
 
@@ -42,7 +49,7 @@ class TestHandbookWorkedExamples:
         """``1.5M / 300k = 5x``.
 
         Handbook `Hedge Efficiency Dollar Worked Example
-        <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#hedge-efficiency-dollar-worked-example>`_.
+        <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#hedge-efficiency-dollar-worked-example>`_.
         """
         result = _efficiency(1_500_000.0, -300_000.0)
 
@@ -53,7 +60,7 @@ class TestHandbookWorkedExamples:
         """``22% / 3% = 7.3``.
 
         Handbook `Convexity Carry Worked Example
-        <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#convexity-carry-worked-example>`_.
+        <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#convexity-carry-worked-example>`_.
 
         The percentage form is the same division on a common normalizer, so
         the function takes the two percentages unchanged and must produce the

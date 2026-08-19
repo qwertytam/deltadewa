@@ -35,10 +35,17 @@ _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 
 # Hedge-efficiency band: crash payoff per dollar of annual carry, read against
 # the handbook's own Interpretation of the Ratio table
-# (https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio
+# (https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio
 # — "< 3 poor / 3 to 6 acceptable / > 6 attractive"). Policy rather than
 # presentation because it answers a mandate question ("is this hedge worth the
 # money"), the same class as the convexity band it sits beside.
+#
+# The link is pinned to handbook version 0.1, not the moving root: the two
+# defaults below are transcribed from that table, so the citation has to keep
+# naming the table they were transcribed from. A band revised upstream should
+# show up as a decision to make here, not as a comment that quietly stops
+# describing the constants under it. Drop the /0.1/ segment for the current
+# page.
 _DEFAULT_EFFICIENCY_MIN_RATIO: Final[float] = 3.0
 _DEFAULT_EFFICIENCY_MAX_RATIO: Final[float] = 6.0
 
@@ -355,8 +362,13 @@ class IpsTriggers:
     ``roll_status.evaluate_roll_status`` compares ``days_to_maturity``, which
     ``clock.days_between`` computes as ``maturity_date - as_of``. See the
     handbook's `Typical Hedge Program Targets
-    <https://qwertytam.github.io/deltadewa-handbook/part-7/typical-hedge-program-targets/>`_,
-    which owns the roll-interval band.
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/typical-hedge-program-targets/>`_,
+    which owns the roll-interval band. That link is pinned to handbook version
+    0.1 because the paragraph above depends on the handbook stating the band
+    as maturity *remaining*: this field's meaning was settled against that
+    wording, and the referent flipping upstream is precisely the failure the
+    paragraph exists to prevent. Drop the ``/0.1/`` segment for the current
+    band.
     """
 
     delta_drift_warn_pct: float

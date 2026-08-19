@@ -12,7 +12,13 @@ the summary crash-convexity ladder.
    The §4 worked-example goldens pinned here are duplicated, as a summary, in
    the handbook repository's Appendix A4:
 
-     https://qwertytam.github.io/deltadewa-handbook/appendices/a4-crash-repricing-methodology/#worked-example
+     https://qwertytam.github.io/deltadewa-handbook/0.1/appendices/a4-crash-repricing-methodology/#worked-example
+
+   That URL is **pinned to handbook version 0.1**, which is deliberate. It has
+   to keep resolving to the figures these goldens were reconciled against, so
+   that a later edit on the handbook side surfaces as a disagreement to
+   investigate rather than quietly redefining what this file claims to match.
+   Drop the ``/0.1/`` segment to read the current A4.
 
    No CI in either repository compares them, so changing a golden below
    silently puts A4 out of date. **If you change any pinned figure in this

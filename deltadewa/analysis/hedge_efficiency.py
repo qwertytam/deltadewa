@@ -12,11 +12,11 @@ handbook states the ratio twice:
 
 - ``Hedge Efficiency = Crash payoff / Annual carry`` in dollars, item #15
   (handbook `HER Metric
-  <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#her-metric>`_),
+  <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#her-metric>`_),
   and
 - ``Carry-Convexity Ratio = Convexity / Carry`` in percentages, item #5
   (handbook `Mathematical Definition of the Ratio
-  <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_),
+  <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_),
   also given as ``Crash payoff % / Annual carry %`` in the same HER Metric
   section above.
 
@@ -26,13 +26,22 @@ In this codebase both percentages normalize by the *same* protected book —
 ``abs(underlying_quantity * spot)`` — so the normalizer cancels and the
 percentage form reduces exactly to the dollar form. One function serves both
 items. (The handbook's own `Example of a Full Dashboard
-<https://qwertytam.github.io/deltadewa-handbook/part-10/introduction/#example-of-a-full-dashboard>`_
+<https://qwertytam.github.io/deltadewa-handbook/0.1/part-10/introduction/#example-of-a-full-dashboard>`_
 prints ``Convexity/carry ratio: 7.5`` and ``Hedge efficiency: 6.3x`` as if
 they were different figures; on a common normalizer they cannot be.)
 
 The band is policy, not presentation: it answers a mandate question ("is this
 hedge worth the money"), so it comes from ``ips.yaml``'s ``convexity`` section
 and is never defaulted here.
+
+Every handbook link in this module is **pinned to version 0.1** rather than
+tracking the site root, deliberately. The argument above rests on what the
+handbook says specifically — that it states the ratio in two forms, and that
+its dashboard prints those two as if they were different figures — so the links
+have to keep resolving to the text the argument was written against. Were the
+handbook to reconcile that dashboard, this module should read as out of date
+and get revisited, not go on citing a page that no longer supports it. Drop the
+``/0.1/`` segment for the current version of any of them.
 """
 
 from __future__ import annotations
@@ -45,7 +54,7 @@ class EfficiencyVerdict(StrEnum):
     """Reading of the efficiency ratio against the IPS band.
 
     Names follow the handbook's own `Interpretation of the Ratio
-    <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio>`_
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio>`_
     table: below the band is a poor hedge, inside it is acceptable, above it
     is attractive.
     """

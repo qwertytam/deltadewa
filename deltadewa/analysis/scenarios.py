@@ -52,11 +52,17 @@ _SPOT_VOL_METRIC_TO_ATTR: dict[str, str] = {
 }
 
 # Handbook Part X §13, Delta Drift Metric
-# (https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/#delta-drift-metric):
+# (https://qwertytam.github.io/deltadewa-handbook/0.1/part-10/tier-4-tactical-optional-trading-metrics/#delta-drift-metric):
 # the shock is fixed at exactly -5% -- the handbook's own worked example, not
 # a dial and not the IPS crash_scenario_pct (a much larger,
 # separately-configured move). A different percentage would be a different
 # metric, so this is a constant, not a parameter.
+#
+# Pinned to handbook version 0.1 rather than tracking the root, for the reason
+# stated on the line above: the constant *is* the handbook's figure. If the
+# worked example were rewritten around a different shock, this would need to
+# become a different metric rather than quietly cite a page that no longer says
+# -5%. Drop the /0.1/ segment for the current page.
 DELTA_DRIFT_SHOCK_PCT: Final[float] = -5.0
 
 
@@ -86,11 +92,16 @@ class DeltaDrift:
     """Handbook Part X §13: shocked-minus-current hedge delta.
 
     Handbook `Delta Drift Metric
-    <https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/#delta-drift-metric>`_::
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-10/tier-4-tactical-optional-trading-metrics/#delta-drift-metric>`_::
 
         Δ0 = hedge delta today
         Δ5 = hedge delta if market falls 5%
         Delta Drift = Δ5 - Δ0
+
+    That link is pinned to handbook version 0.1: the three lines above are
+    transcribed from it, including the 5% that ``DELTA_DRIFT_SHOCK_PCT``
+    hardcodes, so the citation has to keep naming the statement they came from.
+    Drop the ``/0.1/`` segment for the current page.
 
     "Hedge delta" is the **option legs' delta only** -- the underlying
     equity leg is excluded, the same hedge-only convention
