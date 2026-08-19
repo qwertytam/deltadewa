@@ -146,8 +146,9 @@ money" condition and so would defer a roll on a *rally* trigger; see
 `docs/part-x-coverage.md`, "The roll plan is restored (#258)".
 See `docs/part-x-coverage.md` for the full
 handbook-item → implementation map and the
-[deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo
-(`HANDBOOK.md`, #246) for the cited sections — the handbook was extracted
+[deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,
+published at <https://qwertytam.github.io/deltadewa-handbook/> (#246), for the
+cited sections — the handbook was extracted
 out of this repo's `docs/` into its own public repo so it can be read and
 cited without pulling in the hedge-program internals; see `docs/part-x-coverage.md`'s
 intro for how citations into it are anchored.
