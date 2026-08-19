@@ -4,7 +4,7 @@ Implements the 5-step IPS-driven sizing framework:
 
 0. ``beta_adjusted_notional`` — the book's SPX-equivalent exposure
    (``book_notional * portfolio_beta``, handbook `Beta-Adjusted Hedge Sizing
-   <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_).
+   <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_).
    The offset and convexity are measured against it, so beta ≠ 1 sizes the
    hedge up/down.
 1. ``required_crash_offset`` — dollars the hedge must recover beyond the
@@ -157,7 +157,7 @@ def beta_adjusted_notional(
     """SPX-equivalent market exposure of the book.
 
     Handbook `Beta-Adjusted Hedge Sizing
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_.
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_.
 
     The sizing framework protects the book's *systematic* exposure, which is
     ``book_notional * portfolio_beta`` — the notional of SPX the book behaves
@@ -281,7 +281,7 @@ def size_hedge(
     Sizing operates on the **beta-adjusted (SPX-equivalent) notional**
     ``book_notional * ips_config.sizing.portfolio_beta`` (handbook
     `Beta-Adjusted Hedge Sizing
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_):
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_):
     the crash offset and achieved convexity are measured against it, so a
     book beta
     below/above 1.0 sizes the hedge down/up proportionally. ``portfolio_beta``

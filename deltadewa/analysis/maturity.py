@@ -31,7 +31,7 @@ class MaturityVegaExposure:
     """Handbook Part X §14: vega aggregated by maturity bucket.
 
     Part X: `Institutional Hedge Dashboards
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#part-x--institutional-hedge-dashboards>`_.
+    <https://qwertytam.github.io/deltadewa-handbook/part-10/>`_.
 
     Attributes:
         vega_by_bucket: Vega total per maturity bucket, keyed by the same

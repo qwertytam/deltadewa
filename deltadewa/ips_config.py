@@ -35,7 +35,7 @@ _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 
 # Hedge-efficiency band: crash payoff per dollar of annual carry, read against
 # the handbook's own Interpretation of the Ratio table
-# (https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#interpretation-of-the-ratio
+# (https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#interpretation-of-the-ratio
 # — "< 3 poor / 3 to 6 acceptable / > 6 attractive"). Policy rather than
 # presentation because it answers a mandate question ("is this hedge worth the
 # money"), the same class as the convexity band it sits beside.
@@ -282,7 +282,7 @@ class IpsSizing:
     """Hedge-sizing policy inputs.
 
     Handbook `Beta-Adjusted Hedge Sizing
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_.
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_.
 
     ``portfolio_beta`` is the protected book's beta versus SPX. The hedge
     notional the sizing framework works against is
@@ -345,6 +345,18 @@ class IpsTriggers:
     ``gamma_drift_moderate_pct`` / ``gamma_drift_high_pct`` band the gamma
     trigger. It fires on gamma *drift* — the % of the hedged equity that net
     delta shifts per 1% spot move — not raw gamma, which scales with book size.
+
+    ``roll_time_months`` is maturity **remaining**, never time elapsed since
+    entry: the roll fires once an option has this many months left to run, so
+    a smaller value rolls later in its life. The name alone does not say which
+    referent is meant, and the two are not interchangeable — an 18-month put
+    rolled on the elapsed reading lands in the 6-9 month theta-acceleration
+    zone the handbook warns against. Consumers agree with this reading:
+    ``roll_status.evaluate_roll_status`` compares ``days_to_maturity``, which
+    ``clock.days_between`` computes as ``maturity_date - as_of``. See the
+    handbook's `Typical Hedge Program Targets
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/typical-hedge-program-targets/>`_,
+    which owns the roll-interval band.
     """
 
     delta_drift_warn_pct: float

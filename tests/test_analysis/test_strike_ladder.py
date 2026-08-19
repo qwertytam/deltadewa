@@ -476,7 +476,7 @@ class TestBetaAdjustment:
     """Beta scales each rung's SPX-equivalent notional.
 
     Handbook `Beta-Adjusted Hedge Sizing
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing>`_.
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_.
     """
 
     def test_beta_one_matches_book_notional(self) -> None:

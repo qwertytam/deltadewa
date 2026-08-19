@@ -107,7 +107,7 @@ def gamma_theta_delay(
     """Return True when the gamma/theta nuance says to defer the roll.
 
     The handbook (`"Rule 1 — Time-Based Roll"
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-1--time-based-roll>`_,
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/rolling-rules/#rule-1-time-based-roll>`_,
     the gamma/theta trade-off note) sanctions deferring a roll on three
     conditions, all required:
 
@@ -126,7 +126,7 @@ def gamma_theta_delay(
     rally, whose delta has collapsed and which is accumulating no gamma
     at all. That is the handbook's `"Rule 2 — Market Rally Rebalance
     Trigger"
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-2--market-rally-rebalance-trigger>`_,
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger>`_,
     where the sanctioned action is to roll up, not to wait.
     Deferring there would recommend inaction on a live rally trigger
     while citing a gamma position that does not exist.

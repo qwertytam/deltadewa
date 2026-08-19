@@ -150,9 +150,9 @@ def _efficiency_sentence(result: ScenarioResult) -> html.P:
     The bridge between "what does this cost" and "what do we get" — Part X
     #5/#15, the handbook's single "is this hedge worth the money" figure
     (`HER Metric
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#her-metric>`_
+    <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#her-metric>`_
     / `Mathematical Definition of the Ratio
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#mathematical-definition-of-the-ratio>`_).
+    <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_).
 
     Deliberately one plain-language sentence with no ``big-number`` and no
     ``band_bar``: this page already carries five big numbers and two band

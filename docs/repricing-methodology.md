@@ -2,11 +2,11 @@
 
 *Belongs at `docs/repricing-methodology.md`; cross-reference it from the
 handbook's [Part VI crash-convexity
-definition](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#crash-convexity).
+definition](https://qwertytam.github.io/deltadewa-handbook/part-6/crash-convexity/).
 The handbook lives at
 [qwertytam/deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook)
 and now carries its own worked appendix on this topic, [A4 Crash Repricing
-Methodology](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#a4-crash-repricing-methodology);
+Methodology](https://qwertytam.github.io/deltadewa-handbook/appendices/a4-crash-repricing-methodology/);
 this file remains the normative spec the codebase implements against.*
 
 This appendix closes the ambiguity the handbook's Part VI left open: it defines

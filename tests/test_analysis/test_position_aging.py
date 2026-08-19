@@ -194,6 +194,21 @@ class TestClassifyExpiryBucket:
             == ExpiryBucketLabel.ROLL_REVIEW
         )
 
+    def test_roll_due_edge_holds_at_twelve_months(self) -> None:
+        """Test the ROLL DUE edge at the top of the handbook's 9-12 band."""
+        boundaries = expiry_boundaries(
+            _make_ips_config(roll_time_months=12.0).triggers,
+        )
+
+        assert (
+            classify_expiry_bucket(boundaries.roll_due_days, boundaries)
+            == ExpiryBucketLabel.ROLL_DUE
+        )
+        assert (
+            classify_expiry_bucket(boundaries.roll_due_days + 1, boundaries)
+            == ExpiryBucketLabel.ROLL_REVIEW
+        )
+
     def test_exactly_review_days_is_roll_review(self) -> None:
         """Test ROLL REVIEW uses `<=` on its upper edge."""
         boundaries = expiry_boundaries(_make_ips_config().triggers)
@@ -219,7 +234,7 @@ class TestAgreementWithRollStatus:
     The two upper buckets read the same IPS keys as
     ``roll_status._time_trigger_verdict``; these guard that they stay in
     step, which the `handbook
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#part-x--institutional-hedge-dashboards>`_
+    <https://qwertytam.github.io/deltadewa-handbook/part-10/>`_
     (Part X close) requires of any two panels grading the same quantity.
     """
 

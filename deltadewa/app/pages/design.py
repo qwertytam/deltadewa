@@ -164,7 +164,7 @@ _BASIS_LIVE_MARKET_DATA = "basis: live market data"
 _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
 # Nor does the delta drift panel: it reprices at the handbook's own fixed
 # -5% spot shock (Part X #13 --
-# https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#13-delta-drift),
+# https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/#13-delta-drift),
 # not the IPS crash anchor -- a distinct basis from every other PLANNING
 # panel.
 _BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"

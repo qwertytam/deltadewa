@@ -90,7 +90,7 @@ tests added.
 **Status: done** — PRs #192, #193. Spec: `docs/repricing-methodology.md`.
 
 - **C1** — reimplement crash convexity per the handbook ([Crash
-  Convexity](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#crash-convexity)):
+  Convexity](https://qwertytam.github.io/deltadewa-handbook/part-6/crash-convexity/)):
   hedge-only,
   repriced at the crash spot via `BatchPricer`, with a configurable crash-vol
   shock, anchored at the IPS −25%. Remove the `include_underlying=True` /
@@ -148,7 +148,7 @@ conformant book; the regime figure is a real percentile or honestly named.
   (`hedge_triggers.py:160`, `roll_status.py:231`); complete the `from_ips` mapping
   (expiry / gamma / theta-excellent are hardcoded); recalibrate the inert gamma
   bands (10/30 vs measured 0.23) to SPX scale or drive from IPS; add
-  beta-adjustment (handbook [Beta-Adjusted Hedge Sizing](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing));
+  beta-adjustment (handbook [Beta-Adjusted Hedge Sizing](https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/));
   make `underlying_quantity` fail loud rather
   than degrade metrics to 0.
 - **Mi4 / Mi5 / Mi6** — naive-timestamp DTE (`position_detail.py:48`);
@@ -1763,7 +1763,7 @@ methodology is a writing task, not a sync task.
   **cash/margin** section, and quantified **put-spread vs outright** economics.
   Reconcile the Quick Start "1–2%" vs benchmark "0.5–1.5% / 1% ceiling" tension.
   - **Concentrated single-name crash-beta gap (opened by the [Beta-Adjusted
-    Hedge Sizing](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#beta-adjusted-hedge-sizing)
+    Hedge Sizing](https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/)
     beta multiplier).** M1.4 shipped `IpsSizing.portfolio_beta` — the handbook's
     beta-adjusted sizing (`hedge notional = book × β`) — but the handbook only
     covers a *diversified* book with a stable β near 1.0. It gives **no

@@ -52,7 +52,7 @@ _SPOT_VOL_METRIC_TO_ATTR: dict[str, str] = {
 }
 
 # Handbook Part X §13, Delta Drift Metric
-# (https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#delta-drift-metric):
+# (https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/#delta-drift-metric):
 # the shock is fixed at exactly -5% -- the handbook's own worked example, not
 # a dial and not the IPS crash_scenario_pct (a much larger,
 # separately-configured move). A different percentage would be a different
@@ -86,7 +86,7 @@ class DeltaDrift:
     """Handbook Part X §13: shocked-minus-current hedge delta.
 
     Handbook `Delta Drift Metric
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#delta-drift-metric>`_::
+    <https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/#delta-drift-metric>`_::
 
         Δ0 = hedge delta today
         Δ5 = hedge delta if market falls 5%

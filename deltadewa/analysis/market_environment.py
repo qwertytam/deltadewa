@@ -2,7 +2,7 @@
 
 Turns ``MarketDataProvider`` readings (VIX, VIX term structure, SKEW) into
 a single ``MarketEnvironment`` snapshot for `Tier-2
-<https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#tier-2--market-environment-metrics>`_
+<https://qwertytam.github.io/deltadewa-handbook/part-10/tier-2-market-environment-metrics/>`_
 of the hedging handbook -- "is crash protection cheap or expensive right
 now?" The future C3
 decision matrix in ``analysis.recommendations`` consumes this snapshot

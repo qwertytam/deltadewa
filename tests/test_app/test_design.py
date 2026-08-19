@@ -1380,7 +1380,7 @@ class TestHedgeTriggersPanel:
 
 class TestDeltaDriftPanel:
     """`Part X #13
-    <https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#13-delta-drift>`_
+    <https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/#13-delta-drift>`_
     — hedge delta today vs. the handbook's own -5% shock.
 
     Sits beside the hedge triggers panel: same "does the book need
