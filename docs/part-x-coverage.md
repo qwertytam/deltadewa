@@ -28,6 +28,16 @@ The handbook repo's own `HANDBOOK.md` and `README.md` state this convention.
 If a link 404s, the heading was renamed — search the handbook for the wording
 rather than trusting the old anchor text.
 
+Two checks keep these citations honest, and they cover different halves of the
+problem. `.github/workflows/handbook-links.yml` runs monthly, fetches every
+published-site URL in this repo and fails if the `#fragment` is absent from the
+returned HTML — that catches a heading renamed on the handbook side, which no
+change here would ever reveal. `ops/check-handbook-citations.sh` runs in the PR
+gate and rejects the citation forms that first check cannot see: an anchor into
+GitHub source, or any link to the retired `HANDBOOK.md`. Cite the published site
+and both checks work for you; cite the source and the monthly sweep silently
+skips the link.
+
 **Updated 2026-08-10**, when planning the notebook retirement traced the four
 remaining Jupyter-only health gauges and found one — the convexity cliff — with
 no Dash surface and no recorded decision to drop it. It is now on `/design`;

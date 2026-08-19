@@ -14,6 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Runs before the toolchain install so a bad citation fails in seconds
+      # rather than after a full Poetry and Playwright setup. Needs no network
+      # and no dependencies — it only reads the tree.
+      - name: Handbook citation form
+        run: ops/check-handbook-citations.sh
+
       - name: Install Poetry
         run: pipx install "poetry>=2.0,<3"
 
