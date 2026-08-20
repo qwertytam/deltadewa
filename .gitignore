@@ -25,8 +25,9 @@ __pycache__/
 *.so
 
 # Personal, un-shared Claude Code context
-.claude/
+.claude/*
 CLAUDE.local.md
+!.claude/agents/
 
 # Distribution / packaging
 .Python
