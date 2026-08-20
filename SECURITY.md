@@ -31,19 +31,27 @@ coverage as itself worth reporting.
 ### The three incidents behind the rule
 
 - **[#245](https://github.com/qwertytam/deltadewa/issues/245)** —
-  `config/ips.yaml` and `config/dashboard.yaml` were tracked with this
-  program's real policy values (carry budget, convexity targets, program
-  name), not template data. Fixed going forward: both were gitignored,
-  with `config/ips.example.yaml` / `config/dashboard.example.yaml` as the
-  tracked templates (#248) — this is the origin of the `*.example.yaml`
-  convention stated above. (#279 later retired the `dashboard.yaml` surface
-  entirely; only the IPS pair remains.) **Still open**: the fix is forward-only: every
-  past revision of those real values remains visible in this public
-  repo's git history. Closing this needs an actual decision — private
-  repo, history rewrite, or a written accepted-risk sign-off — not just
-  the current-state fix. See the issue for the live status; this file
-  intentionally doesn't restate it, to avoid drifting out of sync with
-  the real decision.
+  `config/ips.yaml` was tracked with this program's real policy values
+  (carry budget, convexity targets, program name), not template data.
+  `config/dashboard.yaml` was named in this incident too, but that was an
+  overcorrection: its real-to-template diff was comment-only — a single
+  comment line quoting the real book's vega reading — so it never carried
+  a bespoke policy value, and is dropped from that description here. Fixed
+  going forward: `config/ips.yaml` was gitignored, with
+  `config/ips.example.yaml` as the tracked template (#248) — this is the
+  origin of the `*.example.yaml` convention stated above;
+  `config/dashboard.yaml` was templated alongside it at the same time out
+  of the same caution. (#279 later retired the `dashboard.yaml` surface
+  entirely, so only the IPS pair remains today — a separate point from the
+  correction above: that removal was about the surface ceasing to exist,
+  not about what its history held.) **Resolved 2026-08-20 as accepted
+  risk, not remediated**: the fix was forward-only, so every past revision
+  of `config/ips.yaml`'s real values remains visible in this public repo's
+  git history. No history rewrite will be performed. The reasoning, the
+  full-history audit that underwrites it, and the condition that would
+  reopen it are recorded below under "[Accepted risk: the #245
+  history](#accepted-risk-the-245-history)"; tracked at
+  [#351](https://github.com/qwertytam/deltadewa/issues/351).
 - **[#249](https://github.com/qwertytam/deltadewa/issues/249)** (closed)
   — `examples/ips/ips_default.yaml`, documented as a starter preset, was
   actually a near-exact mirror of the same real policy #245 was about,
@@ -59,6 +67,66 @@ coverage as itself worth reporting.
   only at first init (#250). The same PR scrubbed `docs/RUNBOOK.md` of
   the backup host/alias and SMTP provider specifics it had named
   directly, replacing them with "see private ops doc" pointers.
+
+### Accepted risk: the #245 history
+
+**Decision (2026-08-20): the pre-remediation git history of #245 stays as
+it is. No rewrite, no repo transfer, no request to GitHub Support.**
+Tracked at [#351](https://github.com/qwertytam/deltadewa/issues/351).
+
+**What was accepted.** Revisions of `config/ips.yaml` and
+`examples/ips/ips_default.yaml` predating the 2026-08-10 sanitisation
+remain readable in history, along with the vendor and ops detail scrubbed
+from `docs/RUNBOOK.md` and `ops/backup-exports.sh` in #243/#250, and the
+maintainer's personal email on commit author lines. In substance this
+exposes **this program's risk tolerance and its operating cadence** — the
+thresholds it runs to and the rhythm it runs on.
+
+**What was not exposed.** A full-history audit (2026-08-20, scoped by
+class of value across every tracked path and every revision, not by a
+file list) found **no portfolio size, no position size, no positions, no
+broker, custodian, counterparty or legal entity** anywhere in the
+history. It separately cleared the ten `.claude/agents/` files that #349
+made tracked and public. The distinction matters: a threshold reveals how
+the program thinks, and can be re-set. A position or a counterparty
+reveals who and how much, and cannot.
+
+**Why nothing needs rotating.** The same audit found no credential of any
+kind: no private keys, no AWS or GitHub tokens, no `password=<value>`.
+Every email address in tracked content is `@example.com`, every IP is
+`127.0.0.1`, `0.0.0.0` or `192.0.2.1`, every heartbeat URL is a
+placeholder. `.env` and `exports/` were never tracked. There is no secret
+in this history to invalidate, so there is no rotation step being skipped
+here.
+
+**Why GitHub Support was not asked.** Their published policy is that
+Support "won't remove non-sensitive data, and will only assist in the
+removal of sensitive data in cases where we determine that the risk can't
+be mitigated by rotating affected credentials." With no credentials
+involved, there is nothing here they would act on.
+
+**Why a rewrite was rejected — the honest version.** A force-push would
+in fact work at GitHub's edge: this repo has no fork network (0 forks, 0
+stars, 0 watchers), so the old commits would genuinely be orphaned there
+rather than surviving in a fork. What defeats it is the copies already
+off-platform. In the 14 days to 2026-08-20 the repo saw **772 clones from
+234 unique cloners against 7 page views from 3 visitors** — a ratio that
+says automated collection by parties who were not invited, not human
+readers. The caveat, stated plainly because it cuts against the
+conclusion: `actions/checkout` defaults to `depth: 1`, so an unknown and
+possibly large fraction of those clones took no history at all. What
+remains certain even after that discount is that this repository is
+cloned at scale by unknown parties, and a rewrite reaches none of those
+copies. It would buy the appearance of remediation, not remediation.
+
+**When to revisit.** This sign-off covers the class of value described
+above, and only that class. **If any value touching position size or
+counterparty is ever found in the history, this decision is void and must
+be retaken from scratch** — no sign-off can mitigate that class, because
+the harm does not depend on the value still being current. Re-run the
+full-history audit by class (not by file list) after any change to what
+the tracked configs carry; an audit scoped to named files cannot tell you
+what it missed.
 
 ## Scope and what "secure" means here
 

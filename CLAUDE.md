@@ -301,6 +301,13 @@ don't fix):
 - **consumer-tracer** — maps every consumer of a symbol, config key, or file as a
   file:line inventory with a risk note per consumer. Use before any config-key
   removal, rename, or module retirement.
+- **boot-wiring-checker** — traces a config key from its schema to the object
+  that must hold it at runtime and reports WIRED / UNWIRED / ORPHAN /
+  READ-ONLY-CONSUMER / DEFAULT-MASKED. Separate from consumer-tracer:
+  consumer-tracer maps who *reads* a symbol, this asks who *sets* it during
+  boot — #295 was a key with readers and no writer, which a consumer map alone
+  makes look healthy. Run before shipping a new config key, and whenever a
+  deployed surface is dead while its unit tests pass.
 - **clock-fixture-auditor** — inventories every wall-clock seed in `tests/` and the
   package and classifies each as DRIFT / BOUNDARY-ONLY / INSTANT / PINNED-BOMB.
   Separate from consumer-tracer: it classifies ~330 sites by date-sensitivity, not
@@ -313,6 +320,11 @@ don't fix):
   that failed or hung, and whether the cause is the code or the infrastructure.
   Use for every CI check-status read.
 
-`.claude/` is gitignored, so the agent *files* aren't versioned — **this section is
-the versioned record of the convention.** Keep it current if the agents change.
+Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
+so the agent *definition files* are tracked and public — only `agent-memory/`
+and `settings.local.json` stay gitignored, local-only state. **This section
+stays the prose record of when to reach for which agent** — that's still worth
+keeping current even though the files themselves are now versioned, because a
+directory listing doesn't tell you which agent to run for which situation.
+Keep it current if the agents change.
   
