@@ -2,12 +2,20 @@
 
 *Belongs at `docs/repricing-methodology.md`; cross-reference it from the
 handbook's [Part VI crash-convexity
-definition](https://qwertytam.github.io/deltadewa-handbook/part-6/crash-convexity/).
+definition](https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/crash-convexity/).
 The handbook lives at
 [qwertytam/deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook)
 and now carries its own worked appendix on this topic, [A4 Crash Repricing
-Methodology](https://qwertytam.github.io/deltadewa-handbook/appendices/a4-crash-repricing-methodology/);
+Methodology](https://qwertytam.github.io/deltadewa-handbook/0.1/appendices/a4-crash-repricing-methodology/);
 this file remains the normative spec the codebase implements against.*
+
+*Both handbook links above are **pinned to handbook version 0.1**, deliberately
+rather than by neglect. This file is normative, and §4's worked example is the
+regression anchor `tests/test_analysis/test_crash_repricing.py` asserts, so the
+citations have to keep pointing at the text those goldens were reconciled
+against: a definition edited afterwards would leave this spec citing something
+it does not implement. Drop the `/0.1/` segment for the current version of
+either page.*
 
 This appendix closes the ambiguity the handbook's Part VI left open: it defines
 **exactly** how the crash hedge value is repriced. It is **normative** — the

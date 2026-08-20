@@ -58,15 +58,19 @@ class ScenarioResult:
             it doesn't move ``hedge_value_*``).
         efficiency: ``hedge_gain`` per dollar of annual carry, read against
             the IPS band (handbook Part X #5/#15 — `HER Metric
-            <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#her-metric>`_
+            <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#her-metric>`_
             / `Mathematical Definition of the Ratio
-            <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_
+            <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_
             — see :mod:`deltadewa.analysis.hedge_efficiency`).
             **Scenario-local**,
             like everything else here: at the IPS default dials this is the
             handbook's figure, but the spot dial moves ``hedge_gain``, so at
             a shallower shock it is a smaller ratio about a smaller move.
             Unaffected by the quantity dial, which moves neither term.
+            Both links are pinned to handbook version 0.1, because "this is
+            the handbook's figure" is a claim about a particular definition
+            and has to keep naming the one it was checked against. Drop the
+            ``/0.1/`` segment for the current pages.
 
     """
 

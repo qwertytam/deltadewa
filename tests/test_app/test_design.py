@@ -1380,12 +1380,16 @@ class TestHedgeTriggersPanel:
 
 class TestDeltaDriftPanel:
     """`Part X #13
-    <https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/#13-delta-drift>`_
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-10/tier-4-tactical-optional-trading-metrics/#13-delta-drift>`_
     — hedge delta today vs. the handbook's own -5% shock.
 
     Sits beside the hedge triggers panel: same "does the book need
     rebalancing" question, asked by how fast the hedge itself responds
     rather than by a policy threshold.
+
+    Pinned to handbook version 0.1, because these assertions rest on the shock
+    being the handbook's own -5% rather than a value chosen here. Drop the
+    ``/0.1/`` segment for the current page.
     """
 
     @staticmethod

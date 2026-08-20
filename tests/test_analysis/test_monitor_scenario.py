@@ -216,12 +216,17 @@ class TestHedgeEfficiency:
         """#5 and #15 are one metric, not two.
 
         The handbook states the ratio in dollars (`HER Metric
-        <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#her-metric>`_)
+        <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#her-metric>`_)
         and in percentages (`Mathematical Definition of the Ratio
-        <https://qwertytam.github.io/deltadewa-handbook/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_).
+        <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/hedge-efficiency-ratio/#mathematical-definition-of-the-ratio>`_).
         Both percentages here normalize by the same protected book, so the
         normalizer cancels — this pins that identity rather than leaving it
         as a docstring claim.
+
+        Both links are pinned to handbook version 0.1: what this test asserts
+        is that the handbook's two stated forms are one number, so it has to
+        keep citing the two statements it was written against. Drop the
+        ``/0.1/`` segment for the current pages.
         """
         portfolio = _make_mixed_leg_book()
         ips = _make_ips_config()
