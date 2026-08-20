@@ -84,7 +84,14 @@ with a test — not in a page callback.
   dates and subtracting timestamps floors the result a day low. Both were #182:
   a UTC clock repriced the book a day forward at 20:00 ET, and the floored count
   crossed the expiry triggers a day early. New code that needs "today" or "days
-  to expiry" calls these, not the stdlib.
+  to expiry" calls these, not the stdlib. **This rule binds test fixtures too**
+  (#321/#343): a fixture that seeds a maturity from `datetime.now(tz=UTC)`
+  disagrees with a portfolio's `program_trading_date()`-derived valuation date
+  for up to four hours a night, which turns an exact day-count assertion into
+  an intermittent failure. Seed fixture dates through `tests/clock_helpers.py`
+  (`program_date`, `days_from_today`) instead — a wall-clock-shift test run
+  cannot catch this class, since it moves both sides together; see the note in
+  `tests/clockshift_plugin.py`.
 - `ips.yaml` is the only config the app loads. The `dashboard_config_*.yaml`
   gauge-presentation surface was retired in #279 — its policy had already
   migrated into the IPS and its last loader went with the Jupyter layer.

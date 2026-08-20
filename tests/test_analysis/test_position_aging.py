@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from deltadewa import constants as const
 from deltadewa.analysis.position_aging import (
     BUCKET_ORDER,
@@ -25,6 +27,7 @@ from deltadewa.ips_config import (
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
+from tests.clock_helpers import days_from_today, program_date
 
 
 def _make_ips_config(
@@ -65,11 +68,12 @@ def _make_position(
     strike_price: float = 90.0,
     spot_price: float = 100.0,
     option_type: OptionType = OptionType.PUT,
+    now: datetime | None = None,
 ) -> OptionPosition:
     option = OptionValuation(
         spot_price=spot_price,
         strike_price=strike_price,
-        maturity_date=datetime.now(tz=UTC) + timedelta(days=days_to_maturity),
+        maturity_date=days_from_today(days_to_maturity, now=now),
         volatility=0.2,
         risk_free_rate=0.04,
         dividend_yield=0.0,
@@ -81,13 +85,19 @@ def _make_position(
         quantity=quantity,
         exercise_style=ExerciseStyle.EUROPEAN,
         entry_spot=spot_price,
-        entry_date=datetime.now(tz=UTC) - timedelta(days=30),
+        entry_date=days_from_today(-30, now=now),
     )
 
 
-def _portfolio_with(*positions: OptionPosition) -> OptionPortfolio:
+def _portfolio_with(
+    *positions: OptionPosition,
+    now: datetime | None = None,
+) -> OptionPortfolio:
     spot = positions[0].option.spot_price if positions else 100.0
-    portfolio = OptionPortfolio(spot_price=spot)
+    portfolio = OptionPortfolio(
+        spot_price=spot,
+        valuation_date=program_date(now=now),
+    )
     portfolio.positions.extend(positions)
     return portfolio
 
@@ -394,7 +404,7 @@ class TestExpirationCalendar:
 
     def test_legs_sharing_a_maturity_collapse_to_one_entry(self) -> None:
         """Test two legs on one expiry make a single dated roll-off."""
-        maturity = datetime.now(tz=UTC) + timedelta(days=120)
+        maturity = days_from_today(120)
         first = _make_position(days_to_maturity=120, strike_price=90.0)
         second = _make_position(days_to_maturity=120, strike_price=80.0)
         first.option.maturity_date = maturity
@@ -456,3 +466,58 @@ class TestValuationDateDrivesAging:
 
         assert after.positions[0].days_to_expiry == 5
         assert after.positions[0].bucket == ExpiryBucketLabel.URGENT
+
+
+class TestFixturesAgreeWithTheProgramClock:
+    """#321/#343: a fixture's "today" must match the portfolio's.
+
+    Between 20:00 and 24:00 America/New_York, ``datetime.now(tz=UTC)`` and
+    ``program_trading_date()`` disagree on the calendar date. A fixture
+    that seeds a maturity from the former while the portfolio defaults its
+    valuation date from the latter reports a day count off by one during
+    that window -- this is what made the nightly clock-shift run red.
+
+    Pinned instants rather than a probe-level shift: the divergence is a
+    time-of-day boundary, not a day-granularity one, so a whole-day clock
+    shift moves both sides together and cannot expose it (see the note in
+    ``tests/clockshift_plugin.py``). Threading ``now`` through
+    ``_make_position``/``_portfolio_with`` reaches the real bug directly,
+    at every hour of the program day, in the ordinary gate.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "instant"),
+        [
+            ("morning ET", datetime(2026, 3, 14, 12, 0, tzinfo=UTC)),
+            (
+                "21:00 ET -- inside the window",
+                datetime(2026, 8, 21, 1, 0, tzinfo=UTC),
+            ),
+            (
+                "23:59 ET -- window edge",
+                datetime(2026, 8, 21, 3, 59, tzinfo=UTC),
+            ),
+            (
+                "00:00 ET -- just outside",
+                datetime(2026, 8, 21, 4, 0, tzinfo=UTC),
+            ),
+            ("DST fold", datetime(2026, 11, 1, 5, 30, tzinfo=UTC)),
+        ],
+    )
+    def test_runway_is_exact_at_every_hour_of_the_program_day(
+        self,
+        label: str,
+        instant: datetime,
+    ) -> None:
+        """Test days_to_expiry and bucket hold no matter when "now" falls."""
+        del label  # pytest id only
+        aging = evaluate_position_aging(
+            _portfolio_with(
+                _make_position(days_to_maturity=3, now=instant),
+                now=instant,
+            ),
+            _make_ips_config(),
+        )
+
+        assert aging.positions[0].days_to_expiry == 3
+        assert aging.positions[0].bucket == ExpiryBucketLabel.URGENT

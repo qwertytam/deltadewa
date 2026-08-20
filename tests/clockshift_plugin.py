@@ -36,6 +36,19 @@ regression tests in ``tests/test_batch_pricer.py``'s
 The default shift is 0, deliberately: a bare ``-p`` load is the control run,
 and the plugin and the canary read the same environment variable with the same
 default, so they can never disagree about how far the clock moved.
+
+A second gap, same shape (#321, #343). This probe shifts by whole days, so it
+moves a UTC instant and the program trading date together and cannot expose a
+sub-day disagreement between them. ``deltadewa.clock.program_trading_date``
+resolves "today" at midnight in the program timezone (America/New_York by
+default), so between 20:00 and 24:00 ET it and a raw ``datetime.now(tz=UTC)``
+land on different calendar dates -- a divergence that exists only at specific
+real-time hours and reappears identically at every shift this plugin applies.
+A green matrix says nothing about that window. See
+``tests/clock_helpers.py`` and
+``TestFixturesAgreeWithTheProgramClock`` in
+``tests/test_analysis/test_position_aging.py``, which pin instants inside and
+outside the window directly rather than relying on this probe to reach it.
 """
 
 from __future__ import annotations
