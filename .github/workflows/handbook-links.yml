@@ -34,11 +34,19 @@ jobs:
           # Collect every handbook URL in the tree. The character class stops
           # at the closing paren of a Markdown link and at trailing prose
           # punctuation, then a second pass trims anything left over.
+          #
+          # -I is load-bearing. Without it grep writes "Binary file ./x.pyc
+          # matches" to *stdout*, and that line is collected as though it were
+          # a URL — every one then fails as unreachable. A bare checkout has no
+          # .pyc files, so this passes today; adding a Python setup step or a
+          # cache restore ahead of it would turn the job red for a reason that
+          # has nothing to do with a broken link.
           mapfile -t urls < <(
-            grep -rhoE 'https://qwertytam\.github\.io/deltadewa-handbook[^][:space:]")'"'"'<>]*' . \
+            grep -rhoIE 'https://qwertytam\.github\.io/deltadewa-handbook[^][:space:]")'"'"'<>]*' . \
               --exclude-dir=.git \
               --exclude-dir=.venv \
               --exclude-dir=node_modules \
+              --exclude-dir=__pycache__ \
               | sed -E 's/[.,;:]+$//' \
               | sort -u
           )

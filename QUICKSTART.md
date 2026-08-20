@@ -249,7 +249,7 @@ print(f"Annual time decay: ${annual_theta:.2f}")
 - See `README.md` for detailed documentation
 - Run `poetry run python -m deltadewa.app` and open `/monitor` or `/design`
   for interactive analysis
-- The handbook itself lives at
-  [qwertytam/deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook)
-  (`HANDBOOK.md`); see `docs/part-x-coverage.md` for the handbook-item →
-  surface map
+- The handbook itself is published at
+  <https://qwertytam.github.io/deltadewa-handbook/>, source in
+  [qwertytam/deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook);
+  see `docs/part-x-coverage.md` for the handbook-item → surface map
