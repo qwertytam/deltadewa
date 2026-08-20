@@ -7,6 +7,7 @@ import pytest
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
+from tests.clock_helpers import days_from_today
 
 
 class TestMaturityMixin:
@@ -87,10 +88,13 @@ class TestMaturityMixin:
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
 
-        # Add a position
+        # Add a position, pinned to the portfolio's own valuation date
+        # rather than a raw UTC now() -- otherwise the two disagree for up
+        # to four hours a day and the assertion below can only be a
+        # tolerance band (#321, #343).
         portfolio.add_position(
             strike_price=105.0,
-            maturity_date=datetime.now(tz=UTC) + timedelta(days=15),
+            maturity_date=days_from_today(15, now=portfolio.valuation_date),
             quantity=1,
             option_type=OptionType.CALL,
         )
@@ -106,8 +110,7 @@ class TestMaturityMixin:
         assert "maturity_bucket" in df_with_buckets.columns
 
         # Check values make sense
-        assert df_with_buckets["days_to_expiry"].iloc[0] >= 14
-        assert df_with_buckets["days_to_expiry"].iloc[0] <= 16
+        assert df_with_buckets["days_to_expiry"].iloc[0] == 15
         assert (
             df_with_buckets["maturity_bucket"].iloc[0] == "8-30 days (Monthly)"
         )
