@@ -285,6 +285,10 @@ don't fix):
   "orient" step so file contents don't fill the main context.
 - **gate-runner** — the code gate: ruff, format, mypy, pytest, pylint. Use after an
   implementation step.
+- **clockshift-runner** — runs the clock-shift determinism probe (the day-shift
+  matrix plus the canary) and reports whether the run covered the ET-evening
+  boundary window. Separate from gate-runner: the matrix is deliberately out of
+  the commit gate (see the Makefile note) and runs the whole suite once per shift.
 - **dash-smoke-runner** — the app/integration gate: brings the Dash app up headless
   and runs the app-level smoke / Playwright suite. Use after a UI step. Distinct from
   gate-runner — a green code gate does not imply the live app renders.
@@ -294,6 +298,20 @@ don't fix):
 - **secret-scanner** — scans the working tree for operational values that must not
   land in this public repo (see SECURITY.md's standing rule). Run before any commit
   that touches config, ops scripts, or RUNBOOK/docs.
+- **consumer-tracer** — maps every consumer of a symbol, config key, or file as a
+  file:line inventory with a risk note per consumer. Use before any config-key
+  removal, rename, or module retirement.
+- **clock-fixture-auditor** — inventories every wall-clock seed in `tests/` and the
+  package and classifies each as DRIFT / BOUNDARY-ONLY / INSTANT / PINNED-BOMB.
+  Separate from consumer-tracer: it classifies ~330 sites by date-sensitivity, not
+  by the removability of one symbol. Use before #321/#343-class fixture work.
+- **policy-leak-checker** — after a panel or analysis change, confirms no threshold
+  or decision boundary is hardcoded in view/analysis code instead of read from the
+  IPS. Reports the literal and the IPS key that should own it.
+- **ci-run-inspector** — reads what a GitHub Actions run actually did without
+  pulling its log into the main thread: per-step outcome and duration, the step
+  that failed or hung, and whether the cause is the code or the infrastructure.
+  Use for every CI check-status read.
 
 `.claude/` is gitignored, so the agent *files* aren't versioned — **this section is
 the versioned record of the convention.** Keep it current if the agents change.
