@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from dash import Input, Output, Patch, dcc, html
 from dash.development.base_component import Component
 
+from deltadewa import __version__
 from deltadewa.analysis.crash_repricing import hedge_value
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.monetization import build_monetization_plan
@@ -549,6 +550,15 @@ def render(app: ProgramDashApp) -> html.Div:
                 _cost_panel(result, ips_config),
                 id="cost-panel",
                 className="cost-panel",
+            ),
+            html.Div(
+                [
+                    html.P(
+                        f"Running v{__version__}",
+                        className="plain-language",
+                    ),
+                ],
+                className="plain-language",
             ),
             _headline_sentence(result),
         ],

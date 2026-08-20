@@ -44,6 +44,7 @@ import numpy as np
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 from dash.development.base_component import Component
 
+from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.decision_matrix import (
@@ -317,8 +318,10 @@ def _net_delta_readout(portfolio: OptionPortfolio) -> Component:
     net_delta = stats.get("net_delta")
     if net_delta is None:
         return html.P(
-            "Net delta is unavailable — the book's Greeks could not be "
-            "computed.",
+            (
+                "Net delta is unavailable — "
+                "the book's Greeks could not be computed."
+            ),
             className="plain-language",
         )
     return html.P(
@@ -1739,8 +1742,8 @@ def _convexity_cliff_panel_view(days: int, conv: IpsConvexity) -> Component:
         return html.Div(
             [
                 html.P(
-                    lead + "the nearest long put in the book is already "
-                    "inside it.",
+                    lead
+                    + "the nearest long put in the book is already inside it.",
                     className="plain-language",
                 ),
                 html.P(
@@ -2873,8 +2876,10 @@ def render(app: ProgramDashApp) -> html.Div:
                             html.Div(
                                 [
                                     html.Label(
-                                        "Horizon (days, blank = nearest "
-                                        "maturity)",
+                                        (
+                                            "Horizon (days, "
+                                            "blank = nearest maturity)"
+                                        ),
                                     ),
                                     dcc.Input(
                                         id="explore-mc-horizon-days",
@@ -2887,8 +2892,10 @@ def render(app: ProgramDashApp) -> html.Div:
                             html.Div(
                                 [
                                     html.Label(
-                                        "Expected return (%, blank = "
-                                        "risk-neutral)",
+                                        (
+                                            "Expected return (%, "
+                                            "blank = risk-neutral)"
+                                        ),
                                     ),
                                     dcc.Input(
                                         id="explore-mc-expected-return",
@@ -2944,6 +2951,15 @@ def render(app: ProgramDashApp) -> html.Div:
                     ),
                 ],
                 className="panel",
+            ),
+            html.Div(
+                [
+                    html.P(
+                        f"Running v{__version__}",
+                        className="plain-language",
+                    ),
+                ],
+                className="plain-language",
             ),
         ],
         className="zone-exploration",
