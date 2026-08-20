@@ -22,6 +22,7 @@ jobs:
   check:
     name: Check handbook links
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
