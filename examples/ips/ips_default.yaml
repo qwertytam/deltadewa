@@ -36,7 +36,7 @@ pricing:
 
 budget:
   # "Handbook" in the comments below is
-  # https://github.com/qwertytam/deltadewa-handbook (HANDBOOK.md).
+  # https://qwertytam.github.io/deltadewa-handbook/
   # Premium budget, % of portfolio / yr. Handbook family-office benchmark is
   # 0.5-1.5%, with 1% "a practical ceiling". EXAMPLE VALUE sits at that
   # ceiling as a reasonable starting point — raise or lower deliberately in

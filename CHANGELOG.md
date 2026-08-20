@@ -41,10 +41,15 @@ history for that record instead.
   Two findings are recorded rather than acted on: `triggers.rally_rebalance_pct`
   is validated and documented but read by nothing (the handbook's ["Rule 2 —
   Market Rally Rebalance
-  Trigger"](https://github.com/qwertytam/deltadewa-handbook/blob/main/HANDBOOK.md#rule-2--market-rally-rebalance-trigger)
+  Trigger"](https://qwertytam.github.io/deltadewa-handbook/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger)
   was never built), and the matplotlib half
   of `deltadewa/visualization/` is a second orphan set of the same shape.
   See `docs/part-x-coverage.md`.
+
+  *[Link repointed 2026-08-19: this entry originally cited an anchor inside the
+  handbook's `HANDBOOK.md`, which became a stub when the handbook was extracted
+  to its own repo (#246). It now points at the same section on the published
+  site. The finding recorded above is unchanged.]*
 
 ## [0.7.0] - 2026-08-11
 
