@@ -98,7 +98,7 @@ from deltadewa.visualization.stress_charts_plotly import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from deltadewa.analysis.cache import ScenarioGridCache
     from deltadewa.analysis.decision_matrix import (
@@ -334,15 +334,21 @@ def _net_delta_readout(portfolio: OptionPortfolio) -> Component:
 
 def _render_position_table_logic(
     *,
-    portfolio: OptionPortfolio,
+    positions: Sequence[OptionPosition],
 ) -> Component:
     """Build the position table wholesale from the live portfolio.
 
     Always a full rebuild, never a ``Patch()`` — removing a position
     shifts every later index, so every remove button's id must be
     recomputed from the current list, not patched in place.
+
+    Takes the positions rather than the portfolio so callers can hand it
+    ``ProgramState.positions_snapshot()``: this is the one place page code
+    iterates the live list, and iterating it directly races a concurrent
+    mutator into ``RuntimeError: list changed size during iteration``
+    (#299).
     """
-    if not portfolio.positions:
+    if not positions:
         return html.P("No positions in the book yet.")
 
     header = html.Tr(
@@ -358,7 +364,7 @@ def _render_position_table_logic(
     )
     rows = [
         _position_row(index, position)
-        for index, position in enumerate(portfolio.positions)
+        for index, position in enumerate(positions)
     ]
     return html.Table(
         [html.Thead(header), html.Tbody(rows)],
@@ -2331,7 +2337,9 @@ def render(app: ProgramDashApp) -> html.Div:
             html.Div(id="mutation-status"),
             html.H3("Positions"),
             html.Div(
-                _render_position_table_logic(portfolio=portfolio),
+                _render_position_table_logic(
+                    positions=app.program_state.positions_snapshot(),
+                ),
                 id="position-table",
             ),
             html.H3("Import / export"),
@@ -3129,7 +3137,7 @@ def register_callbacks(app: ProgramDashApp) -> None:
     )
     def _render_position_table(_version: int) -> Component:
         return _render_position_table_logic(
-            portfolio=app.program_state.portfolio,
+            positions=app.program_state.positions_snapshot(),
         )
 
     @app.callback(

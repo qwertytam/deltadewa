@@ -21,11 +21,42 @@ unguarded mutation, so a caller cannot reach a destructive
 ``ProgramState.portfolio`` returns the live, shared object — read it fresh
 each time rather than caching a reference, since ``import_portfolio``
 replaces the instance wholesale.
+
+Concurrency (#299)
+------------------
+The server runs one worker with four threads (``Dockerfile``'s ``CMD``:
+``--workers 1 --worker-class gthread --threads 4``) — deliberately, so that
+this stays one shared in-memory instance rather than forking into several
+independently-drifting books. Four request threads therefore share it.
+
+One ``threading.RLock`` guards every mutator, both saves, and the
+``import_portfolio`` portfolio replacement. It is an ``RLock`` because the
+call graph nests: ``import_portfolio`` → ``_mutate_and_save`` →
+``save_if_dirty``; a plain ``Lock`` deadlocks on the first mutation.
+
+What the lock is *for* is easy to mistake.
+``PortfolioSerializer.export_to_json`` already writes tmp-then-rename, so the
+state file is never torn and never half-read. The unprotected failure was a
+**lost update**: building the export data prices every position (slow), so a
+thread could snapshot the book, have a second thread mutate *and* fully save
+underneath it, then land its own older snapshot on top — reverting the second
+change and clearing ``dirty``, so nothing would ever re-save it. Both writes
+were individually atomic; what was missing is that snapshot-then-write is one
+unit and the write order must be total. Holding the lock across both provides
+that.
+
+**Readers do not take the lock**, and that is what keeps a coarse lock from
+becoming a latency bug: a page render prices the whole book, so a locked
+reader would put mutators behind renders and renders behind saves. See
+:attr:`ProgramState.portfolio` for the accepted-stale contract that buys, and
+:meth:`ProgramState.positions_snapshot` for the one case that needs a
+consistent view.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -82,6 +113,10 @@ class ProgramState:
         self._default_exercise_style = default_exercise_style
         self._changelog = PortfolioLogger(name="program_state.changelog")
         self._dirty = False
+        # RLock, not Lock: the mutators nest into _mutate_and_save() ->
+        # save_if_dirty(), and import_portfolio() nests into both, so a
+        # non-reentrant lock would deadlock on the first mutation (#299).
+        self._lock = threading.RLock()
 
     @classmethod
     def load(
@@ -106,6 +141,10 @@ class ProgramState:
                 succeeds — this never raises for that reason.
             default_exercise_style: Exercise style applied to positions in
                 the loaded file that have no explicit ``exercise_style``.
+                When ``None`` (the default) and an IPS loaded, this is
+                taken from ``ips_config.pricing.exercise_style`` (#295) —
+                pass an explicit value only to override the program's own
+                policy.
 
         Returns:
             A ready-to-use ``ProgramState``.
@@ -126,6 +165,18 @@ class ProgramState:
                 exc,
             )
             ips_config = None
+
+        # #295: an explicit caller override always wins; otherwise the
+        # program's own policy sets the style positions get when they don't
+        # carry one of their own. Before this, every real boot path (wsgi.py,
+        # weekly_report.py, import_portfolio.py's initial ProgramState.load()
+        # call) left this None regardless of what pricing.exercise_style
+        # said, because ips_config was loaded here and then never consulted
+        # for it — only unit tests that constructed the portfolio directly
+        # (or passed default_exercise_style= explicitly) exercised the wired
+        # case, so the gap shipped with a green suite.
+        if default_exercise_style is None and ips_config is not None:
+            default_exercise_style = ips_config.pricing.exercise_style
 
         as_of = program_trading_date(
             ips_config.program.timezone if ips_config is not None else None,
@@ -162,8 +213,46 @@ class ProgramState:
 
     @property
     def portfolio(self) -> OptionPortfolio:
-        """The live, shared portfolio."""
+        """The live, shared portfolio. **Deliberately unlocked** (#299).
+
+        Reading the attribute is a single load, so this never hands back a
+        torn *reference* — even mid-``import_portfolio``, a caller gets
+        either the old book or the new one. What it does not promise is
+        that the object's *interior* holds still: a mutator on another
+        thread can add, remove or edit a position while the caller is
+        reading this one.
+
+        That is the accepted trade, not an oversight. Taking the lock here
+        would be the real regression — a page render prices the whole book
+        while holding the portfolio, so a locked reader would queue
+        mutators behind renders and renders behind saves. Renders tolerate
+        a slightly stale book; they do not tolerate blocking.
+
+        Use :meth:`positions_snapshot` where iteration must not tear.
+        """
         return self._portfolio
+
+    def positions_snapshot(self) -> tuple[OptionPosition, ...]:
+        """Return a point-in-time copy of the positions, safe to iterate.
+
+        Take this instead of iterating ``portfolio.positions`` directly
+        when another thread could be mutating the book: a plain iteration
+        races ``add_position``/``remove_position`` and raises
+        ``RuntimeError: list changed size during iteration`` (#299).
+        Copying the list under the lock is microseconds — unlike a save,
+        it prices nothing.
+
+        Note the limit: this gives a consistent *list*, not a consistent
+        *book*. The ``OptionPosition`` objects are the live, shared ones, so
+        ``update_position`` can still change one while the caller reads it.
+        Closing that would need copy-on-write inside ``OptionPortfolio``.
+
+        Returns:
+            The positions held at the moment of the call.
+
+        """
+        with self._lock:
+            return tuple(self._portfolio.positions)
 
     @property
     def ips_config(self) -> IpsConfig | None:
@@ -177,6 +266,13 @@ class ProgramState:
         Normally ``False`` immediately after any mutation, since every
         mutator autosaves itself. Becomes ``True`` only when an autosave
         attempt itself fails.
+
+        Program-wide, not per-caller: one shared book means one flag. Under
+        concurrency that has a visible consequence — a failed save on one
+        thread leaves this ``True``, which makes another thread's
+        ``import_portfolio`` refuse until it passes ``confirm=True``. The
+        refusal is correct (there really are unsaved changes) even though
+        the second operator did not cause them.
         """
         return self._dirty
 
@@ -188,19 +284,26 @@ class ProgramState:
     def save_if_dirty(self) -> bool:
         """Atomically persist to ``exports/program_state.json`` if dirty.
 
+        Holds the state lock across the whole check-build-write-clear
+        sequence, not just the flag (#299). The write itself was already
+        atomic; what needed protecting is that a slow snapshot could
+        otherwise land on top of a newer one and clear ``dirty`` with the
+        newer change missing.
+
         Returns:
             Whether a write happened.
 
         """
-        if not self._dirty:
-            return False
-        self._serializer.export_to_json(
-            self._portfolio,
-            self._changelog,
-            filename=STATE_FILENAME,
-        )
-        self._dirty = False
-        return True
+        with self._lock:
+            if not self._dirty:
+                return False
+            self._serializer.export_to_json(
+                self._portfolio,
+                self._changelog,
+                filename=STATE_FILENAME,
+            )
+            self._dirty = False
+            return True
 
     def export_snapshot(self, filename: str) -> Path:
         """Write a point-in-time copy of the live portfolio to *filename*.
@@ -211,6 +314,12 @@ class ProgramState:
         changelog rather than a second ``PortfolioSerializer`` pointed at
         the same directory, so it stays inside the guarded session layer.
 
+        Takes the same lock as the mutators (#299) — an operator must never
+        download a book that never existed — but still never touches
+        ``dirty``, since this is a copy, not a change to the live book. The
+        cost is that an export blocks a concurrent edit for its duration;
+        that is the point of a point-in-time snapshot, not a side effect.
+
         Args:
             filename: Name of the file to write under this state's
                 export directory. Should not be ``STATE_FILENAME`` — a
@@ -220,15 +329,17 @@ class ProgramState:
             Path to the written file.
 
         """
-        return self._serializer.export_to_json(
-            self._portfolio,
-            self._changelog,
-            filename=filename,
-        )
+        with self._lock:
+            return self._serializer.export_to_json(
+                self._portfolio,
+                self._changelog,
+                filename=filename,
+            )
 
     def _mutate_and_save(self) -> None:
-        self._dirty = True
-        self.save_if_dirty()
+        with self._lock:
+            self._dirty = True
+            self.save_if_dirty()
 
     def add_position(  # pylint: disable=too-many-arguments
         self,
@@ -244,20 +355,21 @@ class ProgramState:
         entry_premium: float | None = None,
     ) -> OptionPosition:
         """Add a position. See ``OptionPortfolio.add_position``."""
-        position = self._portfolio.add_position(
-            strike_price=strike_price,
-            maturity_date=maturity_date,
-            quantity=quantity,
-            option_type=option_type,
-            contract_size=contract_size,
-            volatility=volatility,
-            exercise_style=exercise_style,
-            entry_spot=entry_spot,
-            entry_date=entry_date,
-            entry_premium=entry_premium,
-        )
-        self._mutate_and_save()
-        return position
+        with self._lock:
+            position = self._portfolio.add_position(
+                strike_price=strike_price,
+                maturity_date=maturity_date,
+                quantity=quantity,
+                option_type=option_type,
+                contract_size=contract_size,
+                volatility=volatility,
+                exercise_style=exercise_style,
+                entry_spot=entry_spot,
+                entry_date=entry_date,
+                entry_premium=entry_premium,
+            )
+            self._mutate_and_save()
+            return position
 
     def update_position(  # pylint: disable=too-many-arguments
         self,
@@ -273,31 +385,40 @@ class ProgramState:
         """Update a position by index.
 
         See ``OptionPortfolio.update_position``.
+
+        The lock makes this operation atomic, but note what it cannot fix:
+        *index* was chosen in the browser before the request, so a
+        concurrent ``remove_position`` that shifts the list still leaves
+        this editing a different leg than the operator picked. That needs
+        stable position IDs, not a lock.
         """
-        self._portfolio.update_position(
-            index,
-            quantity=quantity,
-            strike=strike,
-            expiry=expiry,
-            option_type=option_type,
-            contract_size=contract_size,
-            volatility=volatility,
-            exercise_style=exercise_style,
-        )
-        self._mutate_and_save()
+        with self._lock:
+            self._portfolio.update_position(
+                index,
+                quantity=quantity,
+                strike=strike,
+                expiry=expiry,
+                option_type=option_type,
+                contract_size=contract_size,
+                volatility=volatility,
+                exercise_style=exercise_style,
+            )
+            self._mutate_and_save()
 
     def set_volatility(self, volatility: float) -> None:
         """Set portfolio volatility. See ``OptionPortfolio.set_volatility``."""
-        self._portfolio.set_volatility(volatility)
-        self._mutate_and_save()
+        with self._lock:
+            self._portfolio.set_volatility(volatility)
+            self._mutate_and_save()
 
     def set_underlying_quantity(self, underlying_quantity: float) -> None:
         """Set underlying quantity.
 
         See ``OptionPortfolio.set_underlying_quantity``.
         """
-        self._portfolio.set_underlying_quantity(underlying_quantity)
-        self._mutate_and_save()
+        with self._lock:
+            self._portfolio.set_underlying_quantity(underlying_quantity)
+            self._mutate_and_save()
 
     def update_market_conditions(  # pylint: disable=too-many-arguments
         self,
@@ -312,15 +433,16 @@ class ProgramState:
 
         See ``OptionPortfolio.update_market_conditions``.
         """
-        self._portfolio.update_market_conditions(
-            spot_price=spot_price,
-            volatility=volatility,
-            risk_free_rate=risk_free_rate,
-            dividend_yield=dividend_yield,
-            valuation_date=valuation_date,
-            override_custom_volatility=override_custom_volatility,
-        )
-        self._mutate_and_save()
+        with self._lock:
+            self._portfolio.update_market_conditions(
+                spot_price=spot_price,
+                volatility=volatility,
+                risk_free_rate=risk_free_rate,
+                dividend_yield=dividend_yield,
+                valuation_date=valuation_date,
+                override_custom_volatility=override_custom_volatility,
+            )
+            self._mutate_and_save()
 
     def remove_position(self, index: int, *, confirm: bool = False) -> None:
         """Remove a position by index. Destructive — requires confirm=True."""
@@ -328,8 +450,9 @@ class ProgramState:
             raise ConfirmationRequiredError(
                 "remove_position is destructive; pass confirm=True",
             )
-        self._portfolio.remove_position(index)
-        self._mutate_and_save()
+        with self._lock:
+            self._portfolio.remove_position(index)
+            self._mutate_and_save()
 
     def clear_positions(self, *, confirm: bool = False) -> None:
         """Remove every position. Destructive — requires confirm=True."""
@@ -337,8 +460,9 @@ class ProgramState:
             raise ConfirmationRequiredError(
                 "clear_positions is destructive; pass confirm=True",
             )
-        self._portfolio.clear_positions()
-        self._mutate_and_save()
+        with self._lock:
+            self._portfolio.clear_positions()
+            self._mutate_and_save()
 
     def import_portfolio(
         self,
@@ -353,6 +477,14 @@ class ProgramState:
         import would otherwise silently discard whatever hasn't been
         autosaved yet.
 
+        The lock is held across the whole method, the parse of *filepath*
+        included (#299). That is deliberate rather than merely simple: the
+        ``dirty`` check and the portfolio replacement have to be one atomic
+        unit or another thread can dirty the book in the gap, and an import
+        in flight *should* block concurrent edits — those edits are about to
+        be discarded anyway. The cost is that a large or slow source file
+        blocks mutators for the duration of the read.
+
         Args:
             filepath: Path to a JSON or YAML portfolio export.
             default_exercise_style: Exercise style applied to positions with
@@ -364,18 +496,19 @@ class ProgramState:
             ConfirmationRequiredError: If ``dirty`` and not ``confirm``.
 
         """
-        if self._dirty and not confirm:
-            raise ConfirmationRequiredError(
-                "unsaved changes would be discarded; pass confirm=True",
+        with self._lock:
+            if self._dirty and not confirm:
+                raise ConfirmationRequiredError(
+                    "unsaved changes would be discarded; pass confirm=True",
+                )
+            style = (
+                default_exercise_style
+                if default_exercise_style is not None
+                else self._default_exercise_style
             )
-        style = (
-            default_exercise_style
-            if default_exercise_style is not None
-            else self._default_exercise_style
-        )
-        result = self._serializer.import_portfolio(
-            filepath,
-            default_exercise_style=style,
-        )
-        self._portfolio = result["portfolio"]
-        self._mutate_and_save()
+            result = self._serializer.import_portfolio(
+                filepath,
+                default_exercise_style=style,
+            )
+            self._portfolio = result["portfolio"]
+            self._mutate_and_save()
