@@ -97,16 +97,14 @@ def _series(
     makes (``vix``, ``vix_term_structure``, ``skew_index``,
     ``skew_percentile``) plus ``vix_history`` (``analysis.health``).
 
-    ``spot`` is the exception: **it is fetched here and currently read by
-    nothing.** Its consumer used to be ``dashboard.session``, which #279
-    deleted with the rest of the Jupyter layer, and the app has warmed a
-    cache nobody reads ever since. It is retained deliberately rather than
-    dropped — #336 wires the cached spot into ``/monitor`` as a labelled
-    cross-check against the book's hand-entered ``portfolio.spot_price``,
-    which today can go arbitrarily stale with nothing on the page saying
-    so. Retiring the fetch would only mean re-adding this line then, for
-    the sake of one CSV request a night. See ``docs/market-data.md`` for
-    the full reading-by-reading map, and #322 for the decision.
+    ``spot`` was the exception until #336: fetched here since before #279,
+    but read by nothing once #279 deleted its old consumer,
+    ``dashboard.session``, with the rest of the Jupyter layer. #322 decided
+    to wire it rather than retire the fetch; #336 did so —
+    ``analysis.spot_reading.observe_spot`` reads this cache key and
+    ``/monitor`` renders it as a labelled cross-check beside the book's
+    hand-entered ``portfolio.spot_price``. See ``docs/market-data.md`` for
+    the full reading-by-reading map.
 
     One pair listed separately here shares a single disk-cache key —
     ``vix``/``vix_history`` both write ``"vix_fred"`` (see

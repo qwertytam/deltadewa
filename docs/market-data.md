@@ -28,7 +28,7 @@ to absorb. See RUNBOOK §9 for the crontab line and §11 to run it by hand.
 | VIX term structure | `get_vix_term_structure` | CBOE (5 legs) | `spot_VIX9D`, `spot_VIX`, `spot_VIX3M`, `spot_VIX6M`, `spot_VIX1Y` | `assess_market_environment` |
 | SKEW index | `get_skew_index` | CBOE | `spot_SKEW` | `assess_market_environment` |
 | SKEW percentile | `get_skew_percentile` | CBOE | `skew_percentile_history` | `assess_market_environment` |
-| **Spot (SPX)** | `get_spot` | CBOE | `spot_SPX` | **nothing yet — see #336** |
+| **Spot (SPX)** | `get_spot` | CBOE | `spot_SPX` | `analysis.spot_reading.observe_spot`, `/monitor` (#336) |
 
 Notes on the table:
 
@@ -38,10 +38,15 @@ Notes on the table:
   FRED (`vix_fred`); the term structure's front leg is CBOE
   (`spot_VIX`). They are the same index and will normally agree, but
   they are separately cached and can disagree on a partial-refresh day.
-- **Spot is fetched and read by nothing.** Its consumer was
-  `dashboard.session`, deleted in #279 with the Jupyter layer. It is kept
-  rather than retired: #336 wires it into `/monitor` as a labelled
-  cross-check. #322 records that decision.
+- **Spot is read by `/monitor`, as a cross-check, not a pricing input.**
+  Its original consumer, `dashboard.session`, was deleted in #279 with the
+  Jupyter layer, leaving the fetch orphaned. #322 decided to wire it
+  rather than retire it, on the grounds of what `/monitor` is for; #336
+  built the wiring — `analysis.spot_reading.observe_spot` reads this cache
+  key and `/monitor` renders it beside the book's hand-entered spot,
+  labelled with its quality (CACHED/STALE/UNAVAILABLE) and age. It still
+  never feeds a calculation: every number on the page is computed from the
+  book spot, never the observed one.
 - Each series is fetched independently — one failure never aborts the run,
   and a failed series' previous cache entry is left untouched, because
   the disk cache only writes on success.
@@ -49,21 +54,28 @@ Notes on the table:
 ## Hand-entered inputs, which never refresh
 
 These come from the loaded portfolio (or `/design`'s position editor) and
-have **no market feed behind them at all**. Nothing in the app updates
-them, and nothing on either page flags them as old.
+have **no market feed behind them at all** — nothing in the app updates
+them. Three of the four are also unflagged: nothing on either page notes
+their age.
 
 | Input | Where it is set | Refresh path |
 | --- | --- | --- |
-| Per-leg implied volatility | Position record | None — hand-entered |
-| Risk-free rate | `market_parameters` on the book | None — hand-entered |
-| Dividend yield | `market_parameters` on the book | None — hand-entered |
-| **Spot price** | `market_parameters` on the book | **None today** — changes only on portfolio import; #336 |
+| Per-leg implied volatility | Position record | None — hand-entered, unflagged |
+| Risk-free rate | `market_parameters` on the book | None — hand-entered, unflagged |
+| Dividend yield | `market_parameters` on the book | None — hand-entered, unflagged |
+| **Spot price** | `market_parameters` on the book | None — changes only on portfolio import, but see below |
 
 Spot is the one that matters most, because it is the reference point
 almost every other number is measured against — crash convexity, roll
 OTM%, every drift trigger, hedge value, the monetization gain. A stale
-spot biases all of them in the same direction, and `/monitor`'s headline
-currently calls it *"Today's spot"* regardless of its age. That is #336.
+spot biases all of them in the same direction. It is still never
+refreshed itself, but as of #336 it is no longer unflagged: `/monitor`
+shows it beside the independently observed market spot (see the
+"Observed readings" table above), so a divergence past
+`market_environment.spot_divergence_warn_pct` in `ips.yaml` is visible
+rather than silent. The other three hand-entered inputs have no such
+cross-check — nothing observes per-leg IV, the risk-free rate, or the
+dividend yield, so those three stay unflagged.
 
 ## How freshness is graded
 

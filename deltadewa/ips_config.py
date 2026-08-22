@@ -150,6 +150,11 @@ _DEFAULT_VIX_LOW: Final[float] = 15.0
 # error, so it fails as silent permanent-STALE rather than a config error.
 DEFAULT_DATA_TTL_MINUTES: Final[float] = 15.0
 
+# How far the observed market spot may diverge from the book's hand-entered
+# spot before /monitor's cross-check (analysis.spot_reading, #336) flags it.
+# A display threshold, not a pricing one — nothing here feeds a calculation.
+DEFAULT_SPOT_DIVERGENCE_WARN_PCT: Final[float] = 2.0
+
 try:
     import yaml
 
@@ -205,6 +210,11 @@ class IpsMarketEnvironment:
         ``vix_very_high``/``vix_caution``/``vix_low`` are VIX levels (vol
         points, e.g. ``40.0``), the entry-timing tree's three stops (M2.8) —
         see :func:`~deltadewa.analysis.decision_matrix.entry_timing_tree`.
+        ``spot_divergence_warn_pct`` is a percent (e.g. ``2.0`` for 2%): how
+        far the observed market spot may diverge from the book's
+        hand-entered spot before ``/monitor``'s cross-check flags it — see
+        :func:`~deltadewa.analysis.spot_reading.observe_spot` (#336). Display
+        policy only; the observed reading never feeds a calculation.
     """
 
     vol_regime_low: float = DEFAULT_VOL_REGIME_LOW
@@ -216,6 +226,7 @@ class IpsMarketEnvironment:
     vix_very_high: float = _DEFAULT_VIX_VERY_HIGH
     vix_caution: float = _DEFAULT_VIX_CAUTION
     vix_low: float = _DEFAULT_VIX_LOW
+    spot_divergence_warn_pct: float = DEFAULT_SPOT_DIVERGENCE_WARN_PCT
 
 
 @dataclass(frozen=True)
@@ -737,6 +748,10 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
     vix_very_high = section.get("vix_very_high", _DEFAULT_VIX_VERY_HIGH)
     vix_caution = section.get("vix_caution", _DEFAULT_VIX_CAUTION)
     vix_low = section.get("vix_low", _DEFAULT_VIX_LOW)
+    spot_divergence_warn_pct = section.get(
+        "spot_divergence_warn_pct",
+        DEFAULT_SPOT_DIVERGENCE_WARN_PCT,
+    )
 
     if vol_low >= vol_high:
         raise IpsConfigError(
@@ -764,6 +779,10 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
             "vix_caution < vix_very_high, got "
             f"{vix_low}, {vix_caution}, {vix_very_high}",
         )
+    _require_non_negative(
+        spot_divergence_warn_pct,
+        "market_environment.spot_divergence_warn_pct",
+    )
 
     return IpsMarketEnvironment(
         vol_regime_low=vol_low,
@@ -775,6 +794,7 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         vix_very_high=vix_very_high,
         vix_caution=vix_caution,
         vix_low=vix_low,
+        spot_divergence_warn_pct=spot_divergence_warn_pct,
     )
 
 

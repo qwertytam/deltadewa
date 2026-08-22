@@ -38,6 +38,7 @@ from deltadewa.clock import days_between
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
 from deltadewa.state import ProgramState
+from tests.clock_helpers import days_from_today
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -92,6 +93,45 @@ def _find_component(node: object, component_id: str) -> Component | None:
             if found is not None:
                 return found
     return None
+
+
+def _app_with_spot(
+    tmp_path: Path,
+    *,
+    book_spot: float,
+    market_spot: float | None,
+) -> ProgramDashApp:
+    """Build a minimal /monitor app with a real IPS and a chosen spot pair.
+
+    *market_spot* of ``None`` builds a ``StaticProvider`` carrying no SPX
+    entry at all, so ``observe_spot`` degrades to ``UNAVAILABLE`` — the
+    same shape a missing cache key produces in the deployed app (#293).
+    """
+    state = ProgramState.load(
+        tmp_path,
+        ips_path=_EXAMPLE_IPS_YAML,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    # An empty book defaults to symbol="UNKNOWN" (OptionPortfolio's own
+    # default) — a real deployment's imported portfolio YAML sets its own
+    # symbol (e.g. examples/portfolios/spx_protective_put.yaml), which is
+    # what observe_spot's cache-key lookup keys off. Set it explicitly so
+    # market_spot below is actually reachable.
+    state.portfolio.symbol = "SPX"
+    state.portfolio.spot_price = book_spot
+    state.add_position(
+        strike_price=book_spot * 0.9,
+        maturity_date=days_from_today(180),
+        quantity=10,
+        option_type=OptionType.PUT,
+    )
+    spot_prices = {} if market_spot is None else {"SPX": market_spot}
+    market_data = StaticProvider(spot_prices=spot_prices, vix=18.0)
+    return create_app(
+        state=state,
+        market_data=market_data,
+        ips_config=state.ips_config,
+    )
 
 
 def _assert_renders_cleanly(page: Page, url: str) -> None:
@@ -314,6 +354,88 @@ class TestBasisChip:
         layout = monitor.render(monitor_app.app)
 
         assert "basis: crash-skew (IPS anchor)" in str(layout)
+
+
+class TestSpotCrossCheck:
+    """#336: /monitor cross-checks the book spot against the observed one.
+
+    Structural checks on ``render()``'s own component tree, matching
+    ``TestSliderTooltips``/``TestBasisChip``'s style — no browser needed to
+    confirm which sentence a given ``SpotReading`` quality produces.
+    """
+
+    def test_book_spot_line_always_present(self, tmp_path: Path) -> None:
+        """The hand-entered book spot renders regardless of the feed."""
+        app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=None)
+
+        layout_text = str(monitor.render(app))
+
+        assert "Book SPX spot: $5,000.00" in layout_text
+
+    def test_unavailable_reading_says_so_plainly(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A missing cache key (the #293 drift mode) reads UNAVAILABLE."""
+        app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=None)
+
+        layout_text = str(monitor.render(app))
+
+        assert "No market spot reading is available" in layout_text
+        assert "spot-crosscheck--unavailable" in layout_text
+
+    def test_static_provider_reads_synthetic_not_unavailable(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """StaticProvider's STATIC quality must not collapse to UNAVAILABLE.
+
+        ``Observation.static`` carries a real value with no ``as_of``,
+        which is exactly the shape ``_spot_headline`` must not mistake for
+        a missing cache entry.
+        """
+        app = _app_with_spot(
+            tmp_path,
+            book_spot=5000.0,
+            market_spot=5000.0,
+        )
+
+        layout_text = str(monitor.render(app))
+
+        assert "SYNTHETIC" in layout_text
+        assert "No market spot reading is available" not in layout_text
+
+    def test_divergence_within_threshold_is_not_flagged(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A 1% divergence, under the 2% default, gets no --diverged class."""
+        app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=5050.0)
+
+        layout_text = str(monitor.render(app))
+
+        assert "+1.0% vs book" in layout_text
+        assert "spot-crosscheck--diverged" not in layout_text
+
+    def test_divergence_past_threshold_is_flagged(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A 5% divergence, past the 2% default, gets the --diverged class."""
+        app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=5250.0)
+
+        layout_text = str(monitor.render(app))
+
+        assert "+5.0% vs book" in layout_text
+        assert "spot-crosscheck--diverged" in layout_text
+
+    def test_observed_below_book_reads_negative(self, tmp_path: Path) -> None:
+        """A lower observed spot than book renders a signed negative."""
+        app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=4900.0)
+
+        layout_text = str(monitor.render(app))
+
+        assert "-2.0% vs book" in layout_text
 
 
 class TestAgreement:

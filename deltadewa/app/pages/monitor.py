@@ -21,13 +21,17 @@ from dash.development.base_component import Component
 
 from deltadewa import __version__
 from deltadewa.analysis.crash_repricing import hedge_value
-from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.market_environment import (
+    DataQuality,
+    assess_market_environment,
+)
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.monitor_scenario import (
     build_scenario,
     build_scenario_curve,
 )
 from deltadewa.analysis.roll_status import evaluate_roll_status
+from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
@@ -38,6 +42,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.monetization import MonetizationPlan
     from deltadewa.analysis.monitor_scenario import ScenarioResult
     from deltadewa.analysis.roll_status import RollStatusRecord
+    from deltadewa.analysis.spot_reading import SpotReading
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
@@ -46,6 +51,16 @@ _SPOT_SLIDER_MIN = -50.0
 _SPOT_SLIDER_MAX = 10.0
 _VOL_SLIDER_MIN = 0.0
 _VOL_SLIDER_MAX = 0.30
+
+# Labels for the spot cross-check line (#336). STATIC reads "SYNTHETIC" —
+# matching chrome.py's own STATIC banner wording — rather than "STATIC",
+# since a reader who has never seen the enum should still understand it.
+_SPOT_QUALITY_LABEL: dict[DataQuality, str] = {
+    DataQuality.LIVE: "LIVE",
+    DataQuality.CACHED: "CACHED",
+    DataQuality.STALE: "STALE",
+    DataQuality.STATIC: "SYNTHETIC",
+}
 
 
 def _no_ips_layout() -> html.Div:
@@ -63,6 +78,90 @@ def _no_ips_layout() -> html.Div:
             ),
         ],
         className="page page-monitor",
+    )
+
+
+def _spot_headline(
+    reading: SpotReading,
+    symbol: str,
+    warn_pct: float,
+) -> html.Div:
+    """Build the spot headline: book spot plus the #336 observed cross-check.
+
+    The book-spot sentence is unconditional — every shock below moves from
+    ``reading.book_spot`` regardless of the cross-check's quality, since
+    that value (never the observed one) is what every number on this page
+    is actually computed from (#322). The second line is new: at
+    ``UNAVAILABLE`` — today's default state, since nothing has wired this
+    reading before #336 — it says so plainly rather than the page's prior
+    silence on a distinction it never drew.
+
+    Branches on ``reading.observed_spot`` being ``None``, not on
+    ``reading.as_of`` — a ``STATIC`` reading (``StaticProvider``, tests and
+    offline use only) carries a real value with no ``as_of`` by the
+    ``Observation`` invariant, and must not be mistaken for
+    ``UNAVAILABLE``.
+
+    Args:
+        reading: The book spot beside the observed market spot, from
+            ``analysis.spot_reading.observe_spot``.
+        symbol: The book's underlying symbol, for the label.
+        warn_pct: ``ips.market_environment.spot_divergence_warn_pct`` — the
+            divergence, in percent, past which the cross-check line flags
+            rather than merely reports.
+
+    Returns:
+        The headline ``html.Div``.
+
+    """
+    book_line = html.P(
+        f"Book {symbol} spot: "
+        f"{fmt.currency(reading.book_spot, decimals=2)} — the shocks "
+        "below move from this hand-entered reference point.",
+        className="plain-language",
+    )
+    observed = reading.observed_spot
+    if observed is None:
+        return html.Div(
+            [
+                book_line,
+                html.P(
+                    "No market spot reading is available to cross-check "
+                    "against — the value above is hand-entered only.",
+                    className="spot-crosscheck spot-crosscheck--unavailable",
+                ),
+            ],
+            className="spot-headline",
+        )
+
+    as_of_text = (
+        f"as of {fmt.as_of_local(reading.as_of)}"
+        if reading.as_of is not None
+        else "no as-of date"
+    )
+    quality_label = _SPOT_QUALITY_LABEL[reading.quality]
+    divergence = reading.divergence_pct
+    diverged = divergence is not None and abs(divergence) >= warn_pct
+    modifier = " spot-crosscheck--diverged" if diverged else ""
+    divergence_text = (
+        f", {fmt.signed_percent(divergence)} vs book"
+        if divergence is not None
+        else ""
+    )
+    return html.Div(
+        [
+            book_line,
+            html.P(
+                f"Observed {symbol} spot ({quality_label}, {as_of_text}): "
+                f"{fmt.currency(observed, decimals=2)}{divergence_text}.",
+                className=(
+                    f"spot-crosscheck "
+                    f"spot-crosscheck--{reading.quality.value.lower()}"
+                    f"{modifier}"
+                ),
+            ),
+        ],
+        className="spot-headline",
     )
 
 
@@ -458,6 +557,11 @@ def render(app: ProgramDashApp) -> html.Div:
         app.market_data,
         ips_config.market_environment,
     )
+    spot_reading = observe_spot(
+        app.market_data,
+        symbol=portfolio.get_symbol(),
+        book_spot=portfolio.spot_price,
+    )
     plan = build_monetization_plan(
         portfolio,
         ips_config,
@@ -472,11 +576,10 @@ def render(app: ProgramDashApp) -> html.Div:
                     basis_chip("basis: crash-skew (IPS anchor)"),
                 ],
             ),
-            html.P(
-                f"Today's {portfolio.get_symbol()} spot: "
-                f"{fmt.currency(portfolio.spot_price, decimals=2)} — the "
-                "shocks below move from this reference point.",
-                className="plain-language",
+            _spot_headline(
+                spot_reading,
+                portfolio.get_symbol(),
+                ips_config.market_environment.spot_divergence_warn_pct,
             ),
             html.Div(
                 [

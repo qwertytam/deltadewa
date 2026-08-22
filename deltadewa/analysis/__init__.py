@@ -104,6 +104,7 @@ from deltadewa.analysis.sizing import (
     size_from_unit,
     size_hedge,
 )
+from deltadewa.analysis.spot_reading import SpotReading, observe_spot
 from deltadewa.analysis.stress import (
     EmpiricalCdf,
     PnlHistogram,
@@ -167,6 +168,7 @@ __all__ = [
     "RollPlanRecord",
     "RollVerdict",
     "ScenarioGridCache",
+    "SpotReading",
     "SpotVolGridSpec",
     "StrikeLadder",
     "StrikeLadderResult",
@@ -208,6 +210,7 @@ __all__ = [
     "get_volatility_stats",
     "hedge_efficiency",
     "new_strike_for_entry_otm",
+    "observe_spot",
     "percentile_of_value",
     "proportional_vol",
     "recompute_concentration",

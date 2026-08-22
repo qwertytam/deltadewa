@@ -116,6 +116,11 @@ market_environment:
   vix_caution: 25    # VIX above this -> avoid new purchases except rolls
   vix_low: 15        # VIX at/below this -> increased urgency to accumulate
                       # These back entry_timing_tree's three stops (M2.8).
+  spot_divergence_warn_pct: 2.0  # EXAMPLE VALUE — percent the observed
+                                  # market spot may diverge from the book's
+                                  # hand-entered spot before /monitor's
+                                  # cross-check flags it (#336). Display
+                                  # policy only; never feeds a calculation.
 
 triggers:
   target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is
