@@ -1,6 +1,8 @@
 """Tests for deltadewa.state — the shared server-side program state."""
 
+import json
 import logging
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -15,10 +17,22 @@ from deltadewa.state import (
     ConfirmationRequiredError,
     ProgramState,
 )
+from tests.clock_helpers import days_from_today
 
 _MATURITY = datetime(2027, 6, 30, tzinfo=UTC)
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
 _EXAMPLE_IPS = Path(__file__).parent.parent / "config" / "ips.example.yaml"
+
+# Generous — only reached if something actually deadlocks, so it costs
+# nothing on a green run and keeps a red one from hanging the suite.
+_JOIN_TIMEOUT = 10.0
+# How long a thread that *should* be blocked is given to prove otherwise.
+# Short, because a wrong answer here shows up as a fast failure, not a
+# flake: without the lock the blocked thread finishes in microseconds.
+_BLOCKED_PROBE = 0.3
+# Seeded off the program clock, not pinned: a fixed literal drifts into
+# the past under the clock-shift probe and expires the book (#321/#343).
+_CONCURRENCY_MATURITY = days_from_today(365)
 
 
 def _load(tmp_path: Path) -> ProgramState:
@@ -47,6 +61,101 @@ def _write_ips_fixture(tmp_path: Path) -> Path:
 
 def _raise_mid_write(*_args: object, **_kwargs: object) -> None:
     raise RuntimeError("simulated crash mid-write")
+
+
+def _add_leg(state: ProgramState, strike: float) -> None:
+    """Add one put — the smallest thing a mutator thread can do."""
+    state.add_position(
+        strike_price=strike,
+        maturity_date=_CONCURRENCY_MATURITY,
+        quantity=1,
+        option_type=OptionType.PUT,
+    )
+
+
+def _spawn(target: object, *args: object, **kwargs: object) -> threading.Thread:
+    """Start a **daemon** thread for a concurrency test.
+
+    Daemon matters here, and not for tidiness: these tests are designed to
+    fail by deadlocking, and a non-daemon thread stuck on a lock keeps the
+    interpreter alive at shutdown — so a red run hangs the whole suite
+    instead of reporting. As daemons they are abandoned at exit, and the
+    ``join(timeout=...)`` assertions are what turn a hang into a failure.
+    """
+    thread = threading.Thread(
+        target=target,
+        args=args,
+        kwargs=kwargs,
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+def _pause_first_write(
+    monkeypatch: pytest.MonkeyPatch,
+    entered: threading.Event,
+    release: threading.Event,
+) -> None:
+    """Freeze the first autosave *between* its snapshot and its write.
+
+    Patched at the same ``json.dump`` seam ``_force_autosave_failure``
+    uses. By the time ``export_to_json`` reaches the dump it has already
+    run ``_build_export_data`` — which prices every leg — so the book is
+    captured but no bytes are on disk yet. That is exactly the
+    lost-update window.
+
+    Only the *first* call pauses; later saves run at full speed, so the
+    thread we want to observe racing past the lock is never itself held
+    up by this hook.
+    """
+    real_dump = json.dump
+    guard = threading.Lock()
+    paused = False
+
+    def _paused_dump(*args: object, **kwargs: object) -> None:
+        nonlocal paused
+        with guard:
+            first = not paused
+            paused = True
+        if first:
+            entered.set()
+            release.wait(timeout=_JOIN_TIMEOUT)
+        real_dump(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("deltadewa.persistence.json.dump", _paused_dump)
+
+
+def _pause_import(
+    monkeypatch: pytest.MonkeyPatch,
+    entered: threading.Event,
+    release: threading.Event,
+) -> None:
+    """Freeze the parse inside ``import_portfolio``, before the swap.
+
+    Holds the import in the window between reading ``dirty`` and
+    rebinding ``_portfolio`` — the TOCTOU the lock has to close.
+    """
+    real_import = PortfolioSerializer.import_portfolio
+
+    def _paused_import(
+        self: PortfolioSerializer,
+        filepath: str | Path,
+        default_exercise_style: ExerciseStyle | None = None,
+    ) -> dict[str, object]:
+        entered.set()
+        release.wait(timeout=_JOIN_TIMEOUT)
+        return real_import(
+            self,
+            filepath,
+            default_exercise_style=default_exercise_style,
+        )
+
+    monkeypatch.setattr(
+        PortfolioSerializer,
+        "import_portfolio",
+        _paused_import,
+    )
 
 
 def _force_autosave_failure(
@@ -498,6 +607,188 @@ class TestMonteCarloScenarioLocalGuard:
         assert state.dirty is False
         after_files = set(tmp_path.iterdir())
         assert after_files == before_files
+
+
+class TestConcurrency:
+    """#299: one RLock over mutate+save, snapshots, and the import swap.
+
+    Every case here forces its interleaving with ``threading.Event``\\ s
+    rather than sleeping, so each one genuinely fails with the lock
+    removed rather than passing by construction.
+
+    What they deliberately do *not* cover, because no assertion could:
+    the reader path (``ProgramState.portfolio`` is unlocked on purpose, so
+    a reader seeing a mid-flight book is permitted by the design, not a
+    bug) and the process-global QuantLib evaluation date. Both are
+    field-test territory — see the ``deltadewa.state`` module docstring.
+    """
+
+    def test_a_second_mutator_waits_for_an_in_flight_save(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The lock is actually held across the save, not just the flag."""
+        state = _load(tmp_path)
+        entered, release = threading.Event(), threading.Event()
+        _pause_first_write(monkeypatch, entered, release)
+
+        first = _spawn(_add_leg, state, 100.0)
+        assert entered.wait(timeout=_JOIN_TIMEOUT), "save never started"
+
+        second = _spawn(_add_leg, state, 110.0)
+        # The whole point: while the first save holds the lock, the second
+        # mutator must not get in. Without the lock it sails straight
+        # through and this assertion fails.
+        second.join(timeout=_BLOCKED_PROBE)
+        assert second.is_alive(), "second mutator was not blocked by the lock"
+
+        release.set()
+        first.join(timeout=_JOIN_TIMEOUT)
+        second.join(timeout=_JOIN_TIMEOUT)
+        assert not first.is_alive()
+        assert not second.is_alive()
+        assert len(state.portfolio.positions) == 2
+
+    def test_a_slow_save_cannot_revert_a_newer_one(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The lost update #299 is really about — not a torn file.
+
+        Both writes are individually atomic (tmp-then-rename), so the file
+        is never corrupt either way. The bug is ordering: an older
+        snapshot landing on top of a newer one and then clearing ``dirty``,
+        so the newer change is gone and nothing will re-save it. Unlocked,
+        the reloaded book here holds one position; locked, it holds both.
+        """
+        state = _load(tmp_path)
+        entered, release = threading.Event(), threading.Event()
+        _pause_first_write(monkeypatch, entered, release)
+
+        slow = _spawn(_add_leg, state, 100.0)
+        assert entered.wait(timeout=_JOIN_TIMEOUT), "save never started"
+
+        newer = _spawn(_add_leg, state, 110.0)
+        newer.join(timeout=_BLOCKED_PROBE)
+
+        release.set()
+        slow.join(timeout=_JOIN_TIMEOUT)
+        newer.join(timeout=_JOIN_TIMEOUT)
+
+        assert state.dirty is False
+        reloaded = _load(tmp_path)
+        assert len(reloaded.portfolio.positions) == 2
+
+    def test_a_mutator_cannot_interleave_into_an_in_flight_import(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The dirty-check and the portfolio swap are one atomic unit.
+
+        Unlocked, ``import_portfolio`` reads ``dirty``, then parses, then
+        rebinds ``_portfolio`` — a mutation landing in that gap is applied
+        to the book the import is about to throw away, and disappears with
+        no error. The lock closes the gap by holding it across the parse.
+        """
+        state = _load(tmp_path)
+        source = _other_portfolio_export(tmp_path, "to-import.json")
+        entered, release = threading.Event(), threading.Event()
+        _pause_import(monkeypatch, entered, release)
+
+        importer = _spawn(state.import_portfolio, source, confirm=True)
+        assert entered.wait(timeout=_JOIN_TIMEOUT), "import never started"
+
+        mutator = _spawn(_add_leg, state, 100.0)
+        mutator.join(timeout=_BLOCKED_PROBE)
+        assert mutator.is_alive(), "mutation slipped into the import window"
+
+        release.set()
+        importer.join(timeout=_JOIN_TIMEOUT)
+        mutator.join(timeout=_JOIN_TIMEOUT)
+
+        # The imported book (1 leg) plus the mutation that waited its
+        # turn — the mutation is applied after the swap, not silently
+        # dropped onto the discarded portfolio.
+        assert len(state.portfolio.positions) == 2
+        assert state.portfolio.get_symbol() == "OTHER"
+
+    def test_nested_mutate_and_save_does_not_deadlock(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """RLock, not Lock — the call graph nests three deep.
+
+        ``import_portfolio`` -> ``_mutate_and_save`` -> ``save_if_dirty``
+        all take the same lock. With a non-reentrant ``Lock`` this hangs
+        on the first mutation, so this is the test that catches anyone
+        later "simplifying" the RLock away.
+        """
+        state = _load(tmp_path)
+        source = _other_portfolio_export(tmp_path, "nested.json")
+
+        done = threading.Event()
+
+        def _exercise_the_nesting() -> None:
+            _add_leg(state, 100.0)
+            state.import_portfolio(source, confirm=True)
+            state.save_if_dirty()
+            state.export_snapshot("nested-snapshot.json")
+            done.set()
+
+        worker = _spawn(_exercise_the_nesting)
+        worker.join(timeout=_JOIN_TIMEOUT)
+
+        assert done.is_set(), "re-entrant acquisition deadlocked"
+
+    def test_concurrent_adds_leave_memory_and_file_agreeing(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Bounded stress net — deliberately weak, and labelled as such.
+
+        Unlike the four tests above, **this one can pass with the bug
+        present**: it depends on thread timing rather than forcing an
+        interleaving. It is here to catch the crash-shaped failures (a
+        ``RuntimeError`` from iterating a list mid-append, a torn file
+        that won't parse), not to prove the lock exists. Kept small so it
+        stays in the gate.
+        """
+        state = _load(tmp_path)
+        threads_count, per_thread = 4, 15
+        errors: list[BaseException] = []
+        errors_lock = threading.Lock()
+
+        def _worker(worker_id: int) -> None:
+            try:
+                for n in range(per_thread):
+                    state.add_position(
+                        strike_price=100.0 + worker_id * 100 + n,
+                        maturity_date=_CONCURRENCY_MATURITY,
+                        quantity=1,
+                        option_type=OptionType.PUT,
+                    )
+                    # Interleave the locked reader too: this is the path
+                    # that used to raise "list changed size during
+                    # iteration" against a concurrent append.
+                    assert isinstance(state.positions_snapshot(), tuple)
+            except BaseException as exc:  # pylint: disable=broad-exception-caught
+                with errors_lock:
+                    errors.append(exc)
+
+        workers = [_spawn(_worker, i) for i in range(threads_count)]
+        for worker in workers:
+            worker.join(timeout=_JOIN_TIMEOUT)
+
+        assert not errors, f"concurrent mutation raised: {errors!r}"
+        expected = threads_count * per_thread
+        assert len(state.portfolio.positions) == expected
+        assert state.dirty is False
+
+        reloaded = _load(tmp_path)
+        assert len(reloaded.portfolio.positions) == expected
 
 
 def test_create_empty_portfolio_used_for_fresh_state(tmp_path: Path) -> None:
