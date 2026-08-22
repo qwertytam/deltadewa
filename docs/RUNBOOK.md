@@ -352,7 +352,9 @@ above, not after the first missed digest surfaces it.
   volume, so `ops/backup-exports.sh` can read it directly off the host
   filesystem — see `compose.yaml`). Contains `program_state.json` (the
   live portfolio + IPS state), `exports/marketdata-cache/` (the warmed
-  CBOE/FRED cache both `app` and `jobs` share via `DELTADEWA_CACHE_DIR`),
+  CBOE/FRED cache both `app` and `jobs` share via `DELTADEWA_CACHE_DIR` —
+  see `docs/market-data.md` for which readings live in it and which
+  pricing inputs are hand-entered and never refresh),
   `exports/reports/weekly/` (digest + snapshot history), and any
   autosaves.
 - **Everything else** — code, config, the image itself — is rebuildable

@@ -240,6 +240,7 @@ deltadewa/
 │   ├── portfolios/        # spx_protective_put.yaml, spy_collar.yaml, …
 │   └── ips/               # policy presets
 ├── docs/
+│   ├── market-data.md     # what is observed vs hand-entered; read before trusting a number
 │   ├── part-x-coverage.md # handbook-item → surface map; read before moving a panel
 │   └── yaml-config-guide.md
 ├── pyproject.toml

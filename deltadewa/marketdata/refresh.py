@@ -93,10 +93,20 @@ def _series(
 ) -> list[tuple[str, Callable[[], Observation[Any]]]]:
     """List the (name, fetch) pairs the app depends on, in fetch order.
 
-    Mirrors exactly the calls ``assess_market_environment`` makes (``vix``,
-    ``vix_term_structure``, ``skew_index``, ``skew_percentile``) plus
-    ``vix_history`` (``analysis.health``) and ``spot`` (``dashboard.session``)
-    — every key the app or notebook path may read is warmed here.
+    Five of the six mirror exactly the calls ``assess_market_environment``
+    makes (``vix``, ``vix_term_structure``, ``skew_index``,
+    ``skew_percentile``) plus ``vix_history`` (``analysis.health``).
+
+    ``spot`` is the exception: **it is fetched here and currently read by
+    nothing.** Its consumer used to be ``dashboard.session``, which #279
+    deleted with the rest of the Jupyter layer, and the app has warmed a
+    cache nobody reads ever since. It is retained deliberately rather than
+    dropped — #336 wires the cached spot into ``/monitor`` as a labelled
+    cross-check against the book's hand-entered ``portfolio.spot_price``,
+    which today can go arbitrarily stale with nothing on the page saying
+    so. Retiring the fetch would only mean re-adding this line then, for
+    the sake of one CSV request a night. See ``docs/market-data.md`` for
+    the full reading-by-reading map, and #322 for the decision.
 
     One pair listed separately here shares a single disk-cache key —
     ``vix``/``vix_history`` both write ``"vix_fred"`` (see
