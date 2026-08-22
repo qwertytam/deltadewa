@@ -106,6 +106,10 @@ class ProgramState:
                 succeeds — this never raises for that reason.
             default_exercise_style: Exercise style applied to positions in
                 the loaded file that have no explicit ``exercise_style``.
+                When ``None`` (the default) and an IPS loaded, this is
+                taken from ``ips_config.pricing.exercise_style`` (#295) —
+                pass an explicit value only to override the program's own
+                policy.
 
         Returns:
             A ready-to-use ``ProgramState``.
@@ -126,6 +130,18 @@ class ProgramState:
                 exc,
             )
             ips_config = None
+
+        # #295: an explicit caller override always wins; otherwise the
+        # program's own policy sets the style positions get when they don't
+        # carry one of their own. Before this, every real boot path (wsgi.py,
+        # weekly_report.py, import_portfolio.py's initial ProgramState.load()
+        # call) left this None regardless of what pricing.exercise_style
+        # said, because ips_config was loaded here and then never consulted
+        # for it — only unit tests that constructed the portfolio directly
+        # (or passed default_exercise_style= explicitly) exercised the wired
+        # case, so the gap shipped with a green suite.
+        if default_exercise_style is None and ips_config is not None:
+            default_exercise_style = ips_config.pricing.exercise_style
 
         as_of = program_trading_date(
             ips_config.program.timezone if ips_config is not None else None,

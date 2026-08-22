@@ -18,6 +18,7 @@ from deltadewa.state import (
 
 _MATURITY = datetime(2027, 6, 30, tzinfo=UTC)
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
+_EXAMPLE_IPS = Path(__file__).parent.parent / "config" / "ips.example.yaml"
 
 
 def _load(tmp_path: Path) -> ProgramState:
@@ -26,6 +27,22 @@ def _load(tmp_path: Path) -> ProgramState:
         ips_path=tmp_path / _MISSING_IPS,
         default_exercise_style=ExerciseStyle.EUROPEAN,
     )
+
+
+def _write_ips_fixture(tmp_path: Path) -> Path:
+    """Copy the real example IPS to *tmp_path*, valid and self-contained.
+
+    ``pricing.exercise_style: EUROPEAN`` in this file is what #295's
+    regression test relies on the boot path to pick up on its own —
+    unlike ``_load()`` above, nothing here passes
+    ``default_exercise_style=`` explicitly.
+    """
+    fixture_path = tmp_path / "ips.yaml"
+    fixture_path.write_text(
+        _EXAMPLE_IPS.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    return fixture_path
 
 
 def _raise_mid_write(*_args: object, **_kwargs: object) -> None:
@@ -107,6 +124,82 @@ class TestLoad:
         assert second.portfolio.positions[
             0
         ].option.strike_price == pytest.approx(100.0)
+
+
+class TestBootWiresExerciseStyleFromIps:
+    """#295: pricing.exercise_style must reach the portfolio at boot.
+
+    Every case here calls ``ProgramState.load()`` — the same classmethod
+    ``wsgi.py``, ``weekly_report.py`` and ``import_portfolio.py`` call to
+    boot — without passing ``default_exercise_style=``, so a green test
+    here means the real boot path wires it, not that a test double does.
+    A test that built an ``OptionPortfolio`` directly and set the style
+    itself would pass even with the bug present (#295's own postmortem:
+    that is exactly the blind spot that let it ship).
+    """
+
+    def test_empty_start_wires_style_from_ips(self, tmp_path: Path) -> None:
+        """No prior state file — the empty-portfolio branch still wires it."""
+        ips_path = _write_ips_fixture(tmp_path)
+
+        state = ProgramState.load(tmp_path, ips_path=ips_path)
+
+        assert state.loaded_from is None
+        assert state.portfolio.default_exercise_style is ExerciseStyle.EUROPEAN
+
+    def test_reload_from_existing_state_file_wires_style_from_ips(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A restart re-reading program_state.json still wires it.
+
+        Regression-specific: this is the branch a deployed app actually
+        takes on every restart once a book has been imported once — the
+        one #295 left broken, since ``import_from_json`` received
+        whatever ``default_exercise_style`` its caller passed, and no
+        real caller passed anything.
+        """
+        ips_path = _write_ips_fixture(tmp_path)
+        first = ProgramState.load(tmp_path, ips_path=ips_path)
+        first.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        second = ProgramState.load(tmp_path, ips_path=ips_path)
+
+        assert second.loaded_from == tmp_path / STATE_FILENAME
+        assert second.portfolio.default_exercise_style is ExerciseStyle.EUROPEAN
+
+    def test_explicit_override_still_wins_over_ips(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A caller-supplied style is not overwritten by the IPS default."""
+        ips_path = _write_ips_fixture(tmp_path)
+
+        state = ProgramState.load(
+            tmp_path,
+            ips_path=ips_path,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+
+        assert state.portfolio.default_exercise_style is ExerciseStyle.AMERICAN
+
+    def test_missing_ips_leaves_style_none_as_before(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """No IPS to read from — unchanged pre-#295 behaviour, not a crash."""
+        state = ProgramState.load(
+            tmp_path,
+            ips_path=tmp_path / _MISSING_IPS,
+        )
+
+        assert state.portfolio.default_exercise_style is None
 
 
 class TestNonDestructiveMutatorsAutosave:
