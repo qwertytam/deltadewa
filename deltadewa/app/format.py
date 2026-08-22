@@ -11,7 +11,11 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
+from deltadewa.clock import program_now
+
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from deltadewa.analysis.roll_status import RollStatusRecord
 
 
@@ -72,6 +76,25 @@ def signed_percent(value: float, *, decimals: int = 1) -> str:
 
     """
     return f"{value:+.{decimals}f}%"
+
+
+def as_of_local(value: datetime) -> str:
+    """Format *value* in the program's timezone, with the zone abbreviation.
+
+    Same conversion ``chrome.py``'s provenance stamp applies: a bare
+    UTC/naive timestamp forces the reader to convert in their head to judge
+    freshness (#182), and the abbreviation tracks DST because it comes from
+    the zone itself rather than a fixed offset.
+
+    Args:
+        value: A timezone-aware observation timestamp.
+
+    Returns:
+        E.g. ``"2026-08-22 09:14 EDT"``.
+
+    """
+    local = value.astimezone(program_now().tzinfo)
+    return f"{local:%Y-%m-%d %H:%M %Z}"
 
 
 def _round_sig_figs(value: float, sig_figs: int = 3) -> float:

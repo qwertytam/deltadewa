@@ -191,6 +191,38 @@ body {
   color: #1a1a1a;
 }
 
+/* Spot cross-check: book spot vs. the observed market reading (#336) */
+
+.spot-headline {
+  margin-bottom: 8px;
+}
+
+.spot-crosscheck {
+  font-size: 0.85rem;
+  margin: 4px 0 0;
+}
+
+.spot-crosscheck--cached,
+.spot-crosscheck--live {
+  color: #555;
+}
+
+.spot-crosscheck--stale {
+  color: #7a3e00;
+}
+
+.spot-crosscheck--static {
+  color: #7a5b00;
+}
+
+.spot-crosscheck--unavailable {
+  color: #7a0000;
+}
+
+.spot-crosscheck--diverged {
+  font-weight: 700;
+}
+
 /* Decisions section */
 
 .decisions-section {

@@ -74,7 +74,17 @@ echo "BIND_ADDR=<tailscale-ip-from-above>" > .env
 cp config/ips.example.yaml config/ips.yaml
 # edit config/ips.yaml now
 
-docker compose up -d --build
+# Build BOTH images explicitly, then start. `docker compose up -d --build`
+# on its own only builds/starts `app` — `jobs` is profile-gated (see
+# compose.yaml) and Compose excludes non-active-profile services from a
+# bare `build` the exact same way it excludes them from `up`, so `--build`
+# here would silently leave `jobs` unbuilt. Naming both services on
+# `build` still does not start `jobs` — that gate is untouched, and `up`
+# below is still bare, so only `app` comes up. This split is the fix for
+# #293; every later `docker compose build` in this doc follows the same
+# two-service form for the same reason.
+docker compose build app jobs
+docker compose up -d
 ```
 
 **exports/ ownership (#220):** the container runs as a fixed-UID non-root
@@ -96,7 +106,7 @@ id deploy
 # If deploy's UID/GID differ from 1000, set them and rebuild:
 echo "APP_UID=$(id -u deploy)" >> .env
 echo "APP_GID=$(id -g deploy)" >> .env
-docker compose build
+docker compose build app jobs   # both images take APP_UID/APP_GID as build args
 docker compose up -d
 ```
 
@@ -163,7 +173,8 @@ cp config/ips.yaml config/dashboard.yaml /tmp/
 git fetch --tags
 git checkout <the #245 tag or later>
 cp /tmp/ips.yaml /tmp/dashboard.yaml config/
-docker compose build   # COPY config ./config bakes the restored files in
+docker compose build app jobs   # COPY config ./config bakes the restored
+                                 # files in; name both — §1 explains why
 docker compose up -d
 ```
 
@@ -173,7 +184,7 @@ docker compose up -d
 cd deltadewa
 git fetch --tags
 git checkout <tag>
-docker compose build
+docker compose build app jobs   # name both, or `jobs` drifts — §1, #293
 docker compose up -d
 
 # Logs
@@ -241,8 +252,10 @@ invalid, `/monitor` renders a single "No IPS policy is loaded" screen in
 place of the crash-led content (there's no partial-policy state — see
 `docker compose logs -f app` for why it was skipped); to change it, edit
 `config/ips.yaml` directly on the droplet and rebuild
-(`docker compose build`) — a live container won't pick up a host-side edit
-to it, and there's nothing to commit or push.
+(`docker compose build app jobs` — name both, §1, #293: `jobs` bakes in
+the same `COPY config ./config` and goes just as stale) — a live
+container won't pick up a host-side edit to it, and there's nothing to
+commit or push.
 
 **Verify:**
 
@@ -295,7 +308,7 @@ Target: **under 30 minutes, nothing memorised.**
 
 ```bash
 # 1. New droplet, repeat section 1 in full, up to (not including) the
-#    final `docker compose up -d --build`
+#    final `docker compose build app jobs` / `docker compose up -d`
 
 # 2. Restore exports/ from the offsite backup remote (see §8) — clone
 #    it directly into the repo's exports/ directory (the bind-mount
@@ -312,8 +325,9 @@ sudo rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it
 sudo git clone <BACKUP_REMOTE — see private ops doc> \
     ~/deltadewa/exports
 
-# 3. Bring it up
-docker compose up -d --build
+# 3. Bring it up — build both, name both (§1, #293), then start
+docker compose build app jobs
+docker compose up -d
 
 # 4. Confirm state actually came back
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
@@ -338,7 +352,9 @@ above, not after the first missed digest surfaces it.
   volume, so `ops/backup-exports.sh` can read it directly off the host
   filesystem — see `compose.yaml`). Contains `program_state.json` (the
   live portfolio + IPS state), `exports/marketdata-cache/` (the warmed
-  CBOE/FRED cache both `app` and `jobs` share via `DELTADEWA_CACHE_DIR`),
+  CBOE/FRED cache both `app` and `jobs` share via `DELTADEWA_CACHE_DIR` —
+  see `docs/market-data.md` for which readings live in it and which
+  pricing inputs are hand-entered and never refresh),
   `exports/reports/weekly/` (digest + snapshot history), and any
   autosaves.
 - **Everything else** — code, config, the image itself — is rebuildable

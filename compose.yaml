@@ -47,6 +47,13 @@ services:
         APP_GID: ${APP_GID:-1000}
     # Gated behind a profile so a bare `docker compose up` never starts
     # this — it only ever runs via an explicit `docker compose run jobs`.
+    # The same gate also makes a bare `docker compose build` silently skip
+    # this service, which is NOT desired — `jobs` builds from the same
+    # `deltadewa` package as `app` and needs rebuilding on every deploy
+    # that touches shared code, or it drifts onto a stale image (#293).
+    # Name it explicitly — `docker compose build app jobs` — every time;
+    # RUNBOOK.md's documented deploy recipe does this so this comment is
+    # belt-and-braces, not the enforcement.
     profiles: ["jobs"]
     environment:
       DELTADEWA_CACHE_DIR: /app/exports/marketdata-cache

@@ -13,6 +13,7 @@ from deltadewa.ips_config import (
     DEFAULT_DATA_TTL_MINUTES,
     DEFAULT_SKEW_HIGH_PCTILE,
     DEFAULT_SKEW_LOW_PCTILE,
+    DEFAULT_SPOT_DIVERGENCE_WARN_PCT,
     DEFAULT_TERM_CONTANGO_TOLERANCE,
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
@@ -639,6 +640,7 @@ class TestMarketEnvironment:
         assert env.vix_very_high == pytest.approx(40.0)
         assert env.vix_caution == pytest.approx(25.0)
         assert env.vix_low == pytest.approx(15.0)
+        assert env.spot_divergence_warn_pct == DEFAULT_SPOT_DIVERGENCE_WARN_PCT
 
     def test_example_ips_yaml_market_environment(self) -> None:
         """The tracked config/ips.example.yaml carries the policy bands."""
@@ -653,6 +655,7 @@ class TestMarketEnvironment:
         assert env.vix_very_high == pytest.approx(40.0)
         assert env.vix_caution == pytest.approx(25.0)
         assert env.vix_low == pytest.approx(15.0)
+        assert env.spot_divergence_warn_pct == pytest.approx(2.0)
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Section values round-trip through the loader unchanged."""
@@ -668,6 +671,7 @@ class TestMarketEnvironment:
                 "vix_very_high": 35.0,
                 "vix_caution": 22.0,
                 "vix_low": 13.0,
+                "spot_divergence_warn_pct": 3.5,
             },
         }
         env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
@@ -681,6 +685,7 @@ class TestMarketEnvironment:
         assert env.vix_very_high == pytest.approx(35.0)
         assert env.vix_caution == pytest.approx(22.0)
         assert env.vix_low == pytest.approx(13.0)
+        assert env.spot_divergence_warn_pct == pytest.approx(3.5)
 
     def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
         """vol_regime_low >= vol_regime_high raises IpsConfigError."""
@@ -775,6 +780,21 @@ class TestMarketEnvironment:
             },
         }
         with pytest.raises(IpsConfigError, match="vix"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_negative_spot_divergence_warn_pct_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A negative divergence threshold is meaningless — refuse it."""
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {"spot_divergence_warn_pct": -1.0},
+        }
+        with pytest.raises(
+            IpsConfigError,
+            match="spot_divergence_warn_pct",
+        ):
             load_ips_config(_write_yaml(tmp_path, config))
 
 

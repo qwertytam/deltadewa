@@ -169,13 +169,20 @@ to bring it back. See `part-x-coverage.md`,
 
 ## Live market data
 
-By default the app uses **static/offline data** seeded from the loaded
-portfolio's own values. No network calls are made in this mode and
-offline/gated runs are fully deterministic.
+This section covers the *configuration* surface. For the reading-by-reading
+map — which series are observed, from which source, on what cadence, and
+which pricing inputs are hand-entered and never refresh — see
+[market-data.md](market-data.md).
 
-Live end-of-day data is enabled per-deployment rather than per-session —
-see the RUNBOOK for the market-data refresh cron, which populates the
-shared disk cache described below.
+The deployed app always constructs a `CboeFredProvider` in **read-only**
+mode (`deltadewa/app/wsgi.py`): it serves the shared disk cache described
+below and never makes a network call of its own. `create_app` enforces
+that structurally, rejecting a fetch-capable provider. The market-data
+refresh cron is the only process permitted to fetch — see the RUNBOOK for
+its crontab line.
+
+`StaticProvider` is a synthetic no-I/O provider for tests and offline
+runs. It is not constructed by the deployed app.
 
 ### Endpoints
 
@@ -210,16 +217,11 @@ jitter doesn't flap the banner while one fully-missed refresh still reads
 STALE. `config/ips.example.yaml` ships an illustrative value; your own
 `config/ips.yaml` is gitignored and not shipped (#245).
 
-### Offline fallback
+### When a reading is missing
 
-`start_session` catches `MarketDataError` automatically: it warns via the
-reporter and falls back to `StaticProvider` (seeded from the portfolio's
-own values), so the session always starts. The effective source is
-recorded in `ctx.market_data_source` and displayed in the **Market
-Context** (`Data:` line) and **Market Environment** panels:
-
-| `ctx.market_data_source` | Meaning |
-| --- | --- |
-| `"live"` | `CboeFredProvider` is connected; data is live |
-| `"static"` | `_USE_LIVE = False` (deliberate offline mode) |
-| `"static (live unavailable)"` | `_USE_LIVE = True` but network unreachable; fell back to static |
+The app never falls back to synthetic data. A cache entry past the TTL is
+served as `STALE`; a cache key with no entry at all raises, and the
+affected surface reports `UNAVAILABLE`. Both states are shown in the
+provenance banner rather than silently substituted. See
+[market-data.md](market-data.md#how-freshness-is-graded) for the grades
+and what each one means.
