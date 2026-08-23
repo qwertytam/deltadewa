@@ -74,3 +74,69 @@ class TestHealth:
 
         assert payload["market_data"]["source"] == "STATIC"
         assert payload["market_data"]["as_of"] is None
+
+    def test_state_section_is_empty_for_a_fresh_book(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#355: no file yet means nothing was written by anyone."""
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        assert payload["state"]["written_by"] is None
+        assert payload["state"]["loaded_at"] is None
+        assert payload["state"]["external_write_detected"] is False
+
+    def test_state_section_reflects_who_wrote_the_file(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#355: written_by names the process the worker itself saved as."""
+        seed = _state(tmp_path)
+        seed.add_position(
+            strike_price=5000.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        app = create_app(state=seed, market_data=_provider())
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        assert payload["state"]["written_by"] == "app"
+        assert payload["state"]["loaded_at"] is not None
+        assert payload["state"]["external_write_detected"] is False
+
+    def test_state_section_flags_a_write_from_another_process(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#355: a file changed by another process is detectable live.
+
+        Two independent ``ProgramState`` instances against the same
+        directory — the app's (wrapped in the running ``create_app``) and
+        a stand-in CLI importer — never sharing an object, matching the
+        real two-process shape.
+        """
+        app_state = _state(tmp_path)
+        app = create_app(state=app_state, market_data=_provider())
+
+        cli_state = ProgramState.load(
+            tmp_path,
+            ips_path=tmp_path / _MISSING_IPS,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            writer_label="import_portfolio_cli",
+        )
+        cli_state.add_position(
+            strike_price=5000.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        assert payload["state"]["external_write_detected"] is True
+        # The running worker never reloaded — it still reports nothing.
+        assert payload["state"]["written_by"] is None

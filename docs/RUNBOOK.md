@@ -208,6 +208,18 @@ the fastest way to get a whole book in at once, run against the shared
 `exports/` state. For adding one or two positions to a book that's already
 live, use `/design` instead (§6).
 
+**The importer writes the state *file*, not the running app (#355).** It
+runs in its own process (`docker compose exec` starts a fresh one inside
+the container) and never touches the live gunicorn worker's memory — the
+worker only reads `exports/program_state.json` once, at boot. **A restart
+is required after every import** for the change to show up on `/monitor`
+or `/design`; skipping it leaves the browser showing the old book with no
+error. The importer's own output makes this concrete: after a successful
+write it best-effort probes the running worker's `/health` and tells you
+plainly whether that worker already reflects the write (it almost never
+does) — see that message rather than trusting "Loaded N position(s)..."
+alone.
+
 ```bash
 # 1. Write the portfolio YAML into exports/ (the bind-mounted, stateful
 #    directory — see §8). examples/portfolios/spx_protective_put.yaml (in
@@ -228,6 +240,10 @@ docker compose exec app python -m deltadewa.app.import_portfolio \
 # Re-importing later refuses to overwrite the existing state unless forced
 docker compose exec app python -m deltadewa.app.import_portfolio \
     exports/portfolio.yaml --force
+
+# 3. Restart so the live worker actually picks this up — the import
+#    above never reaches it
+docker compose restart app
 ```
 
 Fields worth getting right before importing, or specific panels degrade to

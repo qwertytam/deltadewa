@@ -157,6 +157,19 @@ def create_app(
                     "source": environment.data_quality.value,
                     "as_of": as_of,
                 },
+                # #355: who last wrote the shared state file, and whether
+                # it has changed since this worker last read or wrote it
+                # itself — a single Path.stat() under external_write_
+                # detected(), no lock, no reprice. Lets the CLI importer
+                # (or an operator) tell "the running worker already has
+                # this" apart from "only the file has this."
+                "state": {
+                    "written_by": state.written_by,
+                    "loaded_at": state.loaded_at,
+                    "external_write_detected": (
+                        state.external_write_detected()
+                    ),
+                },
             },
         ), 200
 

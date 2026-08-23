@@ -9,15 +9,56 @@ bad import never touches the state file.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+from werkzeug.serving import make_server
 
+from deltadewa.app.factory import create_app
 from deltadewa.app.import_portfolio import main
+from deltadewa.constants import ExerciseStyle
+from deltadewa.marketdata import StaticProvider
 from deltadewa.state import STATE_FILENAME, ProgramState
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _EXAMPLE_PORTFOLIO = Path("examples/portfolios/spx_protective_put.yaml")
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
+
+
+@pytest.fixture
+def live_worker(tmp_path: Path) -> Iterator[str]:
+    """Boot a real HTTP server against *tmp_path*, ``writer_label="app"``.
+
+    Mirrors ``wsgi.py:_build()`` exactly, on a real socket rather than a
+    Flask test client — the importer talks to it over ``requests.get``,
+    the same as it would talk to the production gunicorn worker. This is
+    what makes the two-process tests below a real regression test for
+    #355 rather than a same-object test that could not reproduce it: the
+    importer runs ``main()`` (its own, separate ``ProgramState``) while
+    this server holds a third, independent one, both pointed at the same
+    ``tmp_path``.
+    """
+    state = ProgramState.load(
+        tmp_path,
+        ips_path=tmp_path / _MISSING_IPS,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+        writer_label="app",
+    )
+    market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
+    app = create_app(state=state, market_data=market_data)
+
+    server = make_server("127.0.0.1", 0, app.server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
 
 
 def test_import_writes_state_the_app_then_loads(
@@ -202,3 +243,103 @@ def test_non_conforming_import_warns_but_still_succeeds(
     assert "isn't a downside-protection structure" in err
     # Unmissable under docker exec: the warning is wrapped in a rule.
     assert "!" * 10 in err
+
+
+# ---------------------------------------------------------------------------
+# #355 — the live-worker divergence notice
+# ---------------------------------------------------------------------------
+
+
+def test_no_reachable_worker_warns_and_still_exits_0(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No app listening at --app-url: best-effort, never fails the import."""
+    exit_code = main(
+        [
+            str(_EXAMPLE_PORTFOLIO),
+            "--export-dir",
+            str(tmp_path),
+            "--ips-path",
+            str(tmp_path / _MISSING_IPS),
+            "--app-url",
+            "http://127.0.0.1:1/health",  # nothing listens on port 1
+        ],
+    )
+
+    assert exit_code == 0
+    err = capsys.readouterr().err
+    assert "Could not reach a running app worker" in err
+    assert "docker compose restart app" in err
+
+
+def test_no_live_check_skips_the_probe_entirely(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--no-live-check means no network attempt and no divergence notice."""
+    exit_code = main(
+        [
+            str(_EXAMPLE_PORTFOLIO),
+            "--export-dir",
+            str(tmp_path),
+            "--ips-path",
+            str(tmp_path / _MISSING_IPS),
+            "--app-url",
+            "http://127.0.0.1:1/health",
+            "--no-live-check",
+        ],
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "app worker" not in captured.out
+    assert "app worker" not in captured.err
+
+
+def test_written_by_stamped_import_portfolio_cli(tmp_path: Path) -> None:
+    """The state file records which process wrote it (#355)."""
+    main(
+        [
+            str(_EXAMPLE_PORTFOLIO),
+            "--export-dir",
+            str(tmp_path),
+            "--ips-path",
+            str(tmp_path / _MISSING_IPS),
+            "--no-live-check",
+        ],
+    )
+
+    data = json.loads((tmp_path / STATE_FILENAME).read_text())
+    assert data["metadata"]["written_by"] == "import_portfolio_cli"
+
+
+def test_running_worker_reports_it_has_not_picked_up_the_import(
+    live_worker: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The real two-process shape: a live worker is up, unrelated to the
+    CLI's own ``ProgramState``, sharing only the export directory on disk.
+
+    Importing must not silently claim to have reached it — the worker's
+    own ``/health`` (queried live, over a real socket) must still show its
+    original boot-time ``written_by``, not the importer's.
+    """
+    exit_code = main(
+        [
+            str(_EXAMPLE_PORTFOLIO),
+            "--export-dir",
+            str(tmp_path),
+            "--ips-path",
+            str(tmp_path / _MISSING_IPS),
+            "--app-url",
+            f"{live_worker}/health",
+        ],
+    )
+
+    assert exit_code == 0
+    err = capsys.readouterr().err
+    assert "has NOT picked this up yet" in err
+    assert "written_by=None" in err  # the worker booted with no file yet
+    assert "docker compose restart app" in err

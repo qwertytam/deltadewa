@@ -574,6 +574,135 @@ class TestSharedObjectIdentity:
         assert state.portfolio is not original
 
 
+class TestExternalWriteDetection:
+    """#355: the worker can tell when *another* process wrote its file.
+
+    Each test here constructs two independent ``ProgramState`` instances
+    against the same ``export_dir`` — one standing in for the live app
+    worker, one for the CLI importer running in its own process — and
+    never mutates the "worker" instance directly to produce the file
+    change. A test that instead wrote through the same object it then
+    reads back would prove nothing about the two-process shape #355 is
+    actually about (the same lesson #295's regression test already
+    taught).
+    """
+
+    def test_no_file_yet_reports_no_external_write(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        worker = _load(tmp_path)
+
+        assert worker.external_write_detected() is False
+
+    def test_a_write_from_a_second_process_is_detected(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        worker = _load(tmp_path)
+        assert worker.external_write_detected() is False
+
+        # Stands in for `docker compose exec app python -m
+        # deltadewa.app.import_portfolio ...`: a second, independent
+        # ProgramState against the same directory, never touching
+        # `worker`.
+        cli = ProgramState.load(
+            tmp_path,
+            ips_path=tmp_path / _MISSING_IPS,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            writer_label="import_portfolio_cli",
+        )
+        cli.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        assert worker.external_write_detected() is True
+
+    def test_worker_own_saves_do_not_self_report_as_external(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The worker's own autosave must not trip its own detector."""
+        worker = _load(tmp_path)
+
+        worker.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        assert worker.external_write_detected() is False
+
+    def test_worker_written_by_and_loaded_at_do_not_change_on_their_own(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The worker never reloads — its own view of the file is frozen.
+
+        This is the field-test near-miss made concrete: after a second
+        process writes the file, the worker's in-memory `written_by` /
+        `loaded_at` must keep describing *its own* last load or save, not
+        silently pick up the other process's write. Only a fresh `.load()`
+        (i.e. a restart) sees the new metadata.
+        """
+        worker = _load(tmp_path)
+        worker.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        worker_written_by_before = worker.written_by
+        worker_loaded_at_before = worker.loaded_at
+        assert worker_written_by_before == "app"
+
+        cli = ProgramState.load(
+            tmp_path,
+            ips_path=tmp_path / _MISSING_IPS,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            writer_label="import_portfolio_cli",
+        )
+        cli.add_position(
+            strike_price=200.0,
+            maturity_date=_MATURITY,
+            quantity=5,
+            option_type=OptionType.CALL,
+        )
+
+        # The worker, un-reloaded, still reports its own prior write.
+        assert worker.written_by == worker_written_by_before
+        assert worker.loaded_at == worker_loaded_at_before
+        assert worker.portfolio.positions[0].quantity == 1
+        assert worker.external_write_detected() is True
+
+        # Only a fresh load (a restart) sees the CLI's write — the file
+        # now holds both positions, since `cli` loaded the worker's prior
+        # save before adding its own.
+        restarted = _load(tmp_path)
+        assert restarted.written_by == "import_portfolio_cli"
+        assert len(restarted.portfolio.positions) == 2
+        assert restarted.portfolio.positions[1].quantity == 5
+        assert restarted.external_write_detected() is False
+
+    def test_writer_label_defaults_to_app(self, tmp_path: Path) -> None:
+        state = _load(tmp_path)
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        assert state.written_by == "app"
+
+        raw = json.loads((tmp_path / STATE_FILENAME).read_text())
+        assert raw["metadata"]["written_by"] == "app"
+
+
 class TestMonteCarloScenarioLocalGuard:
     """A scenario-local Monte Carlo run must not dirty or autosave state.
 
