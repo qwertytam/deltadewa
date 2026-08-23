@@ -429,6 +429,17 @@ class IpsConfig:
     )
     sizing: IpsSizing = dataclass_field(default_factory=IpsSizing)
     vega: IpsVega = dataclass_field(default_factory=IpsVega)
+    # #309: which of the optional sections above (market_environment,
+    # sizing, vega) were absent from the loaded ips.yaml and are running
+    # on their DEFAULT_* module constants instead of the operator's own
+    # numbers. Populated once, in load_ips_config, from the raw parsed
+    # YAML — never recomputed from this object's own field values, since
+    # a field that happens to equal its default (an operator who typed
+    # the same number back in) is not the same condition as a section
+    # that was never written at all.
+    defaulted_sections: frozenset[str] = dataclass_field(
+        default_factory=frozenset,
+    )
 
 
 def _require_section(config: dict[str, Any], name: str) -> dict[str, Any]:
@@ -928,6 +939,14 @@ def load_ips_config(path: str | Path) -> IpsConfig:
     if not isinstance(config, dict):
         raise IpsConfigError("ips.yaml root must be a mapping/object")
 
+    # #309: computed from the raw YAML's own top-level keys, not from
+    # comparing parsed values to defaults — see IpsConfig.defaulted_sections.
+    defaulted_sections = frozenset(
+        name
+        for name in ("market_environment", "sizing", "vega")
+        if name not in config
+    )
+
     return IpsConfig(
         program=_parse_program(config),
         pricing=_parse_pricing(config),
@@ -939,4 +958,5 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         market_environment=_parse_market_environment(config),
         sizing=_parse_sizing(config),
         vega=_parse_vega(config),
+        defaulted_sections=defaulted_sections,
     )

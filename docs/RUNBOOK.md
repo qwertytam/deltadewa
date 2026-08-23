@@ -572,9 +572,52 @@ ls -la ~/deltadewa/exports/marketdata-cache/
 # Last backup commit actually pushed
 cd ~/deltadewa/exports && git log -1 --format='%H %ci'
 
-# The app's own view of data freshness
+# The app's own view of data freshness AND boot-wiring health (#309)
 curl http://<tailscale-ip>:8050/health
 ```
+
+**Read past `"status": "ok"` — check `boot_wiring` too (#309).** `/health`
+asserting `state_loaded`/`market_data` presence alone missed #295 for
+weeks: `ips_config` and the portfolio object both existed, so a presence
+check passed while `default_exercise_style` was never actually wired and
+two panels rendered dead. `boot_wiring` is the fix — six explicit,
+post-boot assertions on the objects the app actually built (see
+`deltadewa/app/health_checks.py` for the full list and why these six):
+
+```json
+"status": "ok",
+"boot_wiring": {
+  "ips_loaded": {"ok": true, "detail": "ips.yaml loaded"},
+  "ips_sections_configured": {"ok": true, "detail": "...", "value": []},
+  "exercise_style_wired": {"ok": true, "detail": "default_exercise_style=EUROPEAN"},
+  "state_persisted": {"ok": true, "detail": "no unsaved changes"},
+  "state_file_undisturbed": {"ok": true, "detail": "..."},
+  "cache_dir_writable": {"ok": true, "detail": "...", "value": "/app/exports/marketdata-cache"}
+}
+```
+
+- **`status` can read `"degraded"` while HTTP still returns 200** —
+  `/health` stays a liveness probe (never restart-loop the container over
+  it); `degraded` means *investigate*, not *the app is down*.
+- **`ips_sections_configured`'s `value` lists which of
+  `market_environment`/`sizing`/`vega` fell back to code defaults.** This
+  one never turns `status` to `degraded` on its own — a program
+  deliberately content with the defaults is legitimate — but a non-empty
+  list here after you edited `config/ips.yaml` almost always means a typo
+  in that section's key name (the section silently reads as absent
+  rather than raising).
+- **`exercise_style_wired: false`** means `add_position()` will raise for
+  any leg with no explicit `exercise_style` — check `pricing.
+  exercise_style` is actually present in `config/ips.yaml` (§5).
+- **`state_file_undisturbed: false`** is §5's importer notice, restated
+  here: `exports/program_state.json` changed since this worker last
+  loaded or saved it (almost always the CLI importer having just run) —
+  restart to pick it up.
+- **`cache_dir_writable: false`** is #300's finding, made checkable
+  directly: the `value` field names the exact resolved path this worker
+  tried to write — diff it against `docker compose run --rm jobs env |
+  grep CACHE_DIR` if `app` and `jobs` might have resolved
+  `DELTADEWA_CACHE_DIR` differently.
 
 Also check the healthchecks.io (or equivalent) dashboard — all three
 checks should show green with a "last ping" time inside their schedule +

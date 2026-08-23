@@ -1031,3 +1031,62 @@ class TestSizing:
         config = {**_VALID_CONFIG, "sizing": {"portfolio_beta": -1.0}}
         with pytest.raises(IpsConfigError, match="portfolio_beta"):
             load_ips_config(_write_yaml(tmp_path, config))
+
+
+class TestDefaultedSections:
+    """#309: which optional sections silently fell back to code defaults.
+
+    ``defaulted_sections`` is what ``/health``'s ``ips_sections_configured``
+    check reports (deltadewa/app/health_checks.py) — computed from the raw
+    YAML's own top-level keys, not from comparing parsed values back to the
+    ``DEFAULT_*`` constants, so an operator who deliberately typed the
+    default number back in is not mistaken for a missing section.
+    """
+
+    def test_all_three_optional_sections_absent(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """_VALID_CONFIG carries none of market_environment/sizing/vega."""
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+
+        config = load_ips_config(path)
+
+        assert config.defaulted_sections == frozenset(
+            {"market_environment", "sizing", "vega"},
+        )
+
+    def test_example_ips_yaml_has_no_defaulted_sections(self) -> None:
+        """The tracked template writes out all three sections explicitly."""
+        config = load_ips_config(EXAMPLE_IPS_YAML)
+
+        assert config.defaulted_sections == frozenset()
+
+    def test_one_section_present_is_not_reported_as_defaulted(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Only the sections actually missing from the YAML are flagged."""
+        config_dict = {**_VALID_CONFIG, "sizing": {"portfolio_beta": 0.85}}
+        path = _write_yaml(tmp_path, config_dict)
+
+        config = load_ips_config(path)
+
+        assert config.defaulted_sections == frozenset(
+            {"market_environment", "vega"},
+        )
+
+    def test_a_value_matching_the_default_is_still_not_defaulted(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Typing the default back in is not the same as omitting it."""
+        config_dict = {
+            **_VALID_CONFIG,
+            "sizing": {"portfolio_beta": 1.0},  # equals _DEFAULT_PORTFOLIO_BETA
+        }
+        path = _write_yaml(tmp_path, config_dict)
+
+        config = load_ips_config(path)
+
+        assert "sizing" not in config.defaulted_sections

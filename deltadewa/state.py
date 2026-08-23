@@ -90,8 +90,6 @@ from deltadewa.persistence import PortfolioSerializer
 from deltadewa.reporting import PortfolioLogger
 
 if TYPE_CHECKING:
-    from datetime import datetime as dt
-
     from deltadewa.constants import ExerciseStyle
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
@@ -118,7 +116,7 @@ class ProgramState:
     invalid" fallback logic in one place.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
         portfolio: OptionPortfolio,
@@ -477,14 +475,14 @@ class ProgramState:
     def add_position(  # pylint: disable=too-many-arguments
         self,
         strike_price: float,
-        maturity_date: dt,
+        maturity_date: datetime,
         quantity: int,
         option_type: OptionType = OptionType.CALL,
         contract_size: int | None = None,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
         entry_spot: float | None = None,
-        entry_date: dt | None = None,
+        entry_date: datetime | None = None,
         entry_premium: float | None = None,
     ) -> OptionPosition:
         """Add a position. See ``OptionPortfolio.add_position``."""
@@ -509,7 +507,7 @@ class ProgramState:
         index: int,
         quantity: int | None = None,
         strike: float | None = None,
-        expiry: dt | None = None,
+        expiry: datetime | None = None,
         option_type: OptionType | None = None,
         contract_size: int | None = None,
         volatility: float | None = None,
@@ -559,7 +557,7 @@ class ProgramState:
         volatility: float | None = None,
         risk_free_rate: float | None = None,
         dividend_yield: float | None = None,
-        valuation_date: dt | None = None,
+        valuation_date: datetime | None = None,
         override_custom_volatility: bool = False,
     ) -> None:
         """Update market conditions.
