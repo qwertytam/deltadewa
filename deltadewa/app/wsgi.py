@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 def _build() -> ProgramDashApp:
     """Construct the app once, against the shared ``exports/`` state."""
     logging.basicConfig(level=logging.INFO)
-    state = ProgramState.load(Path("exports"))
+    state = ProgramState.load(Path("exports"), writer_label="app")
     return create_app(
         state=state,
         market_data=CboeFredProvider(

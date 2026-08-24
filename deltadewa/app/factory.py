@@ -19,7 +19,9 @@ from flask import jsonify
 from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.app.chrome import build_chrome
+from deltadewa.app.health_checks import run_checks, summarize
 from deltadewa.app.pages import design, monitor
+from deltadewa.marketdata import default_cache_dir
 
 if TYPE_CHECKING:
     from flask import Flask, Response
@@ -142,21 +144,47 @@ def create_app(
     def _health() -> tuple[Response, int]:
         # Reuses the same cheap, no-network read _serve_layout already
         # does for the chrome banner — a dead-man's-switch ping must not
-        # itself trigger a fetch or a reprice.
+        # itself trigger a fetch or a reprice. Every boot-wiring check
+        # below is the same class: O(1) attribute reads, one Path.stat(),
+        # or one mkdir+write+unlink — see health_checks.py's module
+        # docstring (#309).
         environment = assess_market_environment(market_data, env_policy)
         as_of = (
             environment.as_of.isoformat()
             if environment.as_of is not None
             else None
         )
+        checks = run_checks(state, cache_dir=default_cache_dir())
+        wiring_status, boot_wiring = summarize(checks)
+        # "status" reflects boot-wiring health, not just liveness — but
+        # HTTP always stays 200 (see summarize()'s docstring): a policy
+        # nit like a defaulted IPS section must never look like a reason
+        # to restart-loop a working container.
         return jsonify(
             {
-                "status": "ok",
+                "status": wiring_status,
                 "state_loaded": state.loaded_from is not None,
                 "market_data": {
                     "source": environment.data_quality.value,
                     "as_of": as_of,
                 },
+                # #355: who last wrote the shared state file, and whether
+                # it has changed since this worker last read or wrote it
+                # itself — a single Path.stat() under external_write_
+                # detected(), no lock, no reprice. Lets the CLI importer
+                # (or an operator) tell "the running worker already has
+                # this" apart from "only the file has this."
+                "state": {
+                    "written_by": state.written_by,
+                    "loaded_at": state.loaded_at,
+                    "external_write_detected": (
+                        state.external_write_detected()
+                    ),
+                },
+                # #309: a small, explicit set of post-boot assertions on
+                # the objects the real boot path constructed — see
+                # health_checks.py for which six and why.
+                "boot_wiring": boot_wiring,
             },
         ), 200
 

@@ -1,4 +1,4 @@
-"""CLI: load a portfolio YAML into the running app's shared state.
+"""CLI: load a portfolio YAML into the shared program state *file*.
 
 Usage::
 
@@ -9,14 +9,30 @@ way to get positions into ``exports/program_state.json`` short of hand-
 editing it. Writes through ``ProgramState.import_portfolio``, so it
 inherits that method's atomic write and its refusal to leave a partial
 state file behind on a bad import.
+
+**This does not reach the running app (#355).** ``docker compose exec``
+starts a fresh process inside the container; it never touches the live
+gunicorn worker's Python heap. This CLI builds its own ``ProgramState``,
+writes ``exports/program_state.json``, and exits — the worker keeps
+serving whatever it already had in memory until it is restarted. See
+``deltadewa/state.py``'s "What this module still does not do (#355)" for
+why that gap is not closed with a reload here. After a successful import
+this prints what it wrote, and — unless ``--no-live-check`` is passed —
+best-effort probes the running worker's own ``/health`` to make that gap
+concrete rather than theoretical: which process the worker thinks last
+wrote the file, and whether that matches this run.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
+
+import requests
 
 from deltadewa.analysis.portfolio_shape import classify_portfolio_shape
 from deltadewa.state import STATE_FILENAME, ProgramState
@@ -24,13 +40,19 @@ from deltadewa.state import STATE_FILENAME, ProgramState
 _DEFAULT_EXPORT_DIR = Path("exports")
 _DEFAULT_IPS_PATH = Path("config/ips.yaml")
 _NOTICE_RULE_WIDTH = 70
+_WRITER_LABEL = "import_portfolio_cli"
+_HEALTH_URL_ENV_VAR = "DELTADEWA_HEALTH_URL"
+_DEFAULT_HEALTH_URL = "http://127.0.0.1:8050/health"
+_HEALTH_REQUEST_TIMEOUT_SECONDS = 5
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     """Parse CLI arguments for the importer."""
     parser = argparse.ArgumentParser(
         description=(
-            "Load a portfolio YAML into the app's shared program state."
+            "Load a portfolio YAML into the app's shared state file. "
+            "Does NOT reach a running app worker directly — see the "
+            "module docstring."
         ),
     )
     parser.add_argument(
@@ -65,6 +87,26 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "state file, so it can never be silently clobbered."
         ),
     )
+    parser.add_argument(
+        "--app-url",
+        default=None,
+        help=(
+            "Base health-check URL of the running app worker, used only "
+            "for the post-import live-divergence notice (default: "
+            f"${_HEALTH_URL_ENV_VAR} if set, else {_DEFAULT_HEALTH_URL} — "
+            "correct when run via `docker compose exec app ...`, since "
+            "that shares the app container's network namespace)."
+        ),
+    )
+    parser.add_argument(
+        "--no-live-check",
+        action="store_true",
+        help=(
+            "Skip the post-import probe of the running worker's /health. "
+            "The import itself is unaffected either way — this only "
+            "controls whether the CLI tries to report on staleness."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -91,6 +133,86 @@ def _warn_if_non_conforming(state: ProgramState) -> None:
     print(rule, file=sys.stderr)
 
 
+def _fetch_live_health(app_url: str) -> dict[str, Any] | None:
+    """Best-effort GET of the running worker's ``/health``.
+
+    Never raises — mirrors ``deltadewa.heartbeat.ping``'s contract: a
+    monitoring hiccup here must not fail the import that already
+    succeeded. Returns ``None`` on any connection error, timeout, or
+    non-2xx response.
+    """
+    try:
+        response = requests.get(
+            app_url,
+            timeout=_HEALTH_REQUEST_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        return None
+    try:
+        payload: dict[str, Any] = response.json()
+    except ValueError:
+        return None
+    return payload
+
+
+def _report_live_divergence(state: ProgramState, app_url: str) -> None:
+    """Print what the just-written file holds vs. what the live worker does.
+
+    This never fails the import and never changes the exit code — it is
+    informational only, printed after the write already succeeded. The
+    two-process split means the live worker (if any) almost never already
+    reflects this write; the point is to make that concrete instead of
+    letting the importer's own "Loaded N position(s)..." success message
+    read as if it reached the running app.
+    """
+    written_by = state.written_by
+    loaded_at = state.loaded_at
+    print(
+        f"\nJust wrote {state.state_path} "
+        f"(written_by={written_by!r}, loaded_at={loaded_at!r}).",
+    )
+
+    health = _fetch_live_health(app_url)
+    if health is None:
+        print(
+            f"Could not reach a running app worker at {app_url} to "
+            "confirm whether it has this. If the app is running, it has "
+            "NOT picked this up — restart it: "
+            "docker compose restart app",
+            file=sys.stderr,
+        )
+        return
+
+    live_state = health.get("state") or {}
+    live_written_by = live_state.get("written_by")
+    live_loaded_at = live_state.get("loaded_at")
+
+    if (
+        health.get("state_loaded")
+        and live_written_by == written_by
+        and (live_loaded_at == loaded_at)
+    ):
+        # Only possible if the worker independently loaded from the same
+        # file at the same instant this process did (e.g. it restarted
+        # between the write and this probe) — not something a caller
+        # should rely on, but worth saying plainly if it happens.
+        print(
+            "The running app worker's /health now reports this same "
+            "write — it already reflects the import.",
+        )
+        return
+
+    print(
+        "The running app worker has NOT picked this up yet — its "
+        f"/health reports written_by={live_written_by!r}, "
+        f"loaded_at={live_loaded_at!r}, which does not match what was "
+        "just written above. Restart it to apply this import: "
+        "docker compose restart app",
+        file=sys.stderr,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Import a portfolio YAML into ``<export-dir>/program_state.json``.
 
@@ -100,7 +222,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     """
     args = _parse_args(argv)
-    state = ProgramState.load(args.export_dir, ips_path=args.ips_path)
+    state = ProgramState.load(
+        args.export_dir,
+        ips_path=args.ips_path,
+        writer_label=_WRITER_LABEL,
+    )
 
     if state.loaded_from is not None and not args.force:
         print(
@@ -129,6 +255,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{args.portfolio_path} into {dest}",
     )
     _warn_if_non_conforming(state)
+
+    if not args.no_live_check:
+        app_url = (
+            args.app_url
+            or os.environ.get(_HEALTH_URL_ENV_VAR)
+            or _DEFAULT_HEALTH_URL
+        )
+        _report_live_divergence(state, app_url)
+
     return 0
 
 

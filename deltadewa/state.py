@@ -51,12 +51,34 @@ reader would put mutators behind renders and renders behind saves. See
 :attr:`ProgramState.portfolio` for the accepted-stale contract that buys, and
 :meth:`ProgramState.positions_snapshot` for the one case that needs a
 consistent view.
+
+What this module still does not do (#355)
+------------------------------------------
+There is no reload path, and this is deliberate rather than an omission.
+``self._portfolio`` is rebound in exactly one place — inside
+``import_portfolio``, in-process, under the lock — and nowhere else. A file
+watcher or an admin reload endpoint would rebind it from *outside* a
+request, mid-render: a page callback reads :attr:`ProgramState.portfolio`
+more than once, so half the panels would price the book a reload swapped in
+underneath them and half would price the one from before it, with the
+header disagreeing with the table. That is a new failure mode, worse than
+the accepted-stale one above, not a variant of it.
+
+Instead, :meth:`ProgramState.external_write_detected` lets a caller (the
+importer CLI, or ``/health``) learn that ``program_state.json`` was written
+by a process other than this one, so a human can decide to restart rather
+than the app silently swapping its own book. That check is a single
+``Path.stat()`` compared against an mtime recorded at ``load()``/save time —
+it deliberately does **not** take the lock, for the same reason
+``portfolio`` doesn't: it must stay cheap enough for a liveness probe, and a
+stale read of it costs at most one late warning, never a torn book.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -68,8 +90,6 @@ from deltadewa.persistence import PortfolioSerializer
 from deltadewa.reporting import PortfolioLogger
 
 if TYPE_CHECKING:
-    from datetime import datetime as dt
-
     from deltadewa.constants import ExerciseStyle
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
@@ -96,7 +116,7 @@ class ProgramState:
     invalid" fallback logic in one place.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
         portfolio: OptionPortfolio,
@@ -104,6 +124,10 @@ class ProgramState:
         ips_config: IpsConfig | None,
         serializer: PortfolioSerializer,
         default_exercise_style: ExerciseStyle | None,
+        state_path: Path,
+        written_by: str | None = None,
+        loaded_at: str | None = None,
+        loaded_mtime: float | None = None,
     ) -> None:
         """Wrap already-resolved state; prefer :meth:`load`."""
         self._portfolio = portfolio
@@ -117,6 +141,15 @@ class ProgramState:
         # save_if_dirty(), and import_portfolio() nests into both, so a
         # non-reentrant lock would deadlock on the first mutation (#299).
         self._lock = threading.RLock()
+        # #355: where the shared state file lives, and what this instance
+        # last knew about it — who wrote it, and its mtime at that moment.
+        # _own_mtime is updated on every write this instance makes (see
+        # _mutate_and_save), so external_write_detected() only fires on a
+        # change *this* process didn't make.
+        self._state_path = state_path
+        self._written_by = written_by
+        self._loaded_at = loaded_at
+        self._own_mtime = loaded_mtime
 
     @classmethod
     def load(
@@ -125,6 +158,7 @@ class ProgramState:
         *,
         ips_path: str | Path = Path("config/ips.yaml"),
         default_exercise_style: ExerciseStyle | None = None,
+        writer_label: str = "app",
     ) -> ProgramState:
         """Load the shared program state from ``export_dir``.
 
@@ -145,12 +179,18 @@ class ProgramState:
                 taken from ``ips_config.pricing.exercise_style`` (#295) —
                 pass an explicit value only to override the program's own
                 policy.
+            writer_label: Identifies this process in every export it
+                writes from here on (#355) — e.g. ``"app"`` for the live
+                worker, ``"import_portfolio_cli"`` for the importer.
 
         Returns:
             A ready-to-use ``ProgramState``.
 
         """
-        serializer = PortfolioSerializer(export_dir=export_dir)
+        serializer = PortfolioSerializer(
+            export_dir=export_dir,
+            writer_label=writer_label,
+        )
         state_path = export_dir / STATE_FILENAME
 
         # Policy is read before the book, because the book's valuation date
@@ -183,6 +223,9 @@ class ProgramState:
         )
 
         loaded_from: Path | None
+        written_by: str | None = None
+        loaded_at: str | None = None
+        loaded_mtime: float | None = None
         if state_path.exists():
             result = serializer.import_from_json(
                 state_path,
@@ -191,7 +234,29 @@ class ProgramState:
             )
             portfolio = result["portfolio"]
             loaded_from = state_path
-            _logger.info("Loaded shared program state from %s", state_path)
+            metadata = result.get("metadata") or {}
+            written_by = metadata.get("written_by")
+            loaded_at = metadata.get("exported_at")
+            loaded_mtime = state_path.stat().st_mtime
+            # #355: a file written by a different process than this one is
+            # exactly the field-test near-miss — surface it at boot, since
+            # that's when the wrong value would silently become live.
+            if written_by is not None and written_by != writer_label:
+                _logger.warning(
+                    "Loaded shared program state from %s, written by "
+                    "'%s' at %s — not this process ('%s'). If that write "
+                    "happened after this worker last saved, this boot "
+                    "picked up whatever that other process wrote.",
+                    state_path,
+                    written_by,
+                    loaded_at,
+                    writer_label,
+                )
+            else:
+                _logger.info(
+                    "Loaded shared program state from %s",
+                    state_path,
+                )
         else:
             portfolio = create_empty_portfolio(
                 default_exercise_style=default_exercise_style,
@@ -209,6 +274,10 @@ class ProgramState:
             ips_config=ips_config,
             serializer=serializer,
             default_exercise_style=default_exercise_style,
+            state_path=state_path,
+            written_by=written_by,
+            loaded_at=loaded_at,
+            loaded_mtime=loaded_mtime,
         )
 
     @property
@@ -281,6 +350,58 @@ class ProgramState:
         """The state file this instance was loaded from, or ``None``."""
         return self._loaded_from
 
+    @property
+    def state_path(self) -> Path:
+        """Where this instance's shared state file lives (#355).
+
+        Set at construction whether or not the file existed yet — this is
+        the path a save would write to, not just one it has read from.
+        """
+        return self._state_path
+
+    @property
+    def written_by(self) -> str | None:
+        """Who wrote the state file this instance last knew about (#355).
+
+        The ``metadata.written_by`` label from the load, updated after
+        every save this instance makes. ``None`` for a fresh book with no
+        file yet, or a file that predates this field.
+        """
+        return self._written_by
+
+    @property
+    def loaded_at(self) -> str | None:
+        """When the known-about state file was last written (#355).
+
+        The ``metadata.exported_at`` timestamp from the load, updated
+        after every save this instance makes. ``None`` for a fresh book.
+        """
+        return self._loaded_at
+
+    def external_write_detected(self) -> bool:
+        """Whether ``state_path`` changed since this instance last knew.
+
+        True when the file's on-disk mtime no longer matches what this
+        instance last loaded or wrote — i.e. another process (the CLI
+        importer, most likely) has written it since. **Deliberately
+        unlocked**, like :attr:`portfolio` (#299/#355): this is a liveness
+        signal, not a mutation, so it must stay cheap enough to sit behind
+        ``/health`` — one ``Path.stat()``, no lock, no reprice. A stale
+        read costs at most one late warning, never a torn book.
+
+        Returns:
+            ``False`` if the file doesn't exist, or its mtime matches what
+            this instance last recorded. ``True`` otherwise.
+
+        """
+        try:
+            current_mtime = self._state_path.stat().st_mtime
+        except FileNotFoundError:
+            return False
+        if self._own_mtime is None:
+            return True
+        return current_mtime != self._own_mtime
+
     def save_if_dirty(self) -> bool:
         """Atomically persist to ``exports/program_state.json`` if dirty.
 
@@ -303,6 +424,16 @@ class ProgramState:
                 filename=STATE_FILENAME,
             )
             self._dirty = False
+            # #355: this instance just became the file's most recent
+            # writer — record that so a later external_write_detected()
+            # only fires on a change this instance didn't make itself.
+            mtime = self._state_path.stat().st_mtime
+            self._own_mtime = mtime
+            self._written_by = self._serializer.writer_label
+            self._loaded_at = datetime.fromtimestamp(
+                mtime,
+                tz=UTC,
+            ).isoformat()
             return True
 
     def export_snapshot(self, filename: str) -> Path:
@@ -344,14 +475,14 @@ class ProgramState:
     def add_position(  # pylint: disable=too-many-arguments
         self,
         strike_price: float,
-        maturity_date: dt,
+        maturity_date: datetime,
         quantity: int,
         option_type: OptionType = OptionType.CALL,
         contract_size: int | None = None,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
         entry_spot: float | None = None,
-        entry_date: dt | None = None,
+        entry_date: datetime | None = None,
         entry_premium: float | None = None,
     ) -> OptionPosition:
         """Add a position. See ``OptionPortfolio.add_position``."""
@@ -376,7 +507,7 @@ class ProgramState:
         index: int,
         quantity: int | None = None,
         strike: float | None = None,
-        expiry: dt | None = None,
+        expiry: datetime | None = None,
         option_type: OptionType | None = None,
         contract_size: int | None = None,
         volatility: float | None = None,
@@ -426,7 +557,7 @@ class ProgramState:
         volatility: float | None = None,
         risk_free_rate: float | None = None,
         dividend_yield: float | None = None,
-        valuation_date: dt | None = None,
+        valuation_date: datetime | None = None,
         override_custom_volatility: bool = False,
     ) -> None:
         """Update market conditions.

@@ -33,6 +33,8 @@ class PortfolioSerializer:
         self,
         export_dir: str | Path,
         examples_dir: str | Path | None = None,
+        *,
+        writer_label: str = "app",
     ) -> None:
         """Initialize the serializer.
 
@@ -41,9 +43,17 @@ class PortfolioSerializer:
             be set later.
             examples_dir: Directory path for example portfolios (str or Path)
             If None, must be set later.
+            writer_label: Identifies which process wrote a given export, in
+                its ``metadata.written_by`` field (#355) — e.g. ``"app"``
+                for the live worker, ``"import_portfolio_cli"`` for the
+                importer. Never derived from ``sys.argv``: ``exports/`` is
+                pushed to an offsite git remote nightly, and a raw command
+                line is exactly the kind of operational value that must not
+                land in a backed-up artifact.
 
         """
         self.export_dir = Path(export_dir)
+        self.writer_label = writer_label
         try:
             self.export_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:  # pylint: disable=broad-exception-caught
@@ -125,6 +135,7 @@ class PortfolioSerializer:
             "metadata": {
                 "exported_at": dt.now(tz=datetime.UTC).isoformat(),
                 "version": "1.0",
+                "written_by": self.writer_label,
             },
             "market_parameters": {
                 "spot_price": portfolio.spot_price,
