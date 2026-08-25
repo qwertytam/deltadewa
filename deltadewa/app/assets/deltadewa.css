@@ -191,6 +191,43 @@ body {
   color: #1a1a1a;
 }
 
+/* IPS compliance strip (#298): one line, above the scenario explorer, so
+   a FAIL cannot be scrolled past. Left accent border carries the verdict
+   at a glance; same card shape as .scenario-explorer/.decisions-section
+   so it reads as a peer panel, not a caption. */
+
+.compliance-strip {
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  border-left: 4px solid #767676;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+  padding: 14px 20px;
+  margin-bottom: 24px;
+}
+
+.compliance-verdict {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.compliance-verdict--pass {
+  color: #1b7a1b;
+}
+
+.compliance-verdict--fail {
+  color: #b02a2a;
+}
+
+.compliance-strip:has(.compliance-verdict--pass) {
+  border-left-color: #1b7a1b;
+}
+
+.compliance-strip:has(.compliance-verdict--fail) {
+  border-left-color: #b02a2a;
+}
+
 /* Spot cross-check: book spot vs. the observed market reading (#336) */
 
 .spot-headline {

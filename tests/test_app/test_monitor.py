@@ -25,6 +25,7 @@ from dash.development.base_component import Component
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
+from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
@@ -131,6 +132,66 @@ def _app_with_spot(
         state=state,
         market_data=market_data,
         ips_config=state.ips_config,
+    )
+
+
+def _app_with_convexity_band(
+    tmp_path: Path,
+    *,
+    band: str,
+) -> ProgramDashApp:
+    """Build a /monitor app whose IPS convexity band is forced pass/fail.
+
+    Measures the book's *own* crash convexity first, then places the IPS
+    band above it (``band="above"`` — the book is under-hedged, forcing a
+    FAIL) or straddling it (``band="around"`` — forcing a PASS). Deriving
+    the band from the measured value, rather than asserting against the
+    IPS example's own 10-20% band, is what keeps this fixture correct
+    however Batch 4 (or any future change) moves that band — see
+    CLAUDE.md's clock/fixture notes on not pinning a test to a policy
+    value that is itself expected to move.
+    """
+    state = ProgramState.load(
+        tmp_path,
+        ips_path=_EXAMPLE_IPS_YAML,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    state.portfolio.spot_price = 5000.0
+    # 5,000 shares against 10 puts keeps carry comfortably within the
+    # example IPS's 1% budget (~0.5%) regardless of which way the
+    # convexity band is forced below — otherwise a forced-PASS convexity
+    # band could still read overall FAIL on the carry row alone.
+    state.set_underlying_quantity(5_000.0)
+    state.add_position(
+        strike_price=4500.0,
+        maturity_date=days_from_today(180),
+        quantity=10,
+        option_type=OptionType.PUT,
+    )
+    market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
+    ips_config = state.ips_config
+    assert ips_config is not None
+    measured_pct = PortfolioAnalyzer(
+        state.portfolio,
+    ).calculate_crash_convexity_pct(CrashShock.from_ips(ips_config.convexity))
+    if band == "above":
+        target_min_pct = measured_pct + 5.0
+        target_max_pct = measured_pct + 10.0
+    else:
+        target_min_pct = measured_pct - 5.0
+        target_max_pct = measured_pct + 5.0
+    forced_ips_config = dataclasses.replace(
+        ips_config,
+        convexity=dataclasses.replace(
+            ips_config.convexity,
+            target_min_pct=target_min_pct,
+            target_max_pct=target_max_pct,
+        ),
+    )
+    return create_app(
+        state=state,
+        market_data=market_data,
+        ips_config=forced_ips_config,
     )
 
 
@@ -354,6 +415,87 @@ class TestBasisChip:
         layout = monitor.render(monitor_app.app)
 
         assert "basis: crash-skew (IPS anchor)" in str(layout)
+
+
+class TestComplianceStrip:
+    """#298: /monitor's one-line IPS compliance strip.
+
+    Structural checks on ``render()``'s own component tree — a FAIL book
+    must not be able to render the page without ``id="compliance-strip"``
+    present, per the issue's acceptance criterion, which this asserts
+    structurally rather than by pinning a rendered string.
+    """
+
+    def test_a_failing_book_cannot_render_monitor_without_the_strip(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_convexity_band(tmp_path, band="above")
+
+        layout = monitor.render(app)
+
+        strip = _find_component(layout, "compliance-strip")
+        assert strip is not None
+        text = str(strip)
+        assert "FAIL" in text
+        assert "Crash convexity" in text
+
+    def test_a_passing_book_renders_a_pass_strip(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_convexity_band(tmp_path, band="around")
+
+        layout = monitor.render(app)
+
+        strip = _find_component(layout, "compliance-strip")
+        assert strip is not None
+        text = str(strip)
+        assert "PASS" in text
+        assert "FAIL" not in text
+
+    def test_strip_is_present_before_the_scenario_explorer(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The strip must not be scrollable-past before the rest loads."""
+        layout = monitor.render(monitor_app.app)
+        classes_in_order = [
+            getattr(child, "className", None) for child in layout.children
+        ]
+
+        assert "compliance-strip" in classes_in_order
+        assert "scenario-explorer" in classes_in_order
+        assert classes_in_order.index(
+            "compliance-strip",
+        ) < classes_in_order.index("scenario-explorer")
+
+    def test_dials_never_change_the_compliance_strip(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "#compliance-strip",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        before_strip = page.inner_text("#compliance-strip")
+        before_numbers = page.inner_text("#scenario-numbers")
+
+        spot_slider = page.locator('#spot-slider [role="slider"]')
+        spot_slider.focus()
+        for _ in range(5):
+            page.keyboard.press("ArrowLeft")
+        page.wait_for_function(
+            "(before) => document.getElementById('scenario-numbers')"
+            ".innerText !== before",
+            arg=before_numbers,
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        assert page.inner_text("#compliance-strip") == before_strip
 
 
 class TestSpotCrossCheck:
@@ -760,12 +902,40 @@ class TestHedgeEfficiencySentence:
             quantity=handle.state.portfolio.underlying_quantity,
         )
 
+    @staticmethod
+    def _sentence(
+        result: ScenarioResult,
+        *,
+        convexity_pct: float | None = 100.0,
+        convexity_target_min_pct: float | None = 0.0,
+        vega_sufficiency_pct: float | None = 100.0,
+        vega_sufficiency_min_pct: float = 0.0,
+    ) -> str:
+        """Call ``_efficiency_sentence`` with safely in-band book facts.
+
+        Defaults keep convexity/vega well clear of their floors, so a
+        test that isn't exercising the "cheap but too small" combination
+        (#304) never accidentally triggers its caveat text. Returns the
+        rendered ``<p>``'s text content directly, since it is always a
+        single paragraph (the caveat is appended into the same sentence,
+        never a second ``<p>`` — see that function's docstring).
+        """
+        return str(
+            monitor._efficiency_sentence(
+                result,
+                convexity_pct=convexity_pct,
+                convexity_target_min_pct=convexity_target_min_pct,
+                vega_sufficiency_pct=vega_sufficiency_pct,
+                vega_sufficiency_min_pct=vega_sufficiency_min_pct,
+            ).children,
+        )
+
     def test_states_the_ratio_and_its_verdict(
         self,
         monitor_app: MonitorAppHandle,
     ) -> None:
         result = self._scenario(monitor_app)
-        text = monitor._efficiency_sentence(result).children
+        text = self._sentence(result)
 
         assert "of hedge payoff" in text
         assert result.efficiency.verdict.value.lower() in text
@@ -780,7 +950,7 @@ class TestHedgeEfficiencySentence:
         smaller ratio as if it were the program's headline efficiency.
         """
         result = self._scenario(monitor_app, spot_pct=-5.0)
-        text = monitor._efficiency_sentence(result).children
+        text = self._sentence(result)
 
         assert "-5.0% scenario" in text
 
@@ -789,7 +959,7 @@ class TestHedgeEfficiencySentence:
         monitor_app: MonitorAppHandle,
     ) -> None:
         result = self._scenario(monitor_app)
-        text = monitor._efficiency_sentence(result).children
+        text = self._sentence(result)
         ips_config = monitor_app.state.ips_config
         assert ips_config is not None
 
@@ -813,7 +983,7 @@ class TestHedgeEfficiencySentence:
             ),
         )
 
-        text = monitor._efficiency_sentence(no_carry).children
+        text = self._sentence(no_carry)
 
         assert "no denominator" in text
         assert "x band" not in text
@@ -834,10 +1004,177 @@ class TestHedgeEfficiencySentence:
             ),
         )
 
-        text = monitor._efficiency_sentence(losing).children
+        text = self._sentence(losing)
 
         assert "loses" in text
         assert "$-" not in text
+
+    def test_below_band_says_below_not_against(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """#304: a POOR reading must say which side of the band it's on."""
+        result = self._scenario(monitor_app)
+        poor = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=1.0,
+                verdict=EfficiencyVerdict.POOR,
+                band_min_ratio=3.0,
+                band_max_ratio=6.0,
+            ),
+        )
+
+        text = self._sentence(poor)
+
+        assert "below the IPS 3-6x band" in text
+        assert "against" not in text
+
+    def test_in_band_says_within_not_against(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """#304: an ACCEPTABLE reading genuinely is "against" the band."""
+        result = self._scenario(monitor_app)
+        acceptable = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=4.5,
+                verdict=EfficiencyVerdict.ACCEPTABLE,
+                band_min_ratio=3.0,
+                band_max_ratio=6.0,
+            ),
+        )
+
+        text = self._sentence(acceptable)
+
+        assert "within the IPS 3-6x band" in text
+        assert "against" not in text
+
+    def test_above_band_states_the_multiple_not_against(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """#304's original finding: 20.7 read as "against" a 3-6x band.
+
+        "Against" implies in-band. The sentence must instead say how far
+        above the ceiling the reading is.
+        """
+        result = self._scenario(monitor_app)
+        attractive = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=20.69,
+                verdict=EfficiencyVerdict.ATTRACTIVE,
+                band_min_ratio=3.0,
+                band_max_ratio=6.0,
+            ),
+        )
+
+        text = self._sentence(attractive)
+
+        assert "against" not in text
+        assert "3.4x above the IPS 3-6x band's ceiling" in text
+
+    def test_cheap_but_too_small_when_convexity_is_short(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """#304: an extreme ratio from a tiny, under-hedged book."""
+        result = self._scenario(monitor_app)
+        attractive = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=20.69,
+                verdict=EfficiencyVerdict.ATTRACTIVE,
+                band_min_ratio=3.0,
+                band_max_ratio=6.0,
+            ),
+        )
+
+        text = self._sentence(
+            attractive,
+            convexity_pct=8.0,
+            convexity_target_min_pct=10.0,
+        )
+
+        assert "cheap because the book is small" in text
+        assert "crash convexity is below its target band" in text
+        assert "Cheap, but too small" in text
+
+    def test_cheap_but_too_small_when_vega_is_short(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        result = self._scenario(monitor_app)
+        attractive = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=20.69,
+                verdict=EfficiencyVerdict.ATTRACTIVE,
+                band_min_ratio=3.0,
+                band_max_ratio=6.0,
+            ),
+        )
+
+        text = self._sentence(
+            attractive,
+            vega_sufficiency_pct=0.9,
+            vega_sufficiency_min_pct=1.5,
+        )
+
+        assert "cheap because the book is small" in text
+        assert "vega sufficiency is below its floor" in text
+
+    def test_no_caveat_when_attractive_and_everything_in_band(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        result = self._scenario(monitor_app)
+        attractive = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=20.69,
+                verdict=EfficiencyVerdict.ATTRACTIVE,
+                band_min_ratio=3.0,
+                band_max_ratio=6.0,
+            ),
+        )
+
+        text = self._sentence(attractive)
+
+        assert "cheap because the book is small" not in text
+
+    def test_no_caveat_when_short_but_not_attractive(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The caveat is specific to ATTRACTIVE — POOR is already the flag."""
+        result = self._scenario(monitor_app)
+        acceptable = dataclasses.replace(
+            result,
+            efficiency=dataclasses.replace(
+                result.efficiency,
+                ratio=4.5,
+                verdict=EfficiencyVerdict.ACCEPTABLE,
+                band_min_ratio=3.0,
+                band_max_ratio=6.0,
+            ),
+        )
+
+        text = self._sentence(
+            acceptable,
+            convexity_pct=8.0,
+            convexity_target_min_pct=10.0,
+        )
+
+        assert "cheap because the book is small" not in text
 
     def test_sentence_is_in_the_cost_panel_and_moves_with_the_spot_dial(
         self,
