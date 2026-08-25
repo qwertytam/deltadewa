@@ -25,6 +25,7 @@ from dash.development.base_component import Component
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
+from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
@@ -1394,6 +1395,39 @@ class TestCollapsedPositionTable:
             expected_value,
             abs=1.0,
         )
+
+
+class TestPageFooter:
+    """#359: the version stamp is the page's own last element.
+
+    Previously nested inside scenario_explorer, styled identically to
+    the surrounding financial prose — easy to render correctly and still
+    be missed by a human scanning the page. Now the true last child of
+    the page, after Position detail, in its own footer style.
+    """
+
+    def test_footer_is_the_last_top_level_child(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        last_child = layout.children[-1]
+        assert getattr(last_child, "className", None) == "page-footer"
+        assert f"Running v{__version__}" in str(last_child)
+
+    def test_footer_visible_regardless_of_position_detail_state(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(".page-footer", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        assert page.locator(".page-footer").is_visible()
+
+        page.click("details.position-detail summary")
+
+        assert page.locator(".page-footer").is_visible()
 
 
 class TestShapeNotice:

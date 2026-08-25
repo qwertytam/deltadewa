@@ -191,6 +191,20 @@ body {
   color: #1a1a1a;
 }
 
+/* Page footer (#359): deliberately NOT .plain-language — that class
+   reads as portfolio commentary, and a build-version stamp styled
+   identically to the surrounding financial sentences gets skimmed past.
+   Small, muted, top-bordered, and the true last element of the page
+   (after Position detail) so it sits in the same place regardless of
+   whether that section is expanded or collapsed. */
+.page-footer {
+  margin-top: 24px;
+  padding-top: 8px;
+  border-top: 1px solid #e3e3e3;
+  color: #999;
+  font-size: 0.75rem;
+}
+
 /* IPS compliance strip (#298): one line, above the scenario explorer, so
    a FAIL cannot be scrolled past. Left accent border carries the verdict
    at a glance; same card shape as .scenario-explorer/.decisions-section

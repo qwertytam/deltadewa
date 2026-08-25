@@ -694,6 +694,27 @@ def _position_detail_table(
     )
 
 
+def _page_footer() -> html.Div:
+    """Build the page's own last element: a muted build-version stamp.
+
+    #359: this used to be a ``.plain-language`` sentence sandwiched
+    inside ``scenario_explorer``, between the cost panel and the crash
+    headline — styled identically to every other financial sentence on
+    the page, so it read as one more dense sentence and got skimmed
+    past. A field test confirmed the text was genuinely rendering (it
+    was visible in a copy-paste of the page) but a human looking at the
+    live page still missed it. Placed here — the true last child of the
+    page, after ``_position_detail_table``, with its own class rather
+    than reusing ``.plain-language`` — it stays in the same place
+    whether ``Position detail`` is expanded or collapsed, and its
+    styling marks it as metadata rather than portfolio commentary.
+    """
+    return html.Div(
+        html.P(f"Running v{__version__}"),
+        className="page-footer",
+    )
+
+
 def render(app: ProgramDashApp) -> html.Div:
     """Build the /monitor page: crash-led headline, decisions, position detail.
 
@@ -867,15 +888,6 @@ def render(app: ProgramDashApp) -> html.Div:
                 id="cost-panel",
                 className="cost-panel",
             ),
-            html.Div(
-                [
-                    html.P(
-                        f"Running v{__version__}",
-                        className="plain-language",
-                    ),
-                ],
-                className="plain-language",
-            ),
             _headline_sentence(result),
         ],
         className="scenario-explorer",
@@ -893,6 +905,7 @@ def render(app: ProgramDashApp) -> html.Div:
             scenario_explorer,
             _decisions_section(records, plan),
             _position_detail_table(records, portfolio),
+            _page_footer(),
         ],
         className="page page-monitor",
     )
