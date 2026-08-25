@@ -97,9 +97,16 @@ Three zones:
 
 **The weekly digest** (`deltadewa/reporting/weekly_report.py` →
 `program_report.py`, shipped in M2.6) — an emailed report, not a page. It
-carries the Part VII board/IC report, the decision matrix + entry-timing
-verdict, and a `MarketContextSection` holding `vix`, `regime_label`,
-`skew_percentile`, and `hedge_cost_verdict`.
+carries the Part VII board/IC report and a `MarketContextSection` holding
+`vix`, `regime_label`, `skew_percentile`, and `hedge_cost_verdict`. **The
+decision matrix + entry-timing verdict is carried as of Batch 3b's #307**
+(`ProgramReport.decision`, rendered as the report's §7 "Decision & entry
+timing"): before that, the digest only threaded a bare `decision_verdict`
+string past the report (`WeeklySnapshot.decision_verdict`) and never
+called `entry_timing_tree` at all — `git log -S entry_timing_tree --
+deltadewa/reporting/` has zero commits before #307. This line's earlier
+claim that the digest already carried both was an overclaim, not a
+regression: nothing here was ever built and then removed.
 
 Shared **chrome** (`deltadewa/app/chrome.py`) renders the as-of stamp and the
 STATIC/STALE/UNAVAILABLE provenance banner above both pages. It reads
@@ -136,7 +143,7 @@ default is chipped:
 
 | # | Part X item | Tier | Current surface | Analysis backing | Status |
 | --- | --- | --- | --- | --- | --- |
-| — | Decision matrix + entry-timing tree | pre-Tier | `/design` PLANNING — *Market environment*; also the weekly digest | `analysis/decision_matrix.py` (`decision_matrix`, `entry_timing_tree`) | **PRESENT** (M2.7; VIX thresholds sourced from policy in M2.8) |
+| — | Decision matrix + entry-timing tree | pre-Tier | `/design` PLANNING — *Market environment*; also the weekly digest (§7, since Batch 3b's #307) | `analysis/decision_matrix.py` (`decision_matrix`, `entry_timing_tree`) | **PRESENT** (M2.7; VIX thresholds sourced from policy in M2.8; digest coverage was an overclaim until #307) |
 | 1 | Crash Convexity Chart | 1 | `/monitor` — *Crash scenario*, `payoff-curve` | `analysis/monitor_scenario.build_scenario_curve`, `visualization/crash_charts_plotly.plot_scenario_curve` | **PRESENT** |
 | 2 | Crash Scenario Table & Payoff Ratio | 1 | `/monitor` — *Crash scenario*, `_scenario_numbers` (offset ratio) | `analysis/monitor_scenario.build_scenario` | **PRESENT** (form changed — see [Conscious retirements](#conscious-retirements)) |
 | 3 | Theta Carry (Insurance Cost) | 1 | `/monitor` — *Crash scenario*, `_cost_panel`; also digest `CostSection` | `analysis/carry.carry_vs_budget` via `monitor_scenario` | **PRESENT** |

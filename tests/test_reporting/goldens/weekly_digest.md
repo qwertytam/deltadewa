@@ -1,4 +1,4 @@
-# Weekly Digest — ACTION: Decision verdict
+# Weekly Digest — BREACH: Annual carry cost out of policy (1st week)
 
 **As of:** 2026-08-05
 
@@ -8,7 +8,6 @@ Compared against the snapshot from 2026-07-29.
 
 **Threshold crossings:**
 
-- **Decision verdict:** MAINTAIN → MONETIZE
 - **Worst roll verdict:** MONITOR → N/A
 - **Carry budget:** within budget → over budget
 - **IPS compliance (overall):** all pass → a metric failing
@@ -86,3 +85,16 @@ IPS schedule: 2 step(s) defined.
 | Crash convexity (-25% shock) | 15.0%–25.0% of book | 19.0% | ✓ PASS |
 
 **Overall: ✗ FAIL**
+
+**Recommended action — Annual carry cost:** Carry is above the IPS budget — trim size.
+
+## 7. Decision & entry timing
+
+**Verdict:** MAINTAIN  
+**Rationale:** test rationale
+
+**Entry-timing recommendation:** test entry recommendation
+
+
+---
+Running v0.8.2

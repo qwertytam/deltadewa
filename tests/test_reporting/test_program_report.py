@@ -394,6 +394,78 @@ class TestBuildProgramReport:
         report = _build()
         assert len(report.ips_compliance.rows) == 2
 
+    def test_passing_rows_have_no_action(self) -> None:
+        """action is None exactly when passes is True (#307)."""
+        report = _build(
+            theta_annual=-8_000.0, budget_pct=2.0, meets_target=True
+        )
+        for row in report.ips_compliance.rows:
+            assert row.passes is True
+            assert row.action is None
+
+    def test_carry_over_budget_has_an_action(self) -> None:
+        report = _build(
+            theta_annual=-20_000.0, budget_pct=2.0, meets_target=True
+        )
+        row = next(
+            r
+            for r in report.ips_compliance.rows
+            if r.metric == "Annual carry cost"
+        )
+        assert row.passes is False
+        assert row.action is not None
+        assert "budget" in row.action
+
+    def test_convexity_below_band_action_says_under_hedged(self) -> None:
+        # target_min_pct=10.0 on _IPS_CONVEXITY — 5.0 is below it.
+        report = _build(convexity_pct=5.0, meets_target=False)
+        row = next(
+            r
+            for r in report.ips_compliance.rows
+            if "Crash convexity" in r.metric
+        )
+        assert row.action is not None
+        assert "under-hedged" in row.action
+        assert "over-hedged" not in row.action
+
+    def test_convexity_above_band_action_says_over_hedged(self) -> None:
+        # target_max_pct=30.0 on _IPS_CONVEXITY — 35.0 is above it.
+        report = _build(convexity_pct=35.0, meets_target=False)
+        row = next(
+            r
+            for r in report.ips_compliance.rows
+            if "Crash convexity" in r.metric
+        )
+        assert row.action is not None
+        assert "over-hedged" in row.action
+        assert "under-hedged" not in row.action
+
+    def test_no_convexity_policy_action_names_the_gap(self) -> None:
+        report = _build(ips_convexity=None)
+        row = next(
+            r
+            for r in report.ips_compliance.rows
+            if r.metric == "Crash convexity"
+        )
+        assert row.action is not None
+        assert "No IPS convexity policy" in row.action
+
+    def test_decision_populated_with_a_real_verdict(self) -> None:
+        """build_program_report always sets decision — never None (#307)."""
+        report = _build()
+        assert report.decision is not None
+        assert report.decision.verdict != "INSUFFICIENT_DATA"
+        assert report.decision.entry_recommendation != ""
+
+    def test_decision_insufficient_data_without_a_convexity_policy(
+        self,
+    ) -> None:
+        """No fabricated number is fed to the classifier (#307)."""
+        report = _build(ips_convexity=None)
+        assert report.decision is not None
+        assert report.decision.verdict == "INSUFFICIENT_DATA"
+        assert report.decision.data_quality_note is not None
+
 
 # ── render_markdown ───────────────────────────────────────────────────────
 
@@ -524,6 +596,33 @@ class TestRenderMarkdown:
         ]
         # header row + 2 data rows = 3
         assert len(table_rows) >= 2
+
+    def test_decision_section_present(self) -> None:
+        """§7 Decision & entry timing renders when report.decision is set."""
+        md = render_markdown(_make_full_report())
+        assert "## 7. Decision & entry timing" in md
+        assert "**Verdict:**" in md
+        assert "**Entry-timing recommendation:**" in md
+
+    def test_decision_section_absent_when_none(self) -> None:
+        """§7 is skipped entirely for a report with no decision (#307)."""
+        report = dataclasses.replace(_make_full_report(), decision=None)
+        md = render_markdown(report)
+        assert "Decision & entry timing" not in md
+
+    def test_recommended_action_line_for_failing_row(self) -> None:
+        report = _build(
+            theta_annual=-20_000.0, budget_pct=2.0, meets_target=True
+        )
+        md = render_markdown(report)
+        assert "**Recommended action — Annual carry cost:**" in md
+
+    def test_no_recommended_action_line_when_all_pass(self) -> None:
+        report = _build(
+            theta_annual=-8_000.0, budget_pct=2.0, meets_target=True
+        )
+        md = render_markdown(report)
+        assert "Recommended action" not in md
 
 
 # ── render_html ───────────────────────────────────────────────────────────
@@ -656,6 +755,32 @@ class TestRenderHtml:
         html = render_html(_make_full_report())
         assert 'rel="stylesheet"' not in html
         assert "<script" not in html
+
+    def test_decision_section_present(self) -> None:
+        """§7 Decision & entry timing renders when report.decision is set."""
+        html = render_html(_make_full_report())
+        assert "7. Decision &amp; entry timing" in html
+        assert "<strong>Verdict:</strong>" in html
+
+    def test_decision_section_absent_when_none(self) -> None:
+        """§7 is skipped entirely for a report with no decision (#307)."""
+        report = dataclasses.replace(_make_full_report(), decision=None)
+        html = render_html(report)
+        assert "Decision &amp; entry timing" not in html
+
+    def test_recommended_action_line_for_failing_row(self) -> None:
+        report = _build(
+            theta_annual=-20_000.0, budget_pct=2.0, meets_target=True
+        )
+        html = render_html(report)
+        assert "Recommended action &mdash; Annual carry cost:" in html
+
+    def test_no_recommended_action_line_when_all_pass(self) -> None:
+        report = _build(
+            theta_annual=-8_000.0, budget_pct=2.0, meets_target=True
+        )
+        html = render_html(report)
+        assert "Recommended action" not in html
 
 
 # ── MonetizationSection with plan ────────────────────────────────────────

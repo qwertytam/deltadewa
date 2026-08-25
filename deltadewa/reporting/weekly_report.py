@@ -53,16 +53,17 @@ import os
 import sys
 from dataclasses import dataclass, replace
 from datetime import date
+from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from deltadewa import __version__
 from deltadewa.analysis import (
     CrashShock,
     PortfolioAnalyzer,
     assess_market_environment,
     build_monetization_plan,
     compute_crash_convexity,
-    decision_matrix,
     evaluate_roll_status,
 )
 from deltadewa.clock import program_trading_date
@@ -80,6 +81,7 @@ from deltadewa.reporting.email_smtp import (
 )
 from deltadewa.reporting.program_report import (
     HTML_STYLE,
+    IpsComplianceSection,
     ProgramReport,
     build_program_report,
     render_html_body,
@@ -88,9 +90,11 @@ from deltadewa.reporting.program_report import (
 from deltadewa.reporting.weekly_snapshot import (
     SnapshotChange,
     SnapshotDiff,
+    StandingBreach,
     WeeklySnapshot,
     diff_snapshots,
     snapshot_from_report,
+    standing_breaches,
 )
 from deltadewa.state import ProgramState
 
@@ -142,6 +146,15 @@ def _worst_roll_verdict(records: Sequence[RollStatusRecord]) -> str:
     )
 
 
+def _ordinal(n: int) -> str:
+    """English ordinal for a positive integer (1st, 2nd, 3rd, 4th, 11th...)."""
+    if 11 <= n % 100 <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 # ── Pure assembly ────────────────────────────────────────────────────────
 
 
@@ -154,8 +167,11 @@ class WeeklyDigest:
         snapshot: This week's ``WeeklySnapshot`` (the new baseline).
         diff: Comparison against the prior snapshot (or the first-run case).
         headline: One-line verdict for a subject line or quick triage —
-            ``"NO ACTION"``, ``"ACTION: <first crossing>"``, prefixed
-            ``"STALE DATA — "`` when data quality is worse than CACHED.
+            ``"BREACH: <metric> out of policy (Nth week)"`` when IPS
+            compliance is failing (outranks everything else, #296),
+            else ``"NO ACTION"`` or ``"ACTION: <first crossing>"``,
+            prefixed ``"STALE DATA — "`` when data quality is worse than
+            CACHED.
         weekly_carry_cost: This period's carry (theta) cost in dollars.
         elapsed_days: Days this ``weekly_carry_cost`` was integrated over
             (actual gap to the prior snapshot, or a nominal week on the
@@ -176,9 +192,38 @@ class WeeklyDigest:
     backup_heartbeat_warning: str | None = None
 
 
-def _headline(diff: SnapshotDiff, snapshot: WeeklySnapshot) -> str:
-    """Derive the one-line triage verdict for this digest."""
-    if diff.crossings:
+def _headline(
+    diff: SnapshotDiff,
+    snapshot: WeeklySnapshot,
+    compliance: IpsComplianceSection,
+    breaches: tuple[StandingBreach, ...],
+) -> str:
+    """Derive the one-line triage verdict for this digest.
+
+    Precedence: an IPS compliance breach outranks a threshold crossing,
+    which outranks a quiet week. Branching on
+    ``snapshot.ips_compliance_all_pass`` (the authoritative flag) rather
+    than on ``breaches`` being non-empty is what makes "NO ACTION requires
+    overall PASS" true by construction (#296). The ``"STALE DATA — "``
+    prefix is applied identically to all three branches, unchanged from
+    before — it's orthogonal to compliance state and must compose with it,
+    never replace or gate it.
+    """
+    if not snapshot.ips_compliance_all_pass:
+        failing = [row.metric for row in compliance.rows if not row.passes]
+        weeks_by_metric = {b.metric: b.weeks for b in breaches}
+        if len(failing) == 1:
+            weeks = weeks_by_metric.get(failing[0], 1)
+            base = (
+                f"BREACH: {failing[0]} out of policy ({_ordinal(weeks)} week)"
+            )
+        else:
+            weeks = min(weeks_by_metric.values(), default=1)
+            base = (
+                f"BREACH: {len(failing)} IPS metrics out of policy "
+                f"({_ordinal(weeks)} week)"
+            )
+    elif diff.crossings:
         base = f"ACTION: {diff.crossings[0].label}"
     else:
         base = "NO ACTION"
@@ -190,13 +235,12 @@ def _headline(diff: SnapshotDiff, snapshot: WeeklySnapshot) -> str:
 def build_weekly_digest(
     *,
     report: ProgramReport,
-    decision_verdict: str,
     roll_records: Sequence[RollStatusRecord],
-    prior_snapshot: WeeklySnapshot | None,
+    history: Sequence[WeeklySnapshot] = (),
     as_of: date,
     backup_heartbeat_warning: str | None = None,
 ) -> WeeklyDigest:
-    """Pure assembly: report + verdicts + prior baseline -> a WeeklyDigest.
+    """Pure assembly: report + roll records + history -> a WeeklyDigest.
 
     No I/O, no clock — every input is supplied by the caller, which is what
     makes this deterministic and what the golden-file test calls directly.
@@ -206,6 +250,20 @@ def build_weekly_digest(
     own. Defaults to ``None`` so every existing caller, including the
     golden-file test, is unaffected.
 
+    ``history`` is every prior snapshot, oldest first (see
+    ``load_snapshot_history``); the prior snapshot is ``history[-1]`` when
+    non-empty. Passing the full history (not just the prior snapshot) is
+    what lets ``standing_breaches`` count how many consecutive weeks a
+    currently-failing metric has been failing, for the headline (#296).
+    Defaults to ``()`` — the first-run case.
+
+    Requires ``report.decision`` to be set — ``build_program_report``
+    always populates it, so this is only reachable from a hand-built
+    ``ProgramReport`` that skipped it. Raising here, rather than silently
+    reading a placeholder verdict, is what makes "the digest always
+    carries a real decision verdict" true by construction rather than by
+    every caller remembering to set one (#307).
+
     Also enriches ``report``'s ``ReturnFramingSection`` with the same
     weekly-carry figures computed here (Issue #171): before this, the
     digest's own lede stated the real carry-consumption numbers in prose
@@ -214,6 +272,14 @@ def build_weekly_digest(
     Populating the report's own fields instead makes it the single place
     those numbers render; the lede no longer repeats them.
     """
+    if report.decision is None:
+        msg = (
+            "build_weekly_digest requires report.decision to be set — "
+            "build_program_report always populates it."
+        )
+        raise ValueError(msg)
+
+    prior_snapshot = history[-1] if history else None
     worst_roll = _worst_roll_verdict(roll_records)
     if prior_snapshot is not None:
         elapsed_days = max((as_of - prior_snapshot.as_of).days, 0)
@@ -243,18 +309,24 @@ def build_weekly_digest(
 
     snapshot = snapshot_from_report(
         enriched_report,
-        decision_verdict=decision_verdict,
+        decision_verdict=report.decision.verdict,
         worst_roll_verdict=worst_roll,
         first_as_of=first_as_of,
         cumulative_carry_cost=cumulative_carry_cost,
     )
     diff = diff_snapshots(prior_snapshot, snapshot)
+    breaches = standing_breaches(history, snapshot)
 
     return WeeklyDigest(
         report=enriched_report,
         snapshot=snapshot,
         diff=diff,
-        headline=_headline(diff, snapshot),
+        headline=_headline(
+            diff,
+            snapshot,
+            enriched_report.ips_compliance,
+            breaches,
+        ),
         weekly_carry_cost=weekly_carry_cost,
         elapsed_days=elapsed_days,
         backup_heartbeat_warning=backup_heartbeat_warning,
@@ -262,6 +334,15 @@ def build_weekly_digest(
 
 
 # ── Rendering ────────────────────────────────────────────────────────────
+
+
+def _footer_facts() -> tuple[str, ...]:
+    """Facts appended to the digest footer, one per line.
+
+    A tuple, not a hardcoded string: #319 (Batch 6) adds a further fact
+    here without restructuring this function or its callers.
+    """
+    return (f"Running v{__version__}",)
 
 
 def _changes_markdown(title: str, changes: tuple[SnapshotChange, ...]) -> str:
@@ -340,7 +421,15 @@ def render_weekly_digest_markdown(digest: WeeklyDigest) -> str:
     # single source, enriched by build_weekly_digest above).
     lines += ["---", ""]
 
-    return "\n".join(lines) + "\n" + render_markdown(digest.report)
+    footer = "\n".join(["---", *_footer_facts()])
+    return (
+        "\n".join(lines)
+        + "\n"
+        + render_markdown(digest.report)
+        + "\n\n"
+        + footer
+        + "\n"
+    )
 
 
 def _changes_html(title: str, changes: tuple[SnapshotChange, ...]) -> str:
@@ -408,6 +497,10 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
 {change_html}
 <hr>"""
 
+    footer_html = "\n".join(
+        f'<p class="note">{escape(fact)}</p>' for fact in _footer_facts()
+    )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -423,6 +516,10 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
 
 {render_html_body(digest.report)}
 
+<footer>
+{footer_html}
+</footer>
+
 </body>
 </html>"""
 
@@ -434,19 +531,21 @@ def _snapshot_dir(export_dir: Path) -> Path:
     return export_dir / _WEEKLY_DIR_NAME
 
 
-def load_prior_snapshot(
+def load_snapshot_history(
     export_dir: Path,
     *,
     before: date,
-) -> WeeklySnapshot | None:
-    """Return the most recent snapshot strictly before *before*, or None.
+) -> tuple[WeeklySnapshot, ...]:
+    """Return every snapshot strictly before *before*, oldest first.
 
     Reads every snapshot file's own ``as_of`` field rather than trusting
-    the filename, so a renamed or hand-copied file is still read correctly.
+    the filename, so a renamed or hand-copied file is still read
+    correctly. ``build_weekly_digest``'s ``history`` parameter takes this
+    return value directly; ``history[-1]`` is the prior snapshot.
     """
     weekly_dir = _snapshot_dir(export_dir)
     if not weekly_dir.exists():
-        return None
+        return ()
 
     candidates: list[WeeklySnapshot] = []
     for path in weekly_dir.glob("snapshot-*.json"):
@@ -459,9 +558,7 @@ def load_prior_snapshot(
         if snapshot.as_of < before:
             candidates.append(snapshot)
 
-    if not candidates:
-        return None
-    return max(candidates, key=lambda snap: snap.as_of)
+    return tuple(sorted(candidates, key=lambda snap: snap.as_of))
 
 
 def _write_snapshot(export_dir: Path, snapshot: WeeklySnapshot) -> Path:
@@ -639,20 +736,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         ips_config,
         market_env=market_env,
     )
-    convexity_now_pct = next(
-        (
-            row.convexity_pct
-            for row in crash_result.scenario_rows
-            if row.shock_pct == ips_config.convexity.crash_scenario_pct
-        ),
-        crash_result.payoff_ratio or 0.0,
-    )
-    decision_result = decision_matrix(
-        market_env,
-        convexity_now_pct=convexity_now_pct,
-        ips_convexity=ips_config.convexity,
-        monetization_plan=monetization_plan,
-    )
     roll_records = evaluate_roll_status(portfolio, ips_config)
 
     report = build_program_report(
@@ -666,12 +749,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         monetization_plan=monetization_plan,
     )
 
-    prior_snapshot = load_prior_snapshot(args.export_dir, before=as_of)
+    history = load_snapshot_history(args.export_dir, before=as_of)
     digest = build_weekly_digest(
         report=report,
-        decision_verdict=decision_result.verdict.value,
         roll_records=roll_records,
-        prior_snapshot=prior_snapshot,
+        history=history,
         as_of=as_of,
         backup_heartbeat_warning=_read_backup_heartbeat_warning(
             args.export_dir,
