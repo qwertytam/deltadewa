@@ -187,8 +187,11 @@ the source of truth for what to build next.
 **M2.7 has shipped**, closing the five Part X coverage regressions the
 2026-08-06 re-audit found. All of them were surfacing gaps, not engine gaps:
 **#4 Vega Sufficiency** and **#10**'s net-delta scalar are on `/design`;
-**#6**/**#7**/**#8** are a new `/design` market-environment panel that also
-carries the decision matrix (previously digest-only); **#5**/**#15** — the
+**#6**/**#7**/**#8** are a new `/design` market-environment panel carrying
+the decision matrix and entry-timing tree in full for the first time — the
+digest had only used `decision_matrix` for a bare verdict string since M2.6,
+and never called `entry_timing_tree` at all until Batch 3b's #307 added a
+real decision section there too (see `docs/part-x-coverage.md`); **#5**/**#15** — the
 convexity÷carry ratio, which existed nowhere in the codebase — is a new
 `analysis/hedge_efficiency.py` surfaced in `/monitor`'s cost panel. M2.7 also
 gave `analysis/hedge_triggers.py` its first product consumer, by extracting a
@@ -315,6 +318,13 @@ don't fix):
 - **policy-leak-checker** — after a panel or analysis change, confirms no threshold
   or decision boundary is hardcoded in view/analysis code instead of read from the
   IPS. Reports the literal and the IPS key that should own it.
+- **false-green-auditor** — traces a rendered verdict, headline, badge, or prose
+  sentence back to the value it describes and reports FAITHFUL / MISLABELLED /
+  OMITTED / UNGRADED. Separate from policy-leak-checker: that agent asks whether a
+  threshold is read from the IPS; this one asks whether the sentence describing it
+  tells the truth — #304 passed the first and failed the second. Run on any
+  reader-facing status surface, and before closing any issue whose complaint is
+  "the screen says fine and it isn't."
 - **ci-run-inspector** — reads what a GitHub Actions run actually did without
   pulling its log into the main thread: per-step outcome and duration, the step
   that failed or hung, and whether the cause is the code or the infrastructure.
