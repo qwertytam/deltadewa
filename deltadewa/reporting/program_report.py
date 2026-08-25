@@ -311,12 +311,12 @@ def build_program_report(
         as_of=as_of,
     )
 
-    cost = _build_cost(
+    cost = build_cost_section(
         carry_metrics=carry_metrics,
         book_notional=book_notional,
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
-    protection = _build_protection(crash_result)
+    protection = build_protection_section(crash_result)
     market_context = _build_market_context(market_env)
 
     return ProgramReport(
@@ -346,17 +346,22 @@ def build_program_report(
                 else None
             ),
         ),
-        ips_compliance=_build_compliance(cost, protection),
+        ips_compliance=build_ips_compliance(cost, protection),
     )
 
 
-def _build_cost(
+def build_cost_section(
     *,
     carry_metrics: dict[str, Any],
     book_notional: float,
     budget_annual_pct: float,
 ) -> CostSection:
-    """Build the CostSection from carry metrics and notional."""
+    """Build the CostSection from carry metrics and notional.
+
+    Public (no leading underscore): reused by ``/monitor``'s IPS
+    compliance strip (#298) so the page and the report build the exact
+    same ``CostSection`` — never a second packaging of the same fields.
+    """
     theta_annual: float = carry_metrics.get("total_theta_annual", 0.0)
     status = carry_vs_budget(
         theta_annual=theta_annual,
@@ -372,10 +377,14 @@ def _build_cost(
     )
 
 
-def _build_protection(
+def build_protection_section(
     crash_result: CrashConvexityResult,
 ) -> ProtectionSection:
-    """Build the ProtectionSection from a CrashConvexityResult."""
+    """Build the ProtectionSection from a CrashConvexityResult.
+
+    Public (no leading underscore): reused by ``/monitor``'s IPS
+    compliance strip (#298) — see ``build_cost_section``.
+    """
     if crash_result.ips_convexity is None:
         return ProtectionSection(
             payoff_ratio=crash_result.payoff_ratio,
@@ -431,11 +440,21 @@ def _build_market_context(
     )
 
 
-def _build_compliance(
+def build_ips_compliance(
     cost: CostSection,
     protection: ProtectionSection,
 ) -> IpsComplianceSection:
-    """Build the IPS compliance table from cost and protection sections."""
+    """Build the IPS compliance table from cost and protection sections.
+
+    Public (no leading underscore): this is the program's single
+    definition of "compliant" (Batch 3b). ``/monitor``'s compliance strip
+    (#298) calls this directly, on ``CostSection``/``ProtectionSection``
+    it builds via ``build_cost_section``/``build_protection_section`` —
+    never a second pass/fail comparison of its own. Two graders that
+    agree today would silently diverge the first time an IPS band moves;
+    routing every surface through this one function is what keeps that
+    from happening.
+    """
     rows: list[IpsComplianceRow] = [
         IpsComplianceRow(
             metric="Annual carry cost",
