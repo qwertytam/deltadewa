@@ -18,9 +18,12 @@ from flask import jsonify
 
 from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.app.chrome import build_chrome
 from deltadewa.app.health_checks import run_checks, summarize
 from deltadewa.app.pages import design, monitor
+from deltadewa.clock import program_trading_date
+from deltadewa.ips_config import IpsPricingInputs
 from deltadewa.marketdata import default_cache_dir
 
 if TYPE_CHECKING:
@@ -111,6 +114,12 @@ def create_app(
     env_policy = (
         ips_config.market_environment if ips_config is not None else None
     )
+    pricing_inputs_policy = (
+        ips_config.pricing_inputs
+        if ips_config is not None
+        else IpsPricingInputs()
+    )
+    program_tz = ips_config.program.timezone if ips_config is not None else None
 
     def _serve_layout() -> html.Div:
         # Re-assessed per request (not baked in once at startup) so a feed
@@ -118,9 +127,15 @@ def create_app(
         # page load. Cheap: market_data is expected to be read-only, i.e.
         # a local cache read, never a network call.
         environment = assess_market_environment(market_data, env_policy)
+        ledger = build_provenance_ledger(
+            environment,
+            state.portfolio,
+            pricing_inputs_policy,
+            as_of=program_trading_date(program_tz).date(),
+        )
         return html.Div(
             [
-                build_chrome(environment),
+                build_chrome(ledger),
                 dcc.Location(id="url", refresh=False),
                 html.Div(id="page-content"),
             ],

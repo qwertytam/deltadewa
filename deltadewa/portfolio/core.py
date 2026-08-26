@@ -520,7 +520,7 @@ class OptionPortfolioBase:
 
         return df
 
-    def update_market_conditions(  # pylint: disable=too-many-arguments
+    def update_market_conditions(  # pylint: disable=too-many-arguments,too-many-branches
         self,
         spot_price: float | None = None,
         volatility: float | None = None,
