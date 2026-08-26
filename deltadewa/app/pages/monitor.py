@@ -16,6 +16,12 @@ digest's own section builders and its single compliance definition
 rather than writing a second one), and is only formatted here
 (``app.format``) or handed to a chart builder
 (``visualization.crash_charts_plotly``).
+
+Each panel in :func:`render` is built by its own
+:func:`~deltadewa.app.panel_guard.safe_render`-wrapped function (#363): a
+raise from any panel's analysis calls degrades that one panel to a
+visible notice instead of taking the whole page to HTTP 500, which is
+what a single expired leg's crash-skew wing solve did before (#362).
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.panel_guard import safe_render
 from deltadewa.app.shape_notice import shape_notice_text
 from deltadewa.reporting.program_report import (
     build_cost_section,
@@ -60,7 +67,11 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
-    from deltadewa.reporting.program_report import IpsComplianceSection
+    from deltadewa.reporting.program_report import (
+        CostSection,
+        IpsComplianceSection,
+        ProtectionSection,
+    )
 
 _SPOT_SLIDER_MIN = -50.0
 _SPOT_SLIDER_MAX = 10.0
@@ -715,67 +726,20 @@ def _page_footer() -> html.Div:
     )
 
 
-def render(app: ProgramDashApp) -> html.Div:
-    """Build the /monitor page: crash-led headline, decisions, position detail.
+def _cost_and_protection(
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> tuple[CostSection, ProtectionSection]:
+    """Cost + protection sections at the IPS crash anchor.
 
-    Every policy-dependent panel needs ``app.ips_config`` — when it's
-    ``None`` there is no crash anchor to render around, so the whole
-    page becomes a single "no IPS policy loaded" state rather than
-    fabricating one.
+    A plain helper, not itself panel-guarded: :func:`_build_compliance_panel`
+    and :func:`_build_scenario_explorer_panel` each call this from *inside*
+    their own :func:`~deltadewa.app.panel_guard.safe_render` closure rather
+    than sharing one precomputed value, so a raise here degrades only
+    whichever panel's own call hit it (#363) — see ``panel_guard``'s module
+    docstring for why a shared value would make that isolation fake.
     """
-    if app.ips_config is None:
-        return _no_ips_layout()
-
-    ips_config = app.ips_config
     convexity = ips_config.convexity
-    portfolio = app.program_state.portfolio
-
-    spot_pct = convexity.crash_scenario_pct
-    vol_points = convexity.crash_vol_shock
-    quantity = portfolio.underlying_quantity
-
-    result = build_scenario(
-        portfolio,
-        ips_config,
-        spot_pct=spot_pct,
-        vol_points=vol_points,
-        quantity=quantity,
-    )
-    curve = build_scenario_curve(
-        portfolio,
-        ips_config,
-        vol_points=vol_points,
-        quantity=quantity,
-    )
-    figure = plot_scenario_curve(
-        curve,
-        marker_pct=result.spot_pct,
-        marker_hedge_value=result.hedge_value_shocked,
-        ips_crash_pct=convexity.crash_scenario_pct,
-    )
-
-    records = evaluate_roll_status(portfolio, ips_config)
-    market_env = assess_market_environment(
-        app.market_data,
-        ips_config.market_environment,
-    )
-    spot_reading = observe_spot(
-        app.market_data,
-        symbol=portfolio.get_symbol(),
-        book_spot=portfolio.spot_price,
-    )
-    plan = build_monetization_plan(
-        portfolio,
-        ips_config,
-        market_env=market_env,
-    )
-
-    # #298: the IPS compliance strip. Computed at the *stored* book and
-    # the IPS anchor shock — deliberately not from `result` above, whose
-    # quantity/spot/vol move with the scenario dials — and via the same
-    # section builders + build_ips_compliance the weekly digest's §6
-    # calls, so this line and the digest's Overall verdict read off one
-    # definition of "compliant".
     crash_result = compute_crash_convexity(
         portfolio,
         shock=CrashShock.from_ips(convexity),
@@ -789,122 +753,285 @@ def render(app: ProgramDashApp) -> html.Div:
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
     protection_section = build_protection_section(crash_result)
-    compliance = build_ips_compliance(cost_section, protection_section)
-    # Book-level facts for the efficiency sentence's "cheap but too small"
-    # combination (#304) — the same convexity_pct the strip above just
-    # graded, plus vega sufficiency (design.py's own band-membership call).
-    vega_sufficiency_pct = PortfolioAnalyzer(
-        portfolio,
-    ).calculate_vega_sufficiency_pct()
+    return cost_section, protection_section
 
-    scenario_explorer = html.Div(
-        [
-            html.H2(
-                [
-                    "Crash scenario",
-                    basis_chip("basis: crash-skew (IPS anchor)"),
-                ],
-            ),
-            _spot_headline(
-                spot_reading,
-                portfolio.get_symbol(),
-                ips_config.market_environment.spot_divergence_warn_pct,
-            ),
-            html.Div(
-                [
-                    html.Div(
-                        [
-                            html.Label(
-                                "Spot shock",
-                                title="How far SPX falls in this scenario",
-                            ),
-                            dcc.Slider(
-                                id="spot-slider",
-                                min=_SPOT_SLIDER_MIN,
-                                max=_SPOT_SLIDER_MAX,
-                                step=1.0,
-                                value=spot_pct,
-                                marks=None,
-                                tooltip={
-                                    "placement": "bottom",
-                                    "always_visible": True,
-                                },
-                            ),
-                        ],
-                        className="dial",
-                    ),
-                    html.Div(
-                        [
-                            html.Label(
-                                "Vol shock (points)",
-                                title=(
-                                    "Implied volatility increase applied "
-                                    "in this scenario, in vol points"
-                                ),
-                            ),
-                            dcc.Slider(
-                                id="vol-slider",
-                                min=_VOL_SLIDER_MIN,
-                                max=_VOL_SLIDER_MAX,
-                                step=0.01,
-                                value=vol_points,
-                                marks=None,
-                                tooltip={
-                                    "placement": "bottom",
-                                    "always_visible": True,
-                                },
-                            ),
-                        ],
-                        className="dial",
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Underlying quantity"),
-                            dcc.Input(
-                                id="qty-input",
-                                type="number",
-                                value=quantity,
-                            ),
-                        ],
-                        className="dial",
-                    ),
-                    html.Button("Reset", id="reset-button", n_clicks=0),
-                ],
-                className="dial-row",
-            ),
-            dcc.Graph(id="payoff-curve", figure=figure),
-            html.Div(
-                _scenario_numbers(result),
-                id="scenario-numbers",
-                className="scenario-numbers",
-            ),
-            html.Div(
-                _cost_panel(
-                    result,
-                    ips_config,
-                    convexity_pct=protection_section.convexity_pct,
-                    vega_sufficiency_pct=vega_sufficiency_pct,
+
+def _build_shape_notice_panel(portfolio: OptionPortfolio) -> Component:
+    """Build the book-shape notice; degrades independently (#363)."""
+
+    def _build() -> Component:
+        return html.Div(
+            shape_notice_text(portfolio),
+            id="shape-notice",
+            className="shape-notice",
+        )
+
+    return safe_render(_build)
+
+
+def _build_compliance_panel(
+    app: ProgramDashApp,
+    ips_config: IpsConfig,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Build the IPS compliance strip; degrades independently (#298, #363).
+
+    Computed at the *stored* book and the IPS anchor shock — deliberately
+    not from the scenario explorer's dial-driven numbers — and via the
+    same section builders + ``build_ips_compliance`` the weekly digest's
+    §6 calls, so this line and the digest's Overall verdict read off one
+    definition of "compliant".
+    """
+
+    def _build() -> Component:
+        cost_section, protection_section = _cost_and_protection(
+            portfolio,
+            ips_config,
+        )
+        compliance = build_ips_compliance(cost_section, protection_section)
+        market_env = assess_market_environment(
+            app.market_data,
+            ips_config.market_environment,
+        )
+        return _compliance_strip(compliance, market_env.data_quality)
+
+    return safe_render(_build)
+
+
+def _build_scenario_explorer_panel(
+    app: ProgramDashApp,
+    ips_config: IpsConfig,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Build the crash-scenario explorer (dials, curve, numbers, cost panel).
+
+    Degrades independently of every other /monitor panel (#363): if a
+    raise (e.g. #362's crash-skew wing solve) reaches here, this whole
+    panel — dials included — is replaced by a degraded notice, but the
+    compliance strip, decisions, and position table above and below it
+    still render, and ``register_callbacks``' dial callbacks simply have
+    no matching component to fire against
+    (``suppress_callback_exceptions=True``, ``factory.py``).
+    """
+
+    def _build() -> Component:
+        convexity = ips_config.convexity
+        spot_pct = convexity.crash_scenario_pct
+        vol_points = convexity.crash_vol_shock
+        quantity = portfolio.underlying_quantity
+
+        result = build_scenario(
+            portfolio,
+            ips_config,
+            spot_pct=spot_pct,
+            vol_points=vol_points,
+            quantity=quantity,
+        )
+        curve = build_scenario_curve(
+            portfolio,
+            ips_config,
+            vol_points=vol_points,
+            quantity=quantity,
+        )
+        figure = plot_scenario_curve(
+            curve,
+            marker_pct=result.spot_pct,
+            marker_hedge_value=result.hedge_value_shocked,
+            ips_crash_pct=convexity.crash_scenario_pct,
+        )
+        spot_reading = observe_spot(
+            app.market_data,
+            symbol=portfolio.get_symbol(),
+            book_spot=portfolio.spot_price,
+        )
+        # Book-level facts for the efficiency sentence's "cheap but too
+        # small" combination (#304) — this panel's own copy of the same
+        # convexity_pct the compliance strip grades, plus vega
+        # sufficiency (design.py's own band-membership call).
+        _cost_section, protection_section = _cost_and_protection(
+            portfolio,
+            ips_config,
+        )
+        vega_sufficiency_pct = PortfolioAnalyzer(
+            portfolio,
+        ).calculate_vega_sufficiency_pct()
+
+        return html.Div(
+            [
+                html.H2(
+                    [
+                        "Crash scenario",
+                        basis_chip("basis: crash-skew (IPS anchor)"),
+                    ],
                 ),
-                id="cost-panel",
-                className="cost-panel",
-            ),
-            _headline_sentence(result),
-        ],
-        className="scenario-explorer",
-    )
+                _spot_headline(
+                    spot_reading,
+                    portfolio.get_symbol(),
+                    ips_config.market_environment.spot_divergence_warn_pct,
+                ),
+                html.Div(
+                    [
+                        html.Div(
+                            [
+                                html.Label(
+                                    "Spot shock",
+                                    title=(
+                                        "How far SPX falls in this scenario"
+                                    ),
+                                ),
+                                dcc.Slider(
+                                    id="spot-slider",
+                                    min=_SPOT_SLIDER_MIN,
+                                    max=_SPOT_SLIDER_MAX,
+                                    step=1.0,
+                                    value=spot_pct,
+                                    marks=None,
+                                    tooltip={
+                                        "placement": "bottom",
+                                        "always_visible": True,
+                                    },
+                                ),
+                            ],
+                            className="dial",
+                        ),
+                        html.Div(
+                            [
+                                html.Label(
+                                    "Vol shock (points)",
+                                    title=(
+                                        "Implied volatility increase "
+                                        "applied in this scenario, in "
+                                        "vol points"
+                                    ),
+                                ),
+                                dcc.Slider(
+                                    id="vol-slider",
+                                    min=_VOL_SLIDER_MIN,
+                                    max=_VOL_SLIDER_MAX,
+                                    step=0.01,
+                                    value=vol_points,
+                                    marks=None,
+                                    tooltip={
+                                        "placement": "bottom",
+                                        "always_visible": True,
+                                    },
+                                ),
+                            ],
+                            className="dial",
+                        ),
+                        html.Div(
+                            [
+                                html.Label("Underlying quantity"),
+                                dcc.Input(
+                                    id="qty-input",
+                                    type="number",
+                                    value=quantity,
+                                ),
+                            ],
+                            className="dial",
+                        ),
+                        html.Button(
+                            "Reset",
+                            id="reset-button",
+                            n_clicks=0,
+                        ),
+                    ],
+                    className="dial-row",
+                ),
+                dcc.Graph(id="payoff-curve", figure=figure),
+                html.Div(
+                    _scenario_numbers(result),
+                    id="scenario-numbers",
+                    className="scenario-numbers",
+                ),
+                html.Div(
+                    _cost_panel(
+                        result,
+                        ips_config,
+                        convexity_pct=protection_section.convexity_pct,
+                        vega_sufficiency_pct=vega_sufficiency_pct,
+                    ),
+                    id="cost-panel",
+                    className="cost-panel",
+                ),
+                _headline_sentence(result),
+            ],
+            className="scenario-explorer",
+        )
+
+    return safe_render(_build)
+
+
+def _build_decisions_panel(
+    app: ProgramDashApp,
+    ips_config: IpsConfig,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Build the DECISIONS section; degrades independently (#363).
+
+    Computes its own roll-status records and market environment rather
+    than sharing :func:`_build_position_detail_panel`'s or
+    :func:`_build_compliance_panel`'s copies — see ``panel_guard``'s
+    module docstring on why that's what makes the isolation real.
+    """
+
+    def _build() -> Component:
+        records = evaluate_roll_status(portfolio, ips_config)
+        market_env = assess_market_environment(
+            app.market_data,
+            ips_config.market_environment,
+        )
+        plan = build_monetization_plan(
+            portfolio,
+            ips_config,
+            market_env=market_env,
+        )
+        return _decisions_section(records, plan)
+
+    return safe_render(_build)
+
+
+def _build_position_detail_panel(
+    ips_config: IpsConfig,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Build the position-detail table; degrades independently (#363)."""
+
+    def _build() -> Component:
+        records = evaluate_roll_status(portfolio, ips_config)
+        return _position_detail_table(records, portfolio)
+
+    return safe_render(_build)
+
+
+def render(app: ProgramDashApp) -> html.Div:
+    """Build the /monitor page: crash-led headline, decisions, position detail.
+
+    Every policy-dependent panel needs ``app.ips_config`` — when it's
+    ``None`` there is no crash anchor to render around, so the whole
+    page becomes a single "no IPS policy loaded" state rather than
+    fabricating one.
+
+    Each panel below is built by its own
+    :func:`~deltadewa.app.panel_guard.safe_render`-wrapped function
+    (#363): a raise in any one panel's analysis calls degrades that
+    panel to a visible notice and leaves the rest of the page intact,
+    where before this the whole page returned HTTP 500.
+    """
+    if app.ips_config is None:
+        return _no_ips_layout()
+
+    ips_config = app.ips_config
+    portfolio = app.program_state.portfolio
 
     return html.Div(
         [
             html.H1("Monitor"),
-            html.Div(
-                shape_notice_text(portfolio),
-                id="shape-notice",
-                className="shape-notice",
-            ),
-            _compliance_strip(compliance, market_env.data_quality),
-            scenario_explorer,
-            _decisions_section(records, plan),
-            _position_detail_table(records, portfolio),
+            _build_shape_notice_panel(portfolio),
+            _build_compliance_panel(app, ips_config, portfolio),
+            _build_scenario_explorer_panel(app, ips_config, portfolio),
+            _build_decisions_panel(app, ips_config, portfolio),
+            _build_position_detail_panel(ips_config, portfolio),
             _page_footer(),
         ],
         className="page page-monitor",

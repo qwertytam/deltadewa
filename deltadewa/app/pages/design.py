@@ -83,6 +83,15 @@ from deltadewa.analysis.volatility import build_volatility_profile
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.panel_guard import (
+    incomplete_notice as _incomplete,
+)
+from deltadewa.app.panel_guard import (
+    safe_render as _safe_render,
+)
+from deltadewa.app.panel_guard import (
+    status_message as _status,
+)
 from deltadewa.app.shape_notice import shape_notice_text
 from deltadewa.clock import program_now
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -232,15 +241,6 @@ def _no_ips_layout() -> html.Div:
             ),
         ],
         className="page page-design",
-    )
-
-
-def _status(message: str, *, error: bool) -> html.Div:
-    """Build a status line for the BOOK zone's mutation feedback."""
-    modifier = "error" if error else "success"
-    return html.Div(
-        message,
-        className=f"status-message status-message--{modifier}",
     )
 
 
@@ -572,41 +572,6 @@ def _export_logic(*, state: ProgramState) -> tuple[Any, Component]:
         str(path),
     )
     return download, _status(f"Exported to {filename}.", error=False)
-
-
-def _incomplete(message: str) -> html.P:
-    """Build an "incomplete inputs" notice.
-
-    Never render zeros for a missing or malformed dial — an unfinished
-    input says so in words. Distinct from :func:`_status`: this isn't a
-    failed action, there is no action to fail.
-    """
-    return html.P(message, className="plain-language")
-
-
-def _safe_render(build: Callable[[], Component]) -> Component:
-    """Render a PLANNING panel, turning a structural ``ValueError`` into text.
-
-    Read-only counterpart to :func:`_guarded_mutation`. ``size_hedge`` and
-    ``build_strike_ladder`` raise ``ValueError`` when the book has no
-    underlying position rather than fabricating a zero result — this turns
-    that into the panel's own "incomplete" message instead of a failed
-    callback. Anything else (an unexpected engine failure) is logged and
-    shown generically, the same no-leaked-traceback discipline the BOOK
-    zone's mutators use.
-    """
-    try:
-        return build()
-    except ValueError as exc:
-        return _incomplete(str(exc))
-    except Exception:  # pylint: disable=broad-exception-caught
-        _logger.exception(
-            "Unexpected error rendering a /design planning panel",
-        )
-        return _status(
-            "Something went wrong — see the server log.",
-            error=True,
-        )
 
 
 def _parse_float_list(raw: str | None) -> list[float] | None:

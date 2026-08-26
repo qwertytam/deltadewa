@@ -499,6 +499,173 @@ class TestComplianceStrip:
         assert page.inner_text("#compliance-strip") == before_strip
 
 
+class TestPanelIsolation:
+    """#363: a raise in one panel's analysis calls must not blank the page.
+
+    Structural checks on ``render()``'s own component tree, per the
+    issue's acceptance criterion ("a structural test — not a string
+    match"): each check monkeypatches one of ``monitor.py``'s own
+    module-level names — the same names its panel-builder closures call
+    — to raise, then confirms the failing panel's known component ids
+    are gone while every other panel's ids are still present.
+    """
+
+    def test_scenario_explorer_failure_leaves_other_panels_intact(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        def _raise(*_args: object, **_kwargs: object) -> ScenarioResult:
+            msg = "synthetic scenario failure"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(monitor, "build_scenario", _raise)
+
+        layout = monitor.render(monitor_app.app)
+
+        # The failing panel's own components are gone...
+        assert _find_component(layout, "spot-slider") is None
+        assert _find_component(layout, "payoff-curve") is None
+        assert _find_component(layout, "cost-panel") is None
+        # ...every other panel is still present...
+        assert _find_component(layout, "shape-notice") is not None
+        assert _find_component(layout, "compliance-strip") is not None
+        assert "Decisions" in str(layout)
+        assert "Position detail" in str(layout)
+        # ...and the failure is visible on the page, not only in the log.
+        assert "Something went wrong" in str(layout)
+
+    def test_decisions_panel_failure_leaves_other_panels_intact(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            msg = "synthetic monetization failure"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(monitor, "build_monetization_plan", _raise)
+
+        layout = monitor.render(monitor_app.app)
+
+        assert _find_component(layout, "monetization-panel") is None
+        assert _find_component(layout, "compliance-strip") is not None
+        assert _find_component(layout, "spot-slider") is not None
+        assert "Position detail" in str(layout)
+        assert "Something went wrong" in str(layout)
+
+    def test_shared_crash_convexity_call_degrades_both_its_panels(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The #362 shape: the crash-convexity call itself raises.
+
+        ``compute_crash_convexity`` (via ``_cost_and_protection``) is
+        called independently by both the compliance strip and the
+        scenario explorer's cost panel — each inside its own
+        ``safe_render`` closure — so *both* degrade here, and correctly
+        so: neither panel has a real convexity figure to show. Decisions
+        and position detail don't touch this call and stay intact.
+        """
+
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            msg = "synthetic crash convexity failure"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(monitor, "compute_crash_convexity", _raise)
+
+        layout = monitor.render(monitor_app.app)
+
+        assert _find_component(layout, "compliance-strip") is None
+        assert _find_component(layout, "spot-slider") is None
+        assert _find_component(layout, "shape-notice") is not None
+        assert "Decisions" in str(layout)
+        assert "Position detail" in str(layout)
+        assert "Something went wrong" in str(layout)
+
+    def test_shared_call_failing_degrades_only_its_own_panels(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """assess_market_environment is called independently by two panels.
+
+        Each panel's own call sits inside its own ``safe_render`` closure
+        (#363's isolation), so both the compliance strip and the
+        decisions section degrade independently — but the scenario
+        explorer, shape notice, and position table, none of which call
+        ``assess_market_environment``, are unaffected.
+        """
+
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            msg = "synthetic market-data failure"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(monitor, "assess_market_environment", _raise)
+
+        layout = monitor.render(monitor_app.app)
+
+        assert _find_component(layout, "compliance-strip") is None
+        assert _find_component(layout, "monetization-panel") is None
+        assert _find_component(layout, "shape-notice") is not None
+        assert _find_component(layout, "spot-slider") is not None
+        assert "Position detail" in str(layout)
+
+    def test_value_error_renders_incomplete_text_not_a_traceback(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """A structural ValueError degrades to plain text, per panel_guard."""
+
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            raise ValueError("crash skew anchor delta is not bracketed")
+
+        monkeypatch.setattr(monitor, "evaluate_roll_status", _raise)
+
+        layout = monitor.render(monitor_app.app)
+
+        assert "crash skew anchor delta is not bracketed" in str(layout)
+        assert "Traceback" not in str(layout)
+        assert _find_component(layout, "spot-slider") is not None
+
+
+class TestExpiredLegDoesNotBreakMonitor:
+    """#362 + #363 together: the live-droplet incident, reproduced and fixed.
+
+    An expired leg used to take out the compliance strip, the scenario
+    explorer, and the weekly digest with one ``ValueError`` from the
+    crash-skew wing solve. #362 fixes the root cause — the wing solve no
+    longer raises for a non-positive tenor — so this confirms /monitor
+    renders every panel *normally* with an expired leg in the book: not
+    merely that a degraded panel is visible (that's ``TestPanelIsolation``
+    above), but that no panel needs to degrade at all.
+    """
+
+    def test_book_with_an_expired_leg_renders_every_panel(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=5000.0)
+        # Mirrors the reported incident's shape: a strike/expiry pair that
+        # reads as a stale scratch value, 27 days past its own expiry.
+        app.program_state.portfolio.add_position(
+            strike_price=234.0,
+            maturity_date=days_from_today(-27),
+            quantity=3,
+            option_type=OptionType.PUT,
+        )
+
+        layout = monitor.render(app)
+
+        assert "Something went wrong" not in str(layout)
+        assert _find_component(layout, "compliance-strip") is not None
+        assert _find_component(layout, "spot-slider") is not None
+        assert "Decisions" in str(layout)
+        assert "Position detail" in str(layout)
+
+
 class TestSpotCrossCheck:
     """#336: /monitor cross-checks the book spot against the observed one.
 
