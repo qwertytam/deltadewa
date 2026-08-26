@@ -25,6 +25,7 @@ from dash import dcc, no_update
 from dash.development.base_component import Component
 from werkzeug.serving import make_server
 
+from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
@@ -2315,6 +2316,36 @@ class TestExplorationZoneRendersClientSide:
         assert js_errors == []
         assert "Traceback" not in page.content()
         assert page.locator(".zone-exploration .js-plotly-plot").count() == 3
+
+
+class TestPageFooter:
+    """#359, applied here to match: the version stamp is the page's own
+    last element.
+
+    Previously nested inside the EXPLORATION zone, after the vega term
+    exposure panel, styled identically to the surrounding financial
+    prose. Now the true last child of the page, after every zone, in
+    the same ``.page-footer`` style /monitor uses.
+    """
+
+    def test_footer_is_the_last_top_level_child(
+        self,
+        design_app: DesignAppHandle,
+    ) -> None:
+        layout = design.render(design_app.app)
+
+        last_child = layout.children[-1]
+        assert getattr(last_child, "className", None) == "page-footer"
+        assert f"Running v{__version__}" in str(last_child)
+
+    def test_footer_visible_on_page_load(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(".page-footer", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        assert page.locator(".page-footer").is_visible()
 
 
 class TestIpsGateRendersClientSide:
