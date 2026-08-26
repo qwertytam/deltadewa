@@ -25,6 +25,25 @@ policy with :meth:`CrashShock.from_ips`. The band (``target_min_pct`` /
 ``target_max_pct``) is deliberately *not* on it — policy and pricing stay
 separable, so omitting the band can never quietly change what is priced.
 
+Expired legs (#362): a leg whose ``maturity_date`` is at or before the
+portfolio's ``valuation_date`` is **excluded from every crash surface in this
+module** — :func:`crash_hedge_value`, :func:`hedge_value`,
+:func:`crash_value_curve`, and :func:`crash_intrinsic_floor` all drop it via
+:func:`partition_expired_legs` before repricing, on both the today and crash
+sides, so the exclusion never distorts the ratio. Pricing an expired leg at
+its crash-spot intrinsic value instead was rejected: the leg has already
+settled at whatever spot prevailed on its real expiry, so a crash-spot payoff
+computed from here is a protection the program cannot actually collect —
+manufactured convexity, and manufactured silently. Convexity answers "what
+does my *current* hedge pay if the market falls from here", and an expired
+leg is not a current hedge. A caller that needs to know legs were excluded
+calls :func:`partition_expired_legs` itself and renders the second tuple;
+``/monitor``'s crash panel does exactly this. Separately, and defensively,
+:class:`_CrashSkewVolMapping` no longer attempts the wing solve for an
+expired leg even if one reaches it uncaught — at zero tenor the put-delta
+magnitude is zero at every strike, so no wing exists to solve, and the vol
+it would have produced is irrelevant to an intrinsic-only price anyway.
+
 Legs are repriced with the existing
 :class:`~deltadewa.valuation.OptionValuation` engine (European exercise uses the
 analytic Black-Scholes engine); no new pricer is introduced.
@@ -205,6 +224,39 @@ class CrashShock:
         )
 
 
+def partition_expired_legs(
+    positions: Sequence[OptionPosition],
+    *,
+    valuation_date: datetime,
+) -> tuple[tuple[OptionPosition, ...], tuple[OptionPosition, ...]]:
+    """Split *positions* into (live, expired) as of *valuation_date* (#362).
+
+    Expired means ``maturity_date.date() <= valuation_date.date()`` — the
+    same boundary :meth:`~deltadewa.valuation.OptionValuation.
+    _is_expired_or_at_expiry` uses, so this module's notion of "expired"
+    never disagrees with the pricer's. Every crash-surface function in this
+    module calls this and prices only the live tuple; see the module
+    docstring's "Expired legs" paragraph for why.
+
+    Args:
+        positions: Legs to split.
+        valuation_date: The portfolio's valuation date.
+
+    Returns:
+        ``(live, expired)`` — two tuples partitioning *positions*, live
+        legs first. Neither is repriced by this function; it only sorts.
+
+    """
+    live: list[OptionPosition] = []
+    expired: list[OptionPosition] = []
+    for position in positions:
+        if position.option.maturity_date.date() <= valuation_date.date():
+            expired.append(position)
+        else:
+            live.append(position)
+    return tuple(live), tuple(expired)
+
+
 def _reprice_leg(
     position: OptionPosition,
     portfolio: OptionPortfolio,
@@ -368,6 +420,14 @@ class _CrashSkewVolMapping:
             return base
         if position.option.option_type != OptionType.PUT:
             return base
+        if position.option.maturity_date.date() <= state.valuation_date.date():
+            # #362 defensive backstop: at T<=0 the put-delta magnitude is
+            # zero at every strike, so no wing exists to solve for, and the
+            # vol this would produce prices nothing — the leg is intrinsic
+            # regardless. Callers are expected to have already excluded
+            # this leg via partition_expired_legs(); this only stops the
+            # wing solve from raising if one reaches here uncaught.
+            return base
         strike = position.option.strike_price
         if strike >= state.spot_price:
             return base
@@ -493,16 +553,24 @@ def crash_hedge_value(
             state. Build it with :meth:`CrashShock.from_ips`.
         positions: Legs to price. Defaults to every position in the portfolio;
             pass a subset (e.g. the long puts) to value part of the book.
+            Any expired leg in this set is excluded before pricing — see the
+            module docstring's "Expired legs" paragraph.
 
     Returns:
         Summed repriced value of the selected option legs, in dollars.
+        Excludes any expired leg (#362).
 
     """
+    legs = portfolio.positions if positions is None else positions
+    live_legs, _expired = partition_expired_legs(
+        legs,
+        valuation_date=portfolio.valuation_date,
+    )
     return reprice_portfolio(
         portfolio,
         shock=shock.to_shock(),
         vol_mapping=shock.vol_mapping(),
-        positions=positions,
+        positions=live_legs,
     )
 
 
@@ -526,17 +594,28 @@ def hedge_value(
 
     Args:
         portfolio: Portfolio to evaluate.
-        positions: Legs to price. Defaults to every position.
+        positions: Legs to price. Defaults to every position. Any expired
+            leg in this set is excluded before pricing (#362) — see the
+            module docstring's "Expired legs" paragraph. Excluding it here
+            too, not only from the crash side, keeps ``V_today`` and
+            ``V_crash`` on the same leg set so the convexity ratio stays
+            symmetric.
 
     Returns:
         Summed repriced value of the selected legs at today's spot and vol.
+        Excludes any expired leg (#362).
 
     """
+    legs = portfolio.positions if positions is None else positions
+    live_legs, _expired = partition_expired_legs(
+        legs,
+        valuation_date=portfolio.valuation_date,
+    )
     return reprice_portfolio(
         portfolio,
         shock=MarketShock(spot_shock=0.0, vol_shock=0.0),
         vol_mapping=flat_bump_vol,
-        positions=positions,
+        positions=live_legs,
     )
 
 
@@ -581,10 +660,11 @@ def crash_value_curve(
     """All-legs hedge value across a shock sweep — the monitor's curve.
 
     Same repricing basis as :func:`crash_hedge_value` /
-    :func:`crash_convexity_pct` (every option leg, none dropped, positions
-    never overridden), swept over spot depth at one vol/skew basis, so the
-    monitor's headline number (all-legs) and its chart agree with each
-    other by construction. Deliberately not
+    :func:`crash_convexity_pct` (every *live* option leg, positions never
+    overridden — an expired leg is excluded, same as those two, per #362),
+    swept over spot depth at one vol/skew basis, so the monitor's headline
+    number (all-legs) and its chart agree with each other by construction.
+    Deliberately not
     :func:`~deltadewa.analysis.crash_payoff.compute_crash_convexity`: that
     function's curve is long-puts-only, scoped to the premium-payoff-ratio
     question (dollars back per dollar of premium paid), not this one.
@@ -615,11 +695,15 @@ def crash_value_curve(
     )
 
     state = MarketState.from_portfolio(portfolio)
+    live_legs, _expired = partition_expired_legs(
+        portfolio.positions,
+        valuation_date=portfolio.valuation_date,
+    )
     return [
         (
             pct,
             reprice_legs_at(
-                portfolio.positions,
+                live_legs,
                 state,
                 shock=shock.at_pct(pct).to_shock(),
                 vol_mapping=shock.at_pct(pct).vol_mapping(),
@@ -645,14 +729,21 @@ def crash_intrinsic_floor(
     Args:
         portfolio: Portfolio to evaluate.
         crash_move: Signed crash move as a decimal (e.g. ``-0.25``).
-        positions: Legs to include. Defaults to every position.
+        positions: Legs to include. Defaults to every position. Any expired
+            leg is excluded (#362) — a settled contract has no crash-spot
+            payoff to collect; including one would manufacture protection
+            the program does not have.
 
     Returns:
         Summed intrinsic value of the selected legs at the crash spot, in
-        dollars (signed by quantity).
+        dollars (signed by quantity). Excludes any expired leg (#362).
 
     """
-    legs = portfolio.positions if positions is None else positions
+    all_legs = portfolio.positions if positions is None else positions
+    legs, _expired = partition_expired_legs(
+        all_legs,
+        valuation_date=portfolio.valuation_date,
+    )
     crash_spot = portfolio.spot_price * (1.0 + crash_move)
     total = 0.0
     for position in legs:

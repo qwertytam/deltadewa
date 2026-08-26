@@ -1883,3 +1883,181 @@ class TestUnderlyingPnl:
 
         assert pnl == pytest.approx(-3000.0 * 6600.0 * -0.25)
         assert pnl > 0.0
+
+
+class TestExpiredLegs:
+    """#362: an expired leg must price without raising, and stay excluded.
+
+    Before this fix, ``_solve_wing_strike`` raised ``ValueError`` for any
+    leg whose maturity was at or before the valuation date — at ``T<=0``
+    the put-delta magnitude is zero at every strike, so there is no wing
+    to bracket. One expired leg therefore took out every crash-skew
+    surface. The fix (see the module docstring's "Expired legs"
+    paragraph) excludes the leg from both the today and crash sides of
+    every crash surface in this module, symmetrically, rather than
+    pricing it at a fabricated crash-spot intrinsic value.
+
+    ``_EXPIRED_MATURITY`` is pinned well before the appendix book's own
+    ``2026-01-02`` valuation date (see ``_make_appendix_book``) — that
+    valuation date is itself a fixed golden anchor, not derived from the
+    real clock, so a past-dated maturity for this fixture is likewise a
+    plain pinned date rather than one seeded through
+    ``tests/clock_helpers.py`` (which exists for fixtures anchored on
+    :func:`~deltadewa.clock.program_trading_date`, not this file's golden
+    dates).
+    """
+
+    _EXPIRED_MATURITY = datetime(2025, 6, 1, tzinfo=UTC)
+    # Unique among the appendix book's 23/26/16 legs, so a test can find
+    # this leg back out of ``portfolio.positions`` by quantity alone.
+    _EXPIRED_QUANTITY = 5
+
+    def _shock(self) -> CrashShock:
+        """The shipped skew-aware shock — the one basis that can reach the
+        wing solve at all (a zero ``skew_steepening`` never attempts it).
+        """
+        return CrashShock(
+            crash_scenario_pct=_APPENDIX_PCT,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+    def _book_with_expired_leg(self) -> OptionPortfolio:
+        """Appendix book plus one OTM put that expired before valuation."""
+        portfolio = _make_appendix_book()
+        portfolio.add_position(
+            strike_price=6000.0,  # OTM at the appendix spot of 6600
+            maturity_date=self._EXPIRED_MATURITY,
+            quantity=self._EXPIRED_QUANTITY,
+            option_type=OptionType.PUT,
+            volatility=0.20,
+        )
+        return portfolio
+
+    def test_crash_hedge_value_does_not_raise(self) -> None:
+        """The #362 regression: an expired leg must not take out pricing."""
+        portfolio = self._book_with_expired_leg()
+
+        value = cr.crash_hedge_value(portfolio, shock=self._shock())
+
+        assert math.isfinite(value)
+
+    def test_crash_convexity_pct_does_not_raise(self) -> None:
+        """The book-level ratio /monitor's compliance strip renders."""
+        portfolio = self._book_with_expired_leg()
+
+        pct = cr.crash_convexity_pct(portfolio, shock=self._shock())
+
+        assert math.isfinite(pct)
+
+    def test_partition_expired_legs_splits_on_the_valuation_date(
+        self,
+    ) -> None:
+        portfolio = self._book_with_expired_leg()
+
+        live, expired = cr.partition_expired_legs(
+            portfolio.positions,
+            valuation_date=portfolio.valuation_date,
+        )
+
+        assert len(expired) == 1
+        assert expired[0].quantity == self._EXPIRED_QUANTITY
+        assert len(live) == len(portfolio.positions) - 1
+        assert all(
+            position.quantity != self._EXPIRED_QUANTITY for position in live
+        )
+
+    def test_expired_leg_does_not_move_crash_convexity_pct(self) -> None:
+        """Symmetric exclusion: adding the expired leg must be a no-op.
+
+        Pins the *mechanism* (both terms of the ratio drop the same leg),
+        not one book's number — the number itself is free to change if
+        the appendix inputs ever do.
+        """
+        baseline = _make_appendix_book()
+        with_expired = self._book_with_expired_leg()
+
+        baseline_pct = cr.crash_convexity_pct(baseline, shock=self._shock())
+        with_expired_pct = cr.crash_convexity_pct(
+            with_expired,
+            shock=self._shock(),
+        )
+
+        assert with_expired_pct == pytest.approx(baseline_pct)
+
+    def test_expired_leg_does_not_move_hedge_value(self) -> None:
+        baseline = _make_appendix_book()
+        with_expired = self._book_with_expired_leg()
+
+        assert cr.hedge_value(with_expired) == pytest.approx(
+            cr.hedge_value(baseline),
+        )
+
+    def test_expired_leg_does_not_move_crash_intrinsic_floor(self) -> None:
+        baseline = _make_appendix_book()
+        with_expired = self._book_with_expired_leg()
+
+        baseline_floor = cr.crash_intrinsic_floor(
+            baseline,
+            crash_move=_APPENDIX_MOVE,
+        )
+        with_expired_floor = cr.crash_intrinsic_floor(
+            with_expired,
+            crash_move=_APPENDIX_MOVE,
+        )
+
+        assert with_expired_floor == pytest.approx(baseline_floor)
+
+    def test_expired_leg_does_not_move_crash_value_curve(self) -> None:
+        baseline = _make_appendix_book()
+        with_expired = self._book_with_expired_leg()
+        shock = self._shock()
+
+        baseline_curve = cr.crash_value_curve(
+            baseline,
+            shock=shock,
+            n_points=5,
+        )
+        with_expired_curve = cr.crash_value_curve(
+            with_expired,
+            shock=shock,
+            n_points=5,
+        )
+
+        assert [v for _, v in with_expired_curve] == pytest.approx(
+            [v for _, v in baseline_curve],
+        )
+
+    def test_vol_mapping_backstop_does_not_raise_on_an_unfiltered_leg(
+        self,
+    ) -> None:
+        """Defensive backstop: even an unfiltered expired leg must not raise.
+
+        ``partition_expired_legs`` is the primary fix, applied by every
+        value function in this module. This exercises
+        ``_CrashSkewVolMapping`` directly, bypassing that filter, to prove
+        the mapping itself is also safe for a caller that reprices an
+        expired leg without filtering first.
+        """
+        portfolio = self._book_with_expired_leg()
+        expired_leg = next(
+            position
+            for position in portfolio.positions
+            if position.quantity == self._EXPIRED_QUANTITY
+        )
+        state = cr.MarketState.from_portfolio(portfolio)
+        mapping = cr.crash_skew_vol(
+            skew_steepening=_APPENDIX_SKEW,
+            skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+        )
+
+        vol = mapping(
+            expired_leg,
+            state,
+            cr.MarketShock(spot_shock=0.0, vol_shock=_APPENDIX_VOL_SHOCK),
+        )
+
+        assert vol == pytest.approx(
+            expired_leg.option.volatility + _APPENDIX_VOL_SHOCK,
+        )
