@@ -2,7 +2,11 @@
 
 from datetime import UTC, date, datetime
 
-from deltadewa.analysis.market_environment import DataQuality, MarketEnvironment
+from deltadewa.analysis.market_environment import (
+    DataQuality,
+    MarketEnvironment,
+    SeriesProvenance,
+)
 from deltadewa.analysis.provenance import (
     ProvenanceLedger,
     build_provenance_ledger,
@@ -236,3 +240,61 @@ class TestHandEnteredInputsCanTurnTheBanner:
         chrome = build_chrome(_ledger(DataQuality.UNAVAILABLE, None))
 
         assert "MARKET DATA UNAVAILABLE" in chrome.children[1].children
+
+
+class TestStampNamesTheLaggingSeries:
+    """#368: the field-test fix — show fetched_at and the laggard by name.
+
+    The 2026-08-25 field test could not tell "VIX's routine FRED lag"
+    apart from "the pipeline stopped": /health read 08-21, the banner
+    08-20, /monitor's spot 08-23. Showing when the pipeline itself last
+    ran, and which series is old, dissolves that without touching the
+    combine rule.
+    """
+
+    def test_stamp_names_refresh_time_and_laggard_when_available(
+        self,
+    ) -> None:
+        lagged_as_of = datetime(2026, 8, 20, 20, 0, tzinfo=UTC)
+        refreshed_at = datetime(2026, 8, 25, 6, 30, tzinfo=UTC)
+        environment = MarketEnvironment(
+            vix=None,
+            regime_percentile=None,
+            regime_label=None,
+            skew_index=None,
+            skew_percentile=None,
+            term_structure=None,
+            term_shape=None,
+            forward_vol_front_3m=None,
+            hedge_cost_verdict=None,
+            data_quality=DataQuality.CACHED,
+            as_of=lagged_as_of,
+            series=(
+                SeriesProvenance(
+                    name="vix",
+                    quality=DataQuality.CACHED,
+                    as_of=lagged_as_of,
+                    fetched_at=refreshed_at,
+                ),
+            ),
+            fetched_at=refreshed_at,
+            oldest_series="vix",
+        )
+        ledger = build_provenance_ledger(
+            environment,
+            _fresh_portfolio(),
+            _POLICY,
+            as_of=_TODAY,
+        )
+
+        stamp = build_chrome(ledger).children[0].children
+
+        assert "refreshed 2026-08-25" in stamp
+        assert "oldest series: vix" in stamp
+
+    def test_stamp_omits_the_clause_when_no_series_data_exists(self) -> None:
+        """A MarketEnvironment predating #368 must not crash the stamp."""
+        chrome = build_chrome(_ledger(DataQuality.LIVE, _AS_OF))
+
+        assert "refreshed" not in chrome.children[0].children
+        assert "oldest series" not in chrome.children[0].children

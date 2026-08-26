@@ -437,3 +437,72 @@ class TestDataQualityAggregation:
 
         assert env.data_quality == DataQuality.UNAVAILABLE
         assert env.as_of is None
+
+    def test_combined_as_of_and_quality_are_unchanged_by_series(self) -> None:
+        """#368 pin: adding per-series provenance changes nothing combined.
+
+        The combination rule stays exactly as conservative as before —
+        #368 adds resolution (``series``/``fetched_at``/``oldest_series``)
+        rather than loosening the worst-of/oldest-of reduction every
+        existing consumer (the banner, the digest gate) already depends
+        on.
+        """
+        older = datetime(2026, 7, 1, tzinfo=UTC)
+        env = assess_market_environment(
+            _MixedSourceProvider(vix_source=Source.CACHED, vix_as_of=older),
+        )
+
+        assert env.data_quality == DataQuality.CACHED
+        assert env.as_of == older
+
+
+class TestSeriesProvenance:
+    """#368: per-series provenance, kept rather than discarded on combine."""
+
+    def test_series_carries_all_four_readings(self) -> None:
+        env = assess_market_environment(_StubProvider())
+
+        names = {s.name for s in env.series}
+        assert names == {
+            "vix",
+            "vix_term_structure",
+            "skew_index",
+            "skew_percentile",
+        }
+
+    def test_lagged_series_is_named_oldest(self) -> None:
+        """The exact #368 field-test scenario: one lagged, cached series."""
+        older = datetime(2026, 7, 1, tzinfo=UTC)
+        env = assess_market_environment(
+            _MixedSourceProvider(vix_source=Source.CACHED, vix_as_of=older),
+        )
+
+        assert env.oldest_series == "vix"
+        vix_entry = next(s for s in env.series if s.name == "vix")
+        assert vix_entry.quality == DataQuality.CACHED
+        assert vix_entry.as_of == older
+        # The pipeline itself ran recently even though VIX's own as_of is
+        # old — fetched_at is what tells the two apart.
+        assert env.fetched_at == _FETCHED
+
+    def test_all_live_has_fetched_at_matching_as_of_series(self) -> None:
+        env = assess_market_environment(_StubProvider())
+
+        assert env.fetched_at == _FETCHED
+        assert env.oldest_series is not None
+
+    def test_static_snapshot_has_no_series_provenance(self) -> None:
+        """A single made-up number has no honest 'oldest' to name."""
+        env = assess_market_environment(
+            _MixedSourceProvider(vix_source=Source.STATIC),
+        )
+
+        assert env.oldest_series is None
+        assert env.fetched_at is None
+
+    def test_unavailable_snapshot_has_no_series_at_all(self) -> None:
+        env = assess_market_environment(_FailingProvider())
+
+        assert env.series == ()
+        assert env.fetched_at is None
+        assert env.oldest_series is None

@@ -376,10 +376,7 @@ def build_provenance_ledger(
     return ProvenanceLedger(
         entries=tuple(entries),
         market_data_as_of=environment.as_of,
-        # Wired to a real value once MarketEnvironment carries its own
-        # fetched_at (#368) — until then, no such timestamp exists to
-        # report, and None is the honest answer, not a fabricated one.
-        market_data_fetched_at=getattr(environment, "fetched_at", None),
+        market_data_fetched_at=environment.fetched_at,
         market_data_quality=environment.data_quality,
-        oldest_series=getattr(environment, "oldest_series", None),
+        oldest_series=environment.oldest_series,
     )

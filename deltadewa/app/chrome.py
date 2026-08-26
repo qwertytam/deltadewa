@@ -74,8 +74,27 @@ def _stamp_text(ledger: ProvenanceLedger) -> str:
         local = ledger.market_data_as_of.astimezone(program_now().tzinfo)
         market_part = (
             f"Data as of {local:%Y-%m-%d %H:%M %Z} "
-            f"({ledger.market_data_quality.value})"
+            f"({ledger.market_data_quality.value}"
         )
+        # #368: as_of is the *oldest* series' observation date — a fine
+        # thing for VIX to lag behind on its own routine FRED schedule.
+        # Naming when the pipeline itself last ran, and which series is
+        # the laggard, is what let a 2026-08-25 field test tell that
+        # apart from "the pipeline stopped": /health read 08-21, the
+        # banner 08-20, /monitor's spot 08-23, and nothing said which of
+        # those was merely a normal lag.
+        if (
+            ledger.market_data_fetched_at is not None
+            and ledger.oldest_series is not None
+        ):
+            fetched_local = ledger.market_data_fetched_at.astimezone(
+                program_now().tzinfo,
+            )
+            market_part += (
+                f" · refreshed {fetched_local:%Y-%m-%d %H:%M %Z} "
+                f"· oldest series: {ledger.oldest_series}"
+            )
+        market_part += ")"
 
     hand_entered = ledger.by_kind(InputKind.HAND_ENTERED)
     fresh_count = sum(
