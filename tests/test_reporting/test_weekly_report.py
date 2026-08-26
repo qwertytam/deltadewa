@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -16,6 +16,7 @@ from deltadewa.reporting import weekly_report as weekly_report_module
 from deltadewa.reporting.email_smtp import EmailDeliveryError
 from deltadewa.reporting.program_report import (
     CostSection,
+    DecisionSection,
     IpsComplianceRow,
     IpsComplianceSection,
     MarketContextSection,
@@ -26,15 +27,20 @@ from deltadewa.reporting.program_report import (
     ReturnFramingSection,
 )
 from deltadewa.reporting.weekly_report import (
+    _headline,
     _read_backup_heartbeat_warning,
     _worst_roll_verdict,
     build_weekly_digest,
-    load_prior_snapshot,
+    load_snapshot_history,
     main,
     render_weekly_digest_html,
     render_weekly_digest_markdown,
 )
-from deltadewa.reporting.weekly_snapshot import WeeklySnapshot
+from deltadewa.reporting.weekly_snapshot import (
+    SnapshotChange,
+    SnapshotDiff,
+    WeeklySnapshot,
+)
 
 _GOLDEN_PATH = Path(__file__).parent / "goldens" / "weekly_digest.md"
 _EXAMPLE_IPS_YAML = (
@@ -53,10 +59,21 @@ _PRIOR_AS_OF = date(2026, 7, 29)
 _FIRST_AS_OF = date(2026, 7, 1)
 
 
+def _make_decision(verdict: str = "MAINTAIN") -> DecisionSection:
+    return DecisionSection(
+        verdict=verdict,
+        rationale="test rationale",
+        entry_recommendation="test entry recommendation",
+        should_enter=True,
+        data_quality_note=None,
+    )
+
+
 def _make_report(
     *,
     data_quality: str = "CACHED",
     within_budget: bool = False,
+    decision: DecisionSection | None = None,
 ) -> ProgramReport:
     return ProgramReport(
         header=ReportHeader(
@@ -101,6 +118,11 @@ def _make_report(
                     target="≤ 1.00% of notional",
                     actual="1.15%",
                     passes=within_budget,
+                    action=(
+                        None
+                        if within_budget
+                        else "Carry is above the IPS budget — trim size."
+                    ),
                 ),
                 IpsComplianceRow(
                     metric="Crash convexity (-25% shock)",
@@ -111,6 +133,7 @@ def _make_report(
             ),
             all_pass=within_budget,
         ),
+        decision=decision if decision is not None else _make_decision(),
     )
 
 
@@ -166,9 +189,7 @@ class TestBuildWeeklyDigest:
 
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -185,9 +206,8 @@ class TestBuildWeeklyDigest:
 
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MONETIZE",
             roll_records=(),
-            prior_snapshot=prior,
+            history=(prior,),
             as_of=_AS_OF,
         )
 
@@ -205,22 +225,26 @@ class TestBuildWeeklyDigest:
 
         digest = build_weekly_digest(
             report=report,
-            decision_verdict=prior.decision_verdict,
             roll_records=(),
-            prior_snapshot=replace(prior, worst_roll_verdict="N/A"),
+            history=(replace(prior, worst_roll_verdict="N/A"),),
             as_of=_AS_OF,
         )
 
         assert digest.headline == "NO ACTION"
 
     def test_headline_action_names_first_crossing(self) -> None:
-        report = _make_report()  # within_budget=False vs prior's True
+        # Compliant on both sides (a BREACH would otherwise outrank this,
+        # #296) — the crossing here is the decision verdict changing,
+        # which prior's "MAINTAIN" doesn't match.
+        report = _make_report(
+            within_budget=True,
+            decision=_make_decision("MONETIZE"),
+        )
 
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MONETIZE",
             roll_records=(),
-            prior_snapshot=_prior_snapshot(),
+            history=(_prior_snapshot(),),
             as_of=_AS_OF,
         )
 
@@ -233,13 +257,184 @@ class TestBuildWeeklyDigest:
 
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
         assert digest.headline.startswith("STALE DATA — ")
+
+
+def _snapshot_with_carry_failing(
+    as_of: date, *, passes: bool
+) -> WeeklySnapshot:
+    """A hand-built WeeklySnapshot varying only the carry-cost row's pass."""
+    return replace(
+        _prior_snapshot(),
+        as_of=as_of,
+        within_budget=passes,
+        ips_compliance_all_pass=passes,
+        ips_compliance_rows=(
+            ("Annual carry cost", passes),
+            ("Crash convexity (-25% shock)", True),
+        ),
+    )
+
+
+class TestStandingBreachHeadline:
+    """#296: a compliance breach outranks a crossing and carries a count."""
+
+    def test_keeps_announcing_with_no_crossings(self) -> None:
+        report = _make_report(within_budget=False)
+        history = (
+            _snapshot_with_carry_failing(date(2026, 7, 22), passes=False),
+            _snapshot_with_carry_failing(_PRIOR_AS_OF, passes=False),
+        )
+
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            history=history,
+            as_of=_AS_OF,
+        )
+
+        assert digest.headline.startswith("BREACH")
+        assert digest.headline != "NO ACTION"
+
+    def test_count_tracks_the_run(self) -> None:
+        report = _make_report(within_budget=False)
+
+        one_week = (_snapshot_with_carry_failing(_PRIOR_AS_OF, passes=False),)
+        digest_2nd = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            history=one_week,
+            as_of=_AS_OF,
+        )
+        assert "2nd week" in digest_2nd.headline
+
+        five_weeks = tuple(
+            _snapshot_with_carry_failing(
+                date(2026, 7, 1) + timedelta(days=7 * i),
+                passes=False,
+            )
+            for i in range(4)
+        )
+        digest_5th = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            history=five_weeks,
+            as_of=_AS_OF,
+        )
+        assert "5th week" in digest_5th.headline
+
+    def test_a_passing_week_resets_the_count(self) -> None:
+        report = _make_report(within_budget=False)
+        history = (
+            _snapshot_with_carry_failing(date(2026, 7, 15), passes=False),
+            _snapshot_with_carry_failing(date(2026, 7, 22), passes=True),
+            _snapshot_with_carry_failing(_PRIOR_AS_OF, passes=True),
+        )
+
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            history=history,
+            as_of=_AS_OF,
+        )
+
+        assert "1st week" in digest.headline
+
+
+class TestHeadlineMechanism:
+    """_headline() directly — the invariant and the STALE-prefix compose."""
+
+    def _snapshot(
+        self, *, all_pass: bool, data_quality: str = "CACHED"
+    ) -> WeeklySnapshot:
+        return replace(
+            _prior_snapshot(),
+            as_of=_AS_OF,
+            data_quality=data_quality,
+            ips_compliance_all_pass=all_pass,
+            ips_compliance_rows=(
+                ("Annual carry cost", all_pass),
+                ("Crash convexity (-25% shock)", True),
+            ),
+        )
+
+    def _compliance(self, *, all_pass: bool) -> IpsComplianceSection:
+        return IpsComplianceSection(
+            rows=(
+                IpsComplianceRow(
+                    metric="Annual carry cost",
+                    target="≤ 1.00%",
+                    actual="1.15%",
+                    passes=all_pass,
+                ),
+                IpsComplianceRow(
+                    metric="Crash convexity (-25% shock)",
+                    target="15.0%\u201325.0%",
+                    actual="19.0%",
+                    passes=True,
+                ),
+            ),
+            all_pass=all_pass,
+        )
+
+    @pytest.mark.parametrize(
+        ("all_pass", "has_crossing"),
+        [(True, False), (True, True), (False, False), (False, True)],
+    )
+    def test_no_action_implies_all_pass(
+        self,
+        all_pass: bool,
+        has_crossing: bool,
+    ) -> None:
+        crossings = (
+            (SnapshotChange(label="Decision verdict", detail="A → B"),)
+            if has_crossing
+            else ()
+        )
+        diff = SnapshotDiff(
+            is_first_run=False,
+            prior_as_of=_PRIOR_AS_OF,
+            crossings=crossings,
+            material_moves=(),
+        )
+        snapshot = self._snapshot(all_pass=all_pass)
+        compliance = self._compliance(all_pass=all_pass)
+
+        headline = _headline(diff, snapshot, compliance, ())
+
+        if headline == "NO ACTION":
+            assert all_pass is True
+
+    @pytest.mark.parametrize(
+        ("all_pass", "has_crossing"),
+        [(True, False), (True, True), (False, False)],
+    )
+    def test_stale_prefix_composes_on_every_branch(
+        self,
+        all_pass: bool,
+        has_crossing: bool,
+    ) -> None:
+        crossings = (
+            (SnapshotChange(label="Decision verdict", detail="A → B"),)
+            if has_crossing
+            else ()
+        )
+        diff = SnapshotDiff(
+            is_first_run=False,
+            prior_as_of=_PRIOR_AS_OF,
+            crossings=crossings,
+            material_moves=(),
+        )
+        snapshot = self._snapshot(all_pass=all_pass, data_quality="STALE")
+        compliance = self._compliance(all_pass=all_pass)
+
+        headline = _headline(diff, snapshot, compliance, ())
+
+        assert headline.startswith("STALE DATA — ")
 
 
 class TestGoldenMarkdown:
@@ -249,9 +444,8 @@ class TestGoldenMarkdown:
         report = _make_report()
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MONETIZE",
             roll_records=(),
-            prior_snapshot=_prior_snapshot(),
+            history=(_prior_snapshot(),),
             as_of=_AS_OF,
         )
 
@@ -267,9 +461,8 @@ class TestRenderWeeklyDigestHtml:
         report = _make_report(**report_kwargs)  # type: ignore[arg-type]
         return build_weekly_digest(
             report=report,
-            decision_verdict="MONETIZE",
             roll_records=(),
-            prior_snapshot=_prior_snapshot(),
+            history=(_prior_snapshot(),),
             as_of=_AS_OF,
         )
 
@@ -282,11 +475,14 @@ class TestRenderWeeklyDigestHtml:
         assert html.count("<body>") == 1
 
     def test_contains_headline_and_report_sections(self) -> None:
+        # Default fixture is within_budget=False vs prior's True — a
+        # compliance breach, which outranks a plain crossing (#296).
         html = render_weekly_digest_html(self._digest())
 
-        assert "ACTION: Decision verdict" in html
+        assert "BREACH: Annual carry cost out of policy" in html
         assert "<h2>3. Market Context</h2>" in html
         assert "<h2>6. IPS Compliance</h2>" in html
+        assert "<h2>7. Decision &amp; entry timing</h2>" in html
 
 
 class TestStaleBanner:
@@ -296,9 +492,7 @@ class TestStaleBanner:
         report = _make_report(data_quality="CACHED", within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -310,9 +504,7 @@ class TestStaleBanner:
         report = _make_report(data_quality="STALE", within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -324,9 +516,7 @@ class TestStaleBanner:
         report = _make_report(data_quality="UNAVAILABLE", within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -338,9 +528,7 @@ class TestStaleBanner:
         report = _make_report(data_quality="STALE", within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -353,9 +541,7 @@ class TestStaleBanner:
         report = _make_report(data_quality="CACHED", within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -374,9 +560,7 @@ class TestBackupHeartbeatCaveat:
         report = _make_report(within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -388,9 +572,7 @@ class TestBackupHeartbeatCaveat:
         report = _make_report(within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
             backup_heartbeat_warning="Offsite backup heartbeat ping "
             "failed as of 2026-08-04T03:00:12Z",
@@ -407,9 +589,7 @@ class TestBackupHeartbeatCaveat:
         report = _make_report(within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -421,9 +601,7 @@ class TestBackupHeartbeatCaveat:
         report = _make_report(within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
             backup_heartbeat_warning="Offsite backup heartbeat ping failed",
         )
@@ -437,9 +615,7 @@ class TestBackupHeartbeatCaveat:
         report = _make_report(data_quality="STALE", within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
             backup_heartbeat_warning="Offsite backup heartbeat ping failed",
         )
@@ -498,9 +674,7 @@ class TestFirstRunRendering:
         report = _make_report(within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -513,9 +687,7 @@ class TestFirstRunRendering:
         report = _make_report(within_budget=True)
         digest = build_weekly_digest(
             report=report,
-            decision_verdict="MAINTAIN",
             roll_records=(),
-            prior_snapshot=None,
             as_of=_AS_OF,
         )
 
@@ -524,13 +696,13 @@ class TestFirstRunRendering:
         assert "first snapshot" in html
 
 
-class TestLoadPriorSnapshot:
-    """load_prior_snapshot() — reads each file's own as_of, not the name."""
+class TestLoadSnapshotHistory:
+    """load_snapshot_history() — every prior snapshot, oldest first."""
 
-    def test_missing_dir_returns_none(self, tmp_path: Path) -> None:
-        assert load_prior_snapshot(tmp_path, before=_AS_OF) is None
+    def test_missing_dir_returns_empty(self, tmp_path: Path) -> None:
+        assert load_snapshot_history(tmp_path, before=_AS_OF) == ()
 
-    def test_returns_the_most_recent_prior(self, tmp_path: Path) -> None:
+    def test_returns_every_prior_oldest_first(self, tmp_path: Path) -> None:
         weekly_dir = tmp_path / "reports" / "weekly"
         weekly_dir.mkdir(parents=True)
         older = _prior_snapshot()
@@ -542,10 +714,9 @@ class TestLoadPriorSnapshot:
             json.dumps(newer.to_json_dict()),
         )
 
-        result = load_prior_snapshot(tmp_path, before=_AS_OF)
+        result = load_snapshot_history(tmp_path, before=_AS_OF)
 
-        assert result is not None
-        assert result.as_of == date(2026, 8, 1)
+        assert [snap.as_of for snap in result] == [older.as_of, newer.as_of]
 
     def test_ignores_snapshots_on_or_after_before(self, tmp_path: Path) -> None:
         weekly_dir = tmp_path / "reports" / "weekly"
@@ -555,7 +726,7 @@ class TestLoadPriorSnapshot:
             json.dumps(same_day.to_json_dict()),
         )
 
-        assert load_prior_snapshot(tmp_path, before=_AS_OF) is None
+        assert load_snapshot_history(tmp_path, before=_AS_OF) == ()
 
     def test_skips_unreadable_files(self, tmp_path: Path) -> None:
         weekly_dir = tmp_path / "reports" / "weekly"
@@ -566,10 +737,9 @@ class TestLoadPriorSnapshot:
             json.dumps(good.to_json_dict()),
         )
 
-        result = load_prior_snapshot(tmp_path, before=_AS_OF)
+        result = load_snapshot_history(tmp_path, before=_AS_OF)
 
-        assert result is not None
-        assert result.as_of == good.as_of
+        assert [snap.as_of for snap in result] == [good.as_of]
 
 
 @dataclass

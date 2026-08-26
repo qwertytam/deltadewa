@@ -22,6 +22,7 @@ from deltadewa.reporting.weekly_snapshot import (
     WeeklySnapshot,
     diff_snapshots,
     snapshot_from_report,
+    standing_breaches,
 )
 
 _AS_OF = date(2026, 8, 5)
@@ -313,3 +314,146 @@ class TestDiffSnapshotsMaterialMoves:
         assert diff.crossings == ()
         assert diff.material_moves == ()
         assert diff.prior_as_of == prior.as_of
+
+
+def _snap_at(
+    as_of: date,
+    *,
+    compliance_rows: tuple[tuple[str, bool], ...],
+) -> WeeklySnapshot:
+    """A snapshot at a given as_of, varying only its compliance rows."""
+    return replace(_snapshot(compliance_rows=compliance_rows), as_of=as_of)
+
+
+class TestStandingBreaches:
+    """standing_breaches() — consecutive-snapshot runs per failing metric."""
+
+    def test_no_failing_metric_returns_empty(self) -> None:
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                ("Crash convexity (-25% shock)", True),
+            ),
+        )
+
+        assert standing_breaches((), current) == ()
+
+    def test_first_week_of_a_breach_is_weeks_one(self) -> None:
+        prior = _snap_at(
+            date(2026, 7, 29),
+            compliance_rows=(("Annual carry cost", True),),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(("Annual carry cost", False),),
+        )
+
+        breaches = standing_breaches((prior,), current)
+
+        assert len(breaches) == 1
+        assert breaches[0].metric == "Annual carry cost"
+        assert breaches[0].weeks == 1
+        assert breaches[0].since == current.as_of
+
+    def test_run_extends_across_multiple_prior_failing_weeks(self) -> None:
+        history = tuple(
+            _snap_at(
+                date(2026, 7, day),
+                compliance_rows=(("Annual carry cost", False),),
+            )
+            for day in (1, 8, 15, 22, 29)
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(("Annual carry cost", False),),
+        )
+
+        breaches = standing_breaches(history, current)
+
+        assert breaches[0].weeks == 6
+        assert breaches[0].since == date(2026, 7, 1)
+
+    def test_run_stops_at_the_first_passing_snapshot(self) -> None:
+        history = (
+            _snap_at(
+                date(2026, 7, 15),
+                compliance_rows=(("Annual carry cost", False),),
+            ),
+            _snap_at(
+                date(2026, 7, 22),
+                compliance_rows=(("Annual carry cost", True),),
+            ),
+            _snap_at(
+                date(2026, 7, 29),
+                compliance_rows=(("Annual carry cost", False),),
+            ),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(("Annual carry cost", False),),
+        )
+
+        breaches = standing_breaches(history, current)
+
+        assert breaches[0].weeks == 2
+        assert breaches[0].since == date(2026, 7, 29)
+
+    def test_metric_absent_from_history_stops_the_run(self) -> None:
+        history = (
+            _snap_at(
+                date(2026, 7, 29),
+                compliance_rows=(("Crash convexity (-25% shock)", True),),
+            ),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(("Annual carry cost", False),),
+        )
+
+        breaches = standing_breaches(history, current)
+
+        assert breaches[0].weeks == 1
+
+    def test_history_order_does_not_matter(self) -> None:
+        history = tuple(
+            _snap_at(
+                date(2026, 7, day),
+                compliance_rows=(("Annual carry cost", False),),
+            )
+            for day in (22, 8, 15, 1, 29)  # deliberately shuffled
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(("Annual carry cost", False),),
+        )
+
+        breaches = standing_breaches(history, current)
+
+        assert breaches[0].weeks == 6
+
+    def test_multiple_failing_metrics_each_get_their_own_breach(self) -> None:
+        history = (
+            _snap_at(
+                date(2026, 7, 29),
+                compliance_rows=(
+                    ("Annual carry cost", False),
+                    ("Crash convexity (-25% shock)", True),
+                ),
+            ),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", False),
+                ("Crash convexity (-25% shock)", False),
+            ),
+        )
+
+        breaches = standing_breaches(history, current)
+
+        by_metric = {b.metric: b.weeks for b in breaches}
+        assert by_metric == {
+            "Annual carry cost": 2,
+            "Crash convexity (-25% shock)": 1,
+        }

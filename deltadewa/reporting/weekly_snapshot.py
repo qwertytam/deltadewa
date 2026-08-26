@@ -15,6 +15,8 @@ from datetime import date
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from deltadewa.reporting.program_report import ProgramReport
 
 # Mirrors program_report._STALE_OR_WORSE locally rather than importing a
@@ -442,3 +444,69 @@ def diff_snapshots(
         crossings=tuple(crossings),
         material_moves=tuple(material_moves),
     )
+
+
+@dataclass(frozen=True)
+class StandingBreach:
+    """A metric that has failed IPS compliance for N straight snapshots.
+
+    Attributes:
+        metric: The compliance row's ``metric`` string, matching
+            ``WeeklySnapshot.ips_compliance_rows``.
+        weeks: Consecutive *snapshots* failing this metric, including the
+            current one — not calendar weeks, so a skipped cron week
+            undercounts.
+        since: ``as_of`` of the run's first failing snapshot in this
+            streak — what disambiguates a skipped week from a shorter
+            true run.
+
+    """
+
+    metric: str
+    weeks: int
+    since: date
+
+
+def standing_breaches(
+    history: Sequence[WeeklySnapshot],
+    current: WeeklySnapshot,
+) -> tuple[StandingBreach, ...]:
+    """Consecutive-snapshot failing runs for each metric failing now.
+
+    For every metric currently failing in ``current.ips_compliance_rows``,
+    walks ``history`` backwards from its most recent entry, stopping at the
+    first snapshot where that metric passes or is absent (a metric only
+    tracked partway through the history). ``history`` may be given in any
+    order and may include entries at or after ``current.as_of``; only
+    entries strictly older than ``current.as_of`` are considered.
+
+    Returns:
+        One ``StandingBreach`` per currently-failing metric, in
+        ``current.ips_compliance_rows`` order; ``()`` when ``current``
+        passes.
+
+    """
+    failing_metrics = [
+        metric for metric, passed in current.ips_compliance_rows if not passed
+    ]
+    if not failing_metrics:
+        return ()
+
+    ordered = sorted(
+        (snap for snap in history if snap.as_of < current.as_of),
+        key=lambda snap: snap.as_of,
+        reverse=True,
+    )
+
+    breaches: list[StandingBreach] = []
+    for metric in failing_metrics:
+        weeks = 1
+        since = current.as_of
+        for snap in ordered:
+            row = dict(snap.ips_compliance_rows).get(metric)
+            if row is None or row:
+                break
+            weeks += 1
+            since = snap.as_of
+        breaches.append(StandingBreach(metric=metric, weeks=weeks, since=since))
+    return tuple(breaches)

@@ -6,8 +6,14 @@ in :func:`render`, at the default dial values; the scenario explorer's
 three dials only *update* it afterward, via :func:`register_callbacks`.
 No arithmetic happens in this module — every number comes from
 ``analysis/`` (``monitor_scenario.build_scenario``,
-``monitor_scenario.build_scenario_curve``, ``roll_status.evaluate_roll_status``,
-``monetization.build_monetization_plan``) and is only formatted here
+``monitor_scenario.build_scenario_curve``,
+``roll_status.evaluate_roll_status``,
+``monetization.build_monetization_plan``,
+``crash_payoff.compute_crash_convexity``) and ``reporting.program_report``
+(``build_cost_section``, ``build_protection_section``,
+``build_ips_compliance`` — the IPS compliance strip, #298, reuses the
+digest's own section builders and its single compliance definition
+rather than writing a second one), and is only formatted here
 (``app.format``) or handed to a chart builder
 (``visualization.crash_charts_plotly``).
 """
@@ -20,7 +26,10 @@ from dash import Input, Output, Patch, dcc, html
 from dash.development.base_component import Component
 
 from deltadewa import __version__
-from deltadewa.analysis.crash_repricing import hedge_value
+from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.crash_payoff import compute_crash_convexity
+from deltadewa.analysis.crash_repricing import CrashShock, hedge_value
+from deltadewa.analysis.hedge_efficiency import EfficiencyVerdict
 from deltadewa.analysis.market_environment import (
     DataQuality,
     assess_market_environment,
@@ -36,6 +45,11 @@ from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.shape_notice import shape_notice_text
+from deltadewa.reporting.program_report import (
+    build_cost_section,
+    build_ips_compliance,
+    build_protection_section,
+)
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
 if TYPE_CHECKING:
@@ -46,6 +60,7 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.reporting.program_report import IpsComplianceSection
 
 _SPOT_SLIDER_MIN = -50.0
 _SPOT_SLIDER_MAX = 10.0
@@ -61,6 +76,14 @@ _SPOT_QUALITY_LABEL: dict[DataQuality, str] = {
     DataQuality.STALE: "STALE",
     DataQuality.STATIC: "SYNTHETIC",
 }
+
+# Mirrors chrome._BANNER_QUALITIES and program_report._STALE_OR_WORSE
+# locally rather than importing either module-private name — the
+# established convention (see weekly_snapshot.py's own copy) for a set
+# every module that reads DataQuality needs but none owns.
+_STALE_OR_WORSE: frozenset[DataQuality] = frozenset(
+    {DataQuality.STALE, DataQuality.STATIC, DataQuality.UNAVAILABLE},
+)
 
 
 def _no_ips_layout() -> html.Div:
@@ -165,6 +188,78 @@ def _spot_headline(
     )
 
 
+def _compliance_strip(
+    compliance: IpsComplianceSection,
+    data_quality: DataQuality,
+) -> html.Div:
+    """Build the one-line IPS compliance strip (#298).
+
+    The program's single definition of "compliant" is
+    ``reporting.program_report.build_ips_compliance`` — the same function
+    the weekly digest's §6 calls. This renders its result; it never
+    re-derives pass/fail from a band comparison of its own, so this line
+    and the digest's Overall verdict cannot silently disagree.
+
+    :func:`render` builds this unconditionally, before the scenario
+    explorer, from the *stored* book at the IPS anchor — never from
+    ``register_callbacks``' scenario dials, so moving a dial changes the
+    numbers below without moving this line. Compliance is a statement
+    about the book and the policy, not about a what-if.
+
+    Args:
+        compliance: This week's compliance result, computed at the IPS
+            anchor via ``build_ips_compliance``.
+        data_quality: The page's ``MarketEnvironment.data_quality`` —
+            used only to add a caveat line, never to gate the verdict
+            itself (carry and crash convexity are QuantLib repricing of
+            the book's own hand-entered inputs; market data is not one
+            of their inputs, so a stale market-data week must not hide a
+            real breach).
+
+    Returns:
+        ``id="compliance-strip"`` — a FAIL book cannot render
+        ``/monitor`` without this id present
+        (``tests/test_app/test_monitor.py``'s structural guard asserts
+        exactly that, rather than pinning a string).
+
+    """
+    if compliance.all_pass:
+        text = (
+            "IPS compliance: PASS — carry and crash convexity both "
+            "within policy."
+        )
+        modifier = "pass"
+    else:
+        clauses = [
+            f"{row.metric} {row.actual} vs. target {row.target}"
+            for row in compliance.rows
+            if not row.passes
+        ]
+        text = "IPS compliance: FAIL — " + "; ".join(clauses) + "."
+        modifier = "fail"
+
+    children: list[Component] = [
+        html.P(
+            text,
+            className=f"compliance-verdict compliance-verdict--{modifier}",
+        ),
+    ]
+    if data_quality in _STALE_OR_WORSE:
+        children.append(
+            html.P(
+                f"Market data is {data_quality.value} — this verdict is "
+                "computed from the book and the IPS policy, not from "
+                "market data.",
+                className="plain-language",
+            ),
+        )
+    return html.Div(
+        children,
+        id="compliance-strip",
+        className="compliance-strip",
+    )
+
+
 def _scenario_numbers(result: ScenarioResult) -> list[Component]:
     """Build the scenario-numbers children.
 
@@ -244,7 +339,14 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
     ]
 
 
-def _efficiency_sentence(result: ScenarioResult) -> html.P:
+def _efficiency_sentence(
+    result: ScenarioResult,
+    *,
+    convexity_pct: float | None,
+    convexity_target_min_pct: float | None,
+    vega_sufficiency_pct: float | None,
+    vega_sufficiency_min_pct: float,
+) -> html.P:
     """Build the hedge-efficiency sentence: payoff bought per dollar of carry.
 
     The bridge between "what does this cost" and "what do we get" — Part X
@@ -262,6 +364,32 @@ def _efficiency_sentence(result: ScenarioResult) -> html.P:
     The wording names *this scenario* because
     :attr:`ScenarioResult.efficiency` is scenario-local — at the IPS default
     dials it is the handbook's ratio, but the spot dial moves it.
+
+    **Wording rule (#304):** the verdict word alone used to read as if the
+    ratio sat *inside* the band ("attractive against the IPS 3-6x band" for
+    a reading of 20.7 — 3.4x above the ceiling). The sentence now says
+    which side of the band the reading is on: below it (``POOR``), inside
+    it (``ACCEPTABLE``), or how far above the ceiling (``ATTRACTIVE``).
+
+    **The "cheap but too small" combination (#304):** an ``ATTRACTIVE``
+    reading paired with convexity below its target band, or vega
+    sufficiency below its floor, is not a good deal — it is a small book
+    whose tiny carry makes the ratio look extreme. ``convexity_pct``/
+    ``convexity_target_min_pct`` and ``vega_sufficiency_pct``/
+    ``vega_sufficiency_min_pct`` are book-level facts (not scenario-local
+    like ``result``), passed in by the caller so this function never reads
+    ``ips_config``/``portfolio`` itself.
+
+    Args:
+        result: This scenario's numbers.
+        convexity_pct: Book convexity at the IPS crash anchor, or ``None``
+            when no IPS convexity policy is loaded.
+        convexity_target_min_pct: IPS convexity band floor, or ``None``
+            alongside ``convexity_pct``.
+        vega_sufficiency_pct: Book vega sufficiency, portfolio % impact
+            per +10 vol points.
+        vega_sufficiency_min_pct: IPS vega sufficiency band floor.
+
     """
     efficiency = result.efficiency
     # ``verdict`` is None exactly when ``ratio`` is (see HedgeEfficiency), but
@@ -287,21 +415,68 @@ def _efficiency_sentence(result: ScenarioResult) -> html.P:
             className="plain-language",
         )
 
-    return html.P(
+    verdict_word = efficiency.verdict.value.lower()
+    band = f"{efficiency.band_min_ratio:g}-{efficiency.band_max_ratio:g}x band"
+    if efficiency.verdict is EfficiencyVerdict.POOR:
+        position_clause = f"{verdict_word}, below the IPS {band}"
+    elif efficiency.verdict is EfficiencyVerdict.ACCEPTABLE:
+        position_clause = f"{verdict_word}, within the IPS {band}"
+    else:  # ATTRACTIVE
+        above_by = efficiency.ratio / efficiency.band_max_ratio
+        position_clause = (
+            f"{verdict_word}, {above_by:.1f}x above the IPS {band}'s ceiling"
+        )
+
+    sentence = (
         f"Every dollar of annual carry buys "
         f"{fmt.currency(efficiency.ratio, decimals=2)} of hedge payoff at "
         f"this {fmt.signed_percent(result.spot_pct)} scenario — "
-        f"{efficiency.verdict.value.lower()} against the IPS "
-        f"{efficiency.band_min_ratio:g}-{efficiency.band_max_ratio:g}x band.",
-        className="plain-language",
+        f"{position_clause}."
     )
+
+    convexity_short = (
+        convexity_pct is not None
+        and convexity_target_min_pct is not None
+        and convexity_pct < convexity_target_min_pct
+    )
+    vega_short = (
+        vega_sufficiency_pct is not None
+        and vega_sufficiency_pct < vega_sufficiency_min_pct
+    )
+    if efficiency.verdict is EfficiencyVerdict.ATTRACTIVE and (
+        convexity_short or vega_short
+    ):
+        short_reasons = [
+            reason
+            for reason, is_short in (
+                ("crash convexity is below its target band", convexity_short),
+                ("vega sufficiency is below its floor", vega_short),
+            )
+            if is_short
+        ]
+        sentence += (
+            " That is cheap because the book is small, not because it is "
+            f"efficient: {' and '.join(short_reasons)}. Cheap, but too "
+            "small."
+        )
+
+    return html.P(sentence, className="plain-language")
 
 
 def _cost_panel(
     result: ScenarioResult,
     ips_config: IpsConfig,
+    *,
+    convexity_pct: float | None,
+    vega_sufficiency_pct: float | None,
 ) -> list[Component]:
-    """Build the cost-panel children: carry % of notional vs. IPS budget."""
+    """Build the cost-panel children: carry % of notional vs. IPS budget.
+
+    ``convexity_pct``/``vega_sufficiency_pct`` are book-level facts
+    (unaffected by the scenario dials) threaded through to
+    :func:`_efficiency_sentence` for the "cheap but too small" combination
+    check (#304) — see that function's docstring.
+    """
     budget_pct = ips_config.budget.annual_carry_pct
     verdict = "within budget" if result.carry.within_budget else "over budget"
     verdict_class = "within" if result.carry.within_budget else "over"
@@ -351,7 +526,13 @@ def _cost_panel(
             "bigger share.",
             className="plain-language",
         ),
-        _efficiency_sentence(result),
+        _efficiency_sentence(
+            result,
+            convexity_pct=convexity_pct,
+            convexity_target_min_pct=ips_config.convexity.target_min_pct,
+            vega_sufficiency_pct=vega_sufficiency_pct,
+            vega_sufficiency_min_pct=ips_config.vega.sufficiency_min_pct,
+        ),
     ]
 
 
@@ -513,6 +694,27 @@ def _position_detail_table(
     )
 
 
+def _page_footer() -> html.Div:
+    """Build the page's own last element: a muted build-version stamp.
+
+    #359: this used to be a ``.plain-language`` sentence sandwiched
+    inside ``scenario_explorer``, between the cost panel and the crash
+    headline — styled identically to every other financial sentence on
+    the page, so it read as one more dense sentence and got skimmed
+    past. A field test confirmed the text was genuinely rendering (it
+    was visible in a copy-paste of the page) but a human looking at the
+    live page still missed it. Placed here — the true last child of the
+    page, after ``_position_detail_table``, with its own class rather
+    than reusing ``.plain-language`` — it stays in the same place
+    whether ``Position detail`` is expanded or collapsed, and its
+    styling marks it as metadata rather than portfolio commentary.
+    """
+    return html.Div(
+        html.P(f"Running v{__version__}"),
+        className="page-footer",
+    )
+
+
 def render(app: ProgramDashApp) -> html.Div:
     """Build the /monitor page: crash-led headline, decisions, position detail.
 
@@ -567,6 +769,33 @@ def render(app: ProgramDashApp) -> html.Div:
         ips_config,
         market_env=market_env,
     )
+
+    # #298: the IPS compliance strip. Computed at the *stored* book and
+    # the IPS anchor shock — deliberately not from `result` above, whose
+    # quantity/spot/vol move with the scenario dials — and via the same
+    # section builders + build_ips_compliance the weekly digest's §6
+    # calls, so this line and the digest's Overall verdict read off one
+    # definition of "compliant".
+    crash_result = compute_crash_convexity(
+        portfolio,
+        shock=CrashShock.from_ips(convexity),
+        ips_convexity=convexity,
+    )
+    cost_section = build_cost_section(
+        carry_metrics=PortfolioAnalyzer(portfolio).calculate_carry_metrics(),
+        book_notional=(
+            abs(portfolio.underlying_quantity) * portfolio.spot_price
+        ),
+        budget_annual_pct=ips_config.budget.annual_carry_pct,
+    )
+    protection_section = build_protection_section(crash_result)
+    compliance = build_ips_compliance(cost_section, protection_section)
+    # Book-level facts for the efficiency sentence's "cheap but too small"
+    # combination (#304) — the same convexity_pct the strip above just
+    # graded, plus vega sufficiency (design.py's own band-membership call).
+    vega_sufficiency_pct = PortfolioAnalyzer(
+        portfolio,
+    ).calculate_vega_sufficiency_pct()
 
     scenario_explorer = html.Div(
         [
@@ -650,18 +879,14 @@ def render(app: ProgramDashApp) -> html.Div:
                 className="scenario-numbers",
             ),
             html.Div(
-                _cost_panel(result, ips_config),
+                _cost_panel(
+                    result,
+                    ips_config,
+                    convexity_pct=protection_section.convexity_pct,
+                    vega_sufficiency_pct=vega_sufficiency_pct,
+                ),
                 id="cost-panel",
                 className="cost-panel",
-            ),
-            html.Div(
-                [
-                    html.P(
-                        f"Running v{__version__}",
-                        className="plain-language",
-                    ),
-                ],
-                className="plain-language",
             ),
             _headline_sentence(result),
         ],
@@ -676,9 +901,11 @@ def render(app: ProgramDashApp) -> html.Div:
                 id="shape-notice",
                 className="shape-notice",
             ),
+            _compliance_strip(compliance, market_env.data_quality),
             scenario_explorer,
             _decisions_section(records, plan),
             _position_detail_table(records, portfolio),
+            _page_footer(),
         ],
         className="page page-monitor",
     )
@@ -730,13 +957,28 @@ def register_callbacks(app: ProgramDashApp) -> None:
         vol_points: float,
         quantity: float,
     ) -> tuple[Patch, list[Component], list[Component]]:
+        portfolio = app.program_state.portfolio
         result = build_scenario(
-            app.program_state.portfolio,
+            portfolio,
             ips_config,
             spot_pct=spot_pct,
             vol_points=vol_points,
             quantity=quantity,
         )
+        # Book-level facts for the efficiency sentence's "cheap but too
+        # small" combination (#304) — read fresh from the live portfolio
+        # on every dial move (never cached across callback firings), but
+        # via the single-shock convexity call (not #298's full 51-point
+        # compute_crash_convexity): unaffected by any of the three dials,
+        # so it would be identical work repeated on every keystroke.
+        convexity_pct = PortfolioAnalyzer(
+            portfolio,
+        ).calculate_crash_convexity_pct(
+            CrashShock.from_ips(ips_config.convexity)
+        )
+        vega_sufficiency_pct = PortfolioAnalyzer(
+            portfolio,
+        ).calculate_vega_sufficiency_pct()
 
         patched = Patch()
         patched["data"][4]["x"] = [result.spot_pct]
@@ -744,7 +986,12 @@ def register_callbacks(app: ProgramDashApp) -> None:
         return (
             patched,
             _scenario_numbers(result),
-            _cost_panel(result, ips_config),
+            _cost_panel(
+                result,
+                ips_config,
+                convexity_pct=convexity_pct,
+                vega_sufficiency_pct=vega_sufficiency_pct,
+            ),
         )
 
     @app.callback(

@@ -2960,15 +2960,6 @@ def render(app: ProgramDashApp) -> html.Div:
                 ],
                 className="panel",
             ),
-            html.Div(
-                [
-                    html.P(
-                        f"Running v{__version__}",
-                        className="plain-language",
-                    ),
-                ],
-                className="plain-language",
-            ),
         ],
         className="zone-exploration",
     )
@@ -2984,8 +2975,28 @@ def render(app: ProgramDashApp) -> html.Div:
             book_zone,
             planning_zone,
             exploration_zone,
+            _page_footer(),
         ],
         className="page page-design",
+    )
+
+
+def _page_footer() -> html.Div:
+    """Build the page's own last element: a muted build-version stamp.
+
+    #359 (originally fixed on /monitor, applied here to match): a
+    build-version stamp styled identically to the surrounding financial
+    sentences gets skimmed past. This used to be a ``.plain-language``
+    paragraph sandwiched inside the exploration zone, after the vega
+    term exposure panel. Placed here instead — the true last child of
+    the page, after every zone — it stays in the same place regardless
+    of which panels are expanded or collapsed, and its styling (shared
+    ``.page-footer`` class, same as /monitor) marks it as metadata
+    rather than portfolio commentary.
+    """
+    return html.Div(
+        html.P(f"Running v{__version__}"),
+        className="page-footer",
     )
 
 

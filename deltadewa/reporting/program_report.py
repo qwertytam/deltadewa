@@ -14,6 +14,11 @@ from html import escape
 from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.carry import carry_vs_budget
+from deltadewa.analysis.decision_matrix import (
+    DecisionVerdict,
+    decision_matrix,
+    entry_timing_tree,
+)
 
 if TYPE_CHECKING:
     from deltadewa.analysis.crash_payoff import CrashConvexityResult
@@ -222,12 +227,22 @@ class MonetizationSection:
 
 @dataclass(frozen=True)
 class IpsComplianceRow:
-    """One row in the IPS compliance summary table."""
+    """One row in the IPS compliance summary table.
+
+    Attributes:
+        action: Recommended remediation when this row fails — ``None``
+            exactly when ``passes`` is True. Set by ``build_ips_compliance``
+            from the same ``CostSection``/``ProtectionSection`` fields that
+            already decided ``passes``; it explains an already-decided
+            failure, it never re-decides one (#307).
+
+    """
 
     metric: str
     target: str
     actual: str
     passes: bool
+    action: str | None = None
 
 
 @dataclass(frozen=True)
@@ -242,6 +257,30 @@ class IpsComplianceSection:
 
     rows: tuple[IpsComplianceRow, ...]
     all_pass: bool
+
+
+@dataclass(frozen=True)
+class DecisionSection:
+    """Part X.2 decision-matrix + entry-timing verdict for this report.
+
+    Attributes:
+        verdict: ``DecisionResult.verdict.value`` (BUY/MAINTAIN/AVOID/
+            MONETIZE/INSUFFICIENT_DATA).
+        rationale: ``DecisionResult.rationale``.
+        entry_recommendation: ``EntryTimingResult.recommendation``.
+        should_enter: ``EntryTimingResult.should_enter``.
+        data_quality_note: Set, verbatim, whenever either
+            ``decision_matrix`` or ``entry_timing_tree`` withheld a real
+            verdict for data-quality reasons; ``None`` when both returned
+            one.
+
+    """
+
+    verdict: str
+    rationale: str
+    entry_recommendation: str
+    should_enter: bool
+    data_quality_note: str | None
 
 
 @dataclass(frozen=True)
@@ -260,6 +299,7 @@ class ProgramReport:
     return_framing: ReturnFramingSection
     monetization: MonetizationSection
     ips_compliance: IpsComplianceSection
+    decision: DecisionSection | None = None
 
 
 # ── Builder ───────────────────────────────────────────────────────────────
@@ -311,13 +351,19 @@ def build_program_report(
         as_of=as_of,
     )
 
-    cost = _build_cost(
+    cost = build_cost_section(
         carry_metrics=carry_metrics,
         book_notional=book_notional,
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
-    protection = _build_protection(crash_result)
+    protection = build_protection_section(crash_result)
     market_context = _build_market_context(market_env)
+    decision = _build_decision(
+        ips_config=ips_config,
+        market_env=market_env,
+        protection=protection,
+        monetization_plan=monetization_plan,
+    )
 
     return ProgramReport(
         header=header,
@@ -346,17 +392,80 @@ def build_program_report(
                 else None
             ),
         ),
-        ips_compliance=_build_compliance(cost, protection),
+        ips_compliance=build_ips_compliance(cost, protection),
+        decision=decision,
     )
 
 
-def _build_cost(
+def _build_decision(
+    *,
+    ips_config: IpsConfig,
+    market_env: MarketEnvironment,
+    protection: ProtectionSection,
+    monetization_plan: MonetizationPlan | None,
+) -> DecisionSection:
+    """Compute the decision-matrix + entry-timing verdict for this report.
+
+    Reuses ``protection.convexity_pct`` — the row ``build_protection_section``
+    already matched to the IPS crash shock — as ``decision_matrix``'s
+    ``convexity_now_pct``, rather than re-deriving it with a second,
+    differently-rounded search. Before this, ``weekly_report.main()`` ran
+    its own bare-``==`` match for that figure, which could select a
+    different row than this one, and fell back to ``payoff_ratio`` (a
+    ratio, not a percent) when it found none (#307). When no convexity
+    reading is available at all, no fabricated number is fed to the
+    classifier — a clear note is set instead.
+    """
+    me = ips_config.market_environment
+    entry = entry_timing_tree(
+        market_env,
+        vix_very_high=me.vix_very_high,
+        vix_caution=me.vix_caution,
+        vix_low=me.vix_low,
+    )
+
+    if protection.convexity_pct is None:
+        return DecisionSection(
+            verdict=DecisionVerdict.INSUFFICIENT_DATA.value,
+            rationale=(
+                "No IPS convexity policy is loaded — hedge adequacy "
+                "cannot be assessed."
+            ),
+            entry_recommendation=entry.recommendation,
+            should_enter=entry.should_enter,
+            data_quality_note=(
+                "ProtectionSection.convexity_pct is None — no IPS "
+                "convexity policy loaded"
+            ),
+        )
+
+    decision = decision_matrix(
+        market_env,
+        convexity_now_pct=protection.convexity_pct,
+        ips_convexity=ips_config.convexity,
+        monetization_plan=monetization_plan,
+    )
+    return DecisionSection(
+        verdict=decision.verdict.value,
+        rationale=decision.rationale,
+        entry_recommendation=entry.recommendation,
+        should_enter=entry.should_enter,
+        data_quality_note=decision.data_quality_note or entry.data_quality_note,
+    )
+
+
+def build_cost_section(
     *,
     carry_metrics: dict[str, Any],
     book_notional: float,
     budget_annual_pct: float,
 ) -> CostSection:
-    """Build the CostSection from carry metrics and notional."""
+    """Build the CostSection from carry metrics and notional.
+
+    Public (no leading underscore): reused by ``/monitor``'s IPS
+    compliance strip (#298) so the page and the report build the exact
+    same ``CostSection`` — never a second packaging of the same fields.
+    """
     theta_annual: float = carry_metrics.get("total_theta_annual", 0.0)
     status = carry_vs_budget(
         theta_annual=theta_annual,
@@ -372,10 +481,14 @@ def _build_cost(
     )
 
 
-def _build_protection(
+def build_protection_section(
     crash_result: CrashConvexityResult,
 ) -> ProtectionSection:
-    """Build the ProtectionSection from a CrashConvexityResult."""
+    """Build the ProtectionSection from a CrashConvexityResult.
+
+    Public (no leading underscore): reused by ``/monitor``'s IPS
+    compliance strip (#298) — see ``build_cost_section``.
+    """
     if crash_result.ips_convexity is None:
         return ProtectionSection(
             payoff_ratio=crash_result.payoff_ratio,
@@ -431,17 +544,37 @@ def _build_market_context(
     )
 
 
-def _build_compliance(
+def build_ips_compliance(
     cost: CostSection,
     protection: ProtectionSection,
 ) -> IpsComplianceSection:
-    """Build the IPS compliance table from cost and protection sections."""
+    """Build the IPS compliance table from cost and protection sections.
+
+    Public (no leading underscore): this is the program's single
+    definition of "compliant" (Batch 3b). ``/monitor``'s compliance strip
+    (#298) calls this directly, on ``CostSection``/``ProtectionSection``
+    it builds via ``build_cost_section``/``build_protection_section`` —
+    never a second pass/fail comparison of its own. Two graders that
+    agree today would silently diverge the first time an IPS band moves;
+    routing every surface through this one function is what keeps that
+    from happening.
+    """
     rows: list[IpsComplianceRow] = [
         IpsComplianceRow(
             metric="Annual carry cost",
             target=f"≤ {cost.budget_annual_pct:.2f}% of notional",
             actual=f"{cost.carry_pct_of_notional:.2f}%",
             passes=cost.within_budget,
+            action=(
+                None
+                if cost.within_budget
+                else (
+                    "Carry is above the IPS budget of "
+                    f"{cost.budget_annual_pct:.2f}% — trim position"
+                    " size, or roll to a less expensive structure, to"
+                    " bring theta back within budget."
+                )
+            ),
         ),
     ]
 
@@ -457,12 +590,34 @@ def _build_compliance(
         actual_str = (
             f"{p.convexity_pct:.1f}%" if p.convexity_pct is not None else "—"
         )
+        passes = bool(p.meets_target)
+        action: str | None = None
+        if not passes:
+            if p.convexity_pct is None:
+                action = (
+                    "Crash convexity could not be measured at the IPS"
+                    " shock — check that the crash scenario has a"
+                    " matching repriced row."
+                )
+            elif p.convexity_pct < p.target_min_pct:
+                action = (
+                    "Convexity is below target — the book is"
+                    " under-hedged; increase hedge size, or roll to a"
+                    " cheaper/deeper structure, to raise convexity."
+                )
+            else:
+                action = (
+                    "Convexity is above target — the book is"
+                    " over-hedged; consider monetizing or trimming to"
+                    " bring convexity back within band."
+                )
         rows.append(
             IpsComplianceRow(
                 metric=(f"Crash convexity ({p.ips_crash_pct:.0f}% shock)"),
                 target=target_str,
                 actual=actual_str,
-                passes=bool(p.meets_target),
+                passes=passes,
+                action=action,
             ),
         )
     else:
@@ -472,6 +627,10 @@ def _build_compliance(
                 target="—",
                 actual="—",
                 passes=False,
+                action=(
+                    "No IPS convexity policy is loaded — load one to"
+                    " enable crash-convexity compliance monitoring."
+                ),
             ),
         )
 
@@ -527,9 +686,11 @@ def render_markdown(report: ProgramReport) -> str:
     Sections follow the `Part VII
     <https://qwertytam.github.io/deltadewa-handbook/part-7/>`_
     handbook format, separated by horizontal rules.  The IPS compliance
-    block is a Markdown pipe table.  Pass/fail
-    uses ✓/✗ symbols.  A blockquote caveat is injected in the
-    market-context section when data quality is STATIC or UNAVAILABLE.
+    block is a Markdown pipe table, followed by a recommended-action line
+    for each failing row.  Pass/fail uses ✓/✗ symbols.  A blockquote
+    caveat is injected in the market-context section when data quality is
+    STATIC or UNAVAILABLE.  §7 Decision & entry timing renders whenever
+    ``report.decision`` is set (#307).
 
     Args:
         report: Assembled report to render.
@@ -741,6 +902,31 @@ def render_markdown(report: ProgramReport) -> str:
         f"**Overall: {_pass_fail_md(ic.all_pass)}**",
         "",
     ]
+    action_rows = [row for row in ic.rows if row.action is not None]
+    if action_rows:
+        lines += [
+            f"**Recommended action — {row.metric}:** {row.action}"
+            for row in action_rows
+        ]
+        lines.append("")
+
+    # ── 7. Decision & entry timing ─────────────────────────────────────
+    d = report.decision
+    if d is not None:
+        lines += [
+            "## 7. Decision & entry timing",
+            "",
+            f"**Verdict:** {d.verdict}  ",
+            f"**Rationale:** {d.rationale}",
+            "",
+            f"**Entry-timing recommendation:** {d.entry_recommendation}",
+            "",
+        ]
+        if d.data_quality_note is not None:
+            lines += [
+                f"> withheld: data quality — {d.data_quality_note}",
+                "",
+            ]
 
     return "\n".join(lines)
 
@@ -882,6 +1068,28 @@ def render_html_body(report: ProgramReport) -> str:
         f"</tr>"
         for r in ic.rows
     )
+    action_html = "".join(
+        f"<p><strong>Recommended action &mdash; {escape(r.metric)}:</strong>"
+        f" {escape(r.action)}</p>"
+        for r in ic.rows
+        if r.action is not None
+    )
+
+    decision_html = ""
+    if report.decision is not None:
+        d = report.decision
+        note_html = (
+            f'<p class="note">withheld: data quality &mdash; '
+            f"{escape(d.data_quality_note)}</p>"
+            if d.data_quality_note is not None
+            else ""
+        )
+        decision_html = f"""<h2>7. Decision &amp; entry timing</h2>
+<p><strong>Verdict:</strong> {escape(d.verdict)}</p>
+<p><strong>Rationale:</strong> {escape(d.rationale)}</p>
+<p><strong>Entry-timing recommendation:</strong> \
+{escape(d.entry_recommendation)}</p>
+{note_html}"""
 
     if (
         rf.weekly_carry_cost is not None
@@ -1005,4 +1213,6 @@ over {rf.elapsed_days} day(s)</td></tr>
 <tr><th>Metric</th><th>Target</th><th>Actual</th><th>Status</th></tr>
 {compliance_rows_html}
 </table>
-<p><strong>Overall: {_pass_fail_html(ic.all_pass)}</strong></p>"""
+<p><strong>Overall: {_pass_fail_html(ic.all_pass)}</strong></p>
+{action_html}
+{decision_html}"""
