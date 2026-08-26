@@ -155,6 +155,18 @@ DEFAULT_DATA_TTL_MINUTES: Final[float] = 15.0
 # A display threshold, not a pricing one — nothing here feeds a calculation.
 DEFAULT_SPOT_DIVERGENCE_WARN_PCT: Final[float] = 2.0
 
+# How long a hand-entered pricing input may go unconfirmed before Batch 3d's
+# provenance ledger (analysis.provenance) grades it AGING rather than FRESH.
+# A review cadence, not a market fact: there is no feed to compare a
+# hand-entered rate or IV against, so "stale" here means "nobody has
+# re-confirmed this number in a while," and how long is acceptable
+# genuinely differs by input — spot moves every session, a dividend
+# assumption does not. See #367 and docs/market-data.md.
+_DEFAULT_SPOT_MAX_AGE_DAYS: Final[int] = 1
+_DEFAULT_VOLATILITY_MAX_AGE_DAYS: Final[int] = 7
+_DEFAULT_RISK_FREE_RATE_MAX_AGE_DAYS: Final[int] = 30
+_DEFAULT_DIVIDEND_YIELD_MAX_AGE_DAYS: Final[int] = 90
+
 try:
     import yaml
 
@@ -346,6 +358,29 @@ class IpsVega:
 
 
 @dataclass(frozen=True)
+class IpsPricingInputs:
+    """Review-cadence policy for hand-entered pricing inputs.
+
+    The four inputs a book is actually priced on that the program never
+    fetches — per-leg implied volatility, spot, the risk-free rate, and
+    the dividend yield (#367) — have no ``as_of`` unless a human confirms
+    one at entry, and no feed to grade staleness against. So "stale" here
+    is a maximum unconfirmed age, in days, one per input class because
+    the honest review cadence genuinely differs: spot should be re-eyed
+    every session, a dividend-yield assumption not nearly as often.
+
+    Each field is compared against ``clock.days_between(as_of, stamp)``,
+    never wall-clock subtraction, per ``deltadewa/clock.py``'s rule.
+    ``analysis.provenance.build_provenance_ledger`` is the only consumer.
+    """
+
+    spot_max_age_days: int = _DEFAULT_SPOT_MAX_AGE_DAYS
+    volatility_max_age_days: int = _DEFAULT_VOLATILITY_MAX_AGE_DAYS
+    risk_free_rate_max_age_days: int = _DEFAULT_RISK_FREE_RATE_MAX_AGE_DAYS
+    dividend_yield_max_age_days: int = _DEFAULT_DIVIDEND_YIELD_MAX_AGE_DAYS
+
+
+@dataclass(frozen=True)
 class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
@@ -429,14 +464,17 @@ class IpsConfig:
     )
     sizing: IpsSizing = dataclass_field(default_factory=IpsSizing)
     vega: IpsVega = dataclass_field(default_factory=IpsVega)
+    pricing_inputs: IpsPricingInputs = dataclass_field(
+        default_factory=IpsPricingInputs,
+    )
     # #309: which of the optional sections above (market_environment,
-    # sizing, vega) were absent from the loaded ips.yaml and are running
-    # on their DEFAULT_* module constants instead of the operator's own
-    # numbers. Populated once, in load_ips_config, from the raw parsed
-    # YAML — never recomputed from this object's own field values, since
-    # a field that happens to equal its default (an operator who typed
-    # the same number back in) is not the same condition as a section
-    # that was never written at all.
+    # sizing, vega, pricing_inputs) were absent from the loaded ips.yaml
+    # and are running on their DEFAULT_* module constants instead of the
+    # operator's own numbers. Populated once, in load_ips_config, from the
+    # raw parsed YAML — never recomputed from this object's own field
+    # values, since a field that happens to equal its default (an
+    # operator who typed the same number back in) is not the same
+    # condition as a section that was never written at all.
     defaulted_sections: frozenset[str] = dataclass_field(
         default_factory=frozenset,
     )
@@ -861,6 +899,39 @@ def _parse_vega(config: dict[str, Any]) -> IpsVega:
     )
 
 
+def _parse_pricing_inputs(config: dict[str, Any]) -> IpsPricingInputs:
+    """Parse the optional ``pricing_inputs`` policy section.
+
+    Optional, like ``sizing`` and ``vega``: a missing section (or a
+    missing field) falls back to the ``_DEFAULT_*_MAX_AGE_DAYS``
+    constants, so an ips.yaml written before #367 keeps loading — with
+    every hand-entered input graded against the same review cadence a
+    freshly written one gets.
+    """
+    section = config.get("pricing_inputs", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'pricing_inputs' section must be a mapping",
+        )
+
+    fields = {
+        "spot_max_age_days": _DEFAULT_SPOT_MAX_AGE_DAYS,
+        "volatility_max_age_days": _DEFAULT_VOLATILITY_MAX_AGE_DAYS,
+        "risk_free_rate_max_age_days": (_DEFAULT_RISK_FREE_RATE_MAX_AGE_DAYS),
+        "dividend_yield_max_age_days": (_DEFAULT_DIVIDEND_YIELD_MAX_AGE_DAYS),
+    }
+    resolved: dict[str, int] = {}
+    for name, default in fields.items():
+        value = section.get(name, default)
+        if value <= 0:
+            raise IpsConfigError(
+                f"pricing_inputs.{name} must be > 0, got {value}",
+            )
+        resolved[name] = value
+
+    return IpsPricingInputs(**resolved)
+
+
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     section = _require_section(config, "monetization")
     raw_schedule = _require_field(section, "monetization", "schedule")
@@ -943,7 +1014,12 @@ def load_ips_config(path: str | Path) -> IpsConfig:
     # comparing parsed values to defaults — see IpsConfig.defaulted_sections.
     defaulted_sections = frozenset(
         name
-        for name in ("market_environment", "sizing", "vega")
+        for name in (
+            "market_environment",
+            "sizing",
+            "vega",
+            "pricing_inputs",
+        )
         if name not in config
     )
 
@@ -958,5 +1034,6 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         market_environment=_parse_market_environment(config),
         sizing=_parse_sizing(config),
         vega=_parse_vega(config),
+        pricing_inputs=_parse_pricing_inputs(config),
         defaulted_sections=defaulted_sections,
     )

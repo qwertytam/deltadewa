@@ -22,6 +22,7 @@ class OptionPosition:
         entry_date: dt | None = None,
         entry_premium: float | None = None,
         position_id: str = "",
+        volatility_as_of: dt | None = None,
     ) -> None:
         """Initialize an option position.
 
@@ -43,6 +44,14 @@ class OptionPosition:
             empty (the default) a fresh UUID is generated automatically.
             Pass an explicit value only when restoring a serialized position
             so that save→load preserves identity.
+            volatility_as_of: When a human last confirmed this leg's
+            effective volatility (custom or inherited), or None if unknown
+            — e.g. a position imported from a file predating #367's
+            provenance tracking. See ``deltadewa.portfolio.stamps`` for
+            what "confirmed" means. Callers restoring a serialized position
+            should pass the stored value (or leave it None) rather than
+            re-deriving one; ``OptionPortfolioBase.add_position`` is the
+            only caller expected to stamp "now" by default.
 
         """
         self.option = option
@@ -54,6 +63,7 @@ class OptionPosition:
         self.entry_date = entry_date
         self.entry_premium = entry_premium
         self.position_id = position_id if position_id else str(uuid.uuid4())
+        self.volatility_as_of = volatility_as_of
 
     def position_value(self) -> float:
         """Calculate the total value of the position.
@@ -113,6 +123,7 @@ class OptionPosition:
             "contract_size": self.contract_size,
             "volatility": self.option.volatility,
             "custom_volatility": self.custom_volatility,
+            "volatility_as_of": self.volatility_as_of,
             "entry_spot": self.entry_spot,
             "entry_date": self.entry_date,
             "entry_premium": self.entry_premium,

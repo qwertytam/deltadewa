@@ -1221,6 +1221,174 @@ class TestEntryPremiumPersistence:
         )
 
 
+class TestProvenanceStampsPersistence:
+    """Batch 3d / #367: pricing-input confirmation stamps round-trip.
+
+    ``MarketParameterStamps`` (book-level spot/rate/dividend) and
+    ``OptionPosition.volatility_as_of`` (per-leg) must survive JSON and
+    YAML export/import — and, critically, a file written before this
+    feature existed must import with every stamp ``None``, never
+    silently back-filled to the import instant. ``None`` is what
+    ``analysis.provenance`` grades ``Freshness.UNKNOWN``, a distinct and
+    worse grade than a stamped-but-old value; defaulting to "now" would
+    launder every pre-existing stale input into looking freshly
+    confirmed (the exact bug #367 is about).
+    """
+
+    def _make_stamped_portfolio(self) -> OptionPortfolio:
+        from datetime import UTC, datetime, timedelta
+
+        from deltadewa.constants import ExerciseStyle, OptionType
+
+        portfolio = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.2,
+            risk_free_rate=0.04,
+            dividend_yield=0.0,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=60),
+            quantity=5,
+            option_type=OptionType.PUT,
+        )
+        # add_position stamps volatility_as_of to "now" by default; the
+        # book-level stamps only get set by a mutator that actually
+        # changes a value, so drive them through update_market_conditions
+        # rather than poking .stamps directly.
+        portfolio.update_market_conditions(
+            spot_price=101.0,
+            risk_free_rate=0.05,
+            dividend_yield=0.01,
+        )
+        return portfolio
+
+    def test_json_export_includes_book_level_stamps(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        portfolio = self._make_stamped_portfolio()
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(
+            portfolio,
+            PortfolioLogger(),
+            "stamps.json",
+        )
+        params = json.loads(path.read_text())["market_parameters"]
+        assert params["spot_as_of"] is not None
+        assert params["risk_free_rate_as_of"] is not None
+        assert params["dividend_yield_as_of"] is not None
+
+    def test_json_export_includes_position_stamp(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        portfolio = self._make_stamped_portfolio()
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(
+            portfolio,
+            PortfolioLogger(),
+            "stamps_pos.json",
+        )
+        data = json.loads(path.read_text())
+        assert data["positions"][0]["volatility_as_of"] is not None
+
+    def test_json_round_trip_restores_stamps(self, tmp_path: Path) -> None:
+        portfolio = self._make_stamped_portfolio()
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(
+            portfolio,
+            PortfolioLogger(),
+            "stamps_rt.json",
+        )
+        restored = serializer.import_from_json(path)["portfolio"]
+
+        assert restored.stamps.spot_as_of == portfolio.stamps.spot_as_of
+        assert (
+            restored.stamps.risk_free_rate_as_of
+            == portfolio.stamps.risk_free_rate_as_of
+        )
+        assert (
+            restored.stamps.dividend_yield_as_of
+            == portfolio.stamps.dividend_yield_as_of
+        )
+        assert (
+            restored.positions[0].volatility_as_of
+            == portfolio.positions[0].volatility_as_of
+        )
+
+    @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
+    def test_yaml_round_trip_restores_stamps(self, tmp_path: Path) -> None:
+        portfolio = self._make_stamped_portfolio()
+        serializer = PortfolioSerializer(tmp_path)
+        yaml_path = serializer.export_to_yaml(
+            portfolio,
+            PortfolioLogger(),
+            "stamps_rt.yaml",
+        )
+        assert yaml_path is not None
+        restored = serializer.import_from_yaml(yaml_path)["portfolio"]
+
+        assert restored.stamps.spot_as_of == portfolio.stamps.spot_as_of
+        assert (
+            restored.positions[0].volatility_as_of
+            == portfolio.positions[0].volatility_as_of
+        )
+
+    def test_json_import_of_pre_change_file_reports_unknown(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A file predating #367 imports with every stamp None (UNKNOWN).
+
+        This is the exact scenario the batch's design names as the hard
+        case: an existing book must not read as freshly confirmed just
+        because it happens to be re-imported after this feature ships.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        path = tmp_path / "pre_367.json"
+        maturity = (datetime.now(tz=UTC) + timedelta(days=60)).isoformat()
+        legacy = {
+            "metadata": {"version": "1.0"},
+            "market_parameters": {
+                "spot_price": 100.0,
+                "volatility": 0.2,
+                "risk_free_rate": 0.04,
+                "dividend_yield": 0.0,
+                "underlying_quantity": 0.0,
+                "symbol": "SPX",
+                "contract_size": 100,
+                # deliberately no spot_as_of / risk_free_rate_as_of /
+                # dividend_yield_as_of keys — a file from before #367
+            },
+            "positions": [
+                {
+                    "option_type": "put",
+                    "strike_price": 100.0,
+                    "maturity_date": maturity,
+                    "quantity": 5,
+                    "contract_size": 100,
+                    "volatility": 0.2,
+                    "custom_volatility": False,
+                    "exercise_style": "european",
+                    # deliberately no volatility_as_of key
+                },
+            ],
+            "session_changelog": [],
+        }
+        path.write_text(json.dumps(legacy))
+        serializer = PortfolioSerializer(tmp_path)
+        result = serializer.import_from_json(path)
+        portfolio = result["portfolio"]
+
+        assert portfolio.stamps.spot_as_of is None
+        assert portfolio.stamps.risk_free_rate_as_of is None
+        assert portfolio.stamps.dividend_yield_as_of is None
+        assert portfolio.positions[0].volatility_as_of is None
+
+
 # ========== contract_size round-trip ==========
 
 

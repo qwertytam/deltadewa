@@ -512,6 +512,8 @@ class ProgramState:
         contract_size: int | None = None,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
+        *,
+        stamp_as_of: datetime | None = None,
     ) -> None:
         """Update a position by index.
 
@@ -533,13 +535,22 @@ class ProgramState:
                 contract_size=contract_size,
                 volatility=volatility,
                 exercise_style=exercise_style,
+                stamp_as_of=stamp_as_of,
             )
             self._mutate_and_save()
 
-    def set_volatility(self, volatility: float) -> None:
+    def set_volatility(
+        self,
+        volatility: float,
+        *,
+        stamp_as_of: datetime | None = None,
+    ) -> None:
         """Set portfolio volatility. See ``OptionPortfolio.set_volatility``."""
         with self._lock:
-            self._portfolio.set_volatility(volatility)
+            self._portfolio.set_volatility(
+                volatility,
+                stamp_as_of=stamp_as_of,
+            )
             self._mutate_and_save()
 
     def set_underlying_quantity(self, underlying_quantity: float) -> None:
@@ -559,6 +570,8 @@ class ProgramState:
         dividend_yield: float | None = None,
         valuation_date: datetime | None = None,
         override_custom_volatility: bool = False,
+        *,
+        stamp_as_of: datetime | None = None,
     ) -> None:
         """Update market conditions.
 
@@ -572,6 +585,7 @@ class ProgramState:
                 dividend_yield=dividend_yield,
                 valuation_date=valuation_date,
                 override_custom_volatility=override_custom_volatility,
+                stamp_as_of=stamp_as_of,
             )
             self._mutate_and_save()
 

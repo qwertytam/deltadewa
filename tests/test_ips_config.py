@@ -1033,6 +1033,78 @@ class TestSizing:
             load_ips_config(_write_yaml(tmp_path, config))
 
 
+class TestPricingInputs:
+    """Tests for the ``pricing_inputs`` policy section (Batch 3d, #367).
+
+    Review-cadence bands for the four hand-entered pricing inputs — spot,
+    per-leg IV, risk-free rate, dividend yield — the program never fetches.
+    """
+
+    def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
+        """A config without the section falls back to the module defaults."""
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+        pricing_inputs = load_ips_config(path).pricing_inputs
+
+        assert pricing_inputs.spot_max_age_days == 1
+        assert pricing_inputs.volatility_max_age_days == 7
+        assert pricing_inputs.risk_free_rate_max_age_days == 30
+        assert pricing_inputs.dividend_yield_max_age_days == 90
+
+    def test_example_ips_yaml_carries_the_section(self) -> None:
+        """The tracked config/ips.example.yaml writes the section out."""
+        pricing_inputs = load_ips_config(EXAMPLE_IPS_YAML).pricing_inputs
+
+        assert pricing_inputs.spot_max_age_days == 1
+        assert pricing_inputs.volatility_max_age_days == 7
+        assert pricing_inputs.risk_free_rate_max_age_days == 30
+        assert pricing_inputs.dividend_yield_max_age_days == 90
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        config = {
+            **_VALID_CONFIG,
+            "pricing_inputs": {
+                "spot_max_age_days": 2,
+                "volatility_max_age_days": 14,
+                "risk_free_rate_max_age_days": 60,
+                "dividend_yield_max_age_days": 180,
+            },
+        }
+        pricing_inputs = load_ips_config(
+            _write_yaml(tmp_path, config)
+        ).pricing_inputs
+
+        assert pricing_inputs.spot_max_age_days == 2
+        assert pricing_inputs.volatility_max_age_days == 14
+        assert pricing_inputs.risk_free_rate_max_age_days == 60
+        assert pricing_inputs.dividend_yield_max_age_days == 180
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            "spot_max_age_days",
+            "volatility_max_age_days",
+            "risk_free_rate_max_age_days",
+            "dividend_yield_max_age_days",
+        ],
+    )
+    def test_non_positive_max_age_raises(
+        self,
+        tmp_path: Path,
+        field: str,
+    ) -> None:
+        """A zero or negative max age has no honest reading — reject it."""
+        config = {**_VALID_CONFIG, "pricing_inputs": {field: 0}}
+        with pytest.raises(IpsConfigError, match=field):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_non_mapping_section_raises(self, tmp_path: Path) -> None:
+        config = {**_VALID_CONFIG, "pricing_inputs": 30}
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="pricing_inputs"):
+            load_ips_config(path)
+
+
 class TestDefaultedSections:
     """#309: which optional sections silently fell back to code defaults.
 
@@ -1043,17 +1115,17 @@ class TestDefaultedSections:
     default number back in is not mistaken for a missing section.
     """
 
-    def test_all_three_optional_sections_absent(
+    def test_all_four_optional_sections_absent(
         self,
         tmp_path: Path,
     ) -> None:
-        """_VALID_CONFIG carries none of market_environment/sizing/vega."""
+        """_VALID_CONFIG carries none of the four optional sections."""
         path = _write_yaml(tmp_path, _VALID_CONFIG)
 
         config = load_ips_config(path)
 
         assert config.defaulted_sections == frozenset(
-            {"market_environment", "sizing", "vega"},
+            {"market_environment", "sizing", "vega", "pricing_inputs"},
         )
 
     def test_example_ips_yaml_has_no_defaulted_sections(self) -> None:
@@ -1073,7 +1145,7 @@ class TestDefaultedSections:
         config = load_ips_config(path)
 
         assert config.defaulted_sections == frozenset(
-            {"market_environment", "vega"},
+            {"market_environment", "vega", "pricing_inputs"},
         )
 
     def test_a_value_matching_the_default_is_still_not_defaulted(

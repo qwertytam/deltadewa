@@ -126,6 +126,20 @@ market_environment:
                                   # cross-check flags it (#336). Display
                                   # policy only; never feeds a calculation.
 
+pricing_inputs:
+  # Batch 3d / #367: review-cadence policy for the four hand-entered
+  # pricing inputs — per-leg IV, spot, risk-free rate, dividend yield —
+  # the program never fetches and so cannot grade against a feed. Each
+  # value is the maximum number of days a stamped input may go
+  # unconfirmed before the provenance ledger grades it AGING; an input
+  # that was never stamped at all (e.g. a position saved before this
+  # section existed) grades UNKNOWN regardless of this policy — a
+  # missing stamp is not the same as a fresh one.
+  spot_max_age_days: 1              # spot should be re-eyed every session
+  volatility_max_age_days: 7        # per-leg IV, a weekly review cadence
+  risk_free_rate_max_age_days: 30   # book-level rate, a monthly cadence
+  dividend_yield_max_age_days: 90   # book-level yield, a quarterly cadence
+
 triggers:
   target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is
                                    # measured (in pp) as deviation from this, not
