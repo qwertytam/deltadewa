@@ -8,6 +8,7 @@ from deltadewa.analysis.market_environment import DataQuality, MarketEnvironment
 from deltadewa.analysis.provenance import (
     Freshness,
     InputKind,
+    ProvenanceLedger,
     build_provenance_ledger,
 )
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -359,3 +360,53 @@ class TestByKind:
         assert {e.key for e in fetched} == {"market_data"}
         assert all(e.kind is InputKind.HAND_ENTERED for e in hand_entered)
         assert len(fetched) + len(hand_entered) == len(ledger.entries)
+
+
+class TestWorstOf:
+    """/health's pricing_inputs object must never borrow market_data's grade."""
+
+    def test_worst_of_hand_entered_ignores_a_worse_market_data_channel(
+        self,
+    ) -> None:
+        environment = _make_environment(data_quality=DataQuality.UNAVAILABLE)
+        portfolio = _make_portfolio(
+            stamps=MarketParameterStamps(
+                spot_as_of=datetime(2026, 8, 26, tzinfo=UTC),
+                risk_free_rate_as_of=datetime(2026, 8, 26, tzinfo=UTC),
+                dividend_yield_as_of=datetime(2026, 8, 26, tzinfo=UTC),
+            ),
+        )
+        ledger = build_provenance_ledger(
+            environment,
+            portfolio,
+            _POLICY,
+            as_of=_AS_OF_DATE,
+        )
+
+        assert ledger.worst is not None
+        assert ledger.worst.key == "market_data"  # the true overall worst
+        worst_hand_entered = ledger.worst_of(InputKind.HAND_ENTERED)
+        assert worst_hand_entered is not None
+        assert worst_hand_entered.freshness is Freshness.FRESH
+
+    def test_worst_of_returns_none_for_an_empty_kind(self) -> None:
+        """A ledger built with no hand-entered entries reports None, not a
+        crash — worst_of must not assume every kind is represented.
+        """
+        environment = _make_environment(data_quality=DataQuality.LIVE)
+        market_entry = build_provenance_ledger(
+            environment,
+            _make_portfolio(),
+            _POLICY,
+            as_of=_AS_OF_DATE,
+        ).entries[0]  # the synthetic "market_data" FETCHED entry
+
+        ledger = ProvenanceLedger(
+            entries=(market_entry,),
+            market_data_as_of=None,
+            market_data_fetched_at=None,
+            market_data_quality=DataQuality.LIVE,
+            oldest_series=None,
+        )
+
+        assert ledger.worst_of(InputKind.HAND_ENTERED) is None

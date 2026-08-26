@@ -124,6 +124,78 @@ class TestHealth:
         assert payload["market_data"]["source"] == "STATIC"
         assert payload["market_data"]["as_of"] is None
 
+    def test_market_data_series_present_even_when_static(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#368: per-series breakdown, even in the degenerate STATIC case."""
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        series = payload["market_data"]["series"]
+        assert set(series) == {
+            "vix",
+            "vix_term_structure",
+            "skew_index",
+            "skew_percentile",
+        }
+        assert all(s["quality"] == "STATIC" for s in series.values())
+        # STATIC has no honest "oldest"/refresh timestamp to report.
+        assert payload["market_data"]["oldest_series"] is None
+        assert payload["market_data"]["fetched_at"] is None
+
+    def test_pricing_inputs_is_a_sibling_not_merged_into_market_data(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#367: a fresh book's hand-entered inputs, reported on their own.
+
+        A fresh ``ProgramState`` book has never had its market conditions
+        explicitly (re-)confirmed, so every hand-entered input reports
+        ``UNKNOWN`` here — regardless of the STATIC provider's own grade
+        on the sibling ``market_data`` object (the point of #368's
+        never-merged design).
+        """
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        pricing_inputs = payload["pricing_inputs"]
+        assert pricing_inputs["worst"] == "UNKNOWN"
+        keys = {entry["key"] for entry in pricing_inputs["entries"]}
+        assert keys == {
+            "book.spot",
+            "book.risk_free_rate",
+            "book.dividend_yield",
+        }
+        assert all(
+            entry["freshness"] == "UNKNOWN"
+            for entry in pricing_inputs["entries"]
+        )
+        # market_data's own grade must not have absorbed this.
+        assert payload["market_data"]["source"] == "STATIC"
+
+    def test_pricing_inputs_reports_fresh_once_confirmed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _state(tmp_path)
+        state.update_market_conditions(
+            spot_price=state.portfolio.spot_price + 1.0,
+            risk_free_rate=state.portfolio.risk_free_rate + 0.001,
+            dividend_yield=state.portfolio.dividend_yield + 0.001,
+        )
+        app = create_app(state=state, market_data=_provider())
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        pricing_inputs = payload["pricing_inputs"]
+        assert pricing_inputs["worst"] == "FRESH"
+        assert all(
+            entry["freshness"] == "FRESH" for entry in pricing_inputs["entries"]
+        )
+
     def test_state_section_is_empty_for_a_fresh_book(
         self,
         tmp_path: Path,

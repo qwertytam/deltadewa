@@ -216,6 +216,24 @@ class ProvenanceLedger:
         """Return only the entries of the given *kind*."""
         return tuple(entry for entry in self.entries if entry.kind is kind)
 
+    def worst_of(self, kind: InputKind) -> InputProvenance | None:
+        """Return the worst entry restricted to one *kind*, or ``None`` if none.
+
+        For ``/health``'s ``pricing_inputs`` object (#368), which must
+        report the worst *hand-entered* input on its own — never the
+        ledger's overall worst, which could be the fetched market-data
+        channel instead. Merging the two here would make a stale
+        hand-entered rate read as "the market data feed is stale," the
+        same confusion #368 exists to remove, just moved to a new field.
+        """
+        entries = self.by_kind(kind)
+        if not entries:
+            return None
+        return max(
+            entries,
+            key=lambda entry: _FRESHNESS_SEVERITY[entry.freshness],
+        )
+
 
 def _age_days(as_of: date, stamp: datetime) -> int:
     """Whole calendar days from *stamp* to *as_of*, never negative.
