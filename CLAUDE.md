@@ -318,13 +318,15 @@ don't fix):
 - **policy-leak-checker** — after a panel or analysis change, confirms no threshold
   or decision boundary is hardcoded in view/analysis code instead of read from the
   IPS. Reports the literal and the IPS key that should own it.
-- **false-green-auditor** — traces a rendered verdict, headline, badge, or prose
-  sentence back to the value it describes and reports FAITHFUL / MISLABELLED /
-  OMITTED / UNGRADED. Separate from policy-leak-checker: that agent asks whether a
-  threshold is read from the IPS; this one asks whether the sentence describing it
-  tells the truth — #304 passed the first and failed the second. Run on any
-  reader-facing status surface, and before closing any issue whose complaint is
-  "the screen says fine and it isn't."
+- **blast-radius-auditor** — maps each rendering or sending surface (a page
+  callback, panel builder, email job, health endpoint, cron entry point) to
+  the builders it calls, checks whether each call is guarded, and reports
+  ISOLATED / PAGE-FATAL / SEND-FATAL / SILENT — plus, critically, whether the
+  failure also disables the thing that would have reported it: #364's digest
+  raised while building its body and so never reached the send *or* the
+  heartbeat ping, a dead-man's-switch that died with the program. Run before
+  adding a panel, before shipping an error boundary, and whenever one defect
+  took down more than one surface (#362–#364).
 - **ci-run-inspector** — reads what a GitHub Actions run actually did without
   pulling its log into the main thread: per-step outcome and duration, the step
   that failed or hung, and whether the cause is the code or the infrastructure.
