@@ -681,3 +681,69 @@ class TestMainHeartbeat:
 
         assert exit_code == 3
         mock_ping.assert_not_called()
+
+
+class TestMainUnexpectedFailure:
+    """R-a.3: an unanticipated raise in the fetch/verify sequence.
+
+    A blast-radius audit found the provider construction /
+    ``refresh_all`` / ``verify_read_back`` sequence unguarded at
+    ``main()`` level — left that way, an unforeseen raise there exits
+    with Python's bare default (1), indistinguishable from
+    ``_EXIT_PARTIAL`` (a state that WOULD have pinged the heartbeat).
+    These pin the guard: falls back to exit 2 (the same silent-heartbeat
+    contract as a total fetch failure), not merely "no traceback
+    escapes."
+    """
+
+    def test_unexpected_raise_exits_two_and_does_not_ping(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                side_effect=RuntimeError("synthetic construction failure"),
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+            caplog.at_level(logging.ERROR),
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 2
+        mock_ping.assert_not_called()
+        assert "run FAILED unexpectedly" in caplog.text
+
+    def test_unexpected_raise_in_verify_read_back_exits_two(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Same guard, different call site inside the wrapped sequence."""
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                return_value=provider,
+            ),
+            patch.object(
+                refresh_module,
+                "verify_read_back",
+                side_effect=RuntimeError("synthetic read-back crash"),
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 2
+        mock_ping.assert_not_called()

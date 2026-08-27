@@ -50,7 +50,10 @@ run:
 
     0   every series refreshed live and read back through the app's own path
     1   some series refreshed+verified live, some did not
-    2   no series fetched live at all (a fetch failure)
+    2   no series fetched live at all (a fetch failure) — or the provider
+        construction / fetch / read-back sequence itself raised an
+        exception this job did not anticipate (R-a.3): either way, no
+        usable outcome came out of this run, so it is reported the same
     3   at least one series fetched live, but none of it reads back through
         the app's own read path (a write-readability failure — #377 —
         distinct from a fetch failure: the network worked, the write
@@ -78,6 +81,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -351,27 +355,47 @@ def main(argv: Sequence[str] | None = None) -> int:
     cache_dir = (
         args.cache_dir if args.cache_dir is not None else default_cache_dir()
     )
-    provider = CboeFredProvider(
-        cache_dir=cache_dir,
-        # Inert for this job: force_fetch below bypasses the TTL check
-        # that would otherwise consult it. Still resolved and passed
-        # through so --ips-path/load_ips_config above isn't dead code,
-        # and so the constructor's ttl/force_fetch contract stays
-        # visible from this call site.
-        ttl=resolve_data_ttl(ips_config),
-        read_only=False,
-        force_fetch=True,
-    )
 
-    live, total = refresh_all(provider, args.symbol)
-    _logger.info("Fetched %d/%d series live", len(live), total)
+    try:
+        provider = CboeFredProvider(
+            cache_dir=cache_dir,
+            # Inert for this job: force_fetch below bypasses the TTL
+            # check that would otherwise consult it. Still resolved and
+            # passed through so --ips-path/load_ips_config above isn't
+            # dead code, and so the constructor's ttl/force_fetch
+            # contract stays visible from this call site.
+            ttl=resolve_data_ttl(ips_config),
+            read_only=False,
+            force_fetch=True,
+        )
 
-    verified = verify_read_back(cache_dir, args.symbol, live)
-    _logger.info(
-        "Verified %d/%d fetched series read back through the app's own path",
-        len(verified),
-        len(live),
-    )
+        live, total = refresh_all(provider, args.symbol)
+        _logger.info("Fetched %d/%d series live", len(live), total)
+
+        verified = verify_read_back(cache_dir, args.symbol, live)
+        _logger.info(
+            "Verified %d/%d fetched series read back through the app's "
+            "own path",
+            len(verified),
+            len(live),
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Unanticipated on purpose (mirrors weekly_report.py's #364 guard
+        # and panel_guard.safe_render's precedent, #363): a blast-radius
+        # audit (R-a.3) found this whole sequence — provider construction,
+        # refresh_all, verify_read_back — unguarded. Left that way, a
+        # raise here exits with Python's bare default (1), indistinguish-
+        # able from _EXIT_PARTIAL — a state that WOULD have pinged the
+        # heartbeat. Falls back to the same exit code and silent-heartbeat
+        # contract as a total fetch failure (2): from the operator's
+        # chair, "every series failed" and "the run crashed before
+        # finishing" both mean nothing usable came out of this run.
+        _logger.exception("refresh: run FAILED unexpectedly")
+        print(
+            f"refresh: could not complete the run — {exc}",
+            file=sys.stderr,
+        )
+        return _EXIT_FETCH_FAILED
 
     try:
         write_cache_manifest(cache_dir, live)

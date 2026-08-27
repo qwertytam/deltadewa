@@ -43,19 +43,25 @@ path that pings it, per the dead-man's-switch design: a missing weekly
 email is exactly the kind of silence that gets rationalised as "quiet
 week," so it must alarm rather than ping regardless.
 
-**#364 — the digest body build is guarded.** Everything from the market-data
-read through rendering the markdown/html strings (:func:`build_and_render`)
-can raise on an input this module does not control — a provider outage, a
-malformed pricing input, a repricing edge case. Before #364 that raise was
-unguarded: it took the whole cron job down with an unhandled traceback,
-which is also silence from the operator's chair, indistinguishable from the
-job never having run. ``main()`` now wraps that call, on failure prints and
-logs the exception, writes **no files at all** (not even a partial one —
-next week's digest must still compare against last week's real snapshot,
-not a corrupt or missing one), sends a plain-language failure alert when
-``--send-email`` was requested, and exits **3**. See
-:func:`_send_build_failure_alert` and ``heartbeat.py``'s module docstring
-for why this path never pings the heartbeat either.
+**#364 — the digest build is guarded, start to finish.** Everything from
+loading ``ProgramState`` through rendering the markdown/html strings
+(:func:`build_and_render`) can raise on an input this module does not
+control — a corrupt state file, a provider outage, a malformed pricing
+input, a repricing edge case. Before #364 that raise was unguarded: it took
+the whole cron job down with an unhandled traceback, which is also silence
+from the operator's chair, indistinguishable from the job never having run.
+A blast-radius audit (R-a.3) later found that the original guard, though it
+covered :func:`build_and_render`, still left ``ProgramState.load()`` ahead
+of it exposed — Python's bare default exit on an uncaught exception is
+``1``, indistinguishable from ``_EXIT_REFUSED``'s documented meaning of a
+clean, expected refusal. ``main()`` now wraps the whole sequence — state
+load through render — on failure prints and logs the exception, writes **no
+files at all** (not even a partial one — next week's digest must still
+compare against last week's real snapshot, not a corrupt or missing one),
+sends a plain-language failure alert when ``--send-email`` was requested,
+and exits **3**. See :func:`_send_build_failure_alert` and
+``heartbeat.py``'s module docstring for why this path never pings the
+heartbeat either.
 """
 
 from __future__ import annotations
@@ -913,11 +919,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         digest was built and written but ``--send-email`` was requested and
         delivery failed (missing/invalid env vars, or an SMTP send
         failure) — distinct from ``1`` since the report files did get
-        written successfully; ``3`` if :func:`build_and_render` itself
-        raised (#364) — an input this module does not control failed
-        partway through the build, no files (including the snapshot) were
-        written, and — with ``--send-email`` — a best-effort plain-language
-        failure alert was sent in place of the digest. The digest heartbeat
+        written successfully; ``3`` if state loading or
+        :func:`build_and_render` itself raised (#364; the state-load case
+        via R-a.3's blast-radius audit) — an input this module does not
+        control failed partway through, no files (including the snapshot)
+        were written, and — with ``--send-email`` — a best-effort
+        plain-language failure alert was sent in place of the digest. The
+        digest heartbeat
         (``DIGEST_HEARTBEAT_URL``) is pinged on **outcome 0 only**; ``1``,
         ``2``, and ``3`` all leave it un-pinged.
 
@@ -925,41 +933,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO)
     args = _parse_args(argv)
 
-    state = ProgramState.load(args.export_dir, ips_path=args.ips_path)
-    ips_config = state.ips_config
-
-    # `date.today()` was the last naive clock read in the package: a local
-    # date on whatever the host's timezone happened to be, which on the
-    # UTC droplet running the cron dated a Sunday-evening digest to Monday
-    # (#182). The digest's as-of now follows the same program clock the
-    # book is priced on, so the snapshot it writes and the prior snapshot
-    # it compares against are on one calendar.
-    as_of: date = (
-        args.as_of
-        if args.as_of is not None
-        else program_trading_date(
-            ips_config.program.timezone if ips_config is not None else None,
-        ).date()
-    )
-    period_label = args.period_label or f"Week of {as_of}"
-
-    if ips_config is None:
-        print(
-            f"weekly_report: {args.ips_path} unavailable; refusing to "
-            "build a policy-free report.",
-            file=sys.stderr,
-        )
-        return _EXIT_REFUSED
-
-    portfolio = state.portfolio
-    if not portfolio.positions:
-        print(
-            "weekly_report: no positions in the book; load a portfolio first.",
-            file=sys.stderr,
-        )
-        return _EXIT_REFUSED
-
     try:
+        state = ProgramState.load(args.export_dir, ips_path=args.ips_path)
+        ips_config = state.ips_config
+
+        # `date.today()` was the last naive clock read in the package: a
+        # local date on whatever the host's timezone happened to be, which
+        # on the UTC droplet running the cron dated a Sunday-evening digest
+        # to Monday (#182). The digest's as-of now follows the same program
+        # clock the book is priced on, so the snapshot it writes and the
+        # prior snapshot it compares against are on one calendar.
+        as_of: date = (
+            args.as_of
+            if args.as_of is not None
+            else program_trading_date(
+                ips_config.program.timezone if ips_config is not None else None,
+            ).date()
+        )
+        period_label = args.period_label or f"Week of {as_of}"
+
+        if ips_config is None:
+            print(
+                f"weekly_report: {args.ips_path} unavailable; refusing to "
+                "build a policy-free report.",
+                file=sys.stderr,
+            )
+            return _EXIT_REFUSED
+
+        portfolio = state.portfolio
+        if not portfolio.positions:
+            print(
+                "weekly_report: no positions in the book; load a "
+                "portfolio first.",
+                file=sys.stderr,
+            )
+            return _EXIT_REFUSED
+
         rendered = build_and_render(
             state=state,
             ips_config=ips_config,
@@ -968,17 +977,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             export_dir=args.export_dir,
         )
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        # Unanticipated on purpose: the point is that a raise this module
-        # did not foresee must not go unreported, matching
-        # panel_guard.safe_render's precedent (#363). No files — not even
-        # a partial one — are written below this point.
-        _logger.exception("weekly_report: digest body build FAILED")
+        # Unanticipated on purpose, and deliberately wraps state loading
+        # too, not just build_and_render: a blast-radius audit (R-a.3)
+        # found ProgramState.load() sitting ahead of this guard, unguarded
+        # — a raise there exited with Python's bare default (1), colliding
+        # with _EXIT_REFUSED's documented meaning ("no IPS policy, or an
+        # empty book") for what is actually a crash, not a clean refusal.
+        # Matches panel_guard.safe_render's precedent (#363): a raise this
+        # module did not foresee must not go unreported. No files — not
+        # even a partial one — are written below this point. `as_of` may
+        # not have been computed yet if state loading itself is what
+        # failed, so the alert below falls back to the same default-
+        # timezone resolution used when ips_config is None.
+        _logger.exception("weekly_report: digest build FAILED")
         print(
             f"weekly_report: could not build the digest — {exc}",
             file=sys.stderr,
         )
         if args.send_email:
-            _send_build_failure_alert(exc, as_of=as_of)
+            alert_as_of = (
+                args.as_of
+                if args.as_of is not None
+                else program_trading_date(None).date()
+            )
+            _send_build_failure_alert(exc, as_of=alert_as_of)
         return _EXIT_BUILD_FAILED
 
     weekly_dir = _snapshot_dir(args.export_dir)
