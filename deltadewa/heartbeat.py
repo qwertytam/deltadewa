@@ -10,7 +10,12 @@ because they fail independently and mean different things when overdue:
   refresh is the normal state, not an incident — paging on it would alert
   most mornings for a healthy system. A total failure does not ping, so it
   stays visible (in logs, and as an eventually-overdue check) without
-  drowning the routine partial-failure signal.
+  drowning the routine partial-failure signal. Since #377, a full or
+  partial success also has to *read back* through the app's own
+  read-only read path before it counts — not just have been written by
+  the job's own process — so a write-readability failure (exit 3, at
+  least one series fetched live but none of it read back) withholds the
+  ping exactly like a total fetch failure (exit 2) does.
 - **Digest** pings only once the weekly email is confirmed sent. This is
   the one where silence is most dangerous: a missing weekly email is
   exactly what gets rationalised as "quiet week," so an overdue digest
