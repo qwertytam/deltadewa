@@ -75,6 +75,13 @@ from deltadewa.analysis.position_aging import (
     evaluate_position_aging,
     expiry_boundaries,
 )
+from deltadewa.analysis.provenance import (
+    Freshness,
+    InputKind,
+    InputProvenance,
+    ProvenanceLedger,
+    build_provenance_ledger,
+)
 from deltadewa.analysis.repricing import (
     MarketShock,
     MarketState,
@@ -145,6 +152,7 @@ __all__ = [
     "ExpiryBucketLabel",
     "ExpiryBucketTotal",
     "ExpiryCalendarEntry",
+    "Freshness",
     "HedgeAdequacy",
     "HedgeCostVerdict",
     "HedgeEfficiency",
@@ -152,6 +160,8 @@ __all__ = [
     "HedgeTriggerReason",
     "HedgeTriggerSet",
     "HedgeTriggerThresholds",
+    "InputKind",
+    "InputProvenance",
     "LadderRung",
     "MarketEnvironment",
     "MarketShock",
@@ -163,6 +173,7 @@ __all__ = [
     "PortfolioShape",
     "PositionAging",
     "PremiumBasis",
+    "ProvenanceLedger",
     "RegimeLabel",
     "RollAction",
     "RollPlanRecord",
@@ -180,6 +191,7 @@ __all__ = [
     "assess_market_environment",
     "beta_adjusted_notional",
     "build_monetization_plan",
+    "build_provenance_ledger",
     "build_roll_plan",
     "build_spot_vol_grid_spec",
     "build_strike_ladder",

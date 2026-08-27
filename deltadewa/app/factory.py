@@ -18,9 +18,12 @@ from flask import jsonify
 
 from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.provenance import InputKind, build_provenance_ledger
 from deltadewa.app.chrome import build_chrome
 from deltadewa.app.health_checks import run_checks, summarize
 from deltadewa.app.pages import design, monitor
+from deltadewa.clock import program_trading_date
+from deltadewa.ips_config import IpsPricingInputs
 from deltadewa.marketdata import default_cache_dir
 
 if TYPE_CHECKING:
@@ -111,6 +114,12 @@ def create_app(
     env_policy = (
         ips_config.market_environment if ips_config is not None else None
     )
+    pricing_inputs_policy = (
+        ips_config.pricing_inputs
+        if ips_config is not None
+        else IpsPricingInputs()
+    )
+    program_tz = ips_config.program.timezone if ips_config is not None else None
 
     def _serve_layout() -> html.Div:
         # Re-assessed per request (not baked in once at startup) so a feed
@@ -118,9 +127,15 @@ def create_app(
         # page load. Cheap: market_data is expected to be read-only, i.e.
         # a local cache read, never a network call.
         environment = assess_market_environment(market_data, env_policy)
+        ledger = build_provenance_ledger(
+            environment,
+            state.portfolio,
+            pricing_inputs_policy,
+            as_of=program_trading_date(program_tz).date(),
+        )
         return html.Div(
             [
-                build_chrome(environment),
+                build_chrome(ledger),
                 dcc.Location(id="url", refresh=False),
                 html.Div(id="page-content"),
             ],
@@ -149,11 +164,18 @@ def create_app(
         # or one mkdir+write+unlink — see health_checks.py's module
         # docstring (#309).
         environment = assess_market_environment(market_data, env_policy)
+        ledger = build_provenance_ledger(
+            environment,
+            state.portfolio,
+            pricing_inputs_policy,
+            as_of=program_trading_date(program_tz).date(),
+        )
         as_of = (
             environment.as_of.isoformat()
             if environment.as_of is not None
             else None
         )
+        worst_hand_entered = ledger.worst_of(InputKind.HAND_ENTERED)
         checks = run_checks(state, cache_dir=default_cache_dir())
         wiring_status, boot_wiring = summarize(checks)
         # "status" reflects boot-wiring health, not just liveness — but
@@ -164,9 +186,62 @@ def create_app(
             {
                 "status": wiring_status,
                 "state_loaded": state.loaded_from is not None,
+                # #368: fetched_at/series/oldest_series let an operator
+                # tell "one series is on its normal, expected lag" apart
+                # from "the pipeline stopped" — the confusion a 2026-08-25
+                # field test hit with only source/as_of available here.
                 "market_data": {
                     "source": environment.data_quality.value,
                     "as_of": as_of,
+                    "fetched_at": (
+                        environment.fetched_at.isoformat()
+                        if environment.fetched_at is not None
+                        else None
+                    ),
+                    "oldest_series": environment.oldest_series,
+                    "series": {
+                        series.name: {
+                            "quality": series.quality.value,
+                            "as_of": (
+                                series.as_of.isoformat()
+                                if series.as_of is not None
+                                else None
+                            ),
+                            "fetched_at": (
+                                series.fetched_at.isoformat()
+                                if series.fetched_at is not None
+                                else None
+                            ),
+                        }
+                        for series in environment.series
+                    },
+                },
+                # #367: a sibling object, deliberately never merged into
+                # market_data above — a stale hand-entered rate must not
+                # make this endpoint claim the *fetched* market data feed
+                # is stale, which would just relocate #368's confusion.
+                "pricing_inputs": {
+                    "worst": (
+                        worst_hand_entered.freshness.value
+                        if worst_hand_entered is not None
+                        else None
+                    ),
+                    "entries": [
+                        {
+                            "key": entry.key,
+                            "label": entry.label,
+                            "freshness": entry.freshness.value,
+                            "as_of": (
+                                entry.as_of.isoformat()
+                                if entry.as_of is not None
+                                else None
+                            ),
+                            "age_days": entry.age_days,
+                            "max_age_days": entry.max_age_days,
+                            "detail": entry.detail,
+                        }
+                        for entry in ledger.by_kind(InputKind.HAND_ENTERED)
+                    ],
                 },
                 # #355: who last wrote the shared state file, and whether
                 # it has changed since this worker last read or wrote it

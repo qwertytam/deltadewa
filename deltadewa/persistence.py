@@ -16,6 +16,7 @@ import pandas as pd
 from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.reporting import PortfolioLogger
 
 try:
@@ -24,6 +25,35 @@ try:
     YAML_AVAILABLE = True
 except ImportError:
     YAML_AVAILABLE = False
+
+
+def _stamps_from_market_params(
+    market_params: dict[str, Any],
+) -> MarketParameterStamps:
+    """Restore ``MarketParameterStamps`` from a parsed ``market_parameters``.
+
+    A file predating #367 carries none of the three ``*_as_of`` keys;
+    ``.get`` returning ``None`` for each is correct here, not a fallback —
+    those inputs were never confirmed under this feature, so they must
+    report ``None`` (later graded ``Freshness.UNKNOWN``), not "now".
+    """
+    return MarketParameterStamps(
+        spot_as_of=(
+            dt.fromisoformat(raw)
+            if (raw := market_params.get("spot_as_of"))
+            else None
+        ),
+        risk_free_rate_as_of=(
+            dt.fromisoformat(raw)
+            if (raw := market_params.get("risk_free_rate_as_of"))
+            else None
+        ),
+        dividend_yield_as_of=(
+            dt.fromisoformat(raw)
+            if (raw := market_params.get("dividend_yield_as_of"))
+            else None
+        ),
+    )
 
 
 class PortfolioSerializer:
@@ -145,6 +175,25 @@ class PortfolioSerializer:
                 "underlying_quantity": portfolio.underlying_quantity,
                 "symbol": portfolio.get_symbol(),
                 "contract_size": portfolio.contract_size,
+                # #367: when each hand-entered book-level input was last
+                # confirmed. None (rather than the export instant) for a
+                # value never explicitly (re-)confirmed — see
+                # deltadewa.portfolio.stamps.
+                "spot_as_of": (
+                    portfolio.stamps.spot_as_of.isoformat()
+                    if portfolio.stamps.spot_as_of
+                    else None
+                ),
+                "risk_free_rate_as_of": (
+                    portfolio.stamps.risk_free_rate_as_of.isoformat()
+                    if portfolio.stamps.risk_free_rate_as_of
+                    else None
+                ),
+                "dividend_yield_as_of": (
+                    portfolio.stamps.dividend_yield_as_of.isoformat()
+                    if portfolio.stamps.dividend_yield_as_of
+                    else None
+                ),
             },
             "positions": [],
             "risk_metrics": portfolio.summary_stats(),
@@ -162,6 +211,11 @@ class PortfolioSerializer:
                 "exercise_style": pos.exercise_style.value,
                 "volatility": pos.option.volatility,
                 "custom_volatility": pos.custom_volatility,
+                "volatility_as_of": (
+                    pos.volatility_as_of.isoformat()
+                    if pos.volatility_as_of
+                    else None
+                ),
                 "greeks": {
                     "delta": pos.option.delta(),
                     "gamma": pos.option.gamma(),
@@ -419,6 +473,7 @@ class PortfolioSerializer:
             symbol=market_params.get("symbol", "UNKNOWN"),
             default_exercise_style=default_exercise_style,
             contract_size=market_params["contract_size"],
+            stamps=_stamps_from_market_params(market_params),
         )
 
         # Add positions (robust to variations in exported field names)
@@ -483,6 +538,12 @@ class PortfolioSerializer:
             new_position.entry_premium = pos_data.get("entry_premium")
             if pid := pos_data.get("position_id"):
                 new_position.position_id = pid
+            raw_volatility_as_of = pos_data.get("volatility_as_of")
+            new_position.volatility_as_of = (
+                dt.fromisoformat(raw_volatility_as_of)
+                if raw_volatility_as_of
+                else None
+            )
 
         return {
             "portfolio": imported_portfolio,
@@ -550,6 +611,7 @@ class PortfolioSerializer:
             symbol=market_params.get("symbol", "UNKNOWN"),
             default_exercise_style=default_exercise_style,
             contract_size=market_params["contract_size"],
+            stamps=_stamps_from_market_params(market_params),
         )
 
         # Add positions
@@ -603,6 +665,12 @@ class PortfolioSerializer:
             new_position.entry_premium = pos_config.get("entry_premium")
             if pid := pos_config.get("position_id"):
                 new_position.position_id = pid
+            raw_volatility_as_of = pos_config.get("volatility_as_of")
+            new_position.volatility_as_of = (
+                dt.fromisoformat(raw_volatility_as_of)
+                if raw_volatility_as_of
+                else None
+            )
 
         return {
             "portfolio": imported_portfolio,

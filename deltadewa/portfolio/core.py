@@ -1,17 +1,19 @@
 """Core portfolio management and mixin composition."""
 
+from dataclasses import replace as dataclass_replace
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from deltadewa.clock import program_trading_date
+from deltadewa.clock import program_now, program_trading_date
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.portfolio.greeks import GreeksMixin
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
 from deltadewa.portfolio.pnl import PnLMixin
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.portfolio.risk import RiskMixin
+from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
@@ -39,6 +41,7 @@ class OptionPortfolioBase:
         symbol: str = "UNKNOWN",
         default_exercise_style: ExerciseStyle | None = None,
         contract_size: int = 100,
+        stamps: MarketParameterStamps | None = None,
     ) -> None:
         """Initialize option portfolio.
 
@@ -58,6 +61,13 @@ class OptionPortfolioBase:
                 before adding positions (e.g. in setup_dashboard).
             contract_size: Number of underlying units per contract; used as
                 the default for positions added via add_position()
+            stamps: When each hand-entered book-level pricing input
+                (spot, risk-free rate, dividend yield) was last confirmed
+                — see ``deltadewa.portfolio.stamps.MarketParameterStamps``
+                (#367). Defaults to an all-``None`` stamp set, matching an
+                as-yet-unconfirmed book; callers restoring a serialized
+                portfolio should pass the stored stamps rather than
+                letting a fresh set be assumed.
 
         """
         self.positions: list[OptionPosition] = []
@@ -73,6 +83,7 @@ class OptionPortfolioBase:
         self.symbol = symbol
         self.default_exercise_style = default_exercise_style
         self.contract_size = contract_size
+        self.stamps = stamps if stamps is not None else MarketParameterStamps()
         self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
@@ -92,6 +103,7 @@ class OptionPortfolioBase:
         entry_spot: float | None = None,
         entry_date: dt | None = None,
         entry_premium: float | None = None,
+        volatility_as_of: dt | None = None,
     ) -> OptionPosition:
         """Add an option position to the portfolio.
 
@@ -114,6 +126,14 @@ class OptionPortfolioBase:
                 unknown. Used as the cost basis for monetization/gain
                 calculations; a position with no recorded entry_premium
                 reports its gain basis as "unknown" rather than "paid".
+            volatility_as_of: When this leg's effective volatility (custom
+                or inherited) was last confirmed. Defaults to
+                ``program_now()`` — a live caller adding a position is
+                confirming its inputs at that instant. A restore path
+                (``persistence.py``'s importers) should overwrite this on
+                the returned position directly with the serialized value,
+                the same way it already does for ``entry_spot``/
+                ``entry_date``, rather than accepting this default.
 
         Returns:
             The newly created and appended OptionPosition.
@@ -147,6 +167,8 @@ class OptionPortfolioBase:
             entry_spot = self.spot_price
         if entry_date is None:
             entry_date = self.valuation_date
+        if volatility_as_of is None:
+            volatility_as_of = program_now()
 
         option = OptionValuation(
             spot_price=self.spot_price,
@@ -169,21 +191,44 @@ class OptionPortfolioBase:
             entry_spot=entry_spot,
             entry_date=entry_date,
             entry_premium=entry_premium,
+            volatility_as_of=volatility_as_of,
         )
         self.positions.append(position)
         return position
 
-    def set_volatility(self, volatility: float) -> None:
+    def set_volatility(
+        self,
+        volatility: float,
+        *,
+        stamp_as_of: dt | None = None,
+    ) -> None:
         """Set portfolio volatility.
 
         Update positions without custom volatility.
+
+        Args:
+            volatility: The new book-level volatility.
+            stamp_as_of: When this change is deemed confirmed, for
+                ``volatility_as_of`` on every affected position. Defaults
+                to ``program_now()``. Only applied when *volatility*
+                actually differs from the current value — a no-op call
+                (e.g. re-saving an unchanged book) must not refresh a
+                stamp, or every stale input would be laundered fresh the
+                next time the file happens to round-trip (#367).
+
         """
+        if volatility == self.volatility:
+            return
+        effective_stamp = (
+            stamp_as_of if stamp_as_of is not None else program_now()
+        )
         self.volatility = volatility
         for pos in self.positions:
             if not pos.custom_volatility:
                 # Route through update_volatility() so the QuantLib quote and
                 # the greek cache are updated, not just the Python attribute.
                 pos.option.update_volatility(volatility)
+                pos.volatility_as_of = effective_stamp
 
     def set_underlying_quantity(self, underlying_quantity: float) -> None:
         """Set the underlying notional position being hedged."""
@@ -377,8 +422,28 @@ class OptionPortfolioBase:
         contract_size: int | None = None,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
+        *,
+        stamp_as_of: dt | None = None,
     ) -> None:
-        """Update a position's properties by index."""
+        """Update a position's properties by index.
+
+        Args:
+            index: Index of the position to update.
+            quantity: New quantity, if changing.
+            strike: New strike price, if changing.
+            expiry: New maturity date, if changing.
+            option_type: New option type, if changing.
+            contract_size: New contract size, if changing.
+            volatility: New per-leg volatility, if changing. Passing a
+                value marks the position custom and stamps
+                ``volatility_as_of`` (#367) — a human just confirmed this
+                leg's volatility.
+            exercise_style: New exercise style, if changing.
+            stamp_as_of: When the volatility change (if any) is deemed
+                confirmed. Defaults to ``program_now()``. Ignored when
+                *volatility* is ``None``.
+
+        """
         if index < 0 or index >= len(self.positions):
             raise IndexError("Position index out of range")
 
@@ -403,6 +468,10 @@ class OptionPortfolioBase:
 
         # Handle volatility update
         if volatility is not None:
+            if volatility != pos.option.volatility:
+                pos.volatility_as_of = (
+                    stamp_as_of if stamp_as_of is not None else program_now()
+                )
             option_volatility = volatility
             pos.custom_volatility = True
         else:
@@ -451,7 +520,7 @@ class OptionPortfolioBase:
 
         return df
 
-    def update_market_conditions(
+    def update_market_conditions(  # pylint: disable=too-many-arguments,too-many-branches
         self,
         spot_price: float | None = None,
         volatility: float | None = None,
@@ -459,6 +528,8 @@ class OptionPortfolioBase:
         dividend_yield: float | None = None,
         valuation_date: dt | None = None,
         override_custom_volatility: bool = False,
+        *,
+        stamp_as_of: dt | None = None,
     ) -> None:
         """Update market conditions for all positions.
 
@@ -470,9 +541,26 @@ class OptionPortfolioBase:
             valuation_date: New valuation date
             override_custom_volatility: If True, update all positions'
             volatility including custom ones
+            stamp_as_of: When these changes are deemed confirmed, for
+            ``self.stamps`` (spot/rate/dividend) and any affected
+            position's ``volatility_as_of`` (#367). Defaults to
+            ``program_now()``. Each stamp is only touched when its own
+            value actually changes — a call that repeats the current
+            spot, rate, or dividend yield must not refresh that stamp, or
+            a save→reload cycle would launder a stale input into looking
+            freshly confirmed.
 
         """
+        effective_stamp = (
+            stamp_as_of if stamp_as_of is not None else program_now()
+        )
+
         if spot_price is not None:
+            if spot_price != self.spot_price:
+                self.stamps = dataclass_replace(
+                    self.stamps,
+                    spot_as_of=effective_stamp,
+                )
             self.spot_price = spot_price
             for pos in self.positions:
                 pos.option.update_spot_price(spot_price)
@@ -483,6 +571,8 @@ class OptionPortfolioBase:
                 # Only update if not custom volatility, or if override is
                 # requested
                 if override_custom_volatility or not pos.custom_volatility:
+                    if volatility != pos.option.volatility:
+                        pos.volatility_as_of = effective_stamp
                     pos.option.update_volatility(volatility)
                     # If overriding, mark as no longer custom
                     if override_custom_volatility:
@@ -496,8 +586,18 @@ class OptionPortfolioBase:
         # For rate changes, need to recreate options
         if risk_free_rate is not None or dividend_yield is not None:
             if risk_free_rate is not None:
+                if risk_free_rate != self.risk_free_rate:
+                    self.stamps = dataclass_replace(
+                        self.stamps,
+                        risk_free_rate_as_of=effective_stamp,
+                    )
                 self.risk_free_rate = risk_free_rate
             if dividend_yield is not None:
+                if dividend_yield != self.dividend_yield:
+                    self.stamps = dataclass_replace(
+                        self.stamps,
+                        dividend_yield_as_of=effective_stamp,
+                    )
                 self.dividend_yield = dividend_yield
 
             # Recreate all positions with new rates, preserving custom
@@ -530,6 +630,11 @@ class OptionPortfolioBase:
                         entry_date=pos.entry_date,
                         entry_premium=pos.entry_premium,
                         position_id=pos.position_id,
+                        # Preserve the volatility stamp — the rate/dividend
+                        # rebuild does not touch volatility itself, so
+                        # losing this here would be a silent reset to
+                        # UNKNOWN for every leg on the next rate change.
+                        volatility_as_of=pos.volatility_as_of,
                     ),
                 )
             self.positions = new_positions
@@ -537,6 +642,36 @@ class OptionPortfolioBase:
     def clear_positions(self) -> None:
         """Clear all positions from the portfolio."""
         self.positions = []
+
+    def confirm_current_inputs(self, *, as_of: dt | None = None) -> None:
+        """Stamp every hand-entered pricing input as confirmed *now*.
+
+        Unlike ``update_market_conditions``/``set_volatility``/
+        ``update_position``, this stamps unconditionally — an operator
+        reviewing the book and finding every number still correct has
+        nothing to *change*, but has still performed the confirmation
+        #367's provenance ledger exists to record. The change-gated
+        stamping those other mutators do is for the opposite case: a
+        value that actually moved.
+
+        This is deliberately the only unconditional stamp in the
+        portfolio layer — ``ProgramState.mark_inputs_reviewed`` gates
+        calling it behind ``confirm=True`` (#367), since it erases
+        whatever staleness signal existed before.
+
+        Args:
+            as_of: When this confirmation is deemed to have happened.
+                Defaults to ``program_now()``.
+
+        """
+        effective_stamp = as_of if as_of is not None else program_now()
+        self.stamps = MarketParameterStamps(
+            spot_as_of=effective_stamp,
+            risk_free_rate_as_of=effective_stamp,
+            dividend_yield_as_of=effective_stamp,
+        )
+        for pos in self.positions:
+            pos.volatility_as_of = effective_stamp
 
     def __repr__(
         self: "_PortfolioProtocol",

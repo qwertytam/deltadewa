@@ -493,6 +493,36 @@ class TestDestructiveOpsRequireConfirm:
         assert state.dirty is False
 
 
+class TestMarkInputsReviewed:
+    """#367: confirm-gated because it erases an existing staleness signal."""
+
+    def test_without_confirm_is_refused(self, tmp_path: Path) -> None:
+        state = _load(tmp_path)
+
+        with pytest.raises(ConfirmationRequiredError):
+            state.mark_inputs_reviewed()
+
+        assert state.portfolio.stamps.spot_as_of is None
+
+    def test_with_confirm_stamps_every_input(self, tmp_path: Path) -> None:
+        state = _load(tmp_path)
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        fixed_now = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+
+        state.mark_inputs_reviewed(as_of=fixed_now, confirm=True)
+
+        assert state.portfolio.stamps.spot_as_of == fixed_now
+        assert state.portfolio.stamps.risk_free_rate_as_of == fixed_now
+        assert state.portfolio.stamps.dividend_yield_as_of == fixed_now
+        assert state.portfolio.positions[0].volatility_as_of == fixed_now
+        assert state.dirty is False  # the mutation autosaved
+
+
 class TestAtomicAutosave:
     """A failed autosave never leaves a partial file, and dirty stays True."""
 

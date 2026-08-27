@@ -108,7 +108,11 @@ class ConfirmationRequiredError(RuntimeError):
     """
 
 
-class ProgramState:
+class ProgramState:  # pylint: disable=too-many-public-methods
+    # A thin, lock-wrapped facade over OptionPortfolio: each portfolio
+    # mutator gets exactly one public twin here (add this, mark_inputs_
+    # reviewed for #367 is the latest), so the count tracks the domain
+    # model's own mutator surface rather than growing responsibilities.
     """Owns the one shared ``OptionPortfolio`` + ``IpsConfig``.
 
     Construct via :meth:`load`, not directly — the constructor takes
@@ -512,6 +516,8 @@ class ProgramState:
         contract_size: int | None = None,
         volatility: float | None = None,
         exercise_style: ExerciseStyle | None = None,
+        *,
+        stamp_as_of: datetime | None = None,
     ) -> None:
         """Update a position by index.
 
@@ -533,13 +539,22 @@ class ProgramState:
                 contract_size=contract_size,
                 volatility=volatility,
                 exercise_style=exercise_style,
+                stamp_as_of=stamp_as_of,
             )
             self._mutate_and_save()
 
-    def set_volatility(self, volatility: float) -> None:
+    def set_volatility(
+        self,
+        volatility: float,
+        *,
+        stamp_as_of: datetime | None = None,
+    ) -> None:
         """Set portfolio volatility. See ``OptionPortfolio.set_volatility``."""
         with self._lock:
-            self._portfolio.set_volatility(volatility)
+            self._portfolio.set_volatility(
+                volatility,
+                stamp_as_of=stamp_as_of,
+            )
             self._mutate_and_save()
 
     def set_underlying_quantity(self, underlying_quantity: float) -> None:
@@ -559,6 +574,8 @@ class ProgramState:
         dividend_yield: float | None = None,
         valuation_date: datetime | None = None,
         override_custom_volatility: bool = False,
+        *,
+        stamp_as_of: datetime | None = None,
     ) -> None:
         """Update market conditions.
 
@@ -572,7 +589,41 @@ class ProgramState:
                 dividend_yield=dividend_yield,
                 valuation_date=valuation_date,
                 override_custom_volatility=override_custom_volatility,
+                stamp_as_of=stamp_as_of,
             )
+            self._mutate_and_save()
+
+    def mark_inputs_reviewed(
+        self,
+        *,
+        as_of: datetime | None = None,
+        confirm: bool = False,
+    ) -> None:
+        """Assert every hand-entered pricing input is current as of now.
+
+        See ``OptionPortfolio.confirm_current_inputs``. Confirm-gated
+        like the destructive mutators below, but for the opposite
+        reason: this doesn't destroy data, it *erases a staleness
+        signal* — every existing AGING/UNKNOWN entry in the provenance
+        ledger (#367) reads FRESH immediately afterward, so it must be a
+        deliberate operator act, not a side effect of an unrelated call.
+
+        Args:
+            as_of: When this confirmation is deemed to have happened.
+                Defaults to ``program_now()``.
+            confirm: Must be ``True``.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "mark_inputs_reviewed asserts every pricing input is "
+                "current; pass confirm=True",
+            )
+        with self._lock:
+            self._portfolio.confirm_current_inputs(as_of=as_of)
             self._mutate_and_save()
 
     def remove_position(self, index: int, *, confirm: bool = False) -> None:

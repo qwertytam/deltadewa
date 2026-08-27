@@ -45,13 +45,16 @@ from deltadewa.analysis.monitor_scenario import (
     build_scenario,
     build_scenario_curve,
 )
+from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import safe_render
+from deltadewa.app.provenance_panel import build_provenance_panel
 from deltadewa.app.shape_notice import shape_notice_text
+from deltadewa.clock import program_trading_date
 from deltadewa.reporting.program_report import (
     build_cost_section,
     build_ips_compliance,
@@ -1004,6 +1007,35 @@ def _build_position_detail_panel(
     return safe_render(_build)
 
 
+def _build_provenance_panel(
+    app: ProgramDashApp,
+    ips_config: IpsConfig,
+    portfolio: OptionPortfolio,
+) -> Component:
+    """Build the pricing-input provenance panel; degrades independently.
+
+    #367/#368: reassesses market data and rebuilds the ledger fresh in
+    this closure — the same isolation rule ``_build_compliance_panel``
+    follows — rather than reusing the chrome's ledger, so a failure here
+    cannot take chrome or any other panel down with it.
+    """
+
+    def _build() -> Component:
+        environment = assess_market_environment(
+            app.market_data,
+            ips_config.market_environment,
+        )
+        ledger = build_provenance_ledger(
+            environment,
+            portfolio,
+            ips_config.pricing_inputs,
+            as_of=program_trading_date(ips_config.program.timezone).date(),
+        )
+        return build_provenance_panel(ledger)
+
+    return safe_render(_build)
+
+
 def render(app: ProgramDashApp) -> html.Div:
     """Build the /monitor page: crash-led headline, decisions, position detail.
 
@@ -1032,6 +1064,7 @@ def render(app: ProgramDashApp) -> html.Div:
             _build_scenario_explorer_panel(app, ips_config, portfolio),
             _build_decisions_panel(app, ips_config, portfolio),
             _build_position_detail_panel(ips_config, portfolio),
+            _build_provenance_panel(app, ips_config, portfolio),
             _page_footer(),
         ],
         className="page page-monitor",

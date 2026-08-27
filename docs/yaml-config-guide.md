@@ -225,3 +225,19 @@ affected surface reports `UNAVAILABLE`. Both states are shown in the
 provenance banner rather than silently substituted. See
 [market-data.md](market-data.md#how-freshness-is-graded) for the grades
 and what each one means.
+
+### Hand-entered pricing inputs (`pricing_inputs`)
+
+`data_ttl_minutes` above bounds a *fetched* reading's age; it says nothing
+about the four inputs a book is actually priced on when they are
+hand-entered (per-leg IV, spot, the risk-free rate, the dividend yield —
+#367). `pricing_inputs` is the analogous policy for those:
+`spot_max_age_days`, `volatility_max_age_days`,
+`risk_free_rate_max_age_days`, and `dividend_yield_max_age_days`, each the
+maximum number of days a stamped input may go unconfirmed before the
+provenance banner and `/health`'s `pricing_inputs` object grade it
+`AGING`. Optional — a missing section, like `market_environment`/`sizing`/
+`vega`, falls back to the module defaults (1/7/30/90 days). See
+[market-data.md](market-data.md#hand-entered-inputs-which-never-refresh)
+for what a confirmation stamp means and when it is set, and
+`deltadewa/ips_config.py` for the authoritative field list.

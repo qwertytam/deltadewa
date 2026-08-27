@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
@@ -82,6 +82,23 @@ _SOURCE_TO_QUALITY: Final[dict[Source, DataQuality]] = {
 
 
 @dataclass(frozen=True)
+class SeriesProvenance:
+    """One of the four series ``assess_market_environment`` fetches.
+
+    Batch 3d / #368: kept so a consumer can tell "one series is on its
+    normal, expected schedule (VIX's routine FRED lag)" apart from "the
+    whole pipeline stopped" — a distinction the single combined
+    ``MarketEnvironment.as_of``/``data_quality`` cannot make on its own,
+    which was the field-test confusion #368 reported.
+    """
+
+    name: str
+    quality: DataQuality
+    as_of: datetime | None
+    fetched_at: datetime | None
+
+
+@dataclass(frozen=True)
 class MarketEnvironment:
     """A point-in-time classification of market conditions.
 
@@ -103,10 +120,29 @@ class MarketEnvironment:
             and 3M tenors, in vol points. ``None`` if unavailable.
         hedge_cost_verdict: Overall cheap/fair/expensive read.
         data_quality: The weakest ``Source`` among the readings that went into
-            this snapshot, or ``UNAVAILABLE`` if the provider failed.
+            this snapshot, or ``UNAVAILABLE`` if the provider failed. This
+            combination rule is deliberately conservative and does **not**
+            change with #368 — see ``series``/``oldest_series`` below for
+            the resolution #368 adds instead of loosening it.
         as_of: Observation date of the *oldest* reading in the snapshot — what
             a stale-data banner must display. ``None`` when ``data_quality``
             is ``STATIC`` or ``UNAVAILABLE``, neither of which has one.
+        series: Per-series provenance for each of the four fetched
+            readings (#368) — what let a 2026-08-25 field test tell "VIX's
+            normal FRED lag" apart from "the pipeline stopped" once this
+            was surfaced on ``/health``. Empty when ``data_quality`` is
+            ``UNAVAILABLE`` (nothing was successfully read at all).
+        fetched_at: When this process last retrieved the *oldest-observed*
+            series — i.e. the same combined reading ``as_of`` describes,
+            but the retrieval instant rather than the source's own
+            observation date. A banner showing both together (#368) can
+            distinguish "the data itself is old" from "the pipeline
+            hasn't run since it fetched this old-but-expected reading."
+            ``None`` under the same conditions as ``as_of``.
+        oldest_series: Name of the series ``as_of`` was taken from (one of
+            ``series``' names), or ``None`` when ``data_quality`` is
+            ``STATIC`` or ``UNAVAILABLE`` (neither has a meaningful
+            "oldest" among synthetic/absent timestamps).
 
     """
 
@@ -121,6 +157,12 @@ class MarketEnvironment:
     hedge_cost_verdict: HedgeCostVerdict | None
     data_quality: DataQuality
     as_of: datetime | None
+    # #368: new, defaulted fields, kept last so every existing call site
+    # that builds a MarketEnvironment positionally or by keyword still
+    # constructs correctly.
+    series: tuple[SeriesProvenance, ...] = ()
+    fetched_at: datetime | None = None
+    oldest_series: str | None = None
 
 
 _VIX_LABEL_LOW_PCT: Final[float] = 25.0
@@ -270,6 +312,25 @@ def _hedge_cost_verdict(
     return HedgeCostVerdict.FAIR
 
 
+def _oldest_series_name(
+    named_observations: tuple[tuple[str, Observation[Any]], ...],
+) -> str | None:
+    """Return the name of the series with the earliest ``as_of``.
+
+    ``None`` if every observation's ``as_of`` is ``None`` — cannot occur
+    for the non-``STATIC`` case ``assess_market_environment`` calls this
+    from, but there is no honest name to return if it somehow did.
+    """
+    dated = [
+        (name, obs.as_of)
+        for name, obs in named_observations
+        if obs.as_of is not None
+    ]
+    if not dated:
+        return None
+    return min(dated, key=lambda pair: pair[1])[0]
+
+
 def assess_market_environment(
     provider: MarketDataProvider,
     env_policy: IpsMarketEnvironment | None = None,
@@ -339,10 +400,38 @@ def assess_market_environment(
 
     # The snapshot is only as trustworthy — and only as fresh — as its
     # weakest input, so combine the four readings rather than asking the
-    # provider what kind of provider it is.
+    # provider what kind of provider it is. This combination rule stays
+    # exactly as conservative as before (#368 does not loosen it) — what
+    # #368 adds is keeping the per-series breakdown below instead of
+    # discarding it once combined, so a consumer can tell "one series is
+    # on its normal, expected lag" apart from "the whole pipeline
+    # stopped."
+    named_observations = (
+        ("vix", vix_obs),
+        ("vix_term_structure", term_obs),
+        ("skew_index", skew_index_obs),
+        ("skew_percentile", skew_pctile_obs),
+    )
     provenance = Observation.combine(
         None,
-        (vix_obs, term_obs, skew_index_obs, skew_pctile_obs),
+        (obs for _, obs in named_observations),
+    )
+    series = tuple(
+        SeriesProvenance(
+            name=name,
+            quality=_SOURCE_TO_QUALITY[obs.source],
+            as_of=obs.as_of,
+            fetched_at=obs.fetched_at,
+        )
+        for name, obs in named_observations
+    )
+    # A single STATIC part collapses combine() straight to
+    # Observation.static(), whose as_of/fetched_at are both None — there
+    # is no honest "oldest" to name among synthetic/absent timestamps.
+    oldest_series = (
+        _oldest_series_name(named_observations)
+        if provenance.source is not Source.STATIC
+        else None
     )
 
     return MarketEnvironment(
@@ -361,4 +450,7 @@ def assess_market_environment(
         ),
         data_quality=_SOURCE_TO_QUALITY[provenance.source],
         as_of=provenance.as_of,
+        series=series,
+        fetched_at=provenance.fetched_at,
+        oldest_series=oldest_series,
     )

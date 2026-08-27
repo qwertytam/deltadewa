@@ -66,6 +66,7 @@ from deltadewa.analysis.position_aging import (
     PositionAging,
     evaluate_position_aging,
 )
+from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.roll_planner import build_roll_plan
 from deltadewa.analysis.roll_status import evaluate_roll_status
@@ -92,8 +93,9 @@ from deltadewa.app.panel_guard import (
 from deltadewa.app.panel_guard import (
     status_message as _status,
 )
+from deltadewa.app.provenance_panel import build_provenance_panel
 from deltadewa.app.shape_notice import shape_notice_text
-from deltadewa.clock import program_now
+from deltadewa.clock import program_now, program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.monte_carlo import drift_measure_label
 from deltadewa.state import ConfirmationRequiredError
@@ -477,6 +479,28 @@ def _remove_position_logic(
     if error is not None:
         return no_update, _status(error, error=True)
     return version + 1, _status("Removed.", error=False)
+
+
+def _mark_inputs_reviewed_logic(
+    *,
+    version: int,
+    state: ProgramState,
+) -> tuple[Any, Component]:
+    """Confirm every pricing input — the browser's confirm already happened.
+
+    Same ``ConfirmDialogProvider`` idiom as ``_remove_position_logic``:
+    ``submit_n_clicks`` only increments once the native confirm dialog is
+    accepted, so ``confirm=True`` is always correct here.
+    """
+    error = _guarded_mutation(
+        lambda: state.mark_inputs_reviewed(confirm=True),
+    )
+    if error is not None:
+        return no_update, _status(error, error=True)
+    return version + 1, _status(
+        "Pricing inputs marked reviewed.",
+        error=False,
+    )
 
 
 def _set_underlying_quantity_logic(
@@ -1339,6 +1363,38 @@ def _render_roll_plan_panel_logic(
     return _safe_render(
         lambda: _roll_plan_panel_view(build_roll_plan(portfolio, ips_config)),
     )
+
+
+def _render_provenance_panel_logic(
+    *,
+    app: ProgramDashApp,
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> Component:
+    """Render the pricing-input provenance panel (Batch 3d, #367/#368).
+
+    Reassesses market data fresh in this closure rather than sharing
+    ``render()``'s own ``market_env`` — ``assess_market_environment``
+    never raises, so sharing would be safe, but a fresh call here keeps
+    this panel's isolation independent of whatever ``render()`` happens
+    to compute elsewhere, matching monitor.py's convention for this
+    specific panel.
+    """
+
+    def _build() -> Component:
+        environment = assess_market_environment(
+            app.market_data,
+            ips_config.market_environment,
+        )
+        ledger = build_provenance_ledger(
+            environment,
+            portfolio,
+            ips_config.pricing_inputs,
+            as_of=program_trading_date(ips_config.program.timezone).date(),
+        )
+        return build_provenance_panel(ledger)
+
+    return _safe_render(_build)
 
 
 def _day_range_text(low: int, high: int) -> str:
@@ -2520,6 +2576,39 @@ def render(app: ProgramDashApp) -> html.Div:
             ),
             html.Div(
                 [
+                    # No basis chip: unlike every other PLANNING panel,
+                    # this one grades staleness, not a priced quantity —
+                    # there is no crash-skew or book-greeks basis for it
+                    # to name (Batch 3d, #367/#368).
+                    html.H3("Pricing input provenance"),
+                    html.Div(
+                        _render_provenance_panel_logic(
+                            app=app,
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                        ),
+                        id="plan-provenance-panel",
+                    ),
+                    dcc.ConfirmDialogProvider(
+                        id="mark-inputs-reviewed-confirm",
+                        message=(
+                            "Mark every hand-entered pricing input "
+                            "(spot, risk-free rate, dividend yield, and "
+                            "every leg's volatility) as confirmed "
+                            "current, as of now? This clears any "
+                            "existing staleness signal — it does not "
+                            "change any value, only its confirmed date."
+                        ),
+                        children=html.Button(
+                            "Mark pricing inputs reviewed",
+                            className="btn btn-secondary",
+                        ),
+                    ),
+                ],
+                className="panel",
+            ),
+            html.Div(
+                [
                     html.H3(
                         ["Position aging", basis_chip(_BASIS_BOOK_GREEKS)],
                     ),
@@ -2965,8 +3054,15 @@ def _page_footer() -> html.Div:
     )
 
 
-def register_callbacks(app: ProgramDashApp) -> None:
+def register_callbacks(  # pylint: disable=too-many-locals
+    app: ProgramDashApp,
+) -> None:
     """Wire the BOOK zone's mutating callbacks and the read-only panels.
+
+    One nested callback per mutator/panel is the natural shape of this
+    function — the local count tracks how many the page wires, not
+    unrelated complexity, so a targeted disable is more honest than
+    restructuring around the lint.
 
     A no-op when ``app.ips_config is None`` — mirrors ``render()``'s own
     page-level gate, so a gated page has nothing wired to a mutator
@@ -3173,6 +3269,35 @@ def register_callbacks(app: ProgramDashApp) -> None:
         return _render_roll_panel_logic(
             portfolio=app.program_state.portfolio,
             ips_config=ips_config,
+        )
+
+    @app.callback(
+        Output("plan-provenance-panel", "children"),
+        Input("book-version", "data"),
+    )
+    def _render_provenance_panel(_version: int) -> Component:
+        return _render_provenance_panel_logic(
+            app=app,
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+    @app.callback(
+        Output("book-version", "data", allow_duplicate=True),
+        Output("mutation-status", "children", allow_duplicate=True),
+        Input("mark-inputs-reviewed-confirm", "submit_n_clicks"),
+        State("book-version", "data"),
+        prevent_initial_call=True,
+    )
+    def _mark_inputs_reviewed(
+        submit_n_clicks: int | None,
+        version: int,
+    ) -> tuple[Any, Any]:
+        if not submit_n_clicks:
+            return no_update, no_update
+        return _mark_inputs_reviewed_logic(
+            version=version,
+            state=app.program_state,
         )
 
     @app.callback(

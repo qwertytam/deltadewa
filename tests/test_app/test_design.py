@@ -261,6 +261,61 @@ class TestMutationsPersist:
         assert state.dirty is False
 
 
+class TestMarkInputsReviewed:
+    """Batch 3d / #367: the /design 'Mark pricing inputs reviewed' control."""
+
+    def test_stamps_every_input_and_persists(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        assert state.portfolio.stamps.spot_as_of is None
+
+        version, _status = design._mark_inputs_reviewed_logic(
+            version=0,
+            state=state,
+        )
+
+        assert version == 1
+        assert state.portfolio.stamps.spot_as_of is not None
+        assert state.portfolio.stamps.risk_free_rate_as_of is not None
+        assert state.portfolio.stamps.dividend_yield_as_of is not None
+        assert state.portfolio.positions[0].volatility_as_of is not None
+        assert state.dirty is False
+
+    def test_reloaded_book_carries_the_stamps(self, tmp_path: Path) -> None:
+        """The stamps survive the same autosave/reload round-trip as any
+        other mutation.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        design._mark_inputs_reviewed_logic(version=0, state=state)
+
+        reloaded = ProgramState.load(
+            tmp_path,
+            ips_path=_EXAMPLE_IPS_YAML,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        assert reloaded.portfolio.stamps.spot_as_of is not None
+
+    def test_panel_and_control_are_present_on_the_page(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        assert _find_component(layout, "plan-provenance-panel") is not None
+        confirm = _find_component(layout, "mark-inputs-reviewed-confirm")
+        assert confirm is not None
+
+
 class TestExerciseStyleDefault:
     """C2: the add-form's exercise style always sources from the IPS."""
 
@@ -2274,10 +2329,11 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 10 PLANNING panels + 5 EXPLORATION panels share the .panel class.
-        # A count, not a list, so a panel disappearing fails loudly; update it
-        # when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 15
+        # 11 PLANNING panels + 5 EXPLORATION panels share the .panel class
+        # (Batch 3d added the provenance panel, #367/#368). A count, not a
+        # list, so a panel disappearing fails loudly; update it when a
+        # panel is deliberately added or removed.
+        assert page.locator(".panel").count() == 16
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1

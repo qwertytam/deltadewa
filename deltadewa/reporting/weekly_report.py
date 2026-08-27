@@ -63,6 +63,7 @@ from deltadewa.analysis import (
     PortfolioAnalyzer,
     assess_market_environment,
     build_monetization_plan,
+    build_provenance_ledger,
     compute_crash_convexity,
     evaluate_roll_status,
 )
@@ -730,6 +731,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         market_data,
         ips_config.market_environment,
     )
+    # One ledger, reused rather than re-derived (Batch 3b's rule): the
+    # digest's MarketContextSection.data_quality reads this same grade,
+    # so a stale hand-entered pricing input turns the digest's caveat
+    # exactly as it turns the live pages' banner (#367).
+    provenance_ledger = build_provenance_ledger(
+        market_env,
+        portfolio,
+        ips_config.pricing_inputs,
+        as_of=as_of,
+    )
     carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics()
     monetization_plan = build_monetization_plan(
         portfolio,
@@ -744,6 +755,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         crash_result=crash_result,
         carry_metrics=carry_metrics,
         market_env=market_env,
+        provenance_ledger=provenance_ledger,
         period_label=period_label,
         as_of=as_of,
         monetization_plan=monetization_plan,
