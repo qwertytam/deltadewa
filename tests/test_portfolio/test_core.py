@@ -640,6 +640,66 @@ class TestOptionPortfolioBase:
         assert rebuilt.entry_premium == pytest.approx(4.25)
         assert rebuilt.position_id == original_id
 
+    def test_confirm_current_inputs_stamps_unchanged_values(self) -> None:
+        """#367: reviewing and finding nothing wrong is still a confirmation.
+
+        Unlike update_market_conditions/set_volatility, which stamp only
+        on an actual value change, confirm_current_inputs stamps every
+        input unconditionally — that's the whole point of a "mark
+        reviewed" action on an unchanged book.
+        """
+        portfolio = OptionPortfolioBase(
+            spot_price=100.0,
+            volatility=0.2,
+            risk_free_rate=0.04,
+            dividend_yield=0.01,
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        assert portfolio.stamps.spot_as_of is None  # never confirmed yet
+
+        fixed_now = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+        portfolio.confirm_current_inputs(as_of=fixed_now)
+
+        assert portfolio.stamps.spot_as_of == fixed_now
+        assert portfolio.stamps.risk_free_rate_as_of == fixed_now
+        assert portfolio.stamps.dividend_yield_as_of == fixed_now
+        assert portfolio.positions[0].volatility_as_of == fixed_now
+        # Values themselves are untouched — this only stamps.
+        assert portfolio.spot_price == pytest.approx(100.0)
+        assert portfolio.risk_free_rate == pytest.approx(0.04)
+
+    def test_confirm_current_inputs_covers_every_position(self) -> None:
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.AMERICAN,
+        )
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=maturity,
+            quantity=-1,
+            option_type=OptionType.PUT,
+            volatility=0.5,  # custom leg
+        )
+        fixed_now = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
+
+        portfolio.confirm_current_inputs(as_of=fixed_now)
+
+        assert all(
+            pos.volatility_as_of == fixed_now for pos in portfolio.positions
+        )
+
     def test_get_symbol(self) -> None:
         """Test get_symbol method."""
         portfolio = OptionPortfolioBase(

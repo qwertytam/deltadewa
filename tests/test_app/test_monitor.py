@@ -418,6 +418,18 @@ class TestBasisChip:
         assert "basis: crash-skew (IPS anchor)" in str(layout)
 
 
+class TestProvenancePanel:
+    """Batch 3d / #367: the full pricing-input breakdown, on /monitor."""
+
+    def test_provenance_panel_is_present(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        assert _find_component(layout, "provenance-panel") is not None
+
+
 class TestComplianceStrip:
     """#298: /monitor's one-line IPS compliance strip.
 

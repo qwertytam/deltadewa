@@ -643,6 +643,36 @@ class OptionPortfolioBase:
         """Clear all positions from the portfolio."""
         self.positions = []
 
+    def confirm_current_inputs(self, *, as_of: dt | None = None) -> None:
+        """Stamp every hand-entered pricing input as confirmed *now*.
+
+        Unlike ``update_market_conditions``/``set_volatility``/
+        ``update_position``, this stamps unconditionally — an operator
+        reviewing the book and finding every number still correct has
+        nothing to *change*, but has still performed the confirmation
+        #367's provenance ledger exists to record. The change-gated
+        stamping those other mutators do is for the opposite case: a
+        value that actually moved.
+
+        This is deliberately the only unconditional stamp in the
+        portfolio layer — ``ProgramState.mark_inputs_reviewed`` gates
+        calling it behind ``confirm=True`` (#367), since it erases
+        whatever staleness signal existed before.
+
+        Args:
+            as_of: When this confirmation is deemed to have happened.
+                Defaults to ``program_now()``.
+
+        """
+        effective_stamp = as_of if as_of is not None else program_now()
+        self.stamps = MarketParameterStamps(
+            spot_as_of=effective_stamp,
+            risk_free_rate_as_of=effective_stamp,
+            dividend_yield_as_of=effective_stamp,
+        )
+        for pos in self.positions:
+            pos.volatility_as_of = effective_stamp
+
     def __repr__(
         self: "_PortfolioProtocol",
     ) -> str:

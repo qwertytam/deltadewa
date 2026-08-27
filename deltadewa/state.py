@@ -108,7 +108,11 @@ class ConfirmationRequiredError(RuntimeError):
     """
 
 
-class ProgramState:
+class ProgramState:  # pylint: disable=too-many-public-methods
+    # A thin, lock-wrapped facade over OptionPortfolio: each portfolio
+    # mutator gets exactly one public twin here (add this, mark_inputs_
+    # reviewed for #367 is the latest), so the count tracks the domain
+    # model's own mutator surface rather than growing responsibilities.
     """Owns the one shared ``OptionPortfolio`` + ``IpsConfig``.
 
     Construct via :meth:`load`, not directly — the constructor takes
@@ -587,6 +591,39 @@ class ProgramState:
                 override_custom_volatility=override_custom_volatility,
                 stamp_as_of=stamp_as_of,
             )
+            self._mutate_and_save()
+
+    def mark_inputs_reviewed(
+        self,
+        *,
+        as_of: datetime | None = None,
+        confirm: bool = False,
+    ) -> None:
+        """Assert every hand-entered pricing input is current as of now.
+
+        See ``OptionPortfolio.confirm_current_inputs``. Confirm-gated
+        like the destructive mutators below, but for the opposite
+        reason: this doesn't destroy data, it *erases a staleness
+        signal* — every existing AGING/UNKNOWN entry in the provenance
+        ledger (#367) reads FRESH immediately afterward, so it must be a
+        deliberate operator act, not a side effect of an unrelated call.
+
+        Args:
+            as_of: When this confirmation is deemed to have happened.
+                Defaults to ``program_now()``.
+            confirm: Must be ``True``.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "mark_inputs_reviewed asserts every pricing input is "
+                "current; pass confirm=True",
+            )
+        with self._lock:
+            self._portfolio.confirm_current_inputs(as_of=as_of)
             self._mutate_and_save()
 
     def remove_position(self, index: int, *, confirm: bool = False) -> None:
