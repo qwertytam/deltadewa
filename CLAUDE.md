@@ -252,6 +252,32 @@ bid/ask and open interest, which the free CBOE/FRED provider doesn't return).
 **#9**'s skew-beta scalar has never existed — an unbuilt feature, not a
 regression.
 
+**Batch 3d has shipped**, closing #367 (the banner graded only the six
+*fetched* market readings, never the four hand-entered pricing inputs a
+book is actually priced on) and #368 (the combination rule's single
+oldest-`as_of`/weakest-`Source` reduction made a routinely-lagged VIX
+reading indistinguishable from a dead pipeline — a 2026-08-25 field test
+hit exactly this). New `analysis/provenance.py` builds one
+`ProvenanceLedger` grading both fetched market data and every
+hand-entered input (per-leg IV, book-level spot/rate/dividend, each
+stamped via `deltadewa.portfolio.stamps.MarketParameterStamps` /
+`OptionPosition.volatility_as_of` and graded against a review-cadence
+policy, `ips_config.pricing_inputs`) side by side, with one worst-of for
+the banner and the digest and a never-merged breakdown for `/health` and
+a new provenance panel (`/monitor`, `/design`). `MarketEnvironment` keeps
+its per-series provenance (`series`/`fetched_at`/`oldest_series`) instead
+of discarding it once combined — the combine rule itself is unchanged
+and pinned by test. A pre-existing book or position reports its
+hand-entered inputs as `UNKNOWN`, never silently fresh; a confirm-gated
+`ProgramState.mark_inputs_reviewed` (a `/design` control) is the only way
+to clear that. See `docs/market-data.md` for the full model and
+`analysis/provenance.py`'s module docstring for the alarm-fatigue
+argument behind the banner's actionability rule. Two follow-on findings
+from the same review — the refresh job's heartbeat has no read-back
+verification, and nothing asserts `app`/`jobs` resolve the same
+`DELTADEWA_CACHE_DIR` — are filed as #377/#378, both write-side
+counterparts of this same provenance question, not acted on here.
+
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public
 [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,
