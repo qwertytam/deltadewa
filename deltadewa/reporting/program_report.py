@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.crash_payoff import CrashConvexityResult
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import MonetizationPlan
+    from deltadewa.analysis.provenance import ProvenanceLedger
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -305,13 +306,14 @@ class ProgramReport:
 # ── Builder ───────────────────────────────────────────────────────────────
 
 
-def build_program_report(
+def build_program_report(  # pylint: disable=too-many-arguments
     *,
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
     crash_result: CrashConvexityResult,
     carry_metrics: dict[str, Any],
     market_env: MarketEnvironment,
+    provenance_ledger: ProvenanceLedger,
     period_label: str,
     as_of: datetime.date,
     monetization_plan: MonetizationPlan | None = None,
@@ -331,6 +333,15 @@ def build_program_report(
         carry_metrics: Dict from
             ``PortfolioAnalyzer.calculate_carry_metrics``.
         market_env: Pre-assessed from ``assess_market_environment``.
+        provenance_ledger: Pre-built from
+            ``analysis.provenance.build_provenance_ledger``, over the
+            same *market_env* and *portfolio*. ``MarketContextSection.
+            data_quality`` reads this ledger's ``combined_quality``
+            rather than ``market_env.data_quality`` directly (#367) —
+            the same grade the live pages' banner reflects, reused
+            rather than re-derived, so a stale hand-entered pricing
+            input can turn the digest's caveat too, not only the six
+            fetched market readings.
         period_label: Human-readable period (e.g. ``"Q2 2026"``).
         as_of: Report date.
         monetization_plan: Optional pre-computed
@@ -357,7 +368,7 @@ def build_program_report(
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
     protection = build_protection_section(crash_result)
-    market_context = _build_market_context(market_env)
+    market_context = _build_market_context(market_env, provenance_ledger)
     decision = _build_decision(
         ips_config=ips_config,
         market_env=market_env,
@@ -525,8 +536,15 @@ def build_protection_section(
 
 def _build_market_context(
     market_env: MarketEnvironment,
+    provenance_ledger: ProvenanceLedger,
 ) -> MarketContextSection:
-    """Build the MarketContextSection from a MarketEnvironment."""
+    """Build the MarketContextSection from a MarketEnvironment.
+
+    ``data_quality`` reads ``provenance_ledger.combined_quality`` rather
+    than ``market_env.data_quality`` directly (#367) — see
+    ``build_program_report``'s docstring on why. Every other field still
+    comes from *market_env* itself; only the grade's source changes.
+    """
     return MarketContextSection(
         vix=market_env.vix,
         regime_label=(
@@ -540,7 +558,7 @@ def _build_market_context(
             if market_env.hedge_cost_verdict is not None
             else None
         ),
-        data_quality=market_env.data_quality.value,
+        data_quality=provenance_ledger.combined_quality.value,
     )
 
 

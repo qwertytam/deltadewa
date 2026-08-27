@@ -21,6 +21,10 @@ from deltadewa.analysis.monetization import (
     MonetizationPlan,
     MonetizationStepStatus,
 )
+from deltadewa.analysis.provenance import (
+    ProvenanceLedger,
+    build_provenance_ledger,
+)
 from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import (
     IpsBudget,
@@ -30,10 +34,12 @@ from deltadewa.ips_config import (
     IpsMonetization,
     IpsMonetizationStep,
     IpsPricing,
+    IpsPricingInputs,
     IpsProgram,
     IpsTriggers,
 )
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.reporting.program_report import (
     HTML_STYLE,
     ProgramReport,
@@ -160,6 +166,29 @@ def _make_portfolio(
     return OptionPortfolio(
         underlying_quantity=underlying_quantity,
         spot_price=spot_price,
+        # Freshly confirmed as of _AS_OF, so ProvenanceLedger.combined_
+        # quality falls through to the fetched market-data grade below,
+        # exactly like every one of this module's data_quality assertions
+        # already assumes — a portfolio with no stamps would report
+        # UNKNOWN pricing inputs and override every data_quality= this
+        # file's tests pass in (#367).
+        stamps=MarketParameterStamps(
+            spot_as_of=_ENV_AS_OF,
+            risk_free_rate_as_of=_ENV_AS_OF,
+            dividend_yield_as_of=_ENV_AS_OF,
+        ),
+    )
+
+
+def _make_provenance_ledger(
+    portfolio: OptionPortfolio,
+    market_env: MarketEnvironment,
+) -> ProvenanceLedger:
+    return build_provenance_ledger(
+        market_env,
+        portfolio,
+        IpsPricingInputs(),
+        as_of=_AS_OF,
     )
 
 
@@ -206,11 +235,13 @@ def _build(
     schedule_steps: int = 2,
     monetization_plan: MonetizationPlan | None = None,
 ) -> ProgramReport:
+    portfolio = _make_portfolio(
+        underlying_quantity=underlying_quantity,
+        spot_price=spot_price,
+    )
+    market_env = _make_market_env(data_quality)
     return build_program_report(
-        portfolio=_make_portfolio(
-            underlying_quantity=underlying_quantity,
-            spot_price=spot_price,
-        ),
+        portfolio=portfolio,
         ips_config=_make_ips_config(
             annual_carry_pct=budget_pct,
             schedule_steps=schedule_steps,
@@ -222,7 +253,8 @@ def _build(
             meets_target=meets_target,
         ),
         carry_metrics=_make_carry_metrics(theta_annual),
-        market_env=_make_market_env(data_quality),
+        market_env=market_env,
+        provenance_ledger=_make_provenance_ledger(portfolio, market_env),
         period_label="Q2 2026",
         as_of=_AS_OF,
         monetization_plan=monetization_plan,
@@ -319,6 +351,60 @@ class TestBuildProgramReport:
         assert mc.regime_label is None
         assert mc.skew_percentile is None
         assert mc.hedge_cost_verdict is None
+
+    def test_market_context_reads_the_ledgers_combined_quality(
+        self,
+    ) -> None:
+        """#367: data_quality is provenance_ledger.combined_quality, not
+        market_env.data_quality directly — the same grade the live
+        pages' banner reflects (Batch 3b's "one grader" rule).
+        """
+        portfolio = _make_portfolio()
+        market_env = _make_market_env(DataQuality.LIVE)
+        ledger = _make_provenance_ledger(portfolio, market_env)
+
+        report = build_program_report(
+            portfolio=portfolio,
+            ips_config=_make_ips_config(),
+            crash_result=_make_crash_result(),
+            carry_metrics=_make_carry_metrics(),
+            market_env=market_env,
+            provenance_ledger=ledger,
+            period_label="Q2 2026",
+            as_of=_AS_OF,
+        )
+
+        assert report.market_context.data_quality == (
+            ledger.combined_quality.value
+        )
+
+    def test_stale_hand_entered_input_turns_the_digest_grade(self) -> None:
+        """#367's acceptance: a stale hand-entered input can turn the
+        digest's data-quality caveat even though the fetched market data
+        is fully LIVE.
+        """
+        # No stamps at all — every hand-entered input is UNKNOWN.
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0, spot_price=5_000.0
+        )
+        market_env = _make_market_env(DataQuality.LIVE)
+        ledger = _make_provenance_ledger(portfolio, market_env)
+
+        report = build_program_report(
+            portfolio=portfolio,
+            ips_config=_make_ips_config(),
+            crash_result=_make_crash_result(),
+            carry_metrics=_make_carry_metrics(),
+            market_env=market_env,
+            provenance_ledger=ledger,
+            period_label="Q2 2026",
+            as_of=_AS_OF,
+        )
+
+        # The fetched market data is LIVE, but the never-confirmed
+        # hand-entered inputs (UNKNOWN) are worse and must win.
+        assert market_env.data_quality == DataQuality.LIVE
+        assert report.market_context.data_quality == "STATIC"
 
     def test_return_framing_carry_drag(self) -> None:
         """carry_drag_annual_pct mirrors cost.carry_pct_of_notional."""
