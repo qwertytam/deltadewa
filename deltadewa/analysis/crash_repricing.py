@@ -37,8 +37,11 @@ computed from here is a protection the program cannot actually collect —
 manufactured convexity, and manufactured silently. Convexity answers "what
 does my *current* hedge pay if the market falls from here", and an expired
 leg is not a current hedge. A caller that needs to know legs were excluded
-calls :func:`partition_expired_legs` itself and renders the second tuple;
-``/monitor``'s crash panel does exactly this. Separately, and defensively,
+calls :func:`partition_expired_legs` itself and renders the second tuple; no
+non-test caller does so today (#375 adds one: ``crash_payoff.
+compute_crash_convexity`` names the excluded long-put legs on its result, for
+the ``/monitor`` compliance strip and the digest §2 Protection section to
+render as a caveat). Separately, and defensively,
 :class:`_CrashSkewVolMapping` no longer attempts the wing solve for an
 expired leg even if one reaches it uncaught — at zero tenor the put-delta
 magnitude is zero at every strike, so no wing exists to solve, and the vol
@@ -224,6 +227,30 @@ class CrashShock:
         )
 
 
+def is_expired(position: OptionPosition, *, valuation_date: datetime) -> bool:
+    """Return whether *position* is expired as of *valuation_date*.
+
+    The boundary is ``maturity.date() <= valuation_date.date()`` — the one
+    place it is spelled out. Every other expiry check in the package
+    (:func:`partition_expired_legs`, :meth:`~deltadewa.portfolio.core.
+    OptionPortfolio.add_position`'s ``reject_expired`` guard,
+    :func:`~deltadewa.analysis.position_aging.classify_expiry_bucket`'s
+    ``EXPIRED`` bucket) calls this rather than repeating the comparison, so
+    the boundary can only be defined once. Matches
+    :meth:`~deltadewa.valuation.OptionValuation._is_expired_or_at_expiry`.
+
+    Args:
+        position: The leg to check.
+        valuation_date: The date to check it against — typically the
+            portfolio's own ``valuation_date``.
+
+    Returns:
+        ``True`` when *position* is at or past expiry on *valuation_date*.
+
+    """
+    return position.option.maturity_date.date() <= valuation_date.date()
+
+
 def partition_expired_legs(
     positions: Sequence[OptionPosition],
     *,
@@ -231,12 +258,10 @@ def partition_expired_legs(
 ) -> tuple[tuple[OptionPosition, ...], tuple[OptionPosition, ...]]:
     """Split *positions* into (live, expired) as of *valuation_date* (#362).
 
-    Expired means ``maturity_date.date() <= valuation_date.date()`` — the
-    same boundary :meth:`~deltadewa.valuation.OptionValuation.
-    _is_expired_or_at_expiry` uses, so this module's notion of "expired"
-    never disagrees with the pricer's. Every crash-surface function in this
-    module calls this and prices only the live tuple; see the module
-    docstring's "Expired legs" paragraph for why.
+    Expiry is judged by :func:`is_expired`, so this module's notion of
+    "expired" never disagrees with the pricer's. Every crash-surface
+    function in this module calls this and prices only the live tuple; see
+    the module docstring's "Expired legs" paragraph for why.
 
     Args:
         positions: Legs to split.
@@ -250,11 +275,38 @@ def partition_expired_legs(
     live: list[OptionPosition] = []
     expired: list[OptionPosition] = []
     for position in positions:
-        if position.option.maturity_date.date() <= valuation_date.date():
+        if is_expired(position, valuation_date=valuation_date):
             expired.append(position)
         else:
             live.append(position)
     return tuple(live), tuple(expired)
+
+
+def describe_expired_legs(
+    positions: Sequence[OptionPosition],
+) -> tuple[str, ...]:
+    """One human-readable label per leg, e.g. ``"234 PUT, expired 2026-07-28"``.
+
+    Built from ``position.option`` alone — ``OptionPosition`` carries no
+    per-leg symbol (the book's symbol lives on the portfolio), so a caller
+    that wants one prefixed (e.g. ``"SPX 234 PUT, expired 2026-07-28"``)
+    does so itself. Does not check expiry itself; pass it the ``expired``
+    half of a :func:`partition_expired_legs` call.
+
+    Args:
+        positions: The legs to describe, typically already known to be
+            expired.
+
+    Returns:
+        One label per position, in the same order as *positions*.
+
+    """
+    return tuple(
+        f"{position.option.strike_price:,.0f} "
+        f"{position.option.option_type.value}, expired "
+        f"{position.option.maturity_date.date()}"
+        for position in positions
+    )
 
 
 def _reprice_leg(
