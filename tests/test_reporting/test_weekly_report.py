@@ -1033,3 +1033,115 @@ class TestMainSendEmail:
             "https://hc-ping.com/x",
             label="digest",
         )
+
+
+class TestMainBuildFailure:
+    """#364: build_and_render() raising exits 3, writes nothing, never pings."""
+
+    def test_returns_three_and_writes_no_files(
+        self,
+        seeded_export_dir: _MainFixture,
+    ) -> None:
+        export_dir = seeded_export_dir.export_dir
+
+        with (
+            patch.object(
+                weekly_report_module,
+                "build_and_render",
+                side_effect=RuntimeError("synthetic build failure"),
+            ),
+            patch.object(weekly_report_module, "ping") as mock_ping,
+        ):
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(export_dir),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS_YAML),
+                    "--as-of",
+                    "2026-08-05",
+                ],
+            )
+
+        assert exit_code == 3
+        weekly_dir = export_dir / "reports" / "weekly"
+        # No digest md/html, and critically no snapshot — next week's
+        # digest must still compare against last week's real snapshot.
+        assert not weekly_dir.exists() or not any(weekly_dir.iterdir())
+        mock_ping.assert_not_called()
+
+    def test_send_email_sends_a_failure_alert(
+        self,
+        seeded_export_dir: _MainFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("SMTP_PORT", "587")
+        monkeypatch.setenv("SMTP_USERNAME", "hedge-program@example.com")
+        monkeypatch.setenv("SMTP_PASSWORD", "fake-smtp-password")
+        monkeypatch.setenv("REPORT_EMAIL_TO", "ic@example.com")
+        monkeypatch.setenv("REPORT_EMAIL_FROM", "hedge-program@example.com")
+        monkeypatch.setenv("DIGEST_HEARTBEAT_URL", "https://hc-ping.com/x")
+
+        with (
+            patch.object(
+                weekly_report_module,
+                "build_and_render",
+                side_effect=RuntimeError("synthetic build failure"),
+            ),
+            patch.object(weekly_report_module, "send_email") as mock_send,
+            patch.object(weekly_report_module, "ping") as mock_ping,
+        ):
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(seeded_export_dir.export_dir),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS_YAML),
+                    "--as-of",
+                    "2026-08-05",
+                    "--send-email",
+                ],
+            )
+
+        assert exit_code == 3
+        mock_send.assert_called_once()
+        message = mock_send.call_args.args[0]
+        assert "FAILED to build" in message.subject
+        mock_ping.assert_not_called()
+
+    def test_without_send_email_sends_no_alert(
+        self,
+        seeded_export_dir: _MainFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("SMTP_PORT", "587")
+        monkeypatch.setenv("SMTP_USERNAME", "hedge-program@example.com")
+        monkeypatch.setenv("SMTP_PASSWORD", "fake-smtp-password")
+        monkeypatch.setenv("REPORT_EMAIL_TO", "ic@example.com")
+        monkeypatch.setenv("REPORT_EMAIL_FROM", "hedge-program@example.com")
+
+        with (
+            patch.object(
+                weekly_report_module,
+                "build_and_render",
+                side_effect=RuntimeError("synthetic build failure"),
+            ),
+            patch.object(weekly_report_module, "send_email") as mock_send,
+            patch.object(weekly_report_module, "ping") as mock_ping,
+        ):
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(seeded_export_dir.export_dir),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS_YAML),
+                    "--as-of",
+                    "2026-08-05",
+                ],
+            )
+
+        assert exit_code == 3
+        mock_send.assert_not_called()
+        mock_ping.assert_not_called()

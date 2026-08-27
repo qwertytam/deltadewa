@@ -42,6 +42,20 @@ failure must never look like exit-0 success. On a confirmed send,
 path that pings it, per the dead-man's-switch design: a missing weekly
 email is exactly the kind of silence that gets rationalised as "quiet
 week," so it must alarm rather than ping regardless.
+
+**#364 — the digest body build is guarded.** Everything from the market-data
+read through rendering the markdown/html strings (:func:`build_and_render`)
+can raise on an input this module does not control — a provider outage, a
+malformed pricing input, a repricing edge case. Before #364 that raise was
+unguarded: it took the whole cron job down with an unhandled traceback,
+which is also silence from the operator's chair, indistinguishable from the
+job never having run. ``main()`` now wraps that call, on failure prints and
+logs the exception, writes **no files at all** (not even a partial one —
+next week's digest must still compare against last week's real snapshot,
+not a corrupt or missing one), sends a plain-language failure alert when
+``--send-email`` was requested, and exits **3**. See
+:func:`_send_build_failure_alert` and ``heartbeat.py``'s module docstring
+for why this path never pings the heartbeat either.
 """
 
 from __future__ import annotations
@@ -103,6 +117,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from deltadewa.analysis.roll_status import RollStatusRecord
+    from deltadewa.ips_config import IpsConfig
 
 _logger = logging.getLogger(__name__)
 
@@ -122,6 +137,11 @@ _NO_POSITIONS_ROLL_VERDICT: Final[str] = "N/A"
 _STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
     {"STALE", "STATIC", "UNAVAILABLE"},
 )
+
+_EXIT_OK: Final[int] = 0
+_EXIT_REFUSED: Final[int] = 1
+_EXIT_SEND_FAILED: Final[int] = 2
+_EXIT_BUILD_FAILED: Final[int] = 3
 
 _SMTP_HOST_ENV_VAR: Final[str] = "SMTP_HOST"
 _SMTP_PORT_ENV_VAR: Final[str] = "SMTP_PORT"
@@ -615,6 +635,223 @@ def _read_backup_heartbeat_warning(export_dir: Path) -> str | None:
     )
 
 
+# ── Guarded body build (#364) ───────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class _RenderedDigest:
+    """One week's assembled digest, plus its rendered markdown and HTML.
+
+    Attributes:
+        digest: The fully assembled ``WeeklyDigest``.
+        markdown: ``render_weekly_digest_markdown(digest)``.
+        html: ``render_weekly_digest_html(digest)``.
+
+    """
+
+    digest: WeeklyDigest
+    markdown: str
+    html: str
+
+
+def build_and_render(
+    *,
+    state: ProgramState,
+    ips_config: IpsConfig,
+    as_of: date,
+    period_label: str,
+    export_dir: Path,
+) -> _RenderedDigest:
+    """Assemble and render this week's digest. Performs no writes.
+
+    Every analysis call the digest depends on — the crash reprice, the
+    market-environment read, the provenance ledger, carry, monetization,
+    roll status, and the ``ProgramReport``/``WeeklyDigest`` assembly and
+    render — lives here, unguarded. Raising here (rather than partially
+    degrading) is deliberate: ``main()`` writes nothing on a raise, so a
+    bad build never corrupts next week's snapshot baseline. See the module
+    docstring / #364.
+
+    Args:
+        state: The already-loaded ``ProgramState`` (portfolio + IPS state).
+        ips_config: The program's policy — ``state.ips_config``, passed
+            explicitly since the caller has already confirmed it is not
+            ``None``.
+        as_of: The report date.
+        period_label: Human-readable period label for the report header.
+        export_dir: Shared state/export directory — read for market-data
+            cache resolution and the prior snapshot history.
+
+    Returns:
+        The assembled digest and its rendered markdown/HTML strings.
+
+    """
+    portfolio = state.portfolio
+    market_data = CboeFredProvider(
+        cache_dir=default_cache_dir(),
+        ttl=resolve_data_ttl(ips_config),
+        read_only=True,
+    )
+
+    shock = CrashShock.from_ips(ips_config.convexity)
+    crash_result = compute_crash_convexity(
+        portfolio,
+        shock=shock,
+        ips_convexity=ips_config.convexity,
+    )
+    market_env = assess_market_environment(
+        market_data,
+        ips_config.market_environment,
+    )
+    # One ledger, reused rather than re-derived (Batch 3b's rule): the
+    # digest's MarketContextSection.data_quality reads this same grade,
+    # so a stale hand-entered pricing input turns the digest's caveat
+    # exactly as it turns the live pages' banner (#367).
+    provenance_ledger = build_provenance_ledger(
+        market_env,
+        portfolio,
+        ips_config.pricing_inputs,
+        as_of=as_of,
+    )
+    carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics()
+    monetization_plan = build_monetization_plan(
+        portfolio,
+        ips_config,
+        market_env=market_env,
+    )
+    roll_records = evaluate_roll_status(portfolio, ips_config)
+
+    report = build_program_report(
+        portfolio=portfolio,
+        ips_config=ips_config,
+        crash_result=crash_result,
+        carry_metrics=carry_metrics,
+        market_env=market_env,
+        provenance_ledger=provenance_ledger,
+        period_label=period_label,
+        as_of=as_of,
+        monetization_plan=monetization_plan,
+    )
+
+    history = load_snapshot_history(export_dir, before=as_of)
+    digest = build_weekly_digest(
+        report=report,
+        roll_records=roll_records,
+        history=history,
+        as_of=as_of,
+        backup_heartbeat_warning=_read_backup_heartbeat_warning(export_dir),
+    )
+
+    return _RenderedDigest(
+        digest=digest,
+        markdown=render_weekly_digest_markdown(digest),
+        html=render_weekly_digest_html(digest),
+    )
+
+
+def _send_build_failure_alert(exc: Exception, *, as_of: date) -> None:
+    """Best-effort alert email when :func:`build_and_render` raised (#364).
+
+    Never raises: a failure while trying to report the original build
+    failure must not mask it. Missing/invalid SMTP env vars and a failed
+    send are both logged and swallowed here — the same posture
+    :func:`_send_digest_email` takes on the happy path, except this
+    function has no exit code of its own to report through, since
+    ``main()`` has already committed to returning ``_EXIT_BUILD_FAILED``
+    regardless of whether this alert gets out.
+
+    **Never pings the digest heartbeat.** Only a confirmed send of a real
+    digest does that (see ``heartbeat.py``'s module docstring) — a
+    build-failed run, like a refused or delivery-failed one, must leave
+    the check un-pinged. The heartbeat and this alert are independent
+    signals on purpose: if SMTP itself is the fault, this alert never
+    arrives either, and the heartbeat must not be traded away for a
+    redundant signal that can fail the exact same way.
+
+    Args:
+        exc: The exception :func:`build_and_render` raised.
+        as_of: The report date the failed build was for.
+
+    """
+    try:
+        host = os.environ[_SMTP_HOST_ENV_VAR]
+        port = int(os.environ[_SMTP_PORT_ENV_VAR])
+        username = os.environ[_SMTP_USERNAME_ENV_VAR]
+        password = os.environ[_SMTP_PASSWORD_ENV_VAR]
+        to_addr = os.environ[_REPORT_EMAIL_TO_ENV_VAR]
+        from_addr = os.environ[_REPORT_EMAIL_FROM_ENV_VAR]
+    except KeyError as env_exc:
+        _logger.warning(
+            "weekly_report: cannot send the build-failure alert — %s is "
+            "not set",
+            env_exc,
+        )
+        return
+    except ValueError:
+        _logger.warning(
+            "weekly_report: cannot send the build-failure alert — %s is "
+            "not a valid integer",
+            _SMTP_PORT_ENV_VAR,
+        )
+        return
+
+    detail = escape(f"{type(exc).__name__}: {exc}")
+    footer_html = "\n".join(
+        f'<p class="note">{escape(fact)}</p>' for fact in _footer_facts()
+    )
+    subject = f"Weekly Hedge Digest — FAILED to build ({as_of})"
+    body_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{escape(subject)}</title>
+<style>
+{HTML_STYLE}
+</style>
+</head>
+<body>
+
+<h1>Weekly Hedge Digest &mdash; FAILED to build</h1>
+<p>No digest was produced this week.</p>
+<p><strong>No snapshot was written</strong>, so next week's digest will
+compare across two weeks instead of one.</p>
+<p>For detail, see <code>~/deltadewa/logs/weekly_report.log</code> on the
+host, or RUNBOOK.md &sect;9.</p>
+<p class="note">technical detail: &ldquo;{detail}&rdquo;</p>
+
+<footer>
+{footer_html}
+</footer>
+
+</body>
+</html>"""
+
+    message = EmailMessage(
+        subject=subject,
+        html_body=body_html,
+        to_addr=to_addr,
+        from_addr=from_addr,
+    )
+    config = SmtpConfig(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+    )
+    try:
+        send_email(message, config=config)
+    except EmailDeliveryError as send_exc:
+        _logger.warning(
+            "weekly_report: build-failure alert send FAILED: %s",
+            send_exc,
+        )
+        return
+
+    _logger.info("weekly_report: build-failure alert emailed to %s", to_addr)
+    # #364: deliberately no ping(...) call on this path — see this
+    # function's docstring and heartbeat.py's module docstring for why.
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────
 
 
@@ -669,13 +906,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Build and write this week's digest.
 
     Returns:
-        Process exit code: ``0`` on success; ``1`` if refused (no IPS
-        policy, or an empty book — a report built from neither is not a
-        degraded report, it isn't a report); ``2`` if the digest was built
-        and written but ``--send-email`` was requested and delivery
-        failed (missing/invalid env vars, or an SMTP send failure) —
-        distinct from ``1`` since the report files did get written
-        successfully.
+        Process exit code: ``0`` on a confirmed send of a real digest (or,
+        without ``--send-email``, on a successful build+write); ``1`` if
+        refused (no IPS policy, or an empty book — a report built from
+        neither is not a degraded report, it isn't a report); ``2`` if the
+        digest was built and written but ``--send-email`` was requested and
+        delivery failed (missing/invalid env vars, or an SMTP send
+        failure) — distinct from ``1`` since the report files did get
+        written successfully; ``3`` if :func:`build_and_render` itself
+        raised (#364) — an input this module does not control failed
+        partway through the build, no files (including the snapshot) were
+        written, and — with ``--send-email`` — a best-effort plain-language
+        failure alert was sent in place of the digest. The digest heartbeat
+        (``DIGEST_HEARTBEAT_URL``) is pinged on **outcome 0 only**; ``1``,
+        ``2``, and ``3`` all leave it un-pinged.
 
     """
     logging.basicConfig(level=logging.INFO)
@@ -705,7 +949,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "build a policy-free report.",
             file=sys.stderr,
         )
-        return 1
+        return _EXIT_REFUSED
 
     portfolio = state.portfolio
     if not portfolio.positions:
@@ -713,83 +957,47 @@ def main(argv: Sequence[str] | None = None) -> int:
             "weekly_report: no positions in the book; load a portfolio first.",
             file=sys.stderr,
         )
-        return 1
+        return _EXIT_REFUSED
 
-    market_data = CboeFredProvider(
-        cache_dir=default_cache_dir(),
-        ttl=resolve_data_ttl(ips_config),
-        read_only=True,
-    )
-
-    shock = CrashShock.from_ips(ips_config.convexity)
-    crash_result = compute_crash_convexity(
-        portfolio,
-        shock=shock,
-        ips_convexity=ips_config.convexity,
-    )
-    market_env = assess_market_environment(
-        market_data,
-        ips_config.market_environment,
-    )
-    # One ledger, reused rather than re-derived (Batch 3b's rule): the
-    # digest's MarketContextSection.data_quality reads this same grade,
-    # so a stale hand-entered pricing input turns the digest's caveat
-    # exactly as it turns the live pages' banner (#367).
-    provenance_ledger = build_provenance_ledger(
-        market_env,
-        portfolio,
-        ips_config.pricing_inputs,
-        as_of=as_of,
-    )
-    carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics()
-    monetization_plan = build_monetization_plan(
-        portfolio,
-        ips_config,
-        market_env=market_env,
-    )
-    roll_records = evaluate_roll_status(portfolio, ips_config)
-
-    report = build_program_report(
-        portfolio=portfolio,
-        ips_config=ips_config,
-        crash_result=crash_result,
-        carry_metrics=carry_metrics,
-        market_env=market_env,
-        provenance_ledger=provenance_ledger,
-        period_label=period_label,
-        as_of=as_of,
-        monetization_plan=monetization_plan,
-    )
-
-    history = load_snapshot_history(args.export_dir, before=as_of)
-    digest = build_weekly_digest(
-        report=report,
-        roll_records=roll_records,
-        history=history,
-        as_of=as_of,
-        backup_heartbeat_warning=_read_backup_heartbeat_warning(
-            args.export_dir,
-        ),
-    )
+    try:
+        rendered = build_and_render(
+            state=state,
+            ips_config=ips_config,
+            as_of=as_of,
+            period_label=period_label,
+            export_dir=args.export_dir,
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Unanticipated on purpose: the point is that a raise this module
+        # did not foresee must not go unreported, matching
+        # panel_guard.safe_render's precedent (#363). No files — not even
+        # a partial one — are written below this point.
+        _logger.exception("weekly_report: digest body build FAILED")
+        print(
+            f"weekly_report: could not build the digest — {exc}",
+            file=sys.stderr,
+        )
+        if args.send_email:
+            _send_build_failure_alert(exc, as_of=as_of)
+        return _EXIT_BUILD_FAILED
 
     weekly_dir = _snapshot_dir(args.export_dir)
     weekly_dir.mkdir(parents=True, exist_ok=True)
     md_path = weekly_dir / f"digest-{as_of.isoformat()}.md"
     html_path = weekly_dir / f"digest-{as_of.isoformat()}.html"
-    html_text = render_weekly_digest_html(digest)
-    md_path.write_text(render_weekly_digest_markdown(digest), encoding="utf-8")
-    html_path.write_text(html_text, encoding="utf-8")
-    snapshot_path = _write_snapshot(args.export_dir, digest.snapshot)
+    md_path.write_text(rendered.markdown, encoding="utf-8")
+    html_path.write_text(rendered.html, encoding="utf-8")
+    snapshot_path = _write_snapshot(args.export_dir, rendered.digest.snapshot)
 
-    print(digest.headline)
+    print(rendered.digest.headline)
     print(f"Wrote {md_path}, {html_path}, {snapshot_path}")
 
     if args.send_email:
-        failure_code = _send_digest_email(digest, html_text, as_of)
+        failure_code = _send_digest_email(rendered.digest, rendered.html, as_of)
         if failure_code is not None:
             return failure_code
 
-    return 0
+    return _EXIT_OK
 
 
 def _send_digest_email(
@@ -801,8 +1009,8 @@ def _send_digest_email(
 
     Returns:
         ``None`` on a confirmed send; otherwise the exit code ``main()``
-        should return (``2`` — required env vars missing/invalid, or the
-        send itself failed).
+        should return (``_EXIT_SEND_FAILED`` — required env vars missing/
+        invalid, or the send itself failed).
 
     """
     try:
@@ -818,14 +1026,14 @@ def _send_digest_email(
             "the digest was written above but not sent.",
             file=sys.stderr,
         )
-        return 2
+        return _EXIT_SEND_FAILED
     except ValueError:
         print(
             f"weekly_report: --send-email requires {_SMTP_PORT_ENV_VAR} "
             "to be an integer; the digest was written above but not sent.",
             file=sys.stderr,
         )
-        return 2
+        return _EXIT_SEND_FAILED
 
     config = SmtpConfig(
         host=host,
@@ -844,7 +1052,7 @@ def _send_digest_email(
     except EmailDeliveryError as exc:
         _logger.error("weekly_report: email delivery FAILED: %s", exc)
         print(f"weekly_report: email delivery FAILED — {exc}", file=sys.stderr)
-        return 2
+        return _EXIT_SEND_FAILED
 
     _logger.info("weekly_report: digest emailed to %s", to_addr)
     ping(os.environ.get(_DIGEST_HEARTBEAT_ENV_VAR), label="digest")

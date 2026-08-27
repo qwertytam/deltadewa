@@ -14,7 +14,16 @@ because they fail independently and mean different things when overdue:
 - **Digest** pings only once the weekly email is confirmed sent. This is
   the one where silence is most dangerous: a missing weekly email is
   exactly what gets rationalised as "quiet week," so an overdue digest
-  check must alarm.
+  check must alarm. That contract is exact and total (#364): every other
+  outcome of a digest run — refused (exit 1, no IPS policy or an empty
+  book), built-and-written-but-delivery-failed (exit 2), and build-failed
+  (exit 3, ``weekly_report.build_and_render`` itself raised) — leaves this
+  check un-pinged, including when a build failure sends its own
+  plain-language alert email (``weekly_report._send_build_failure_alert``).
+  The heartbeat and that alert email are independent signals on purpose:
+  if SMTP itself is the fault, the alert never arrives either, so the
+  heartbeat must not be traded away for a redundant signal that can fail
+  the exact same way.
 
 Both checks live at top level (not inside ``marketdata/`` or
 ``reporting/``) because both jobs share this one pinger.
