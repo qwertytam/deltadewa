@@ -14,6 +14,7 @@ from html import escape
 from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.carry import carry_vs_budget
+from deltadewa.analysis.crash_repricing import describe_expired_legs
 from deltadewa.analysis.decision_matrix import (
     DecisionVerdict,
     decision_matrix,
@@ -115,6 +116,13 @@ class ProtectionSection:
         meets_target: True when convexity_pct is within the target band.
         premium_paid: Total put premium used as the payoff denominator.
         premium_basis: ``"paid"`` or ``"mark (approx)"``.
+        excluded_expired_legs: One human-readable label per long-put leg
+            excluded from the figures above because it was already
+            expired (#375) — see
+            ``analysis.crash_payoff.CrashConvexityResult.excluded_expired``
+            and ``analysis.crash_repricing.describe_expired_legs``. Empty
+            ``()`` when nothing was excluded — the common case, and every
+            existing caller's default.
 
     """
 
@@ -126,6 +134,7 @@ class ProtectionSection:
     meets_target: bool | None
     premium_paid: float
     premium_basis: str
+    excluded_expired_legs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -498,8 +507,12 @@ def build_protection_section(
     """Build the ProtectionSection from a CrashConvexityResult.
 
     Public (no leading underscore): reused by ``/monitor``'s IPS
-    compliance strip (#298) — see ``build_cost_section``.
+    compliance strip (#298) — see ``build_cost_section``. Names
+    ``crash_result.excluded_expired`` (#375) — hedge-only, exactly the
+    long-put legs the figures above dropped for being already expired —
+    on both return branches.
     """
+    excluded_expired_legs = describe_expired_legs(crash_result.excluded_expired)
     if crash_result.ips_convexity is None:
         return ProtectionSection(
             payoff_ratio=crash_result.payoff_ratio,
@@ -510,6 +523,7 @@ def build_protection_section(
             meets_target=None,
             premium_paid=crash_result.premium_paid,
             premium_basis=crash_result.premium_basis.value,
+            excluded_expired_legs=excluded_expired_legs,
         )
 
     ips_conv = crash_result.ips_convexity
@@ -531,6 +545,7 @@ def build_protection_section(
         meets_target=matching.meets_target if matching else None,
         premium_paid=crash_result.premium_paid,
         premium_basis=crash_result.premium_basis.value,
+        excluded_expired_legs=excluded_expired_legs,
     )
 
 
@@ -695,6 +710,53 @@ def _html_or_dash(value: str | None) -> str:
     return escape(value) if value is not None else "&mdash;"
 
 
+_MAX_NAMED_EXPIRED_LEGS: Final[int] = 3
+
+
+def expired_legs_caveat(legs: tuple[str, ...]) -> str | None:
+    """Build the #375 plain-text caveat naming excluded expired legs.
+
+    Public (no leading underscore): reused by ``/monitor``'s compliance
+    strip, which renders the same sentence — never a second wording of
+    its own — as a ``plain-language`` paragraph.
+
+    Args:
+        legs: ``ProtectionSection.excluded_expired_legs``. Each entry is
+            one leg label from
+            ``analysis.crash_repricing.describe_expired_legs``.
+
+    Returns:
+        ``None`` when *legs* is empty (the common case — nothing to
+        caveat). Otherwise one sentence, singular/plural as appropriate,
+        naming up to :data:`_MAX_NAMED_EXPIRED_LEGS` legs and summarising
+        the rest as ``"...and N more."``.
+
+    """
+    if not legs:
+        return None
+    noun = "leg" if len(legs) == 1 else "legs"
+    shown = legs[:_MAX_NAMED_EXPIRED_LEGS]
+    remainder = len(legs) - len(shown)
+    named = ", ".join(shown)
+    if remainder > 0:
+        named += f", …and {remainder} more"
+    return f"Convexity excludes {len(legs)} expired {noun}: {named}."
+
+
+def _expired_caveat_html(legs: tuple[str, ...]) -> str:
+    """HTML ``<div class="caveat">`` for :func:`expired_legs_caveat`.
+
+    ``""`` when *legs* is empty — matching the empty-string convention the
+    data-quality caveat already uses in :func:`render_html_body`, so an
+    unconditional f-string insertion renders nothing rather than a blank
+    ``<div>``.
+    """
+    caveat = expired_legs_caveat(legs)
+    if caveat is None:
+        return ""
+    return f'<div class="caveat">{escape(caveat)}</div>'
+
+
 # ── Markdown renderer ─────────────────────────────────────────────────────
 
 
@@ -781,6 +843,9 @@ def render_markdown(report: ProgramReport) -> str:
         f"| Status | {_pass_fail_md(p.meets_target)} |",
         "",
     ]
+    expired_caveat = expired_legs_caveat(p.excluded_expired_legs)
+    if expired_caveat is not None:
+        lines += [f"> {expired_caveat}", ""]
 
     # ── 3. Market Context ────────────────────────────────────────────────
     mc = report.market_context
@@ -1054,6 +1119,8 @@ def render_html_body(report: ProgramReport) -> str:
             " not live market data.</div>"
         )
 
+    expired_caveat_html = _expired_caveat_html(p.excluded_expired_legs)
+
     ratio_str = (
         f"{p.payoff_ratio:.1f}&times;"
         if p.payoff_ratio is not None
@@ -1201,6 +1268,7 @@ over {rf.elapsed_days} day(s)</td></tr>
 <tr><td>IPS convexity target</td><td>{target_band_html}</td></tr>
 <tr><td>Status</td><td>{_pass_fail_html(p.meets_target)}</td></tr>
 </table>
+{expired_caveat_html}
 
 <h2>3. Market Context</h2>
 {caveat_html}

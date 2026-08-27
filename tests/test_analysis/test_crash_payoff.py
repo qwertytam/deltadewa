@@ -315,6 +315,68 @@ class TestComputeCrashConvexity:
         assert len(set(calls)) == n
 
 
+class TestExcludedExpired:
+    """CrashConvexityResult.excluded_expired names dropped legs (#375)."""
+
+    def _shock(self) -> CrashShock:
+        return CrashShock(
+            crash_scenario_pct=0.0,
+            crash_vol_shock=0.0,
+            skew_steepening=0.0,
+            skew_reference_delta=0.10,
+        )
+
+    def test_no_expired_legs_yields_empty_tuple(self) -> None:
+        portfolio = _make_long_put_portfolio()
+
+        result = compute_crash_convexity(portfolio, shock=self._shock())
+
+        assert result.excluded_expired == ()
+
+    def test_expired_long_put_is_named(self) -> None:
+        """Hedge-only: an expired long put is named on the result."""
+        portfolio = _make_long_put_portfolio()
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=datetime.now(tz=UTC) - timedelta(days=5),
+            quantity=3,
+            option_type=OptionType.PUT,
+        )
+
+        result = compute_crash_convexity(portfolio, shock=self._shock())
+
+        assert len(result.excluded_expired) == 1
+        assert result.excluded_expired[0].quantity == 3
+
+    def test_expired_short_put_is_not_named(self) -> None:
+        """A short leg's expiry was never in the long-puts figure."""
+        portfolio = _make_long_put_portfolio()
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=datetime.now(tz=UTC) - timedelta(days=5),
+            quantity=-3,
+            option_type=OptionType.PUT,
+        )
+
+        result = compute_crash_convexity(portfolio, shock=self._shock())
+
+        assert result.excluded_expired == ()
+
+    def test_expired_call_is_not_named(self) -> None:
+        """An expired call was never in the long-puts figure either."""
+        portfolio = _make_long_put_portfolio()
+        portfolio.add_position(
+            strike_price=90.0,
+            maturity_date=datetime.now(tz=UTC) - timedelta(days=5),
+            quantity=3,
+            option_type=OptionType.CALL,
+        )
+
+        result = compute_crash_convexity(portfolio, shock=self._shock())
+
+        assert result.excluded_expired == ()
+
+
 class TestNetProtectivePremium:
     """Tests for _net_protective_premium."""
 

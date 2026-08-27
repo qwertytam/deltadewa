@@ -10,6 +10,7 @@ from deltadewa.analysis.crash_payoff import (
     CrashScenarioRow,
     PremiumBasis,
 )
+from deltadewa.analysis.crash_repricing import describe_expired_legs
 from deltadewa.analysis.market_environment import (
     DataQuality,
     HedgeCostVerdict,
@@ -25,7 +26,7 @@ from deltadewa.analysis.provenance import (
     ProvenanceLedger,
     build_provenance_ledger,
 )
-from deltadewa.constants import ExerciseStyle
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
     IpsConfig,
@@ -44,6 +45,8 @@ from deltadewa.reporting.program_report import (
     HTML_STYLE,
     ProgramReport,
     build_program_report,
+    build_protection_section,
+    expired_legs_caveat,
     render_html,
     render_html_body,
     render_markdown,
@@ -85,6 +88,22 @@ def _make_ips_config(
     )
 
 
+def _expired_put_position() -> object:
+    """One long put whose maturity is already past the valuation date."""
+    portfolio = OptionPortfolio(
+        spot_price=5_000.0,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+        valuation_date=datetime.datetime(2026, 6, 24, tzinfo=datetime.UTC),
+    )
+    portfolio.add_position(
+        strike_price=4_500.0,
+        maturity_date=datetime.datetime(2026, 5, 1, tzinfo=datetime.UTC),
+        quantity=5,
+        option_type=OptionType.PUT,
+    )
+    return portfolio.positions[0]
+
+
 def _make_crash_result(
     *,
     ips_convexity: IpsConvexity | None = _IPS_CONVEXITY,
@@ -92,6 +111,7 @@ def _make_crash_result(
     convexity_pct: float = 15.0,
     meets_target: bool = True,
     premium_paid: float = 10_000.0,
+    excluded_expired: tuple = (),
 ) -> CrashConvexityResult:
     rows = []
     if ips_convexity is not None:
@@ -112,6 +132,7 @@ def _make_crash_result(
         premium_paid=premium_paid,
         premium_basis=PremiumBasis.PAID,
         ips_convexity=ips_convexity,
+        excluded_expired=excluded_expired,
     )
 
 
@@ -259,6 +280,74 @@ def _build(
         as_of=_AS_OF,
         monetization_plan=monetization_plan,
     )
+
+
+# ── expired_legs_caveat / build_protection_section (#375) ─────────────────
+
+
+class TestExpiredLegsCaveat:
+    """Tests for expired_legs_caveat."""
+
+    def test_none_when_no_legs(self) -> None:
+        assert expired_legs_caveat(()) is None
+
+    def test_singular_for_one_leg(self) -> None:
+        text = expired_legs_caveat(("4,500 PUT, expired 2026-05-01",))
+        assert text == (
+            "Convexity excludes 1 expired leg: 4,500 PUT, expired 2026-05-01."
+        )
+
+    def test_plural_for_multiple_legs(self) -> None:
+        text = expired_legs_caveat(
+            (
+                "4,500 PUT, expired 2026-05-01",
+                "4,600 PUT, expired 2026-05-15",
+            ),
+        )
+        assert text is not None
+        assert text.startswith("Convexity excludes 2 expired legs: ")
+
+    def test_caps_at_three_named_legs(self) -> None:
+        legs = tuple(f"leg-{i}" for i in range(5))
+        text = expired_legs_caveat(legs)
+        assert text is not None
+        assert "leg-0" in text
+        assert "leg-1" in text
+        assert "leg-2" in text
+        assert "leg-3" not in text
+        assert "…and 2 more" in text
+
+
+class TestBuildProtectionSectionExcludedExpired:
+    """build_protection_section threads excluded_expired through (#375)."""
+
+    def test_empty_when_nothing_excluded(self) -> None:
+        result = _make_crash_result()
+        section = build_protection_section(result)
+        assert section.excluded_expired_legs == ()
+
+    def test_names_excluded_expired_legs(self) -> None:
+        position = _expired_put_position()
+        result = _make_crash_result(excluded_expired=(position,))
+
+        section = build_protection_section(result)
+
+        assert section.excluded_expired_legs == describe_expired_legs(
+            (position,),
+        )
+        assert len(section.excluded_expired_legs) == 1
+
+    def test_names_excluded_expired_legs_without_ips_convexity(self) -> None:
+        """The no-IPS branch also threads excluded_expired (#375)."""
+        position = _expired_put_position()
+        result = _make_crash_result(
+            ips_convexity=None,
+            excluded_expired=(position,),
+        )
+
+        section = build_protection_section(result)
+
+        assert len(section.excluded_expired_legs) == 1
 
 
 # ── build_program_report ──────────────────────────────────────────────────
@@ -657,6 +746,27 @@ class TestRenderMarkdown:
         assert "STALE" in md
         assert "reference values" in md
 
+    def test_expired_legs_caveat_absent_by_default(self) -> None:
+        """No #375 caveat when no legs were excluded."""
+        md = render_markdown(_make_full_report())
+        assert "Convexity excludes" not in md
+
+    def test_expired_legs_caveat_present_when_legs_excluded(self) -> None:
+        """The #375 caveat names the excluded expired leg, after §2."""
+        report = _make_full_report()
+        report = dataclasses.replace(
+            report,
+            protection=dataclasses.replace(
+                report.protection,
+                excluded_expired_legs=("4,500 PUT, expired 2026-05-01",),
+            ),
+        )
+        md = render_markdown(report)
+        assert "Convexity excludes 1 expired leg" in md
+        assert "4,500 PUT, expired 2026-05-01" in md
+        assert md.index("Convexity excludes") > md.index("## 2. Protection")
+        assert md.index("Convexity excludes") < md.index("## 3. Market Context")
+
     def test_monetization_placeholder_present(self) -> None:
         """The monetization placeholder string appears in the output."""
         md = render_markdown(_make_full_report())
@@ -816,6 +926,31 @@ class TestRenderHtml:
         html = render_html(_build(data_quality=DataQuality.STALE))
         assert 'class="caveat"' in html
         assert "STALE" in html
+
+    def test_expired_legs_caveat_absent_by_default(self) -> None:
+        """No #375 caveat when no legs were excluded."""
+        html = render_html(_make_full_report())
+        assert "Convexity excludes" not in html
+
+    def test_expired_legs_caveat_present_when_legs_excluded(self) -> None:
+        """The #375 caveat names the excluded expired leg, after §2."""
+        report = _make_full_report()
+        report = dataclasses.replace(
+            report,
+            protection=dataclasses.replace(
+                report.protection,
+                excluded_expired_legs=("4,500 PUT, expired 2026-05-01",),
+            ),
+        )
+        html = render_html(report)
+        assert "Convexity excludes 1 expired leg" in html
+        assert "4,500 PUT, expired 2026-05-01" in html
+        assert html.index("Convexity excludes") > html.index(
+            "<h2>2. Protection</h2>",
+        )
+        assert html.index("Convexity excludes") < html.index(
+            "<h2>3. Market Context</h2>",
+        )
 
     def test_pass_class_present(self) -> None:
         """HTML class 'pass' appears for passing metrics."""
