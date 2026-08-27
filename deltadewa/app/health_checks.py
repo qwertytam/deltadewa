@@ -9,7 +9,7 @@ the fix's shape, not a general config auditor: a small, explicit set of
 runtime assertions on the objects the *real* boot path already built,
 composed once per request.
 
-**Six checks, not 49.** ``boot-wiring-checker`` inventoried the full IPS —
+**Seven checks, not 49.** ``boot-wiring-checker`` inventoried the full IPS —
 1 UNWIRED (``pricing.exercise_style``, fixed by #295/#361), 1 ORPHAN
 (``triggers.rally_rebalance_pct``, #297 — deliberately untouched here), 46
 READ-ONLY-CONSUMER. Reporting all 49 from ``/health`` would be noise; the
@@ -43,6 +43,16 @@ surface show nothing, or a number the operator did not configure?*
   resolved market-data cache directory, not ``os.access()`` (permission
   bits don't catch a full disk or a remounted-read-only filesystem, both
   live droplet failure modes, and lie under root).
+- ``cache_manifest_matches`` — #377/#378: reads the manifest the refresh
+  job writes on every run and compares its recorded ``cache_dir`` against
+  what this app process itself resolved. ``default_cache_dir()``'s
+  resolution *logic* is shared between ``app`` and ``jobs``, but nothing
+  previously verified the two processes' resolved paths actually agree
+  at runtime — a silent divergence there would mean the refresh job
+  keeps a cache warm that this app never reads. ``compose.yaml``
+  hardcodes both ``DELTADEWA_CACHE_DIR`` literals identically today, so
+  this is a detector for future drift (#378 is scoped P2), not evidence
+  of a divergence happening now.
 
 **Not checked: ``triggers.rally_rebalance_pct`` (#297).** Per boot-wiring-
 checker's own finding, an orphan key never fails at boot — it just does
@@ -68,7 +78,10 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Final
+
+from deltadewa.marketdata import read_cache_manifest
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -88,6 +101,7 @@ BOOT_WIRING_CHECKS: Final[tuple[str, ...]] = (
     "state_persisted",
     "state_file_undisturbed",
     "cache_dir_writable",
+    "cache_manifest_matches",
 )
 
 
@@ -271,6 +285,88 @@ def check_cache_dir_writable(cache_dir: Path) -> CheckResult:
     )
 
 
+def check_cache_manifest_matches(cache_dir: Path) -> CheckResult:
+    """#377/#378: confirm the refresh job's manifest matches this resolution.
+
+    One small file read plus one ``Path.exists()`` — no fetch, no
+    reprice, O(1) like every other check here (see the module docstring).
+
+    ``default_cache_dir()``'s resolution *logic* is shared between
+    ``app`` and ``jobs``, but the two ``compose.yaml`` literals that
+    actually feed each process's ``DELTADEWA_CACHE_DIR`` are not verified
+    to agree by anything at runtime — this check is that runtime
+    cross-check. It reads the manifest ``marketdata.refresh`` writes on
+    every run and compares its recorded ``cache_dir`` against what this
+    app process itself resolved.
+
+    ``compose.yaml`` hardcodes both literals identically today, so a
+    mismatch is not a live failure mode — this is a detector for future
+    drift (#378 is scoped P2), not evidence of one happening now.
+    """
+    manifest = read_cache_manifest(cache_dir)
+    if manifest is None:
+        return CheckResult(
+            name="cache_manifest_matches",
+            ok=False,
+            detail=(
+                f"no refresh manifest found at {cache_dir} — either the "
+                "refresh job (#378) has not run against this cache_dir "
+                "yet, or it resolved a different DELTADEWA_CACHE_DIR "
+                "than this app process did; this check cannot "
+                "distinguish the two"
+            ),
+            value={
+                "recorded_cache_dir": None,
+                "written_at": None,
+                "resolved_cache_dir": str(cache_dir),
+            },
+        )
+
+    matches = manifest.cache_dir == str(cache_dir)
+    if matches:
+        detail = (
+            "refresh manifest matches this app's resolved cache_dir "
+            f"(written_at={manifest.written_at}"
+            f"{_age_suffix(manifest.written_at)})"
+        )
+    else:
+        detail = (
+            f"refresh manifest recorded cache_dir={manifest.cache_dir!r} "
+            f"but this app process resolved cache_dir={str(cache_dir)!r} "
+            "— app and jobs may be resolving DELTADEWA_CACHE_DIR "
+            "differently"
+        )
+    return CheckResult(
+        name="cache_manifest_matches",
+        ok=matches,
+        detail=detail,
+        value={
+            "recorded_cache_dir": manifest.cache_dir,
+            "written_at": manifest.written_at,
+            "resolved_cache_dir": str(cache_dir),
+        },
+    )
+
+
+def _age_suffix(written_at: str) -> str:
+    """Render ``", ~Nh ago"`` for a manifest's ``written_at``, or ``""``.
+
+    Wall-clock provenance display — exactly like
+    ``cboe_fred_provider.py``'s own ``fetched_at`` staleness math, not a
+    ``clock.py`` program-day computation — so ``datetime.now()`` is
+    correct here, not a violation of the program-clock rule. Never
+    raises: a malformed ``written_at`` (the manifest file itself is only
+    tolerantly parsed, not validated) degrades to no age shown rather
+    than a broken ``/health``.
+    """
+    try:
+        parsed = datetime.fromisoformat(written_at)
+    except ValueError:
+        return ""
+    age_hours = (datetime.now(tz=UTC) - parsed).total_seconds() / 3600
+    return f", ~{age_hours:.1f}h ago"
+
+
 def run_checks(
     state: ProgramState,
     *,
@@ -294,6 +390,7 @@ def run_checks(
         check_state_persisted(state),
         check_state_file_undisturbed(state),
         check_cache_dir_writable(cache_dir),
+        check_cache_manifest_matches(cache_dir),
     )
 
 
