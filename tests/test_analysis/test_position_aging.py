@@ -34,7 +34,7 @@ def _make_ips_config(
     *,
     expiry_urgent_days: int = 7,
     expiry_soon_days: int = 21,
-    roll_time_months: float = 9.0,
+    roll_at_months_remaining: float = 9.0,
     roll_review_buffer: float = 1.5,
 ) -> IpsConfig:
     return IpsConfig(
@@ -48,10 +48,10 @@ def _make_ips_config(
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=20.0),
         triggers=IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=roll_time_months,
+            roll_at_months_remaining=roll_at_months_remaining,
             rally_rebalance_pct=15.0,
             strike_drift_max_otm_pct=45.0,
             roll_review_buffer=roll_review_buffer,
@@ -132,10 +132,10 @@ class TestExpiryBoundaries:
 
         assert boundaries.soon_days == 30
 
-    def test_roll_time_months_moves_the_roll_due_boundary(self) -> None:
-        """Test the ROLL DUE boundary tracks roll_time_months."""
+    def test_roll_at_months_remaining_moves_the_roll_due_boundary(self) -> None:
+        """Test the ROLL DUE boundary tracks roll_at_months_remaining."""
         boundaries = expiry_boundaries(
-            _make_ips_config(roll_time_months=12.0).triggers,
+            _make_ips_config(roll_at_months_remaining=12.0).triggers,
         )
 
         assert boundaries.roll_due_days == 12 * const.CALENDAR_DAYS_PER_MONTH
@@ -153,7 +153,7 @@ class TestExpiryBoundaries:
         boundaries = expiry_boundaries(
             _make_ips_config(
                 expiry_soon_days=60,
-                roll_time_months=0.5,
+                roll_at_months_remaining=0.5,
                 roll_review_buffer=1.0,
             ).triggers,
         )
@@ -207,7 +207,7 @@ class TestClassifyExpiryBucket:
     def test_roll_due_edge_holds_at_twelve_months(self) -> None:
         """Test the ROLL DUE edge at the top of the handbook's 9-12 band."""
         boundaries = expiry_boundaries(
-            _make_ips_config(roll_time_months=12.0).triggers,
+            _make_ips_config(roll_at_months_remaining=12.0).triggers,
         )
 
         assert (

@@ -83,10 +83,10 @@ def _make_ips(
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=20.0),
         triggers=IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             rally_rebalance_pct=15.0,
             strike_drift_max_otm_pct=45.0,
         ),
@@ -183,7 +183,7 @@ class TestCrashScenarioSingleSource:
             ips_convexity=_make_ips(_DEEP_PCT).convexity,
         )
 
-        assert shallow.payoff_ratio != deep.payoff_ratio
+        assert shallow.payoff_vs_premium != deep.payoff_vs_premium
 
     def test_roll_trigger_moves_with_scenario(self) -> None:
         """evaluate_roll_status's crash convexity tracks the IPS move."""

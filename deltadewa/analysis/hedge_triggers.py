@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 import deltadewa.constants as const
-from deltadewa.analysis.health import delta_drift_from_target
+from deltadewa.analysis.health import delta_deviation_from_target
 from deltadewa.clock import days_between
 
 if TYPE_CHECKING:
@@ -81,14 +81,16 @@ class HedgeTriggerThresholds:
     Parameters
     ----------
     target_delta_ratio_pct:
-        Intended net-delta-to-equity ratio (%) the book is run at; delta drift
-        is measured as deviation from it (default 90 %).
-    delta_drift_warn_pct:
-        Drift (pp from target) at which a MONITOR warning is raised (default
-        5 pp).
-    delta_drift_action_pct:
-        Drift (pp from target) at which an ACTION REQUIRED alert is raised
-        (default 10 pp).
+        Intended net-delta-to-equity ratio (%) the book is run at; net delta's
+        deviation from it is measured against the two bands below. Renamed
+        from "delta drift" (4.2, #335) — the handbook's own "Delta Drift" is
+        a different metric (Part X §13, ``scenarios.calculate_delta_drift``).
+    delta_ratio_deviation_warn_pct:
+        Deviation (pp from target) at which a MONITOR warning is raised
+        (default 5 pp).
+    delta_ratio_deviation_action_pct:
+        Deviation (pp from target) at which an ACTION REQUIRED alert is
+        raised (default 10 pp).
     expiry_urgent_days:
         Days-to-expiry below which a position is classified as URGENT
         (default 7 days).
@@ -110,8 +112,8 @@ class HedgeTriggerThresholds:
     """
 
     target_delta_ratio_pct: float = 90.0
-    delta_drift_warn_pct: float = 5.0
-    delta_drift_action_pct: float = 10.0
+    delta_ratio_deviation_warn_pct: float = 5.0
+    delta_ratio_deviation_action_pct: float = 10.0
     expiry_urgent_days: int = 7
     expiry_soon_days: int = 21
     theta_cost_excellent_pct: float = 1.0
@@ -127,8 +129,9 @@ class HedgeTriggerThresholds:
         value is left on a dataclass literal.
 
         Note:
-            This is *not* the whole of ``IpsTriggers``. ``roll_time_months``,
-            ``strike_drift_max_otm_pct``, ``strike_drift_review_fraction``
+            This is *not* the whole of ``IpsTriggers``.
+            ``roll_at_months_remaining``, ``strike_drift_max_otm_pct``,
+            ``strike_drift_review_fraction``
             and ``roll_review_buffer`` are roll policy, consumed by
             ``roll_planner``/``roll_status`` rather than here. But
             ``rally_rebalance_pct`` is consumed by **nothing** — the
@@ -141,8 +144,8 @@ class HedgeTriggerThresholds:
         """
         return cls(
             target_delta_ratio_pct=triggers.target_delta_ratio_pct,
-            delta_drift_warn_pct=triggers.delta_drift_warn_pct,
-            delta_drift_action_pct=triggers.delta_drift_action_pct,
+            delta_ratio_deviation_warn_pct=triggers.delta_ratio_deviation_warn_pct,
+            delta_ratio_deviation_action_pct=triggers.delta_ratio_deviation_action_pct,
             expiry_urgent_days=triggers.expiry_urgent_days,
             expiry_soon_days=triggers.expiry_soon_days,
             theta_cost_excellent_pct=triggers.theta_cost_excellent_pct,
@@ -201,7 +204,7 @@ class HedgeTriggerSet:
     as a whole, and the two sets are never merged.
 
     Attributes:
-        delta: Net-delta drift vs the IPS target hedge ratio.
+        delta: Net delta's deviation vs the IPS target hedge ratio.
         expiry: Nearest expiry vs the URGENT / SOON windows.
         theta: Annualised carry cost vs the EXCELLENT / ACCEPTABLE bands.
         gamma: Net-delta drift per 1% spot move vs the gamma bands.
@@ -229,7 +232,7 @@ class HedgeTriggerResult:
 
     Attributes
     ----------
-    delta_drift_pct:
+    delta_ratio_deviation_pct:
         Signed deviation from the target hedge ratio, in percentage points
         (0 = at target), or ``None`` when ``underlying_quantity`` is unset and
         the metric is unavailable.
@@ -252,7 +255,7 @@ class HedgeTriggerResult:
 
     """
 
-    delta_drift_pct: float | None
+    delta_ratio_deviation_pct: float | None
     days_to_nearest_expiry: int
     near_expiry_count: int
     theta_cost_pct: float | None
@@ -272,12 +275,17 @@ class HedgeTriggerResult:
 
 
 def _delta_reason(
-    delta_drift_pct: float | None,
+    delta_ratio_deviation_pct: float | None,
     t: HedgeTriggerThresholds,
 ) -> HedgeTriggerReason:
-    """Band net-delta drift against the IPS target hedge ratio."""
-    label = "Delta drift"
-    if delta_drift_pct is None:
+    """Band net delta's deviation against the IPS target hedge ratio.
+
+    Labelled "Net delta vs target" (4.2, #335) — not "Delta drift", which is
+    the handbook's own name for a different figure (Part X §13,
+    ``/design``'s Delta drift panel).
+    """
+    label = "Net delta vs target"
+    if delta_ratio_deviation_pct is None:
         return HedgeTriggerReason(
             label=label,
             status=TriggerStatus.UNAVAILABLE,
@@ -288,15 +296,15 @@ def _delta_reason(
         )
 
     reason = (
-        f"{delta_drift_pct:+.1f}pp from the "
+        f"{delta_ratio_deviation_pct:+.1f}pp from the "
         f"{t.target_delta_ratio_pct:.0f}% target; monitor past "
-        f"{t.delta_drift_warn_pct:.0f}pp, act past "
-        f"{t.delta_drift_action_pct:.0f}pp"
+        f"{t.delta_ratio_deviation_warn_pct:.0f}pp, act past "
+        f"{t.delta_ratio_deviation_action_pct:.0f}pp"
     )
-    drift = abs(delta_drift_pct)
-    if drift < t.delta_drift_warn_pct:
+    drift = abs(delta_ratio_deviation_pct)
+    if drift < t.delta_ratio_deviation_warn_pct:
         return HedgeTriggerReason(label, TriggerStatus.OK, reason)
-    if drift < t.delta_drift_action_pct:
+    if drift < t.delta_ratio_deviation_action_pct:
         return HedgeTriggerReason(label, TriggerStatus.MONITOR, reason)
     return HedgeTriggerReason(label, TriggerStatus.ACTION, reason)
 
@@ -408,7 +416,7 @@ def evaluate_hedge_trigger_set(
     now = portfolio.valuation_date
     stats = portfolio.summary_stats()
 
-    delta_drift_pct = delta_drift_from_target(
+    delta_ratio_deviation_pct = delta_deviation_from_target(
         stats["net_delta"],
         stats["underlying_quantity"],
         t.target_delta_ratio_pct,
@@ -449,7 +457,7 @@ def evaluate_hedge_trigger_set(
 
     actions = _build_action_list(
         stats,
-        delta_drift_pct,
+        delta_ratio_deviation_pct,
         near_expiry_positions,
         days_to_nearest_expiry,
         theta_cost_pct,
@@ -458,12 +466,12 @@ def evaluate_hedge_trigger_set(
     )
 
     return HedgeTriggerSet(
-        delta=_delta_reason(delta_drift_pct, t),
+        delta=_delta_reason(delta_ratio_deviation_pct, t),
         expiry=_expiry_reason(days_to_nearest_expiry, t),
         theta=_theta_reason(theta_cost_pct, t),
         gamma=_gamma_reason(gamma_drift, t),
         metrics=HedgeTriggerResult(
-            delta_drift_pct=delta_drift_pct,
+            delta_ratio_deviation_pct=delta_ratio_deviation_pct,
             days_to_nearest_expiry=days_to_nearest_expiry,
             near_expiry_count=len(near_expiry_positions),
             theta_cost_pct=theta_cost_pct,
@@ -528,7 +536,7 @@ def evaluate_hedge_triggers(
 
     _print_delta_trigger(
         stats,
-        metrics.delta_drift_pct,
+        metrics.delta_ratio_deviation_pct,
         triggers.delta.status,
         reporter,
         t,
@@ -583,44 +591,48 @@ def _shares_to_target(
 
 def _print_delta_trigger(  # pylint: disable=too-many-arguments  # a printer over one already-banded trigger; every argument is a distinct print input
     stats: dict[str, Any],
-    delta_drift_pct: float | None,
+    delta_ratio_deviation_pct: float | None,
     status: TriggerStatus,
     reporter: ConsoleReporter,
     t: HedgeTriggerThresholds,
 ) -> None:
     print("1️⃣  DELTA HEDGE EFFECTIVENESS:")
     reporter.divider()
-    if delta_drift_pct is None or status is TriggerStatus.UNAVAILABLE:
+    if delta_ratio_deviation_pct is None or status is TriggerStatus.UNAVAILABLE:
         reporter.warning(
-            "    Delta drift: unavailable - no underlying_quantity set",
+            "    Net delta vs target: unavailable - no underlying_quantity set",
         )
         print("     → Set the equity position to measure the hedge ratio")
         print()
         return
 
-    drift_label = (
-        f"    Delta drift: {delta_drift_pct:+.1f}pp from "
+    deviation_label = (
+        f"    Net delta vs target: {delta_ratio_deviation_pct:+.1f}pp from "
         f"{t.target_delta_ratio_pct:.0f}% target"
     )
     if status is TriggerStatus.OK:
-        reporter.success(f"{drift_label} - ON TARGET")
+        reporter.success(f"{deviation_label} - ON TARGET")
         print("     → Hedge ratio is at target, no action needed")
     elif status is TriggerStatus.MONITOR:
-        direction = "under-hedged" if delta_drift_pct > 0 else "over-hedged"
-        reporter.warning(f"{drift_label} - MONITOR")
+        direction = (
+            "under-hedged" if delta_ratio_deviation_pct > 0 else "over-hedged"
+        )
+        reporter.warning(f"{deviation_label} - MONITOR")
         print(
-            f"     → {direction}; rebalance if drift exceeds "
-            f"{t.delta_drift_action_pct:.0f}pp",
+            f"     → {direction}; rebalance if deviation exceeds "
+            f"{t.delta_ratio_deviation_action_pct:.0f}pp",
         )
         print(
             f"     → Current net delta: {stats['net_delta']:.0f} "
             f"vs {stats['underlying_quantity']:.0f} equity",
         )
     else:
-        direction = "under-hedged" if delta_drift_pct > 0 else "over-hedged"
+        direction = (
+            "under-hedged" if delta_ratio_deviation_pct > 0 else "over-hedged"
+        )
         shares = _shares_to_target(stats, t)
         verb = "Buy" if shares > 0 else "Sell"
-        reporter.error(f"{drift_label} - ACTION REQUIRED")
+        reporter.error(f"{deviation_label} - ACTION REQUIRED")
         print(f"     → Hedge is {direction} vs target!")
         print(
             f"     → {verb} {abs(shares):.0f} shares to restore the "
@@ -792,7 +804,7 @@ def _print_gamma_trigger(
 
 def _build_action_list(
     stats: dict[str, Any],
-    delta_drift_pct: float | None,
+    delta_ratio_deviation_pct: float | None,
     near_expiry_positions: list[Any],
     days_to_nearest_expiry: int,
     theta_cost_pct: float | None,
@@ -814,8 +826,8 @@ def _build_action_list(
             ),
         )
     if (
-        delta_drift_pct is not None
-        and abs(delta_drift_pct) > t.delta_drift_action_pct
+        delta_ratio_deviation_pct is not None
+        and abs(delta_ratio_deviation_pct) > t.delta_ratio_deviation_action_pct
     ):
         shares = _shares_to_target(stats, t)
         actions.append(
@@ -840,17 +852,18 @@ def _build_action_list(
             ),
         )
     if (
-        delta_drift_pct is not None
-        and t.delta_drift_warn_pct
-        < abs(delta_drift_pct)
-        <= t.delta_drift_action_pct
+        delta_ratio_deviation_pct is not None
+        and t.delta_ratio_deviation_warn_pct
+        < abs(delta_ratio_deviation_pct)
+        <= t.delta_ratio_deviation_action_pct
     ):
         actions.append(
             (
                 "🟡 SOON",
                 (
-                    f"Monitor delta drift ({delta_drift_pct:+.1f}pp from "
-                    "target) → May need adjustment"
+                    "Monitor net delta vs target "
+                    f"({delta_ratio_deviation_pct:+.1f}pp from target) → "
+                    "May need adjustment"
                 ),
             ),
         )
@@ -889,8 +902,8 @@ def _print_action_summary(
         )
         print("\n  Continue monitoring:")
         print(
-            f"    • Delta drift (rebalance if "
-            f">{t.delta_drift_action_pct:.0f}pp from target)",
+            f"    • Net delta vs target (rebalance if "
+            f">{t.delta_ratio_deviation_action_pct:.0f}pp from target)",
         )
         print(
             f"    • Approaching expirations (roll before "

@@ -61,10 +61,10 @@ def _make_ips(
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=max_tolerance_pct),
         triggers=IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=3.0,
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             rally_rebalance_pct=10.0,
             strike_drift_max_otm_pct=15.0,
         ),

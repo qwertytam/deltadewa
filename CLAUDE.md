@@ -278,6 +278,48 @@ verification, and nothing asserts `app`/`jobs` resolve the same
 `DELTADEWA_CACHE_DIR` — are filed as #377/#378, both write-side
 counterparts of this same provenance question, not acted on here.
 
+**4.2 (`chore/one-canon`) has shipped**, closing the handbook staleness
+sweep's two live-code items (#294): the handbook settled crash-convexity
+canon at **+10%…+20% at −25% SPX** (was +15%…+25%) and skew-percentile
+canon at **30/70** (was 25/75). `ips_config.DEFAULT_SKEW_LOW_PCTILE`/
+`_HIGH_PCTILE` now read 30.0/70.0 to match; the shipped
+`config/ips.example.yaml`/`examples/ips/ips_default.yaml` convexity band
+was already 10–20 since #248, so that side needed no code change — only the
+live, gitignored `config/ips.yaml` is an operator's own edit. The §4 golden
+book (`spx_tail_20m.yaml`, `docs/repricing-methodology.md` §4 —
+`+24.64%`/`$297,715`/`$5,226,004`) is unchanged and now documented as
+reading *above* the canonical band by design, not in-band — it stays the
+engine's crash-repricing regression anchor, not a policy-conformant demo
+book (precedent: M1.6 refined the crash shock rather than re-size this book
+when the model was wrong; the band moved this time instead, same
+instinct). Its own local check band lives as `_ANCHOR_BAND_MIN`/`_MAX` in
+`tests/test_analysis/test_crash_repricing.py`, explicitly decoupled from
+live policy. The canonical golden (`spx_protective_put.yaml`, `+16.1%`) is
+unaffected — it sits inside both the old and the new band.
+
+4.2 also closed three related naming issues found in the same sweep
+(#303/#335/#338), one name per collision, handbook term winning where the
+handbook has one: `triggers.roll_time_months` → `roll_at_months_remaining`
+(the old name didn't say whether it meant maturity remaining or time
+elapsed); `triggers.delta_drift_warn_pct`/`_action_pct` →
+`delta_ratio_deviation_warn_pct`/`_action_pct` and
+`health.delta_drift_from_target`/`calculate_delta_drift_pct` →
+`delta_deviation_from_target`/`calculate_delta_ratio_deviation_pct` (freeing
+"Delta drift" for the handbook's own Part X §13 metric,
+`scenarios.calculate_delta_drift`, which `/design` was labelling
+identically to this unrelated net-delta-vs-target figure — the actual bug
+#335 reported); and `analysis/crash_payoff.crash_payoff_ratio`/
+`payoff_ratio` → `payoff_vs_premium_multiple`/`payoff_vs_premium` (the
+handbook's Ratio Disambiguation page names this the "Payoff-vs-Premium
+Multiple" and reserves "Crash Payoff Ratio" for a different figure — this
+repo's `offset_ratio`, whose name stays since the handbook blesses "offset
+ratio" as a synonym for it). The first two are breaking changes for a live
+`config/ips.yaml`; the third is a pure code/API rename — `weekly_snapshot`'s
+on-disk JSON key deliberately stays `"payoff_ratio"` so persisted snapshot
+history keeps loading. `config/ips.example.yaml`'s `cliff_threshold_days`
+also moved 180 → 150 (#338), decoupling it from
+`roll_at_months_remaining`'s numeric coincidence (6.0 × 30 ≈ 180).
+
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public
 [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,

@@ -37,10 +37,10 @@ _VALID_CONFIG: dict[str, Any] = {
     },
     "drawdown": {"max_tolerance_pct": 20.0},
     "triggers": {
-        "delta_drift_warn_pct": 5.0,
-        "delta_drift_action_pct": 10.0,
+        "delta_ratio_deviation_warn_pct": 5.0,
+        "delta_ratio_deviation_action_pct": 10.0,
         "theta_cost_acceptable_pct": 2.0,
-        "roll_time_months": 9.0,
+        "roll_at_months_remaining": 9.0,
         "rally_rebalance_pct": 15.0,
         "strike_drift_max_otm_pct": 45.0,
     },
@@ -156,7 +156,9 @@ class TestLoadIpsConfig:
         assert ips.triggers.target_delta_ratio_pct == pytest.approx(
             90.0, rel=1e-4
         )
-        assert ips.triggers.delta_drift_warn_pct == pytest.approx(4.0, rel=1e-7)
+        assert ips.triggers.delta_ratio_deviation_warn_pct == pytest.approx(
+            4.0, rel=1e-7
+        )
         assert len(ips.monetization.schedule) == 3
         assert ips.monetization.schedule[0].gain_pct == 100
 
@@ -198,13 +200,15 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "triggers": {
                 **_VALID_CONFIG["triggers"],
-                "delta_drift_warn_pct": 10.0,
-                "delta_drift_action_pct": 5.0,
+                "delta_ratio_deviation_warn_pct": 10.0,
+                "delta_ratio_deviation_action_pct": 5.0,
             },
         }
         path = _write_yaml(tmp_path, config)
 
-        with pytest.raises(IpsConfigError, match="delta_drift_warn_pct"):
+        with pytest.raises(
+            IpsConfigError, match="delta_ratio_deviation_warn_pct"
+        ):
             load_ips_config(path)
 
     def test_convexity_min_max_ordering_validated(self, tmp_path: Path) -> None:
@@ -648,8 +652,8 @@ class TestMarketEnvironment:
 
         assert env.vol_regime_low == pytest.approx(0.15, rel=1e-4)
         assert env.vol_regime_high == pytest.approx(0.35, rel=1e-4)
-        assert env.skew_low_pctile == 25
-        assert env.skew_high_pctile == 75
+        assert env.skew_low_pctile == 30
+        assert env.skew_high_pctile == 70
         assert env.term_contango_tolerance == pytest.approx(0.5, rel=1e-4)
         assert env.data_ttl_minutes == pytest.approx(1440.0, rel=1e-7)
         assert env.vix_very_high == pytest.approx(40.0)

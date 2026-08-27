@@ -35,7 +35,7 @@ _RATE = 0.04
 
 def _make_ips_config(
     *,
-    roll_time_months: float = 1.0,
+    roll_at_months_remaining: float = 1.0,
     roll_review_buffer: float = 1.5,
     strike_drift_max_otm_pct: float = 45.0,
     strike_drift_review_fraction: float = 0.75,
@@ -54,10 +54,10 @@ def _make_ips_config(
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=20.0),
         triggers=IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=roll_time_months,
+            roll_at_months_remaining=roll_at_months_remaining,
             rally_rebalance_pct=15.0,
             strike_drift_max_otm_pct=strike_drift_max_otm_pct,
             roll_review_buffer=roll_review_buffer,
@@ -125,13 +125,13 @@ class TestGammaThetaDelay:
 
     def _triggers(
         self,
-        roll_time_months: float = 1.0,
+        roll_at_months_remaining: float = 1.0,
     ) -> IpsTriggers:
         return IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=roll_time_months,
+            roll_at_months_remaining=roll_at_months_remaining,
             rally_rebalance_pct=15.0,
             strike_drift_max_otm_pct=10.0,
         )
@@ -153,7 +153,7 @@ class TestGammaThetaDelay:
         months_to_maturity: float = 3.0,
         convexity_now_pct: float = 20.0,
         drift_pct: float | None = -5.0,
-        roll_time_months: float = 1.0,
+        roll_at_months_remaining: float = 1.0,
     ) -> bool:
         """Call gamma_theta_delay with all three conditions satisfied.
 
@@ -165,7 +165,9 @@ class TestGammaThetaDelay:
             months_to_maturity=months_to_maturity,
             convexity_now_pct=convexity_now_pct,
             drift_pct=drift_pct,
-            ips_triggers=self._triggers(roll_time_months=roll_time_months),
+            ips_triggers=self._triggers(
+                roll_at_months_remaining=roll_at_months_remaining
+            ),
             ips_convexity=self._convexity(15.0, 25.0),
         )
 
@@ -296,7 +298,7 @@ class TestBuildRollPlan:
         pos = self._rallied_position()  # 90 days >> 30-day window
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
@@ -333,7 +335,7 @@ class TestBuildRollPlan:
         pos = self._declined_position()
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=10.0,
             strike_drift_review_fraction=0.75,
             target_min_pct=15.0,
@@ -358,7 +360,7 @@ class TestBuildRollPlan:
         pos = self._declined_position()
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=10.0,
             strike_drift_review_fraction=0.75,
             target_min_pct=15.0,
@@ -387,7 +389,7 @@ class TestBuildRollPlan:
         pos = _make_put(days_to_maturity=40, entry_spot=None)
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             roll_review_buffer=1.5,
             target_min_pct=15.0,
             target_max_pct=25.0,
@@ -412,7 +414,7 @@ class TestBuildRollPlan:
         )
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
@@ -431,7 +433,7 @@ class TestBuildRollPlan:
         pos = self._rallied_position()
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
@@ -459,7 +461,7 @@ class TestBuildRollPlan:
         )
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=45.0,
             target_min_pct=15.0,
             target_max_pct=25.0,

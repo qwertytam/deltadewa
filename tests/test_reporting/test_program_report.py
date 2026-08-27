@@ -74,10 +74,10 @@ def _make_ips_config(
         convexity=_IPS_CONVEXITY,
         drawdown=IpsDrawdown(max_tolerance_pct=5.0),
         triggers=IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=2.0,
+            roll_at_months_remaining=2.0,
             rally_rebalance_pct=5.0,
             strike_drift_max_otm_pct=10.0,
         ),
@@ -88,7 +88,7 @@ def _make_ips_config(
 def _make_crash_result(
     *,
     ips_convexity: IpsConvexity | None = _IPS_CONVEXITY,
-    payoff_ratio: float | None = 8.5,
+    payoff_vs_premium: float | None = 8.5,
     convexity_pct: float = 15.0,
     meets_target: bool = True,
     premium_paid: float = 10_000.0,
@@ -98,17 +98,17 @@ def _make_crash_result(
         rows.append(
             CrashScenarioRow(
                 shock_pct=ips_convexity.crash_scenario_pct,
-                hedge_pnl=premium_paid * (payoff_ratio or 0),
-                payoff_ratio=payoff_ratio or 0.0,
+                hedge_pnl=premium_paid * (payoff_vs_premium or 0),
+                payoff_vs_premium=payoff_vs_premium or 0.0,
                 convexity_pct=convexity_pct,
                 meets_target=meets_target,
-                intrinsic_floor=premium_paid * (payoff_ratio or 0) * 0.2,
+                intrinsic_floor=premium_paid * (payoff_vs_premium or 0) * 0.2,
             ),
         )
     return CrashConvexityResult(
         curve=[],
         scenario_rows=rows,
-        payoff_ratio=payoff_ratio,
+        payoff_vs_premium=payoff_vs_premium,
         premium_paid=premium_paid,
         premium_basis=PremiumBasis.PAID,
         ips_convexity=ips_convexity,
@@ -228,7 +228,7 @@ def _build(
     underlying_quantity: float = 100.0,
     spot_price: float = 5_000.0,
     ips_convexity: IpsConvexity | None = _IPS_CONVEXITY,
-    payoff_ratio: float | None = 8.5,
+    payoff_vs_premium: float | None = 8.5,
     convexity_pct: float = 15.0,
     meets_target: bool = True,
     data_quality: DataQuality = DataQuality.LIVE,
@@ -248,7 +248,7 @@ def _build(
         ),
         crash_result=_make_crash_result(
             ips_convexity=ips_convexity,
-            payoff_ratio=payoff_ratio,
+            payoff_vs_premium=payoff_vs_premium,
             convexity_pct=convexity_pct,
             meets_target=meets_target,
         ),
@@ -308,7 +308,7 @@ class TestBuildProgramReport:
         assert p.ips_crash_pct == pytest.approx(-25.0)
         assert p.convexity_pct == pytest.approx(18.0)
         assert p.meets_target is True
-        assert p.payoff_ratio == pytest.approx(8.5)
+        assert p.payoff_vs_premium == pytest.approx(8.5)
         assert p.target_min_pct == pytest.approx(10.0)
         assert p.target_max_pct == pytest.approx(30.0)
 
@@ -319,7 +319,7 @@ class TestBuildProgramReport:
 
     def test_protection_no_ips_convexity(self) -> None:
         """All optional protection fields are None when no IPS scenario."""
-        report = _build(ips_convexity=None, payoff_ratio=None)
+        report = _build(ips_convexity=None, payoff_vs_premium=None)
         p = report.protection
         assert p.ips_crash_pct is None
         assert p.convexity_pct is None

@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.health import delta_drift_from_target
+from deltadewa.analysis.health import delta_deviation_from_target
 
 
 def _analyzer(
@@ -35,59 +35,63 @@ def _analyzer(
     return PortfolioAnalyzer(portfolio)
 
 
-class TestDeltaDriftFromTarget:
+class TestDeltaDeviationFromTarget:
     """The single-sourced helper shared by the gauge and the trigger."""
 
     def test_at_target_reads_zero(self) -> None:
         """A book at exactly the target has zero drift."""
-        assert delta_drift_from_target(90.0, 100.0, 90.0) == pytest.approx(
+        assert delta_deviation_from_target(90.0, 100.0, 90.0) == pytest.approx(
             0.0, rel=1e-4
         )
 
     def test_under_hedged_is_positive(self) -> None:
         """More net long than target (less hedged) reads positive."""
-        assert delta_drift_from_target(95.0, 100.0, 90.0) == pytest.approx(
+        assert delta_deviation_from_target(95.0, 100.0, 90.0) == pytest.approx(
             5.0, rel=1e-4
         )
 
     def test_over_hedged_is_negative(self) -> None:
         """Less net long than target (more hedged) reads negative."""
-        assert delta_drift_from_target(80.0, 100.0, 90.0) == pytest.approx(
+        assert delta_deviation_from_target(80.0, 100.0, 90.0) == pytest.approx(
             -10.0, rel=1e-4
         )
 
     def test_unset_underlying_is_none(self) -> None:
         """No equity position -> unavailable, never a fabricated 0.0."""
-        assert delta_drift_from_target(0.0, 0.0, 90.0) is None
+        assert delta_deviation_from_target(0.0, 0.0, 90.0) is None
 
     def test_target_shifts_drift(self) -> None:
         """Same book, different target moves the drift by the difference."""
-        assert delta_drift_from_target(97.0, 100.0, 90.0) == pytest.approx(
+        assert delta_deviation_from_target(97.0, 100.0, 90.0) == pytest.approx(
             7.0, rel=1e-4
         )
-        assert delta_drift_from_target(97.0, 100.0, 85.0) == pytest.approx(
+        assert delta_deviation_from_target(97.0, 100.0, 85.0) == pytest.approx(
             12.0, rel=1e-4
         )
 
 
-class TestCalculateDeltaDriftPct:
-    """HealthMixin.calculate_delta_drift_pct delegates to the helper."""
+class TestCalculateDeltaRatioDeviationPct:
+    """HealthMixin.calculate_delta_ratio_deviation_pct delegates to the
+    helper."""
 
     def test_measures_deviation_from_target(self) -> None:
         """Drift is the ratio minus the target, in percentage points."""
-        assert _analyzer(95.0, 100.0).calculate_delta_drift_pct(
+        assert _analyzer(95.0, 100.0).calculate_delta_ratio_deviation_pct(
             90.0
         ) == pytest.approx(5.0, rel=1e-4)
 
     def test_at_target_reads_zero(self) -> None:
         """A book at target reads exactly 0.0."""
-        assert _analyzer(90.0, 100.0).calculate_delta_drift_pct(
+        assert _analyzer(90.0, 100.0).calculate_delta_ratio_deviation_pct(
             90.0
         ) == pytest.approx(0.0, rel=1e-4)
 
     def test_unset_underlying_is_none(self) -> None:
         """Unset underlying_quantity returns None (unavailable)."""
-        assert _analyzer(0.0, 0.0).calculate_delta_drift_pct(90.0) is None
+        assert (
+            _analyzer(0.0, 0.0).calculate_delta_ratio_deviation_pct(90.0)
+            is None
+        )
 
 
 class TestCalculateNetCarryPct:
@@ -118,16 +122,18 @@ class TestCalculateHealthMetricsThreadsTarget:
     """calculate_health_metrics threads the target like the crash scenario."""
 
     def test_threads_target_into_drift(self) -> None:
-        """A supplied target drives delta_drift_pct."""
+        """A supplied target drives delta_ratio_deviation_pct."""
         metrics = _analyzer(95.0, 100.0).calculate_health_metrics(
             target_delta_ratio_pct=90.0,
         )
-        assert metrics["delta_drift_pct"] == pytest.approx(5.0, rel=1e-7)
+        assert metrics["delta_ratio_deviation_pct"] == pytest.approx(
+            5.0, rel=1e-7
+        )
 
     def test_none_target_reads_unavailable(self) -> None:
-        """Without a target (no IPS), delta_drift_pct is None."""
+        """Without a target (no IPS), delta_ratio_deviation_pct is None."""
         metrics = _analyzer(95.0, 100.0).calculate_health_metrics()
-        assert metrics["delta_drift_pct"] is None
+        assert metrics["delta_ratio_deviation_pct"] is None
 
 
 class TestOverallHealthScoreSkipsUnavailable:

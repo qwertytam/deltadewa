@@ -245,7 +245,9 @@ def evaluate_roll_status(
 
     triggers = ips_config.triggers
     convexity = ips_config.convexity
-    roll_window_days = triggers.roll_time_months * const.CALENDAR_DAYS_PER_MONTH
+    roll_window_days = (
+        triggers.roll_at_months_remaining * const.CALENDAR_DAYS_PER_MONTH
+    )
 
     analyzer = PortfolioAnalyzer(portfolio)
     # Source the whole crash basis from the IPS so the roll trigger's convexity

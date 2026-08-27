@@ -16,9 +16,9 @@ from deltadewa.analysis.crash_payoff import (
     CrashScenarioRow,
     PremiumBasis,
     compute_crash_convexity,
-    crash_payoff_ratio,
     crash_scenario_table,
     default_crash_shock,
+    payoff_vs_premium_multiple,
 )
 from deltadewa.analysis.crash_repricing import CrashShock, crash_skew_vol
 from deltadewa.analysis.decision_matrix import (
@@ -203,7 +203,6 @@ __all__ = [
     "compute_empirical_cdf",
     "compute_hedge_gain_pct",
     "compute_pnl_histogram",
-    "crash_payoff_ratio",
     "crash_scenario_table",
     "crash_skew_vol",
     "days_to_max_maturity",
@@ -223,6 +222,7 @@ __all__ = [
     "hedge_efficiency",
     "new_strike_for_entry_otm",
     "observe_spot",
+    "payoff_vs_premium_multiple",
     "percentile_of_value",
     "proportional_vol",
     "recompute_concentration",
