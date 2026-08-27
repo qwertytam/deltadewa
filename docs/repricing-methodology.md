@@ -43,7 +43,7 @@ Three properties the current code violates, now made explicit:
   Time-to-maturity is **unchanged**; the valuation date does **not** advance.
 
 $P_{\text{today}}$ is the protected portfolio value today — the reference the IPS
-band (+15% … +25% at −25%) is stated against. The numerator is the change in
+band (+10% … +20% at −25%) is stated against. The numerator is the change in
 **hedge** value; the denominator is the **book**.
 
 ---
@@ -137,6 +137,20 @@ must not be the headline (it reads 2.5× where the repriced value is 17.5×).
 
 ## 4. Worked example (reproducible — the regression anchor)
 
+> **This book reads ABOVE the canonical band, by design (4.2).** The handbook's
+> crash-convexity canon settled at **+10%…+20% at −25% SPX**
+> (`part-7/typical-hedge-program-targets`), below where the §4 book has always
+> read. §4 is a deliberately deep 20/30/40-OTM ladder, kept fixed as the *engine
+> regression anchor* — it exists to prove the crash-repricing model is faithful,
+> which it does precisely by landing high, not by hugging a policy band. Its own
+> local check band (+15%…+25%, unrelated to `ips.yaml`'s canon) is pinned in
+> `tests/test_analysis/test_crash_repricing.py` as `_ANCHOR_BAND_MIN`/`_MAX` for
+> that reason. It is **no longer** the "in-band book to open in the monitor for
+> demos" — see `examples/portfolios/spx_tail_20m.yaml`'s header. Precedent:
+> M1.6 refined the crash shock rather than re-size this book when the model was
+> wrong; the canonical band has now moved instead of the book, and the same
+> instinct points the same way.
+
 A conformant $20M book: three-rung 20/30/40%-OTM ladder, 18-month tenor,
 weighted 35/40/25 by contract count, carry ≈ 1%.
 
@@ -164,16 +178,17 @@ $w = 0.95$ (+9.5 vol pts), while the 30% and 40% rungs sit *past* the wing and
 - Hedge value in crash **\$5,226,004** (repriced) — a **≈17.5×** multiple.
 - Intrinsic floor **\$759,000** — only **2.5×**, and it zeroes the 30% and 40% legs.
 
-$$\text{convexity} = \frac{5{,}226{,}004 - 297{,}715}{20{,}000{,}000} = \mathbf{+24.64\%} \;\Rightarrow\; \textbf{inside the IPS +15\%…+25\% band.}$$
+$$\text{convexity} = \frac{5{,}226{,}004 - 297{,}715}{20{,}000{,}000} = \mathbf{+24.64\%} \;\Rightarrow\; \textbf{ABOVE the canonical +10\%…+20\% band (this book's own +15\%…+25\% check band, by design — see box above).}$$
 
 **Before/after.** Under the pre-M1.6 *flat* $+0.15$ bump (every leg at 35% crash
 vol) this same book read $V_{\text{crash}} = \$3{,}895{,}901$, a **13.1×** multiple
 and **+18.0%** convexity. M1.6's first skew shock anchored the steepening to the
 book's *deepest held* put and read **+22.5%** (16.1×); M1.7 re-anchors it **per
 leg** to each leg's own ~10-delta wing (capped there), lifting the two deep rungs
-to the full $\kappa$ and reading **+24.64%** (17.5×). All three sit inside the
-+15%…+25% band — each refinement recovers convexity the flat bump *understated* on
-the low strikes.
+to the full $\kappa$ and reading **+24.64%** (17.5×). All three sit inside this
+book's own +15%…+25% check band — each refinement recovers convexity the flat
+bump *understated* on the low strikes. (All three also sit above the *canonical*
++10%…+20% band — see the box at the top of this section.)
 
 **The intrinsic bug, for contrast:** the intrinsic-only basis gives
 $(759{,}000 - 297{,}715)/20{,}000{,}000 = \mathbf{+2.3\%}$ — and the pre-M1.2 code
@@ -261,13 +276,16 @@ errs toward less apparent protection, the safe direction for a tail program.
    and $V_{\text{crash}} = \$5{,}226{,}004$ within tolerance; convexity =
    **+24.64% ± ε** and the repriced payoff ratio ≈ **17.53×** (skew-aware, per-leg
    wing). A separate no-op test pins the flat baseline at $\kappa = 0$: **+18.0%**,
-   $V_{\text{crash}} = \$3{,}895{,}901$, **13.1×**.
+   $V_{\text{crash}} = \$3{,}895{,}901$, **13.1×**. These values are frozen as the
+   engine anchor and read **above** the canonical +10%…+20% band by design (see
+   the box at the top of §4) — do not re-derive them against the canon.
 2. **Band** — the canonical example (`examples/portfolios/spx_protective_put.yaml`)
-   yields convexity within **+15%…+25%** at −25%. Under the flat bump it read
-   **+14.25%** (just under the floor); the honestly-calibrated per-leg skew shock
-   lifts it to **≈+16.1%**, comfortably in-band — **so no re-size is needed** (the
-   "record the re-size decision either way" outcome). The book is unchanged (two
-   puts, 5200/4900, 5 contracts each).
+   yields convexity within **+10%…+20%** at −25%. Under the flat bump it read
+   **+14.25%** (below the pre-4.2 +15% floor, but inside today's +10%…+20% band);
+   the honestly-calibrated per-leg skew shock lifts it to **≈+16.1%**, comfortably
+   in-band under either band — **so no re-size is needed** (the "record the
+   re-size decision either way" outcome). The book is unchanged (two puts,
+   5200/4900, 5 contracts each).
 3. **Hedge-only invariant** — adding or removing the equity leg does **not** change
    convexity (guards against C1 regressing).
 4. **Repriced invariant** — the 30% and 40% OTM legs contribute **> 0** at −25%

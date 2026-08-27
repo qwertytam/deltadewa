@@ -1,10 +1,19 @@
-# Portfolio Configuration Example — §4 "golden" book (regression anchor + demo)
+# Portfolio Configuration Example — §4 "golden" book (regression anchor)
 #
 # The conformant $20M book from docs/repricing-methodology.md §4: a long SPX
 # index position protected by a three-rung 20/30/40%-OTM put ladder, 18-month
 # tenor, contract counts weighted ~35/40/25, carry ≈ 1%/yr. European exercise
 # (SPX is cash-settled). This is the methodology's reproducible worked example —
-# an in-band book to open in the monitor for demos and smoke checks.
+# the engine's crash-repricing regression anchor.
+#
+# NOT an in-band demo book (4.2): the handbook's crash-convexity canon settled
+# at +10%..+20% at -25% SPX (part-7/typical-hedge-program-targets), below where
+# this book has always read. This book is a deliberately deep 20/30/40-OTM
+# ladder, kept fixed at its current values on purpose — see the box at the top
+# of docs/repricing-methodology.md §4 for why re-sizing it would be the wrong
+# fix. Do not open the monitor on this book expecting a PASS on the convexity
+# compliance row; that is the correct, above-band reading of a deep ladder, not
+# a bug.
 #
 # Golden values (§4, skew-aware crash shock, -25% crash, T = 1.5y): flat +0.15
 # vol bump at ATM plus a +0.10 skew steepening capped at each leg's own ~10-delta
@@ -12,7 +21,12 @@
 # rungs (the two deeper rungs sit at/beyond their wing, so both hit the +0.10 cap):
 #   Hedge value today   ≈ $298,099   (1.49% of $20M, ≈ 0.99%/yr carry)
 #   Hedge value in crash ≈ $5,226,004 (17.5x — repriced, full option value)
-#   Convexity           ≈ +24.6%     -> inside the IPS +15%..+25% band
+#   Convexity           ≈ +24.6%     -> ABOVE the canonical +10%..+20% band
+#                                        (inside this book's own local
+#                                        +15%..+25% check band only — see
+#                                        tests/test_analysis/
+#                                        test_crash_repricing.py's
+#                                        _ANCHOR_BAND_MIN/_MAX)
 # (Under the pre-M1.6 flat +0.15 bump this book read +18.0% / 13.1x; under the
 #  M1.6 book-relative anchor, +22.5% / 16.1x.)
 #

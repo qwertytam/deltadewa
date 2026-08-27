@@ -87,14 +87,14 @@ def plot_crash_convexity(
             linestyle=":",
             zorder=1,
         )
-        if result.payoff_ratio is not None:
+        if result.payoff_vs_premium is not None:
             curve_dict = dict(result.curve)
             ips_gp = curve_dict.get(
                 round(ips_shock, 6),
-                result.payoff_ratio * result.premium_paid,
+                result.payoff_vs_premium * result.premium_paid,
             )
             ax.annotate(
-                f"{result.payoff_ratio:.1f}x",
+                f"{result.payoff_vs_premium:.1f}x",
                 xy=(ips_shock, ips_gp),
                 xytext=(8, 8),
                 textcoords="offset points",

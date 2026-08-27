@@ -52,7 +52,12 @@ class WeeklySnapshot:
         carry_pct_of_notional: ``CostSection.carry_pct_of_notional``.
         within_budget: ``CostSection.within_budget``.
         convexity_pct: ``ProtectionSection.convexity_pct``.
-        payoff_ratio: ``ProtectionSection.payoff_ratio``.
+        payoff_vs_premium: ``ProtectionSection.payoff_vs_premium``. Renamed
+            from ``payoff_ratio`` (4.2, #303) — see
+            ``analysis.crash_payoff``'s module docstring for why. The
+            on-disk JSON key stays ``"payoff_ratio"`` (see
+            :meth:`to_json_dict`) so already-persisted snapshot history
+            keeps loading.
         meets_target: ``ProtectionSection.meets_target``.
         vix: ``MarketContextSection.vix``.
         skew_percentile: ``MarketContextSection.skew_percentile`` (0-1
@@ -84,7 +89,7 @@ class WeeklySnapshot:
     carry_pct_of_notional: float
     within_budget: bool
     convexity_pct: float | None
-    payoff_ratio: float | None
+    payoff_vs_premium: float | None
     meets_target: bool | None
     vix: float | None
     skew_percentile: float | None
@@ -98,7 +103,15 @@ class WeeklySnapshot:
     cumulative_carry_cost: float
 
     def to_json_dict(self) -> dict[str, Any]:
-        """Serialize to a JSON-safe dict (dates as ISO strings)."""
+        """Serialize to a JSON-safe dict (dates as ISO strings).
+
+        The ``"payoff_ratio"`` key is a deliberate exception to
+        field-name-equals-json-key: the Python field was renamed to
+        ``payoff_vs_premium`` in 4.2 (#303), but the on-disk key stays
+        ``"payoff_ratio"`` so a snapshot history file persisted before
+        this rename keeps loading via :meth:`from_json_dict` without a
+        migration step.
+        """
         return {
             "as_of": self.as_of.isoformat(),
             "first_as_of": self.first_as_of.isoformat(),
@@ -106,7 +119,7 @@ class WeeklySnapshot:
             "carry_pct_of_notional": self.carry_pct_of_notional,
             "within_budget": self.within_budget,
             "convexity_pct": self.convexity_pct,
-            "payoff_ratio": self.payoff_ratio,
+            "payoff_ratio": self.payoff_vs_premium,
             "meets_target": self.meets_target,
             "vix": self.vix,
             "skew_percentile": self.skew_percentile,
@@ -132,7 +145,7 @@ class WeeklySnapshot:
             carry_pct_of_notional=data["carry_pct_of_notional"],
             within_budget=data["within_budget"],
             convexity_pct=data["convexity_pct"],
-            payoff_ratio=data["payoff_ratio"],
+            payoff_vs_premium=data["payoff_ratio"],
             meets_target=data["meets_target"],
             vix=data["vix"],
             skew_percentile=data["skew_percentile"],
@@ -182,7 +195,7 @@ def snapshot_from_report(
         carry_pct_of_notional=c.carry_pct_of_notional,
         within_budget=bool(c.within_budget),
         convexity_pct=p.convexity_pct,
-        payoff_ratio=p.payoff_ratio,
+        payoff_vs_premium=p.payoff_vs_premium,
         meets_target=(
             bool(p.meets_target) if p.meets_target is not None else None
         ),

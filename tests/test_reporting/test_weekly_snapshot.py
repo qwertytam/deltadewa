@@ -33,7 +33,7 @@ def _make_report(
     carry_pct_of_notional: float = 1.0,
     within_budget: bool = True,
     convexity_pct: float | None = 18.0,
-    payoff_ratio: float | None = 8.5,
+    payoff_vs_premium: float | None = 8.5,
     meets_target: bool | None = True,
     vix: float | None = 18.0,
     skew_percentile: float | None = 0.45,
@@ -60,7 +60,7 @@ def _make_report(
             within_budget=within_budget,
         ),
         protection=ProtectionSection(
-            payoff_ratio=payoff_ratio,
+            payoff_vs_premium=payoff_vs_premium,
             ips_crash_pct=-25.0,
             convexity_pct=convexity_pct,
             target_min_pct=15.0,

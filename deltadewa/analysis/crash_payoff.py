@@ -1,4 +1,4 @@
-"""Crash-scenario payoff-ratio analysis for the hedge book.
+"""Crash-scenario payoff-vs-premium analysis for the hedge book.
 
 Answers "for every dollar of put premium paid, how many dollars does the
 hedge pay out if the underlying drops X%?" — distinct from
@@ -6,12 +6,24 @@ hedge pay out if the underlying drops X%?" — distinct from
 a % of the protected book's notional rather than as a multiple of premium
 paid.
 
-A payoff ratio of 8.5x means the hedge returns 8.5x its cost in the defined
-crash; net-profit ratio = payoff_ratio - 1.  The headline payoff is the long
-put legs **repriced** at the crash state (crash spot + flat additive vol shock,
-full option value including time value) via ``analysis.crash_repricing`` — the
-same hedge-only basis the health convexity gauge uses.  The intrinsic value at
-the crash spot is retained as a separate, clearly-labelled conservative floor
+Renamed from ``crash_payoff_ratio``/``payoff_ratio`` (4.2, #303): the
+handbook's `Ratio Disambiguation
+<https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/ratio-disambiguation/>`_
+page names this the **Payoff-vs-Premium Multiple** ("no settled synonym")
+and reserves **Crash Payoff Ratio** for a different figure — hedge gain
+over the *equity loss* it offsets (this repo's ``offset_ratio``, whose name
+the handbook lists "offset ratio" as a blessed synonym for, so that one
+keeps its name). The two repo names collided with two different handbook
+names; this module's rename resolves the collision by adopting the
+handbook's term for what this module actually computes.
+
+A payoff-vs-premium multiple of 8.5x means the hedge returns 8.5x its cost
+in the defined crash; net-profit ratio = payoff_vs_premium - 1.  The
+headline payoff is the long put legs **repriced** at the crash state (crash
+spot + flat additive vol shock, full option value including time value) via
+``analysis.crash_repricing`` — the same hedge-only basis the health
+convexity gauge uses.  The intrinsic value at the crash spot is retained as
+a separate, clearly-labelled conservative floor
 (``CrashScenarioRow.intrinsic_floor``), never the headline.
 """
 
@@ -97,7 +109,7 @@ class CrashConvexityResult:
         scenario_rows: Discrete payoff ladder at standard shocks plus the
             IPS crash point, sorted mild to severe.  Used for the table
             widget and the right-panel bar chart.
-        payoff_ratio: Repriced hedge value at
+        payoff_vs_premium: Repriced hedge value at
             ``ips_convexity.crash_scenario_pct`` divided by ``premium_paid``.
             ``None`` when no *ips_convexity* was supplied or when premium is
             zero.
@@ -110,7 +122,7 @@ class CrashConvexityResult:
 
     curve: list[tuple[float, float]]
     scenario_rows: list[CrashScenarioRow]
-    payoff_ratio: float | None
+    payoff_vs_premium: float | None
     premium_paid: float
     premium_basis: PremiumBasis
     ips_convexity: IpsConvexity | None
@@ -124,7 +136,7 @@ class CrashScenarioRow:
         shock_pct: Signed shock percent for this row (e.g. -25.0).
         hedge_pnl: Long put legs **repriced** at the shocked spot and crash
             vol (hedge-only, full option value; no cost basis subtracted).
-        payoff_ratio: hedge_pnl as a multiple of premium paid.
+        payoff_vs_premium: hedge_pnl as a multiple of premium paid.
         convexity_pct: Hedge-only repriced crash convexity as % of the
             protected book (``HealthMixin.calculate_crash_convexity_pct``).
         meets_target: Whether convexity_pct falls within the IPS
@@ -137,7 +149,7 @@ class CrashScenarioRow:
 
     shock_pct: float
     hedge_pnl: float
-    payoff_ratio: float
+    payoff_vs_premium: float
     convexity_pct: float
     meets_target: bool
     intrinsic_floor: float
@@ -213,7 +225,7 @@ def _net_protective_premium(portfolio: OptionPortfolio) -> float:
     )
 
 
-def crash_payoff_ratio(
+def payoff_vs_premium_multiple(
     portfolio: OptionPortfolio,
     *,
     shock: CrashShock,
@@ -335,7 +347,7 @@ def _build_scenario_rows(
             CrashScenarioRow(
                 shock_pct=shock_pct,
                 hedge_pnl=hedge_pnl,
-                payoff_ratio=ratio,
+                payoff_vs_premium=ratio,
                 convexity_pct=convexity_pct,
                 meets_target=meets_target,
                 intrinsic_floor=floor[shock_pct],
@@ -375,7 +387,7 @@ def compute_crash_convexity(
         n_points: Number of evenly-spaced points in the fine grid.
         ips_convexity: IPS convexity target (policy, not pricing).  When
             supplied the IPS crash scenario is guaranteed to appear in both
-            the grid and ``scenario_rows``, and ``payoff_ratio`` is
+            the grid and ``scenario_rows``, and ``payoff_vs_premium`` is
             populated.  Used only for ``meets_target`` band comparison,
             never for repricing — that is *shock*'s job, and the two stay
             separate arguments so policy cannot quietly move the pricing.
@@ -385,7 +397,7 @@ def compute_crash_convexity(
 
     Returns:
         ``CrashConvexityResult`` with curve, scenario_rows,
-        payoff_ratio, premium_paid, premium_basis, and ips_convexity.
+        payoff_vs_premium, premium_paid, premium_basis, and ips_convexity.
 
     """
     premium_paid, premium_basis = _premium_with_basis(portfolio)
@@ -439,14 +451,14 @@ def compute_crash_convexity(
     )
 
     # Headline payoff ratio at the IPS crash shock.
-    payoff_ratio: float | None = None
+    payoff_vs_premium: float | None = None
     if ips_shock is not None and premium_paid > 0:
-        payoff_ratio = repriced[ips_shock] / premium_paid
+        payoff_vs_premium = repriced[ips_shock] / premium_paid
 
     return CrashConvexityResult(
         curve=curve,
         scenario_rows=scenario_rows,
-        payoff_ratio=payoff_ratio,
+        payoff_vs_premium=payoff_vs_premium,
         premium_paid=premium_paid,
         premium_basis=premium_basis,
         ips_convexity=ips_convexity,

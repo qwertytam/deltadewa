@@ -113,7 +113,7 @@ def gamma_theta_delay(
 
     1. the time trigger is not yet urgent — the position has not
        entered the mandatory roll window
-       (``months_to_maturity > roll_time_months``);
+       (``months_to_maturity > roll_at_months_remaining``);
     2. **the put has moved meaningfully nearer to the money**
        (``drift_pct < 0``) — this is the whole basis for the deferral,
        because a put drifting toward the strike is accumulating
@@ -153,7 +153,7 @@ def gamma_theta_delay(
             which cannot support a deferral: the gamma story is
             unverifiable, so the roll stands.
         ips_triggers: IPS trigger thresholds (supplies
-            ``roll_time_months``).
+            ``roll_at_months_remaining``).
         ips_convexity: IPS convexity target band (supplies
             ``target_min_pct`` / ``target_max_pct``).
 
@@ -164,7 +164,9 @@ def gamma_theta_delay(
         moved nearer the money.
 
     """
-    not_in_roll_window = months_to_maturity > ips_triggers.roll_time_months
+    not_in_roll_window = (
+        months_to_maturity > ips_triggers.roll_at_months_remaining
+    )
     in_target_band = (
         ips_convexity.target_min_pct
         <= convexity_now_pct
@@ -222,7 +224,7 @@ def _delay_rationale(
         f" the put has moved {nearer_pct:.1f}% nearer the money since"
         " entry, so it is gaining gamma;"
         f" {months_to_maturity:.1f} mo to expiry is still outside the"
-        f" {ips_triggers.roll_time_months:.0f} mo roll window;"
+        f" {ips_triggers.roll_at_months_remaining:.0f} mo roll window;"
         f" and crash convexity {convexity_now_pct:.1f}% is inside the"
         f" {ips_convexity.target_min_pct:.0f}-"
         f"{ips_convexity.target_max_pct:.0f}% IPS target band."

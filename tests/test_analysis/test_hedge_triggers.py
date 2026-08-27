@@ -144,11 +144,12 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
             == ips.triggers.target_delta_ratio_pct
         )
         assert (
-            thresholds.delta_drift_warn_pct == ips.triggers.delta_drift_warn_pct
+            thresholds.delta_ratio_deviation_warn_pct
+            == ips.triggers.delta_ratio_deviation_warn_pct
         )
         assert (
-            thresholds.delta_drift_action_pct
-            == ips.triggers.delta_drift_action_pct
+            thresholds.delta_ratio_deviation_action_pct
+            == ips.triggers.delta_ratio_deviation_action_pct
         )
         assert (
             thresholds.theta_cost_acceptable_pct
@@ -182,11 +183,12 @@ class TestHedgeTriggerThresholdsFromIpsConfig:
         thresholds = HedgeTriggerThresholds.from_ips(ips.triggers)
 
         assert (
-            thresholds.delta_drift_warn_pct == ips.triggers.delta_drift_warn_pct
+            thresholds.delta_ratio_deviation_warn_pct
+            == ips.triggers.delta_ratio_deviation_warn_pct
         )
         assert (
-            thresholds.delta_drift_action_pct
-            == ips.triggers.delta_drift_action_pct
+            thresholds.delta_ratio_deviation_action_pct
+            == ips.triggers.delta_ratio_deviation_action_pct
         )
         assert (
             thresholds.theta_cost_acceptable_pct
@@ -200,10 +202,10 @@ class TestIpsThresholdsMoveTriggers:
     def test_from_ips_maps_all_non_gamma_thresholds(self) -> None:
         """Distinct IPS values (not the dataclass defaults) are mapped."""
         triggers = IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=9.0,
+            roll_at_months_remaining=9.0,
             rally_rebalance_pct=15.0,
             strike_drift_max_otm_pct=45.0,
             expiry_urgent_days=9,
@@ -401,8 +403,8 @@ class TestEvaluateDeltaDriftTrigger:
     def _thresholds(self, target: float = 90.0) -> HedgeTriggerThresholds:
         return HedgeTriggerThresholds(
             target_delta_ratio_pct=target,
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
         )
 
     def test_at_target_holds(self) -> None:
@@ -413,7 +415,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == pytest.approx(0.0, abs=1e-9)
+        assert result.delta_ratio_deviation_pct == pytest.approx(0.0, abs=1e-9)
         assert "delta" not in _action_text(result.actions).lower()
 
     def test_within_warn_holds(self) -> None:
@@ -424,7 +426,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == pytest.approx(3.0, rel=1e-7)
+        assert result.delta_ratio_deviation_pct == pytest.approx(3.0, rel=1e-7)
         assert "delta" not in _action_text(result.actions).lower()
 
     def test_monitor_band_raises_soon(self) -> None:
@@ -435,9 +437,9 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == pytest.approx(7.0, rel=1e-7)
+        assert result.delta_ratio_deviation_pct == pytest.approx(7.0, rel=1e-7)
         text = _action_text(result.actions)
-        assert "Monitor delta drift" in text
+        assert "Monitor net delta vs target" in text
         assert "🟡 SOON" in {label for label, _ in result.actions}
 
     def test_action_band_raises_urgent_with_target_relative_shares(
@@ -454,7 +456,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == pytest.approx(15.0, rel=1e-4)
+        assert result.delta_ratio_deviation_pct == pytest.approx(15.0, rel=1e-4)
         text = _action_text(result.actions)
         assert "🔴 URGENT" in {label for label, _ in result.actions}
         assert "Rebalance delta (adjust 15 shares)" in text
@@ -469,7 +471,9 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct == pytest.approx(-12.0, rel=1e-4)
+        assert result.delta_ratio_deviation_pct == pytest.approx(
+            -12.0, rel=1e-4
+        )
         assert "🔴 URGENT" in {label for label, _ in result.actions}
 
     def test_unset_underlying_is_unavailable(self) -> None:
@@ -481,7 +485,7 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(),
         )
 
-        assert result.delta_drift_pct is None
+        assert result.delta_ratio_deviation_pct is None
         assert "delta" not in _action_text(result.actions).lower()
         warned = " ".join(
             str(call.args[0]) for call in reporter.warning.call_args_list
@@ -501,9 +505,9 @@ class TestEvaluateDeltaDriftTrigger:
             self._thresholds(target=85.0),
         )
 
-        assert monitor.delta_drift_pct == pytest.approx(7.0, rel=1e-7)
+        assert monitor.delta_ratio_deviation_pct == pytest.approx(7.0, rel=1e-7)
         assert "🟡 SOON" in {label for label, _ in monitor.actions}
-        assert action.delta_drift_pct == pytest.approx(12.0, rel=1e-4)
+        assert action.delta_ratio_deviation_pct == pytest.approx(12.0, rel=1e-4)
         assert "🔴 URGENT" in {label for label, _ in action.actions}
 
 
@@ -520,8 +524,8 @@ class TestEvaluateHedgeTriggerSet:
     def _thresholds(**overrides: float) -> HedgeTriggerThresholds:
         defaults: dict[str, float] = {
             "target_delta_ratio_pct": 90.0,
-            "delta_drift_warn_pct": 5.0,
-            "delta_drift_action_pct": 10.0,
+            "delta_ratio_deviation_warn_pct": 5.0,
+            "delta_ratio_deviation_action_pct": 10.0,
             "theta_cost_excellent_pct": 1.0,
             "theta_cost_acceptable_pct": 2.0,
             "gamma_drift_moderate_pct": 2.0,
@@ -536,7 +540,7 @@ class TestEvaluateHedgeTriggerSet:
         )
 
         assert [t.label for t in triggers] == [
-            "Delta drift",
+            "Net delta vs target",
             "Expiry",
             "Theta cost",
             "Gamma drift",
