@@ -386,6 +386,57 @@ class TestGuardMechanism:
         assert state.portfolio.positions == []
 
 
+class TestAddPositionRejectsExpiredMaturity:
+    """#365: the add-form surfaces add_position()'s new expired-maturity
+    guard as a status-message error, without clearing the typed fields.
+    """
+
+    def test_expired_maturity_produces_an_error_status(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        result = design._add_position_logic(
+            strike=100.0,
+            maturity="2020-01-01",
+            quantity=1,
+            option_type=OptionType.CALL.value,
+            exercise_style=ExerciseStyle.EUROPEAN.value,
+            entry_premium=None,
+            version=0,
+            state=state,
+        )
+
+        version, status, *_rest = result
+        assert version is no_update
+        assert "already-expired" in status.children
+        assert state.portfolio.positions == []
+
+    def test_expired_maturity_does_not_clear_the_typed_fields(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The existing no-clear-on-failure UX (_guarded_mutation) holds."""
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        result = design._add_position_logic(
+            strike=100.0,
+            maturity="2020-01-01",
+            quantity=1,
+            option_type=OptionType.CALL.value,
+            exercise_style=ExerciseStyle.EUROPEAN.value,
+            entry_premium=None,
+            version=0,
+            state=state,
+        )
+
+        _version, _status, *form_fields = result
+        assert all(field is no_update for field in form_fields)
+
+
 class TestImportRefusal:
     """import over dirty state without confirm is refused."""
 

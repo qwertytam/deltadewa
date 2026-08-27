@@ -222,6 +222,8 @@ def _app_with_expired_long_put(tmp_path: Path) -> ProgramDashApp:
         maturity_date=days_from_today(-5),
         quantity=5,
         option_type=OptionType.PUT,
+        # #365: this fixture deliberately wants an already-expired leg.
+        reject_expired=False,
     )
     market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
     return create_app(
@@ -728,6 +730,8 @@ class TestExpiredLegDoesNotBreakMonitor:
             maturity_date=days_from_today(-27),
             quantity=3,
             option_type=OptionType.PUT,
+            # #365: this fixture deliberately reproduces an expired leg.
+            reject_expired=False,
         )
 
         layout = monitor.render(app)

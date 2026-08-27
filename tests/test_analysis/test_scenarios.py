@@ -58,6 +58,8 @@ class TestScenariosMixin:
             maturity_date=datetime.now(tz=UTC),  # At expiry
             quantity=1,
             option_type=OptionType.CALL,
+            # #365: this fixture deliberately wants an at-expiry position.
+            reject_expired=False,
         )
 
         analyzer = PortfolioAnalyzer(portfolio)

@@ -341,6 +341,8 @@ class TestExcludedExpired:
             maturity_date=datetime.now(tz=UTC) - timedelta(days=5),
             quantity=3,
             option_type=OptionType.PUT,
+            # #365: a deliberately expired fixture leg.
+            reject_expired=False,
         )
 
         result = compute_crash_convexity(portfolio, shock=self._shock())
@@ -356,6 +358,8 @@ class TestExcludedExpired:
             maturity_date=datetime.now(tz=UTC) - timedelta(days=5),
             quantity=-3,
             option_type=OptionType.PUT,
+            # #365: a deliberately expired fixture leg.
+            reject_expired=False,
         )
 
         result = compute_crash_convexity(portfolio, shock=self._shock())
@@ -370,6 +374,8 @@ class TestExcludedExpired:
             maturity_date=datetime.now(tz=UTC) - timedelta(days=5),
             quantity=3,
             option_type=OptionType.CALL,
+            # #365: a deliberately expired fixture leg.
+            reject_expired=False,
         )
 
         result = compute_crash_convexity(portfolio, shock=self._shock())

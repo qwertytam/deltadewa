@@ -34,8 +34,16 @@ class ExpiryBucketLabel(StrEnum):
     them into the label -- as the retired Jupyter widget's
     ``"URGENT (<7d)"`` did -- makes the label lie the moment the IPS is
     edited. Callers render the window from :class:`ExpiryBoundaries`.
+
+    ``EXPIRED`` (#365) is not one of those policy-boundary grades -- it is
+    the same ``maturity.date() <= valuation_date.date()`` boundary
+    :func:`~deltadewa.analysis.crash_repricing.is_expired` uses, not an IPS
+    trigger day count. A leg lands here only via a restore path (a real
+    historical or autosaved book), since ``OptionPortfolio.add_position``
+    refuses an expired maturity by default.
     """
 
+    EXPIRED = "EXPIRED"
     URGENT = "URGENT"
     SOON = "SOON"
     ROLL_DUE = "ROLL DUE"
@@ -43,11 +51,14 @@ class ExpiryBucketLabel(StrEnum):
     LONG_TERM = "LONG-TERM"
 
 
-# Chronological order, shortest runway first. A plain `groupby` would sort
-# these alphabetically ("LONG-TERM" < "ROLL DUE" < "SOON" < "URGENT"), which
-# scrambles the urgency ordering -- this is the canonical order the aging
-# panel reads against, the same convention `maturity._BUCKET_ORDER` uses.
+# Chronological order, shortest runway first -- EXPIRED sorts before URGENT
+# since it is more "gone" than "urgent" (#365). A plain `groupby` would sort
+# these alphabetically ("EXPIRED" < "LONG-TERM" < "ROLL DUE" < "SOON" <
+# "URGENT"), which scrambles the urgency ordering -- this is the canonical
+# order the aging panel reads against, the same convention
+# `maturity._BUCKET_ORDER` uses.
 BUCKET_ORDER: Final[tuple[ExpiryBucketLabel, ...]] = (
+    ExpiryBucketLabel.EXPIRED,
     ExpiryBucketLabel.URGENT,
     ExpiryBucketLabel.SOON,
     ExpiryBucketLabel.ROLL_DUE,
@@ -205,6 +216,13 @@ def classify_expiry_bucket(
     the roll window with ``<=``. Normalising them would put a leg in
     ROLL DUE here while the roll table still said HOLD.
 
+    ``days_to_expiry <= 0`` grades ``EXPIRED`` (#365) ahead of every IPS
+    boundary check -- this is
+    :func:`~deltadewa.analysis.crash_repricing.is_expired`'s own boundary
+    (``days_between`` returns ``0`` on the expiry day itself, matching
+    ``maturity.date() <= valuation_date.date()``), not a policy trigger, so
+    it is checked first and unconditionally.
+
     Args:
         days_to_expiry: Calendar days from the valuation date to maturity.
         boundaries: Resolved IPS boundaries from :func:`expiry_boundaries`.
@@ -213,6 +231,8 @@ def classify_expiry_bucket(
         The bucket this runway falls in.
 
     """
+    if days_to_expiry <= 0:
+        return ExpiryBucketLabel.EXPIRED
     if days_to_expiry < boundaries.urgent_days:
         return ExpiryBucketLabel.URGENT
     if days_to_expiry < boundaries.soon_days:

@@ -34,6 +34,7 @@ from typing import Any
 
 import requests
 
+from deltadewa.analysis.crash_repricing import describe_expired_legs, is_expired
 from deltadewa.analysis.portfolio_shape import classify_portfolio_shape
 from deltadewa.state import STATE_FILENAME, ProgramState
 
@@ -130,6 +131,36 @@ def _warn_if_non_conforming(state: ProgramState) -> None:
         file=sys.stderr,
     )
     print(shape.notice, file=sys.stderr)
+    print(rule, file=sys.stderr)
+
+
+def _warn_if_expired_legs(state: ProgramState) -> None:
+    """Print an advisory naming any leg already expired at import (#365).
+
+    ``add_position()`` refuses an expired maturity by *default*, but the
+    importers pass ``reject_expired=False`` deliberately — a real
+    historical or autosaved book can legitimately hold a leg that expired
+    after being added. That means an import can silently bring in a leg
+    with zero remaining runway; this surfaces it instead, on the same
+    channel as :func:`_warn_if_non_conforming` and with the same
+    never-affects-the-exit-code posture.
+    """
+    expired = [
+        position
+        for position in state.portfolio.positions
+        if is_expired(position, valuation_date=state.portfolio.valuation_date)
+    ]
+    if not expired:
+        return
+    rule = "!" * _NOTICE_RULE_WIDTH
+    print(rule, file=sys.stderr)
+    print(
+        f"WARNING: {len(expired)} already-expired position(s) in the "
+        "imported book:",
+        file=sys.stderr,
+    )
+    for label in describe_expired_legs(expired):
+        print(f"  - {label}", file=sys.stderr)
     print(rule, file=sys.stderr)
 
 
@@ -255,6 +286,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"{args.portfolio_path} into {dest}",
     )
     _warn_if_non_conforming(state)
+    _warn_if_expired_legs(state)
 
     if not args.no_live_check:
         app_url = (

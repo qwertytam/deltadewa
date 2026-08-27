@@ -1932,6 +1932,10 @@ class TestExpiredLegs:
             quantity=self._EXPIRED_QUANTITY,
             option_type=OptionType.PUT,
             volatility=0.20,
+            # #365: add_position() refuses an expired maturity by default;
+            # this fixture deliberately wants one to test the #362
+            # exclusion, so it opts out of that new-entry guard.
+            reject_expired=False,
         )
         return portfolio
 

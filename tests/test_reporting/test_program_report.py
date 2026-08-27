@@ -100,6 +100,8 @@ def _expired_put_position() -> object:
         maturity_date=datetime.datetime(2026, 5, 1, tzinfo=datetime.UTC),
         quantity=5,
         option_type=OptionType.PUT,
+        # #365: this fixture deliberately wants an already-expired leg.
+        reject_expired=False,
     )
     return portfolio.positions[0]
 

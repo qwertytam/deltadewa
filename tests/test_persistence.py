@@ -1466,3 +1466,63 @@ class TestContractSizeRoundtrip:
         imported = result["portfolio"]
         assert imported.contract_size == 50
         assert imported.positions[0].contract_size == 50
+
+
+class TestExpiredLegRoundtrip:
+    """#365: a book holding an already-expired leg round-trips cleanly.
+
+    ``add_position()`` refuses an expired maturity by default; the two
+    importers pass ``reject_expired=False`` deliberately, since a real
+    historical or autosaved book can legitimately hold a leg that expired
+    after being added — refusing the whole file over one leg would be the
+    wrong failure mode.
+    """
+
+    def _make_portfolio_with_expired_leg(self) -> OptionPortfolio:
+        maturity = datetime.now(tz=UTC) + timedelta(days=30)
+        expired_maturity = datetime.now(tz=UTC) - timedelta(days=5)
+        p = OptionPortfolio(
+            spot_price=100.0,
+            volatility=0.3,
+            risk_free_rate=0.05,
+            dividend_yield=0.0,
+            symbol="TEST",
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        p.add_position(
+            strike_price=100.0,
+            maturity_date=maturity,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+        p.add_position(
+            strike_price=90.0,
+            maturity_date=expired_maturity,
+            quantity=1,
+            option_type=OptionType.PUT,
+            # This fixture deliberately wants an already-expired leg.
+            reject_expired=False,
+        )
+        return p
+
+    def test_json_roundtrip_does_not_raise(self, tmp_path: Path) -> None:
+        """import_from_json succeeds on a book with an expired leg."""
+        p = self._make_portfolio_with_expired_leg()
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_json(p, PortfolioLogger(), "expired.json")
+
+        result = serializer.import_from_json(path)
+
+        assert len(result["portfolio"].positions) == 2
+
+    @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
+    def test_yaml_roundtrip_does_not_raise(self, tmp_path: Path) -> None:
+        """import_from_yaml succeeds on a book with an expired leg."""
+        p = self._make_portfolio_with_expired_leg()
+        serializer = PortfolioSerializer(tmp_path)
+        path = serializer.export_to_yaml(p, PortfolioLogger(), "expired.yaml")
+        assert path is not None
+
+        result = serializer.import_from_yaml(path)
+
+        assert len(result["portfolio"].positions) == 2
