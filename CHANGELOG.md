@@ -51,6 +51,39 @@ history for that record instead.
   to its own repo (#246). It now points at the same section on the published
   site. The finding recorded above is unchanged.]*
 
+### Fixed
+
+- **#364** — the weekly digest's body build (market-data read through
+  rendering the markdown/html strings, `weekly_report.build_and_render`)
+  is now guarded: a raise from an input this module doesn't control (a
+  provider outage, a repricing edge case) used to take the whole cron job
+  down unhandled. `main()` now writes no files at all on a build failure —
+  not even a partial one, so next week's digest still compares against
+  last week's real snapshot — logs and prints the failure, sends a
+  best-effort plain-language alert email when `--send-email` was
+  requested, and exits `3` (new, alongside the existing `0`/`1`/`2`). The
+  digest heartbeat contract stays exact: `DIGEST_HEARTBEAT_URL` is pinged
+  only on a confirmed send of a real digest (outcome `0`) — refused,
+  delivery-failed, and build-failed all leave it un-pinged, on purpose.
+- **#375** — the crash-convexity figure and the digest's §2 Protection
+  section now name any long-put leg they silently excluded for being
+  already expired (#362's fix), instead of the exclusion being invisible.
+  `CrashConvexityResult.excluded_expired` and
+  `ProtectionSection.excluded_expired_legs` carry the dropped legs
+  hedge-only — a short leg or expired call was never in the figure and
+  never appears in the caveat. Rendered as a caveat line on `/monitor`'s
+  compliance strip and as a note block after the digest's §2 table.
+- **#365** — `OptionPortfolio.add_position` refuses to add a maturity that
+  is already at or before the book's valuation date by default
+  (`reject_expired=True`), naming both dates in the error. Restore paths
+  (`persistence.py`'s JSON/YAML importers) opt out explicitly — a real
+  historical or autosaved book can legitimately hold a leg that expired
+  after being added, and refusing the whole file over one such leg is the
+  wrong failure mode. The importer CLI and `/design`'s import button both
+  surface an advisory naming any already-expired legs found on import.
+  `analysis/position_aging.py` gains an `EXPIRED` bucket (sorting ahead of
+  `URGENT`) for `days_to_expiry <= 0`, matching the same boundary.
+
 ## [0.7.0] - 2026-08-11
 
 Phase 3 close-out work merged since `v0.6.0` — clock/day-count

@@ -555,6 +555,19 @@ docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_repo
 sudo /home/deploy/deltadewa/ops/backup-exports.sh
 ```
 
+**Weekly digest exit codes** — a manual `echo $?` after the command above
+is a documented diagnosis, not a guess:
+
+|Exit|Meaning|Files written?|Heartbeat pinged?|
+|---|---|---|---|
+|`0`|Sent (or, without `--send-email`, built and written)|md/html/snapshot|Yes — the *only* outcome that pings `DIGEST_HEARTBEAT_URL`|
+|`1`|Refused — no IPS policy, or an empty book|No|No|
+|`2`|Built and written, but `--send-email` delivery failed (missing/invalid env var, or the SMTP relay rejected it)|md/html/snapshot|No|
+|`3`|Build itself failed (#364) — an input this module does not control raised partway through (provider outage, a repricing edge case)|**No — not even a partial one**, so next week's digest still compares against last week's real snapshot|No. With `--send-email`, a best-effort plain-language failure alert is sent instead (subject `Weekly Hedge Digest — FAILED to build (<date>)`)|
+
+See `deltadewa/reporting/weekly_report.py`'s `main()` docstring for the
+authoritative version of this table.
+
 ## 12. Verifying the last run succeeded
 
 ```bash
@@ -647,10 +660,17 @@ also runs nightly, at 03:30).
 - **DIGEST overdue**: the weekly email did not send. This is the
   dangerous one — an overdue digest reads exactly like "a quiet week, no
   news," which is precisely why the design pings only on a *confirmed*
-  send (`deltadewa/reporting/weekly_report.py`). Check
-  `~/deltadewa/logs/weekly_report.log` for a `--send-email` failure
-  (missing/invalid env var, or the SMTP relay rejecting the
-  credentials/quota), then re-run §11's send command by hand.
+  send (`deltadewa/reporting/weekly_report.py`). **The contract is exact:
+  `DIGEST_HEARTBEAT_URL` is pinged on exit `0` only** — see §11's exit-
+  code table. Refused (`1`), built-not-sent (`2`), and build-failed (`3`,
+  #364) all leave it un-pinged on purpose: a build-failed run sends its
+  own best-effort plain-language failure alert email when `--send-email`
+  is set, but that alert is a *separate* signal from the heartbeat, never
+  a substitute for it — if SMTP itself is the fault, the alert never
+  arrives either. Check `~/deltadewa/logs/weekly_report.log` for a
+  `--send-email` failure (missing/invalid env var, or the SMTP relay
+  rejecting the credentials/quota) or a build failure (exit `3`), then
+  re-run §11's send command by hand.
 - **BACKUP overdue**: the offsite `exports/` push (or its "nothing
   changed" no-op) hasn't confirmed within the grace window — either
   root's crontab entry stopped firing, or the push itself is failing.
