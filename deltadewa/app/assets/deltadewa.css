@@ -89,7 +89,8 @@ body {
 
 .scenario-explorer,
 .decisions-section,
-.position-detail {
+.position-detail,
+.provenance-panel {
   background: #fff;
   border: 1px solid #e3e3e3;
   border-radius: 10px;
@@ -412,6 +413,58 @@ body {
 
 .position-detail-table th {
   background: #f0f0f0;
+}
+
+/* Provenance panel (#367/#368): summary line + collapsed detail table,
+ * same card treatment as .position-detail above (added to that shared
+ * selector) so it sits on a white card rather than the page background. */
+
+.provenance-summary {
+  font-weight: 600;
+}
+
+.provenance-detail {
+  margin-top: 12px;
+}
+
+.provenance-detail summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 8px 0;
+}
+
+.provenance-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+  margin-top: 8px;
+}
+
+.provenance-table th,
+.provenance-table td {
+  border: 1px solid #ddd;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.provenance-table th {
+  background: #f0f0f0;
+}
+
+.provenance-freshness--fresh {
+  color: #1a7a1a;
+  font-weight: 600;
+}
+
+.provenance-freshness--aging {
+  color: #7a5b00;
+  font-weight: 600;
+}
+
+.provenance-freshness--unknown,
+.provenance-freshness--missing {
+  color: #7a0000;
+  font-weight: 600;
 }
 
 /* Band bar: "is this in range" horizontal indicator */
