@@ -19,7 +19,9 @@ from deltadewa.state import (
 )
 from tests.clock_helpers import days_from_today
 
-_MATURITY = datetime(2027, 6, 30, tzinfo=UTC)
+# Seeded off the program clock, not pinned: a fixed literal drifts into
+# the past under the clock-shift probe and expires the book (#321/#343).
+_MATURITY = days_from_today(365)
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
 _EXAMPLE_IPS = Path(__file__).parent.parent / "config" / "ips.example.yaml"
 

@@ -399,6 +399,14 @@ don't fix):
   pulling its log into the main thread: per-step outcome and duration, the step
   that failed or hung, and whether the cause is the code or the infrastructure.
   Use for every CI check-status read.
+- **reduction-auditor** — checks aggregations for information that gets
+  destroyed or invented on the way to the reader: every `sum`, `max`/`min`,
+  bucket assignment, group-by and scalar broadcast on a rendering or
+  reporting path, reported LOSSY / INVALID / BROADCAST / DEGENERATE /
+  FAITHFUL — e.g. #374's `_worst_roll_verdict` collapsing every
+  `RollStatusRecord` to one severity word with no way back to which leg or
+  why. Run before changing a table, a bucket scheme, a headline reduction,
+  or any panel that shows one number standing for many.
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`

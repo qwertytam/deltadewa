@@ -51,6 +51,13 @@ MANIFEST
 exports/
 .migrations/
 
+# Cron job logs on the deploy host — RUNBOOK §9 redirects the refresh and
+# weekly-digest cron lines into ~/deltadewa/logs/*.log, and §9's logrotate
+# config rotates them in place. The whole directory rather than *.log
+# (already ignored above) because logrotate's rotated files —
+# refresh.log.1, refresh.log.2.gz — don't match that pattern.
+logs/
+
 # User-specific portfolio configuration
 # Keep example configs but ignore user's custom config
 portfolio_config.yaml

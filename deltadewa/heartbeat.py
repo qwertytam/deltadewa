@@ -10,11 +10,25 @@ because they fail independently and mean different things when overdue:
   refresh is the normal state, not an incident — paging on it would alert
   most mornings for a healthy system. A total failure does not ping, so it
   stays visible (in logs, and as an eventually-overdue check) without
-  drowning the routine partial-failure signal.
+  drowning the routine partial-failure signal. Since #377, a full or
+  partial success also has to *read back* through the app's own
+  read-only read path before it counts — not just have been written by
+  the job's own process — so a write-readability failure (exit 3, at
+  least one series fetched live but none of it read back) withholds the
+  ping exactly like a total fetch failure (exit 2) does.
 - **Digest** pings only once the weekly email is confirmed sent. This is
   the one where silence is most dangerous: a missing weekly email is
   exactly what gets rationalised as "quiet week," so an overdue digest
-  check must alarm.
+  check must alarm. That contract is exact and total (#364): every other
+  outcome of a digest run — refused (exit 1, no IPS policy or an empty
+  book), built-and-written-but-delivery-failed (exit 2), and build-failed
+  (exit 3, ``weekly_report.build_and_render`` itself raised) — leaves this
+  check un-pinged, including when a build failure sends its own
+  plain-language alert email (``weekly_report._send_build_failure_alert``).
+  The heartbeat and that alert email are independent signals on purpose:
+  if SMTP itself is the fault, the alert never arrives either, so the
+  heartbeat must not be traded away for a redundant signal that can fail
+  the exact same way.
 
 Both checks live at top level (not inside ``marketdata/`` or
 ``reporting/``) because both jobs share this one pinger.

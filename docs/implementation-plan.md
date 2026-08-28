@@ -2272,6 +2272,30 @@ it must be scoped as pass 3, not pass 1. The `secret-scanner` sub-agent
 exists because of this sequence, and the standing rule in `SECURITY.md` is
 its written form.
 
+### A finding gets filed once
+
+Batch 3d's blast-radius-style prompts asked for the same two findings — the
+refresh heartbeat pinging on exit code alone with no read-back verification,
+and nothing asserting `app`/`jobs` resolve the same `DELTADEWA_CACHE_DIR` —
+to be filed in the plan step *and again* in the implementation step. Both
+landed twice: #371 duplicated #377, #372 duplicated #378. The later pair are
+the ones kept, because a second pass over the same ground wrote the better
+version — #378 in particular reasoned through *why* the finding is P2 and
+not P1 (the deployed `compose.yaml` hardcodes both cache dirs to the same
+literal, so the divergence it warns about cannot currently happen) and
+proposed a concrete manifest fix, neither of which the first filing had.
+
+**Standing rule: a finding surfaced while planning or auditing gets filed
+once, at the point it is discovered, and is then referenced by number —
+never re-filed as a "new" finding by a later step that rediscovers the same
+thing independently.** Before opening an issue, check whether one already
+covers it (`gh issue list`, or search the finding's file:line). If a later
+pass genuinely improves on an earlier filing's reasoning, fold that
+reasoning into the existing issue as a comment rather than opening a
+sibling — a second open issue for one defect is itself a small instance of
+the "silence reads as fine" problem above: two trackers for one fault make
+it look like more coverage exists than does.
+
 ---
 
 ## Deferred — backlog, not in this plan

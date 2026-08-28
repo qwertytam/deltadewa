@@ -59,6 +59,7 @@ from deltadewa.reporting.program_report import (
     build_cost_section,
     build_ips_compliance,
     build_protection_section,
+    expired_legs_caveat,
 )
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
@@ -205,6 +206,7 @@ def _spot_headline(
 def _compliance_strip(
     compliance: IpsComplianceSection,
     data_quality: DataQuality,
+    excluded_expired: tuple[str, ...] = (),
 ) -> html.Div:
     """Build the one-line IPS compliance strip (#298).
 
@@ -229,6 +231,10 @@ def _compliance_strip(
             the book's own hand-entered inputs; market data is not one
             of their inputs, so a stale market-data week must not hide a
             real breach).
+        excluded_expired: ``ProtectionSection.excluded_expired_legs``
+            (#375) — long-put leg labels dropped from the convexity
+            figures for being already expired. Empty ``()`` (the
+            default) renders no caveat.
 
     Returns:
         ``id="compliance-strip"`` — a FAIL book cannot render
@@ -266,6 +272,11 @@ def _compliance_strip(
                 "market data.",
                 className="plain-language",
             ),
+        )
+    expired_caveat = expired_legs_caveat(excluded_expired)
+    if expired_caveat is not None:
+        children.append(
+            html.P(expired_caveat, className="plain-language"),
         )
     return html.Div(
         children,
@@ -796,7 +807,11 @@ def _build_compliance_panel(
             app.market_data,
             ips_config.market_environment,
         )
-        return _compliance_strip(compliance, market_env.data_quality)
+        return _compliance_strip(
+            compliance,
+            market_env.data_quality,
+            protection_section.excluded_expired_legs,
+        )
 
     return safe_render(_build)
 

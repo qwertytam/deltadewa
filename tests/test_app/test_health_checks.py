@@ -8,7 +8,6 @@ materialized assertions ``/health`` composes, not the route itself (see
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -16,6 +15,7 @@ import pytest
 from deltadewa.app.health_checks import (
     BOOT_WIRING_CHECKS,
     check_cache_dir_writable,
+    check_cache_manifest_matches,
     check_exercise_style_wired,
     check_ips_loaded,
     check_ips_sections_configured,
@@ -25,13 +25,17 @@ from deltadewa.app.health_checks import (
     summarize,
 )
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.marketdata import write_cache_manifest
 from deltadewa.state import ProgramState
+from tests.clock_helpers import days_from_today
 
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
 _EXAMPLE_IPS = (
     Path(__file__).parent.parent.parent / "config" / ("ips.example.yaml")
 )
-_MATURITY = datetime(2027, 6, 30, tzinfo=UTC)
+# Seeded off the program clock, not pinned: a fixed literal drifts into
+# the past under the clock-shift probe and expires the book (#365).
+_MATURITY = days_from_today(365)
 
 
 def _state_no_ips(
@@ -202,6 +206,79 @@ class TestCheckCacheDirWritable:
         assert cache_dir.is_dir()
 
 
+class TestCheckCacheManifestMatches:
+    """#377/#378: the refresh job's manifest vs. this app's own resolution."""
+
+    def test_not_ok_when_no_manifest_exists(self, tmp_path: Path) -> None:
+        cache_dir = tmp_path / "cache"
+
+        result = check_cache_manifest_matches(cache_dir)
+
+        assert result.ok is False
+        assert "no refresh manifest" in result.detail
+        assert result.value == {
+            "recorded_cache_dir": None,
+            "written_at": None,
+            "resolved_cache_dir": str(cache_dir),
+        }
+
+    def test_ok_when_manifest_matches_resolved_cache_dir(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        cache_dir = tmp_path / "cache"
+        write_cache_manifest(cache_dir, {})
+
+        result = check_cache_manifest_matches(cache_dir)
+
+        assert result.ok is True
+        assert result.value is not None
+        assert result.value["recorded_cache_dir"] == str(cache_dir)
+        assert result.value["resolved_cache_dir"] == str(cache_dir)
+
+    def test_not_ok_when_manifest_recorded_a_different_path(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        recorded_dir = tmp_path / "recorded-elsewhere"
+        write_cache_manifest(recorded_dir, {})
+        resolved_dir = tmp_path / "cache"
+        # Simulate a divergent resolution: copy the manifest to the
+        # *resolved* directory this app process actually checks, still
+        # recording the other (different) cache_dir inside it.
+        resolved_dir.mkdir(parents=True, exist_ok=True)
+        manifest_name = (recorded_dir / "refresh-manifest.json").name
+        (resolved_dir / manifest_name).write_text(
+            (recorded_dir / manifest_name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+
+        result = check_cache_manifest_matches(resolved_dir)
+
+        assert result.ok is False
+        assert str(recorded_dir) in result.detail
+        assert str(resolved_dir) in result.detail
+        assert result.value is not None
+        assert result.value["recorded_cache_dir"] == str(recorded_dir)
+        assert result.value["resolved_cache_dir"] == str(resolved_dir)
+
+    def test_not_ok_and_does_not_raise_for_a_corrupt_manifest(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir(parents=True)
+        (cache_dir / "refresh-manifest.json").write_text(
+            "{not valid json",
+            encoding="utf-8",
+        )
+
+        result = check_cache_manifest_matches(cache_dir)
+
+        assert result.ok is False
+        assert "no refresh manifest" in result.detail
+
+
 class TestRunChecksAndSummarize:
     def test_run_checks_returns_one_result_per_registered_name(
         self,
@@ -218,9 +295,11 @@ class TestRunChecksAndSummarize:
         self,
         tmp_path: Path,
     ) -> None:
+        cache_dir = tmp_path / "cache"
+        write_cache_manifest(cache_dir, {})  # cache_manifest_matches: ok
         results = run_checks(
             _state_with_ips(tmp_path),
-            cache_dir=tmp_path / "cache",
+            cache_dir=cache_dir,
         )
 
         status, boot_wiring = summarize(results)

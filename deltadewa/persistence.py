@@ -524,6 +524,12 @@ class PortfolioSerializer:
                 quantity=quantity,
                 volatility=position_volatility,
                 exercise_style=exercise_style,
+                # #365: a real historical or autosaved book can
+                # legitimately hold a leg that expired after being
+                # added — refusing the whole file over one such leg is
+                # the wrong failure mode here. add_position()'s default
+                # guard is for new entry (the /design form), not restore.
+                reject_expired=False,
             )
 
             # Set entry tracking directly (not via add_position's kwargs)
@@ -652,6 +658,10 @@ class PortfolioSerializer:
                 ),
                 volatility=position_volatility,
                 exercise_style=exercise_style,
+                # #365: see import_from_json's matching comment — a
+                # restored book may legitimately hold an already-expired
+                # leg, and refusing the whole file over one is wrong.
+                reject_expired=False,
             )
 
             # See import_from_json for why this is set directly rather than

@@ -33,21 +33,40 @@ blank. Only a ``Source.LIVE`` result counts as refreshed — a ``CACHED``
 result (should not occur given ``force_fetch=True``, but is not trusted
 blindly either) or a ``STALE`` fallback (the live fetch ran and failed)
 both count the same as an outright failure here, even though each is a
-usable value a reader could still consult. The exit code summarizes the
+usable value a reader could still consult.
+
+A fetch counting as ``LIVE`` only proves the write happened *in this
+process*. #300's original acceptance criterion for this job was that the
+app can actually read what the job wrote — a write that lands somewhere
+the read path can't see (a permissions mismatch, a differently-resolved
+``DELTADEWA_CACHE_DIR``, a filesystem quirk) would still report a green
+exit code under that weaker test. #377 closes that gap: after every
+series has had its live-fetch attempt, :func:`verify_read_back`
+constructs a **separate, read-only** ``CboeFredProvider`` over the same
+resolved ``cache_dir`` and re-reads each series that fetched live through
+it — deliberately not trusting the writer's own tally, since the writer
+succeeding is exactly the thing under test. The exit code summarizes the
 run:
 
-    0   every series refreshed live
-    1   some series refreshed live, some did not (partial)
-    2   no series refreshed live
+    0   every series refreshed live and read back through the app's own path
+    1   some series refreshed+verified live, some did not
+    2   no series fetched live at all (a fetch failure) — or the provider
+        construction / fetch / read-back sequence itself raised an
+        exception this job did not anticipate (R-a.3): either way, no
+        usable outcome came out of this run, so it is reported the same
+    3   at least one series fetched live, but none of it reads back through
+        the app's own read path (a write-readability failure — #377 —
+        distinct from a fetch failure: the network worked, the write
+        didn't land somewhere this process's own read path can see)
 
 FRED's VIXCLS series publishes with a lag, so an early-morning run
 reporting exit 1 with only the VIX-derived series unavailable is a
 plausible *normal* state, not an incident by itself — a caller consuming
 this exit code should treat 0 and 1 alike and escalate only on sustained
-1s or any 2.
+1s or any 2 or 3.
 
 If ``REFRESH_HEARTBEAT_URL`` is set, this job pings it on exit 0 and 1
-(see ``deltadewa.heartbeat`` for why exit 2 does not ping).
+(exit 2 and 3 do not ping — see ``deltadewa.heartbeat``).
 
 A note on ``as_of``: it is the *source series'* observation date, not when
 this job ran — a Saturday run fetching Friday's close reports
@@ -62,9 +81,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from collections.abc import Callable, Sequence
+import sys
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.heartbeat import ping
 from deltadewa.ips_config import IpsConfigError, load_ips_config
@@ -75,9 +95,12 @@ from deltadewa.marketdata import (
     Source,
     default_cache_dir,
     resolve_data_ttl,
+    write_cache_manifest,
 )
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from deltadewa.marketdata import MarketDataProvider
 
 _logger = logging.getLogger(__name__)
@@ -85,6 +108,11 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_SYMBOL = "SPX"
 _DEFAULT_IPS_PATH = Path("config/ips.yaml")
 _HEARTBEAT_ENV_VAR = "REFRESH_HEARTBEAT_URL"
+
+_EXIT_OK: Final[int] = 0
+_EXIT_PARTIAL: Final[int] = 1
+_EXIT_FETCH_FAILED: Final[int] = 2
+_EXIT_WRITE_UNREADABLE: Final[int] = 3
 
 
 def _series(
@@ -132,7 +160,10 @@ def _series(
     ]
 
 
-def refresh_all(provider: MarketDataProvider, symbol: str) -> tuple[int, int]:
+def refresh_all(
+    provider: MarketDataProvider,
+    symbol: str,
+) -> tuple[dict[str, datetime], int]:
     """Refresh every series the app depends on, independently.
 
     A failure fetching one series is logged and does not stop the rest —
@@ -150,12 +181,13 @@ def refresh_all(provider: MarketDataProvider, symbol: str) -> tuple[int, int]:
         symbol: Underlying symbol to warm the spot cache for.
 
     Returns:
-        ``(refreshed, total)`` series counts — ``refreshed`` counts only
-        ``Source.LIVE`` results.
+        ``(live, total)`` — ``live`` maps each series name that fetched
+        ``Source.LIVE`` to the ``fetched_at`` timestamp that fetch wrote
+        to disk; ``total`` is the total number of series attempted.
 
     """
     series = _series(provider, symbol)
-    refreshed = 0
+    live: dict[str, datetime] = {}
     for name, fetch in series:
         try:
             observation = fetch()
@@ -163,7 +195,8 @@ def refresh_all(provider: MarketDataProvider, symbol: str) -> tuple[int, int]:
             _logger.warning("%s: FAILED — %s", name, exc)
             continue
         if observation.source is Source.LIVE:
-            refreshed += 1
+            if observation.fetched_at is not None:
+                live[name] = observation.fetched_at
             _logger.info(
                 "%s: refreshed live, as_of=%s fetched_at=%s",
                 name,
@@ -178,7 +211,83 @@ def refresh_all(provider: MarketDataProvider, symbol: str) -> tuple[int, int]:
                 observation.as_of,
                 observation.fetched_at,
             )
-    return refreshed, len(series)
+    return live, len(series)
+
+
+def verify_read_back(
+    cache_dir: Path,
+    symbol: str,
+    live: Mapping[str, datetime],
+) -> tuple[str, ...]:
+    """Confirm each just-refreshed series reads back through the app's own path.
+
+    Builds a **separate**, read-only ``CboeFredProvider`` over the same
+    resolved *cache_dir* the writer just used — not the writer's own
+    provider — and re-fetches only the series named in *live* through it.
+    Deliberately does not trust the writer's own ``Source.LIVE`` tally:
+    that only proves the write happened in this process, not that the
+    app's own read path can see it (#300's original acceptance criterion
+    for this job; #377).
+
+    A series counts as verified iff (a) the re-read doesn't raise
+    ``MarketDataError``, and (b) the re-read ``fetched_at`` is **not
+    older than** (``>=``) the *live*-recorded ``fetched_at`` for that
+    name — not exact equality. ``vix``/``vix_history`` share one on-disk
+    cache key (see ``_series()``'s own docstring), so in a real run the
+    second write legitimately overwrites the first's ``fetched_at`` —
+    an exact-equality check would falsely flag ``vix`` as a write-
+    readability failure on every single healthy run. ``>=`` verifies
+    "this run's own write reached the read path" without that false
+    positive, while still catching a genuine failure: a stale on-disk
+    value from a previous run reads back *older* than what this run just
+    recorded writing.
+
+    Args:
+        cache_dir: The resolved cache directory the writer just used.
+        symbol: Underlying symbol, for the ``spot`` series.
+        live: The series names and ``fetched_at`` timestamps
+            ``refresh_all`` reported as freshly written.
+
+    Returns:
+        The subset of *live*'s names that verified, in *live*'s
+        iteration order.
+
+    """
+    if not live:
+        return ()
+
+    reader = CboeFredProvider(cache_dir=cache_dir, read_only=True)
+    fetch_by_name = dict(_series(reader, symbol))
+
+    verified: list[str] = []
+    for name, recorded_fetched_at in live.items():
+        fetch = fetch_by_name[name]
+        try:
+            observation = fetch()
+        except MarketDataError as exc:
+            _logger.warning("%s: read-back FAILED — %s", name, exc)
+            continue
+        read_fetched_at = observation.fetched_at
+        if (
+            read_fetched_at is not None
+            and read_fetched_at >= recorded_fetched_at
+        ):
+            verified.append(name)
+            _logger.info(
+                "%s: read-back verified (%s)",
+                name,
+                observation.source,
+            )
+        else:
+            _logger.warning(
+                "%s: read-back STALE — wrote fetched_at=%s, read back "
+                "fetched_at=%s (%s)",
+                name,
+                recorded_fetched_at,
+                read_fetched_at,
+                observation.source,
+            )
+    return tuple(verified)
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -224,9 +333,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     within-TTL cache hit must never stand in for this job having run.
 
     Returns:
-        Process exit code: ``0`` if every series refreshed live, ``1`` if
-        some did and some didn't (partial — a stale fallback or a hard
-        failure), ``2`` if none did.
+        Process exit code — see the module docstring's table: ``0``
+        every series refreshed live and read back, ``1`` some did,
+        ``2`` no series fetched live at all, ``3`` at least one fetched
+        live but none of it read back (a write-readability failure).
 
     """
     logging.basicConfig(level=logging.INFO)
@@ -245,30 +355,75 @@ def main(argv: Sequence[str] | None = None) -> int:
     cache_dir = (
         args.cache_dir if args.cache_dir is not None else default_cache_dir()
     )
-    provider = CboeFredProvider(
-        cache_dir=cache_dir,
-        # Inert for this job: force_fetch below bypasses the TTL check
-        # that would otherwise consult it. Still resolved and passed
-        # through so --ips-path/load_ips_config above isn't dead code,
-        # and so the constructor's ttl/force_fetch contract stays
-        # visible from this call site.
-        ttl=resolve_data_ttl(ips_config),
-        read_only=False,
-        force_fetch=True,
-    )
 
-    refreshed, total = refresh_all(provider, args.symbol)
-    _logger.info("Refreshed %d/%d series live", refreshed, total)
+    try:
+        provider = CboeFredProvider(
+            cache_dir=cache_dir,
+            # Inert for this job: force_fetch below bypasses the TTL
+            # check that would otherwise consult it. Still resolved and
+            # passed through so --ips-path/load_ips_config above isn't
+            # dead code, and so the constructor's ttl/force_fetch
+            # contract stays visible from this call site.
+            ttl=resolve_data_ttl(ips_config),
+            read_only=False,
+            force_fetch=True,
+        )
 
-    if refreshed == total:
-        exit_code = 0
-    elif refreshed == 0:
-        exit_code = 2
+        live, total = refresh_all(provider, args.symbol)
+        _logger.info("Fetched %d/%d series live", len(live), total)
+
+        verified = verify_read_back(cache_dir, args.symbol, live)
+        _logger.info(
+            "Verified %d/%d fetched series read back through the app's "
+            "own path",
+            len(verified),
+            len(live),
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Unanticipated on purpose (mirrors weekly_report.py's #364 guard
+        # and panel_guard.safe_render's precedent, #363): a blast-radius
+        # audit (R-a.3) found this whole sequence — provider construction,
+        # refresh_all, verify_read_back — unguarded. Left that way, a
+        # raise here exits with Python's bare default (1), indistinguish-
+        # able from _EXIT_PARTIAL — a state that WOULD have pinged the
+        # heartbeat. Falls back to the same exit code and silent-heartbeat
+        # contract as a total fetch failure (2): from the operator's
+        # chair, "every series failed" and "the run crashed before
+        # finishing" both mean nothing usable came out of this run.
+        _logger.exception("refresh: run FAILED unexpectedly")
+        print(
+            f"refresh: could not complete the run — {exc}",
+            file=sys.stderr,
+        )
+        return _EXIT_FETCH_FAILED
+
+    try:
+        write_cache_manifest(cache_dir, live)
+    except OSError as exc:
+        _logger.warning(
+            "could not write refresh manifest to %s: %s",
+            cache_dir,
+            exc,
+        )
+
+    if len(verified) == total:
+        exit_code = _EXIT_OK
+    elif verified:
+        exit_code = _EXIT_PARTIAL
+    elif live:
+        exit_code = _EXIT_WRITE_UNREADABLE
     else:
-        exit_code = 1
+        exit_code = _EXIT_FETCH_FAILED
 
-    if exit_code in (0, 1):
+    if exit_code in (_EXIT_OK, _EXIT_PARTIAL):
         ping(os.environ.get(_HEARTBEAT_ENV_VAR), label="refresh")
+    elif exit_code == _EXIT_WRITE_UNREADABLE:
+        _logger.warning(
+            "refresh: fetched %d series live but none read back through "
+            "the app's own path, skipping heartbeat ping so it stays "
+            "visible instead of masking a real outage",
+            len(live),
+        )
     else:
         _logger.warning(
             "refresh: total failure, skipping heartbeat ping so it stays "

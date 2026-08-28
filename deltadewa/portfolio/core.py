@@ -104,6 +104,8 @@ class OptionPortfolioBase:
         entry_date: dt | None = None,
         entry_premium: float | None = None,
         volatility_as_of: dt | None = None,
+        *,
+        reject_expired: bool = True,
     ) -> OptionPosition:
         """Add an option position to the portfolio.
 
@@ -134,9 +136,25 @@ class OptionPortfolioBase:
                 the returned position directly with the serialized value,
                 the same way it already does for ``entry_spot``/
                 ``entry_date``, rather than accepting this default.
+            reject_expired: When ``True`` (the default), raise
+                ``ValueError`` rather than add a position whose
+                ``maturity_date`` is already at or before
+                ``self.valuation_date`` (#365) — refuse at typing time
+                so a fat-fingered maturity year can't quietly enter the
+                book as a leg with zero remaining runway. A restore path
+                (``persistence.py``'s importers) passes ``False``: a real
+                historical or autosaved book can legitimately hold a leg
+                that expired after being added, and refusing the whole
+                file over one leg is the wrong failure mode there — see
+                :func:`~deltadewa.analysis.crash_repricing.is_expired`.
 
         Returns:
             The newly created and appended OptionPosition.
+
+        Raises:
+            ValueError: *exercise_style* cannot be resolved, or
+                *reject_expired* is ``True`` and *maturity_date* is
+                already expired as of ``self.valuation_date``.
 
         """
         effective_cs = (
@@ -193,6 +211,22 @@ class OptionPortfolioBase:
             entry_premium=entry_premium,
             volatility_as_of=volatility_as_of,
         )
+        # Local import: analysis/crash_repricing.py sits above this module
+        # in the package (deltadewa.analysis.__init__ imports
+        # deltadewa.analysis.cache, which imports OptionPortfolio) — a
+        # module-level import here would be circular. See #365.
+        # pylint: disable-next=import-outside-toplevel
+        from deltadewa.analysis.crash_repricing import is_expired
+
+        if reject_expired and is_expired(
+            position,
+            valuation_date=self.valuation_date,
+        ):
+            raise ValueError(
+                f"maturity {maturity_date.date()} is at or before the "
+                f"book's valuation date {self.valuation_date.date()} — "
+                "refusing to add an already-expired position",
+            )
         self.positions.append(position)
         return position
 

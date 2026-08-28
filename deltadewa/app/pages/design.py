@@ -46,7 +46,7 @@ from dash.development.base_component import Component
 
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.analysis.crash_repricing import CrashShock, is_expired
 from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
@@ -566,7 +566,26 @@ def _import_logic(
             no_update,
             True,
         )
-    return version + 1, _status("Imported.", error=False), None, True
+
+    # #365: an imported book may legitimately hold a leg that expired
+    # after being added (persistence.py's importers pass
+    # reject_expired=False) — the CLI importer prints a leg-by-leg
+    # breakdown (app/import_portfolio.py's _warn_if_expired_legs); the
+    # status-message plumbing here only carries one line, so a summary
+    # count is the equivalent advisory for this surface.
+    expired_count = sum(
+        1
+        for position in state.portfolio.positions
+        if is_expired(position, valuation_date=state.portfolio.valuation_date)
+    )
+    message = "Imported."
+    if expired_count:
+        leg_word = "leg" if expired_count == 1 else "legs"
+        message += (
+            f" Imported with {expired_count} already-expired {leg_word}; "
+            "see position detail."
+        )
+    return version + 1, _status(message, error=False), None, True
 
 
 def _export_logic(*, state: ProgramState) -> tuple[Any, Component]:
@@ -1426,6 +1445,7 @@ def _expiry_window_text(
     exactly.
     """
     windows = {
+        ExpiryBucketLabel.EXPIRED: "<= 0d",
         ExpiryBucketLabel.URGENT: f"< {boundaries.urgent_days}d",
         ExpiryBucketLabel.SOON: _day_range_text(
             boundaries.urgent_days,

@@ -196,6 +196,43 @@ def _app_with_convexity_band(
     )
 
 
+def _app_with_expired_long_put(tmp_path: Path) -> ProgramDashApp:
+    """Build a /monitor app whose book holds one already-expired long put.
+
+    Mirrors ``_app_with_convexity_band``'s carry-budget headroom (5,000
+    shares vs. the live put) so the compliance verdict stays legible, plus
+    a second long put already past its maturity — the #375 fixture for
+    the compliance strip's expired-leg caveat.
+    """
+    state = ProgramState.load(
+        tmp_path,
+        ips_path=_EXAMPLE_IPS_YAML,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    state.portfolio.spot_price = 5000.0
+    state.set_underlying_quantity(5_000.0)
+    state.add_position(
+        strike_price=4500.0,
+        maturity_date=days_from_today(180),
+        quantity=10,
+        option_type=OptionType.PUT,
+    )
+    state.portfolio.add_position(
+        strike_price=4000.0,
+        maturity_date=days_from_today(-5),
+        quantity=5,
+        option_type=OptionType.PUT,
+        # #365: this fixture deliberately wants an already-expired leg.
+        reject_expired=False,
+    )
+    market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
+    return create_app(
+        state=state,
+        market_data=market_data,
+        ips_config=state.ips_config,
+    )
+
+
 def _assert_renders_cleanly(page: Page, url: str) -> None:
     """Load *url* and assert no client-side error or leaked traceback."""
     js_errors: list[str] = []
@@ -467,6 +504,32 @@ class TestComplianceStrip:
         assert "PASS" in text
         assert "FAIL" not in text
 
+    def test_expired_leg_caveat_present_when_book_has_one(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#375: the strip names an expired long put excluded from convexity."""
+        app = _app_with_expired_long_put(tmp_path)
+
+        layout = monitor.render(app)
+
+        strip = _find_component(layout, "compliance-strip")
+        assert strip is not None
+        text = str(strip)
+        assert "Convexity excludes 1 expired leg" in text
+        assert "4,000 PUT" in text
+
+    def test_expired_leg_caveat_absent_when_book_has_none(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The other direction: no caveat when nothing was excluded."""
+        layout = monitor.render(monitor_app.app)
+
+        strip = _find_component(layout, "compliance-strip")
+        assert strip is not None
+        assert "Convexity excludes" not in str(strip)
+
     def test_strip_is_present_before_the_scenario_explorer(
         self,
         monitor_app: MonitorAppHandle,
@@ -667,6 +730,8 @@ class TestExpiredLegDoesNotBreakMonitor:
             maturity_date=days_from_today(-27),
             quantity=3,
             option_type=OptionType.PUT,
+            # #365: this fixture deliberately reproduces an expired leg.
+            reject_expired=False,
         )
 
         layout = monitor.render(app)

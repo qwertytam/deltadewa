@@ -51,6 +51,72 @@ history for that record instead.
   to its own repo (#246). It now points at the same section on the published
   site. The finding recorded above is unchanged.]*
 
+### Fixed
+
+- **#364** — the weekly digest's body build (market-data read through
+  rendering the markdown/html strings, `weekly_report.build_and_render`)
+  is now guarded: a raise from an input this module doesn't control (a
+  provider outage, a repricing edge case) used to take the whole cron job
+  down unhandled. `main()` now writes no files at all on a build failure —
+  not even a partial one, so next week's digest still compares against
+  last week's real snapshot — logs and prints the failure, sends a
+  best-effort plain-language alert email when `--send-email` was
+  requested, and exits `3` (new, alongside the existing `0`/`1`/`2`). The
+  digest heartbeat contract stays exact: `DIGEST_HEARTBEAT_URL` is pinged
+  only on a confirmed send of a real digest (outcome `0`) — refused,
+  delivery-failed, and build-failed all leave it un-pinged, on purpose.
+- **#375** — the crash-convexity figure and the digest's §2 Protection
+  section now name any long-put leg they silently excluded for being
+  already expired (#362's fix), instead of the exclusion being invisible.
+  `CrashConvexityResult.excluded_expired` and
+  `ProtectionSection.excluded_expired_legs` carry the dropped legs
+  hedge-only — a short leg or expired call was never in the figure and
+  never appears in the caveat. Rendered as a caveat line on `/monitor`'s
+  compliance strip and as a note block after the digest's §2 table.
+- **#365** — `OptionPortfolio.add_position` refuses to add a maturity that
+  is already at or before the book's valuation date by default
+  (`reject_expired=True`), naming both dates in the error. Restore paths
+  (`persistence.py`'s JSON/YAML importers) opt out explicitly — a real
+  historical or autosaved book can legitimately hold a leg that expired
+  after being added, and refusing the whole file over one such leg is the
+  wrong failure mode. The importer CLI and `/design`'s import button both
+  surface an advisory naming any already-expired legs found on import.
+  `analysis/position_aging.py` gains an `EXPIRED` bucket (sorting ahead of
+  `URGENT`) for `days_to_expiry <= 0`, matching the same boundary.
+- **#377** — the market-data refresh job's own `LIVE` tally only proved a
+  write happened *in that process*; nothing confirmed the app could
+  actually read it back, which was #300's original acceptance criterion
+  for this job. `refresh_all()` now returns `(live, total)` — `live`
+  maps each series that fetched live to the `fetched_at` its write
+  recorded — and a new `verify_read_back()` re-reads each of those
+  series through a **separate, read-only** `CboeFredProvider` over the
+  same resolved `cache_dir`, rather than trusting the writer's own
+  tally. A series verifies iff the re-read doesn't raise and its
+  `fetched_at` is `>=` (not `==`) what was recorded: `vix`/`vix_history`
+  share one on-disk cache key, so the second write legitimately
+  overwrites the first's `fetched_at` on every healthy run, and an
+  exact-equality check would falsely flag that pair as a
+  write-readability failure every time. `main()` gains exit code `3`
+  (fetched live, but none of it read back — distinct from exit `2`,
+  nothing fetched live at all); exits `2` and `3` both withhold the
+  heartbeat ping, same as before.
+- **#378** — nothing verified that the read-only Dash app and the
+  refresh job actually resolve `DELTADEWA_CACHE_DIR` to the same
+  directory at runtime; `default_cache_dir()`'s docstring had overclaimed
+  they "agree by construction," true only of the *resolution logic*, not
+  of the two `compose.yaml` literals that actually feed it. The refresh
+  job now writes a small manifest (`write_cache_manifest`, `_policy.py`)
+  into its resolved `cache_dir` on every run, recording that path,
+  when it ran, and each series' `fetched_at`, independent of whether
+  #377's read-back check passes. A new `/health` boot-wiring check,
+  `cache_manifest_matches`, reads that manifest (`read_cache_manifest`)
+  and compares its recorded `cache_dir` against what the app process
+  itself resolved — a missing or mismatched manifest degrades `status`
+  (HTTP stays 200, per #309). `compose.yaml` hardcodes both services'
+  `DELTADEWA_CACHE_DIR` identically today, so this is a detector for
+  future drift (#378 is scoped P2), not evidence of a divergence
+  happening now.
+
 ## [0.7.0] - 2026-08-11
 
 Phase 3 close-out work merged since `v0.6.0` — clock/day-count

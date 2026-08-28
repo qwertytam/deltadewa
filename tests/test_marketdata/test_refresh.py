@@ -4,17 +4,50 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
 import pytest
 import requests
 
-from deltadewa.marketdata import CboeFredProvider, Source
+from deltadewa.marketdata import (
+    CACHE_MANIFEST_FILENAME,
+    CboeFredProvider,
+    Source,
+)
+from deltadewa.marketdata import cboe_fred_provider as _cfp_module
 from deltadewa.marketdata import refresh as refresh_module
-from deltadewa.marketdata.refresh import main, refresh_all
+from deltadewa.marketdata.refresh import main, refresh_all, verify_read_back
+
+
+class _IncrementingClock:
+    """Stand-in for ``datetime`` with a controllable, strictly-advancing clock.
+
+    Patched into ``cboe_fred_provider``'s ``datetime`` name so
+    ``_DiskCache``'s ``fetched_at`` stamps advance deterministically
+    instead of depending on wall-clock timing between two fast, mocked
+    fetches — needed to *provably* order two writes to the same on-disk
+    cache key (see ``TestVerifyReadBack``'s vix/vix_history test).
+    """
+
+    def __init__(self, start: datetime, step: timedelta) -> None:
+        self._next = start
+        self._step = step
+
+    def now(self, tz: Any = None) -> datetime:
+        """Return the next tick, then advance."""
+        value = self._next
+        self._next += self._step
+        return value
+
+    @staticmethod
+    def fromisoformat(value: str) -> datetime:
+        """Delegate to the real ``datetime.fromisoformat``."""
+        return datetime.fromisoformat(value)
+
 
 # Reuses the CSV fixtures' shape from test_cboe_fred_provider.py — kept
 # local (rather than imported) since dispatch-by-URL below needs a
@@ -92,9 +125,9 @@ class TestRefreshAll:
             session=_dispatching_session(),
         )
 
-        succeeded, total = refresh_all(writer, "SPX")
+        live, total = refresh_all(writer, "SPX")
 
-        assert (succeeded, total) == (6, 6)
+        assert (len(live), total) == (6, 6)
         # A second, independent read-only-style provider sharing the same
         # cache dir must see everything as CACHED, not LIVE (this process
         # didn't fetch) and not STALE (the write just happened).
@@ -112,9 +145,9 @@ class TestRefreshAll:
         session.get.side_effect = requests.ConnectionError("offline")
         provider = CboeFredProvider(cache_dir=tmp_path, session=session)
 
-        succeeded, total = refresh_all(provider, "SPX")
+        live, total = refresh_all(provider, "SPX")
 
-        assert (succeeded, total) == (0, 6)
+        assert (len(live), total) == (0, 6)
         assert list(tmp_path.iterdir()) == []
 
     def test_partial_failure_keeps_successes_and_reports_failures(
@@ -135,9 +168,9 @@ class TestRefreshAll:
         )
 
         with caplog.at_level(logging.WARNING):
-            succeeded, total = refresh_all(provider, "SPX")
+            live, total = refresh_all(provider, "SPX")
 
-        assert (succeeded, total) == (4, 6)
+        assert (len(live), total) == (4, 6)
         assert "vix: FAILED" in caplog.text
         assert "vix_history: FAILED" in caplog.text
         # The successful series are still on disk.
@@ -173,9 +206,9 @@ class TestRefreshAll:
             session=forced_session,
         )
 
-        refreshed, total = refresh_all(forced_provider, "SPX")
+        live, total = refresh_all(forced_provider, "SPX")
 
-        assert (refreshed, total) == (6, 6)
+        assert (len(live), total) == (6, 6)
         # Not a fixed count: vix_term_structure fans out over five legs, so
         # a full run issues more than six HTTP requests. What matters here
         # is only that the warm cache didn't suppress the attempt.
@@ -209,9 +242,9 @@ class TestRefreshAll:
         )
 
         with caplog.at_level(logging.WARNING):
-            refreshed, total = refresh_all(cached_provider, "SPX")
+            live, total = refresh_all(cached_provider, "SPX")
 
-        assert (refreshed, total) == (0, 6)
+        assert (len(live), total) == (0, 6)
         assert cached_session.get.call_count == 0
         assert "NOT refreshed" in caplog.text
         assert "CACHED" in caplog.text
@@ -261,6 +294,107 @@ class TestRefreshAll:
         assert stale.value == pytest.approx(21.0, rel=1e-6)
 
 
+class TestVerifyReadBack:
+    """verify_read_back() — a separate read-only reader re-checks the write."""
+
+    def test_empty_live_returns_empty_without_constructing_a_reader(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """No point building a reader when nothing was written live."""
+        with patch.object(refresh_module, "CboeFredProvider") as mock_ctor:
+            verified = verify_read_back(tmp_path, "SPX", {})
+
+        assert verified == ()
+        mock_ctor.assert_not_called()
+
+    def test_full_success_verifies_all_six(self, tmp_path: Path) -> None:
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        live, _total = refresh_all(writer, "SPX")
+
+        verified = verify_read_back(tmp_path, "SPX", live)
+
+        assert set(verified) == set(live)
+        assert len(verified) == 6
+
+    def test_a_claim_the_disk_cannot_back_up_is_not_verified(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A `live` claim older than what's actually on disk is STALE.
+
+        Simulates the write-readability failure #377 exists to catch: the
+        writer's own tally says LIVE, but what's actually readable back
+        through the app's own path is older (or, as here, simply doesn't
+        back up a *newer* claim than what was truly written) — the
+        ``>=`` check must fail it rather than trust the writer.
+        """
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        live, _total = refresh_all(writer, "SPX")
+        overclaimed = {
+            name: fetched_at + timedelta(hours=1)
+            for name, fetched_at in live.items()
+        }
+
+        with caplog.at_level(logging.WARNING):
+            verified = verify_read_back(tmp_path, "SPX", overclaimed)
+
+        assert verified == ()
+        assert "read-back STALE" in caplog.text
+
+    def test_vix_vix_history_shared_key_both_verify_without_false_stale(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The vix/vix_history shared cache-key case (#377's `>=` design).
+
+        vix and vix_history share one on-disk cache key
+        (``vix_fred.json``); vix_history's write legitimately overwrites
+        vix's ``fetched_at`` with a strictly later one, in the same run.
+        A deterministic, strictly-increasing fake clock makes that
+        ordering provable rather than relying on wall-clock timing
+        between two fast, mocked fetches — then asserts "vix" still
+        verifies despite its recorded ``fetched_at`` now being provably
+        earlier than what's on disk. An exact-equality check would
+        falsely flag this as a write-readability failure on every single
+        healthy run; ``>=`` must not.
+        """
+        clock = _IncrementingClock(
+            start=datetime(2026, 8, 27, tzinfo=UTC),
+            step=timedelta(seconds=1),
+        )
+        monkeypatch.setattr(_cfp_module, "datetime", clock)
+
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        live, _total = refresh_all(writer, "SPX")
+
+        on_disk = json.loads((tmp_path / "vix_fred.json").read_text())
+        on_disk_fetched_at = datetime.fromisoformat(on_disk["fetched_at"])
+        # Provably overwritten: vix_history fetches after vix and shares
+        # its cache key, so the disk now reflects vix_history's later
+        # write, not vix's own.
+        assert live["vix"] < on_disk_fetched_at
+
+        verified = verify_read_back(tmp_path, "SPX", live)
+
+        assert "vix" in verified
+        assert "vix_history" in verified
+
+
 class TestMain:
     """main() — CLI wiring: exit codes and provider construction."""
 
@@ -283,6 +417,32 @@ class TestMain:
             exit_code = main(["--cache-dir", str(tmp_path)])
 
         assert exit_code == 0
+
+    def test_exit_code_three_when_fetch_succeeds_but_read_back_fails(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Fetched live, but nothing reads back: exit 3, not 0/1/2 (#377)."""
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                return_value=provider,
+            ),
+            patch.object(
+                refresh_module,
+                "verify_read_back",
+                return_value=(),
+            ),
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 3
 
     def test_exit_code_two_on_total_failure(self, tmp_path: Path) -> None:
         """Every series failing is exit 2."""
@@ -374,6 +534,10 @@ class TestMain:
         after = {
             path.name: path.read_text() for path in tmp_path.glob("*.json")
         }
+        # #378: main() always writes the refresh manifest, win or lose —
+        # a new file, not a mutation of the data cache this test is
+        # actually pinning the untouched-ness of.
+        after.pop(CACHE_MANIFEST_FILENAME, None)
         assert after == before
 
     def test_missing_ips_path_falls_back_to_default_ttl(
@@ -409,7 +573,7 @@ class TestMain:
 
 
 class TestMainHeartbeat:
-    """REFRESH_HEARTBEAT_URL pings on exit 0/1, never on exit 2."""
+    """REFRESH_HEARTBEAT_URL pings on exit 0/1, never on exit 2 or 3."""
 
     def test_pings_on_full_success(
         self,
@@ -480,6 +644,102 @@ class TestMainHeartbeat:
                 refresh_module,
                 "CboeFredProvider",
                 return_value=provider,
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 2
+        mock_ping.assert_not_called()
+
+    def test_does_not_ping_on_write_unreadable_failure(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Exit 3 (fetched live, nothing read back) must not ping either."""
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                return_value=provider,
+            ),
+            patch.object(
+                refresh_module,
+                "verify_read_back",
+                return_value=(),
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 3
+        mock_ping.assert_not_called()
+
+
+class TestMainUnexpectedFailure:
+    """R-a.3: an unanticipated raise in the fetch/verify sequence.
+
+    A blast-radius audit found the provider construction /
+    ``refresh_all`` / ``verify_read_back`` sequence unguarded at
+    ``main()`` level — left that way, an unforeseen raise there exits
+    with Python's bare default (1), indistinguishable from
+    ``_EXIT_PARTIAL`` (a state that WOULD have pinged the heartbeat).
+    These pin the guard: falls back to exit 2 (the same silent-heartbeat
+    contract as a total fetch failure), not merely "no traceback
+    escapes."
+    """
+
+    def test_unexpected_raise_exits_two_and_does_not_ping(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                side_effect=RuntimeError("synthetic construction failure"),
+            ),
+            patch.object(refresh_module, "ping") as mock_ping,
+            caplog.at_level(logging.ERROR),
+        ):
+            exit_code = main(["--cache-dir", str(tmp_path)])
+
+        assert exit_code == 2
+        mock_ping.assert_not_called()
+        assert "run FAILED unexpectedly" in caplog.text
+
+    def test_unexpected_raise_in_verify_read_back_exits_two(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Same guard, different call site inside the wrapped sequence."""
+        monkeypatch.setenv("REFRESH_HEARTBEAT_URL", "https://hc-ping.com/x")
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                return_value=provider,
+            ),
+            patch.object(
+                refresh_module,
+                "verify_read_back",
+                side_effect=RuntimeError("synthetic read-back crash"),
             ),
             patch.object(refresh_module, "ping") as mock_ping,
         ):

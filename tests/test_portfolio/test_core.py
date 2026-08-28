@@ -746,6 +746,78 @@ class TestOptionPortfolioBase:
         assert "OptionPortfolio" in repr_str
 
 
+class TestAddPositionRejectExpired:
+    """#365: add_position() refuses an already-expired maturity by default."""
+
+    def test_refuses_expired_maturity_by_default(self) -> None:
+        """A maturity at/before the valuation date raises ValueError."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        with pytest.raises(ValueError, match="already-expired") as exc_info:
+            portfolio.add_position(
+                strike_price=100.0,
+                maturity_date=portfolio.valuation_date,
+                quantity=1,
+                option_type=OptionType.PUT,
+            )
+
+        # maturity_date == valuation_date here, so both dates are the same
+        # string — see the next test for the two-distinct-dates case.
+        assert str(portfolio.valuation_date.date()) in str(exc_info.value)
+
+    def test_refuses_maturity_before_the_valuation_date(self) -> None:
+        """A maturity strictly before the valuation date also raises."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        past_maturity = portfolio.valuation_date - timedelta(days=10)
+
+        with pytest.raises(ValueError, match="already-expired") as exc_info:
+            portfolio.add_position(
+                strike_price=100.0,
+                maturity_date=past_maturity,
+                quantity=1,
+                option_type=OptionType.PUT,
+            )
+
+        message = str(exc_info.value)
+        assert str(past_maturity.date()) in message
+        assert str(portfolio.valuation_date.date()) in message
+
+    def test_accepts_expired_maturity_when_disabled(self) -> None:
+        """reject_expired=False accepts an already-expired maturity."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        position = portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=portfolio.valuation_date,
+            quantity=1,
+            option_type=OptionType.PUT,
+            reject_expired=False,
+        )
+
+        assert position in portfolio.positions
+
+    def test_accepts_a_live_maturity(self) -> None:
+        """The default guard does not reject a genuinely live maturity."""
+        portfolio = OptionPortfolioBase(
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+
+        position = portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=portfolio.valuation_date + timedelta(days=30),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+
+        assert position in portfolio.positions
+
+
 class TestDefaultExerciseStyle:
     """Test cases for OptionPortfolioBase.default_exercise_style."""
 

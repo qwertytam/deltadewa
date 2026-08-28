@@ -166,6 +166,32 @@ class TestExpiryBoundaries:
 class TestClassifyExpiryBucket:
     """Bucket edges, including the comparisons each boundary's owner uses."""
 
+    def test_zero_days_is_expired(self) -> None:
+        """#365: days_to_expiry == 0 grades EXPIRED, matching is_expired's
+        maturity.date() <= valuation_date.date() boundary.
+        """
+        boundaries = expiry_boundaries(_make_ips_config().triggers)
+
+        assert classify_expiry_bucket(0, boundaries) == (
+            ExpiryBucketLabel.EXPIRED
+        )
+
+    def test_negative_days_is_expired(self) -> None:
+        """A maturity strictly in the past also grades EXPIRED."""
+        boundaries = expiry_boundaries(_make_ips_config().triggers)
+
+        assert classify_expiry_bucket(-5, boundaries) == (
+            ExpiryBucketLabel.EXPIRED
+        )
+
+    def test_one_day_is_not_expired(self) -> None:
+        """The boundary is exclusive above zero — one day out is URGENT."""
+        boundaries = expiry_boundaries(_make_ips_config().triggers)
+
+        assert classify_expiry_bucket(1, boundaries) == (
+            ExpiryBucketLabel.URGENT
+        )
+
     def test_below_urgent_is_urgent(self) -> None:
         """Test a leg inside the urgent window grades URGENT."""
         boundaries = expiry_boundaries(_make_ips_config().triggers)

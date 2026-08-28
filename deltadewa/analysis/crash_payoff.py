@@ -41,6 +41,7 @@ from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
     crash_intrinsic_floor,
+    partition_expired_legs,
 )
 from deltadewa.ips_config import (
     _DEFAULT_CRASH_VOL_SHOCK,
@@ -117,6 +118,14 @@ class CrashConvexityResult:
         premium_basis: Whether *premium_paid* came from ``entry_premium``
             fields or the current mark.
         ips_convexity: The ``IpsConvexity`` target used, or ``None``.
+        excluded_expired: Long put legs excluded from *curve* and
+            *scenario_rows* because they were already expired as of the
+            portfolio's valuation date (#362/#375) — hedge-only, exactly
+            the legs this figure dropped. A short leg or call that
+            happens to be expired was never in this number and never
+            appears here; see :func:`_long_puts`. Empty ``()`` when
+            nothing was excluded — the common case, and every existing
+            caller's default.
 
     """
 
@@ -126,6 +135,7 @@ class CrashConvexityResult:
     premium_paid: float
     premium_basis: PremiumBasis
     ips_convexity: IpsConvexity | None
+    excluded_expired: tuple[OptionPosition, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -397,11 +407,21 @@ def compute_crash_convexity(
 
     Returns:
         ``CrashConvexityResult`` with curve, scenario_rows,
-        payoff_vs_premium, premium_paid, premium_basis, and ips_convexity.
+        payoff_vs_premium, premium_paid, premium_basis, ips_convexity, and
+        excluded_expired (#375) — the long puts, if any, dropped from
+        *curve*/*scenario_rows* because they were already expired.
 
     """
     premium_paid, premium_basis = _premium_with_basis(portfolio)
-    long_puts = _long_puts(portfolio)
+    # Partitioned once, up front, so the excluded half can be named on the
+    # result (#375). Pricing behaviour is unchanged: crash_hedge_value and
+    # crash_intrinsic_floor already partition internally, so passing only
+    # the live half here is a no-op for the numbers, not a second filter.
+    live_puts, excluded_expired = partition_expired_legs(
+        _long_puts(portfolio),
+        valuation_date=portfolio.valuation_date,
+    )
+    long_puts = list(live_puts)
 
     # Fine grid (rounded to avoid float-key mismatches).
     lo, hi = shock_range
@@ -462,6 +482,7 @@ def compute_crash_convexity(
         premium_paid=premium_paid,
         premium_basis=premium_basis,
         ips_convexity=ips_convexity,
+        excluded_expired=excluded_expired,
     )
 
 

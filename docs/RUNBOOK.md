@@ -555,6 +555,32 @@ docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_repo
 sudo /home/deploy/deltadewa/ops/backup-exports.sh
 ```
 
+**Market-data refresh exit codes** — a manual `echo $?` after the refresh
+command above is a documented diagnosis, not a guess:
+
+|Exit|Meaning|Files/cache written?|Heartbeat pinged?|
+|---|---|---|---|
+|`0`|Every series refreshed live and read back through the app's own path (#377)|Data cache (every series) + refresh manifest (#378)|Yes|
+|`1`|Some series refreshed+verified live, some did not (partial — routine for FRED's VIXCLS lag)|Data cache (the series that succeeded) + refresh manifest|Yes|
+|`2`|No series fetched live at all (a fetch failure)|No data cache writes this run — refresh manifest still written, recording an empty series list|No|
+|`3`|At least one series fetched live, but none of it reads back through the app's own read path (#377, a write-readability failure — distinct from exit 2: the network worked, the write didn't land somewhere this process's own read path can see)|Data cache write happened but couldn't be confirmed readable + refresh manifest|No|
+
+See `deltadewa/marketdata/refresh.py`'s module docstring for the
+authoritative version of this table.
+
+**Weekly digest exit codes** — a manual `echo $?` after the command above
+is a documented diagnosis, not a guess:
+
+|Exit|Meaning|Files written?|Heartbeat pinged?|
+|---|---|---|---|
+|`0`|Sent (or, without `--send-email`, built and written)|md/html/snapshot|Yes — the *only* outcome that pings `DIGEST_HEARTBEAT_URL`|
+|`1`|Refused — no IPS policy, or an empty book|No|No|
+|`2`|Built and written, but `--send-email` delivery failed (missing/invalid env var, or the SMTP relay rejected it)|md/html/snapshot|No|
+|`3`|Build itself failed (#364) — an input this module does not control raised partway through (provider outage, a repricing edge case)|**No — not even a partial one**, so next week's digest still compares against last week's real snapshot|No. With `--send-email`, a best-effort plain-language failure alert is sent instead (subject `Weekly Hedge Digest — FAILED to build (<date>)`)|
+
+See `deltadewa/reporting/weekly_report.py`'s `main()` docstring for the
+authoritative version of this table.
+
 ## 12. Verifying the last run succeeded
 
 ```bash
@@ -580,9 +606,9 @@ curl http://<tailscale-ip>:8050/health
 asserting `state_loaded`/`market_data` presence alone missed #295 for
 weeks: `ips_config` and the portfolio object both existed, so a presence
 check passed while `default_exercise_style` was never actually wired and
-two panels rendered dead. `boot_wiring` is the fix — six explicit,
+two panels rendered dead. `boot_wiring` is the fix — seven explicit,
 post-boot assertions on the objects the app actually built (see
-`deltadewa/app/health_checks.py` for the full list and why these six):
+`deltadewa/app/health_checks.py` for the full list and why these seven):
 
 ```json
 "status": "ok",
@@ -592,7 +618,8 @@ post-boot assertions on the objects the app actually built (see
   "exercise_style_wired": {"ok": true, "detail": "default_exercise_style=EUROPEAN"},
   "state_persisted": {"ok": true, "detail": "no unsaved changes"},
   "state_file_undisturbed": {"ok": true, "detail": "..."},
-  "cache_dir_writable": {"ok": true, "detail": "...", "value": "/app/exports/marketdata-cache"}
+  "cache_dir_writable": {"ok": true, "detail": "...", "value": "/app/exports/marketdata-cache"},
+  "cache_manifest_matches": {"ok": true, "detail": "...", "value": {"recorded_cache_dir": "/app/exports/marketdata-cache", "written_at": "...", "resolved_cache_dir": "/app/exports/marketdata-cache"}}
 }
 ```
 
@@ -618,6 +645,18 @@ post-boot assertions on the objects the app actually built (see
   tried to write — diff it against `docker compose run --rm jobs env |
   grep CACHE_DIR` if `app` and `jobs` might have resolved
   `DELTADEWA_CACHE_DIR` differently.
+- **`cache_manifest_matches: false`** is #377/#378's own cross-check: it
+  reads the manifest the refresh job wrote on its last run and compares
+  the `cache_dir` recorded there against what this app process resolved.
+  `value.recorded_cache_dir: null` means no manifest was found at all —
+  either the refresh job hasn't run against this `cache_dir` yet, or it
+  resolved a different `DELTADEWA_CACHE_DIR` than this app process did
+  (the check can't tell the two apart); a non-null `recorded_cache_dir`
+  that differs from `resolved_cache_dir` means `app` and `jobs` are
+  actually resolving `DELTADEWA_CACHE_DIR` to different paths — diff it
+  the same way as `cache_dir_writable` above. `compose.yaml` hardcodes
+  both services' `DELTADEWA_CACHE_DIR` identically today, so this is a
+  detector for future drift, not a live failure mode as shipped.
 
 Also check the healthchecks.io (or equivalent) dashboard — all three
 checks should show green with a "last ping" time inside their schedule +
@@ -639,18 +678,29 @@ also runs nightly, at 03:30).
 
 - **REFRESH overdue**: the market-data refresh hasn't produced even a
   partial success (exit 0 or 1) within the grace window — either the cron
-  entry itself stopped firing, or CBOE/FRED have been unreachable for
-  longer than a routine early-morning lag. Check
-  `~/deltadewa/logs/refresh.log`, then run §11's refresh command by hand
-  and read its exit code (`echo $?`; 0/1 partial-or-full success, 2 total
-  failure).
+  entry itself stopped firing, CBOE/FRED have been unreachable for longer
+  than a routine early-morning lag (exit 2), or every series fetched live
+  but none of it read back through the app's own read path (exit 3,
+  #377 — a write-readability failure, distinct from a fetch failure).
+  Check `~/deltadewa/logs/refresh.log`, then run §11's refresh command by
+  hand and read its exit code (`echo $?`; see §11's exit-code table:
+  0/1 partial-or-full success and read-back-verified, 2 total fetch
+  failure, 3 fetched but unreadable back through this process's own read
+  path).
 - **DIGEST overdue**: the weekly email did not send. This is the
   dangerous one — an overdue digest reads exactly like "a quiet week, no
   news," which is precisely why the design pings only on a *confirmed*
-  send (`deltadewa/reporting/weekly_report.py`). Check
-  `~/deltadewa/logs/weekly_report.log` for a `--send-email` failure
-  (missing/invalid env var, or the SMTP relay rejecting the
-  credentials/quota), then re-run §11's send command by hand.
+  send (`deltadewa/reporting/weekly_report.py`). **The contract is exact:
+  `DIGEST_HEARTBEAT_URL` is pinged on exit `0` only** — see §11's exit-
+  code table. Refused (`1`), built-not-sent (`2`), and build-failed (`3`,
+  #364) all leave it un-pinged on purpose: a build-failed run sends its
+  own best-effort plain-language failure alert email when `--send-email`
+  is set, but that alert is a *separate* signal from the heartbeat, never
+  a substitute for it — if SMTP itself is the fault, the alert never
+  arrives either. Check `~/deltadewa/logs/weekly_report.log` for a
+  `--send-email` failure (missing/invalid env var, or the SMTP relay
+  rejecting the credentials/quota) or a build failure (exit `3`), then
+  re-run §11's send command by hand.
 - **BACKUP overdue**: the offsite `exports/` push (or its "nothing
   changed" no-op) hasn't confirmed within the grace window — either
   root's crontab entry stopped firing, or the push itself is failing.

@@ -198,14 +198,51 @@ def _write_non_conforming_yaml(tmp_path: Path) -> Path:
     return path
 
 
+def _write_conforming_yaml(tmp_path: Path) -> Path:
+    """A long-underlying + long-put book that is quiet at any clock shift.
+
+    Deliberately NOT ``_EXAMPLE_PORTFOLIO``: that canonical file's
+    ``maturity_date`` is an intentionally pinned absolute date (it is the
+    golden fixture other tests compute exact re-priced values against —
+    see ``tests/test_analysis/test_crash_repricing.py`` and
+    ``docs/implementation-plan.md``'s "Canonical" entries), so it goes
+    genuinely, correctly expired under a large clock-shift and would
+    trip the #365 ``_warn_if_expired_legs`` advisory here — a real
+    warning, not a bug. ``maturity_days`` (relative, like
+    ``examples/portfolios/spx_tail_20m.yaml``) keeps this fixture's own
+    "quiet on a conforming book" assertion true at every shift instead.
+    """
+    path = tmp_path / "conforming.yaml"
+    path.write_text(
+        "market_parameters:\n"
+        "  spot_price: 5800.0\n"
+        "  volatility: 0.17\n"
+        "  risk_free_rate: 0.04\n"
+        "  dividend_yield: 0.013\n"
+        "  underlying_quantity: 1000.0\n"
+        '  symbol: "SPX"\n'
+        "  contract_size: 100\n"
+        "positions:\n"
+        '  - option_type: "put"\n'
+        "    strike_price: 5200.0\n"
+        "    maturity_days: 305\n"
+        "    quantity: 5\n"
+        "    volatility: 0.19\n"
+        '    exercise_style: "EUROPEAN"\n',
+    )
+    return path
+
+
 def test_conforming_import_prints_no_warning(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """spx_protective_put.yaml is a canonical conforming book — quiet."""
+    """A conforming long-underlying + long-put book imports quiet."""
+    conforming = _write_conforming_yaml(tmp_path)
+
     exit_code = main(
         [
-            str(_EXAMPLE_PORTFOLIO),
+            str(conforming),
             "--export-dir",
             str(tmp_path),
             "--ips-path",

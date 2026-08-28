@@ -2,21 +2,33 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from deltadewa.app.factory import create_app
 from deltadewa.constants import ExerciseStyle, OptionType
-from deltadewa.marketdata import StaticProvider
+from deltadewa.marketdata import StaticProvider, write_cache_manifest
 from deltadewa.state import ProgramState
+from tests.clock_helpers import days_from_today
 
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
 _EXAMPLE_IPS = (
     Path(__file__).parent.parent.parent / "config" / ("ips.example.yaml")
 )
-_MATURITY = datetime(2027, 6, 30, tzinfo=UTC)
+# Seeded off the program clock, not pinned: a fixed literal drifts into
+# the past under the clock-shift probe and expires the book (#365).
+_MATURITY = days_from_today(365)
+
+
+def _write_matching_manifest(tmp_path: Path) -> None:
+    """Write a #378 manifest matching the ``_isolated_cache_dir`` fixture.
+
+    So a test asserting a genuinely fully-wired ``status: ok`` state
+    isn't tripped up by ``cache_manifest_matches`` finding no manifest —
+    the same reason ``_fully_wired_state`` builds a real, complete IPS.
+    """
+    write_cache_manifest(tmp_path / "cache", {})
 
 
 @pytest.fixture(autouse=True)
@@ -76,6 +88,7 @@ class TestHealth:
         self,
         tmp_path: Path,
     ) -> None:
+        _write_matching_manifest(tmp_path)
         app = create_app(
             state=_fully_wired_state(tmp_path),
             market_data=_provider(),
@@ -274,6 +287,7 @@ class TestBootWiring:
         self,
         tmp_path: Path,
     ) -> None:
+        _write_matching_manifest(tmp_path)
         app = create_app(
             state=_fully_wired_state(tmp_path),
             market_data=_provider(),
@@ -290,6 +304,7 @@ class TestBootWiring:
             "state_persisted",
             "state_file_undisturbed",
             "cache_dir_writable",
+            "cache_manifest_matches",
         }
         assert all(check["ok"] for check in boot_wiring.values())
         # config/ips.example.yaml carries all three optional sections.
@@ -362,6 +377,7 @@ class TestBootWiring:
         ips_path = tmp_path / "ips.yaml"
         ips_path.write_text("\n".join(trimmed), encoding="utf-8")
 
+        _write_matching_manifest(tmp_path)
         state = ProgramState.load(tmp_path, ips_path=ips_path)
         app = create_app(state=state, market_data=_provider())
 
@@ -465,6 +481,55 @@ class TestBootWiring:
 
         assert payload["status"] == "degraded"
         assert payload["boot_wiring"]["cache_dir_writable"]["ok"] is False
+
+    def test_missing_cache_manifest_degrades_status(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """No #378 manifest at all: cache_manifest_matches reports false."""
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        assert payload["status"] == "degraded"
+        assert payload["boot_wiring"]["cache_manifest_matches"]["ok"] is False
+
+    def test_mismatched_cache_manifest_degrades_status_naming_both_paths(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A manifest recorded for a different path than this app resolved."""
+        recorded_dir = tmp_path / "recorded-elsewhere"
+        write_cache_manifest(recorded_dir, {})
+        resolved_dir = tmp_path / "cache"
+        resolved_dir.mkdir(parents=True, exist_ok=True)
+        manifest_name = "refresh-manifest.json"
+        (resolved_dir / manifest_name).write_text(
+            (recorded_dir / manifest_name).read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        payload = app.server.test_client().get("/health").get_json()
+
+        assert payload["status"] == "degraded"
+        check = payload["boot_wiring"]["cache_manifest_matches"]
+        assert check["ok"] is False
+        assert str(recorded_dir) in check["detail"]
+        assert str(resolved_dir) in check["detail"]
+
+    def test_cache_manifest_checks_still_return_http_200_when_degraded(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Mirrors cache_dir_writable's own HTTP-200-regardless test."""
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+        client = app.server.test_client()
+
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.get_json()["status"] == "degraded"
 
     def test_status_ok_still_returns_http_200_even_when_degraded(
         self,
