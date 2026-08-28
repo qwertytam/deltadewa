@@ -851,6 +851,16 @@ def render_markdown(report: ProgramReport) -> str:
         f"| IPS convexity target | {target_band} |",
         f"| Status | {_pass_fail_md(p.meets_target)} |",
         "",
+        (
+            '> "Payoff ratio at crash" is the handbook\'s '
+            "Payoff-vs-Premium Multiple (payoff per dollar of premium "
+            "paid) — distinct from the Offset Ratio (payoff per dollar "
+            "of underlying loss offset) shown on `/monitor`. See the "
+            "handbook's [Ratio Disambiguation]"
+            "(https://qwertytam.github.io/deltadewa-handbook/0.1/"
+            "part-6/ratio-disambiguation/) page."
+        ),
+        "",
     ]
     expired_caveat = expired_legs_caveat(p.excluded_expired_legs)
     if expired_caveat is not None:
@@ -1277,6 +1287,12 @@ over {rf.elapsed_days} day(s)</td></tr>
 <tr><td>IPS convexity target</td><td>{target_band_html}</td></tr>
 <tr><td>Status</td><td>{_pass_fail_html(p.meets_target)}</td></tr>
 </table>
+<p class="note">&#8220;Payoff ratio at crash&#8221; is the handbook's \
+Payoff-vs-Premium Multiple (payoff per dollar of premium paid) &#8212; \
+distinct from the Offset Ratio (payoff per dollar of underlying loss \
+offset) shown on <code>/monitor</code>. See the handbook's \
+<a href="https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/\
+ratio-disambiguation/">Ratio Disambiguation</a> page.</p>
 {expired_caveat_html}
 
 <h2>3. Market Context</h2>

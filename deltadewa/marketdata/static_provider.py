@@ -104,7 +104,10 @@ class StaticProvider:
         """Return the fixed ``skew_percentile`` value.
 
         ``lookback_days`` is accepted for ``MarketDataProvider`` parity but
-        is unused — ``StaticProvider`` holds a single static value.
+        is unused — ``StaticProvider`` holds a single static value. See
+        ``MarketDataProvider.get_skew_percentile`` for why the ``252``
+        default is unsourced against the handbook's five-year canon
+        (#317); irrelevant here since this provider ignores the argument.
         """
         _ = lookback_days
         return Observation.static(self.skew_percentile)

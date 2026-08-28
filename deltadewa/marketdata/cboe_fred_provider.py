@@ -302,7 +302,12 @@ class CboeFredProvider:
         self,
         lookback_days: int = 252,
     ) -> Observation[float]:
-        """Return the SKEW index's percentile rank over *lookback_days*."""
+        """Return the SKEW index's percentile rank over *lookback_days*.
+
+        See ``MarketDataProvider.get_skew_percentile`` for why the
+        ``252`` default is unsourced against the handbook's five-year
+        canon (#317).
+        """
         fetched = self._request_skew()
         rows = fetched.series[-lookback_days:]
         values = [value for _, value in rows]

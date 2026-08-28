@@ -58,7 +58,17 @@ coverage as itself worth reporting.
   kept in sync with it since the first IPS commit. #245's own audit
   missed it because it only covered `config/`. Fixed: sanitized to
   genuinely illustrative `EXAMPLE VALUE` placeholders, with
-  `tests/test_example_configs.py` guarding against a re-sync (#257).
+  `tests/test_example_configs.py` pinning that the example and preset
+  carry one set of numbers and that the program name reads as an
+  example (#257). The per-value pin against the specific pre-#245
+  numbers was removed in docs/canon-tail (#344): `config/ips.yaml` has
+  in practice always been an operator's copy of the example template
+  with only `program.name` edited, so that guard's premise — the
+  example must differ from a value the real file carries — could never
+  hold. Those pre-sanitisation values are already recorded above as
+  permanently public in this repo's git history (#351); the per-value
+  pin was not protecting anything the two guards that remain don't
+  already cover.
 - **[#243](https://github.com/qwertytam/deltadewa/issues/243)** (closed)
   — a narrower case of the same class: `ops/backup-exports.sh` hardcoded
   a real backup-repo name as its own fallback default. Fixed: the backup

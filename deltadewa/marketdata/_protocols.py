@@ -63,4 +63,18 @@ class MarketDataProvider(Protocol):
         self,
         lookback_days: int = 252,
     ) -> Observation[float]:
-        """Return the SKEW index's percentile rank over *lookback_days*."""
+        """Return the SKEW index's percentile rank over *lookback_days*.
+
+        The ``252`` default is this repo's legacy window (one trading
+        year) and is **unsourced** — no caller overrides it, so it is the
+        window every skew percentile the program reports is actually
+        computed against. The handbook's own skew-percentile canon
+        specifies a **five-year** lookback (`Skew Percentile
+        <https://qwertytam.github.io/deltadewa-handbook/part-6/skew-percentile/>`_),
+        a live contradiction filed as #317. Changing the default would
+        change every skew percentile and, through the 30/70 band, every
+        ``decision_matrix`` verdict and ``entry_timing_tree`` branch it
+        feeds — evaluate that blast radius (including whether CBOE's SKEW
+        history actually covers five years without silent truncation)
+        before moving this number; do not just swap the literal.
+        """

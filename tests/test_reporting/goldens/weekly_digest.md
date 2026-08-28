@@ -49,6 +49,8 @@ Compared against the snapshot from 2026-07-29.
 | IPS convexity target | 15.0%–25.0% of book |
 | Status | ✓ PASS |
 
+> "Payoff ratio at crash" is the handbook's Payoff-vs-Premium Multiple (payoff per dollar of premium paid) — distinct from the Offset Ratio (payoff per dollar of underlying loss offset) shown on `/monitor`. See the handbook's [Ratio Disambiguation](https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/ratio-disambiguation/) page.
+
 ## 3. Market Context
 
 | Metric | Value |
