@@ -1415,7 +1415,7 @@ class TestHedgeTriggersPanel:
     def test_renders_all_four_triggers(self, tmp_path: Path) -> None:
         text = _collect_text(self._panel(self._hedged_app(tmp_path)))
 
-        assert "Delta drift" in text
+        assert "Net delta vs target" in text
         assert "Expiry" in text
         assert "Theta cost" in text
         assert "Gamma drift" in text
@@ -1697,8 +1697,9 @@ class TestConvexityCliffPanel:
         assert ips_config is not None
         self._add_put(app.program_state, days=400)
         analyzer = PortfolioAnalyzer(app.program_state.portfolio)
+        shipped_threshold = ips_config.convexity.cliff_threshold_days
         at_policy = analyzer.calculate_convexity_cliff_days(
-            cliff_threshold_days=ips_config.convexity.cliff_threshold_days,
+            cliff_threshold_days=shipped_threshold,
         )
         tightened = replace(ips_config.convexity, cliff_threshold_days=300)
 
@@ -1709,9 +1710,13 @@ class TestConvexityCliffPanel:
             ),
         )
 
-        # 400 DTE against a 300-day region start leaves 120 days fewer runway
-        # than against the shipped 180-day one.
-        assert f"{at_policy - 120:,} days of runway" in text
+        # A 300-day region start leaves fewer runway days than the shipped
+        # threshold by exactly the gap between the two — computed from the
+        # shipped value rather than hardcoded, so this doesn't silently pin
+        # a stale number the next time the example's cliff_threshold_days
+        # changes (as #338 just did, 180 -> 150).
+        runway_gap = 300 - shipped_threshold
+        assert f"{at_policy - runway_gap:,} days of runway" in text
         assert "300 days to expiry" in text
 
 

@@ -90,7 +90,7 @@ def _make_report(
             within_budget=within_budget,
         ),
         protection=ProtectionSection(
-            payoff_ratio=8.5,
+            payoff_vs_premium=8.5,
             ips_crash_pct=-25.0,
             convexity_pct=19.0,
             target_min_pct=15.0,
@@ -145,7 +145,7 @@ def _prior_snapshot() -> WeeklySnapshot:
         carry_pct_of_notional=1.0,
         within_budget=True,
         convexity_pct=18.0,
-        payoff_ratio=8.3,
+        payoff_vs_premium=8.3,
         meets_target=True,
         vix=18.0,
         skew_percentile=0.40,

@@ -107,7 +107,13 @@ class ProtectionSection:
     when no ``IpsConvexity`` target was supplied to the crash analysis.
 
     Attributes:
-        payoff_ratio: Gross payoff / premium at the IPS crash point.
+        payoff_vs_premium: Gross payoff / premium at the IPS crash point.
+            Renamed from ``payoff_ratio`` (4.2, #303) to match the
+            handbook's `Ratio Disambiguation
+            <https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/ratio-disambiguation/>`_
+            name for this figure — "Payoff-vs-Premium Multiple" — which is
+            distinct from the handbook's "Crash Payoff Ratio" (this repo's
+            ``offset_ratio``).
         ips_crash_pct: The signed crash shock used (e.g. -25.0).
         convexity_pct: Net-of-underlying crash P&L as % of book notional
             at the IPS shock, from the matching ``CrashScenarioRow``.
@@ -126,7 +132,7 @@ class ProtectionSection:
 
     """
 
-    payoff_ratio: float | None
+    payoff_vs_premium: float | None
     ips_crash_pct: float | None
     convexity_pct: float | None
     target_min_pct: float | None
@@ -431,8 +437,9 @@ def _build_decision(
     ``convexity_now_pct``, rather than re-deriving it with a second,
     differently-rounded search. Before this, ``weekly_report.main()`` ran
     its own bare-``==`` match for that figure, which could select a
-    different row than this one, and fell back to ``payoff_ratio`` (a
-    ratio, not a percent) when it found none (#307). When no convexity
+    different row than this one, and fell back to what was then called
+    ``payoff_ratio`` (a ratio, not a percent — renamed ``payoff_vs_premium``
+    in 4.2, #303) when it found none (#307). When no convexity
     reading is available at all, no fabricated number is fed to the
     classifier — a clear note is set instead.
     """
@@ -515,7 +522,7 @@ def build_protection_section(
     excluded_expired_legs = describe_expired_legs(crash_result.excluded_expired)
     if crash_result.ips_convexity is None:
         return ProtectionSection(
-            payoff_ratio=crash_result.payoff_ratio,
+            payoff_vs_premium=crash_result.payoff_vs_premium,
             ips_crash_pct=None,
             convexity_pct=None,
             target_min_pct=None,
@@ -537,7 +544,7 @@ def build_protection_section(
         None,
     )
     return ProtectionSection(
-        payoff_ratio=crash_result.payoff_ratio,
+        payoff_vs_premium=crash_result.payoff_vs_premium,
         ips_crash_pct=ips_shock,
         convexity_pct=matching.convexity_pct if matching else None,
         target_min_pct=ips_conv.target_min_pct,
@@ -814,7 +821,9 @@ def render_markdown(report: ProgramReport) -> str:
     # ── 2. Protection ───────────────────────────────────────────────────
     p = report.protection
     ratio_str = (
-        f"{p.payoff_ratio:.1f}\u00d7" if p.payoff_ratio is not None else "—"
+        f"{p.payoff_vs_premium:.1f}\u00d7"
+        if p.payoff_vs_premium is not None
+        else "—"
     )
     crash_label = (
         f"{p.ips_crash_pct:.0f}% shock"
@@ -1122,8 +1131,8 @@ def render_html_body(report: ProgramReport) -> str:
     expired_caveat_html = _expired_caveat_html(p.excluded_expired_legs)
 
     ratio_str = (
-        f"{p.payoff_ratio:.1f}&times;"
-        if p.payoff_ratio is not None
+        f"{p.payoff_vs_premium:.1f}&times;"
+        if p.payoff_vs_premium is not None
         else "&mdash;"
     )
     crash_label_html = (

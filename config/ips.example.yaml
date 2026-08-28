@@ -67,7 +67,13 @@ convexity:
   # deemed to start, and the metric reports the nearest long put's runway
   # before it gets there; review/urgent band that runway. Owned here only —
   # promoted out of the retired dashboard.yaml gauge (#241, #279).
-  cliff_threshold_days: 180
+  #
+  # Unrelated to triggers.roll_at_months_remaining below despite both being a
+  # "days before expiry matters" number (#338) — this is the convexity/gamma
+  # runway threshold, that is the roll trigger. EXAMPLE VALUEs here are
+  # deliberately decoupled (150, not 180) from roll_at_months_remaining * 30
+  # so the two do not read as one setting by numeric coincidence.
+  cliff_threshold_days: 150   # EXAMPLE VALUE
   cliff_review_days: 90
   cliff_urgent_days: 30
 
@@ -105,8 +111,8 @@ market_environment:
   # not a display, so they belong here rather than in presentation config.
   vol_regime_low: 0.15         # decimal IV; VIX/100 at/below = cheap-vol regime
   vol_regime_high: 0.35        # decimal IV; VIX/100 at/above = high-vol regime
-  skew_low_pctile: 25          # SKEW percentile (0-100); below = benign skew
-  skew_high_pctile: 75         # SKEW percentile (0-100); above = stressed skew
+  skew_low_pctile: 30          # SKEW percentile (0-100); below = benign skew
+  skew_high_pctile: 70         # SKEW percentile (0-100); above = stressed skew
   term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
   data_ttl_minutes: 1440       # EXAMPLE VALUE — how long a fetched value
                                 # stays trustworthy; past this a cache hit
@@ -141,19 +147,28 @@ pricing_inputs:
   dividend_yield_max_age_days: 90   # book-level yield, a quarterly cadence
 
 triggers:
-  target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio; drift is
-                                   # measured (in pp) as deviation from this, not
-                                   # from full delta-neutrality
-  delta_drift_warn_pct: 4.0        # EXAMPLE VALUE — pp of drift from target -> MONITOR
-  delta_drift_action_pct: 8.0      # EXAMPLE VALUE — pp of drift from target -> ACTION
+  target_delta_ratio_pct: 90.0    # intended net-delta-to-equity ratio;
+                                   # deviation is measured (in pp) from this,
+                                   # not from full delta-neutrality
+  # Renamed from delta_drift_* (4.2, #338/#335): "Delta Drift" is the
+  # handbook's own name for a different metric (Part X §13). This is how far
+  # net delta may deviate from target_delta_ratio_pct above.
+  delta_ratio_deviation_warn_pct: 4.0    # EXAMPLE VALUE — pp of deviation from target -> MONITOR
+  delta_ratio_deviation_action_pct: 8.0  # EXAMPLE VALUE — pp of deviation from target -> ACTION
   theta_cost_excellent_pct: 1.0    # annual theta % below this -> EXCELLENT
   theta_cost_acceptable_pct: 1.5   # EXAMPLE VALUE — ...below this -> ACCEPTABLE, else EXPENSIVE
   expiry_urgent_days: 7            # DTE below this -> URGENT (roll immediately)
   expiry_soon_days: 21             # DTE below this -> plan rolls SOON
-  roll_time_months: 6.0          # EXAMPLE VALUE — roll when maturity below this
+  roll_at_months_remaining: 6.0   # EXAMPLE VALUE — roll trigger: an option
+                                   # rolls once maturity REMAINING falls below
+                                   # this. Unrelated to convexity's
+                                   # cliff_threshold_days above (#338) — that
+                                   # is the gamma-runway threshold, this is
+                                   # the roll trigger; kept at a different
+                                   # number of days on purpose.
   rally_rebalance_pct: 12.0      # EXAMPLE VALUE — market rally that forces a re-strike review
   strike_drift_max_otm_pct: 40.0 # EXAMPLE VALUE
-  roll_review_buffer: 1.5        # REVIEW fires within roll_time_months * this
+  roll_review_buffer: 1.5        # REVIEW fires within roll_at_months_remaining * this
   strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
                                        # of strike_drift_max_otm_pct
   # Gamma drift = % of the hedged equity that net delta shifts per 1% spot move

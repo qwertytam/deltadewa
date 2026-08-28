@@ -1421,9 +1421,9 @@ def _day_range_text(low: int, high: int) -> str:
 
     ``expiry_boundaries`` clamps its upper boundaries to keep the ladder
     monotonic rather than raising, so a legal-but-degenerate IPS (a short
-    ``roll_time_months``, or a ``roll_review_buffer`` of 1.0) can leave a
-    bucket with no days in it at all. Printing the arithmetic range would
-    read as an inverted window; say the bucket is unreachable instead.
+    ``roll_at_months_remaining``, or a ``roll_review_buffer`` of 1.0) can
+    leave a bucket with no days in it at all. Printing the arithmetic range
+    would read as an inverted window; say the bucket is unreachable instead.
     """
     if low > high:
         return "none (IPS windows meet)"
@@ -1553,7 +1553,7 @@ def _position_aging_panel_view(aging: PositionAging) -> Component:
             html.P(
                 "Every window comes from ips.yaml — expiry_urgent_days, "
                 "expiry_soon_days, and the roll window "
-                "(roll_time_months x roll_review_buffer). The two roll "
+                "(roll_at_months_remaining x roll_review_buffer). The two roll "
                 "buckets are the same window the roll status table "
                 "grades against, so the two panels cannot disagree.",
                 className="plain-language",

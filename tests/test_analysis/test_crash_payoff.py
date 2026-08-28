@@ -11,8 +11,8 @@ from deltadewa.analysis.crash_payoff import (
     _net_protective_premium,
     _premium_with_basis,
     compute_crash_convexity,
-    crash_payoff_ratio,
     crash_scenario_table,
+    payoff_vs_premium_multiple,
 )
 from deltadewa.analysis.crash_repricing import CrashShock, crash_hedge_value
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -173,8 +173,8 @@ class TestComputeCrashConvexity:
         shocks_in_rows = {r.shock_pct for r in result.scenario_rows}
         assert -25.0 in shocks_in_rows
 
-    def test_payoff_ratio_matches_manual(self) -> None:
-        """payoff_ratio equals repriced_hedge_at_ips / premium_paid."""
+    def test_payoff_vs_premium_matches_manual(self) -> None:
+        """payoff_vs_premium equals repriced_hedge_at_ips / premium_paid."""
         portfolio = _make_long_put_portfolio()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
@@ -191,7 +191,7 @@ class TestComputeCrashConvexity:
             ),
             ips_convexity=ips,
         )
-        assert result.payoff_ratio is not None
+        assert result.payoff_vs_premium is not None
         expected_repriced = crash_hedge_value(
             portfolio,
             shock=CrashShock(
@@ -202,12 +202,12 @@ class TestComputeCrashConvexity:
             ),
             positions=_long_puts(portfolio),
         )
-        assert result.payoff_ratio == pytest.approx(
+        assert result.payoff_vs_premium == pytest.approx(
             expected_repriced / result.premium_paid,
         )
 
-    def test_payoff_ratio_none_without_ips(self) -> None:
-        """payoff_ratio is None when no ips_convexity is supplied."""
+    def test_payoff_vs_premium_none_without_ips(self) -> None:
+        """payoff_vs_premium is None when no ips_convexity is supplied."""
         portfolio = _make_long_put_portfolio()
         result = compute_crash_convexity(
             portfolio,
@@ -218,7 +218,7 @@ class TestComputeCrashConvexity:
                 skew_reference_delta=0.10,
             ),
         )
-        assert result.payoff_ratio is None
+        assert result.payoff_vs_premium is None
         assert result.ips_convexity is None
 
     def test_scenario_rows_match_crash_scenario_table(self) -> None:
@@ -426,7 +426,7 @@ class TestNetProtectivePremium:
 
 
 class TestCrashPayoffRatio:
-    """Tests for crash_payoff_ratio."""
+    """Tests for payoff_vs_premium_multiple."""
 
     def test_known_ratio_against_portfolio_oracle(self) -> None:
         """Ratio matches the repriced long-put value / premium directly.
@@ -449,7 +449,7 @@ class TestCrashPayoffRatio:
             positions=_long_puts(portfolio),
         )
 
-        ratio = crash_payoff_ratio(
+        ratio = payoff_vs_premium_multiple(
             portfolio,
             shock=CrashShock(
                 crash_scenario_pct=-25.0,
@@ -462,11 +462,11 @@ class TestCrashPayoffRatio:
         assert ratio == pytest.approx(expected_repriced / expected_premium)
 
     def test_underlying_quantity_does_not_affect_payoff(self) -> None:
-        """hedge_pnl/payoff_ratio ignore the protected book's P&L."""
+        """hedge_pnl/payoff_vs_premium ignore the protected book's P&L."""
         unhedged_book = _make_long_put_portfolio(underlying_quantity=0.0)
         hedged_book = _make_long_put_portfolio(underlying_quantity=5000.0)
 
-        ratio_no_book = crash_payoff_ratio(
+        ratio_no_book = payoff_vs_premium_multiple(
             unhedged_book,
             shock=CrashShock(
                 crash_scenario_pct=-25.0,
@@ -475,7 +475,7 @@ class TestCrashPayoffRatio:
                 skew_reference_delta=0.10,
             ),
         )
-        ratio_with_book = crash_payoff_ratio(
+        ratio_with_book = payoff_vs_premium_multiple(
             hedged_book,
             shock=CrashShock(
                 crash_scenario_pct=-25.0,
@@ -523,7 +523,7 @@ class TestCrashPayoffRatio:
             positions=_long_puts(portfolio),
         )
 
-        ratio = crash_payoff_ratio(
+        ratio = payoff_vs_premium_multiple(
             portfolio,
             shock=CrashShock(
                 crash_scenario_pct=-25.0,
@@ -550,7 +550,7 @@ class TestCrashPayoffRatio:
             option_type=OptionType.CALL,
         )
 
-        assert crash_payoff_ratio(
+        assert payoff_vs_premium_multiple(
             portfolio,
             shock=CrashShock(
                 crash_scenario_pct=-25.0,
@@ -564,7 +564,7 @@ class TestCrashPayoffRatio:
         """A negative explicit premium also returns 0.0, not a sign flip."""
         portfolio = _make_long_put_portfolio()
 
-        ratio = crash_payoff_ratio(
+        ratio = payoff_vs_premium_multiple(
             portfolio,
             shock=CrashShock(
                 crash_scenario_pct=-25.0,
@@ -584,7 +584,7 @@ class TestCrashPayoffRatio:
             volatility=0.2,
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
-        assert crash_payoff_ratio(
+        assert payoff_vs_premium_multiple(
             portfolio,
             shock=CrashShock(
                 crash_scenario_pct=-25.0,
@@ -605,7 +605,7 @@ class TestCrashPayoffRatio:
         """
         portfolio = _make_long_put_portfolio()
         with pytest.raises(TypeError):
-            crash_payoff_ratio(portfolio)  # type: ignore[call-arg]
+            payoff_vs_premium_multiple(portfolio)  # type: ignore[call-arg]
 
 
 class TestCrashScenarioTable:
@@ -624,7 +624,7 @@ class TestCrashScenarioTable:
         assert len(rows) == 2
         for row in rows:
             assert row.hedge_pnl == pytest.approx(0.0, rel=1e-8)
-            assert row.payoff_ratio == pytest.approx(0.0, rel=1e-8)
+            assert row.payoff_vs_premium == pytest.approx(0.0, rel=1e-8)
 
     def test_no_ips_convexity_means_no_target_met(self) -> None:
         """Without an ips_convexity band, every row's meets_target is False."""

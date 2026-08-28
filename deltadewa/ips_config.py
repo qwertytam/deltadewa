@@ -49,11 +49,13 @@ _DEFAULT_CRASH_FLOOR_REPORTED: Final[bool] = True
 _DEFAULT_EFFICIENCY_MIN_RATIO: Final[float] = 3.0
 _DEFAULT_EFFICIENCY_MAX_RATIO: Final[float] = 6.0
 
-# Default for the delta-drift target that lives alongside the delta_drift
-# thresholds in the ``triggers`` section. A tail-hedged book is deliberately
-# net long (deep-OTM puts offset only a sliver of equity delta), so drift is
-# measured as deviation from this stated net-delta-to-equity ratio rather than
-# distance from full delta-neutrality.
+# Default for the target-delta-ratio that lives alongside the
+# delta_ratio_deviation thresholds (4.2: renamed from delta_drift, #335 —
+# "delta drift" is the handbook's name for a different metric, Part X §13's
+# scenarios.calculate_delta_drift) in the ``triggers`` section. A tail-hedged
+# book is deliberately net long (deep-OTM puts offset only a sliver of equity
+# delta), so deviation is measured from this stated net-delta-to-equity ratio
+# rather than distance from full delta-neutrality.
 _DEFAULT_TARGET_DELTA_RATIO_PCT: Final[float] = 90.0
 
 # Defaults for the expiry / theta trigger thresholds that
@@ -120,8 +122,13 @@ _DEFAULT_CLIFF_URGENT_DAYS: Final[int] = 30
 # edge); the term tolerance is in VIX points.
 DEFAULT_VOL_REGIME_LOW: Final[float] = 0.15
 DEFAULT_VOL_REGIME_HIGH: Final[float] = 0.35
-DEFAULT_SKEW_LOW_PCTILE: Final[float] = 25.0
-DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 75.0
+# 30/70, not the pre-4.2 25/75: the handbook settled its skew-percentile
+# band at accumulate-below-30 / neutral / avoid-above-70
+# (part-3/volatility-skew), and entry_timing_tree's Step 2 is a near-verbatim
+# port of the handbook's decision-matrix table, which uses 30/70 — so this
+# now matches the table the logic came from (#344).
+DEFAULT_SKEW_LOW_PCTILE: Final[float] = 30.0
+DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 70.0
 DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
 
 # Defaults for the entry-timing VIX thresholds (M2.8). Seeded from the
@@ -385,10 +392,15 @@ class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
     ``target_delta_ratio_pct`` is the intended net-delta-to-equity ratio (%)
-    the book is run at; delta drift is measured as deviation from it (in
-    percentage points), and the ``delta_drift_*`` fields are those deviation
-    bands. Distinct from ``recommendations``'s ``target_hedge_ratio`` (the
-    complement, option-offset framing).
+    the book is run at; the ``delta_ratio_deviation_*`` fields band how far
+    net delta may deviate from it (in percentage points). Renamed from
+    ``delta_drift_*`` (4.2, #335): "Delta Drift" is the handbook's own name
+    for a different figure — Part X §13's Δ(spot -5%) - Δ(spot now)
+    (``scenarios.calculate_delta_drift``, ``/design``'s "Delta drift" panel)
+    — and the two sharing a label on that page (this deviation-from-target
+    figure vs. the handbook's gamma-flavoured metric) was exactly the
+    confusion #335 reported. Distinct from ``recommendations``'s
+    ``target_hedge_ratio`` (the complement, option-offset framing).
 
     ``expiry_urgent_days`` / ``expiry_soon_days`` bound the URGENT / SOON
     expiration windows and ``theta_cost_excellent_pct`` is the EXCELLENT theta
@@ -399,28 +411,24 @@ class IpsTriggers:
     trigger. It fires on gamma *drift* — the % of the hedged equity that net
     delta shifts per 1% spot move — not raw gamma, which scales with book size.
 
-    ``roll_time_months`` is maturity **remaining**, never time elapsed since
-    entry: the roll fires once an option has this many months left to run, so
-    a smaller value rolls later in its life. The name alone does not say which
-    referent is meant, and the two are not interchangeable — an 18-month put
-    rolled on the elapsed reading lands in the 6-9 month theta-acceleration
-    zone the handbook warns against. Consumers agree with this reading:
-    ``roll_status.evaluate_roll_status`` compares ``days_to_maturity``, which
-    ``clock.days_between`` computes as ``maturity_date - as_of``. See the
-    handbook's `Typical Hedge Program Targets
+    ``roll_at_months_remaining`` is maturity remaining, by name (4.2 renamed
+    it from ``roll_time_months`` — that name alone did not say which referent
+    was meant, and the two are not interchangeable: an 18-month put rolled on
+    an *elapsed* reading instead lands in the 6-9 month theta-acceleration
+    zone the handbook warns against). ``roll_status.evaluate_roll_status``
+    compares ``days_to_maturity``, which ``clock.days_between`` computes as
+    ``maturity_date - as_of``. See the handbook's `Typical Hedge Program
+    Targets
     <https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/typical-hedge-program-targets/>`_,
-    which owns the roll-interval band. That link is pinned to handbook version
-    0.1 because the paragraph above depends on the handbook stating the band
-    as maturity *remaining*: this field's meaning was settled against that
-    wording, and the referent flipping upstream is precisely the failure the
-    paragraph exists to prevent. Drop the ``/0.1/`` segment for the current
-    band.
+    which owns the roll-interval band. Pinned to handbook version 0.1 because
+    this field's meaning was settled against that page stating the band as
+    maturity *remaining*. Drop the ``/0.1/`` segment for the current band.
     """
 
-    delta_drift_warn_pct: float
-    delta_drift_action_pct: float
+    delta_ratio_deviation_warn_pct: float
+    delta_ratio_deviation_action_pct: float
     theta_cost_acceptable_pct: float
-    roll_time_months: float
+    roll_at_months_remaining: float
     rally_rebalance_pct: float
     strike_drift_max_otm_pct: float
     target_delta_ratio_pct: float = _DEFAULT_TARGET_DELTA_RATIO_PCT
@@ -660,27 +668,30 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
     fields = {
         key: _require_field(section, "triggers", key)
         for key in (
-            "delta_drift_warn_pct",
-            "delta_drift_action_pct",
+            "delta_ratio_deviation_warn_pct",
+            "delta_ratio_deviation_action_pct",
             "theta_cost_acceptable_pct",
-            "roll_time_months",
+            "roll_at_months_remaining",
             "rally_rebalance_pct",
             "strike_drift_max_otm_pct",
         )
     }
     for key, value in fields.items():
         _require_non_negative(value, f"triggers.{key}")
-    if fields["delta_drift_warn_pct"] >= fields["delta_drift_action_pct"]:
+    if (
+        fields["delta_ratio_deviation_warn_pct"]
+        >= fields["delta_ratio_deviation_action_pct"]
+    ):
         raise IpsConfigError(
-            "triggers.delta_drift_warn_pct must be < "
-            "delta_drift_action_pct, got "
-            f"{fields['delta_drift_warn_pct']} >= "
-            f"{fields['delta_drift_action_pct']}",
+            "triggers.delta_ratio_deviation_warn_pct must be < "
+            "delta_ratio_deviation_action_pct, got "
+            f"{fields['delta_ratio_deviation_warn_pct']} >= "
+            f"{fields['delta_ratio_deviation_action_pct']}",
         )
-    if fields["roll_time_months"] <= 0:
+    if fields["roll_at_months_remaining"] <= 0:
         raise IpsConfigError(
-            f"triggers.roll_time_months must be > 0, got "
-            f"{fields['roll_time_months']}",
+            f"triggers.roll_at_months_remaining must be > 0, got "
+            f"{fields['roll_at_months_remaining']}",
         )
 
     roll_review_buffer = section.get("roll_review_buffer", 1.5)

@@ -158,7 +158,7 @@ default is chipped:
 | 12 | Liquidity Risk | 4 | none | none — needs per-strike bid/ask and open interest | **OUTSTANDING** — genuinely data-blocked |
 | 13 | Delta Drift | 4 | `/design` PLANNING — **Delta drift** | `analysis/scenarios.ScenariosMixin.calculate_delta_drift` | **PRESENT** (M2.8) |
 | 14 | Vega Term Exposure | 4 | `/design` EXPLORATION — **Vega term exposure** | `analysis/maturity.MaturityMixin.calculate_vega_by_maturity` | **PRESENT** (M2.8) |
-| 15 | Hedge Efficiency Ratio | 4 | `/monitor` `_cost_panel`; digest `ProtectionSection.payoff_ratio` | Same function as #5 — see below | **PRESENT** (M2.7) |
+| 15 | Hedge Efficiency Ratio | 4 | `/monitor` `_cost_panel`; digest `ProtectionSection.payoff_vs_premium` | Same function as #5 — see below | **PRESENT** (M2.7) |
 | — | Part VII Board/IC report | — | Weekly digest email | `reporting/program_report.py` | **RETIRED** from the dashboard — see [Conscious retirements](#conscious-retirements) |
 | — | Time to Convexity Cliff | — | `/design` PLANNING — **Convexity cliff** | `analysis/health.HealthMixin.calculate_convexity_cliff_days`; lines from `IpsConvexity.cliff_*` | **PRESENT** (notebook-retirement audit) |
 | — | Sizing workbench | — | `/design` PLANNING | `analysis/sizing.size_hedge` | **PRESENT** |
@@ -265,9 +265,10 @@ handbook shows a six-row SPX-move table; `/monitor` renders a continuous
 payoff curve over −50%…+10% with a live marker. *Rationale:* the curve is a
 superset of the table, and a second tabular copy of the same information
 works against `/monitor` staying legible cold. The tabular engine
-(`analysis/crash_payoff.crash_scenario_table`, `crash_payoff_ratio`) is
-**kept and still tested**, with no production consumer — kept rather than
-restored, and kept rather than deleted, because the digest's payoff ratio
+(`analysis/crash_payoff.crash_scenario_table`, `payoff_vs_premium_multiple`
+— renamed from `crash_payoff_ratio` in 4.2, #303) is **kept and still
+tested**, with no production consumer — kept rather than restored, and kept
+rather than deleted, because the digest's payoff-vs-premium figure
 descends from the same code path.
 
 **The hedge-success gauge — omitted, per M2.4 finding M2.** A permanently
@@ -357,8 +358,9 @@ un-gating it, and all three orphaned methods were **kept deliberately** — see
 [`analysis/health.py`'s three orphans](#analysishealthpys-three-orphans) for
 the reasoning. `analysis/health.py` records it at each function.
 
-**`analysis/crash_payoff.crash_scenario_table` / `crash_payoff_ratio`** —
-kept deliberately; see [Conscious retirements](#conscious-retirements).
+**`analysis/crash_payoff.crash_scenario_table` /
+`payoff_vs_premium_multiple`** (renamed from `crash_payoff_ratio`, 4.2,
+#303) — kept deliberately; see [Conscious retirements](#conscious-retirements).
 
 ## The notebook-retirement audit
 
@@ -491,7 +493,7 @@ All four boundaries therefore come from keys `IpsTriggers` **already** owned:
 | --- | --- |
 | URGENT | `triggers.expiry_urgent_days` |
 | SOON | `triggers.expiry_soon_days` |
-| ROLL DUE | `triggers.roll_time_months` x `const.CALENDAR_DAYS_PER_MONTH` |
+| ROLL DUE | `triggers.roll_at_months_remaining` x `const.CALENDAR_DAYS_PER_MONTH` |
 | ROLL REVIEW | ROLL DUE x `triggers.roll_review_buffer` |
 
 The upper two are exactly the window
@@ -638,7 +640,7 @@ rallied/declined scenario pair) — the rallied case previously asserted `DELAY`
 and now asserts `ROLL_NOW`.
 
 `DELAY` renders its reasoning inline, naming all three conditions against the
-IPS values they were measured on (roll window from `triggers.roll_time_months`,
+IPS values they were measured on (roll window from `triggers.roll_at_months_remaining`,
 band from `convexity.target_min_pct`/`target_max_pct`), and carries its own
 badge colour rather than reusing HOLD's — a deferral is not an all-clear.
 
@@ -694,7 +696,7 @@ declined. All 47 keys were checked, per gauge block:
 | `convexity_cliff` | `IpsConvexity.cliff_threshold_days` / `_review_days` / `_urgent_days`, seeded verbatim (`ips_config.py:93`) |
 | `vol_regime` | `IpsMarketEnvironment.vol_regime_low` / `_high` (`analysis/market_environment.py:166`) |
 | `crash_convexity` | `IpsConvexity.target_min_pct` / `_max_pct` |
-| `delta_drift` | `IpsTriggers.delta_drift_warn_pct` / `_action_pct` |
+| `delta_drift` | `IpsTriggers.delta_ratio_deviation_warn_pct` / `_action_pct` (renamed from `delta_drift_warn_pct`/`_action_pct` in 4.2, #335) |
 | `net_carry` | `IpsBudget.annual_carry_pct` |
 | `hedge_success` | none, and none needed — `health.calculate_hedge_success_pct` is a computed percentage the handbook gives no band, and it is already surfaced |
 

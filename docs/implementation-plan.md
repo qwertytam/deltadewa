@@ -539,6 +539,33 @@ and the gauge convexity agree at equal depth on the §4 book; goldens recomputed
 (methodology doc re-golden tracked as a follow-up above); `skew = 0` still a
 byte-for-byte no-op.
 
+> **Note (2026-08-27, 4.2 — the band canon moved).** This is a dev log; the
+> entries above (M1.6/M1.7, and the golden-value tables further down this
+> file) are left as-written and remain an accurate record of what was true
+> when each milestone landed. They are **no longer current policy**. The
+> handbook has since settled crash-convexity canon at **+10%…+20% at −25%
+> SPX** (was the +15%…+25% these entries cite) and skew-percentile canon at
+> **30/70** (was 25/75) — see #344 and `docs/part-x-coverage.md`'s handbook
+> staleness-sweep notes. 4.2 (chore/one-canon) moved the *code* defaults
+> (`ips_config.DEFAULT_SKEW_LOW_PCTILE`/`_HIGH_PCTILE`, now 30.0/70.0; the
+> shipped `config/ips.example.yaml`/`examples/ips/ips_default.yaml` convexity
+> band was already 10–20 since #248) to match. The §4 golden book itself
+> (`+24.64%`, `$297,715`/`$5,226,004`) is **unchanged and deliberately kept
+> that way** — it now reads *above* the canonical band by design, not
+> in-band; see the box at the top of `docs/repricing-methodology.md` §4 and
+> `tests/test_analysis/test_crash_repricing.py`'s `_ANCHOR_BAND_MIN`/`_MAX`.
+> The canonical golden (`spx_protective_put.yaml`, `+16.098902%`) is
+> unaffected either way — it sits inside both the old and the new band. 4.2
+> also renamed `triggers.roll_time_months` →
+> `triggers.roll_at_months_remaining` (#338) and
+> `triggers.delta_drift_warn_pct`/`_action_pct` →
+> `triggers.delta_ratio_deviation_warn_pct`/`_action_pct` (#335) — both are
+> breaking changes for a live `config/ips.yaml`. Also (#338):
+> `convexity.cliff_threshold_days` in the shipped example configs moved
+> 180 → 150, decoupled from `roll_at_months_remaining`'s 6.0-month default
+> (6.0 × 30 ≈ 180 days) so the two no longer read as one setting by
+> numeric coincidence — example data only, not a policy or code change.
+
 ### M1.8 — `CrashShock`: thread the crash pricing basis as one value object
 
 **Status: DONE (closed 2026-07-26).** Closes the first M1.7 deferred follow-up.

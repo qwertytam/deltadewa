@@ -48,7 +48,7 @@ def _empty_result() -> CrashConvexityResult:
     return CrashConvexityResult(
         curve=[],
         scenario_rows=[],
-        payoff_ratio=None,
+        payoff_vs_premium=None,
         premium_paid=0.0,
         premium_basis=PremiumBasis.MARK,
         ips_convexity=None,

@@ -76,7 +76,7 @@ class ExpiryBoundaries:
             URGENT.
         soon_days: ``triggers.expiry_soon_days``. Below this, SOON.
         roll_due_days: The program's roll window in days --
-            ``triggers.roll_time_months`` converted at
+            ``triggers.roll_at_months_remaining`` converted at
             ``const.CALENDAR_DAYS_PER_MONTH``. At or below this, ROLL DUE.
             This is the handbook's own roll trigger ("maturity < 9 months
             remaining", `Part VII Rule 1 — Time-Based Roll
@@ -165,15 +165,16 @@ def expiry_boundaries(triggers: IpsTriggers) -> ExpiryBoundaries:
     """Derive the five buckets' boundaries from existing IPS trigger keys.
 
     All four boundaries come from keys ``IpsTriggers`` already owns --
-    ``expiry_urgent_days``, ``expiry_soon_days``, ``roll_time_months`` and
-    ``roll_review_buffer``. The upper two are exactly the window
+    ``expiry_urgent_days``, ``expiry_soon_days``,
+    ``roll_at_months_remaining`` and ``roll_review_buffer``. The upper two
+    are exactly the window
     :func:`~deltadewa.analysis.roll_status.evaluate_roll_status` grades its
     time trigger against, so the aging panel and the roll table cannot
     disagree about where a leg sits.
 
     ``IpsTriggers`` validates ``expiry_urgent_days < expiry_soon_days`` but
     nothing constrains ``expiry_soon_days`` against the roll window: a
-    program with a short ``roll_time_months`` is a legal IPS. The upper
+    program with a short ``roll_at_months_remaining`` is a legal IPS. The upper
     boundaries are therefore clamped upward to keep the ladder monotonic
     (a bucket may collapse to empty), rather than raising -- a display
     panel must not refuse to render a valid config.
@@ -188,7 +189,9 @@ def expiry_boundaries(triggers: IpsTriggers) -> ExpiryBoundaries:
     urgent_days = triggers.expiry_urgent_days
     soon_days = triggers.expiry_soon_days
     roll_due_days = max(
-        round(triggers.roll_time_months * const.CALENDAR_DAYS_PER_MONTH),
+        round(
+            triggers.roll_at_months_remaining * const.CALENDAR_DAYS_PER_MONTH
+        ),
         soon_days,
     )
     roll_review_days = max(

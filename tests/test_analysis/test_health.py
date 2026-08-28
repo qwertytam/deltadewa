@@ -4,11 +4,11 @@ Direct unit tests for the HealthMixin gauge metrics, covering the three
 zero-reference functions (calculate_vega_sufficiency_pct,
 calculate_hedge_success_pct, calculate_convexity_cliff_days) and the
 remaining wrapper methods. Uses the established _analyzer() Mock-portfolio
-pattern from test_vol_regime.py / test_delta_drift.py.
+pattern from test_vol_regime.py / test_delta_ratio_deviation.py.
 
-Note: calculate_net_carry_pct, calculate_delta_drift_pct,
+Note: calculate_net_carry_pct, calculate_delta_ratio_deviation_pct,
 calculate_crash_convexity_pct, and compute_vol_regime have existing
-coverage elsewhere (test_delta_drift.py, test_vol_regime.py,
+coverage elsewhere (test_delta_ratio_deviation.py, test_vol_regime.py,
 test_crash_single_source.py, test_crash_repricing.py); this file adds
 boundary and degenerate cases not yet covered, plus full normal/boundary
 /degenerate suites for the three uncovered functions.
@@ -110,10 +110,10 @@ class TestCalculateVegaSufficiencyPct:
         """portfolio_value == 0 → returns 0.0 (current behavior).
 
         NOTE: This is inconsistent with calculate_net_carry_pct /
-        calculate_delta_drift_pct, which return None when the denominator
-        is unset. Returning a literal 0.0 here vs None there is a known
-        inconsistency not addressed in this scope — this test pins the
-        current contract.
+        calculate_delta_ratio_deviation_pct, which return None when the
+        denominator is unset. Returning a literal 0.0 here vs None there is
+        a known inconsistency not addressed in this scope — this test pins
+        the current contract.
         """
         analyzer = _analyzer(total_vega=100.0, total_portfolio_value=0.0)
         result = analyzer.calculate_vega_sufficiency_pct(vol_shock_points=10.0)
@@ -479,20 +479,22 @@ class TestCalculateConvexityCliffDays:
         assert result == 999
 
 
-class TestCalculateDeltaDriftPct:
-    """Delta drift wrapper + boundary/degenerate complement.
+class TestCalculateDeltaRatioDeviationPct:
+    """Delta ratio deviation wrapper + boundary/degenerate complement.
 
-    Complements test_delta_drift with wrapper-level stats plumbing and IPS
-    threshold boundaries not covered elsewhere.
+    Complements test_delta_ratio_deviation with wrapper-level stats
+    plumbing and IPS threshold boundaries not covered elsewhere.
     """
 
     def test_wrapper_reads_summary_stats(self) -> None:
         """Wrapper correctly reads net_delta/underlying_qty from stats."""
         analyzer = _analyzer(net_delta=95.0, underlying_quantity=100.0)
-        result = analyzer.calculate_delta_drift_pct(target_delta_ratio_pct=90.0)
+        result = analyzer.calculate_delta_ratio_deviation_pct(
+            target_delta_ratio_pct=90.0
+        )
         assert result == pytest.approx(5.0)
 
-    def test_boundary_at_delta_drift_warn_pct(self) -> None:
+    def test_boundary_at_delta_ratio_deviation_warn_pct(self) -> None:
         """Result landing exactly at IPS warn threshold (5.0 pp).
 
         IPS value from the retired Jupyter setup suite (#279).
@@ -501,14 +503,18 @@ class TestCalculateDeltaDriftPct:
         If target=90, then net_delta/100*100 = 95
         """
         analyzer = _analyzer(net_delta=95.0, underlying_quantity=100.0)
-        result = analyzer.calculate_delta_drift_pct(target_delta_ratio_pct=90.0)
+        result = analyzer.calculate_delta_ratio_deviation_pct(
+            target_delta_ratio_pct=90.0
+        )
         assert result == pytest.approx(5.0)
 
-    def test_boundary_at_delta_drift_action_pct(self) -> None:
+    def test_boundary_at_delta_ratio_deviation_action_pct(self) -> None:
         """Result landing exactly at IPS action threshold (10.0 pp)."""
         # If target=90, then net_delta/100*100 = 100 for drift=10
         analyzer = _analyzer(net_delta=100.0, underlying_quantity=100.0)
-        result = analyzer.calculate_delta_drift_pct(target_delta_ratio_pct=90.0)
+        result = analyzer.calculate_delta_ratio_deviation_pct(
+            target_delta_ratio_pct=90.0
+        )
         assert result == pytest.approx(10.0)
 
     def test_degenerate_zero_underlying_quantity_returns_none(self) -> None:
@@ -517,12 +523,15 @@ class TestCalculateDeltaDriftPct:
             net_delta=50.0,
             underlying_quantity=0.0,
         )
-        result = analyzer.calculate_delta_drift_pct(target_delta_ratio_pct=90.0)
+        result = analyzer.calculate_delta_ratio_deviation_pct(
+            target_delta_ratio_pct=90.0
+        )
         assert result is None
 
 
 class TestCalculateNetCarryPct:
-    """Theta/carry wrapper + boundary complement to test_delta_drift."""
+    """Theta/carry wrapper + boundary complement to
+    test_delta_ratio_deviation."""
 
     def test_normal_positive_theta_positive_carry_pct(self) -> None:
         """Positive theta (earning carry) → positive pct."""
@@ -680,7 +689,7 @@ class TestCalculateHealthMetricsDisablingContract:
     def test_target_delta_ratio_none_makes_delta_drift_unavailable(
         self,
     ) -> None:
-        """target_delta_ratio_pct=None → delta_drift_pct=None."""
+        """target_delta_ratio_pct=None → delta_ratio_deviation_pct=None."""
         analyzer = _analyzer()
 
         metrics = analyzer.calculate_health_metrics(
@@ -688,7 +697,7 @@ class TestCalculateHealthMetricsDisablingContract:
             target_delta_ratio_pct=None,
         )
 
-        assert metrics["delta_drift_pct"] is None
+        assert metrics["delta_ratio_deviation_pct"] is None
 
     def test_all_metrics_keys_present_in_output(self) -> None:
         """Aggregated dict contains all documented gauge keys."""
@@ -700,7 +709,7 @@ class TestCalculateHealthMetricsDisablingContract:
             "net_carry_pct",
             "crash_convexity_pct",
             "vega_sufficiency_pct",
-            "delta_drift_pct",
+            "delta_ratio_deviation_pct",
             "convexity_cliff_days",
             "vol_regime_percentile",
             "vol_regime_basis",

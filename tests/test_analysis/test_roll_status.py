@@ -30,7 +30,7 @@ from deltadewa.valuation import OptionValuation
 
 def _make_ips_config(
     *,
-    roll_time_months: float = 1.0,
+    roll_at_months_remaining: float = 1.0,
     roll_review_buffer: float = 1.5,
     strike_drift_max_otm_pct: float = 45.0,
     strike_drift_review_fraction: float = 0.75,
@@ -49,10 +49,10 @@ def _make_ips_config(
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=20.0),
         triggers=IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=roll_time_months,
+            roll_at_months_remaining=roll_at_months_remaining,
             rally_rebalance_pct=15.0,
             strike_drift_max_otm_pct=strike_drift_max_otm_pct,
             roll_review_buffer=roll_review_buffer,
@@ -356,7 +356,7 @@ class TestEvaluateRollStatus:
         self._patch_convexity(monkeypatch, 20.0)
         position = _make_position(days_to_maturity=10, entry_spot=100.0)
         portfolio = self._portfolio_with(position)
-        ips = _make_ips_config(roll_time_months=1.0)  # ~30 day window
+        ips = _make_ips_config(roll_at_months_remaining=1.0)  # ~30 day window
 
         records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
 
@@ -371,7 +371,9 @@ class TestEvaluateRollStatus:
         """A what-if valuation date, not the wall clock, drives the roll DTE."""
         self._patch_convexity(monkeypatch, 20.0)  # convexity comfortable
         position = _make_position(days_to_maturity=200, entry_spot=100.0)
-        ips = _make_ips_config(roll_time_months=1.0)  # ~30-day roll window
+        ips = _make_ips_config(
+            roll_at_months_remaining=1.0
+        )  # ~30-day roll window
 
         # As of today (~200 days out) -> HOLD.
         today_rec = evaluate_roll_status(
@@ -463,7 +465,7 @@ class TestEvaluateRollStatus:
         portfolio = self._portfolio_with(position)
         # Small max drift so the modest -4.74% drift still exceeds it.
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=3.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
@@ -489,7 +491,7 @@ class TestEvaluateRollStatus:
         self._patch_convexity(monkeypatch, 20.0)
         position = _make_position(days_to_maturity=10, entry_spot=100.0)
         portfolio = self._portfolio_with(position)
-        ips = _make_ips_config(roll_time_months=1.0)  # ~30 day window
+        ips = _make_ips_config(roll_at_months_remaining=1.0)  # ~30 day window
 
         records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
 
@@ -513,7 +515,7 @@ class TestEvaluateRollStatus:
         )
         portfolio = self._portfolio_with(position)
         ips = _make_ips_config(
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             strike_drift_max_otm_pct=3.0,
             target_min_pct=15.0,
             target_max_pct=25.0,

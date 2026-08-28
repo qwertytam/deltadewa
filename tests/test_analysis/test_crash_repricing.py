@@ -46,8 +46,8 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.candidate import evaluate_candidate
 from deltadewa.analysis.crash_payoff import (
     compute_crash_convexity,
-    crash_payoff_ratio,
     crash_scenario_table,
+    payoff_vs_premium_multiple,
 )
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.health import HealthMixin
@@ -87,6 +87,17 @@ _APPENDIX_SKEW_ANCHOR = 0.10
 # carries an *absolute* maturity, so without a pin its time-to-expiry — and
 # every number derived from it — walks with the calendar.
 _FIXTURE_AS_OF = datetime(2026, 7, 26, tzinfo=UTC)
+# The §4 anchor's own local check band — deliberately NOT the IPS/handbook
+# canon (+10%..+20% at -25%, per part-7/typical-hedge-program-targets). §4 is
+# a deliberately deep 20/30/40-OTM ladder and reprices to +24.64%, which reads
+# ABOVE canon by design (4.2, docs/repricing-methodology.md §4's box). This
+# constant exists only so the ten inline ``IpsConvexity`` band-parameter sites
+# below don't each silently re-encode the old 15/25 literal — it is this
+# fixture's own historical check band, decoupled from live program policy.
+# Never read this constant when the intent is "what does the program require" —
+# that's ``ips.yaml``'s ``convexity.target_min_pct``/``target_max_pct``.
+_ANCHOR_BAND_MIN = 15.0
+_ANCHOR_BAND_MAX = 25.0
 # (strike, contract count) for the 20/30/40%-OTM three-rung ladder.
 _APPENDIX_LEGS = ((5280.0, 23), (4620.0, 26), (3960.0, 16))
 
@@ -265,18 +276,18 @@ def _make_appendix_ips(
         budget=IpsBudget(annual_carry_pct=2.0),
         convexity=IpsConvexity(
             crash_scenario_pct=crash_scenario_pct,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            target_min_pct=_ANCHOR_BAND_MIN,
+            target_max_pct=_ANCHOR_BAND_MAX,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
             skew_steepening=_APPENDIX_SKEW,
             skew_reference_delta=skew_reference_delta,
         ),
         drawdown=IpsDrawdown(max_tolerance_pct=20.0),
         triggers=IpsTriggers(
-            delta_drift_warn_pct=5.0,
-            delta_drift_action_pct=10.0,
+            delta_ratio_deviation_warn_pct=5.0,
+            delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
-            roll_time_months=1.0,
+            roll_at_months_remaining=1.0,
             rally_rebalance_pct=15.0,
             strike_drift_max_otm_pct=45.0,
         ),
@@ -322,8 +333,11 @@ class TestAppendixGoldenValues:
         This value assertion (not the ``meets_target`` boolean in
         :class:`TestBand`) is the §4 regression anchor. §4 is a deliberately
         deep 20/30/40 ladder, so a faithful crash model correctly places it near
-        the top of the +15..+25% band — it rides only 0.36pp under the +25% IPS
-        ceiling by design. Pinning the value (not the boolean) makes any future
+        the top of this fixture's own local ``_ANCHOR_BAND_MIN``/``_MAX`` check
+        band — it rides only 0.36pp under that band's ceiling by design. This is
+        NOT the live IPS/handbook canon (+10%..+20% — see
+        :class:`TestCanonicalBandReading`, which pins the above-canon reading
+        separately). Pinning the value (not the boolean) makes any future
         re-calibration that nudges §4 surface as a visible number change
         demanding a deliberate decision, never a silent ``meets_target`` flip
         that would masquerade as a regression while the fixture just hugs the
@@ -342,17 +356,18 @@ class TestAppendixGoldenValues:
         )
 
         assert convexity == pytest.approx(24.64, abs=0.1)
-        assert 15.0 <= convexity <= 25.0
-        # Rides 0.36pp under the +25% IPS ceiling (target_max_pct) by design.
-        assert 25.0 - convexity == pytest.approx(0.36, abs=0.1)
+        assert _ANCHOR_BAND_MIN <= convexity <= _ANCHOR_BAND_MAX
+        # Rides 0.36pp under this fixture's own ceiling (_ANCHOR_BAND_MAX) by
+        # design — not the live IPS ceiling.
+        assert _ANCHOR_BAND_MAX - convexity == pytest.approx(0.36, abs=0.1)
 
-    def test_payoff_ratio_is_about_17x(self) -> None:
+    def test_payoff_vs_premium_is_about_17x(self) -> None:
         """The repriced headline payoff ratio is ~17.5x (not the 2.5x floor)."""
         portfolio = _make_appendix_book()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            target_min_pct=_ANCHOR_BAND_MIN,
+            target_max_pct=_ANCHOR_BAND_MAX,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
             skew_steepening=_APPENDIX_SKEW,
         )
@@ -368,8 +383,8 @@ class TestAppendixGoldenValues:
             ips_convexity=ips,
         )
 
-        assert result.payoff_ratio is not None
-        assert result.payoff_ratio == pytest.approx(17.53, rel=0.02)
+        assert result.payoff_vs_premium is not None
+        assert result.payoff_vs_premium == pytest.approx(17.53, rel=0.02)
 
     def test_intrinsic_floor_is_the_conservative_759k(self) -> None:
         """The intrinsic floor (~$759k) is far below the repriced value."""
@@ -451,13 +466,13 @@ class TestSkewSteepeningNoOp:
         assert with_knob == base
         assert with_knob == pytest.approx(18.0, abs=0.5)
 
-    def test_payoff_ratio_unchanged(self) -> None:
+    def test_payoff_vs_premium_unchanged(self) -> None:
         """The ``13.1x`` payoff anchor is untouched by the knob."""
         portfolio = _make_appendix_book()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            target_min_pct=_ANCHOR_BAND_MIN,
+            target_max_pct=_ANCHOR_BAND_MAX,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
         )
 
@@ -472,7 +487,7 @@ class TestSkewSteepeningNoOp:
             ips_convexity=ips,
         )
 
-        assert result.payoff_ratio == pytest.approx(13.1, rel=0.02)
+        assert result.payoff_vs_premium == pytest.approx(13.1, rel=0.02)
 
     def test_intrinsic_floor_is_vol_independent(self) -> None:
         """The ``$759,000`` intrinsic floor is vol-independent."""
@@ -796,15 +811,32 @@ class TestCompositionInvariance:
 
 
 class TestBand:
-    """§7.2 (D3) — the band test anchors on the §4 fixture, not the example."""
+    """§7.2 (D3) — the band test anchors on the §4 fixture, not the example.
 
-    def test_appendix_book_meets_target_in_band(self) -> None:
-        """The §4 book's -25% row is inside +15..+25% and meets_target."""
+    Two tests, deliberately kept apart per 4.2: this class exercises
+    band-comparison *mechanics* against the fixture's own local
+    ``_ANCHOR_BAND_MIN``/``_MAX`` check band — an arbitrary valid band, not a
+    claim about live policy. :class:`TestCanonicalBandReading` below pins the
+    separate, policy-relevant fact: §4 reads *above* the real IPS/handbook
+    canon (+10%..+20%).
+    """
+
+    def test_meets_target_true_when_convexity_inside_supplied_band(
+        self,
+    ) -> None:
+        """The §4 book's -25% row is inside its own local check band.
+
+        Renamed from ``test_appendix_book_meets_target_in_band`` (4.2): the
+        old name read as a claim about IPS conformance, which stopped being
+        true once the canon moved to +10%..+20%. This test never claimed
+        that — it exercises ``meets_target`` mechanics against whatever band
+        it is handed — so only the name was wrong, not the assertion.
+        """
         portfolio = _make_appendix_book()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            target_min_pct=_ANCHOR_BAND_MIN,
+            target_max_pct=_ANCHOR_BAND_MAX,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
             skew_steepening=_APPENDIX_SKEW,
         )
@@ -825,7 +857,7 @@ class TestBand:
             if r.shock_pct == pytest.approx(-25.0, rel=1e-4)
         )
 
-        assert 15.0 <= ips_row.convexity_pct <= 25.0
+        assert _ANCHOR_BAND_MIN <= ips_row.convexity_pct <= _ANCHOR_BAND_MAX
         # This exercises the band-comparison mechanics; the §4 regression is
         # anchored on the convexity VALUE (TestAppendixGoldenValues), not on
         # this boolean, so a re-calibration reads as a number change there
@@ -833,12 +865,59 @@ class TestBand:
         assert ips_row.meets_target is True
 
 
+class TestCanonicalBandReading:
+    """4.2 — §4 reads ABOVE the live IPS/handbook canon, by design.
+
+    Pins the policy-relevant fact :class:`TestBand` deliberately does not:
+    against the real canonical band (+10%..+20% at -25% SPX, per
+    ``part-7/typical-hedge-program-targets``), the §4 book's +24.64% is
+    ``meets_target is False`` — it over-shoots the ceiling. See the box atop
+    docs/repricing-methodology.md §4 for why that is correct and expected,
+    not a defect: §4 is kept fixed as the engine's crash-repricing anchor,
+    not re-sized to track policy.
+    """
+
+    def test_appendix_book_reads_above_canonical_band(self) -> None:
+        """§4's -25% row fails ``meets_target`` against the +10%..+20% canon."""
+        portfolio = _make_appendix_book()
+        ips = IpsConvexity(
+            crash_scenario_pct=-25.0,
+            target_min_pct=10.0,
+            target_max_pct=20.0,
+            crash_vol_shock=_APPENDIX_VOL_SHOCK,
+            skew_steepening=_APPENDIX_SKEW,
+        )
+
+        result = compute_crash_convexity(
+            portfolio,
+            shock=CrashShock(
+                crash_scenario_pct=0.0,
+                crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                skew_steepening=_APPENDIX_SKEW,
+                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+            ),
+            ips_convexity=ips,
+        )
+        ips_row = next(
+            r
+            for r in result.scenario_rows
+            if r.shock_pct == pytest.approx(-25.0, rel=1e-4)
+        )
+
+        assert ips_row.convexity_pct > 20.0
+        assert ips_row.meets_target is False
+
+
 class TestGoldenExampleFile:
     """The shipped spx_tail_20m.yaml reproduces the §4 golden book on load.
 
-    Guards the loadable demo/smoke fixture (as opposed to the in-code
-    ``_make_appendix_book``): it must stay conforming and in-band so it can be
-    opened in the monitor as the reference conformant book.
+    Guards the loadable engine-anchor fixture (as opposed to the in-code
+    ``_make_appendix_book``): it must stay shape-conforming and reproduce the
+    §4 golden values on load. As of 4.2 it is **not** required to be inside
+    the live IPS/handbook canon (+10%..+20%) — §4 reads above that band by
+    design; see docs/repricing-methodology.md §4. It is no longer offered as
+    "the reference conformant book" to open in the monitor for a passing
+    compliance row.
     """
 
     def test_example_is_shape_conforming(self) -> None:
@@ -864,8 +943,13 @@ class TestGoldenExampleFile:
         assert v_today == pytest.approx(297_715.0, rel=0.005)
         assert v_crash == pytest.approx(5_226_004.0, rel=0.005)
 
-    def test_example_convexity_is_in_band(self) -> None:
-        """Loaded book reprices to +24.6% ± epsilon — inside +15..+25%."""
+    def test_example_convexity_reads_above_canonical_band(self) -> None:
+        """Loaded book reprices to +24.6% ± epsilon — inside its own local
+        check band, above the +10%..+20% IPS/handbook canon (4.2).
+
+        Renamed from ``test_example_convexity_is_in_band``, which claimed IPS
+        conformance this fixture no longer has under the current canon.
+        """
         portfolio = _load_golden_20m_example()
 
         convexity = cr.crash_convexity_pct(
@@ -879,9 +963,12 @@ class TestGoldenExampleFile:
         )
 
         assert convexity == pytest.approx(24.64, abs=0.1)
-        assert 15.0 <= convexity <= 25.0
-        # Rides 0.36pp under the +25% IPS ceiling (target_max_pct) by design.
-        assert 25.0 - convexity == pytest.approx(0.36, abs=0.1)
+        assert _ANCHOR_BAND_MIN <= convexity <= _ANCHOR_BAND_MAX
+        # Rides 0.36pp under this fixture's own local ceiling
+        # (_ANCHOR_BAND_MAX) by design — not the live IPS ceiling.
+        assert _ANCHOR_BAND_MAX - convexity == pytest.approx(0.36, abs=0.1)
+        # Above the real canon's ceiling — this is the correct reading.
+        assert convexity > 20.0
 
 
 class TestFixtureValuationDatePins:
@@ -1103,8 +1190,8 @@ class TestConsistencyAcrossSurfaces:
         portfolio = _make_appendix_book()
         ips = IpsConvexity(
             crash_scenario_pct=-25.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            target_min_pct=_ANCHOR_BAND_MIN,
+            target_max_pct=_ANCHOR_BAND_MAX,
             crash_vol_shock=_APPENDIX_VOL_SHOCK,
             skew_steepening=_APPENDIX_SKEW,
         )
@@ -1206,8 +1293,8 @@ class TestCrashShockValueObject:
         """Every pricing knob is projected off IpsConvexity, none dropped."""
         convexity = IpsConvexity(
             crash_scenario_pct=-30.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            target_min_pct=_ANCHOR_BAND_MIN,
+            target_max_pct=_ANCHOR_BAND_MAX,
             crash_vol_shock=0.17,
             skew_steepening=0.08,
             skew_reference_delta=0.07,
@@ -1526,7 +1613,7 @@ class TestNoLegacyBasisInConvexityPaths:
             cr.crash_convexity_pct,
             HealthMixin.calculate_crash_convexity_pct,
             compute_crash_convexity,
-            crash_payoff_ratio,
+            payoff_vs_premium_multiple,
             evaluate_candidate,
         )
 
@@ -1541,7 +1628,7 @@ class TestNoLegacyBasisInConvexityPaths:
             cr.crash_convexity_pct,
             HealthMixin.calculate_crash_convexity_pct,
             compute_crash_convexity,
-            crash_payoff_ratio,
+            payoff_vs_premium_multiple,
             evaluate_candidate,
         )
 
@@ -1614,11 +1701,13 @@ class TestCanonicalExampleInvariants:
     def test_canonical_in_band_under_skew_not_resized(self) -> None:
         """Per-leg skew lifts the canonical to ~+16.1% — in-band, not re-sized.
 
-        The flat bump left it just under the +15% floor (~+14.3%); the
-        honestly-calibrated per-leg wing steepening (M1.7) reads ~+16.1%,
-        comfortably in the +15..+25% band, so no re-size is needed. The load is
-        pinned to ``_FIXTURE_AS_OF`` (the fixture carries an absolute maturity),
-        so this is an exact golden rather than a moving target.
+        The flat bump left it at ~+14.3% (below the pre-4.2 +15% floor, but
+        inside today's +10%..+20% canon); the honestly-calibrated per-leg
+        wing steepening (M1.7) reads ~+16.1%, comfortably inside the
+        +10%..+20% IPS/handbook canon either way, so no re-size is needed.
+        The load is pinned to ``_FIXTURE_AS_OF`` (the fixture carries an
+        absolute maturity), so this is an exact golden rather than a moving
+        target.
         """
         portfolio = _load_canonical_example()
 
@@ -1635,8 +1724,9 @@ class TestCanonicalExampleInvariants:
         # Pinned load => exact golden. A loose tolerance here would re-admit
         # the theta drift the pin exists to remove.
         assert convexity == pytest.approx(16.0989, abs=0.001)
-        # In-band => the conformance conclusion is "no re-size needed".
-        assert 15.0 <= convexity <= 25.0
+        # In-band under the real IPS/handbook canon (+10%..+20%, not the §4
+        # anchor's own local check band) => "no re-size needed" still holds.
+        assert 10.0 <= convexity <= 20.0
         # ...and the fixture itself is unchanged: two puts, same strikes/counts.
         puts = {
             (pos.option.strike_price, pos.quantity)
@@ -1809,8 +1899,8 @@ class TestCrashValueCurve:
             shock=dataclasses.replace(shock, crash_scenario_pct=0.0),
             ips_convexity=IpsConvexity(
                 crash_scenario_pct=_APPENDIX_PCT,
-                target_min_pct=15.0,
-                target_max_pct=25.0,
+                target_min_pct=_ANCHOR_BAND_MIN,
+                target_max_pct=_ANCHOR_BAND_MAX,
                 crash_vol_shock=_APPENDIX_VOL_SHOCK,
                 skew_steepening=_APPENDIX_SKEW,
                 skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
