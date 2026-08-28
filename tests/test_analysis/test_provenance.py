@@ -15,6 +15,7 @@ from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsPricingInputs
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.stamps import MarketParameterStamps
+from tests.clock_helpers import days_from_today
 
 _AS_OF_DATE = date(2026, 8, 26)
 _POLICY = IpsPricingInputs(
@@ -146,16 +147,21 @@ class TestHandEnteredGrading:
     def test_per_leg_iv_is_graded_independently(self) -> None:
         environment = _make_environment()
         portfolio = _make_portfolio()
+        # Maturity only needs to be unexpired at add-time (#365) — the
+        # provenance grading below is entirely driven by volatility_as_of
+        # vs. the absolute _AS_OF_DATE, so the maturity itself is seeded
+        # off the program clock rather than pinned.
+        maturity = days_from_today(365)
         portfolio.add_position(
             strike_price=4500.0,
-            maturity_date=datetime(2027, 6, 18, tzinfo=UTC),
+            maturity_date=maturity,
             quantity=10,
             option_type=OptionType.PUT,
             volatility_as_of=datetime(2026, 8, 25, tzinfo=UTC),  # fresh
         )
         portfolio.add_position(
             strike_price=4000.0,
-            maturity_date=datetime(2027, 6, 18, tzinfo=UTC),
+            maturity_date=maturity,
             quantity=10,
             option_type=OptionType.PUT,
             volatility_as_of=datetime(2026, 8, 1, tzinfo=UTC),  # stale

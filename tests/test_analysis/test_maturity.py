@@ -117,7 +117,12 @@ class TestMaturityMixin:
 
     def test_days_to_expiry_uses_valuation_date(self) -> None:
         """days_to_expiry is measured from the valuation date, not now."""
-        maturity = datetime(2027, 1, 1, tzinfo=UTC)
+        # Seeded off the program clock: add_position's default
+        # valuation_date (used by its #365 expired-maturity guard) is
+        # whatever "today" the clock reads at call time, before the
+        # what-if override below — a pinned literal would go stale under
+        # the clock-shift probe.
+        maturity = days_from_today(365)
         portfolio = OptionPortfolio(
             underlying_quantity=100.0,
             spot_price=100.0,

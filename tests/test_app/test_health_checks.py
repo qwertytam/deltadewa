@@ -8,7 +8,6 @@ materialized assertions ``/health`` composes, not the route itself (see
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -28,12 +27,15 @@ from deltadewa.app.health_checks import (
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import write_cache_manifest
 from deltadewa.state import ProgramState
+from tests.clock_helpers import days_from_today
 
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
 _EXAMPLE_IPS = (
     Path(__file__).parent.parent.parent / "config" / ("ips.example.yaml")
 )
-_MATURITY = datetime(2027, 6, 30, tzinfo=UTC)
+# Seeded off the program clock, not pinned: a fixed literal drifts into
+# the past under the clock-shift probe and expires the book (#365).
+_MATURITY = days_from_today(365)
 
 
 def _state_no_ips(

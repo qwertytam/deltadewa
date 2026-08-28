@@ -57,6 +57,7 @@ from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting import PortfolioLogger
 from deltadewa.state import ProgramState
+from tests.clock_helpers import days_from_today
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -67,8 +68,11 @@ _PAGE_LOAD_TIMEOUT_MS = 10_000
 _EXAMPLE_IPS_YAML = (
     Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
 )  # #245: real config/ips.yaml is gitignored; use the tracked example.
-_MATURITY = datetime(2027, 6, 30, tzinfo=UTC)
-_MATURITY_STR = "2027-06-30"
+# Seeded off the program clock, not pinned: a fixed literal drifts into
+# the past under the clock-shift probe and expires the book (#365 rejects
+# an add_position() whose maturity is at/before valuation_date).
+_MATURITY = days_from_today(365)
+_MATURITY_STR = _MATURITY.strftime("%Y-%m-%d")
 
 
 def _app_with_ips(tmp_path: Path) -> ProgramDashApp:
