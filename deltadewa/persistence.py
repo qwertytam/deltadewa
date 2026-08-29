@@ -232,6 +232,10 @@ class PortfolioSerializer:
                     pos.entry_date.isoformat() if pos.entry_date else None
                 ),
                 "entry_premium": pos.entry_premium,
+                # #333: legs that trade as one structure. None for a
+                # standalone leg, which is every leg in a book written
+                # before this field existed.
+                "structure_id": pos.structure_id,
             }
             data["positions"].append(position_data)
 
@@ -542,6 +546,7 @@ class PortfolioSerializer:
                 dt.fromisoformat(raw_entry_date) if raw_entry_date else None
             )
             new_position.entry_premium = pos_data.get("entry_premium")
+            new_position.structure_id = pos_data.get("structure_id")
             if pid := pos_data.get("position_id"):
                 new_position.position_id = pid
             raw_volatility_as_of = pos_data.get("volatility_as_of")
@@ -673,6 +678,7 @@ class PortfolioSerializer:
                 dt.fromisoformat(raw_entry_date) if raw_entry_date else None
             )
             new_position.entry_premium = pos_config.get("entry_premium")
+            new_position.structure_id = pos_config.get("structure_id")
             if pid := pos_config.get("position_id"):
                 new_position.position_id = pid
             raw_volatility_as_of = pos_config.get("volatility_as_of")

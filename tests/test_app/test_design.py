@@ -216,6 +216,7 @@ class TestMutationsPersist:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -339,6 +340,7 @@ class TestExerciseStyleDefault:
             option_type=OptionType.PUT.value,
             exercise_style=ips_style.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -359,6 +361,7 @@ class TestGuardMechanism:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=7,
             state=app.program_state,
         )
@@ -381,6 +384,7 @@ class TestGuardMechanism:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=7,
             state=state,
         )
@@ -409,6 +413,7 @@ class TestAddPositionRejectsExpiredMaturity:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -433,6 +438,7 @@ class TestAddPositionRejectsExpiredMaturity:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -1016,12 +1022,12 @@ class TestRollPlanPanel:
         assert "verdict-badge--delay" in markup
         assert "DELAY" in _collect_text(row)
 
-    def test_empty_book_says_no_long_puts(self, tmp_path: Path) -> None:
+    def test_empty_book_says_no_positions(self, tmp_path: Path) -> None:
         app = _app_with_ips(tmp_path)
 
         text = _collect_text(self._panel(app)).lower()
 
-        assert "no long puts in the book yet" in text
+        assert "no positions in the book yet" in text
 
     def test_panel_renders_without_error_on_mixed_book(
         self,

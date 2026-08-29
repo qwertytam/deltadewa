@@ -383,14 +383,15 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
     option_type: str,
     exercise_style: str,
     entry_premium: float | None,
+    structure_id: str | None,
     version: int,
     state: ProgramState,
-) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any]:
     """Add a position from the BOOK zone's add-form.
 
     Returns:
         A tuple matching the callback's Outputs: the new ``book-version``
-        (or ``no_update`` on failure), a status message, and the six
+        (or ``no_update`` on failure), a status message, and the seven
         form fields' next values — cleared on success (so the operator
         isn't typing over stale values on the next add) and left as
         ``no_update`` on failure (so a typo can be fixed and resubmitted
@@ -401,6 +402,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         return (
             no_update,
             _status(_REQUIRED_ADD_FIELDS_MSG, error=True),
+            no_update,
             no_update,
             no_update,
             no_update,
@@ -425,6 +427,10 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
             option_type=OptionType(option_type),
             exercise_style=ExerciseStyle(exercise_style),
             entry_premium=entry_premium,
+            # Blank means "standalone leg", not "a structure named ''" —
+            # an empty text input yields "" and must not become a tag that
+            # silently groups every untagged leg into one structure (#333).
+            structure_id=(structure_id or "").strip() or None,
         )
 
     error = _guarded_mutation(_do_add)
@@ -432,6 +438,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         return (
             no_update,
             _status(error, error=True),
+            no_update,
             no_update,
             no_update,
             no_update,
@@ -457,6 +464,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         None,
         OptionType.PUT.value,
         reset_style,
+        None,
         None,
     )
 
@@ -1318,7 +1326,6 @@ def _roll_plan_row(record: RollPlanRecord) -> html.Tr:
     its justification attached or it reads as the tool losing the
     signal.
     """
-    position = record.position
     strike_text = (
         f"{record.target_strike:,.0f}"
         if record.target_strike is not None
@@ -1329,27 +1336,38 @@ def _roll_plan_row(record: RollPlanRecord) -> html.Tr:
         if record.roll_up_cost is not None
         else "n/a"
     )
+    excluded = record.action is None
+    action_text = (
+        "—" if record.action is None else record.action.value.replace("_", " ")
+    )
+    action_class = (
+        "verdict-badge verdict-badge--excluded"
+        if record.action is None
+        else f"verdict-badge verdict-badge--{record.action.value.lower()}"
+    )
     return html.Tr(
         [
-            html.Td(
-                html.Span(
-                    record.action.value.replace("_", " "),
-                    className=(
-                        "verdict-badge verdict-badge--"
-                        f"{record.action.value.lower()}"
-                    ),
-                ),
-            ),
-            html.Td(
-                f"{position.option.option_type.value} "
-                f"{position.option.strike_price:,.0f}",
-            ),
+            html.Td(html.Span(action_text, className=action_class)),
+            html.Td(_plan_leg_text(record)),
             html.Td(strike_text),
             html.Td(cost_text),
             html.Td(f"{record.gamma:,.4f} / {record.theta:,.2f}"),
             html.Td(record.rationale, className="plan-rationale"),
         ],
+        className="plan-row--excluded" if excluded else None,
     )
+
+
+def _plan_leg_text(record: RollPlanRecord) -> str:
+    """Name the leg, and the structure it rolls with when it has one."""
+    position = record.position
+    leg = (
+        f"{position.option.option_type.value} "
+        f"{position.option.strike_price:,.0f}"
+    )
+    if record.structure_id is None:
+        return leg
+    return f"{leg} ({record.structure_id})"
 
 
 def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
@@ -1363,11 +1381,14 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
     what to roll *to* and what that would cost.
     """
     intro = html.P(
-        "One recommended action per long put — what to roll it to, and "
-        "what that roll would cost. Built on the same trigger grades as "
-        "the roll status table below, so the two never disagree: this "
-        "panel adds the handbook's gamma/theta judgement, which is the "
-        "only thing that can turn a fired trigger into DELAY.",
+        "One recommended action per leg — what to roll it to, and what "
+        "that roll would cost. Built on the same trigger grades as the "
+        "roll status table below, so the two never disagree: this panel "
+        "adds the handbook's gamma/theta judgement, which is the only "
+        "thing that can turn a fired trigger into DELAY. Legs that get no "
+        "recommendation of their own — short legs of a spread, non-puts, "
+        "expired legs — are still listed, greyed, with the reason: a leg "
+        "the planner skipped must never just be absent.",
         className="plain-language",
     )
     if not records:
@@ -1375,7 +1396,7 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
             [
                 intro,
                 html.P(
-                    "No long puts in the book yet.",
+                    "No positions in the book yet.",
                     className="plain-language",
                 ),
             ],
@@ -2412,6 +2433,23 @@ def render(app: ProgramDashApp) -> html.Div:
                         ],
                         className="editor-field",
                     ),
+                    html.Div(
+                        [
+                            html.Label("Structure (optional)"),
+                            dcc.Input(
+                                id="add-structure-id",
+                                type="text",
+                                placeholder="e.g. collar-2027",
+                            ),
+                            html.Small(
+                                "Same tag on both legs of a spread — the "
+                                "roll planner then moves them together "
+                                "and nets their cost. Blank = standalone.",
+                                className="field-hint",
+                            ),
+                        ],
+                        className="editor-field",
+                    ),
                     html.Button(
                         "Add position",
                         id="add-submit",
@@ -3153,6 +3191,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
         Output("add-option-type", "value"),
         Output("add-exercise-style", "value"),
         Output("add-entry-premium", "value"),
+        Output("add-structure-id", "value"),
         Input("add-submit", "n_clicks"),
         State("add-strike", "value"),
         State("add-maturity", "date"),
@@ -3160,6 +3199,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
         State("add-option-type", "value"),
         State("add-exercise-style", "value"),
         State("add-entry-premium", "value"),
+        State("add-structure-id", "value"),
         State("book-version", "data"),
         prevent_initial_call=True,
     )
@@ -3171,8 +3211,9 @@ def register_callbacks(  # pylint: disable=too-many-locals
         option_type: str,
         exercise_style: str,
         entry_premium: float | None,
+        structure_id: str | None,
         version: int,
-    ) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any]:
+    ) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any]:
         return _add_position_logic(
             strike=strike,
             maturity=maturity,
@@ -3180,6 +3221,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
             option_type=option_type,
             exercise_style=exercise_style,
             entry_premium=entry_premium,
+            structure_id=structure_id,
             version=version,
             state=app.program_state,
         )

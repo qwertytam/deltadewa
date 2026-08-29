@@ -374,6 +374,18 @@ body {
   background: #7a5ea8;
 }
 
+/* A leg the roll planner declines to recommend on (#333): a short leg that
+   rolls with its structure, a non-put, an expired leg. Listed rather than
+   dropped, and visually recessive so it cannot be mistaken for an action. */
+
+.verdict-badge--excluded {
+  background: #8d949c;
+}
+
+.plan-row--excluded {
+  opacity: 0.72;
+}
+
 .plan-rationale {
   font-size: 0.85rem;
   line-height: 1.45;

@@ -104,6 +104,7 @@ class OptionPortfolioBase:
         entry_date: dt | None = None,
         entry_premium: float | None = None,
         volatility_as_of: dt | None = None,
+        structure_id: str | None = None,
         *,
         reject_expired: bool = True,
     ) -> OptionPosition:
@@ -136,6 +137,9 @@ class OptionPortfolioBase:
                 the returned position directly with the serialized value,
                 the same way it already does for ``entry_spot``/
                 ``entry_date``, rather than accepting this default.
+            structure_id: Opaque tag grouping legs that trade as one
+                structure, so a roll moves them together (#333). ``None``
+                means the leg stands alone. See ``OptionPosition``.
             reject_expired: When ``True`` (the default), raise
                 ``ValueError`` rather than add a position whose
                 ``maturity_date`` is already at or before
@@ -210,6 +214,7 @@ class OptionPortfolioBase:
             entry_date=entry_date,
             entry_premium=entry_premium,
             volatility_as_of=volatility_as_of,
+            structure_id=structure_id,
         )
         # Local import: analysis/crash_repricing.py sits above this module
         # in the package (deltadewa.analysis.__init__ imports
@@ -669,6 +674,10 @@ class OptionPortfolioBase:
                         # losing this here would be a silent reset to
                         # UNKNOWN for every leg on the next rate change.
                         volatility_as_of=pos.volatility_as_of,
+                        # Likewise for the structure tag: a rate change
+                        # must not silently break a spread into two
+                        # unrelated legs (#333).
+                        structure_id=pos.structure_id,
                     ),
                 )
             self.positions = new_positions

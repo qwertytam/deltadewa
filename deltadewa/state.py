@@ -488,6 +488,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         entry_spot: float | None = None,
         entry_date: datetime | None = None,
         entry_premium: float | None = None,
+        structure_id: str | None = None,
     ) -> OptionPosition:
         """Add a position. See ``OptionPortfolio.add_position``."""
         with self._lock:
@@ -502,6 +503,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 entry_spot=entry_spot,
                 entry_date=entry_date,
                 entry_premium=entry_premium,
+                structure_id=structure_id,
             )
             self._mutate_and_save()
             return position
