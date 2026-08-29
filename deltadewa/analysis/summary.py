@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 
+from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
 from deltadewa.portfolio.monte_carlo import drift_measure_label
 
 if TYPE_CHECKING:
@@ -350,7 +351,12 @@ class SummaryMixin:
         insights = []
         stats = self.portfolio.summary_stats()
 
-        carry_metrics = self.calculate_carry_metrics()
+        # Only scalar totals are read below, so these edges reach no
+        # reader — passed explicitly all the same, because the
+        # parameter has no default anywhere (#305).
+        carry_metrics = self.calculate_carry_metrics(
+            DEFAULT_MATURITY_BUCKETS,
+        )
 
         concentration = self.analyze_risk_concentration()
 

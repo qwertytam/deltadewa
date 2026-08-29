@@ -90,6 +90,7 @@ from deltadewa.analysis import (
     evaluate_roll_status,
     verdict_reason,
 )
+from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
 from deltadewa.marketdata import (
@@ -876,7 +877,9 @@ def build_and_render(
         ips_config.pricing_inputs,
         as_of=as_of,
     )
-    carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics()
+    carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics(
+        MaturityBuckets.from_ips(ips_config.maturity_buckets),
+    )
     monetization_plan = build_monetization_plan(
         portfolio,
         ips_config,

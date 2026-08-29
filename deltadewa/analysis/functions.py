@@ -20,8 +20,12 @@ def classify_maturity_bucket(days_to_expiry: int) -> str:
     # analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
+    from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
 
-    return PortfolioAnalyzer.classify_maturity_bucket(days_to_expiry)
+    return PortfolioAnalyzer.classify_maturity_bucket(
+        days_to_expiry,
+        DEFAULT_MATURITY_BUCKETS,
+    )
 
 
 def quick_carry_analysis(portfolio: OptionPortfolio) -> dict[str, Any]:
@@ -39,9 +43,10 @@ def quick_carry_analysis(portfolio: OptionPortfolio) -> dict[str, Any]:
     # analysis.functions
     # pylint: disable=import-outside-toplevel
     from deltadewa.analysis.base import PortfolioAnalyzer
+    from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
 
     analyzer = PortfolioAnalyzer(portfolio)
-    return analyzer.calculate_carry_metrics()
+    return analyzer.calculate_carry_metrics(DEFAULT_MATURITY_BUCKETS)
 
 
 def quick_risk_concentration(

@@ -185,3 +185,18 @@ monetization:
     - {gain_pct: 100, sell_pct: 20}
     - {gain_pct: 250, sell_pct: 20}
     - {gain_pct: 500, sell_pct: 20}
+
+# Where the maturity term structure is cut, for the vega term-exposure panel
+# and the carry panel's theta-by-bucket (#305). POLICY, not presentation:
+# these edges decide what "long-dated" means for this program, and a fund
+# running 3-month rolls wants genuinely different cuts from one running an
+# 18-month ladder. Optional — omit the section for the tail-hedge defaults
+# below.
+maturity_buckets:
+  # Inclusive upper bounds in days, strictly increasing. n edges give n+1
+  # buckets: an open-ended final bucket above the last edge is always added.
+  # Below: 0-30 / 31-90 / 91-180 / 181-365 / 366-730 / 730+ days.
+  # The pre-#305 scheme (7/30/60/90) was sized for weekly options and put an
+  # entire 18-month ladder in one terminal bucket, so the panel answered
+  # nothing.
+  edges_days: [30, 90, 180, 365, 730]

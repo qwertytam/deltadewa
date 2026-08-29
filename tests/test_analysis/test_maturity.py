@@ -1,272 +1,244 @@
 """Tests for deltadewa.analysis.maturity module."""
 
-from datetime import UTC, datetime, timedelta
-
 import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.maturity import (
+    DEFAULT_MATURITY_BUCKETS,
+    MaturityBuckets,
+)
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 from tests.clock_helpers import days_from_today
+
+DEFAULT = DEFAULT_MATURITY_BUCKETS
+"""Shipped tail-hedge edges: 30 / 90 / 180 / 365 / 730 days."""
+
+
+class TestMaturityBuckets:
+    """The scheme itself: edges are the single source, labels derive."""
+
+    def test_labels_derive_from_edges(self) -> None:
+        assert MaturityBuckets(edges_days=(30, 90)).labels == (
+            "0-30 days",
+            "31-90 days",
+            "90+ days",
+        )
+
+    def test_n_edges_give_n_plus_one_buckets(self) -> None:
+        """The open-ended final bucket is always present."""
+        for n in (1, 2, 5):
+            edges = tuple(range(30, 30 * (n + 1), 30))
+            assert len(MaturityBuckets(edges_days=edges).labels) == n + 1
+
+    def test_shipped_default_is_tail_hedge_shaped(self) -> None:
+        assert DEFAULT.labels == (
+            "0-30 days",
+            "31-90 days",
+            "91-180 days",
+            "181-365 days",
+            "366-730 days",
+            "730+ days",
+        )
+
+    def test_classify_lands_on_inclusive_upper_bounds(self) -> None:
+        assert DEFAULT.classify(30) == "0-30 days"
+        assert DEFAULT.classify(31) == "31-90 days"
+        assert DEFAULT.classify(365) == "181-365 days"
+        assert DEFAULT.classify(366) == "366-730 days"
+        assert DEFAULT.classify(730) == "366-730 days"
+        assert DEFAULT.classify(731) == "730+ days"
+
+    def test_the_live_book_tranches_land_in_different_buckets(self) -> None:
+        """#305's whole point: 310d and 493d were indistinguishable."""
+        assert DEFAULT.classify(310) != DEFAULT.classify(493)
+
+    def test_the_retired_scheme_could_not_separate_them(self) -> None:
+        """Pins why the edges moved, not just that they did."""
+        weeklies = MaturityBuckets(edges_days=(7, 30, 60, 90))
+        assert weeklies.classify(310) == weeklies.classify(493) == "90+ days"
+
+    def test_empty_edges_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="must not be empty"):
+            MaturityBuckets(edges_days=())
+
+    def test_non_increasing_edges_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="strictly increasing"):
+            MaturityBuckets(edges_days=(90, 30))
+
+    def test_non_positive_first_edge_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="must be positive"):
+            MaturityBuckets(edges_days=(0, 30))
+
+    def test_single_edge_gives_two_buckets(self) -> None:
+        """Degenerate case: the coarsest usable scheme."""
+        buckets = MaturityBuckets(edges_days=(365,))
+        assert buckets.labels == ("0-365 days", "365+ days")
+        assert buckets.classify(400) == "365+ days"
 
 
 class TestMaturityMixin:
     """Test cases for MaturityMixin."""
 
-    def test_classify_maturity_bucket_weekly(self) -> None:
-        """Test classification for weekly options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(0) == "0-7 days (Weekly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(3) == "0-7 days (Weekly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(7) == "0-7 days (Weekly)"
-        )
+    def test_classify_delegates_to_the_scheme(self) -> None:
+        assert PortfolioAnalyzer.classify_maturity_bucket(
+            45, DEFAULT
+        ) == DEFAULT.classify(45)
 
-    def test_classify_maturity_bucket_monthly(self) -> None:
-        """Test classification for monthly options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(8)
-            == "8-30 days (Monthly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(15)
-            == "8-30 days (Monthly)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(30)
-            == "8-30 days (Monthly)"
-        )
-
-    def test_classify_maturity_bucket_2month(self) -> None:
-        """Test classification for 2-month options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(31) == "31-60 days (2M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(45) == "31-60 days (2M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(60) == "31-60 days (2M)"
-        )
-
-    def test_classify_maturity_bucket_3month(self) -> None:
-        """Test classification for 3-month options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(61) == "61-90 days (3M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(75) == "61-90 days (3M)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(90) == "61-90 days (3M)"
-        )
-
-    def test_classify_maturity_bucket_long_term(self) -> None:
-        """Test classification for long-term options."""
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(91)
-            == "90+ days (Long-term)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(180)
-            == "90+ days (Long-term)"
-        )
-        assert (
-            PortfolioAnalyzer.classify_maturity_bucket(365)
-            == "90+ days (Long-term)"
-        )
-
-    def test_add_maturity_buckets(self) -> None:
-        """Test adding maturity bucket columns to DataFrame."""
+    def test_add_maturity_buckets_adds_both_columns(self) -> None:
         portfolio = OptionPortfolio(
-            underlying_quantity=100.0,
-            spot_price=100.0,
-            volatility=0.2,
-            default_exercise_style=ExerciseStyle.EUROPEAN,
-        )
-
-        # Add a position, pinned to the portfolio's own valuation date
-        # rather than a raw UTC now() -- otherwise the two disagree for up
-        # to four hours a day and the assertion below can only be a
-        # tolerance band (#321, #343).
-        portfolio.add_position(
-            strike_price=105.0,
-            maturity_date=days_from_today(15, now=portfolio.valuation_date),
-            quantity=1,
-            option_type=OptionType.CALL,
-        )
-
-        analyzer = PortfolioAnalyzer(portfolio)
-        df = portfolio.to_dataframe()
-
-        # Add maturity buckets
-        df_with_buckets = analyzer.add_maturity_buckets(df)
-
-        # Check columns were added
-        assert "days_to_expiry" in df_with_buckets.columns
-        assert "maturity_bucket" in df_with_buckets.columns
-
-        # Check values make sense
-        assert df_with_buckets["days_to_expiry"].iloc[0] == 15
-        assert (
-            df_with_buckets["maturity_bucket"].iloc[0] == "8-30 days (Monthly)"
-        )
-
-    def test_days_to_expiry_uses_valuation_date(self) -> None:
-        """days_to_expiry is measured from the valuation date, not now."""
-        # Seeded off the program clock: add_position's default
-        # valuation_date (used by its #365 expired-maturity guard) is
-        # whatever "today" the clock reads at call time, before the
-        # what-if override below — a pinned literal would go stale under
-        # the clock-shift probe.
-        maturity = days_from_today(365)
-        portfolio = OptionPortfolio(
-            underlying_quantity=100.0,
             spot_price=100.0,
             volatility=0.2,
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
         portfolio.add_position(
-            strike_price=105.0,
-            maturity_date=maturity,
+            strike_price=100.0,
+            maturity_date=days_from_today(45),
             quantity=1,
             option_type=OptionType.CALL,
         )
-        # A what-if valuation date exactly 30 days before maturity.
-        portfolio.valuation_date = maturity - timedelta(days=30)
-
         analyzer = PortfolioAnalyzer(portfolio)
-        df = analyzer.add_maturity_buckets(portfolio.to_dataframe())
 
-        assert df["days_to_expiry"].iloc[0] == 30
-        assert df["maturity_bucket"].iloc[0] == "8-30 days (Monthly)"
+        df = analyzer.add_maturity_buckets(portfolio.to_dataframe(), DEFAULT)
 
-    def test_add_maturity_buckets_empty(self) -> None:
-        """Test add_maturity_buckets with empty DataFrame."""
+        assert "maturity_bucket" in df.columns
+        assert "days_to_expiry" in df.columns
+        assert df["days_to_expiry"].iloc[0] == 45
+        assert df["maturity_bucket"].iloc[0] == "31-90 days"
+
+    def test_days_to_expiry_uses_the_valuation_date(self) -> None:
+        """#182: a what-if valuation date must move the buckets."""
         portfolio = OptionPortfolio(
-            default_exercise_style=ExerciseStyle.EUROPEAN
+            spot_price=100.0,
+            volatility=0.2,
+            valuation_date=days_from_today(0),
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        portfolio.add_position(
+            strike_price=100.0,
+            maturity_date=days_from_today(200),
+            quantity=1,
+            option_type=OptionType.CALL,
         )
         analyzer = PortfolioAnalyzer(portfolio)
 
-        df = portfolio.to_dataframe()
+        df = analyzer.add_maturity_buckets(portfolio.to_dataframe(), DEFAULT)
+        assert df["days_to_expiry"].iloc[0] == 200
 
-        # Empty portfolio returns empty DataFrame, which may not have maturity
-        # column
-        if df.empty:
-            # For empty portfolio, just check it doesn't raise an error
-            # We'll test with a real position instead
-            portfolio.add_position(
-                strike_price=100.0,
-                maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
-                quantity=1,
-                option_type=OptionType.CALL,
-            )
-            df = portfolio.to_dataframe()
-            df_with_buckets = analyzer.add_maturity_buckets(df)
-            assert "days_to_expiry" in df_with_buckets.columns
-            assert "maturity_bucket" in df_with_buckets.columns
+        portfolio.valuation_date = days_from_today(150)
+        df = analyzer.add_maturity_buckets(portfolio.to_dataframe(), DEFAULT)
+        assert df["days_to_expiry"].iloc[0] == 50
+        assert df["maturity_bucket"].iloc[0] == "31-90 days"
 
 
 class TestVegaByMaturityBucket:
     """Tests for MaturityMixin.calculate_vega_by_maturity (Part X §14)."""
 
-    def test_buckets_positions_correctly(self) -> None:
-        """Legs in different buckets land in the right bucket."""
-        maturity = datetime(2027, 1, 1, tzinfo=UTC)
+    @staticmethod
+    def _ladder(*days: int) -> OptionPortfolio:
         portfolio = OptionPortfolio(
             spot_price=100.0,
             volatility=0.2,
-            valuation_date=maturity - timedelta(days=400),
+            valuation_date=days_from_today(0),
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
-        # Weekly bucket (5 days out).
-        portfolio.add_position(
-            strike_price=100.0,
-            maturity_date=maturity - timedelta(days=395),
-            quantity=1,
-            option_type=OptionType.CALL,
-        )
-        # Long-term bucket (100 days out).
-        portfolio.add_position(
-            strike_price=100.0,
-            maturity_date=maturity - timedelta(days=300),
-            quantity=2,
-            option_type=OptionType.PUT,
-        )
+        for offset in days:
+            portfolio.add_position(
+                strike_price=90.0,
+                maturity_date=days_from_today(offset),
+                quantity=1,
+                option_type=OptionType.PUT,
+            )
+        return portfolio
 
+    def test_a_leaps_ladder_spreads_across_buckets(self) -> None:
+        """#305: 3/6/9/12-month rungs used to collapse into one bucket."""
+        portfolio = self._ladder(90, 180, 270, 365)
         analyzer = PortfolioAnalyzer(portfolio)
-        exposure = analyzer.calculate_vega_by_maturity()
 
-        assert exposure.vega_by_bucket["0-7 days (Weekly)"] != pytest.approx(
-            0.0,
-            abs=1e-9,
+        exposure = analyzer.calculate_vega_by_maturity(DEFAULT)
+        non_empty = [
+            label
+            for label, vega in exposure.vega_by_bucket.items()
+            if abs(vega) > 1e-9
+        ]
+
+        assert len(non_empty) == 3
+        assert non_empty == ["31-90 days", "91-180 days", "181-365 days"]
+
+    def test_the_retired_scheme_put_the_whole_ladder_in_one_bucket(
+        self,
+    ) -> None:
+        """The degenerate case, pinned so a regression is visible."""
+        portfolio = self._ladder(90, 180, 270, 365)
+        weeklies = MaturityBuckets(edges_days=(7, 30, 60, 90))
+
+        exposure = PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(
+            weeklies,
         )
-        assert exposure.vega_by_bucket["90+ days (Long-term)"] != pytest.approx(
-            0.0, abs=1e-9
+        non_empty = [
+            label
+            for label, vega in exposure.vega_by_bucket.items()
+            if abs(vega) > 1e-9
+        ]
+
+        assert non_empty == ["61-90 days", "90+ days"]
+
+    def test_every_canonical_bucket_is_present_zero_filled(self) -> None:
+        portfolio = self._ladder(200)
+        exposure = PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(
+            DEFAULT,
         )
-        # Buckets nothing landed in are present, zero-filled.
-        assert exposure.vega_by_bucket["8-30 days (Monthly)"] == pytest.approx(
-            0.0,
-            abs=1e-9,
-        )
-        assert exposure.vega_by_bucket["31-60 days (2M)"] == pytest.approx(
-            0.0,
-            abs=1e-9,
-        )
-        assert exposure.vega_by_bucket["61-90 days (3M)"] == pytest.approx(
-            0.0,
-            abs=1e-9,
-        )
-        assert set(exposure.vega_by_bucket) == {
-            "0-7 days (Weekly)",
-            "8-30 days (Monthly)",
-            "31-60 days (2M)",
-            "61-90 days (3M)",
-            "90+ days (Long-term)",
-        }
+
+        assert set(exposure.vega_by_bucket) == set(DEFAULT.labels)
 
     def test_bucketed_vega_reconciles_to_total(self) -> None:
         """sum(vega_by_bucket.values()) == total_vega, always."""
-        portfolio = OptionPortfolio(
-            spot_price=100.0,
-            volatility=0.2,
-            default_exercise_style=ExerciseStyle.EUROPEAN,
-        )
-        portfolio.add_position(
-            strike_price=95.0,
-            maturity_date=datetime.now(tz=UTC) + timedelta(days=10),
-            quantity=3,
-            option_type=OptionType.PUT,
-        )
+        portfolio = self._ladder(10, 200)
         portfolio.add_position(
             strike_price=110.0,
-            maturity_date=datetime.now(tz=UTC) + timedelta(days=200),
+            maturity_date=days_from_today(400),
             quantity=-1,
             option_type=OptionType.CALL,
         )
 
-        analyzer = PortfolioAnalyzer(portfolio)
-        exposure = analyzer.calculate_vega_by_maturity()
+        exposure = PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(
+            DEFAULT,
+        )
 
         assert sum(exposure.vega_by_bucket.values()) == pytest.approx(
             exposure.total_vega,
             rel=1e-9,
         )
 
+    def test_all_positions_in_one_bucket_still_reconciles(self) -> None:
+        """Degenerate case: everything in one bucket."""
+        portfolio = self._ladder(200, 210, 220)
+        exposure = PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(
+            DEFAULT,
+        )
+
+        non_empty = [
+            v for v in exposure.vega_by_bucket.values() if abs(v) > 1e-9
+        ]
+        assert len(non_empty) == 1
+        assert sum(exposure.vega_by_bucket.values()) == pytest.approx(
+            exposure.total_vega,
+            rel=1e-9,
+        )
+
     def test_empty_book_returns_zero_filled_buckets(self) -> None:
-        """An empty book is a real all-zero reading, not a raise."""
+        """Degenerate case: an empty book is a real all-zero reading."""
         portfolio = OptionPortfolio(
             default_exercise_style=ExerciseStyle.EUROPEAN,
         )
-        analyzer = PortfolioAnalyzer(portfolio)
 
-        exposure = analyzer.calculate_vega_by_maturity()
+        exposure = PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(
+            DEFAULT,
+        )
 
         assert exposure.total_vega == pytest.approx(0.0, abs=1e-9)
-        assert len(exposure.vega_by_bucket) == 5
+        assert set(exposure.vega_by_bucket) == set(DEFAULT.labels)
         assert all(
             v == pytest.approx(0.0, abs=1e-9)
             for v in exposure.vega_by_bucket.values()

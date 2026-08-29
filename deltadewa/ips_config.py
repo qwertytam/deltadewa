@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -363,6 +364,46 @@ class IpsSizing:
     portfolio_beta: float = _DEFAULT_PORTFOLIO_BETA
 
 
+_DEFAULT_MATURITY_BUCKET_EDGES_DAYS: Final[tuple[int, ...]] = (
+    30,
+    90,
+    180,
+    365,
+    730,
+)
+"""Tail-hedge term-structure edges: 1M / 3M / 6M / 1Y / 2Y / 2Y+.
+
+The shipped default is sized for the program this package exists for. The
+previous scheme (0-7 / 8-30 / 31-60 / 61-90 / 90+) was sized for weekly
+options and put an entire 18-month ladder in one terminal bucket (#305).
+"""
+
+
+@dataclass(frozen=True)
+class IpsMaturityBuckets:
+    """Where the maturity term structure is cut, for vega and theta (#305).
+
+    These edges are **policy, not presentation**: they decide what
+    "long-dated" means for a given program, which is a mandate question of
+    the same class as the convexity band. A fund running 3-month rolls and
+    one running an 18-month ladder want genuinely different cuts, and the
+    same edges must drive both the vega term-exposure panel and the carry
+    panel's theta-by-bucket so the two can never disagree on a boundary.
+
+    Labels are derived from these edges rather than configured beside them
+    (see :class:`~deltadewa.analysis.maturity.MaturityBuckets`), so a label
+    cannot drift from the boundary it names.
+
+    Attributes:
+        edges_days: Strictly increasing, positive, inclusive upper bounds.
+            ``n`` edges yield ``n + 1`` buckets — an open-ended final bucket
+            above the last edge is always present.
+
+    """
+
+    edges_days: tuple[int, ...] = _DEFAULT_MATURITY_BUCKET_EDGES_DAYS
+
+
 @dataclass(frozen=True)
 class IpsVega:
     """Vega sufficiency band — "is the book big enough to answer a vol spike".
@@ -497,6 +538,9 @@ class IpsConfig:
     )
     sizing: IpsSizing = dataclass_field(default_factory=IpsSizing)
     vega: IpsVega = dataclass_field(default_factory=IpsVega)
+    maturity_buckets: IpsMaturityBuckets = dataclass_field(
+        default_factory=IpsMaturityBuckets,
+    )
     pricing_inputs: IpsPricingInputs = dataclass_field(
         default_factory=IpsPricingInputs,
     )
@@ -904,6 +948,46 @@ def _parse_sizing(config: dict[str, Any]) -> IpsSizing:
     return IpsSizing(portfolio_beta=portfolio_beta)
 
 
+def _parse_maturity_buckets(config: dict[str, Any]) -> IpsMaturityBuckets:
+    """Parse the optional ``maturity_buckets`` policy section (#305).
+
+    Optional, like ``vega`` and ``sizing``: a missing section falls back to
+    ``_DEFAULT_MATURITY_BUCKET_EDGES_DAYS``, so every ips.yaml written before
+    this section existed keeps loading. Absence is reported through
+    ``IpsConfig.defaulted_sections`` rather than passing silently.
+    """
+    section = config.get("maturity_buckets", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'maturity_buckets' section must be a mapping",
+        )
+
+    raw = section.get("edges_days", _DEFAULT_MATURITY_BUCKET_EDGES_DAYS)
+    if not isinstance(raw, (list, tuple)) or not raw:
+        raise IpsConfigError(
+            "maturity_buckets.edges_days must be a non-empty list of days, "
+            f"got {raw!r}",
+        )
+    try:
+        edges = tuple(int(value) for value in raw)
+    except (TypeError, ValueError) as exc:
+        raise IpsConfigError(
+            f"maturity_buckets.edges_days must be whole days, got {raw!r}",
+        ) from exc
+
+    if edges[0] <= 0:
+        raise IpsConfigError(
+            f"maturity_buckets.edges_days must be positive, got {edges[0]}",
+        )
+    if any(lower >= upper for lower, upper in pairwise(edges)):
+        raise IpsConfigError(
+            "maturity_buckets.edges_days must be strictly increasing, got "
+            f"{list(edges)}",
+        )
+
+    return IpsMaturityBuckets(edges_days=edges)
+
+
 def _parse_vega(config: dict[str, Any]) -> IpsVega:
     """Parse the optional ``vega`` policy section.
 
@@ -1055,6 +1139,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
             "sizing",
             "vega",
             "pricing_inputs",
+            "maturity_buckets",
         )
         if name not in config
     )
@@ -1070,6 +1155,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         market_environment=_parse_market_environment(config),
         sizing=_parse_sizing(config),
         vega=_parse_vega(config),
+        maturity_buckets=_parse_maturity_buckets(config),
         pricing_inputs=_parse_pricing_inputs(config),
         defaulted_sections=defaulted_sections,
     )

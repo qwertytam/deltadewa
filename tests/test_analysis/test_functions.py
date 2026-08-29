@@ -217,11 +217,11 @@ class TestModuleLevelFunctions:
 
     def test_classify_maturity_bucket_function(self) -> None:
         """Test standalone classify_maturity_bucket function."""
-        assert classify_maturity_bucket(5) == "0-7 days (Weekly)"
-        assert classify_maturity_bucket(15) == "8-30 days (Monthly)"
-        assert classify_maturity_bucket(45) == "31-60 days (2M)"
-        assert classify_maturity_bucket(75) == "61-90 days (3M)"
-        assert classify_maturity_bucket(120) == "90+ days (Long-term)"
+        assert classify_maturity_bucket(5) == "0-30 days"
+        assert classify_maturity_bucket(15) == "0-30 days"
+        assert classify_maturity_bucket(45) == "31-90 days"
+        assert classify_maturity_bucket(75) == "31-90 days"
+        assert classify_maturity_bucket(120) == "91-180 days"
 
     def test_quick_carry_analysis(self) -> None:
         """Test quick_carry_analysis function."""

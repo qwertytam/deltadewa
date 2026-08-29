@@ -57,6 +57,7 @@ from deltadewa.analysis.hedge_triggers import (
     evaluate_hedge_trigger_set,
 )
 from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.position_aging import (
     ExpiryBoundaries,
@@ -2277,11 +2278,18 @@ def _vega_term_panel_view(exposure: MaturityVegaExposure) -> Component:
 def _render_vega_term_panel_logic(
     *,
     portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
 ) -> Component:
-    """Render the vega term exposure panel for the current book."""
+    """Render the vega term exposure panel for the current book.
+
+    Takes ``ips_config`` for the bucket edges (#305): where the term
+    structure is cut is policy, not presentation, and this is the panel the
+    old weekly-options edges rendered useless on an 18-month ladder.
+    """
+    buckets = MaturityBuckets.from_ips(ips_config.maturity_buckets)
     return _safe_render(
         lambda: _vega_term_panel_view(
-            PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(),
+            PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(buckets),
         ),
     )
 
@@ -3065,7 +3073,10 @@ def render(app: ProgramDashApp) -> html.Div:
                         ],
                     ),
                     html.Div(
-                        _render_vega_term_panel_logic(portfolio=portfolio),
+                        _render_vega_term_panel_logic(
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                        ),
                         id="explore-vega-term-panel",
                     ),
                 ],
@@ -3537,4 +3548,5 @@ def register_callbacks(  # pylint: disable=too-many-locals
     def _render_vega_term_panel(_version: int) -> Component:
         return _render_vega_term_panel_logic(
             portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
         )

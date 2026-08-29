@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
+
 if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
 
@@ -168,7 +170,10 @@ class RecommendationsMixin:
         if df.empty:
             return self._empty_concentration()
 
-        df = self.add_maturity_buckets(df)
+        # Concentration reaches no page or digest (#279's sweep), so
+        # these edges are not policy-visible; stated explicitly because
+        # the parameter has no default (#305).
+        df = self.add_maturity_buckets(df, DEFAULT_MATURITY_BUCKETS)
 
         result: dict[str, Any] = {
             "by_strike": {},

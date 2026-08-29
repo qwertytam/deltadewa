@@ -26,6 +26,7 @@ from deltadewa.analysis.hedge_efficiency import (
     HedgeEfficiency,
     hedge_efficiency,
 )
+from deltadewa.analysis.maturity import MaturityBuckets
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
@@ -146,7 +147,9 @@ def build_scenario(
     book_notional = abs(quantity) * portfolio.spot_price
     theta_annual: float = PortfolioAnalyzer(
         portfolio,
-    ).calculate_carry_metrics()["total_theta_annual"]
+    ).calculate_carry_metrics(
+        MaturityBuckets.from_ips(ips_config.maturity_buckets),
+    )["total_theta_annual"]
     carry = carry_vs_budget(
         theta_annual=theta_annual,
         book_notional=book_notional,

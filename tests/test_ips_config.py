@@ -1119,7 +1119,7 @@ class TestDefaultedSections:
     default number back in is not mistaken for a missing section.
     """
 
-    def test_all_four_optional_sections_absent(
+    def test_all_optional_sections_absent(
         self,
         tmp_path: Path,
     ) -> None:
@@ -1129,7 +1129,13 @@ class TestDefaultedSections:
         config = load_ips_config(path)
 
         assert config.defaulted_sections == frozenset(
-            {"market_environment", "sizing", "vega", "pricing_inputs"},
+            {
+                "market_environment",
+                "sizing",
+                "vega",
+                "pricing_inputs",
+                "maturity_buckets",
+            },
         )
 
     def test_example_ips_yaml_has_no_defaulted_sections(self) -> None:
@@ -1149,7 +1155,12 @@ class TestDefaultedSections:
         config = load_ips_config(path)
 
         assert config.defaulted_sections == frozenset(
-            {"market_environment", "vega", "pricing_inputs"},
+            {
+                "market_environment",
+                "vega",
+                "pricing_inputs",
+                "maturity_buckets",
+            },
         )
 
     def test_a_value_matching_the_default_is_still_not_defaulted(

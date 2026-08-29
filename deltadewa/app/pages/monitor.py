@@ -40,6 +40,7 @@ from deltadewa.analysis.market_environment import (
     DataQuality,
     assess_market_environment,
 )
+from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.monitor_scenario import (
     build_scenario,
@@ -788,7 +789,9 @@ def _cost_and_protection(
         ips_convexity=convexity,
     )
     cost_section = build_cost_section(
-        carry_metrics=PortfolioAnalyzer(portfolio).calculate_carry_metrics(),
+        carry_metrics=PortfolioAnalyzer(portfolio).calculate_carry_metrics(
+            MaturityBuckets.from_ips(ips_config.maturity_buckets),
+        ),
         book_notional=(
             abs(portfolio.underlying_quantity) * portfolio.spot_price
         ),

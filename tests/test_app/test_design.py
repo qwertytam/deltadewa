@@ -2135,8 +2135,10 @@ class TestVegaTermPanel:
 
     @staticmethod
     def _panel(app: ProgramDashApp) -> Component:
+        assert app.ips_config is not None
         return design._render_vega_term_panel_logic(
             portfolio=app.program_state.portfolio,
+            ips_config=app.ips_config,
         )
 
     def test_renders_bucketed_vega_for_multi_maturity_book(
@@ -2161,8 +2163,8 @@ class TestVegaTermPanel:
         text = _collect_text(self._panel(app))
 
         assert "Total vega" in text
-        assert "0-7 days (Weekly)" in text
-        assert "90+ days (Long-term)" in text
+        assert "0-30 days" in text
+        assert "181-365 days" in text
 
     def test_empty_book_renders_zeros_not_a_raise(
         self,

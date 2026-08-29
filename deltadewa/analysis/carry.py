@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from deltadewa import constants as const
+from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
 from deltadewa.utils import abs_sum
 
 if TYPE_CHECKING:
     from deltadewa.analysis._protocols import _AnalyzerProtocol
+    from deltadewa.analysis.maturity import MaturityBuckets
 
 
 @dataclass(frozen=True)
@@ -74,6 +76,7 @@ class CarryMixin:
 
     def calculate_carry_metrics(
         self: "_AnalyzerProtocol",
+        buckets: "MaturityBuckets",
     ) -> dict[str, Any]:
         """Analyze portfolio carry (theta decay) characteristics.
 
@@ -83,35 +86,52 @@ class CarryMixin:
         - VIX and exchange conventions
         - Volatility calculations which use calendar time in T
 
+        Args:
+            buckets: The maturity bucketing scheme. **Required, with no
+                default** — the edges are policy (#305). See
+                :class:`~deltadewa.analysis.maturity.MaturityBuckets`.
+
         Returns:
             dict containing:
                 - total_theta_daily: Daily theta across all positions
                 - total_theta_weekly: Weekly theta (daily * 7 calendar days)
                 - total_theta_monthly: Monthly theta (daily * 30 calendar days)
                 - total_theta_annual: Annual theta (daily * 365 calendar days)
-                - theta_by_bucket: dict of theta totals per maturity bucket
+                - theta_by_bucket: theta total per maturity bucket, one
+                  entry per canonical bucket in ``buckets.labels`` order,
+                  zero-filled when empty. Before #305 this was a raw
+                  ``groupby().to_dict()``: absent buckets were missing
+                  keys rather than zeros, and the order was pandas'
+                  alphabetical sort of the labels, so it silently did
+                  *not* match ``calculate_vega_by_maturity``'s output
+                  shape despite sharing its boundaries.
                 - theta_by_type: dict of theta totals by option type
                 - covered_call_theta: Theta from short calls (income)
                 - long_call_theta: Theta from long calls (cost)
                 - hedge_put_theta: Theta cost from long puts (protection)
                 - short_put_theta: Theta from short puts (income)
                 - net_carry: Net daily carry (equals total_theta_daily)
-                - carry_efficiency: Theta / position value ratio by bucket
+                - carry_efficiency: Theta / position value ratio by
+                  bucket, same keys and order as ``theta_by_bucket``
 
         """
         df = self.portfolio.to_dataframe()
         if df.empty:
-            return self._empty_carry_metrics()
+            return self._empty_carry_metrics(buckets)
 
-        df = self.add_maturity_buckets(df)
+        df = self.add_maturity_buckets(df, buckets)
 
         # Total theta metrics
         total_theta_daily = df["position_theta"].sum()
 
-        # Theta by bucket
-        theta_by_bucket = (
-            df.groupby("maturity_bucket")["position_theta"].sum().to_dict()
-        )
+        # Theta by bucket, zero-filled and in canonical order so this
+        # reconciles to total_theta_daily and lines up row-for-row with the
+        # vega term-structure panel (#305).
+        grouped_theta = df.groupby("maturity_bucket")["position_theta"].sum()
+        theta_by_bucket = {
+            bucket: float(grouped_theta.get(bucket, 0.0))
+            for bucket in buckets.labels
+        }
 
         # Theta by type
         theta_by_type = (
@@ -174,7 +194,11 @@ class CarryMixin:
             * 100
             * const.DAYS_PER_YEAR
         )
-        carry_efficiency = bucket_summary["carry_efficiency_pct"].to_dict()
+        raw_efficiency = bucket_summary["carry_efficiency_pct"].to_dict()
+        carry_efficiency = {
+            bucket: float(raw_efficiency.get(bucket, 0.0))
+            for bucket in buckets.labels
+        }
 
         return {
             "total_theta_daily": total_theta_daily,
@@ -195,14 +219,22 @@ class CarryMixin:
             "is_positive_carry": net_carry > 0,
         }
 
-    def _empty_carry_metrics(self) -> dict[str, Any]:
-        """Return empty carry metrics structure."""
+    def _empty_carry_metrics(
+        self,
+        buckets: "MaturityBuckets",
+    ) -> dict[str, Any]:
+        """Return empty carry metrics structure.
+
+        Buckets are present and zero-filled rather than an empty dict: an
+        empty book genuinely has zero theta in every bucket, which is a real
+        reading, not missing data.
+        """
         return {
             "total_theta_daily": 0.0,
             "total_theta_weekly": 0.0,
             "total_theta_monthly": 0.0,
             "total_theta_annual": 0.0,
-            "theta_by_bucket": {},
+            "theta_by_bucket": dict.fromkeys(buckets.labels, 0.0),
             "theta_by_type": {},
             "covered_call_theta": 0.0,
             "covered_call_premium": 0.0,
@@ -211,7 +243,7 @@ class CarryMixin:
             "hedge_put_delta": 0.0,
             "short_put_theta": 0.0,
             "net_carry": 0.0,
-            "carry_efficiency": {},
+            "carry_efficiency": dict.fromkeys(buckets.labels, 0.0),
             "is_positive_carry": False,
         }
 
@@ -238,7 +270,9 @@ class CarryMixin:
             code. See ``docs/part-x-coverage.md``.
 
         """
-        carry_metrics = self.calculate_carry_metrics()
+        carry_metrics = self.calculate_carry_metrics(
+            DEFAULT_MATURITY_BUCKETS,
+        )
 
         data = []
 

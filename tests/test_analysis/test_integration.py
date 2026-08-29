@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
@@ -54,11 +55,15 @@ class TestPortfolioAnalyzerIntegration:
 
         # Test maturity classification
         df = portfolio.to_dataframe()
-        df_with_buckets = analyzer.add_maturity_buckets(df)
+        df_with_buckets = analyzer.add_maturity_buckets(
+            df, DEFAULT_MATURITY_BUCKETS
+        )
         assert "maturity_bucket" in df_with_buckets.columns
 
         # Test carry analysis
-        carry_metrics = analyzer.calculate_carry_metrics()
+        carry_metrics = analyzer.calculate_carry_metrics(
+            DEFAULT_MATURITY_BUCKETS
+        )
         assert "total_theta_daily" in carry_metrics
         assert isinstance(carry_metrics["total_theta_daily"], (int, float))
 
@@ -175,7 +180,9 @@ class TestPortfolioAnalyzerIntegration:
         analyzer = PortfolioAnalyzer(portfolio)
 
         # Carry analysis uses maturity classification
-        carry_metrics = analyzer.calculate_carry_metrics()
+        carry_metrics = analyzer.calculate_carry_metrics(
+            DEFAULT_MATURITY_BUCKETS
+        )
         assert "theta_by_bucket" in carry_metrics
         assert len(carry_metrics["theta_by_bucket"]) > 0
 
@@ -216,7 +223,9 @@ class TestPortfolioAnalyzerIntegration:
         analyzer = PortfolioAnalyzer(portfolio)
 
         # All analyses should complete without errors
-        carry_metrics = analyzer.calculate_carry_metrics()
+        carry_metrics = analyzer.calculate_carry_metrics(
+            DEFAULT_MATURITY_BUCKETS
+        )
         concentration = analyzer.analyze_risk_concentration()
         hedge_actions = analyzer.calculate_hedge_actions(
             target_hedge_ratio=60.0,

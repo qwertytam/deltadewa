@@ -3,6 +3,7 @@
 import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer, PortfolioAnalyzerBase
+from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
 from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -58,7 +59,9 @@ class TestPortfolioAnalyzerBase:
         analyzer = PortfolioAnalyzer(portfolio)
 
         # Should not raise errors on empty portfolio
-        carry_metrics = analyzer.calculate_carry_metrics()
+        carry_metrics = analyzer.calculate_carry_metrics(
+            DEFAULT_MATURITY_BUCKETS
+        )
         assert carry_metrics["total_theta_daily"] == pytest.approx(
             0.0, rel=1e-8
         )
