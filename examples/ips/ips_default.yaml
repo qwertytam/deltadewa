@@ -163,7 +163,17 @@ triggers:
                                    # is the gamma-runway threshold, this is
                                    # the roll trigger; kept at a different
                                    # number of days on purpose.
-  rally_rebalance_pct: 12.0      # EXAMPLE VALUE — market rally that forces a re-strike review
+  # Handbook Rule 2 — Market Rally Rebalance Trigger. Measured as the rally in
+  # spot since a tranche's OWN entry (entry_spot), not since program
+  # inception. Each band carries its own action: monitor / review and consider
+  # rolling up / act, strikes are too deep OTM / rebalance urgently, the
+  # original strikes may give negligible protection. Replaces the single
+  # rally_rebalance_pct (#297), whose name did not say which of these four
+  # boundaries it was and whose value sat on none of them.
+  rally_monitor_pct: 5.0    # monitor: recompute crash convexity at current spot
+  rally_review_pct: 10.0    # review: roll strikes up if convexity target missed
+  rally_action_pct: 15.0    # act: strikes likely too deep OTM, roll the ladder
+  rally_urgent_pct: 20.0    # urgent: close and re-establish
   strike_drift_max_otm_pct: 40.0 # EXAMPLE VALUE
   roll_review_buffer: 1.5        # REVIEW fires within roll_at_months_remaining * this
   strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction

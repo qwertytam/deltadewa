@@ -42,6 +42,8 @@ from deltadewa.analysis.hedge_triggers import (
     TriggerStatus,
     evaluate_hedge_trigger_set,
     evaluate_hedge_triggers,
+    rally_reason,
+    worst_rally_from_entry,
 )
 from deltadewa.analysis.market_environment import (
     DataQuality,
@@ -230,6 +232,7 @@ __all__ = [
     "payoff_vs_premium_multiple",
     "percentile_of_value",
     "proportional_vol",
+    "rally_reason",
     "recompute_concentration",
     "reprice_leg",
     "reprice_legs_at",
@@ -241,4 +244,5 @@ __all__ = [
     "strike_for_delta",
     "term_structure_shape",
     "verdict_reason",
+    "worst_rally_from_entry",
 ]

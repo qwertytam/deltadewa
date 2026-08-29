@@ -11,10 +11,11 @@ composed once per request.
 
 **Seven checks, not 49.** ``boot-wiring-checker`` inventoried the full IPS —
 1 UNWIRED (``pricing.exercise_style``, fixed by #295/#361), 1 ORPHAN
-(``triggers.rally_rebalance_pct``, #297 — deliberately untouched here), 46
-READ-ONLY-CONSUMER. Reporting all 49 from ``/health`` would be noise; the
-filter applied to pick these six: *does this key's absence make a rendered
-surface show nothing, or a number the operator did not configure?*
+(``triggers.rally_rebalance_pct``, since built and replaced by 5a's four
+rally bands, #297), the rest READ-ONLY-CONSUMER. Reporting all of them
+from ``/health`` would be noise; the filter applied to pick these six:
+*does this key's absence make a rendered surface show nothing, or a number
+the operator did not configure?*
 
 - ``ips_loaded`` — ``load_ips_config`` is all-or-nothing (any invalid
   required section raises, caught into ``ips_config=None`` by
@@ -54,12 +55,24 @@ surface show nothing, or a number the operator did not configure?*
   this is a detector for future drift (#378 is scoped P2), not evidence
   of a divergence happening now.
 
-**Not checked: ``triggers.rally_rebalance_pct`` (#297).** Per boot-wiring-
-checker's own finding, an orphan key never fails at boot — it just does
-nothing — so it is not a runtime-checkable condition. Catching it needs
-static consumer tracing in CI, not an endpoint assertion; conflating the
-two would either produce a permanently-red ``/health`` or a check that can
-never fire.
+**Not checked: the rally bands (#297).** The orphan this paragraph used
+to name — ``triggers.rally_rebalance_pct`` — is gone: 5a replaced it with
+the handbook's four named bands and built the trigger, so the key count is
+no longer 1 UNWIRED / 1 ORPHAN / 46 READ-ONLY-CONSUMER but 0 / 0 / 49-plus.
+
+The bands are deliberately still not checked here, for a different reason
+than before. They are now ordinary READ-ONLY-CONSUMERs, and the filter
+above ("does this key's absence make a rendered surface show nothing, or a
+number the operator did not configure?") answers no: all four are required
+with no default, so ``load_ips_config`` raises on absence and
+``ips_loaded`` already covers them. There is no DEFAULT-MASKED
+silent-fallback case to catch, and adding a check would be exactly the
+noise "seven checks, not 49" exists to refuse.
+
+The general orphan class still needs static consumer tracing in CI rather
+than an endpoint assertion — an orphan key never *fails* at boot, it just
+does nothing, so conflating the two would produce either a permanently-red
+``/health`` or a check that can never fire.
 
 **Object-materialized, not file-materialized.** None of these checks
 re-read ``ips.yaml`` from disk — every one reads an attribute already set

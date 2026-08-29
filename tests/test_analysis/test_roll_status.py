@@ -54,7 +54,10 @@ def _make_ips_config(
             delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
             roll_at_months_remaining=roll_at_months_remaining,
-            rally_rebalance_pct=15.0,
+            rally_monitor_pct=5.0,
+            rally_review_pct=10.0,
+            rally_action_pct=15.0,
+            rally_urgent_pct=20.0,
             strike_drift_max_otm_pct=strike_drift_max_otm_pct,
             roll_review_buffer=roll_review_buffer,
             strike_drift_review_fraction=strike_drift_review_fraction,
@@ -778,3 +781,150 @@ class TestLegConvexityContribution:
         ips = _make_ips_config()
 
         assert evaluate_roll_status(portfolio, ips, current_spot=100.0) == []
+
+
+class TestRallyTrigger:
+    """#297: handbook Rule 2, banded per tranche from its own entry spot."""
+
+    @staticmethod
+    def _at_rally(rally_pct: float) -> OptionPortfolio:
+        """A 16%-OTM put entered at 100, now priced after *rally_pct*.
+
+        Entry spot is exactly 100, so ``100 + rally_pct`` is the exact
+        post-rally spot. ``100 * (1 + rally_pct / 100)`` is not: at 15 it
+        yields 114.99999999999999, and the band boundary tests below then
+        read 14.999999999999986 and land one band low.
+        """
+        spot = 100.0 + rally_pct
+        option = OptionValuation(
+            spot_price=spot,
+            strike_price=84.0,
+            maturity_date=days_from_today(400),
+            volatility=0.2,
+            risk_free_rate=0.04,
+            dividend_yield=0.0,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        position = OptionPosition(
+            option=option,
+            quantity=10,
+            exercise_style=ExerciseStyle.EUROPEAN,
+            entry_spot=100.0,
+            entry_date=days_from_today(-30),
+        )
+        portfolio = OptionPortfolio(
+            spot_price=spot,
+            underlying_quantity=1000,
+        )
+        portfolio.positions.append(position)
+        return portfolio
+
+    def _trigger(self, rally_pct: float) -> roll_status.TriggerReason:
+        portfolio = self._at_rally(rally_pct)
+        records = evaluate_roll_status(
+            portfolio,
+            _make_ips_config(),
+            current_spot=portfolio.spot_price,
+        )
+        return records[0].rally_trigger
+
+    @pytest.mark.parametrize(
+        ("rally_pct", "expected", "band"),
+        [
+            (2.0, RollVerdict.HOLD, "below the 5% monitor band"),
+            (7.0, RollVerdict.MONITOR, "MONITOR band"),
+            (12.0, RollVerdict.REVIEW, "REVIEW band"),
+            (17.0, RollVerdict.ROLL, "ACTION band"),
+            (25.0, RollVerdict.ROLL, "URGENT band"),
+        ],
+    )
+    def test_the_handbook_bands(
+        self,
+        rally_pct: float,
+        expected: RollVerdict,
+        band: str,
+    ) -> None:
+        """All four named bands plus the quiet region below them."""
+        trigger = self._trigger(rally_pct)
+
+        assert trigger.verdict is expected
+        assert band in trigger.reason
+
+    def test_action_and_urgent_are_distinguishable_in_the_reason(self) -> None:
+        """Both grade ROLL; the handbook's action must not be lost."""
+        action = self._trigger(17.0).reason
+        urgent = self._trigger(25.0).reason
+
+        assert "roll the ladder closer to spot" in action
+        assert "close and re-establish" in urgent
+
+    def test_boundaries_are_inclusive_lower_edges(self) -> None:
+        assert self._trigger(5.0).verdict is RollVerdict.MONITOR
+        assert self._trigger(10.0).verdict is RollVerdict.REVIEW
+        assert self._trigger(15.0).verdict is RollVerdict.ROLL
+        assert self._trigger(20.0).verdict is RollVerdict.ROLL
+
+    def test_a_selloff_does_not_fire_the_rally_trigger(self) -> None:
+        """The reading is signed; only a rally is a Rule 2 event."""
+        assert self._trigger(-15.0).verdict is RollVerdict.HOLD
+
+    def test_no_entry_spot_is_unavailable_not_zero(self) -> None:
+        """Degenerate case: the reading cannot be taken."""
+        portfolio = _hedged_portfolio(_expiring_position(400))
+        portfolio.positions[0].entry_spot = None
+
+        record = evaluate_roll_status(portfolio, _make_ips_config())[0]
+
+        assert record.rally_trigger.verdict is RollVerdict.HOLD
+        assert "no entry spot" in record.rally_trigger.reason
+
+    def test_rally_fires_where_the_drift_trigger_stays_silent(self) -> None:
+        """#384: the two are on wildly different scales, not duplicates.
+
+        A 12% rally on a 16%-OTM put moves its moneyness by only ~9 pp,
+        nowhere near the 40 pp strike-drift ceiling — which is exactly the
+        live book in #297, where every surface read HOLD.
+        """
+        portfolio = self._at_rally(12.0)
+        ips = _make_ips_config(strike_drift_max_otm_pct=40.0)
+
+        record = evaluate_roll_status(
+            portfolio,
+            ips,
+            current_spot=portfolio.spot_price,
+        )[0]
+
+        assert record.drift_trigger.verdict is RollVerdict.HOLD
+        assert record.rally_trigger.verdict is RollVerdict.REVIEW
+        # The rally trigger is what raised this leg off HOLD; the book's
+        # own convexity may raise it further, which is not this test's
+        # subject.
+        assert record.verdict is not RollVerdict.HOLD
+
+    def test_a_rally_driven_roll_is_never_suppressed(self) -> None:
+        """#258's failure mode, now reachable from a second trigger.
+
+        Suppression requires drift_pct < 0 (the put moved nearer the money).
+        A rally pushes it further OTM, so the guard is structurally
+        unreachable on a rally — pinned, because getting this wrong would
+        defer action on a live Rule 2 trigger.
+        """
+        portfolio = self._at_rally(25.0)
+
+        record = evaluate_roll_status(
+            portfolio,
+            _make_ips_config(),
+            current_spot=portfolio.spot_price,
+        )[0]
+
+        assert record.verdict is RollVerdict.ROLL
+        assert record.suppressed is False
+
+    def test_an_expired_leg_runs_no_rally_trigger(self) -> None:
+        """Expiry short-circuits every trigger, this one included."""
+        portfolio = _hedged_portfolio(_expiring_position(-30))
+
+        record = evaluate_roll_status(portfolio, _make_ips_config())[0]
+
+        assert record.rally_trigger.verdict is RollVerdict.EXPIRED

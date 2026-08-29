@@ -1,5 +1,6 @@
 """Tests for deltadewa.ips_config."""
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -41,7 +42,10 @@ _VALID_CONFIG: dict[str, Any] = {
         "delta_ratio_deviation_action_pct": 10.0,
         "theta_cost_acceptable_pct": 2.0,
         "roll_at_months_remaining": 9.0,
-        "rally_rebalance_pct": 15.0,
+        "rally_monitor_pct": 5.0,
+        "rally_review_pct": 10.0,
+        "rally_action_pct": 15.0,
+        "rally_urgent_pct": 20.0,
         "strike_drift_max_otm_pct": 45.0,
     },
     "monetization": {
@@ -1177,3 +1181,50 @@ class TestDefaultedSections:
         config = load_ips_config(path)
 
         assert "sizing" not in config.defaulted_sections
+
+
+class TestRallyBands:
+    """#297: the four handbook Rule 2 bands, required with no default."""
+
+    def test_all_four_are_required(self, tmp_path: Path) -> None:
+        for missing in (
+            "rally_monitor_pct",
+            "rally_review_pct",
+            "rally_action_pct",
+            "rally_urgent_pct",
+        ):
+            config = deepcopy(_VALID_CONFIG)
+            del config["triggers"][missing]
+            target = tmp_path / missing
+            target.mkdir()
+            path = _write_yaml(target, config)
+
+            with pytest.raises(IpsConfigError, match=missing):
+                load_ips_config(path)
+
+    def test_a_non_increasing_ladder_is_rejected(self, tmp_path: Path) -> None:
+        """A band above its successor would be unreachable in evaluation."""
+        config = deepcopy(_VALID_CONFIG)
+        config["triggers"]["rally_action_pct"] = 25.0
+        path = _write_yaml(tmp_path, config)
+
+        with pytest.raises(IpsConfigError, match="must be <"):
+            load_ips_config(path)
+
+    def test_the_retired_scalar_is_gone(self, tmp_path: Path) -> None:
+        """rally_rebalance_pct is superseded, not aliased (#297)."""
+        config = deepcopy(_VALID_CONFIG)
+        path = _write_yaml(tmp_path, config)
+
+        triggers = load_ips_config(path).triggers
+
+        assert not hasattr(triggers, "rally_rebalance_pct")
+
+    def test_the_shipped_example_states_the_handbook_bands(self) -> None:
+        """5/10/15/20 — the numbers #245's sanitization had erased."""
+        triggers = load_ips_config(EXAMPLE_IPS_YAML).triggers
+
+        assert triggers.rally_monitor_pct == pytest.approx(5.0)
+        assert triggers.rally_review_pct == pytest.approx(10.0)
+        assert triggers.rally_action_pct == pytest.approx(15.0)
+        assert triggers.rally_urgent_pct == pytest.approx(20.0)

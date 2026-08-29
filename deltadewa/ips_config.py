@@ -477,6 +477,27 @@ class IpsTriggers:
     trigger. It fires on gamma *drift* — the % of the hedged equity that net
     delta shifts per 1% spot move — not raw gamma, which scales with book size.
 
+    ``rally_monitor_pct`` / ``rally_review_pct`` / ``rally_action_pct`` /
+    ``rally_urgent_pct`` are the four bands of the handbook's `Rule 2 — Market
+    Rally Rebalance Trigger
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger>`_,
+    measured as the rally in spot **since a tranche's own entry**
+    (``OptionPosition.entry_spot``), and each carrying its own recommended
+    action: monitor and recompute convexity at current spot; review and roll
+    strikes up if the convexity target is no longer met; act, because strikes
+    are likely too deep OTM; or rebalance urgently, because the original
+    strikes may provide negligible protection.
+
+    They replace ``rally_rebalance_pct`` (#297), a single scalar that was
+    validated and read by nothing for two and a half months. Its name did not
+    say *which* of the handbook's four boundaries it was, and its shipped
+    value (12.0) sat on none of them — the same ambiguity 4.2 renamed
+    ``roll_time_months`` and ``delta_drift_*`` to remove. Its original value
+    (15.0, before #245's sanitization made it an example) *was* a handbook
+    band edge; restating all four restores the provenance that sanitization
+    erased. Required with no default, like ``entry_timing_tree``'s VIX
+    thresholds after M2.8: a band nobody stated is a band nobody chose.
+
     ``roll_at_months_remaining`` is maturity remaining, by name (4.2 renamed
     it from ``roll_time_months`` — that name alone did not say which referent
     was meant, and the two are not interchangeable: an 18-month put rolled on
@@ -495,7 +516,10 @@ class IpsTriggers:
     delta_ratio_deviation_action_pct: float
     theta_cost_acceptable_pct: float
     roll_at_months_remaining: float
-    rally_rebalance_pct: float
+    rally_monitor_pct: float
+    rally_review_pct: float
+    rally_action_pct: float
+    rally_urgent_pct: float
     strike_drift_max_otm_pct: float
     target_delta_ratio_pct: float = _DEFAULT_TARGET_DELTA_RATIO_PCT
     roll_review_buffer: float = 1.5
@@ -741,7 +765,10 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             "delta_ratio_deviation_action_pct",
             "theta_cost_acceptable_pct",
             "roll_at_months_remaining",
-            "rally_rebalance_pct",
+            "rally_monitor_pct",
+            "rally_review_pct",
+            "rally_action_pct",
+            "rally_urgent_pct",
             "strike_drift_max_otm_pct",
         )
     }
@@ -762,6 +789,7 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             f"triggers.roll_at_months_remaining must be > 0, got "
             f"{fields['roll_at_months_remaining']}",
         )
+    _validate_rally_bands(fields)
 
     roll_review_buffer = section.get("roll_review_buffer", 1.5)
     if roll_review_buffer <= 1.0:
@@ -946,6 +974,34 @@ def _parse_sizing(config: dict[str, Any]) -> IpsSizing:
         )
 
     return IpsSizing(portfolio_beta=portfolio_beta)
+
+
+def _validate_rally_bands(fields: dict[str, Any]) -> None:
+    """Reject a rally ladder that is not strictly increasing (#297).
+
+    The four bands are read as half-open intervals, so a non-increasing
+    ladder would make one of them unreachable — a policy an operator wrote
+    and the program silently never applies.
+    """
+    names = (
+        "rally_monitor_pct",
+        "rally_review_pct",
+        "rally_action_pct",
+        "rally_urgent_pct",
+    )
+    values = [fields[name] for name in names]
+    if values[0] <= 0:
+        raise IpsConfigError(
+            f"triggers.rally_monitor_pct must be > 0, got {values[0]}",
+        )
+    for (lower_name, lower), (upper_name, upper) in pairwise(
+        zip(names, values, strict=True),
+    ):
+        if lower >= upper:
+            raise IpsConfigError(
+                f"triggers.{lower_name} must be < {upper_name}, got "
+                f"{lower} >= {upper}",
+            )
 
 
 def _parse_maturity_buckets(config: dict[str, Any]) -> IpsMaturityBuckets:

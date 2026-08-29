@@ -82,6 +82,13 @@ class WeeklySnapshot:
             the clock ticks — a phantom change on a book that had not
             moved. The verdict word is the thing that genuinely crosses;
             these two explain it.
+        rally_status: The book-level handbook Rule 2 reading
+            (``OK``/``MONITOR``/``ACTION``/``UNAVAILABLE``) — diffed as a
+            crossing (#297).
+        worst_rally_pct: The most-rallied long put's move since its own
+            entry spot, carried for rendering and reported as a material
+            move rather than a crossing. ``None`` when no long put has a
+            recorded entry spot — unavailable, not zero.
         expired_leg_count: How many legs are already past maturity
             (#373). Diffed as a **crossing**, not a material move: an
             expired leg is excluded from ``worst_roll_verdict``, so
@@ -119,6 +126,8 @@ class WeeklySnapshot:
     worst_roll_leg: str | None
     worst_roll_reason: str | None
     expired_leg_count: int
+    rally_status: str
+    worst_rally_pct: float | None
     ips_compliance_all_pass: bool
     ips_compliance_rows: tuple[tuple[str, bool], ...]
     premium_paid_point_in_time: float
@@ -152,6 +161,8 @@ class WeeklySnapshot:
             "worst_roll_leg": self.worst_roll_leg,
             "worst_roll_reason": self.worst_roll_reason,
             "expired_leg_count": self.expired_leg_count,
+            "rally_status": self.rally_status,
+            "worst_rally_pct": self.worst_rally_pct,
             "ips_compliance_all_pass": self.ips_compliance_all_pass,
             "ips_compliance_rows": [
                 list(row) for row in self.ips_compliance_rows
@@ -185,6 +196,8 @@ class WeeklySnapshot:
             worst_roll_leg=data.get("worst_roll_leg"),
             worst_roll_reason=data.get("worst_roll_reason"),
             expired_leg_count=data.get("expired_leg_count", 0),
+            rally_status=data.get("rally_status", "UNAVAILABLE"),
+            worst_rally_pct=data.get("worst_rally_pct"),
             ips_compliance_all_pass=data["ips_compliance_all_pass"],
             ips_compliance_rows=tuple(
                 (row[0], row[1]) for row in data["ips_compliance_rows"]
@@ -194,7 +207,7 @@ class WeeklySnapshot:
         )
 
 
-def snapshot_from_report(
+def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argument is a distinct snapshot field the caller computes
     report: ProgramReport,
     *,
     decision_verdict: str,
@@ -202,6 +215,8 @@ def snapshot_from_report(
     worst_roll_leg: str | None,
     worst_roll_reason: str | None,
     expired_leg_count: int,
+    rally_status: str,
+    worst_rally_pct: float | None,
     first_as_of: date,
     cumulative_carry_cost: float,
 ) -> WeeklySnapshot:
@@ -243,6 +258,8 @@ def snapshot_from_report(
         worst_roll_leg=worst_roll_leg,
         worst_roll_reason=worst_roll_reason,
         expired_leg_count=expired_leg_count,
+        rally_status=rally_status,
+        worst_rally_pct=worst_rally_pct,
         ips_compliance_all_pass=bool(ic.all_pass),
         ips_compliance_rows=tuple(
             (row.metric, bool(row.passes)) for row in ic.rows
@@ -452,6 +469,11 @@ def diff_snapshots(
         ),
         _worst_roll_crossing(prior, current),
         _expired_leg_crossing(prior, current),
+        _str_crossing(
+            "Rally trigger (since entry)",
+            prior.rally_status,
+            current.rally_status,
+        ),
         _optional_bool_crossing(
             "Convexity band",
             prior.meets_target,
@@ -517,6 +539,13 @@ def diff_snapshots(
             prior.vix,
             current.vix,
             floor=_VIX_MATERIAL_MOVE_PTS,
+        ),
+        _material_move(
+            "Rally since entry (worst leg)",
+            prior.worst_rally_pct,
+            current.worst_rally_pct,
+            floor=1.0,
+            unit="%",
         ),
         _material_move(
             "SKEW percentile",

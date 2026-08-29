@@ -25,7 +25,7 @@ from deltadewa.constants import OptionType
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
 
@@ -140,6 +140,7 @@ class RollStatusRecord:
     time_trigger: TriggerReason
     convexity_trigger: TriggerReason
     drift_trigger: TriggerReason
+    rally_trigger: TriggerReason
 
 
 def _otm_pct(option_type: OptionType, spot: float, strike: float) -> float:
@@ -261,6 +262,109 @@ def _strike_drift_trigger_verdict(
     return TriggerReason(RollVerdict.HOLD, reason=reason)
 
 
+def rally_from_entry_pct(
+    position: OptionPosition,
+    current_spot: float,
+) -> float | None:
+    """Percent the underlying has rallied since *position* was entered.
+
+    ``(current_spot - entry_spot) / entry_spot * 100``, signed, so a
+    selloff reads negative. This is the reading the handbook's `Rule 2 —
+    Market Rally Rebalance Trigger
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger>`_
+    bands, and it is measured from **the hedge's entry spot** — each
+    tranche has its own, which is why this is a per-tranche reading and
+    not a book-level one.
+
+    Distinct from :class:`MoneynessDrift`'s ``drift_pct``, which the strike
+    drift trigger bands. The two are deterministically related for a given
+    leg but on very different scales: a rally ``r`` on a put entered
+    ``m``% OTM moves its moneyness by only ``(1 - m/100) * r/(1+r)``
+    percentage points, so the handbook's most severe rally band (>+20%)
+    produces about 14 pp of drift on a 16%-OTM put. See #384.
+
+    Args:
+        position: The tranche to measure.
+        current_spot: Spot to measure against.
+
+    Returns:
+        Percent rally since entry, or ``None`` when the position has no
+        recorded ``entry_spot`` — the reading is then unavailable, which is
+        not the same as zero.
+
+    """
+    entry_spot = position.entry_spot
+    if entry_spot is None or entry_spot == 0:
+        return None
+    return (current_spot - entry_spot) / entry_spot * 100.0
+
+
+def _rally_trigger_verdict(
+    rally_pct: float | None,
+    triggers: IpsTriggers,
+) -> TriggerReason:
+    """Band a rally-since-entry reading against the handbook's four bands.
+
+    Five regions onto four gradable verdicts: the handbook's ACTION and
+    URGENT bands both map to ``ROLL``, because ``RollVerdict`` has four
+    rungs and inventing a fifth would imply an urgency the rest of the
+    package has no vocabulary for. The distinction is not lost — the band's
+    own name and recommended action are carried in the reason, which is
+    this package's standing convention for never letting a verdict arrive
+    as a bare word.
+    """
+    if rally_pct is None:
+        return TriggerReason(
+            RollVerdict.HOLD,
+            reason="no entry spot recorded",
+        )
+
+    reading = f"{rally_pct:+.1f}% rally since entry"
+    if rally_pct >= triggers.rally_urgent_pct:
+        return TriggerReason(
+            RollVerdict.ROLL,
+            reason=(
+                f"{reading} — URGENT band (>{triggers.rally_urgent_pct:.0f}%):"
+                " original strikes may provide negligible protection; close"
+                " and re-establish"
+            ),
+        )
+    if rally_pct >= triggers.rally_action_pct:
+        return TriggerReason(
+            RollVerdict.ROLL,
+            reason=(
+                f"{reading} — ACTION band ({triggers.rally_action_pct:.0f}-"
+                f"{triggers.rally_urgent_pct:.0f}%): strikes likely too deep"
+                " OTM; roll the ladder closer to spot"
+            ),
+        )
+    if rally_pct >= triggers.rally_review_pct:
+        return TriggerReason(
+            RollVerdict.REVIEW,
+            reason=(
+                f"{reading} — REVIEW band ({triggers.rally_review_pct:.0f}-"
+                f"{triggers.rally_action_pct:.0f}%): roll strikes up if the"
+                " convexity target is no longer met"
+            ),
+        )
+    if rally_pct >= triggers.rally_monitor_pct:
+        return TriggerReason(
+            RollVerdict.MONITOR,
+            reason=(
+                f"{reading} — MONITOR band ({triggers.rally_monitor_pct:.0f}-"
+                f"{triggers.rally_review_pct:.0f}%): recompute crash convexity"
+                " at current spot"
+            ),
+        )
+    return TriggerReason(
+        RollVerdict.HOLD,
+        reason=(
+            f"{reading} — below the {triggers.rally_monitor_pct:.0f}% monitor"
+            " band"
+        ),
+    )
+
+
 def new_strike_for_entry_otm(
     option_type: OptionType,
     current_spot: float,
@@ -364,8 +468,9 @@ def verdict_reason(record: RollStatusRecord) -> str:
 
     ``EXPIRED`` is answered first — its three triggers were never evaluated,
     so matching against them would return a stand-in string. Otherwise the
-    verdict is matched against the four per-trigger verdicts and that
-    trigger's ``.reason`` is returned. When ``record.suppressed`` is ``True``
+    verdict is matched against the four per-trigger verdicts (time,
+    convexity, strike drift, rally) and that trigger's ``.reason`` is
+    returned. When ``record.suppressed`` is ``True``
     — or, defensively, when no trigger matches — this is the roll-suppression
     case and a sentence naming the suppression is returned instead.
 
@@ -384,6 +489,7 @@ def verdict_reason(record: RollStatusRecord) -> str:
             record.time_trigger,
             record.convexity_trigger,
             record.drift_trigger,
+            record.rally_trigger,
         ):
             if trigger.verdict == record.verdict:
                 return trigger.reason
@@ -395,7 +501,7 @@ def verdict_reason(record: RollStatusRecord) -> str:
     )
 
 
-def evaluate_roll_status(
+def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, their verdicts, and the crash basis they share
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
     current_spot: float | None = None,
@@ -473,6 +579,7 @@ def evaluate_roll_status(
                     time_trigger=expired_trigger,
                     convexity_trigger=expired_trigger,
                     drift_trigger=expired_trigger,
+                    rally_trigger=expired_trigger,
                 ),
             )
             continue
@@ -492,12 +599,21 @@ def evaluate_roll_status(
             triggers.strike_drift_max_otm_pct,
             triggers.strike_drift_review_fraction,
         )
+        rally_trigger = _rally_trigger_verdict(
+            rally_from_entry_pct(position, current_spot),
+            triggers,
+        )
         time_verdict = time_trigger.verdict
         convexity_verdict = convexity_trigger.verdict
         drift_verdict = drift_trigger.verdict
 
         verdict = max(
-            (time_verdict, convexity_verdict, drift_verdict),
+            (
+                time_verdict,
+                convexity_verdict,
+                drift_verdict,
+                rally_trigger.verdict,
+            ),
             key=lambda v: _SEVERITY[v],
         )
 
@@ -505,6 +621,12 @@ def evaluate_roll_status(
         # gaining convexity on its own. If there's no time pressure and
         # crash convexity is still within target, don't force a roll that
         # was only triggered by strike drift.
+        #
+        # A rally can never reach this: it requires drift_pct < 0, and a
+        # rally pushes a put further OTM (drift_pct > 0). That is structural
+        # rather than incidental — deferring on a rally is exactly what #258
+        # fixed, and a test pins it now that the rally trigger can also
+        # produce a ROLL.
         suppressed = False
         if (  # pylint: disable=too-many-boolean-expressions  # six independent roll-suppression guards; decomposing would obscure the policy
             verdict == RollVerdict.ROLL
@@ -555,6 +677,7 @@ def evaluate_roll_status(
                 time_trigger=time_trigger,
                 convexity_trigger=convexity_trigger,
                 drift_trigger=drift_trigger,
+                rally_trigger=rally_trigger,
             ),
         )
 

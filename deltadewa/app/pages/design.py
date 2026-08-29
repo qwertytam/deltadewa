@@ -1254,6 +1254,10 @@ def _roll_record_row(record: RollStatusRecord) -> html.Tr:
                 f"Drift: {record.drift_trigger.verdict.value} — "
                 f"{record.drift_trigger.reason}{suppressed_note}",
             ),
+            html.Td(
+                f"Rally: {record.rally_trigger.verdict.value} — "
+                f"{record.rally_trigger.reason}",
+            ),
         ],
     )
 
@@ -1293,6 +1297,7 @@ def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
             html.Th("Time trigger"),
             html.Th("Convexity trigger (book)"),
             html.Th("Drift trigger"),
+            html.Th("Rally trigger"),
         ],
     )
     rows = [_roll_record_row(record) for record in records]

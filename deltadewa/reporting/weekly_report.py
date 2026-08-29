@@ -90,6 +90,13 @@ from deltadewa.analysis import (
     evaluate_roll_status,
     verdict_reason,
 )
+from deltadewa.analysis.hedge_triggers import (
+    HedgeTriggerReason,
+    HedgeTriggerThresholds,
+    TriggerStatus,
+    rally_reason,
+    worst_rally_from_entry,
+)
 from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
@@ -358,12 +365,20 @@ def build_weekly_digest(
     roll_records: Sequence[RollStatusRecord],
     history: Sequence[WeeklySnapshot] = (),
     as_of: date,
+    rally: HedgeTriggerReason | None = None,
+    worst_rally_pct: float | None = None,
     backup_heartbeat_warning: str | None = None,
 ) -> WeeklyDigest:
     """Pure assembly: report + roll records + history -> a WeeklyDigest.
 
     No I/O, no clock — every input is supplied by the caller, which is what
     makes this deterministic and what the golden-file test calls directly.
+    ``rally``/``worst_rally_pct`` are the handbook Rule 2 book-level
+    reading (#297), computed by the caller from the portfolio the same way
+    ``roll_records`` is — this function never touches a portfolio. Omitting
+    them yields ``UNAVAILABLE``, which is honest: a digest assembled
+    without the reading has not measured it.
+
     ``backup_heartbeat_warning`` is no exception: ``main()`` reads it from
     disk (see ``_read_backup_heartbeat_warning``) and passes the resulting
     string (or ``None``) in here — this function still does no I/O of its
@@ -447,6 +462,12 @@ def build_weekly_digest(
             else None
         ),
         expired_leg_count=_expired_leg_count(roll_records),
+        rally_status=(
+            rally.status.value
+            if rally is not None
+            else TriggerStatus.UNAVAILABLE.value
+        ),
+        worst_rally_pct=worst_rally_pct,
         first_as_of=first_as_of,
         cumulative_carry_cost=cumulative_carry_cost,
     )
@@ -886,6 +907,12 @@ def build_and_render(
         market_env=market_env,
     )
     roll_records = evaluate_roll_status(portfolio, ips_config)
+    # Handbook Rule 2 (#297), book-level: the most-rallied long put, named.
+    worst_rally = worst_rally_from_entry(portfolio)
+    rally_reading = rally_reason(
+        worst_rally,
+        HedgeTriggerThresholds.from_ips(ips_config.triggers),
+    )
 
     report = build_program_report(
         portfolio=portfolio,
@@ -903,6 +930,8 @@ def build_and_render(
     digest = build_weekly_digest(
         report=report,
         roll_records=roll_records,
+        rally=rally_reading,
+        worst_rally_pct=worst_rally[0] if worst_rally is not None else None,
         history=history,
         as_of=as_of,
         backup_heartbeat_warning=_read_backup_heartbeat_warning(export_dir),

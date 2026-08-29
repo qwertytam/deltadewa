@@ -66,7 +66,10 @@ def _make_ips_config(
             delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
             roll_at_months_remaining=roll_at_months_remaining,
-            rally_rebalance_pct=15.0,
+            rally_monitor_pct=5.0,
+            rally_review_pct=10.0,
+            rally_action_pct=15.0,
+            rally_urgent_pct=20.0,
             strike_drift_max_otm_pct=strike_drift_max_otm_pct,
             roll_review_buffer=roll_review_buffer,
             strike_drift_review_fraction=strike_drift_review_fraction,
@@ -140,7 +143,10 @@ class TestGammaThetaDelay:
             delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
             roll_at_months_remaining=roll_at_months_remaining,
-            rally_rebalance_pct=15.0,
+            rally_monitor_pct=5.0,
+            rally_review_pct=10.0,
+            rally_action_pct=15.0,
+            rally_urgent_pct=20.0,
             strike_drift_max_otm_pct=10.0,
         )
 

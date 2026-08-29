@@ -28,8 +28,11 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 import deltadewa.constants as const
+from deltadewa.analysis.crash_repricing import is_expired
 from deltadewa.analysis.health import delta_deviation_from_target
+from deltadewa.analysis.roll_status import rally_from_entry_pct
 from deltadewa.clock import days_between
+from deltadewa.constants import OptionType
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -108,6 +111,15 @@ class HedgeTriggerThresholds:
         below which gamma risk is LOW (default 2 %).
     gamma_drift_high_pct:
         Gamma drift above which gamma risk is HIGH (default 5 %).
+    rally_monitor_pct:
+        Rally since a tranche's entry at or above which the book is put on
+        MONITOR — the handbook's Rule 2 first band (default 5 %).
+    rally_action_pct:
+        Rally at or above which the reading is ACTION (default 15 %). The
+        handbook's URGENT band sits above this and is named in the reason;
+        ``TriggerStatus`` has three gradable levels on purpose, and
+        inventing a fourth would imply an action this book-level evaluation
+        does not itself recommend.
 
     """
 
@@ -120,6 +132,8 @@ class HedgeTriggerThresholds:
     theta_cost_acceptable_pct: float = 2.0
     gamma_drift_moderate_pct: float = 2.0
     gamma_drift_high_pct: float = 5.0
+    rally_monitor_pct: float = 5.0
+    rally_action_pct: float = 15.0
 
     @classmethod
     def from_ips(cls, triggers: IpsTriggers) -> HedgeTriggerThresholds:
@@ -131,14 +145,22 @@ class HedgeTriggerThresholds:
         Note:
             This is *not* the whole of ``IpsTriggers``.
             ``roll_at_months_remaining``, ``strike_drift_max_otm_pct``,
-            ``strike_drift_review_fraction``
-            and ``roll_review_buffer`` are roll policy, consumed by
-            ``roll_planner``/``roll_status`` rather than here. But
-            ``rally_rebalance_pct`` is consumed by **nothing** — the
-            handbook's `"Rule 2 — Market Rally Rebalance Trigger"
-            <https://qwertytam.github.io/deltadewa-handbook/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger>`_
-            has never been built, and the earlier wording of this docstring
-            ("every threshold the IPS defines") is why that went unnoticed.
+            ``strike_drift_review_fraction`` and ``roll_review_buffer`` are
+            roll policy, consumed by ``roll_planner``/``roll_status``
+            rather than here. The rally bands are consumed by **both**:
+            ``roll_status`` grades each tranche against all four, and this
+            book-level set carries the outer two so the digest and the
+            hedge-trigger panel can report one reading for the book.
+
+            ``rally_review_pct``/``rally_urgent_pct`` are deliberately not
+            mapped: ``TriggerStatus`` has three gradable levels, so the
+            book-level reading bands on monitor/action and names the
+            handbook band it actually landed in.
+
+            Until #297 the IPS carried a single ``rally_rebalance_pct``
+            that was consumed by nothing at all, and an earlier wording of
+            this docstring ("every threshold the IPS defines is mapped
+            here") is why that went unnoticed for two and a half months.
             See ``docs/part-x-coverage.md``.
 
         """
@@ -200,14 +222,19 @@ class HedgeTriggerSet:
 
     Distinct from :func:`~deltadewa.analysis.roll_status.evaluate_roll_status`,
     which answers "should *this tranche* be replaced" per position. These
-    four answer "is the book still hedged the way policy says" for the book
-    as a whole, and the two sets are never merged.
+    answer "is the book still hedged the way policy says" for the book as a
+    whole, and the two sets are never merged. The rally trigger appears in
+    both, from one shared evaluator, because the handbook does not say
+    whether Rule 2 is per-tranche or book-level: per-tranche is where the
+    re-strike decision is made, book-level is what the digest reports.
 
     Attributes:
         delta: Net delta's deviation vs the IPS target hedge ratio.
         expiry: Nearest expiry vs the URGENT / SOON windows.
         theta: Annualised carry cost vs the EXCELLENT / ACCEPTABLE bands.
         gamma: Net-delta drift per 1% spot move vs the gamma bands.
+        rally: The book's worst rally-since-entry vs the handbook's Rule 2
+            bands (#297), naming the leg it came from.
         metrics: The raw figures behind the four readings — the same
             values :class:`HedgeTriggerResult` carries.
         actions: Priority-ordered ``(label, description)`` recommendations.
@@ -218,12 +245,15 @@ class HedgeTriggerSet:
     expiry: HedgeTriggerReason
     theta: HedgeTriggerReason
     gamma: HedgeTriggerReason
+    rally: HedgeTriggerReason
     metrics: HedgeTriggerResult
     actions: list[tuple[str, str]]
 
     def __iter__(self) -> Iterator[HedgeTriggerReason]:
-        """Iterate the four triggers in the order the report prints them."""
-        return iter((self.delta, self.expiry, self.theta, self.gamma))
+        """Iterate the triggers in the order the report prints them."""
+        return iter(
+            (self.delta, self.expiry, self.theta, self.gamma, self.rally),
+        )
 
 
 @dataclass
@@ -387,6 +417,101 @@ def _gamma_reason(
 # ---------------------------------------------------------------------------
 
 
+def worst_rally_from_entry(
+    portfolio: OptionPortfolio,
+) -> tuple[float, str] | None:
+    """Return the largest rally-since-entry across long puts (#297).
+
+    A book-level reading of a per-tranche quantity. Each tranche has its own
+    ``entry_spot``, and a ladder legged in over eighteen months has no single
+    entry to measure from — so the worst leg is what answers "has the market
+    moved away from where this book's protection was struck".
+
+    A max is exactly the kind of reduction that loses the reader's ability to
+    act, so the leg comes back with it. Expired legs are excluded (they are
+    not protection any more), as are legs with no recorded ``entry_spot``.
+
+    Args:
+        portfolio: The book to read.
+
+    Returns:
+        ``(rally_pct, leg_label)`` for the most-rallied long put, or
+        ``None`` when no long put has a usable ``entry_spot`` — unavailable,
+        which is not the same as a 0% rally.
+
+    """
+    best: tuple[float, str] | None = None
+    for position in portfolio.positions:
+        if position.option.option_type != OptionType.PUT:
+            continue
+        if position.quantity <= 0:
+            continue
+        if is_expired(position, valuation_date=portfolio.valuation_date):
+            continue
+        rally = rally_from_entry_pct(position, portfolio.spot_price)
+        if rally is None:
+            continue
+        if best is None or rally > best[0]:  # pylint: disable=unsubscriptable-object  # narrowed by the `is None or` short-circuit
+            leg = (
+                f"{position.option.option_type.value} "
+                f"{position.option.strike_price:,.0f}"
+            )
+            best = (rally, leg)
+    return best
+
+
+def rally_reason(
+    worst: tuple[float, str] | None,
+    t: HedgeTriggerThresholds,
+) -> HedgeTriggerReason:
+    """Band the book's worst rally-since-entry (handbook Rule 2).
+
+    Public, unlike the other four ``_*_reason`` banders: the weekly digest
+    reports this same book-level reading (#297), and mirroring the banding
+    there would be a second place for the handbook's thresholds to drift.
+    """
+    label = "Rally since entry"
+    if worst is None:
+        return HedgeTriggerReason(
+            label=label,
+            status=TriggerStatus.UNAVAILABLE,
+            reason=(
+                "no long put has a recorded entry spot, so the rally"
+                " trigger cannot be measured"
+            ),
+        )
+
+    rally, leg = worst
+    reading = f"{leg} is {rally:+.1f}% from its entry spot"
+    if rally >= t.rally_action_pct:
+        return HedgeTriggerReason(
+            label=label,
+            status=TriggerStatus.ACTION,
+            reason=(
+                f"{reading}, at or past the {t.rally_action_pct:.0f}% action"
+                " band — strikes are likely too deep OTM; roll the ladder"
+                " closer to spot"
+            ),
+        )
+    if rally >= t.rally_monitor_pct:
+        return HedgeTriggerReason(
+            label=label,
+            status=TriggerStatus.MONITOR,
+            reason=(
+                f"{reading}, past the {t.rally_monitor_pct:.0f}% monitor band"
+                f" and below the {t.rally_action_pct:.0f}% action band —"
+                " recompute crash convexity at current spot"
+            ),
+        )
+    return HedgeTriggerReason(
+        label=label,
+        status=TriggerStatus.OK,
+        reason=(
+            f"{reading}, below the {t.rally_monitor_pct:.0f}% monitor band"
+        ),
+    )
+
+
 def evaluate_hedge_trigger_set(
     portfolio: OptionPortfolio,
     thresholds: HedgeTriggerThresholds | None = None,
@@ -465,11 +590,14 @@ def evaluate_hedge_trigger_set(
         t,
     )
 
+    worst_rally = worst_rally_from_entry(portfolio)
+
     return HedgeTriggerSet(
         delta=_delta_reason(delta_ratio_deviation_pct, t),
         expiry=_expiry_reason(days_to_nearest_expiry, t),
         theta=_theta_reason(theta_cost_pct, t),
         gamma=_gamma_reason(gamma_drift, t),
+        rally=rally_reason(worst_rally, t),
         metrics=HedgeTriggerResult(
             delta_ratio_deviation_pct=delta_ratio_deviation_pct,
             days_to_nearest_expiry=days_to_nearest_expiry,
@@ -563,6 +691,7 @@ def evaluate_hedge_triggers(
         triggers.gamma.status,
         reporter,
     )
+    _print_rally_trigger(triggers.rally, reporter)
     _print_action_summary(triggers.actions, reporter, t)
 
     return metrics
@@ -761,6 +890,39 @@ def _print_theta_trigger(  # pylint: disable=too-many-arguments  # a printer ove
             "     → Consider:  Moving strikes further OTM, using longer dated"
             " options, or reducing hedge size",
         )
+    print()
+
+
+def _print_rally_trigger(
+    rally: HedgeTriggerReason,
+    reporter: ConsoleReporter,
+) -> None:
+    """Print the handbook Rule 2 rally reading (#297).
+
+    A fifth section. Until #297 this module printed four, because the IPS
+    key for this trigger was validated and read by nothing; the printed
+    output is deliberately no longer identical to M2.7's, and this is the
+    only reason it changed.
+
+    Takes the already-banded ``HedgeTriggerReason`` rather than a metric
+    plus thresholds: ``_rally_reason`` names the band and its recommended
+    action in the reason itself, so re-deriving anything here would be a
+    second opinion on a settled reading.
+    """
+    print("5️⃣  RALLY SINCE ENTRY:")
+    reporter.divider()
+    label = f"    {rally.reason}"
+    if rally.status is TriggerStatus.UNAVAILABLE:
+        reporter.warning("    Rally since entry: unavailable")
+        print("     → Record entry_spot on the long puts to measure it")
+    elif rally.status is TriggerStatus.OK:
+        reporter.success(f"{label} - IN RANGE")
+    elif rally.status is TriggerStatus.MONITOR:
+        reporter.warning(f"{label} - MONITOR")
+        print("     → Recompute crash convexity at current spot")
+    else:
+        reporter.error(f"{label} - ACTION REQUIRED")
+        print("     → Roll the ladder closer to current spot")
     print()
 
 

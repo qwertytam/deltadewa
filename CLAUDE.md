@@ -233,11 +233,17 @@ were false positives and are recorded as such. See
 
 Two follow-ups came out of it, neither acted on:
 
-- **`triggers.rally_rebalance_pct` is validated but read by nothing** —
-  required with no default, in both example YAMLs, handbook-backed ("Rule 2 —
-  Market Rally Rebalance Trigger"), and skipped by
-  `HedgeTriggerThresholds.from_ips`. Pre-existing, and the only IPS key with no
-  reader. The key stays (thresholds are policy); the trigger needs building.
+- ~~**`triggers.rally_rebalance_pct` is validated but read by nothing**~~ —
+  **built in 5a (#297)**, and replaced rather than wired: the single scalar
+  became the handbook's four named Rule 2 bands (`rally_monitor_pct` /
+  `_review_pct` / `_action_pct` / `_urgent_pct` = 5/10/15/20), graded per
+  tranche by `roll_status` and book-level by `hedge_triggers`. **Breaking
+  change for a live `config/ips.yaml`.** The same archaeology filed **#384**:
+  `strike_drift_max_otm_pct` was transcribed from the handbook as a 45% OTM
+  *level* and implemented as a 40 pp *change since entry*, so it cannot fire
+  (a 16%-OTM put needs a ~91% rally). Its rule has since been deleted from the
+  handbook entirely — the rally trigger supersedes it. Retiring the two
+  `strike_drift_*` keys is #384's job, deliberately not 5a's.
 - **A second orphan set: the matplotlib half of `visualization/`.** `base.py`
   (`OptionCharts`) and its five mixins (`crash_charts`, `greeks_charts`,
   `pnl_charts`, `scenarios`, `theta_charts`), plus `convenience.py` and

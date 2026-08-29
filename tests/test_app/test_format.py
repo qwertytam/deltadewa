@@ -146,6 +146,10 @@ def _make_record(
             reason="convexity reason",
         ),
         drift_trigger=TriggerReason(drift_verdict, reason="drift reason"),
+        rally_trigger=TriggerReason(
+            RollVerdict.HOLD,
+            reason="+0.0% rally since entry",
+        ),
     )
 
 

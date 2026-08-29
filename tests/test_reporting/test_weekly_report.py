@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -167,6 +167,12 @@ def _prior_snapshot() -> WeeklySnapshot:
         worst_roll_leg="PUT 4200",
         worst_roll_reason="30d to maturity, 180d roll window",
         expired_leg_count=0,
+        # A digest assembled without a rally reading reports
+        # UNAVAILABLE, so the prior baseline says the same — otherwise
+        # every unrelated test here would see a phantom OK -> UNAVAILABLE
+        # crossing. Tests that exercise the rally trigger pass one in.
+        rally_status="UNAVAILABLE",
+        worst_rally_pct=None,
         ips_compliance_all_pass=True,
         ips_compliance_rows=(
             ("Annual carry cost", True),
@@ -183,12 +189,22 @@ def _roll_record(
     strike: float = 4200.0,
     reason: str = "30d to maturity, 180d roll window",
     days_to_maturity: int = 30,
+    maturity: datetime | None = None,
 ) -> RollStatusRecord:
-    """A real RollStatusRecord — the reduction now reads more than .verdict."""
+    """A real RollStatusRecord — the reduction now reads more than .verdict.
+
+    ``maturity`` defaults to the program clock (so the option prices), but
+    the golden pins it: ``expired_reason`` renders the expiry *date*, and a
+    clock-derived one would re-write the golden every day.
+    """
     option = OptionValuation(
         spot_price=5000.0,
         strike_price=strike,
-        maturity_date=days_from_today(days_to_maturity),
+        maturity_date=(
+            maturity
+            if maturity is not None
+            else days_from_today(days_to_maturity)
+        ),
         volatility=0.2,
         risk_free_rate=0.04,
         dividend_yield=0.0,
@@ -219,6 +235,7 @@ def _roll_record(
         time_trigger=trigger,
         convexity_trigger=trigger,
         drift_trigger=trigger,
+        rally_trigger=trigger,
     )
 
 
@@ -681,9 +698,27 @@ class TestGoldenMarkdown:
 
     def test_matches_golden_file(self) -> None:
         report = _make_report()
+        # Real roll records, not (): the per-leg roll table and the
+        # attributed worst-roll crossing (#374) are digest output, so the
+        # byte-goldened document has to contain them. Every rendered
+        # string here is pinned by the fixture — the reasons are passed in
+        # rather than derived — so this stays deterministic under the
+        # clock-shift probe.
         digest = build_weekly_digest(
             report=report,
-            roll_records=(),
+            roll_records=(
+                _roll_record(
+                    RollVerdict.ROLL,
+                    strike=4200.0,
+                    reason="28d to maturity, 180d roll window",
+                ),
+                _roll_record(
+                    RollVerdict.EXPIRED,
+                    strike=234.0,
+                    days_to_maturity=-30,
+                    maturity=datetime(2026, 7, 28, tzinfo=UTC),
+                ),
+            ),
             history=(_prior_snapshot(),),
             as_of=_AS_OF,
         )

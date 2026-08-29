@@ -1822,9 +1822,15 @@ installs `--only main` and Stage 4.3 already took that win.
 Two findings were recorded rather than acted on, both now in
 `part-x-coverage.md`:
 
-- `triggers.rally_rebalance_pct` is validated, documented and handbook-backed
-  but read by nothing — the only IPS key with no reader. The key stays;
-  building the trigger is a separate issue.
+- ~~`triggers.rally_rebalance_pct` is validated, documented and handbook-backed
+  but read by nothing — the only IPS key with no reader.~~ **Built in 5a
+  (#297)**, and replaced rather than wired: the scalar became the handbook's
+  four named bands (`rally_monitor_pct`/`_review_pct`/`_action_pct`/
+  `_urgent_pct` = 5/10/15/20), surfaced per tranche on the roll-status table
+  and book-level on the hedge-trigger panel and the digest. See
+  `part-x-coverage.md`. The same work turned up **#384**: the neighbouring
+  strike-drift trigger implements a *retired* handbook rule (a 45% OTM level)
+  as a 40 pp change since entry, and cannot fire for this program.
 - **A second orphan set**: the matplotlib half of `deltadewa/visualization/` —
   `base.py` (`OptionCharts`) and its five mixins, plus `convenience.py` and
   `_protocols.py`. 8 modules, ~2,760 lines, 51 tests, no importer outside

@@ -8,7 +8,8 @@ Compared against the snapshot from 2026-07-29.
 
 **Threshold crossings:**
 
-- **Worst roll verdict:** MONITOR → N/A
+- **Worst roll verdict:** MONITOR → ROLL (PUT 4,200, 28d to maturity, 180d roll window)
+- **Expired legs:** 0 → 1 leg past maturity
 - **Carry budget:** within budget → over budget
 - **IPS compliance (overall):** all pass → a metric failing
 - **IPS compliance: Annual carry cost:** pass → fail
@@ -18,6 +19,15 @@ Compared against the snapshot from 2026-07-29.
 - **Convexity:** 18.00% → 19.00% (+1.00%)
 - **VIX:** 18.00 → 22.00 (+4.00)
 - **Carry as % of notional:** 1.00% → 1.15% (+0.15pp)
+
+## Roll status by leg
+
+Where each leg stands right now. The crossing above reports what *changed*; this is the standing state behind it.
+
+| Verdict | Leg | Reason |
+| --- | --- | --- |
+| ROLL | PUT 4,200 | 28d to maturity, 180d roll window |
+| EXPIRED | PUT 234 | expired 2026-07-28 (30d ago) — no roll recommendation |
 
 ---
 

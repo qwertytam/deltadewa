@@ -108,6 +108,8 @@ def _snapshot(**kwargs: object) -> WeeklySnapshot:
         worst_roll_leg="PUT 4200",
         worst_roll_reason="30d to maturity",
         expired_leg_count=0,
+        rally_status="OK",
+        worst_rally_pct=3.0,
         first_as_of=_AS_OF,
         cumulative_carry_cost=1_000.0,
     )
@@ -125,6 +127,8 @@ class TestSnapshotFromReport:
             worst_roll_leg="PUT 4200",
             worst_roll_reason="30d to maturity",
             expired_leg_count=0,
+            rally_status="OK",
+            worst_rally_pct=3.0,
             first_as_of=date(2026, 7, 1),
             cumulative_carry_cost=5_000.0,
         )
