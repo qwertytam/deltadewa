@@ -1,5 +1,6 @@
 """Tests for deltadewa.analysis.hedge_triggers."""
 
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import Mock
@@ -770,10 +771,24 @@ class TestBookLevelRallyTrigger:
         assert "cannot be measured" in reason.reason
 
     def test_from_ips_maps_the_rally_bands(self) -> None:
-        """#297: the key that was validated and read by nothing."""
-        ips = load_ips_config(EXAMPLE_IPS_YAML)
+        """#297: the key that was validated and read by nothing.
 
-        thresholds = HedgeTriggerThresholds.from_ips(ips.triggers)
+        Deliberately built from values that are NOT the dataclass defaults.
+        Reading these off ``ips.example.yaml`` proves nothing: it ships
+        5.0/15.0, which are exactly the defaults, so an unmapped field would
+        pass — and did, until policy-leak-checker caught it. This is the
+        same trap ``test_from_ips_maps_all_non_gamma_thresholds`` above
+        already guards against.
+        """
+        triggers = replace(
+            load_ips_config(EXAMPLE_IPS_YAML).triggers,
+            rally_monitor_pct=6.5,
+            rally_action_pct=17.5,
+        )
 
-        assert thresholds.rally_monitor_pct == ips.triggers.rally_monitor_pct
-        assert thresholds.rally_action_pct == ips.triggers.rally_action_pct
+        thresholds = HedgeTriggerThresholds.from_ips(triggers)
+
+        assert thresholds.rally_monitor_pct == pytest.approx(6.5)
+        assert thresholds.rally_action_pct == pytest.approx(17.5)
+        assert HedgeTriggerThresholds().rally_monitor_pct != pytest.approx(6.5)
+        assert HedgeTriggerThresholds().rally_action_pct != pytest.approx(17.5)

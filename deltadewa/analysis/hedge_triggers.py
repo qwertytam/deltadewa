@@ -174,6 +174,8 @@ class HedgeTriggerThresholds:
             theta_cost_acceptable_pct=triggers.theta_cost_acceptable_pct,
             gamma_drift_moderate_pct=triggers.gamma_drift_moderate_pct,
             gamma_drift_high_pct=triggers.gamma_drift_high_pct,
+            rally_monitor_pct=triggers.rally_monitor_pct,
+            rally_action_pct=triggers.rally_action_pct,
         )
 
 
