@@ -354,7 +354,13 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
                     "Offset ratio",
                     className="big-number-label",
                     title=(
-                        "Hedge dollars gained per dollar of underlying loss"
+                        "Hedge dollars gained per dollar of underlying "
+                        "loss offset — the handbook's Crash Payoff Ratio "
+                        "(offset ratio is a blessed synonym). Distinct "
+                        "from the Payoff-vs-Premium Multiple shown "
+                        "elsewhere (payoff per dollar of premium paid, "
+                        "not per dollar of loss). See the handbook's "
+                        "Ratio Disambiguation page, part-6."
                     ),
                 ),
                 html.Span(offset_text, className="big-number"),

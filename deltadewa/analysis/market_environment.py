@@ -354,7 +354,13 @@ def assess_market_environment(
             The skew percentile band is converted to the 0-1 fraction
             ``get_skew_percentile`` returns once, here at the edge.
         skew_lookback_days: Lookback window passed to
-            ``get_skew_percentile`` (default 252).
+            ``get_skew_percentile`` (default 252). No caller overrides
+            this, so 252 (one trading year) is the window every skew
+            percentile the program reports is actually computed against.
+            It is unsourced against the handbook's own five-year canon
+            (see ``MarketDataProvider.get_skew_percentile``, #317) — a
+            live contradiction, not yet resolved here because changing it
+            changes every skew percentile the program reports.
 
     Returns:
         A fully classified ``MarketEnvironment``, or a degraded one with

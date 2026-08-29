@@ -45,10 +45,14 @@ budget:
   annual_carry_pct: 1.0
 
 convexity:
-  crash_scenario_pct: -20.0     # EXAMPLE VALUE — the crash move you're
+  crash_scenario_pct: -25.0     # EXAMPLE VALUE — the crash move you're
                                  # hedging against; single source of truth
-                                 # for it. -20% to -30% is a common tail-
-                                 # hedge design range.
+                                 # for it. The band below is defined AT this
+                                 # depth (handbook part-7,
+                                 # typical-hedge-program-targets: +10%..+20%
+                                 # at -25% SPX) — move this and you must
+                                 # re-derive target_min/max_pct, not just
+                                 # this line (#344).
   target_min_pct: 10.0          # EXAMPLE VALUE
   target_max_pct: 20.0          # EXAMPLE VALUE
   crash_vol_shock: 0.15         # flat additive vol bump at the crash spot (M1.2)

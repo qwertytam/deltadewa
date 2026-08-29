@@ -32,8 +32,8 @@ _VALID_CONFIG: dict[str, Any] = {
     "budget": {"annual_carry_pct": 2.0},
     "convexity": {
         "crash_scenario_pct": -25.0,
-        "target_min_pct": 15.0,
-        "target_max_pct": 25.0,
+        "target_min_pct": 10.0,
+        "target_max_pct": 20.0,
     },
     "drawdown": {"max_tolerance_pct": 20.0},
     "triggers": {
@@ -232,8 +232,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": 25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
             },
         }
         path = _write_yaml(tmp_path, config)
@@ -261,8 +261,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "crash_vol_shock": 0.20,
                 "skew_steepening": 0.30,
                 "skew_reference_delta": 0.15,
@@ -286,8 +286,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "crash_vol_shock": -0.05,
             },
         }
@@ -302,8 +302,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "skew_steepening": -0.05,
             },
         }
@@ -323,8 +323,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "skew_reference_delta": bad_delta,
             },
         }
@@ -355,8 +355,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "efficiency_min_ratio": 4.0,
                 "efficiency_max_ratio": 9.0,
             },
@@ -374,8 +374,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "efficiency_min_ratio": 6.0,
                 "efficiency_max_ratio": 3.0,
             },
@@ -391,8 +391,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "efficiency_min_ratio": -1.0,
             },
         }
@@ -430,8 +430,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "cliff_threshold_days": 270,
                 "cliff_review_days": 120,
                 "cliff_urgent_days": 45,
@@ -455,8 +455,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "cliff_review_days": 30,
                 "cliff_urgent_days": 90,
             },
@@ -472,8 +472,8 @@ class TestLoadIpsConfig:
             **_VALID_CONFIG,
             "convexity": {
                 "crash_scenario_pct": -25.0,
-                "target_min_pct": 15.0,
-                "target_max_pct": 25.0,
+                "target_min_pct": 10.0,
+                "target_max_pct": 20.0,
                 "cliff_threshold_days": -10,
             },
         }

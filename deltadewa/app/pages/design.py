@@ -1708,7 +1708,13 @@ def _delta_drift_panel_view(drift: DeltaDrift) -> Component:
             html.P(
                 "Hedge-only delta (options, no underlying) today vs. "
                 f"spot {drift.shock_pct:.0f}% — the handbook's own "
-                "worked example, not the IPS crash scenario.",
+                "worked example, not the IPS crash scenario. This "
+                "answers how fast the hedge starts biting in an "
+                'early-stage decline — it is not the "Delta ratio '
+                'deviation" trigger in the Hedge triggers panel above, '
+                "which instead measures how far net delta has wandered "
+                "from the book's target hedge ratio at today's market, "
+                "with no shock applied at all.",
                 className="plain-language",
             ),
             html.P(

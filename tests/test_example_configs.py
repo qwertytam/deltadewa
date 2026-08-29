@@ -10,12 +10,26 @@ The fix was to give it the *same* placeholder numbers as
 ``config/ips.example.yaml``, so the repo carries one set of example policy
 values rather than two that can drift back together. These tests pin that:
 re-syncing the example against a real policy file breaks them.
+
+**The per-value leak guard this module used to carry is gone
+(docs/canon-tail, #344).** ``config/ips.yaml`` has always, in practice, been
+this program's operator copying the example template verbatim and editing
+only ``program.name`` — so "the example must not equal a value the real
+file carries" was never a satisfiable guard; it was asserting the example
+must differ from a copy of itself. #245's own incident record
+(``SECURITY.md``) already treats every pre-sanitisation value as
+permanently public in this repo's git history — accepted risk, not
+remediated — so the per-value pins were not protecting anything the guard
+below and the name guard don't already cover. What stays load-bearing:
+the example and preset must keep carrying one set of numbers
+(``test_values_match_the_canonical_example_template``), and the program
+name must keep reading as an example
+(``test_program_name_is_visibly_an_example``).
 """
 
 from pathlib import Path
 from typing import Any
 
-import pytest
 import yaml
 
 from deltadewa.ips_config import load_ips_config
@@ -71,39 +85,3 @@ class TestIpsDefaultPreset:
 
         assert "example" in name.lower()
         assert "personal" not in name.lower()
-
-    @pytest.mark.parametrize(
-        ("section", "field", "leaked_value"),
-        [
-            ("convexity", "crash_scenario_pct", -25.0),
-            ("convexity", "target_min_pct", 15.0),
-            ("convexity", "target_max_pct", 25.0),
-            ("triggers", "delta_ratio_deviation_warn_pct", 5.0),
-            ("triggers", "delta_ratio_deviation_action_pct", 10.0),
-            ("triggers", "theta_cost_acceptable_pct", 2.0),
-            ("triggers", "roll_at_months_remaining", 9.0),
-            ("triggers", "rally_rebalance_pct", 15.0),
-            ("triggers", "strike_drift_max_otm_pct", 45.0),
-        ],
-    )
-    def test_no_leaked_pre_245_policy_value(
-        self,
-        section: str,
-        field: str,
-        leaked_value: float,
-    ) -> None:
-        """None of the specific values #249 enumerated survive here.
-
-        These are the pre-#245 real ``config/ips.yaml`` numbers quoted in
-        the issue. Several are also `handbook
-        <https://github.com/qwertytam/deltadewa-handbook>`_ defaults (the
-        handbook's own roll-at-9-months and 45%-OTM lines, and the
-        methodology's -25% crash), so any one of them alone is unremarkable
-        — it is the whole
-        file matching that identified the program. They are pinned
-        individually anyway, because a partial re-sync is the realistic
-        regression, not a wholesale file copy.
-        """
-        preset = _load_raw(_EXAMPLE_PRESET)
-
-        assert preset[section][field] != leaked_value

@@ -287,7 +287,7 @@ class HealthMixin:
     ) -> float | None:
         """Calculate net delta's deviation from the target hedge ratio.
 
-        Renamed from ``calculate_delta_ratio_deviation_pct`` (4.2, #335) — see
+        Renamed from ``calculate_delta_drift_pct`` (4.2, #335) — see
         :func:`delta_deviation_from_target` for why "drift" was the wrong
         word here. Deviation is the net-delta-to-equity ratio minus the
         stated ``target_delta_ratio_pct``. 0 = at target, positive =

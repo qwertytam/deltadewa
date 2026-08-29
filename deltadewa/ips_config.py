@@ -109,6 +109,19 @@ _DEFAULT_VEGA_SUFFICIENCY_MAX_PCT: Final[float] = 4.0
 # above, those three genuinely were grading lines, so the carry-over was sound;
 # "when does decaying convexity force a decision" is a mandate question, not a
 # display choice.
+# Stays 180, not 150 (docs/canon-tail, #338 loose end). Both shipped
+# templates decoupled their example ``cliff_threshold_days`` to 150
+# specifically to break the numeric coincidence with
+# ``triggers.roll_at_months_remaining * 30`` (6.0 * 30 == 180) — a
+# pedagogical EXAMPLE VALUE, not a claim that 150 is a better module
+# default. This constant is the sourced number (the migrated dashboard
+# gauge boundary, above); 150 is not sourced to anything and would trade
+# a real citation for an unsourced one just to kill a coincidence that
+# only exists in the example file. A config omitting
+# ``convexity.cliff_threshold_days`` gets this value, independent of
+# whatever ``triggers.roll_at_months_remaining`` it carries — the two
+# keys are read by different code paths and neither derives from the
+# other.
 _DEFAULT_CLIFF_THRESHOLD_DAYS: Final[int] = 180
 _DEFAULT_CLIFF_REVIEW_DAYS: Final[int] = 90
 _DEFAULT_CLIFF_URGENT_DAYS: Final[int] = 30
@@ -260,9 +273,21 @@ class IpsConvexity:
     """Target convexity (hedge payoff) range under a crash scenario.
 
     ``crash_scenario_pct`` is the single source of truth for the crash *move*
-    (a signed percent, e.g. ``-25.0``) across every panel. ``crash_vol_shock``,
-    ``skew_steepening``, ``skew_reference_delta`` and ``crash_floor_reported``
-    are the crash-repricing knobs co-located here (see
+    (a signed percent, e.g. ``-25.0``) across every panel. ``target_min_pct``
+    / ``target_max_pct`` are the required convexity band *at that depth* —
+    the scenario is part of the band, not an independent dial: a convexity
+    figure quoted at a different crash depth is a different number, not a
+    looser or tighter reading of the same one. The handbook's own canon
+    (`Typical Hedge Program Targets
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/typical-hedge-program-targets/>`_)
+    states the pair together as +10%..+20% convexity **at -25% SPX** (4.2,
+    #294/#344) — quoting the band without the depth it was measured at is
+    what let the shipped example drift to -20% while the band stayed
+    10-20% (#344; fixed docs/canon-tail).
+
+    ``crash_vol_shock``, ``skew_steepening``, ``skew_reference_delta`` and
+    ``crash_floor_reported`` are the crash-repricing knobs co-located here
+    (see
     ``docs/repricing-methodology.md`` §5): the flat additive volatility bump
     applied at the crash spot, an optional deep-OTM skew steepening added on top
     of that bump and capped at each leg's own ~10-delta wing (M1.6/M1.7; ``0.0``
