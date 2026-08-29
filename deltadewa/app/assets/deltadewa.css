@@ -326,6 +326,22 @@ body {
   background: #c62828;
 }
 
+/* EXPIRED (#373) is a lifecycle fact, not a rung on the urgency scale, so
+   it is deliberately off the hold-to-roll colour ramp: slate, not red. An
+   expired leg is gone, not urgent, and must not compete visually with a
+   real ROLL sitting next to it in the same list. */
+
+.verdict-badge--expired {
+  background: #55606b;
+}
+
+.decision-note {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #6b7681;
+  flex-shrink: 0;
+}
+
 /* Hedge rebalance triggers (TriggerStatus). Shares the roll badge's shape
    deliberately — same visual grammar — but MONITOR is the only value the
    two enums have in common, so the rest get their own rules. UNAVAILABLE is

@@ -2,18 +2,24 @@
 
 Combines existing health metrics (crash convexity) with new entry-tracking
 data (``OptionPosition.entry_spot``/``entry_date``) to produce a
-HOLD/MONITOR/REVIEW/ROLL verdict for every position in a portfolio.
+HOLD/MONITOR/REVIEW/ROLL verdict for every position in a portfolio, or
+``EXPIRED`` for a leg that is already gone (#373).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    crash_hedge_value,
+    hedge_value,
+    is_expired,
+)
 from deltadewa.clock import days_between
 from deltadewa.constants import OptionType
 from deltadewa.valuation import OptionValuation
@@ -25,12 +31,27 @@ if TYPE_CHECKING:
 
 
 class RollVerdict(StrEnum):
-    """Per-tranche roll recommendation, in increasing order of urgency."""
+    """Per-tranche roll recommendation.
+
+    ``HOLD < MONITOR < REVIEW < ROLL`` is the urgency scale, and
+    :data:`_SEVERITY` is the only place it is written down.
+
+    ``EXPIRED`` (#373) is deliberately **not on that scale**. It is a
+    lifecycle fact, not a policy grade -- the same disposition
+    :class:`~deltadewa.analysis.position_aging.ExpiryBucketLabel` gives its
+    own ``EXPIRED`` member, and read off the same boundary
+    (:func:`~deltadewa.analysis.crash_repricing.is_expired`) rather than an
+    IPS threshold. An expired leg is not urgent, it is gone: ranking it
+    above ``ROLL`` would let it dominate a headline over a real roll, and
+    below ``HOLD`` would read as "fine". So it gets no severity at all and
+    every reduction over verdicts iterates :data:`GRADABLE_VERDICTS`.
+    """
 
     HOLD = "HOLD"
     MONITOR = "MONITOR"
     REVIEW = "REVIEW"
     ROLL = "ROLL"
+    EXPIRED = "EXPIRED"
 
 
 _SEVERITY: dict[RollVerdict, int] = {
@@ -39,6 +60,22 @@ _SEVERITY: dict[RollVerdict, int] = {
     RollVerdict.REVIEW: 2,
     RollVerdict.ROLL: 3,
 }
+
+GRADABLE_VERDICTS: Final[frozenset[RollVerdict]] = frozenset(_SEVERITY)
+"""The verdicts that sit on the urgency scale -- everything but ``EXPIRED``.
+
+Callers reducing many records to one (the digest's worst-verdict line, a
+panel headline) must filter on this rather than assuming every member of
+:class:`RollVerdict` has a severity.
+"""
+
+_EXPIRED_TRIGGER_REASON: Final[str] = "not evaluated - leg expired"
+"""Stand-in reason for an expired leg's three (un-run) roll triggers.
+
+An expired leg short-circuits before any trigger is evaluated, so the
+per-trigger cells have nothing real to report. Saying so beats rendering
+three readings computed from a negative day count.
+"""
 
 
 @dataclass(frozen=True)
@@ -65,13 +102,36 @@ class TriggerReason:
 
 @dataclass(frozen=True)
 class RollStatusRecord:
-    """One row of the roll status table — one option tranche."""
+    """One row of the roll status table — one option tranche.
+
+    Two convexity numbers, deliberately (#306). ``crash_convexity_pct`` is
+    the **book's** crash convexity, which is what
+    ``convexity_target_min_pct``/``_max_pct`` band and what
+    ``convexity_trigger`` grades — the IPS target is stated against the whole
+    book, so the gate cannot be applied per leg. Before #306 that book figure
+    was the only one here, repeated down a per-tranche column as though each
+    tranche had been tested on its own.
+
+    ``leg_convexity_contribution_pct`` is **this leg's share** of it, in the
+    same units (percentage points of the protected book), computed on the same
+    :class:`~deltadewa.analysis.crash_repricing.CrashShock`. Contributions are
+    exactly additive: they sum to ``crash_convexity_pct``, because both terms
+    of the ratio are sums over legs and the denominator is constant. That is
+    the number that answers *which* tranche to roll, which the book figure
+    never could.
+
+    It is ``None`` — not ``0.0`` — for an expired leg, which
+    :func:`~deltadewa.analysis.crash_repricing.crash_hedge_value` excludes
+    from pricing entirely (#362). Zero would read as "this leg is worthless";
+    ``None`` reads as "this leg was not priced", which is what happened.
+    """
 
     position: OptionPosition
     moneyness: MoneynessDrift
     days_to_maturity: int
     roll_window_days: int
     crash_convexity_pct: float
+    leg_convexity_contribution_pct: float | None
     convexity_target_min_pct: float
     convexity_target_max_pct: float
     verdict: RollVerdict
@@ -223,6 +283,118 @@ def new_strike_for_entry_otm(
     return current_spot * (1 - entry_otm_pct / 100)
 
 
+def leg_convexity_contribution_pct(
+    portfolio: OptionPortfolio,
+    position: OptionPosition,
+    *,
+    shock: CrashShock,
+) -> float | None:
+    """Return one leg's share of the book's crash convexity, same units.
+
+    ``(V_crash(leg) - V_today(leg)) / P_today * 100`` against the same
+    protected book ``P_today`` that
+    :func:`~deltadewa.analysis.crash_repricing.crash_convexity_pct` divides
+    by, so contributions across every leg sum **exactly** to the book figure
+    — both terms of the ratio are sums over legs and the denominator does not
+    depend on which legs are selected. Short legs need no special handling:
+    ``position_value`` already carries the quantity sign.
+
+    Do not compare the result against the IPS convexity band. The band is
+    stated against the whole book; a leg's contribution is a fraction of it,
+    so grading one against the other would fail every row (#306).
+
+    Args:
+        portfolio: The book the leg belongs to — supplies the protected-book
+            denominator and the market state the leg is repriced in.
+        position: The single leg to value.
+        shock: The crash basis, built once by the caller with
+            :meth:`CrashShock.from_ips` so every leg and the book figure share
+            one crash state.
+
+    Returns:
+        The leg's contribution in percentage points of the protected book, or
+        ``None`` when the book has no underlying (the ratio is undefined) or
+        the leg is expired and therefore never priced (#362) — ``None`` rather
+        than ``0.0``, which would read as a worthless leg rather than an
+        unpriced one.
+
+    """
+    book = abs(portfolio.underlying_quantity * portfolio.spot_price)
+    if book == 0:
+        return None
+    if is_expired(position, valuation_date=portfolio.valuation_date):
+        return None
+    legs = [position]
+    v_today = hedge_value(portfolio, positions=legs)
+    v_crash = crash_hedge_value(portfolio, shock=shock, positions=legs)
+    return (v_crash - v_today) / book * 100.0
+
+
+def expired_reason(position: OptionPosition, days_to_maturity: int) -> str:
+    """Plain-language reason text for an expired leg (#373).
+
+    Says it in words rather than leaving a negative day count as the only
+    signal. Matches the wording
+    :func:`~deltadewa.analysis.crash_repricing.describe_expired_legs` uses for
+    #375's convexity caveat, so one leg reads identically wherever it is
+    named.
+
+    Args:
+        position: The expired leg.
+        days_to_maturity: Its (negative or zero) day count, as
+            :func:`~deltadewa.clock.days_between` computed it.
+
+    Returns:
+        E.g. ``"expired 2025-06-17 (435d ago) — no roll recommendation"``.
+
+    """
+    expiry = position.option.maturity_date.date()
+    return (
+        f"expired {expiry} ({abs(days_to_maturity)}d ago)"
+        " — no roll recommendation"
+    )
+
+
+def verdict_reason(record: RollStatusRecord) -> str:
+    """Return the plain-language reason driving ``record.verdict``.
+
+    Lives here rather than in ``app/`` because the digest needs it too and
+    ``reporting/`` must not import from ``app/``; ``app.format`` keeps a thin
+    delegating alias.
+
+    ``EXPIRED`` is answered first — its three triggers were never evaluated,
+    so matching against them would return a stand-in string. Otherwise the
+    verdict is matched against the four per-trigger verdicts and that
+    trigger's ``.reason`` is returned. When ``record.suppressed`` is ``True``
+    — or, defensively, when no trigger matches — this is the roll-suppression
+    case and a sentence naming the suppression is returned instead.
+
+    Args:
+        record: One position's roll status record.
+
+    Returns:
+        A one-sentence, human-readable explanation of the verdict.
+
+    """
+    if record.verdict is RollVerdict.EXPIRED:
+        return expired_reason(record.position, record.days_to_maturity)
+
+    if not record.suppressed:
+        for trigger in (
+            record.time_trigger,
+            record.convexity_trigger,
+            record.drift_trigger,
+        ):
+            if trigger.verdict == record.verdict:
+                return trigger.reason
+
+    return (
+        "Strike drift alone flagged a roll, but convexity is in-band "
+        "and there's no time pressure, so this is held at "
+        f"{record.verdict.value}."
+    )
+
+
 def evaluate_roll_status(
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
@@ -238,6 +410,9 @@ def evaluate_roll_status(
 
     Returns:
         One RollStatusRecord per position, in portfolio.positions order.
+        An already-expired leg gets a record graded ``EXPIRED`` with its
+        three triggers un-run and no roll-up cost (#373) — it is reported,
+        never dropped, and never graded on the urgency scale.
 
     """
     if current_spot is None:
@@ -255,9 +430,12 @@ def evaluate_roll_status(
     # (vol_shock=0) understated convexity and biased the roll toward firing.
     # The band below is read straight off `convexity` — pricing and policy
     # travel separately by design.
-    crash_convexity_pct = analyzer.calculate_crash_convexity_pct(
-        CrashShock.from_ips(convexity),
-    )
+    #
+    # Built once and reused for every leg's contribution below, so the book
+    # figure and its per-leg decomposition can only ever be on one crash
+    # state — the property that makes the contributions sum back to it (#306).
+    shock = CrashShock.from_ips(convexity)
+    crash_convexity_pct = analyzer.calculate_crash_convexity_pct(shock)
 
     # Measure DTE against the portfolio's (what-if) valuation date, not the
     # wall clock, so moving the valuation date moves every roll verdict.
@@ -266,6 +444,38 @@ def evaluate_roll_status(
 
     for position in portfolio.positions:
         days_to_maturity = days_between(as_of, position.option.maturity_date)
+        moneyness = compute_moneyness_drift(position, current_spot)
+
+        # An expired leg short-circuits before any trigger runs (#373). Its
+        # day count is a large negative, which trivially satisfies the roll
+        # window and used to grade it ROLL — the most urgent possible verdict
+        # on a position that is simply gone. Moneyness is still computed: it
+        # is a fact about the strike, and the table's entry/now OTM columns
+        # stay populated.
+        if is_expired(position, valuation_date=as_of):
+            expired_trigger = TriggerReason(
+                RollVerdict.EXPIRED,
+                reason=_EXPIRED_TRIGGER_REASON,
+            )
+            records.append(
+                RollStatusRecord(
+                    position=position,
+                    moneyness=moneyness,
+                    days_to_maturity=days_to_maturity,
+                    roll_window_days=int(roll_window_days),
+                    crash_convexity_pct=crash_convexity_pct,
+                    leg_convexity_contribution_pct=None,
+                    convexity_target_min_pct=convexity.target_min_pct,
+                    convexity_target_max_pct=convexity.target_max_pct,
+                    verdict=RollVerdict.EXPIRED,
+                    suppressed=False,
+                    estimated_roll_up_cost=None,
+                    time_trigger=expired_trigger,
+                    convexity_trigger=expired_trigger,
+                    drift_trigger=expired_trigger,
+                ),
+            )
+            continue
 
         time_trigger = _time_trigger_verdict(
             days_to_maturity,
@@ -277,7 +487,6 @@ def evaluate_roll_status(
             convexity.target_min_pct,
             convexity.target_max_pct,
         )
-        moneyness = compute_moneyness_drift(position, current_spot)
         drift_trigger = _strike_drift_trigger_verdict(
             moneyness.drift_pct,
             triggers.strike_drift_max_otm_pct,
@@ -331,6 +540,13 @@ def evaluate_roll_status(
                 days_to_maturity=days_to_maturity,
                 roll_window_days=int(roll_window_days),
                 crash_convexity_pct=crash_convexity_pct,
+                leg_convexity_contribution_pct=(
+                    leg_convexity_contribution_pct(
+                        portfolio,
+                        position,
+                        shock=shock,
+                    )
+                ),
                 convexity_target_min_pct=convexity.target_min_pct,
                 convexity_target_max_pct=convexity.target_max_pct,
                 verdict=verdict,

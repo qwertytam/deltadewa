@@ -6,12 +6,19 @@ import json
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
+from deltadewa.analysis.roll_status import (
+    MoneynessDrift,
+    RollStatusRecord,
+    RollVerdict,
+    TriggerReason,
+)
 from deltadewa.app.import_portfolio import main as import_portfolio_main
+from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.portfolio.position import OptionPosition
 from deltadewa.reporting import weekly_report as weekly_report_module
 from deltadewa.reporting.email_smtp import EmailDeliveryError
 from deltadewa.reporting.program_report import (
@@ -27,8 +34,10 @@ from deltadewa.reporting.program_report import (
     ReturnFramingSection,
 )
 from deltadewa.reporting.weekly_report import (
+    _expired_leg_count,
     _headline,
     _read_backup_heartbeat_warning,
+    _worst_roll_record,
     _worst_roll_verdict,
     build_weekly_digest,
     load_snapshot_history,
@@ -41,6 +50,8 @@ from deltadewa.reporting.weekly_snapshot import (
     SnapshotDiff,
     WeeklySnapshot,
 )
+from deltadewa.valuation import OptionValuation
+from tests.clock_helpers import days_from_today
 
 _GOLDEN_PATH = Path(__file__).parent / "goldens" / "weekly_digest.md"
 _EXAMPLE_IPS_YAML = (
@@ -153,6 +164,9 @@ def _prior_snapshot() -> WeeklySnapshot:
         hedge_cost_verdict="FAIR",
         decision_verdict="MAINTAIN",
         worst_roll_verdict="MONITOR",
+        worst_roll_leg="PUT 4200",
+        worst_roll_reason="30d to maturity, 180d roll window",
+        expired_leg_count=0,
         ips_compliance_all_pass=True,
         ips_compliance_rows=(
             ("Annual carry cost", True),
@@ -160,6 +174,51 @@ def _prior_snapshot() -> WeeklySnapshot:
         ),
         premium_paid_point_in_time=290_000.0,
         cumulative_carry_cost=1_400.0,
+    )
+
+
+def _roll_record(
+    verdict: RollVerdict,
+    *,
+    strike: float = 4200.0,
+    reason: str = "30d to maturity, 180d roll window",
+    days_to_maturity: int = 30,
+) -> RollStatusRecord:
+    """A real RollStatusRecord — the reduction now reads more than .verdict."""
+    option = OptionValuation(
+        spot_price=5000.0,
+        strike_price=strike,
+        maturity_date=days_from_today(days_to_maturity),
+        volatility=0.2,
+        risk_free_rate=0.04,
+        dividend_yield=0.0,
+        option_type=OptionType.PUT,
+        exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    trigger = TriggerReason(verdict, reason=reason)
+    return RollStatusRecord(
+        position=OptionPosition(
+            option=option,
+            quantity=10,
+            exercise_style=ExerciseStyle.EUROPEAN,
+        ),
+        moneyness=MoneynessDrift(
+            entry_otm_pct=16.0,
+            current_otm_pct=16.0,
+            drift_pct=0.0,
+        ),
+        days_to_maturity=days_to_maturity,
+        roll_window_days=180,
+        crash_convexity_pct=18.0,
+        leg_convexity_contribution_pct=4.5,
+        convexity_target_min_pct=10.0,
+        convexity_target_max_pct=20.0,
+        verdict=verdict,
+        suppressed=False,
+        estimated_roll_up_cost=None,
+        time_trigger=trigger,
+        convexity_trigger=trigger,
+        drift_trigger=trigger,
     )
 
 
@@ -171,12 +230,192 @@ class TestWorstRollVerdict:
 
     def test_picks_the_most_severe_verdict(self) -> None:
         records = [
-            SimpleNamespace(verdict=SimpleNamespace(value="HOLD")),
-            SimpleNamespace(verdict=SimpleNamespace(value="ROLL")),
-            SimpleNamespace(verdict=SimpleNamespace(value="MONITOR")),
+            _roll_record(RollVerdict.HOLD),
+            _roll_record(RollVerdict.ROLL),
+            _roll_record(RollVerdict.MONITOR),
         ]
 
         assert _worst_roll_verdict(records) == "ROLL"
+
+    def test_single_record_is_its_own_worst(self) -> None:
+        """Degenerate case: one leg."""
+        assert _worst_roll_verdict([_roll_record(RollVerdict.REVIEW)]) == (
+            "REVIEW"
+        )
+
+    def test_all_identical_verdicts_reduce_to_that_verdict(self) -> None:
+        """Degenerate case: nothing to choose between."""
+        records = [_roll_record(RollVerdict.MONITOR) for _ in range(3)]
+
+        assert _worst_roll_verdict(records) == "MONITOR"
+
+
+class TestWorstRollRecordExcludesExpired:
+    """#373/#374: EXPIRED has no severity, so it cannot win the reduction."""
+
+    def test_expired_never_outranks_a_real_roll(self) -> None:
+        records = [
+            _roll_record(RollVerdict.EXPIRED, strike=234.0),
+            _roll_record(RollVerdict.ROLL, strike=4200.0),
+        ]
+
+        worst = _worst_roll_record(records)
+
+        assert worst is not None
+        assert worst.verdict is RollVerdict.ROLL
+        assert worst.position.option.strike_price == pytest.approx(4200.0)
+
+    def test_expired_never_outranks_even_a_hold(self) -> None:
+        records = [
+            _roll_record(RollVerdict.EXPIRED),
+            _roll_record(RollVerdict.HOLD),
+        ]
+
+        worst = _worst_roll_record(records)
+
+        assert worst is not None
+        assert worst.verdict is RollVerdict.HOLD
+
+    def test_all_expired_book_has_no_gradable_verdict(self) -> None:
+        """Degenerate case: nothing gradable left."""
+        records = [_roll_record(RollVerdict.EXPIRED) for _ in range(2)]
+
+        assert _worst_roll_record(records) is None
+        assert _worst_roll_verdict(records) == "N/A"
+
+    def test_expired_legs_are_counted_separately(self) -> None:
+        records = [
+            _roll_record(RollVerdict.EXPIRED),
+            _roll_record(RollVerdict.EXPIRED),
+            _roll_record(RollVerdict.HOLD),
+        ]
+
+        assert _expired_leg_count(records) == 2
+
+    def test_empty_book_counts_no_expired_legs(self) -> None:
+        """Degenerate case: empty."""
+        assert _expired_leg_count(()) == 0
+
+    def test_ties_break_on_portfolio_order(self) -> None:
+        """Stability matters: a flapping winner is a phantom crossing."""
+        records = [
+            _roll_record(RollVerdict.ROLL, strike=4200.0),
+            _roll_record(RollVerdict.ROLL, strike=3900.0),
+        ]
+
+        worst = _worst_roll_record(records)
+
+        assert worst is not None
+        assert worst.position.option.strike_price == pytest.approx(4200.0)
+
+
+class TestDigestNamesTheLegAndReason:
+    """#374: the digest is the surface a partner reads — it must explain."""
+
+    def test_crossing_names_the_worst_leg_and_reason(self) -> None:
+        report = _make_report()
+        records = [
+            _roll_record(
+                RollVerdict.ROLL,
+                strike=4200.0,
+                reason="28d to maturity, 180d roll window",
+            ),
+        ]
+        prior = replace(_prior_snapshot(), worst_roll_verdict="HOLD")
+
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=records,
+            as_of=_AS_OF,
+            history=(prior,),
+        )
+        rendered = render_weekly_digest_markdown(digest)
+
+        crossing = next(
+            c for c in digest.diff.crossings if c.label == "Worst roll verdict"
+        )
+        assert "PUT 4,200" in crossing.detail
+        assert "28d to maturity" in crossing.detail
+        assert "PUT 4,200" in rendered
+
+    def test_per_leg_table_lists_every_leg(self) -> None:
+        report = _make_report()
+        records = [
+            _roll_record(RollVerdict.HOLD, strike=4200.0),
+            _roll_record(RollVerdict.EXPIRED, strike=234.0),
+        ]
+
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=records,
+            as_of=_AS_OF,
+        )
+        markdown = render_weekly_digest_markdown(digest)
+        html = render_weekly_digest_html(digest)
+
+        assert "Roll status by leg" in markdown
+        assert "PUT 4,200" in markdown
+        assert "PUT 234" in markdown
+        assert "EXPIRED" in markdown
+        assert "Roll status by leg" in html
+        assert "PUT 234" in html
+
+    def test_empty_book_renders_no_roll_table(self) -> None:
+        """Degenerate case: nothing to tabulate, so no empty table."""
+        digest = build_weekly_digest(
+            report=_make_report(),
+            roll_records=(),
+            as_of=_AS_OF,
+        )
+
+        assert "Roll status by leg" not in render_weekly_digest_markdown(
+            digest,
+        )
+
+    def test_reason_ticking_down_is_not_a_crossing(self) -> None:
+        """The whole reason attribution is carried, not diffed.
+
+        A day count moves every week. If it were part of the diffed field
+        an unchanged book would report a threshold crossing every Monday.
+        """
+        report = _make_report()
+        prior_digest = build_weekly_digest(
+            report=report,
+            roll_records=[
+                _roll_record(RollVerdict.ROLL, reason="30d to maturity"),
+            ],
+            as_of=_AS_OF,
+        )
+        current = build_weekly_digest(
+            report=report,
+            roll_records=[
+                _roll_record(RollVerdict.ROLL, reason="23d to maturity"),
+            ],
+            as_of=_AS_OF,
+            history=(prior_digest.snapshot,),
+        )
+
+        labels = [c.label for c in current.diff.crossings]
+        assert "Worst roll verdict" not in labels
+
+    def test_a_leg_expiring_is_reported_as_its_own_crossing(self) -> None:
+        """Otherwise ROLL -> N/A reads as the problem solving itself."""
+        report = _make_report()
+        prior_digest = build_weekly_digest(
+            report=report,
+            roll_records=[_roll_record(RollVerdict.ROLL)],
+            as_of=_AS_OF,
+        )
+        current = build_weekly_digest(
+            report=report,
+            roll_records=[_roll_record(RollVerdict.EXPIRED)],
+            as_of=_AS_OF,
+            history=(prior_digest.snapshot,),
+        )
+
+        details = {c.label: c.detail for c in current.diff.crossings}
+        assert details["Worst roll verdict"].endswith("ROLL → N/A")
+        assert "0 → 1" in details["Expired legs"]
 
 
 class TestBuildWeeklyDigest:

@@ -26,6 +26,7 @@ from deltadewa.ips_config import (
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
+from tests.clock_helpers import days_from_today
 
 
 def _make_ips_config(
@@ -542,3 +543,238 @@ class TestEvaluateRollStatus:
         assert records[0].moneyness.entry_otm_pct is None
         assert records[0].verdict == RollVerdict.HOLD
         assert records[0].estimated_roll_up_cost is None
+
+
+def _expiring_position(
+    days_to_maturity: int,
+    *,
+    strike_price: float = 90.0,
+    quantity: int = 10,
+    option_type: OptionType = OptionType.PUT,
+) -> OptionPosition:
+    """Build a leg whose maturity is seeded off the *program* clock.
+
+    ``_make_position`` above seeds from ``datetime.now(tz=UTC)``, which
+    disagrees with a portfolio's ``program_trading_date()``-derived
+    valuation date for up to four hours a night (#321/#343). Every
+    expiry-boundary assertion below turns on the exact day count, so these
+    fixtures route through ``tests/clock_helpers`` instead.
+    """
+    option = OptionValuation(
+        spot_price=100.0,
+        strike_price=strike_price,
+        maturity_date=days_from_today(days_to_maturity),
+        volatility=0.2,
+        risk_free_rate=0.04,
+        dividend_yield=0.0,
+        option_type=option_type,
+        exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    return OptionPosition(
+        option=option,
+        quantity=quantity,
+        exercise_style=ExerciseStyle.EUROPEAN,
+        entry_spot=100.0,
+        entry_date=days_from_today(-30),
+    )
+
+
+def _hedged_portfolio(*positions: OptionPosition) -> OptionPortfolio:
+    """A book with an underlying, so convexity ratios are defined."""
+    portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=1000)
+    portfolio.positions.extend(positions)
+    return portfolio
+
+
+class TestExpiredLegVerdict:
+    """#373: an expired leg is gone, not urgent."""
+
+    def test_expired_leg_reads_expired_not_roll(self) -> None:
+        """A leg that expired long ago must not grade as the worst roll."""
+        portfolio = _hedged_portfolio(_expiring_position(-435))
+        ips = _make_ips_config(roll_at_months_remaining=6.0)
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.verdict is RollVerdict.EXPIRED
+        assert record.days_to_maturity == -435
+
+    def test_expired_reason_says_so_in_words(self) -> None:
+        """The sign of the day count must not be the only signal."""
+        portfolio = _hedged_portfolio(_expiring_position(-435))
+        ips = _make_ips_config()
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+        reason = roll_status.verdict_reason(record)
+
+        assert "expired" in reason
+        assert "435d ago" in reason
+        assert str(record.position.option.maturity_date.date()) in reason
+
+    def test_expired_at_the_boundary_is_expired(self) -> None:
+        """``maturity <= valuation_date`` is the boundary (is_expired)."""
+        portfolio = _hedged_portfolio(_expiring_position(0))
+        ips = _make_ips_config()
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.verdict is RollVerdict.EXPIRED
+
+    def test_one_day_of_runway_is_still_graded(self) -> None:
+        """The guard is on residence, not near-expiry — 1d out still rolls."""
+        portfolio = _hedged_portfolio(_expiring_position(1))
+        ips = _make_ips_config(roll_at_months_remaining=6.0)
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.verdict is RollVerdict.ROLL
+
+    def test_expired_leg_runs_no_triggers_and_costs_nothing(self) -> None:
+        """Three triggers computed off a negative day count are noise."""
+        portfolio = _hedged_portfolio(_expiring_position(-30))
+        ips = _make_ips_config()
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.estimated_roll_up_cost is None
+        assert record.suppressed is False
+        for trigger in (
+            record.time_trigger,
+            record.convexity_trigger,
+            record.drift_trigger,
+        ):
+            assert trigger.verdict is RollVerdict.EXPIRED
+            assert "expired" in trigger.reason
+
+    def test_expired_leg_keeps_its_moneyness(self) -> None:
+        """Strike vs spot is a fact; the table's OTM columns stay populated."""
+        portfolio = _hedged_portfolio(_expiring_position(-30))
+        ips = _make_ips_config()
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.moneyness.current_otm_pct == pytest.approx(10.0)
+        assert record.moneyness.entry_otm_pct == pytest.approx(10.0)
+
+    def test_expired_is_not_on_the_severity_scale(self) -> None:
+        """Structural pin: no severity, so no reduction can rank it."""
+        assert RollVerdict.EXPIRED not in roll_status._SEVERITY
+        assert RollVerdict.EXPIRED not in roll_status.GRADABLE_VERDICTS
+        assert (
+            frozenset(
+                {
+                    RollVerdict.HOLD,
+                    RollVerdict.MONITOR,
+                    RollVerdict.REVIEW,
+                    RollVerdict.ROLL,
+                },
+            )
+            == roll_status.GRADABLE_VERDICTS
+        )
+
+    def test_expired_leg_is_reported_never_dropped(self) -> None:
+        """Every position gets a record, expired or not."""
+        portfolio = _hedged_portfolio(
+            _expiring_position(-435),
+            _expiring_position(200, strike_price=80.0),
+        )
+        ips = _make_ips_config()
+
+        records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
+
+        assert len(records) == 2
+        assert records[0].verdict is RollVerdict.EXPIRED
+        assert records[1].verdict is not RollVerdict.EXPIRED
+
+
+class TestLegConvexityContribution:
+    """#306: the per-tranche number the book-level gate never carried."""
+
+    def test_contributions_sum_to_the_book_figure(self) -> None:
+        """Exactly additive — this is what makes the column trustworthy."""
+        portfolio = _hedged_portfolio(
+            _expiring_position(200, strike_price=90.0),
+            _expiring_position(400, strike_price=80.0),
+            _expiring_position(
+                300,
+                strike_price=110.0,
+                quantity=-5,
+                option_type=OptionType.CALL,
+            ),
+        )
+        ips = _make_ips_config()
+
+        records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
+        total = sum(r.leg_convexity_contribution_pct or 0.0 for r in records)
+
+        assert total == pytest.approx(
+            records[0].crash_convexity_pct,
+            abs=1e-9,
+        )
+
+    def test_rows_differ_when_tranches_differ(self) -> None:
+        """The defect: one book-level number repeated down every row."""
+        portfolio = _hedged_portfolio(
+            _expiring_position(200, strike_price=90.0),
+            _expiring_position(200, strike_price=70.0),
+        )
+        ips = _make_ips_config()
+
+        records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
+        first, second = (r.leg_convexity_contribution_pct for r in records)
+
+        assert first is not None
+        assert second is not None
+        assert first != second
+
+    def test_all_identical_tranches_contribute_equally(self) -> None:
+        """Degenerate case: identical legs must not be made to differ."""
+        portfolio = _hedged_portfolio(
+            _expiring_position(200, strike_price=90.0),
+            _expiring_position(200, strike_price=90.0),
+        )
+        ips = _make_ips_config()
+
+        records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
+
+        assert records[0].leg_convexity_contribution_pct == pytest.approx(
+            records[1].leg_convexity_contribution_pct,
+        )
+
+    def test_single_leg_contributes_the_whole_book_figure(self) -> None:
+        """Degenerate case: one leg, so the decomposition is the total."""
+        portfolio = _hedged_portfolio(_expiring_position(200))
+        ips = _make_ips_config()
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.leg_convexity_contribution_pct == pytest.approx(
+            record.crash_convexity_pct,
+            abs=1e-9,
+        )
+
+    def test_expired_leg_contributes_none_not_zero(self) -> None:
+        """Zero reads as worthless; None reads as never priced."""
+        portfolio = _hedged_portfolio(_expiring_position(-30))
+        ips = _make_ips_config()
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.leg_convexity_contribution_pct is None
+
+    def test_no_underlying_yields_none(self) -> None:
+        """Degenerate case: the ratio is undefined without a protected book."""
+        portfolio = OptionPortfolio(spot_price=100.0)
+        portfolio.positions.append(_expiring_position(200))
+        ips = _make_ips_config()
+
+        record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
+
+        assert record.leg_convexity_contribution_pct is None
+
+    def test_empty_book_yields_no_records(self) -> None:
+        """Degenerate case: nothing to decompose."""
+        portfolio = OptionPortfolio(spot_price=100.0, underlying_quantity=1000)
+        ips = _make_ips_config()
+
+        assert evaluate_roll_status(portfolio, ips, current_spot=100.0) == []

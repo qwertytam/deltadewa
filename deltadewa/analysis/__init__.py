@@ -100,9 +100,12 @@ from deltadewa.analysis.roll_planner import (
     gamma_theta_delay,
 )
 from deltadewa.analysis.roll_status import (
+    GRADABLE_VERDICTS,
     RollVerdict,
     evaluate_roll_status,
+    leg_convexity_contribution_pct,
     new_strike_for_entry_otm,
+    verdict_reason,
 )
 from deltadewa.analysis.sizing import (
     HedgeSizingResult,
@@ -136,6 +139,7 @@ from deltadewa.analysis.strike_ladder import (
 from deltadewa.analysis.volatility import get_volatility_stats
 
 __all__ = [
+    "GRADABLE_VERDICTS",
     "AgedPosition",
     "CandidateMetrics",
     "CrashConvexityResult",
@@ -220,6 +224,7 @@ __all__ = [
     "gamma_theta_delay",
     "get_volatility_stats",
     "hedge_efficiency",
+    "leg_convexity_contribution_pct",
     "new_strike_for_entry_otm",
     "observe_spot",
     "payoff_vs_premium_multiple",
@@ -235,4 +240,5 @@ __all__ = [
     "size_hedge",
     "strike_for_delta",
     "term_structure_shape",
+    "verdict_reason",
 ]

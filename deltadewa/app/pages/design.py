@@ -69,7 +69,7 @@ from deltadewa.analysis.position_aging import (
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.roll_planner import build_roll_plan
-from deltadewa.analysis.roll_status import evaluate_roll_status
+from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.analysis.stress import (
     build_spot_vol_grid_spec,
@@ -1172,6 +1172,35 @@ def _otm_pair_text(moneyness: MoneynessDrift) -> str:
     return f"{entry} / {fmt.signed_percent(moneyness.current_otm_pct)}"
 
 
+def _dte_text(record: RollStatusRecord) -> str:
+    """Days-to-maturity cell — or the expiry date for a leg already gone.
+
+    ``-435d / 180d`` is technically the day count but reads as an extreme
+    roll urgency; the sign is the only signal and it is easy to miss (#373).
+    """
+    if record.verdict is RollVerdict.EXPIRED:
+        return f"expired {record.position.option.maturity_date.date()}"
+    return f"{record.days_to_maturity}d / {record.roll_window_days}d"
+
+
+def _leg_convexity_text(record: RollStatusRecord) -> str:
+    """Render this leg's own contribution to book crash convexity (#306).
+
+    The neighbouring Convexity cell is a **book-level** gate — the IPS band
+    is stated against the whole book, so it cannot be applied per leg. This
+    cell is the per-tranche number that gate never carried: contributions
+    sum exactly to the book figure, so this is the column that answers
+    *which* tranche to roll.
+
+    ``n/a`` for an expired leg, which was never priced — not ``+0.00``,
+    which would read as a worthless leg rather than an unpriced one.
+    """
+    contribution = record.leg_convexity_contribution_pct
+    if contribution is None:
+        return "n/a"
+    return f"{contribution:+.2f} pp"
+
+
 def _roll_record_row(record: RollStatusRecord) -> html.Tr:
     """One position's roll status, with all three trigger reasons (G3)."""
     position = record.position
@@ -1201,15 +1230,16 @@ def _roll_record_row(record: RollStatusRecord) -> html.Tr:
                 f"{position.option.strike_price:,.0f}",
             ),
             html.Td(_otm_pair_text(record.moneyness)),
-            html.Td(f"{record.days_to_maturity}d / {record.roll_window_days}d"),
+            html.Td(_dte_text(record)),
             html.Td(cost_text),
+            html.Td(_leg_convexity_text(record)),
             html.Td(
                 f"Time: {record.time_trigger.verdict.value} — "
                 f"{record.time_trigger.reason}"
             ),
             html.Td(
-                f"Convexity: {record.convexity_trigger.verdict.value} — "
-                f"{record.convexity_trigger.reason}",
+                f"Convexity (book): {record.convexity_trigger.verdict.value}"
+                f" — {record.convexity_trigger.reason}",
             ),
             html.Td(
                 f"Drift: {record.drift_trigger.verdict.value} — "
@@ -1250,8 +1280,9 @@ def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
             html.Th("OTM entry / now"),
             html.Th("DTE / window"),
             html.Th("Est. roll-up cost"),
+            html.Th("This leg's convexity"),
             html.Th("Time trigger"),
-            html.Th("Convexity trigger"),
+            html.Th("Convexity trigger (book)"),
             html.Th("Drift trigger"),
         ],
     )

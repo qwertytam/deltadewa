@@ -134,6 +134,7 @@ def _make_record(
         days_to_maturity=200,
         roll_window_days=30,
         crash_convexity_pct=20.0,
+        leg_convexity_contribution_pct=None,
         convexity_target_min_pct=15.0,
         convexity_target_max_pct=25.0,
         verdict=verdict,
