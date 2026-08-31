@@ -168,7 +168,13 @@ class SignedTotals:
         sides whenever this is ``True``, not only when the net happens
         to round to zero.
         """
-        return self.long_contracts > 0 and self.short_contracts < 0
+        # Two independent comparisons on two different fields, not a
+        # chainable range check -- pylint's R1716 misreads the shared
+        # "0" as a middle term to merge, which would change the meaning.
+        return (
+            self.long_contracts > 0  # pylint: disable=chained-comparison
+            and self.short_contracts < 0
+        )
 
 
 def _signed_totals(members: Sequence[AgedPosition]) -> SignedTotals:
