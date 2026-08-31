@@ -805,6 +805,114 @@ class TestStrikeLadderPanel:
         assert _collect_text(narrow) != _collect_text(wide)
 
 
+class TestLadderPanelThreeDeadEnds:
+    """#326: INPUT, BLOCKED and EMPTY are three distinct notices, never
+    the same grey ``.plain-language`` paragraph the panel reported as
+    indistinguishable from "still to build".
+    """
+
+    def test_unparseable_dials_render_the_input_kind(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="abc",
+            maturities_years_raw="0.5",
+        )
+
+        assert getattr(panel, "className", None) == (
+            "panel-notice panel-notice--input"
+        )
+
+    def test_no_underlying_position_renders_the_blocked_kind_with_hint(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A fresh book (underlying_quantity == 0) hits
+        build_strike_ladder's structural ValueError -- BLOCKED, with the
+        BOOK-zone remediation pointer as the detail line.
+        """
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10",
+            maturities_years_raw="0.5",
+        )
+
+        assert getattr(panel, "className", None) == (
+            "panel-notice panel-notice--blocked"
+        )
+        text = _collect_text(panel).lower()
+        assert "book zone" in text
+
+    def test_every_rung_unsolvable_renders_the_empty_kind_no_table(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Every cell fails to solve (delta >= 0.5 is off the solver
+        bracket) -- EMPTY, and no <table> at all, not just an
+        "Unsolvable" heading with nothing above it.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.60, 0.70",
+            maturities_years_raw="1.0",
+        )
+
+        assert getattr(panel, "className", None) == (
+            "panel-notice panel-notice--empty"
+        )
+        assert "Table(" not in repr(panel)
+        text = _collect_text(panel).lower()
+        assert "no rung solves" in text
+        assert "outside the solvable" in text
+
+    def test_partial_solve_keeps_the_table_not_a_notice(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A mix of solvable and unsolvable rungs is a partial answer,
+        not an empty one -- the table renders, unflagged.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10, 0.60",
+            maturities_years_raw="0.5",
+        )
+
+        assert getattr(panel, "className", None) != (
+            "panel-notice panel-notice--empty"
+        )
+        assert "Table(" in repr(panel)
+        assert "Unsolvable" in _collect_text(panel)
+
+
 class TestRollStatusTable:
     """Roll status: all three per-trigger reasons (G3), not the summary.
 

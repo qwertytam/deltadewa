@@ -86,6 +86,7 @@ from deltadewa.analysis.volatility import build_volatility_profile
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.panel_guard import NoticeKind, panel_notice
 from deltadewa.app.panel_guard import (
     incomplete_notice as _incomplete,
 )
@@ -163,6 +164,19 @@ _DEFAULT_SIZING_PCT_OTM = 20.0
 _DEFAULT_SIZING_MATURITY_YEARS = 0.5
 _DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
 _DEFAULT_LADDER_MATURITIES_YEARS = "0.25, 0.5, 1.0"
+
+# #326: safe_render's BLOCKED remediation pointer for the two panels that
+# raise ValueError on a book with no underlying position (size_hedge,
+# build_strike_ladder). Presentation, on the page that knows where the
+# fix lives -- not baked into the analysis-layer exception text.
+_SIZING_BLOCKED_HINT = (
+    "Set the underlying spot and quantity in the BOOK zone; sizing "
+    "needs them to size a candidate hedge."
+)
+_LADDER_BLOCKED_HINT = (
+    "Set the underlying spot and quantity in the BOOK zone; the ladder "
+    "sizes every rung against them."
+)
 
 # Every PLANNING panel prices this basis — size_hedge, build_strike_ladder,
 # and evaluate_roll_status each build CrashShock.from_ips(...) internally,
@@ -1056,7 +1070,7 @@ def _render_sizing_panel_logic(
             )
             return _sizing_panel_view(result, ips_config)
 
-        candidate = _safe_render(_build)
+        candidate = _safe_render(_build, blocked_hint=_SIZING_BLOCKED_HINT)
 
     return html.Div(
         [
@@ -1108,35 +1122,55 @@ def _ladder_panel_view(result: StrikeLadderResult) -> Component:
     """Render the solved rungs table, then the unsolvable cells.
 
     Unsolvable rungs are shown, never dropped — see
-    :func:`_unsolvable_rung_line` for the finding-ID note.
+    :func:`_unsolvable_rung_line` for the finding-ID note. #326's third
+    mode: when nothing at all solved, that is its own dead end (the
+    engine ran and answered "nothing"), rendered as a
+    :attr:`NoticeKind.EMPTY` notice rather than as a bare "Unsolvable"
+    heading — the same table-less shape #326 reported as
+    indistinguishable from a panel that had not built yet.
     """
     if not result.rungs and not result.unsolvable:
+        # Unreachable by construction: _render_ladder_panel_logic only
+        # calls build_strike_ladder with two non-empty sequences (a
+        # None list already short-circuits to the INPUT notice above
+        # it), and itertools.product of two non-empty sequences always
+        # yields at least one cell, which lands in rungs or unsolvable.
+        # Kept as a real INPUT notice rather than deleted, in case that
+        # invariant ever changes.
         return _incomplete("No rungs requested.")
 
-    children: list[Component] = []
-    if result.rungs:
-        header = html.Tr(
-            [
-                html.Th("Delta"),
-                html.Th("Maturity"),
-                html.Th("Strike"),
-                html.Th("%OTM"),
-                html.Th("Put delta"),
-                html.Th("Premium"),
-                html.Th("Crash payoff"),
-                html.Th("Contracts"),
-                html.Th("Achieved convexity"),
-                html.Th("Budget"),
-            ],
+    if not result.rungs:
+        return panel_notice(
+            "No rung solves at these inputs.",
+            kind=NoticeKind.EMPTY,
+            body=[_unsolvable_rung_line(rung) for rung in result.unsolvable],
         )
-        rows = [_ladder_rung_row(rung) for rung in result.rungs]
-        children.append(
-            html.Table(
-                [html.Thead(header), html.Tbody(rows)],
-                className="planning-table",
-            ),
-        )
+
+    header = html.Tr(
+        [
+            html.Th("Delta"),
+            html.Th("Maturity"),
+            html.Th("Strike"),
+            html.Th("%OTM"),
+            html.Th("Put delta"),
+            html.Th("Premium"),
+            html.Th("Crash payoff"),
+            html.Th("Contracts"),
+            html.Th("Achieved convexity"),
+            html.Th("Budget"),
+        ],
+    )
+    rows = [_ladder_rung_row(rung) for rung in result.rungs]
+    children: list[Component] = [
+        html.Table(
+            [html.Thead(header), html.Tbody(rows)],
+            className="planning-table",
+        ),
+    ]
     if result.unsolvable:
+        # A partial answer, not an empty one -- the table above already
+        # says the panel worked, so this stays plain markup rather than
+        # a second notice.
         children.append(html.H4("Unsolvable"))
         children.extend(
             _unsolvable_rung_line(rung) for rung in result.unsolvable
@@ -1169,7 +1203,7 @@ def _render_ladder_panel_logic(
         )
         return _ladder_panel_view(result)
 
-    return _safe_render(_build)
+    return _safe_render(_build, blocked_hint=_LADDER_BLOCKED_HINT)
 
 
 def _otm_pair_text(moneyness: MoneynessDrift) -> str:
