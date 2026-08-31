@@ -43,6 +43,8 @@ from deltadewa.analysis.position_aging import (
     BUCKET_ORDER,
     ExpiryBoundaries,
     ExpiryBucketLabel,
+    ExpiryCalendarEntry,
+    SignedTotals,
     expiry_boundaries,
 )
 from deltadewa.analysis.roll_planner import RollAction, build_roll_plan
@@ -1222,6 +1224,127 @@ class TestPositionAgingPanel:
         )
 
         assert _collect_text(self._panel(app)) != before
+
+
+class TestExpirationCalendarNetVsGross:
+    """#334: netting long against short must not read as an empty row."""
+
+    def test_offsetting_pair_row_shows_gross_and_is_flagged(self) -> None:
+        """A same-strike offsetting pair nets to $0 -- the row must say
+        so is a cancellation, not an absence.
+        """
+        totals = SignedTotals(
+            long_contracts=10,
+            short_contracts=-10,
+            long_value=11_073.0,
+            short_value=-11_073.0,
+            long_theta=-68.3,
+            short_theta=68.3,
+        )
+        entry = ExpiryCalendarEntry(
+            maturity_date=datetime(2027, 1, 1, tzinfo=UTC),
+            days_to_expiry=120,
+            bucket=ExpiryBucketLabel.LONG_TERM,
+            legs=2,
+            totals=totals,
+        )
+
+        row = design._aging_calendar_row(entry)
+
+        assert getattr(row, "className", None) == "aging-row--offsetting"
+        text = _collect_text(row)
+        assert "$0" in text
+        assert "L +$11,073" in text
+        assert "S -$11,073" in text
+
+    def test_different_strike_pair_shows_gross_without_the_flag(
+        self,
+    ) -> None:
+        """The issue's own case: different strikes net to a real,
+        non-zero mark and need no cancellation flag -- just the gross
+        breakdown a mixed row always carries.
+        """
+        totals = SignedTotals(
+            long_contracts=10,
+            short_contracts=-10,
+            long_value=51_134.0,
+            short_value=-11_073.0,
+            long_theta=-182.1,
+            short_theta=68.3,
+        )
+        entry = ExpiryCalendarEntry(
+            maturity_date=datetime(2027, 1, 1, tzinfo=UTC),
+            days_to_expiry=120,
+            bucket=ExpiryBucketLabel.LONG_TERM,
+            legs=2,
+            totals=totals,
+        )
+
+        row = design._aging_calendar_row(entry)
+
+        assert getattr(row, "className", None) is None
+        text = _collect_text(row)
+        assert "$40,061" in text
+        assert "L +$51,134" in text
+        assert "S -$11,073" in text
+
+    def test_pure_long_row_shows_no_gross_breakdown(self) -> None:
+        """A single-direction row has nothing to break down (#334)."""
+        totals = SignedTotals(
+            long_contracts=10,
+            short_contracts=0,
+            long_value=51_134.0,
+            short_value=0.0,
+            long_theta=-182.1,
+            short_theta=0.0,
+        )
+        entry = ExpiryCalendarEntry(
+            maturity_date=datetime(2027, 1, 1, tzinfo=UTC),
+            days_to_expiry=120,
+            bucket=ExpiryBucketLabel.LONG_TERM,
+            legs=1,
+            totals=totals,
+        )
+
+        row = design._aging_calendar_row(entry)
+
+        text = _collect_text(row)
+        assert "L " not in text
+        assert "S " not in text
+
+    def test_live_offsetting_pair_flagged_in_the_full_panel(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """End-to-end: a live book with a same-strike offsetting pair
+        renders the flagged row and an explanatory legend.
+        """
+        app = _app_with_ips(tmp_path)
+        maturity = datetime.now(tz=UTC) + timedelta(days=180)
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=maturity,
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=maturity,
+            quantity=-10,
+            option_type=OptionType.PUT,
+        )
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_position_aging_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+        text = _collect_text(panel).lower()
+        assert "not an empty" in text
+        assert "l +$" in text
+        assert "s -$" in text
 
 
 class TestMonetizationPanel:

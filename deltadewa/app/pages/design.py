@@ -65,6 +65,7 @@ from deltadewa.analysis.position_aging import (
     ExpiryBucketTotal,
     ExpiryCalendarEntry,
     PositionAging,
+    SignedTotals,
     evaluate_position_aging,
 )
 from deltadewa.analysis.provenance import build_provenance_ledger
@@ -1595,26 +1596,99 @@ def _expiry_window_text(
     return windows[label]
 
 
+def _nets_near_zero(value: float) -> bool:
+    """Whether *value* would render as a whole-dollar/theta zero (#334).
+
+    The columns this guards both format at zero decimals
+    (:func:`~deltadewa.app.format.currency`,
+    :func:`~deltadewa.app.format.signed_currency`), so anything that
+    rounds to ``0`` at that precision is what a reader would actually
+    see as "$0" / "+$0".
+    """
+    return abs(round(value)) == 0
+
+
+def _net_and_gross_cell(
+    *,
+    net_text: str,
+    long_text: str,
+    short_text: str,
+    show_gross: bool,
+) -> html.Td:
+    """Net on the first line; ``L ... - S ...`` muted underneath.
+
+    *show_gross* is ``False`` for a pure-long or pure-short row -- a
+    gross breakdown of a single side repeats the net and teaches
+    nothing (#334).
+    """
+    if not show_gross:
+        return html.Td(net_text)
+    return html.Td(
+        [
+            html.Div(net_text),
+            html.Div(
+                f"L {long_text} · S {short_text}",
+                className="aging-gross-line",
+            ),
+        ],
+    )
+
+
+def _aging_row_class(
+    totals: SignedTotals,
+    *,
+    legs: int,
+) -> str | None:
+    """Pick the row's styling hook: empty, offsetting, or plain.
+
+    ``aging-row--offsetting`` fires only when the net would otherwise
+    read as "$0" *and* both a long and a short leg produced it --
+    exactly the case #334 reported as indistinguishable from an empty
+    bucket. A non-empty net (e.g. a real spread's mark) needs no flag
+    even when it mixes long and short legs; that net is a meaningful
+    number, not a cancellation to call out.
+    """
+    if legs == 0:
+        return "aging-row--empty"
+    if totals.is_offsetting and _nets_near_zero(totals.net_value):
+        return "aging-row--offsetting"
+    return None
+
+
 def _aging_bucket_row(
     total: ExpiryBucketTotal,
     boundaries: ExpiryBoundaries,
 ) -> html.Tr:
     """One bucket's window, leg count and the size rolling off in it."""
+    totals = total.totals
+    show_gross = totals.is_offsetting
     return html.Tr(
         [
             html.Td(total.label.value),
             html.Td(_expiry_window_text(total.label, boundaries)),
             html.Td(f"{total.legs}"),
             html.Td(f"{total.contracts:+,}" if total.contracts else "0"),
-            html.Td(fmt.currency(total.position_value)),
-            html.Td(fmt.signed_currency(total.position_theta)),
+            _net_and_gross_cell(
+                net_text=fmt.currency(total.position_value),
+                long_text=fmt.signed_currency(totals.long_value),
+                short_text=fmt.signed_currency(totals.short_value),
+                show_gross=show_gross,
+            ),
+            _net_and_gross_cell(
+                net_text=fmt.signed_currency(total.position_theta),
+                long_text=fmt.signed_currency(totals.long_theta),
+                short_text=fmt.signed_currency(totals.short_theta),
+                show_gross=show_gross,
+            ),
         ],
-        className="aging-row--empty" if total.legs == 0 else None,
+        className=_aging_row_class(totals, legs=total.legs),
     )
 
 
 def _aging_calendar_row(entry: ExpiryCalendarEntry) -> html.Tr:
     """One dated roll-off: every leg sharing this maturity."""
+    totals = entry.totals
+    show_gross = totals.is_offsetting
     return html.Tr(
         [
             html.Td(entry.maturity_date.strftime("%Y-%m-%d")),
@@ -1622,9 +1696,20 @@ def _aging_calendar_row(entry: ExpiryCalendarEntry) -> html.Tr:
             html.Td(entry.bucket.value),
             html.Td(f"{entry.legs}"),
             html.Td(f"{entry.contracts:+,}"),
-            html.Td(fmt.currency(entry.position_value)),
-            html.Td(fmt.signed_currency(entry.position_theta)),
+            _net_and_gross_cell(
+                net_text=fmt.currency(entry.position_value),
+                long_text=fmt.signed_currency(totals.long_value),
+                short_text=fmt.signed_currency(totals.short_value),
+                show_gross=show_gross,
+            ),
+            _net_and_gross_cell(
+                net_text=fmt.signed_currency(entry.position_theta),
+                long_text=fmt.signed_currency(totals.long_theta),
+                short_text=fmt.signed_currency(totals.short_theta),
+                show_gross=show_gross,
+            ),
         ],
+        className=_aging_row_class(totals, legs=entry.legs),
     )
 
 
@@ -1687,6 +1772,15 @@ def _position_aging_panel_view(aging: PositionAging) -> Component:
                 "(roll_at_months_remaining x roll_review_buffer). The two roll "
                 "buckets are the same window the roll status table "
                 "grades against, so the two panels cannot disagree.",
+                className="plain-language",
+            ),
+            html.P(
+                "Value and Theta/day are the NET mark and daily bleed of "
+                "every leg in the row — what unwinding it realises today. "
+                "When a row mixes a long and a short leg, an 'L · S' line "
+                "underneath shows the gross sides that produced the net, "
+                "so a row highlighted amber is a real offsetting position "
+                "netting to $0 — not an empty one (#334).",
                 className="plain-language",
             ),
             bucket_table,

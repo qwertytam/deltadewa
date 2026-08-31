@@ -712,6 +712,19 @@ body {
   color: #8a8a8a;
 }
 
+/* #334: a long/short pair that nets to $0 is a real offsetting
+   position, not an empty row -- amber (matching .unsolvable-note)
+   rather than the grey used for a genuinely empty bucket above. */
+.aging-row--offsetting {
+  background: #fff8e6;
+}
+
+.aging-gross-line {
+  color: #7a7a7a;
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
 /* /design: EXPLORATION zone — stress heatmaps, MC distribution */
 
 .zone-exploration {
