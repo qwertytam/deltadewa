@@ -846,7 +846,7 @@ that sanitization erased.
 **Two surfaces, one evaluator.** The handbook does not say whether Rule 2
 is per-tranche or book-level, and both readings are useful, so:
 `roll_status.evaluate_roll_status` grades each tranche against all four
-bands as a fourth `RollStatusRecord` trigger (per-tranche is where the
+bands as a `RollStatusRecord` trigger (per-tranche is where the
 re-strike decision is made — each leg has its own `entry_spot`, and a
 ladder legged in over eighteen months has no single entry to measure
 from); `hedge_triggers` carries a fifth book-level row reduced as the
@@ -866,15 +866,25 @@ which is the one deliberate break of M2.7's "printed output unchanged"
 note — that note was about the extraction not regressing, not a permanent
 freeze.
 
-Not to be mis-fixed: `strike_drift_max_otm_pct` and
-`strike_drift_review_fraction` *do* have live readers in
-`analysis/roll_status.py`. The strike-**drift** trigger exists — but see
-**#384**: it implements a *retired* handbook rule (a 45% OTM **level**)
-as a 40 pp **change since entry**, and at that threshold it cannot fire
-for this program (a 16%-OTM put needs a ~91% rally to breach it). That is
-the full explanation for #297's "every surface says HOLD", and why the
-rally trigger *replaces* rather than supplements it. Retiring those two
-keys is #384's job, not 5a's.
+**#384 has since retired the strike-drift trigger.** At the time 5a
+shipped, `strike_drift_max_otm_pct` and `strike_drift_review_fraction`
+*did* have live readers in `analysis/roll_status.py` — the strike-**drift**
+trigger existed, but it implemented a *retired* handbook rule (a 45% OTM
+**level**) as a 40 pp **change since entry**, and at that threshold could
+not fire for this program in the direction that mattered (a 16%-OTM put
+needs a ~91% rally to breach it). That was the full explanation for #297's
+"every surface says HOLD". A field test on 2026-08-31 produced a live
+instance of exactly this — every leg read `Drift: HOLD ... vs 40% max`
+while `Rally: REVIEW` fired on the same leg — and the user confirmed the
+retirement. `RollStatusRecord.drift_trigger` and the `suppressed`
+MONITOR-demotion it fed (the latter unreachable once drift stops
+contributing to `verdict = max(...)` — see the roll-suppression-guard
+trace in that PR) are both gone; `roll_planner.gamma_theta_delay` /
+`RollAction.DELAY` is unrelated and unaffected, since it triggers on any
+of the surviving verdict sources, not specifically on drift.
+`MoneynessDrift`/`drift_pct` stays as a live, undbanded reading (the
+"OTM entry / now" column on `/design`'s roll status table, and
+`gamma_theta_delay`'s nearer-the-money input).
 
 ## Open questions
 

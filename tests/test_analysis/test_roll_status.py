@@ -33,8 +33,6 @@ def _make_ips_config(
     *,
     roll_at_months_remaining: float = 1.0,
     roll_review_buffer: float = 1.5,
-    strike_drift_max_otm_pct: float = 45.0,
-    strike_drift_review_fraction: float = 0.75,
     crash_scenario_pct: float = -25.0,
     target_min_pct: float = 15.0,
     target_max_pct: float = 25.0,
@@ -58,9 +56,7 @@ def _make_ips_config(
             rally_review_pct=10.0,
             rally_action_pct=15.0,
             rally_urgent_pct=20.0,
-            strike_drift_max_otm_pct=strike_drift_max_otm_pct,
             roll_review_buffer=roll_review_buffer,
-            strike_drift_review_fraction=strike_drift_review_fraction,
         ),
         monetization=IpsMonetization(schedule=()),
     )
@@ -258,53 +254,6 @@ class TestTriggerHelpers:
         assert "20.0%" in trigger.reason
         assert "15-25%" in trigger.reason
 
-    def test_strike_drift_trigger_hold_when_no_entry_data(self) -> None:
-        """Test HOLD when drift_pct is None (no entry data)."""
-        trigger = roll_status._strike_drift_trigger_verdict(
-            drift_pct=None,
-            max_otm_drift_pct=45.0,
-            review_fraction=0.75,
-        )
-
-        assert trigger.verdict == RollVerdict.HOLD
-        assert trigger.reason == "no entry spot recorded"
-
-    def test_strike_drift_trigger_roll_beyond_max(self) -> None:
-        """Test ROLL when |drift_pct| exceeds the max threshold."""
-        trigger = roll_status._strike_drift_trigger_verdict(
-            drift_pct=-50.0,
-            max_otm_drift_pct=45.0,
-            review_fraction=0.75,
-        )
-
-        assert trigger.verdict == RollVerdict.ROLL
-        assert "-50.0%" in trigger.reason
-        assert "45%" in trigger.reason
-
-    def test_strike_drift_trigger_review_within_buffer(self) -> None:
-        """Test REVIEW when |drift_pct| is within the review fraction band."""
-        trigger = roll_status._strike_drift_trigger_verdict(
-            drift_pct=40.0,
-            max_otm_drift_pct=45.0,
-            review_fraction=0.75,
-        )
-
-        assert trigger.verdict == RollVerdict.REVIEW
-        assert "+40.0%" in trigger.reason
-        assert "45%" in trigger.reason
-
-    def test_strike_drift_trigger_hold_within_band(self) -> None:
-        """Test HOLD when |drift_pct| is comfortably within the band."""
-        trigger = roll_status._strike_drift_trigger_verdict(
-            drift_pct=5.0,
-            max_otm_drift_pct=45.0,
-            review_fraction=0.75,
-        )
-
-        assert trigger.verdict == RollVerdict.HOLD
-        assert "+5.0%" in trigger.reason
-        assert "45%" in trigger.reason
-
 
 class TestEvaluateRollStatus:
     """Integration tests for evaluate_roll_status."""
@@ -335,7 +284,7 @@ class TestEvaluateRollStatus:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Test HOLD when time/convexity/drift are all comfortable."""
+        """Test HOLD when time/convexity/rally are all comfortable."""
         self._patch_convexity(monkeypatch, 20.0)
         position = _make_position(
             days_to_maturity=200,
@@ -350,7 +299,7 @@ class TestEvaluateRollStatus:
         assert records[0].estimated_roll_up_cost is None
         assert records[0].time_trigger.verdict == RollVerdict.HOLD
         assert records[0].convexity_trigger.verdict == RollVerdict.HOLD
-        assert records[0].drift_trigger.verdict == RollVerdict.HOLD
+        assert records[0].rally_trigger.verdict == RollVerdict.HOLD
 
     def test_roll_from_time_trigger_alone(
         self,
@@ -366,7 +315,6 @@ class TestEvaluateRollStatus:
 
         assert records[0].verdict == RollVerdict.ROLL
         assert records[0].estimated_roll_up_cost is not None
-        assert records[0].suppressed is False
 
     def test_valuation_date_moves_roll_verdict(
         self,
@@ -424,114 +372,7 @@ class TestEvaluateRollStatus:
 
         assert records[0].verdict == RollVerdict.MONITOR
 
-    def test_roll_from_strike_drift_further_otm(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test ROLL when a put has drifted far further out of the money."""
-        self._patch_convexity(monkeypatch, 20.0)
-        # Entry at spot 100 (10% OTM); now spot has rallied to 140 (put is
-        # far deeper OTM: (140-90)/140*100 ~= 35.7%, drift ~= +25.7%)
-        position = _make_position(
-            option_type=OptionType.PUT,
-            strike_price=90.0,
-            entry_spot=100.0,
-            days_to_maturity=200,
-        )
-        portfolio = self._portfolio_with(position)
-        ips = _make_ips_config(strike_drift_max_otm_pct=20.0)
-
-        records = evaluate_roll_status(portfolio, ips, current_spot=140.0)
-
-        assert records[0].moneyness.drift_pct is not None
-        assert records[0].moneyness.drift_pct > 0
-        assert records[0].verdict == RollVerdict.ROLL
-
-    def test_downgrade_to_monitor_when_put_moves_nearer_money(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test the gamma/theta nuance downgrades ROLL to MONITOR.
-
-        A put moving nearer the money (negative drift) with no time
-        pressure and crash convexity still within target should be
-        downgraded from ROLL (strike-drift-only trigger) to MONITOR.
-        """
-        self._patch_convexity(monkeypatch, 20.0)
-        # Entry at spot 100 (10% OTM); spot drops to 95
-        # (put nearer money: (95-90)/95*100 ~= 5.26%, drift ~= -4.74%)
-        position = _make_position(
-            option_type=OptionType.PUT,
-            strike_price=90.0,
-            entry_spot=100.0,
-            days_to_maturity=200,
-        )
-        portfolio = self._portfolio_with(position)
-        # Small max drift so the modest -4.74% drift still exceeds it.
-        ips = _make_ips_config(
-            roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=3.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-        )
-
-        records = evaluate_roll_status(portfolio, ips, current_spot=95.0)
-
-        assert records[0].moneyness.drift_pct is not None
-        assert records[0].moneyness.drift_pct < 0
-        assert records[0].verdict == RollVerdict.MONITOR
-        assert records[0].suppressed is True
-        # The suppression overrides the record's verdict, but the raw
-        # sub-verdicts still reflect what each trigger actually saw.
-        assert records[0].drift_trigger.verdict == RollVerdict.ROLL
-        assert records[0].time_trigger.verdict == RollVerdict.HOLD
-        assert records[0].convexity_trigger.verdict == RollVerdict.HOLD
-
-    def test_ordinary_roll_is_not_suppressed(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test suppressed is False on an un-downgraded ROLL verdict."""
-        self._patch_convexity(monkeypatch, 20.0)
-        position = _make_position(days_to_maturity=10, entry_spot=100.0)
-        portfolio = self._portfolio_with(position)
-        ips = _make_ips_config(roll_at_months_remaining=1.0)  # ~30 day window
-
-        records = evaluate_roll_status(portfolio, ips, current_spot=100.0)
-
-        assert records[0].verdict == RollVerdict.ROLL
-        assert records[0].suppressed is False
-
-    def test_no_downgrade_for_call_option(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test the nuance downgrade does not apply to CALL positions."""
-        self._patch_convexity(monkeypatch, 20.0)
-        # Mirror the downgrade scenario but with a CALL: entry at spot 100
-        # (10% OTM, strike 110); spot rises to 105 (call nearer money:
-        # (110-105)/105*100 ~= 4.76%, drift ~= -5.24%)
-        position = _make_position(
-            option_type=OptionType.CALL,
-            strike_price=110.0,
-            entry_spot=100.0,
-            days_to_maturity=200,
-        )
-        portfolio = self._portfolio_with(position)
-        ips = _make_ips_config(
-            roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=3.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-        )
-
-        records = evaluate_roll_status(portfolio, ips, current_spot=105.0)
-
-        assert records[0].moneyness.drift_pct is not None
-        assert records[0].moneyness.drift_pct < 0
-        assert records[0].verdict == RollVerdict.ROLL
-
-    def test_no_entry_data_does_not_crash_and_skips_drift_trigger(
+    def test_no_entry_data_does_not_crash(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -640,11 +481,10 @@ class TestExpiredLegVerdict:
         record = evaluate_roll_status(portfolio, ips, current_spot=100.0)[0]
 
         assert record.estimated_roll_up_cost is None
-        assert record.suppressed is False
         for trigger in (
             record.time_trigger,
             record.convexity_trigger,
-            record.drift_trigger,
+            record.rally_trigger,
         ):
             assert trigger.verdict is RollVerdict.EXPIRED
             assert "expired" in trigger.reason
@@ -878,48 +718,6 @@ class TestRallyTrigger:
 
         assert record.rally_trigger.verdict is RollVerdict.HOLD
         assert "no entry spot" in record.rally_trigger.reason
-
-    def test_rally_fires_where_the_drift_trigger_stays_silent(self) -> None:
-        """#384: the two are on wildly different scales, not duplicates.
-
-        A 12% rally on a 16%-OTM put moves its moneyness by only ~9 pp,
-        nowhere near the 40 pp strike-drift ceiling — which is exactly the
-        live book in #297, where every surface read HOLD.
-        """
-        portfolio = self._at_rally(12.0)
-        ips = _make_ips_config(strike_drift_max_otm_pct=40.0)
-
-        record = evaluate_roll_status(
-            portfolio,
-            ips,
-            current_spot=portfolio.spot_price,
-        )[0]
-
-        assert record.drift_trigger.verdict is RollVerdict.HOLD
-        assert record.rally_trigger.verdict is RollVerdict.REVIEW
-        # The rally trigger is what raised this leg off HOLD; the book's
-        # own convexity may raise it further, which is not this test's
-        # subject.
-        assert record.verdict is not RollVerdict.HOLD
-
-    def test_a_rally_driven_roll_is_never_suppressed(self) -> None:
-        """#258's failure mode, now reachable from a second trigger.
-
-        Suppression requires drift_pct < 0 (the put moved nearer the money).
-        A rally pushes it further OTM, so the guard is structurally
-        unreachable on a rally — pinned, because getting this wrong would
-        defer action on a live Rule 2 trigger.
-        """
-        portfolio = self._at_rally(25.0)
-
-        record = evaluate_roll_status(
-            portfolio,
-            _make_ips_config(),
-            current_spot=portfolio.spot_price,
-        )[0]
-
-        assert record.verdict is RollVerdict.ROLL
-        assert record.suppressed is False
 
     def test_an_expired_leg_runs_no_rally_trigger(self) -> None:
         """Expiry short-circuits every trigger, this one included."""

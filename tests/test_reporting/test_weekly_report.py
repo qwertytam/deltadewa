@@ -230,11 +230,9 @@ def _roll_record(
         convexity_target_min_pct=10.0,
         convexity_target_max_pct=20.0,
         verdict=verdict,
-        suppressed=False,
         estimated_roll_up_cost=None,
         time_trigger=trigger,
         convexity_trigger=trigger,
-        drift_trigger=trigger,
         rally_trigger=trigger,
     )
 

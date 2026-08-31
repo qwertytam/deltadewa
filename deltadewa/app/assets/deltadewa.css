@@ -386,6 +386,23 @@ body {
   opacity: 0.72;
 }
 
+/* A leg rendered under a multi-leg structure's group header (#333): the
+   header already names the structure and its net cost, so the leg row is
+   indented to read as a member of it rather than a peer of it. */
+
+.plan-row--grouped td:first-child {
+  padding-left: 28px;
+}
+
+.plan-group-header td {
+  background: #f0f1f3;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #55606b;
+}
+
 .plan-rationale {
   font-size: 0.85rem;
   line-height: 1.45;

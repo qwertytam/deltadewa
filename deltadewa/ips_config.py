@@ -498,6 +498,15 @@ class IpsTriggers:
     erased. Required with no default, like ``entry_timing_tree``'s VIX
     thresholds after M2.8: a band nobody stated is a band nobody chose.
 
+    They also retire (#384) a second, unrelated pair of fields that once
+    lived here: ``strike_drift_max_otm_pct`` / ``strike_drift_review_fraction``
+    implemented a handbook rule that has since been deleted from the
+    handbook entirely, and banded ``MoneynessDrift.drift_pct`` directly
+    against a flat threshold in a way that, by the scale relationship in
+    ``roll_status.rally_from_entry_pct``'s docstring, could not fire in the
+    direction the rule cared about. These four rally bands are what that
+    rule's replacement actually looks like.
+
     ``roll_at_months_remaining`` is maturity remaining, by name (4.2 renamed
     it from ``roll_time_months`` — that name alone did not say which referent
     was meant, and the two are not interchangeable: an 18-month put rolled on
@@ -520,10 +529,8 @@ class IpsTriggers:
     rally_review_pct: float
     rally_action_pct: float
     rally_urgent_pct: float
-    strike_drift_max_otm_pct: float
     target_delta_ratio_pct: float = _DEFAULT_TARGET_DELTA_RATIO_PCT
     roll_review_buffer: float = 1.5
-    strike_drift_review_fraction: float = 0.75
     expiry_urgent_days: int = _DEFAULT_EXPIRY_URGENT_DAYS
     expiry_soon_days: int = _DEFAULT_EXPIRY_SOON_DAYS
     theta_cost_excellent_pct: float = _DEFAULT_THETA_COST_EXCELLENT_PCT
@@ -769,7 +776,6 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             "rally_review_pct",
             "rally_action_pct",
             "rally_urgent_pct",
-            "strike_drift_max_otm_pct",
         )
     }
     for key, value in fields.items():
@@ -796,16 +802,6 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         raise IpsConfigError(
             "triggers.roll_review_buffer must be > 1.0, got "
             f"{roll_review_buffer}",
-        )
-
-    strike_drift_review_fraction = section.get(
-        "strike_drift_review_fraction",
-        0.75,
-    )
-    if not 0 < strike_drift_review_fraction < 1:
-        raise IpsConfigError(
-            "triggers.strike_drift_review_fraction must be in (0, 1), got "
-            f"{strike_drift_review_fraction}",
         )
 
     target_delta_ratio_pct = section.get(
@@ -871,7 +867,6 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         **fields,
         target_delta_ratio_pct=target_delta_ratio_pct,
         roll_review_buffer=roll_review_buffer,
-        strike_drift_review_fraction=strike_drift_review_fraction,
         expiry_urgent_days=expiry_urgent_days,
         expiry_soon_days=expiry_soon_days,
         theta_cost_excellent_pct=theta_cost_excellent_pct,

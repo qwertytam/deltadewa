@@ -45,8 +45,6 @@ def _make_ips_config(
     *,
     roll_at_months_remaining: float = 1.0,
     roll_review_buffer: float = 1.5,
-    strike_drift_max_otm_pct: float = 45.0,
-    strike_drift_review_fraction: float = 0.75,
     crash_scenario_pct: float = -25.0,
     target_min_pct: float = 15.0,
     target_max_pct: float = 25.0,
@@ -70,9 +68,7 @@ def _make_ips_config(
             rally_review_pct=10.0,
             rally_action_pct=15.0,
             rally_urgent_pct=20.0,
-            strike_drift_max_otm_pct=strike_drift_max_otm_pct,
             roll_review_buffer=roll_review_buffer,
-            strike_drift_review_fraction=strike_drift_review_fraction,
         ),
         monetization=IpsMonetization(schedule=()),
     )
@@ -147,7 +143,6 @@ class TestGammaThetaDelay:
             rally_review_pct=10.0,
             rally_action_pct=15.0,
             rally_urgent_pct=20.0,
-            strike_drift_max_otm_pct=10.0,
         )
 
     def _convexity(
@@ -245,9 +240,9 @@ class TestBuildRollPlan:
     """Integration tests for build_roll_plan on crafted portfolios."""
 
     # ------------------------------------------------------------------
-    # Scenario A: put has rallied far OTM (drift > threshold → ROLL)
-    #   entry_spot=100, current spot=120, strike=80
-    #   entry_otm=20%, current_otm≈33%, drift≈13% > max_drift=10%
+    # Scenario A: put has rallied far OTM (rally trigger → ROLL)
+    #   entry_spot=100, current spot=120: +20% rally, exactly the handbook's
+    #   URGENT band edge (rally_urgent_pct=20.0), so rally_pct >= urgent → ROLL.
     # ------------------------------------------------------------------
 
     def _rallied_position(self) -> OptionPosition:
@@ -267,11 +262,7 @@ class TestBuildRollPlan:
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()
         portfolio = _portfolio_with(pos)
-        ips = _make_ips_config(
-            strike_drift_max_otm_pct=10.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-        )
+        ips = _make_ips_config(target_min_pct=15.0, target_max_pct=25.0)
 
         records = build_roll_plan(portfolio, ips)
 
@@ -286,7 +277,7 @@ class TestBuildRollPlan:
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()
         portfolio = _portfolio_with(pos)
-        ips = _make_ips_config(strike_drift_max_otm_pct=10.0)
+        ips = _make_ips_config()
 
         records = build_roll_plan(portfolio, ips)
 
@@ -303,17 +294,16 @@ class TestBuildRollPlan:
     ) -> None:
         """A rallied put is never deferred, however healthy the band.
 
-        The put has drifted *further* OTM (+13%), so the handbook's
-        gamma/theta deferral does not apply — this is Rule 2's market
-        rally rebalance trigger and the sanctioned action is to roll up.
-        Deferring here would sit on a live signal.
+        The put has drifted *further* OTM (a rally, not a decline), so the
+        handbook's gamma/theta deferral does not apply — this is Rule 2's
+        market rally rebalance trigger and the sanctioned action is to roll
+        up. Deferring here would sit on a live signal.
         """
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()  # 90 days >> 30-day window
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -321,14 +311,21 @@ class TestBuildRollPlan:
         records = build_roll_plan(portfolio, ips)
 
         assert records[0].action == RollAction.ROLL_NOW
-        assert "further OTM" in records[0].rationale
+        assert "Rally trigger" in records[0].rationale
 
     # ------------------------------------------------------------------
     # Scenario B: market has declined, put is nearer the money
     #   entry_spot=100, current spot=90, strike=80
-    #   entry_otm=20%, current_otm≈11%, drift≈-8.9%
-    #   With max_drift=10% and review_fraction=0.75 the drift trigger is
-    #   REVIEW, which is actionable but not suppressed by roll_status.
+    #   entry_otm=20%, current_otm≈11%, drift≈-8.9% (nearer the money —
+    #   and, since a decline never rallies, the rally trigger structurally
+    #   cannot fire either; see #384).
+    #   The actionable trigger here is time: at days_to_maturity=40 (vs a
+    #   30-day roll_window_days and a 1.5x review_buffer, i.e. inside the
+    #   REVIEW buffer but outside the mandatory window) the time trigger
+    #   itself reads REVIEW, which is exactly what gamma_theta_delay's own
+    #   docstring condition 1 allows deferring — "the position has not
+    #   entered the mandatory roll window" does not require the position to
+    #   be trigger-free, only outside the ROLL boundary.
     # ------------------------------------------------------------------
 
     def _declined_position(self, days_to_maturity: int = 90) -> OptionPosition:
@@ -346,12 +343,11 @@ class TestBuildRollPlan:
     ) -> None:
         """The handbook's sanctioned deferral: gaining gamma → DELAY."""
         _patch_convexity(monkeypatch, 20.0)
-        pos = self._declined_position()
+        pos = self._declined_position(days_to_maturity=40)
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
-            strike_drift_review_fraction=0.75,
+            roll_review_buffer=1.5,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -371,12 +367,11 @@ class TestBuildRollPlan:
         rationale must carry the IPS values it was measured against.
         """
         _patch_convexity(monkeypatch, 20.0)
-        pos = self._declined_position()
+        pos = self._declined_position(days_to_maturity=40)
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
-            strike_drift_review_fraction=0.75,
+            roll_review_buffer=1.5,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -429,7 +424,6 @@ class TestBuildRollPlan:
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -448,7 +442,6 @@ class TestBuildRollPlan:
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -476,7 +469,6 @@ class TestBuildRollPlan:
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=45.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -497,7 +489,7 @@ class TestBuildRollPlan:
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()
         portfolio = _portfolio_with(pos)
-        ips = _make_ips_config(strike_drift_max_otm_pct=10.0)
+        ips = _make_ips_config()
 
         plan_records = build_roll_plan(portfolio, ips)
         status_records = [

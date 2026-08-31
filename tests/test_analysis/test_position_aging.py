@@ -56,7 +56,6 @@ def _make_ips_config(
             rally_review_pct=10.0,
             rally_action_pct=15.0,
             rally_urgent_pct=20.0,
-            strike_drift_max_otm_pct=45.0,
             roll_review_buffer=roll_review_buffer,
             expiry_urgent_days=expiry_urgent_days,
             expiry_soon_days=expiry_soon_days,

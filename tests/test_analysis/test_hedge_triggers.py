@@ -220,7 +220,6 @@ class TestIpsThresholdsMoveTriggers:
             rally_review_pct=10.0,
             rally_action_pct=15.0,
             rally_urgent_pct=20.0,
-            strike_drift_max_otm_pct=45.0,
             expiry_urgent_days=9,
             expiry_soon_days=40,
             theta_cost_excellent_pct=0.5,

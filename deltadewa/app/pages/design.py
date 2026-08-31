@@ -1213,11 +1213,6 @@ def _leg_convexity_text(record: RollStatusRecord) -> str:
 def _roll_record_row(record: RollStatusRecord) -> html.Tr:
     """One position's roll status, with all three trigger reasons (G3)."""
     position = record.position
-    suppressed_note = (
-        " (strike-drift roll suppressed — convexity in-band, no time pressure)"
-        if record.suppressed
-        else ""
-    )
     cost_text = (
         fmt.currency(record.estimated_roll_up_cost, decimals=2)
         if record.estimated_roll_up_cost is not None
@@ -1249,10 +1244,6 @@ def _roll_record_row(record: RollStatusRecord) -> html.Tr:
             html.Td(
                 f"Convexity (book): {record.convexity_trigger.verdict.value}"
                 f" — {record.convexity_trigger.reason}",
-            ),
-            html.Td(
-                f"Drift: {record.drift_trigger.verdict.value} — "
-                f"{record.drift_trigger.reason}{suppressed_note}",
             ),
             html.Td(
                 f"Rally: {record.rally_trigger.verdict.value} — "
@@ -1296,7 +1287,6 @@ def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
             html.Th("This leg's convexity"),
             html.Th("Time trigger"),
             html.Th("Convexity trigger (book)"),
-            html.Th("Drift trigger"),
             html.Th("Rally trigger"),
         ],
     )
@@ -1323,13 +1313,21 @@ def _render_roll_panel_logic(
     )
 
 
-def _roll_plan_row(record: RollPlanRecord) -> html.Tr:
+def _roll_plan_row(record: RollPlanRecord, *, grouped: bool = False) -> html.Tr:
     """One long put's recommended action, proposal, and reasoning.
 
     The reasoning cell is not decoration. ``DELAY`` is a recommendation
     to *not* act on a trigger that has fired, so it has to arrive with
     its justification attached or it reads as the tool losing the
     signal.
+
+    Args:
+        record: The leg to render.
+        grouped: Whether this row sits under a
+            :func:`_plan_group_header_row` — when it does, the header
+            already names the structure, so the leg text drops the
+            redundant ``(structure_id)`` suffix (#333).
+
     """
     strike_text = (
         f"{record.target_strike:,.0f}"
@@ -1350,29 +1348,97 @@ def _roll_plan_row(record: RollPlanRecord) -> html.Tr:
         if record.action is None
         else f"verdict-badge verdict-badge--{record.action.value.lower()}"
     )
+    row_classes = " ".join(
+        cls
+        for cls in (
+            "plan-row--excluded" if excluded else None,
+            "plan-row--grouped" if grouped else None,
+        )
+        if cls is not None
+    )
     return html.Tr(
         [
             html.Td(html.Span(action_text, className=action_class)),
-            html.Td(_plan_leg_text(record)),
+            html.Td(_plan_leg_text(record, show_structure_suffix=not grouped)),
             html.Td(strike_text),
             html.Td(cost_text),
             html.Td(f"{record.gamma:,.4f} / {record.theta:,.2f}"),
             html.Td(record.rationale, className="plan-rationale"),
         ],
-        className="plan-row--excluded" if excluded else None,
+        className=row_classes or None,
     )
 
 
-def _plan_leg_text(record: RollPlanRecord) -> str:
-    """Name the leg, and the structure it rolls with when it has one."""
+def _plan_leg_text(
+    record: RollPlanRecord,
+    *,
+    show_structure_suffix: bool = True,
+) -> str:
+    """Name the leg, and the structure it rolls with when it has one.
+
+    ``show_structure_suffix=False`` drops the ``(structure_id)`` suffix for
+    a row already sitting under that structure's group header (#333) — the
+    tag would otherwise be said twice.
+    """
     position = record.position
     leg = (
         f"{position.option.option_type.value} "
         f"{position.option.strike_price:,.0f}"
     )
-    if record.structure_id is None:
+    if record.structure_id is None or not show_structure_suffix:
         return leg
     return f"{leg} ({record.structure_id})"
+
+
+def _group_plan_records(
+    records: list[RollPlanRecord],
+) -> list[tuple[str | None, list[RollPlanRecord]]]:
+    """Cluster *records* by ``structure_id`` for display only (#333).
+
+    Pure rendering grouping — the underlying records are unchanged, one
+    per leg, in whatever order ``build_roll_plan`` returned them. This
+    only decides how they're clustered on screen: legs sharing a tag move
+    together, in the order their tag was first seen; a leg with no tag is
+    always its own singleton group. Mirrors
+    :func:`~deltadewa.analysis.roll_planner.group_into_structures`'s own
+    tag-or-singleton grouping, but over :class:`RollPlanRecord` rather
+    than ``OptionPosition``.
+    """
+    grouped: dict[object, list[RollPlanRecord]] = {}
+    for record in records:
+        tag = record.structure_id
+        key: object = tag if tag is not None else object()
+        grouped.setdefault(key, []).append(record)
+    return [(legs[0].structure_id, legs) for legs in grouped.values()]
+
+
+def _plan_group_header_row(
+    structure_id: str,
+    legs: list[RollPlanRecord],
+) -> html.Tr:
+    """One header row naming a multi-leg structure's grouped rows (#333).
+
+    Target strike and roll-up cost are already identical across every leg
+    in the group — netted once in ``roll_planner`` — so they are stated
+    here rather than repeated silently on each leg row below.
+    """
+    priced = next((r for r in legs if r.target_strike is not None), None)
+    strike_text = (
+        f"target {priced.target_strike:,.0f}" if priced is not None else "n/a"
+    )
+    cost_text = (
+        fmt.signed_currency(priced.roll_up_cost)
+        if priced is not None and priced.roll_up_cost is not None
+        else "n/a"
+    )
+    return html.Tr(
+        html.Td(
+            f"{structure_id} — {len(legs)} legs, rolled as one structure "
+            f"({strike_text}, net cost {cost_text})",
+            colSpan=6,
+            className="plan-group-header",
+        ),
+    )
 
 
 def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
@@ -1417,13 +1483,20 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
             html.Th("Reasoning"),
         ],
     )
+    rows: list[html.Tr] = []
+    for structure_id, legs in _group_plan_records(records):
+        if structure_id is not None and len(legs) > 1:
+            rows.append(_plan_group_header_row(structure_id, legs))
+            rows.extend(_roll_plan_row(r, grouped=True) for r in legs)
+        else:
+            rows.extend(_roll_plan_row(r) for r in legs)
     return html.Div(
         [
             intro,
             html.Table(
                 [
                     html.Thead(header),
-                    html.Tbody([_roll_plan_row(r) for r in records]),
+                    html.Tbody(rows),
                 ],
                 className="planning-table",
             ),

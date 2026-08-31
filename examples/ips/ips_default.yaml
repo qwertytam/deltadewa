@@ -174,10 +174,10 @@ triggers:
   rally_review_pct: 10.0    # review: roll strikes up if convexity target missed
   rally_action_pct: 15.0    # act: strikes likely too deep OTM, roll the ladder
   rally_urgent_pct: 20.0    # urgent: close and re-establish
-  strike_drift_max_otm_pct: 40.0 # EXAMPLE VALUE
   roll_review_buffer: 1.5        # REVIEW fires within roll_at_months_remaining * this
-  strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
-                                       # of strike_drift_max_otm_pct
+  # strike_drift_max_otm_pct / strike_drift_review_fraction were retired
+  # here (#384): they implemented a handbook rule since deleted from the
+  # handbook, superseded by the four rally_* bands above.
   # Gamma drift = % of the hedged equity that net delta shifts per 1% spot move
   # (|gamma|*spot/|underlying_qty|); book-size-independent. A tail hedge is
   # typically gamma-light.

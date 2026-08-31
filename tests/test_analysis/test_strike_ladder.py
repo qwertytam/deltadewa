@@ -83,7 +83,6 @@ def _make_ips(
             rally_review_pct=10.0,
             rally_action_pct=15.0,
             rally_urgent_pct=20.0,
-            strike_drift_max_otm_pct=15.0,
         ),
         monetization=IpsMonetization(
             schedule=(IpsMonetizationStep(gain_pct=50.0, sell_pct=25.0),),

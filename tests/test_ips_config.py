@@ -46,7 +46,6 @@ _VALID_CONFIG: dict[str, Any] = {
         "rally_review_pct": 10.0,
         "rally_action_pct": 15.0,
         "rally_urgent_pct": 20.0,
-        "strike_drift_max_otm_pct": 45.0,
     },
     "monetization": {
         "schedule": [
@@ -513,25 +512,21 @@ class TestLoadIpsConfig:
         with pytest.raises(IpsConfigError, match="sell_pct"):
             load_ips_config(path)
 
-    def test_review_buffers_default_when_omitted(self, tmp_path: Path) -> None:
-        """Test that omitted REVIEW buffer fields fall back to defaults."""
+    def test_review_buffer_defaults_when_omitted(self, tmp_path: Path) -> None:
+        """Test that an omitted roll_review_buffer falls back to default."""
         path = _write_yaml(tmp_path, _VALID_CONFIG)
 
         ips = load_ips_config(path)
 
         assert ips.triggers.roll_review_buffer == pytest.approx(1.5, rel=1e-7)
-        assert ips.triggers.strike_drift_review_fraction == pytest.approx(
-            0.75, rel=1e-4
-        )
 
-    def test_review_buffers_round_trip_when_set(self, tmp_path: Path) -> None:
-        """Test that explicit REVIEW buffer values are loaded as given."""
+    def test_review_buffer_round_trips_when_set(self, tmp_path: Path) -> None:
+        """Test that an explicit roll_review_buffer is loaded as given."""
         config = {
             **_VALID_CONFIG,
             "triggers": {
                 **_VALID_CONFIG["triggers"],
                 "roll_review_buffer": 2.0,
-                "strike_drift_review_fraction": 0.5,
             },
         }
         path = _write_yaml(tmp_path, config)
@@ -539,9 +534,6 @@ class TestLoadIpsConfig:
         ips = load_ips_config(path)
 
         assert ips.triggers.roll_review_buffer == pytest.approx(2.0, rel=1e-7)
-        assert ips.triggers.strike_drift_review_fraction == pytest.approx(
-            0.5, rel=1e-4
-        )
 
     def test_roll_review_buffer_must_exceed_one(self, tmp_path: Path) -> None:
         """Test that roll_review_buffer <= 1.0 raises IpsConfigError."""
@@ -555,26 +547,6 @@ class TestLoadIpsConfig:
         path = _write_yaml(tmp_path, config)
 
         with pytest.raises(IpsConfigError, match="roll_review_buffer"):
-            load_ips_config(path)
-
-    def test_strike_drift_review_fraction_must_be_in_unit_interval(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Test that strike_drift_review_fraction outside (0, 1) raises."""
-        config = {
-            **_VALID_CONFIG,
-            "triggers": {
-                **_VALID_CONFIG["triggers"],
-                "strike_drift_review_fraction": 1.0,
-            },
-        }
-        path = _write_yaml(tmp_path, config)
-
-        with pytest.raises(
-            IpsConfigError,
-            match="strike_drift_review_fraction",
-        ):
             load_ips_config(path)
 
     def test_target_delta_ratio_default_when_omitted(
@@ -1228,3 +1200,36 @@ class TestRallyBands:
         assert triggers.rally_review_pct == pytest.approx(10.0)
         assert triggers.rally_action_pct == pytest.approx(15.0)
         assert triggers.rally_urgent_pct == pytest.approx(20.0)
+
+
+class TestStrikeDriftRetirement:
+    """#384: the strike-drift trigger is retired, not aliased."""
+
+    def test_the_retired_fields_are_gone(self, tmp_path: Path) -> None:
+        """strike_drift_max_otm_pct/_review_fraction are superseded by rally."""
+        config = deepcopy(_VALID_CONFIG)
+        path = _write_yaml(tmp_path, config)
+
+        triggers = load_ips_config(path).triggers
+
+        assert not hasattr(triggers, "strike_drift_max_otm_pct")
+        assert not hasattr(triggers, "strike_drift_review_fraction")
+
+    def test_a_shipped_file_carrying_the_old_keys_still_loads(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The retired keys are ignored, not rejected as unknown."""
+        config = {
+            **deepcopy(_VALID_CONFIG),
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "strike_drift_max_otm_pct": 40.0,
+                "strike_drift_review_fraction": 0.75,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        triggers = load_ips_config(path).triggers
+
+        assert not hasattr(triggers, "strike_drift_max_otm_pct")

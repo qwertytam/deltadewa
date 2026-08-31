@@ -108,7 +108,6 @@ def _make_ips_config() -> IpsConfig:
             rally_review_pct=10.0,
             rally_action_pct=15.0,
             rally_urgent_pct=20.0,
-            strike_drift_max_otm_pct=45.0,
         ),
         monetization=IpsMonetization(schedule=()),
     )

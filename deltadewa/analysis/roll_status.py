@@ -135,11 +135,9 @@ class RollStatusRecord:
     convexity_target_min_pct: float
     convexity_target_max_pct: float
     verdict: RollVerdict
-    suppressed: bool
     estimated_roll_up_cost: float | None
     time_trigger: TriggerReason
     convexity_trigger: TriggerReason
-    drift_trigger: TriggerReason
     rally_trigger: TriggerReason
 
 
@@ -243,25 +241,6 @@ def _convexity_trigger_verdict(
     return TriggerReason(RollVerdict.HOLD, reason=reason)
 
 
-def _strike_drift_trigger_verdict(
-    drift_pct: float | None,
-    max_otm_drift_pct: float,
-    review_fraction: float,
-) -> TriggerReason:
-    if drift_pct is None:
-        return TriggerReason(
-            RollVerdict.HOLD,
-            reason="no entry spot recorded",
-        )
-    reason = f"{drift_pct:+.1f}% OTM drift vs {max_otm_drift_pct:.0f}% max"
-    abs_drift = abs(drift_pct)
-    if abs_drift > max_otm_drift_pct:
-        return TriggerReason(RollVerdict.ROLL, reason=reason)
-    if abs_drift > max_otm_drift_pct * review_fraction:
-        return TriggerReason(RollVerdict.REVIEW, reason=reason)
-    return TriggerReason(RollVerdict.HOLD, reason=reason)
-
-
 def rally_from_entry_pct(
     position: OptionPosition,
     current_spot: float,
@@ -276,12 +255,17 @@ def rally_from_entry_pct(
     tranche has its own, which is why this is a per-tranche reading and
     not a book-level one.
 
-    Distinct from :class:`MoneynessDrift`'s ``drift_pct``, which the strike
-    drift trigger bands. The two are deterministically related for a given
-    leg but on very different scales: a rally ``r`` on a put entered
-    ``m``% OTM moves its moneyness by only ``(1 - m/100) * r/(1+r)``
-    percentage points, so the handbook's most severe rally band (>+20%)
-    produces about 14 pp of drift on a 16%-OTM put. See #384.
+    Distinct from :class:`MoneynessDrift`'s ``drift_pct``, an entry-vs-now
+    %OTM reading still carried on every record for display. The two are
+    deterministically related for a given leg but on very different
+    scales: a rally ``r`` on a put entered ``m``% OTM moves its moneyness
+    by only ``(1 - m/100) * r/(1+r)`` percentage points, so the handbook's
+    most severe rally band (>+20%) produces about 14 pp of drift on a
+    16%-OTM put. A former strike-drift trigger banded ``drift_pct``
+    directly against a flat 40 pp threshold — a handbook rule that no
+    longer exists, and one this scale relationship meant could not fire in
+    the direction that mattered; retired in #384, superseded by this
+    rally-from-entry reading.
 
     Args:
         position: The tranche to measure.
@@ -468,11 +452,10 @@ def verdict_reason(record: RollStatusRecord) -> str:
 
     ``EXPIRED`` is answered first — its three triggers were never evaluated,
     so matching against them would return a stand-in string. Otherwise the
-    verdict is matched against the four per-trigger verdicts (time,
-    convexity, strike drift, rally) and that trigger's ``.reason`` is
-    returned. When ``record.suppressed`` is ``True``
-    — or, defensively, when no trigger matches — this is the roll-suppression
-    case and a sentence naming the suppression is returned instead.
+    verdict is matched against the three per-trigger verdicts (time,
+    convexity, rally) and that trigger's ``.reason`` is returned — the
+    verdict is defined as their max, so one of them always matches; the
+    fallback below is defensive only.
 
     Args:
         record: One position's roll status record.
@@ -484,21 +467,15 @@ def verdict_reason(record: RollStatusRecord) -> str:
     if record.verdict is RollVerdict.EXPIRED:
         return expired_reason(record.position, record.days_to_maturity)
 
-    if not record.suppressed:
-        for trigger in (
-            record.time_trigger,
-            record.convexity_trigger,
-            record.drift_trigger,
-            record.rally_trigger,
-        ):
-            if trigger.verdict == record.verdict:
-                return trigger.reason
+    for trigger in (
+        record.time_trigger,
+        record.convexity_trigger,
+        record.rally_trigger,
+    ):
+        if trigger.verdict == record.verdict:
+            return trigger.reason
 
-    return (
-        "Strike drift alone flagged a roll, but convexity is in-band "
-        "and there's no time pressure, so this is held at "
-        f"{record.verdict.value}."
-    )
+    return f"Held at {record.verdict.value}."  # pragma: no cover - defensive
 
 
 def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, their verdicts, and the crash basis they share
@@ -574,11 +551,9 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                     convexity_target_min_pct=convexity.target_min_pct,
                     convexity_target_max_pct=convexity.target_max_pct,
                     verdict=RollVerdict.EXPIRED,
-                    suppressed=False,
                     estimated_roll_up_cost=None,
                     time_trigger=expired_trigger,
                     convexity_trigger=expired_trigger,
-                    drift_trigger=expired_trigger,
                     rally_trigger=expired_trigger,
                 ),
             )
@@ -594,50 +569,21 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
             convexity.target_min_pct,
             convexity.target_max_pct,
         )
-        drift_trigger = _strike_drift_trigger_verdict(
-            moneyness.drift_pct,
-            triggers.strike_drift_max_otm_pct,
-            triggers.strike_drift_review_fraction,
-        )
         rally_trigger = _rally_trigger_verdict(
             rally_from_entry_pct(position, current_spot),
             triggers,
         )
         time_verdict = time_trigger.verdict
         convexity_verdict = convexity_trigger.verdict
-        drift_verdict = drift_trigger.verdict
 
         verdict = max(
             (
                 time_verdict,
                 convexity_verdict,
-                drift_verdict,
                 rally_trigger.verdict,
             ),
             key=lambda v: _SEVERITY[v],
         )
-
-        # Gamma/theta nuance: a put that has moved nearer the money is
-        # gaining convexity on its own. If there's no time pressure and
-        # crash convexity is still within target, don't force a roll that
-        # was only triggered by strike drift.
-        #
-        # A rally can never reach this: it requires drift_pct < 0, and a
-        # rally pushes a put further OTM (drift_pct > 0). That is structural
-        # rather than incidental — deferring on a rally is exactly what #258
-        # fixed, and a test pins it now that the rally trigger can also
-        # produce a ROLL.
-        suppressed = False
-        if (  # pylint: disable=too-many-boolean-expressions  # six independent roll-suppression guards; decomposing would obscure the policy
-            verdict == RollVerdict.ROLL
-            and position.option.option_type == OptionType.PUT
-            and time_verdict != RollVerdict.ROLL
-            and moneyness.drift_pct is not None
-            and moneyness.drift_pct < 0
-            and convexity_verdict == RollVerdict.HOLD
-        ):
-            verdict = RollVerdict.MONITOR
-            suppressed = True
 
         estimated_roll_up_cost = None
         if (
@@ -672,11 +618,9 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                 convexity_target_min_pct=convexity.target_min_pct,
                 convexity_target_max_pct=convexity.target_max_pct,
                 verdict=verdict,
-                suppressed=suppressed,
                 estimated_roll_up_cost=estimated_roll_up_cost,
                 time_trigger=time_trigger,
                 convexity_trigger=convexity_trigger,
-                drift_trigger=drift_trigger,
                 rally_trigger=rally_trigger,
             ),
         )

@@ -196,10 +196,7 @@ def gamma_theta_delay(
     return not_in_roll_window and in_target_band and nearer_the_money
 
 
-def _roll_now_rationale(
-    record: RollStatusRecord,
-    ips_triggers: IpsTriggers,
-) -> str:
+def _roll_now_rationale(record: RollStatusRecord) -> str:
     """One-sentence rationale identifying the primary ROLL_NOW trigger."""
     if record.days_to_maturity <= record.roll_window_days:
         return (
@@ -212,13 +209,8 @@ def _roll_now_rationale(
             f" below target minimum"
             f" {record.convexity_target_min_pct:.1f}%."
         )
-    drift = record.moneyness.drift_pct
-    if drift is not None and abs(drift) > ips_triggers.strike_drift_max_otm_pct:
-        direction = "further OTM" if drift > 0 else "nearer the money"
-        return (
-            f"Strike drift {drift:+.1f}% ({direction}) exceeded the"
-            f" {ips_triggers.strike_drift_max_otm_pct:.0f}% threshold."
-        )
+    if record.rally_trigger.verdict == record.verdict:
+        return f"Rally trigger: {record.rally_trigger.reason}."
     return f"Roll recommended ({record.verdict})."
 
 
@@ -622,7 +614,7 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
                 ips_convexity=ips_convexity,
             )
         else:
-            rationale = _roll_now_rationale(record, ips_triggers)
+            rationale = _roll_now_rationale(record)
         if structure.is_spread:
             rationale = (
                 f"{rationale} Rolls as one structure with "

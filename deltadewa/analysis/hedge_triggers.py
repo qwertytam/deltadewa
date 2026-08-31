@@ -144,10 +144,12 @@ class HedgeTriggerThresholds:
 
         Note:
             This is *not* the whole of ``IpsTriggers``.
-            ``roll_at_months_remaining``, ``strike_drift_max_otm_pct``,
-            ``strike_drift_review_fraction`` and ``roll_review_buffer`` are
-            roll policy, consumed by ``roll_planner``/``roll_status``
-            rather than here. The rally bands are consumed by **both**:
+            ``roll_at_months_remaining`` and ``roll_review_buffer`` are roll
+            policy, consumed by ``roll_planner``/``roll_status`` rather
+            than here. (``strike_drift_max_otm_pct`` and
+            ``strike_drift_review_fraction`` were also roll-policy-only
+            fields here until #384 retired them.) The rally bands are
+            consumed by **both**:
             ``roll_status`` grades each tranche against all four, and this
             book-level set carries the outer two so the digest and the
             hedge-trigger panel can report one reading for the book.
