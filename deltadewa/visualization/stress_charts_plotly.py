@@ -273,11 +273,16 @@ def plot_time_price_heatmap(
     if result_df.empty:
         return _empty_stress_figure(title)
 
+    # Ascending, matching plot_spot_vol_heatmap (#330): Plotly draws
+    # categorical y-axis entries bottom-to-top, so an ascending index
+    # puts the highest spot at the top. matrix/text/y_labels all derive
+    # from this same pivot.index, so the sort carries all three together
+    # -- no z<->label mispairing is possible.
     pivot = result_df.pivot(
         index="spot_price",
         columns="days_forward",
         values="value",
-    ).sort_index(ascending=False)
+    ).sort_index(ascending=True)
     matrix = pivot.to_numpy()
     text = [
         [spec.value_format.format(value) for value in row] for row in matrix

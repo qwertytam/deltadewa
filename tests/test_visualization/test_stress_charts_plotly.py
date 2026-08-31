@@ -85,6 +85,22 @@ class TestPlotSpotVolHeatmap:
         assert "level" in title
         assert "bump" not in title
 
+    def test_lowest_vol_renders_at_bottom_of_y_axis(self) -> None:
+        """#330: the sibling ``plot_time_price_heatmap`` reads the axis
+        the same way -- both builders must agree.
+        """
+        fig = plot_spot_vol_heatmap(
+            _spot_vol_df(),
+            spot_scenarios=_SPOT_SCENARIOS,
+            vol_scenarios=_VOL_SCENARIOS,
+            original_spot=_ORIGINAL_SPOT,
+            avg_vol=_AVG_VOL,
+            metric="pnl",
+        )
+
+        y = list(fig.data[0].y)
+        assert y == sorted(y)
+
     def test_marks_current_position_and_reference_lines(self) -> None:
         fig = plot_spot_vol_heatmap(
             _spot_vol_df(),
@@ -187,6 +203,25 @@ class TestPlotTimePriceHeatmap:
         assert any("~0%" in label for label in y_labels)
         assert any("+" in label for label in y_labels)
         assert any(label.count("-") >= 1 and "$" in label for label in y_labels)
+
+    def test_highest_spot_renders_at_top_of_y_axis(self) -> None:
+        """#330: Plotly draws categorical y entries bottom-to-top, so the
+        first label must be the LOWEST spot for the highest spot to land
+        at the top of the rendered axis.
+        """
+        fig = plot_time_price_heatmap(
+            _time_price_df(),
+            original_spot=_ORIGINAL_SPOT,
+            original_date=datetime(2026, 1, 1, tzinfo=UTC),
+            metric="pnl",
+        )
+
+        y_labels = list(fig.data[0].y)
+        spots = [
+            float(label.split("(")[0].strip().lstrip("$").replace(",", ""))
+            for label in y_labels
+        ]
+        assert spots == sorted(spots)
 
     def test_empty_dataframe_renders_placeholder_not_raise(self) -> None:
         empty = pd.DataFrame(columns=["spot_price", "days_forward", "value"])
