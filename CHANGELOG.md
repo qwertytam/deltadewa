@@ -53,6 +53,48 @@ history for that record instead.
 
 ### Fixed
 
+- **#326** — the strike ladder had three distinct dead ends and one
+  undifferentiated paragraph for all of them, so a panel showing only its
+  own inputs could mean "you typed something unparseable", "the book has
+  no underlying to size against", or "every rung you asked for is
+  unsolvable". Each now renders as its own notice, via a new
+  `app/panel_guard.panel_notice` with a `NoticeKind` of `INPUT` /
+  `BLOCKED` / `EMPTY` / `ERROR`. A panel that *raised* remains
+  `safe_render`'s job — unchanged; a panel that *returned an empty
+  result* is a different failure and gets the new `EMPTY` state, which
+  names every unsolvable rung and its reason and draws no table at all. A
+  partial solve keeps its table and lists the rest under "Unsolvable".
+  `safe_render` also takes a `blocked_hint`, so the sizing and ladder
+  panels can say which zone to go fix.
+
+- **#334** — the expiration calendar and position-aging tables netted a
+  long and a short leg in the same row to one figure, so a real offsetting
+  pair rendered as `$0`/`$0` — indistinguishable from an empty row. The net
+  is still the headline (it is what unwinding the row realises today), but
+  a new frozen `analysis.position_aging.SignedTotals` now carries the long
+  and short sides separately, `contracts`/`position_value`/`position_theta`
+  delegate to it as properties so there is one source of truth for net
+  vs gross, and a row mixing sides renders an `L … · S …` line beneath the
+  net. A row that both offsets *and* nets to ~zero is flagged amber, so the
+  one case the issue was about is the one case that draws the eye.
+
+- **#316** — the sizing workbench and strike ladder seeded their maturity
+  dials from a hardcoded `0.5`/`0.5, 1.0, 2.0` rather than from policy, so
+  a program that buys 18-month protection opened both panels on tenors it
+  does not trade. A new optional `maturity_selection:` IPS section
+  (`entry_tenor_years` / `maintain_min_years` / `maintain_max_years`,
+  validated `0 < min <= entry <= max`) now owns them. **Additive and
+  non-breaking** — omit the section and the built-in 1.5/1.0/2.0 defaults
+  apply. The dials stay user-editable; the IPS only decides where they
+  start.
+
+- **#330** — the time-x-price stress heatmap sorted its price index
+  descending, which on Plotly's bottom-to-top categorical axis put the
+  lowest spot at the top, inverted relative to the spot-x-vol heatmap
+  beside it. Sorted ascending. Confirmed to be an axis-orientation fix
+  only: `matrix`, `text` and `y_labels` all derive from the same
+  `pivot.index`, so no cell can be mispaired with its label.
+
 - **#364** — the weekly digest's body build (market-data read through
   rendering the markdown/html strings, `weekly_report.build_and_render`)
   is now guarded: a raise from an input this module doesn't control (a
