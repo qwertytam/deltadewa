@@ -11,6 +11,7 @@ literal here: see :func:`expiry_boundaries`.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
@@ -106,19 +107,117 @@ class AgedPosition:
 
 
 @dataclass(frozen=True)
+class SignedTotals:
+    """The long and short sides of one aggregate, kept apart (#334).
+
+    A net is the right headline for a roll plan -- it is the mark you'd
+    realise unwinding the whole group -- but a net of zero is
+    indistinguishable from an empty group unless both sides are carried
+    alongside it. Grouping different strikes under one maturity date is
+    legitimate (that is the calendar's whole axis); silently cancelling
+    opposing legs to nothing is not.
+
+    Sign convention, verified against
+    :class:`~deltadewa.portfolio.position.OptionPosition`: a LONG put
+    (positive ``quantity``) carries positive ``position_value`` and
+    NEGATIVE ``position_theta`` (it decays); a SHORT put (negative
+    ``quantity``) carries negative ``position_value`` and POSITIVE
+    ``position_theta`` (the writer collects it). A leg is classified by
+    the sign of its own ``quantity``, independent of strike.
+
+    Attributes:
+        long_contracts: Sum of positive-quantity legs (``>= 0``).
+        short_contracts: Sum of negative-quantity legs (``<= 0``).
+        long_value: Gross mark of the long side (``>= 0``).
+        short_value: Gross mark of the short side (``<= 0``).
+        long_theta: Gross daily theta of the long side (``<= 0``,
+            long options decay).
+        short_theta: Gross daily theta of the short side (``>= 0``,
+            short options collect).
+
+    """
+
+    long_contracts: int
+    short_contracts: int
+    long_value: float
+    short_value: float
+    long_theta: float
+    short_theta: float
+
+    @property
+    def net_contracts(self) -> int:
+        """Signed contract count -- the size a roll would need to cover."""
+        return self.long_contracts + self.short_contracts
+
+    @property
+    def net_value(self) -> float:
+        """Net mark -- what unwinding the whole group realises today."""
+        return self.long_value + self.short_value
+
+    @property
+    def net_theta(self) -> float:
+        """Net daily theta -- the group's combined bleed."""
+        return self.long_theta + self.short_theta
+
+    @property
+    def is_offsetting(self) -> bool:
+        """``True`` when both a long and a short leg contribute.
+
+        Distinguishes "the net is a cancellation" from "there is
+        nothing here" -- a rendering surface should show the gross
+        sides whenever this is ``True``, not only when the net happens
+        to round to zero.
+        """
+        # Two independent comparisons on two different fields, not a
+        # chainable range check -- pylint's R1716 misreads the shared
+        # "0" as a middle term to merge, which would change the meaning.
+        return (
+            self.long_contracts > 0  # pylint: disable=chained-comparison
+            and self.short_contracts < 0
+        )
+
+
+def _signed_totals(members: Sequence[AgedPosition]) -> SignedTotals:
+    """Split *members* into long/short and sum each side separately."""
+    longs = [m for m in members if m.position.quantity > 0]
+    shorts = [m for m in members if m.position.quantity < 0]
+    return SignedTotals(
+        long_contracts=sum(m.position.quantity for m in longs),
+        short_contracts=sum(m.position.quantity for m in shorts),
+        long_value=sum(m.position.position_value() for m in longs),
+        short_value=sum(m.position.position_value() for m in shorts),
+        long_theta=sum(m.position.position_theta() for m in longs),
+        short_theta=sum(m.position.position_theta() for m in shorts),
+    )
+
+
+@dataclass(frozen=True)
 class ExpiryBucketTotal:
     """What sits in one bucket: how many legs, and how much.
 
-    ``contracts`` is the signed contract count (negative for short legs),
-    so a bucket holding a spread nets rather than double-counting the
-    roll-off size.
+    ``contracts``, ``position_value`` and ``position_theta`` are the
+    signed net -- read them for "how much rolls off"; read ``totals``
+    for the long/short breakdown a net of zero can hide (#334).
     """
 
     label: ExpiryBucketLabel
     legs: int
-    contracts: int
-    position_value: float
-    position_theta: float
+    totals: SignedTotals
+
+    @property
+    def contracts(self) -> int:
+        """Signed contract count (negative for a net-short bucket)."""
+        return self.totals.net_contracts
+
+    @property
+    def position_value(self) -> float:
+        """Net mark of every leg in the bucket."""
+        return self.totals.net_value
+
+    @property
+    def position_theta(self) -> float:
+        """Net daily theta of every leg in the bucket."""
+        return self.totals.net_theta
 
 
 @dataclass(frozen=True)
@@ -127,16 +226,32 @@ class ExpiryCalendarEntry:
 
     The calendar is the "how much at a time" half of the panel -- one row
     per distinct expiry, so a book whose legs are stacked on a single date
-    reads differently from one laddered across four.
+    reads differently from one laddered across four. ``contracts``,
+    ``position_value`` and ``position_theta`` are the signed net; see
+    ``totals`` for the long/short breakdown a net of zero can hide when
+    legs at different strikes share a maturity (#334).
     """
 
     maturity_date: dt
     days_to_expiry: int
     bucket: ExpiryBucketLabel
     legs: int
-    contracts: int
-    position_value: float
-    position_theta: float
+    totals: SignedTotals
+
+    @property
+    def contracts(self) -> int:
+        """Signed contract count (negative for a net-short entry)."""
+        return self.totals.net_contracts
+
+    @property
+    def position_value(self) -> float:
+        """Net mark of every leg sharing this maturity date."""
+        return self.totals.net_value
+
+    @property
+    def position_theta(self) -> float:
+        """Net daily theta of every leg sharing this maturity date."""
+        return self.totals.net_theta
 
 
 @dataclass(frozen=True)
@@ -268,13 +383,7 @@ def _total_for(
     return ExpiryBucketTotal(
         label=label,
         legs=len(members),
-        contracts=sum(entry.position.quantity for entry in members),
-        position_value=sum(
-            entry.position.position_value() for entry in members
-        ),
-        position_theta=sum(
-            entry.position.position_theta() for entry in members
-        ),
+        totals=_signed_totals(members),
     )
 
 
@@ -294,13 +403,7 @@ def _calendar(
             days_to_expiry=members[0].days_to_expiry,
             bucket=members[0].bucket,
             legs=len(members),
-            contracts=sum(entry.position.quantity for entry in members),
-            position_value=sum(
-                entry.position.position_value() for entry in members
-            ),
-            position_theta=sum(
-                entry.position.position_theta() for entry in members
-            ),
+            totals=_signed_totals(members),
         )
         for maturity_date, members in sorted(by_date.items())
     )

@@ -65,6 +65,7 @@ from deltadewa.analysis.position_aging import (
     ExpiryBucketTotal,
     ExpiryCalendarEntry,
     PositionAging,
+    SignedTotals,
     evaluate_position_aging,
 )
 from deltadewa.analysis.provenance import build_provenance_ledger
@@ -85,6 +86,7 @@ from deltadewa.analysis.volatility import build_volatility_profile
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.panel_guard import NoticeKind, panel_notice
 from deltadewa.app.panel_guard import (
     incomplete_notice as _incomplete,
 )
@@ -145,6 +147,7 @@ if TYPE_CHECKING:
         IpsConfig,
         IpsConvexity,
         IpsMarketEnvironment,
+        IpsMaturitySelection,
     )
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
@@ -156,12 +159,27 @@ _REQUIRED_ADD_FIELDS_MSG = "Strike, maturity, and quantity are required."
 
 # PLANNING zone: dial defaults. Carried over from the sizing/ladder cells of
 # hedge_design.ipynb, which Stage 4.3 deleted — these are the starting point
-# that notebook hardcoded, kept here as adjustable dial defaults. They are
-# presentation, not policy: nothing grades against them.
+# that notebook hardcoded, kept here as adjustable dial defaults. Genuinely
+# presentation, not policy: no IPS strike-selection section exists to read
+# them from, and inventing one is its own decision, not #316's (which is
+# about tenor, not delta/OTM). The two MATURITY dial defaults these used to
+# sit beside were #316's actual bug (0.5y, unbacked by any policy) and now
+# come from ips_config.maturity_selection instead — see render().
 _DEFAULT_SIZING_PCT_OTM = 20.0
-_DEFAULT_SIZING_MATURITY_YEARS = 0.5
 _DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
-_DEFAULT_LADDER_MATURITIES_YEARS = "0.25, 0.5, 1.0"
+
+# #326: safe_render's BLOCKED remediation pointer for the two panels that
+# raise ValueError on a book with no underlying position (size_hedge,
+# build_strike_ladder). Presentation, on the page that knows where the
+# fix lives -- not baked into the analysis-layer exception text.
+_SIZING_BLOCKED_HINT = (
+    "Set the underlying spot and quantity in the BOOK zone; sizing "
+    "needs them to size a candidate hedge."
+)
+_LADDER_BLOCKED_HINT = (
+    "Set the underlying spot and quantity in the BOOK zone; the ladder "
+    "sizes every rung against them."
+)
 
 # Every PLANNING panel prices this basis — size_hedge, build_strike_ladder,
 # and evaluate_roll_status each build CrashShock.from_ips(...) internally,
@@ -644,6 +662,16 @@ def _parse_float_list(raw: str | None) -> list[float] | None:
     return values or None
 
 
+def _ladder_maturities_text(selection: IpsMaturitySelection) -> str:
+    """Format the ladder dial's initial text from IPS policy (#316).
+
+    ``ladder_maturities_years`` is already derived from the three
+    ``maturity_selection`` fields, so this is only the text-rendering
+    step of that -- not a fourth place the tenor could drift from them.
+    """
+    return ", ".join(str(years) for years in selection.ladder_maturities_years)
+
+
 def _env_metric_row(
     *,
     label: str,
@@ -1055,7 +1083,7 @@ def _render_sizing_panel_logic(
             )
             return _sizing_panel_view(result, ips_config)
 
-        candidate = _safe_render(_build)
+        candidate = _safe_render(_build, blocked_hint=_SIZING_BLOCKED_HINT)
 
     return html.Div(
         [
@@ -1107,35 +1135,55 @@ def _ladder_panel_view(result: StrikeLadderResult) -> Component:
     """Render the solved rungs table, then the unsolvable cells.
 
     Unsolvable rungs are shown, never dropped — see
-    :func:`_unsolvable_rung_line` for the finding-ID note.
+    :func:`_unsolvable_rung_line` for the finding-ID note. #326's third
+    mode: when nothing at all solved, that is its own dead end (the
+    engine ran and answered "nothing"), rendered as a
+    :attr:`NoticeKind.EMPTY` notice rather than as a bare "Unsolvable"
+    heading — the same table-less shape #326 reported as
+    indistinguishable from a panel that had not built yet.
     """
     if not result.rungs and not result.unsolvable:
+        # Unreachable by construction: _render_ladder_panel_logic only
+        # calls build_strike_ladder with two non-empty sequences (a
+        # None list already short-circuits to the INPUT notice above
+        # it), and itertools.product of two non-empty sequences always
+        # yields at least one cell, which lands in rungs or unsolvable.
+        # Kept as a real INPUT notice rather than deleted, in case that
+        # invariant ever changes.
         return _incomplete("No rungs requested.")
 
-    children: list[Component] = []
-    if result.rungs:
-        header = html.Tr(
-            [
-                html.Th("Delta"),
-                html.Th("Maturity"),
-                html.Th("Strike"),
-                html.Th("%OTM"),
-                html.Th("Put delta"),
-                html.Th("Premium"),
-                html.Th("Crash payoff"),
-                html.Th("Contracts"),
-                html.Th("Achieved convexity"),
-                html.Th("Budget"),
-            ],
+    if not result.rungs:
+        return panel_notice(
+            "No rung solves at these inputs.",
+            kind=NoticeKind.EMPTY,
+            body=[_unsolvable_rung_line(rung) for rung in result.unsolvable],
         )
-        rows = [_ladder_rung_row(rung) for rung in result.rungs]
-        children.append(
-            html.Table(
-                [html.Thead(header), html.Tbody(rows)],
-                className="planning-table",
-            ),
-        )
+
+    header = html.Tr(
+        [
+            html.Th("Delta"),
+            html.Th("Maturity"),
+            html.Th("Strike"),
+            html.Th("%OTM"),
+            html.Th("Put delta"),
+            html.Th("Premium"),
+            html.Th("Crash payoff"),
+            html.Th("Contracts"),
+            html.Th("Achieved convexity"),
+            html.Th("Budget"),
+        ],
+    )
+    rows = [_ladder_rung_row(rung) for rung in result.rungs]
+    children: list[Component] = [
+        html.Table(
+            [html.Thead(header), html.Tbody(rows)],
+            className="planning-table",
+        ),
+    ]
     if result.unsolvable:
+        # A partial answer, not an empty one -- the table above already
+        # says the panel worked, so this stays plain markup rather than
+        # a second notice.
         children.append(html.H4("Unsolvable"))
         children.extend(
             _unsolvable_rung_line(rung) for rung in result.unsolvable
@@ -1168,7 +1216,7 @@ def _render_ladder_panel_logic(
         )
         return _ladder_panel_view(result)
 
-    return _safe_render(_build)
+    return _safe_render(_build, blocked_hint=_LADDER_BLOCKED_HINT)
 
 
 def _otm_pair_text(moneyness: MoneynessDrift) -> str:
@@ -1595,26 +1643,99 @@ def _expiry_window_text(
     return windows[label]
 
 
+def _nets_near_zero(value: float) -> bool:
+    """Whether *value* would render as a whole-dollar/theta zero (#334).
+
+    The columns this guards both format at zero decimals
+    (:func:`~deltadewa.app.format.currency`,
+    :func:`~deltadewa.app.format.signed_currency`), so anything that
+    rounds to ``0`` at that precision is what a reader would actually
+    see as "$0" / "+$0".
+    """
+    return abs(round(value)) == 0
+
+
+def _net_and_gross_cell(
+    *,
+    net_text: str,
+    long_text: str,
+    short_text: str,
+    show_gross: bool,
+) -> html.Td:
+    """Net on the first line; ``L ... - S ...`` muted underneath.
+
+    *show_gross* is ``False`` for a pure-long or pure-short row -- a
+    gross breakdown of a single side repeats the net and teaches
+    nothing (#334).
+    """
+    if not show_gross:
+        return html.Td(net_text)
+    return html.Td(
+        [
+            html.Div(net_text),
+            html.Div(
+                f"L {long_text} · S {short_text}",
+                className="aging-gross-line",
+            ),
+        ],
+    )
+
+
+def _aging_row_class(
+    totals: SignedTotals,
+    *,
+    legs: int,
+) -> str | None:
+    """Pick the row's styling hook: empty, offsetting, or plain.
+
+    ``aging-row--offsetting`` fires only when the net would otherwise
+    read as "$0" *and* both a long and a short leg produced it --
+    exactly the case #334 reported as indistinguishable from an empty
+    bucket. A non-empty net (e.g. a real spread's mark) needs no flag
+    even when it mixes long and short legs; that net is a meaningful
+    number, not a cancellation to call out.
+    """
+    if legs == 0:
+        return "aging-row--empty"
+    if totals.is_offsetting and _nets_near_zero(totals.net_value):
+        return "aging-row--offsetting"
+    return None
+
+
 def _aging_bucket_row(
     total: ExpiryBucketTotal,
     boundaries: ExpiryBoundaries,
 ) -> html.Tr:
     """One bucket's window, leg count and the size rolling off in it."""
+    totals = total.totals
+    show_gross = totals.is_offsetting
     return html.Tr(
         [
             html.Td(total.label.value),
             html.Td(_expiry_window_text(total.label, boundaries)),
             html.Td(f"{total.legs}"),
             html.Td(f"{total.contracts:+,}" if total.contracts else "0"),
-            html.Td(fmt.currency(total.position_value)),
-            html.Td(fmt.signed_currency(total.position_theta)),
+            _net_and_gross_cell(
+                net_text=fmt.currency(total.position_value),
+                long_text=fmt.signed_currency(totals.long_value),
+                short_text=fmt.signed_currency(totals.short_value),
+                show_gross=show_gross,
+            ),
+            _net_and_gross_cell(
+                net_text=fmt.signed_currency(total.position_theta),
+                long_text=fmt.signed_currency(totals.long_theta),
+                short_text=fmt.signed_currency(totals.short_theta),
+                show_gross=show_gross,
+            ),
         ],
-        className="aging-row--empty" if total.legs == 0 else None,
+        className=_aging_row_class(totals, legs=total.legs),
     )
 
 
 def _aging_calendar_row(entry: ExpiryCalendarEntry) -> html.Tr:
     """One dated roll-off: every leg sharing this maturity."""
+    totals = entry.totals
+    show_gross = totals.is_offsetting
     return html.Tr(
         [
             html.Td(entry.maturity_date.strftime("%Y-%m-%d")),
@@ -1622,9 +1743,20 @@ def _aging_calendar_row(entry: ExpiryCalendarEntry) -> html.Tr:
             html.Td(entry.bucket.value),
             html.Td(f"{entry.legs}"),
             html.Td(f"{entry.contracts:+,}"),
-            html.Td(fmt.currency(entry.position_value)),
-            html.Td(fmt.signed_currency(entry.position_theta)),
+            _net_and_gross_cell(
+                net_text=fmt.currency(entry.position_value),
+                long_text=fmt.signed_currency(totals.long_value),
+                short_text=fmt.signed_currency(totals.short_value),
+                show_gross=show_gross,
+            ),
+            _net_and_gross_cell(
+                net_text=fmt.signed_currency(entry.position_theta),
+                long_text=fmt.signed_currency(totals.long_theta),
+                short_text=fmt.signed_currency(totals.short_theta),
+                show_gross=show_gross,
+            ),
         ],
+        className=_aging_row_class(totals, legs=entry.legs),
     )
 
 
@@ -1687,6 +1819,15 @@ def _position_aging_panel_view(aging: PositionAging) -> Component:
                 "(roll_at_months_remaining x roll_review_buffer). The two roll "
                 "buckets are the same window the roll status table "
                 "grades against, so the two panels cannot disagree.",
+                className="plain-language",
+            ),
+            html.P(
+                "Value and Theta/day are the NET mark and daily bleed of "
+                "every leg in the row — what unwinding it realises today. "
+                "When a row mixes a long and a short leg, an 'L · S' line "
+                "underneath shows the gross sides that produced the net, "
+                "so a row highlighted amber is a real offsetting position "
+                "netting to $0 — not an empty one (#334).",
                 className="plain-language",
             ),
             bucket_table,
@@ -2410,6 +2551,12 @@ def render(app: ProgramDashApp) -> html.Div:
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
     default_style = ips_config.pricing.exercise_style.value
+    # #316: the sizing/ladder maturity dials' initial values come from
+    # policy (entry tenor / maintain range), not a hardcoded 0.5y.
+    sizing_maturity_default = ips_config.maturity_selection.entry_tenor_years
+    ladder_maturities_default = _ladder_maturities_text(
+        ips_config.maturity_selection,
+    )
     # One assessment shared by the market-environment and monetization
     # panels. Both need the same snapshot, and a second fetch could return a
     # different one — the two panels would then disagree on the same page.
@@ -2645,7 +2792,7 @@ def render(app: ProgramDashApp) -> html.Div:
                                     dcc.Input(
                                         id="sizing-maturity-years",
                                         type="number",
-                                        value=_DEFAULT_SIZING_MATURITY_YEARS,
+                                        value=sizing_maturity_default,
                                         debounce=True,
                                     ),
                                 ],
@@ -2670,7 +2817,7 @@ def render(app: ProgramDashApp) -> html.Div:
                             portfolio=portfolio,
                             ips_config=ips_config,
                             pct_otm=_DEFAULT_SIZING_PCT_OTM,
-                            maturity_years=_DEFAULT_SIZING_MATURITY_YEARS,
+                            maturity_years=sizing_maturity_default,
                             vol_override=None,
                         ),
                         id="plan-sizing-panel",
@@ -2701,7 +2848,7 @@ def render(app: ProgramDashApp) -> html.Div:
                                     dcc.Input(
                                         id="ladder-maturities-years",
                                         type="text",
-                                        value=_DEFAULT_LADDER_MATURITIES_YEARS,
+                                        value=ladder_maturities_default,
                                         debounce=True,
                                     ),
                                 ],
@@ -2715,9 +2862,7 @@ def render(app: ProgramDashApp) -> html.Div:
                             portfolio=portfolio,
                             ips_config=ips_config,
                             target_deltas_raw=_DEFAULT_LADDER_TARGET_DELTAS,
-                            maturities_years_raw=(
-                                _DEFAULT_LADDER_MATURITIES_YEARS
-                            ),
+                            maturities_years_raw=ladder_maturities_default,
                         ),
                         id="plan-ladder-panel",
                     ),

@@ -204,3 +204,12 @@ maturity_buckets:
   # entire 18-month ladder in one terminal bucket, so the panel answered
   # nothing.
   edges_days: [30, 90, 180, 365, 730]
+
+# Which tenors this program buys and holds (#316). POLICY, not
+# presentation — distinct from maturity_buckets above (reporting cuts
+# only) and triggers.roll_at_months_remaining (the roll-out trigger, not
+# what to buy). See config/ips.example.yaml for the fuller commentary.
+maturity_selection:
+  entry_tenor_years: 1.5
+  maintain_min_years: 1.0
+  maintain_max_years: 2.0

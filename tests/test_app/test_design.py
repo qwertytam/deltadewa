@@ -43,6 +43,8 @@ from deltadewa.analysis.position_aging import (
     BUCKET_ORDER,
     ExpiryBoundaries,
     ExpiryBucketLabel,
+    ExpiryCalendarEntry,
+    SignedTotals,
     expiry_boundaries,
 )
 from deltadewa.analysis.roll_planner import RollAction, build_roll_plan
@@ -513,6 +515,43 @@ class TestBasisChip:
         assert text.count(design._BASIS_CRASH_SKEW) == 6
 
 
+class TestSizingLadderMaturityDefaults:
+    """#316: the maturity dials teach the IPS's own tenor, not 0.5y."""
+
+    def test_sizing_maturity_default_comes_from_the_ips_entry_tenor(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.ips_config
+        assert ips_config is not None
+
+        layout = design.render(app)
+
+        dial = _find_component(layout, "sizing-maturity-years")
+        assert dial is not None
+        assert dial.value == pytest.approx(
+            ips_config.maturity_selection.entry_tenor_years,
+        )
+        assert dial.value != pytest.approx(0.5)
+
+    def test_ladder_maturities_default_comes_from_the_ips_range(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.ips_config
+        assert ips_config is not None
+        selection = ips_config.maturity_selection
+
+        layout = design.render(app)
+
+        dial = _find_component(layout, "ladder-maturities-years")
+        assert dial is not None
+        assert dial.value == design._ladder_maturities_text(selection)
+        assert dial.value != "0.25, 0.5, 1.0"
+
+
 class TestShapeNotice:
     """#261: the shape guard, restored — quiet unless the book is off-shape."""
 
@@ -801,6 +840,114 @@ class TestStrikeLadderPanel:
         )
 
         assert _collect_text(narrow) != _collect_text(wide)
+
+
+class TestLadderPanelThreeDeadEnds:
+    """#326: INPUT, BLOCKED and EMPTY are three distinct notices, never
+    the same grey ``.plain-language`` paragraph the panel reported as
+    indistinguishable from "still to build".
+    """
+
+    def test_unparseable_dials_render_the_input_kind(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="abc",
+            maturities_years_raw="0.5",
+        )
+
+        assert getattr(panel, "className", None) == (
+            "panel-notice panel-notice--input"
+        )
+
+    def test_no_underlying_position_renders_the_blocked_kind_with_hint(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A fresh book (underlying_quantity == 0) hits
+        build_strike_ladder's structural ValueError -- BLOCKED, with the
+        BOOK-zone remediation pointer as the detail line.
+        """
+        app = _app_with_ips(tmp_path)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10",
+            maturities_years_raw="0.5",
+        )
+
+        assert getattr(panel, "className", None) == (
+            "panel-notice panel-notice--blocked"
+        )
+        text = _collect_text(panel).lower()
+        assert "book zone" in text
+
+    def test_every_rung_unsolvable_renders_the_empty_kind_no_table(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Every cell fails to solve (delta >= 0.5 is off the solver
+        bracket) -- EMPTY, and no <table> at all, not just an
+        "Unsolvable" heading with nothing above it.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.60, 0.70",
+            maturities_years_raw="1.0",
+        )
+
+        assert getattr(panel, "className", None) == (
+            "panel-notice panel-notice--empty"
+        )
+        assert "Table(" not in repr(panel)
+        text = _collect_text(panel).lower()
+        assert "no rung solves" in text
+        assert "outside the solvable" in text
+
+    def test_partial_solve_keeps_the_table_not_a_notice(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A mix of solvable and unsolvable rungs is a partial answer,
+        not an empty one -- the table renders, unflagged.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10, 0.60",
+            maturities_years_raw="0.5",
+        )
+
+        assert getattr(panel, "className", None) != (
+            "panel-notice panel-notice--empty"
+        )
+        assert "Table(" in repr(panel)
+        assert "Unsolvable" in _collect_text(panel)
 
 
 class TestRollStatusTable:
@@ -1222,6 +1369,127 @@ class TestPositionAgingPanel:
         )
 
         assert _collect_text(self._panel(app)) != before
+
+
+class TestExpirationCalendarNetVsGross:
+    """#334: netting long against short must not read as an empty row."""
+
+    def test_offsetting_pair_row_shows_gross_and_is_flagged(self) -> None:
+        """A same-strike offsetting pair nets to $0 -- the row must say
+        so is a cancellation, not an absence.
+        """
+        totals = SignedTotals(
+            long_contracts=10,
+            short_contracts=-10,
+            long_value=11_073.0,
+            short_value=-11_073.0,
+            long_theta=-68.3,
+            short_theta=68.3,
+        )
+        entry = ExpiryCalendarEntry(
+            maturity_date=datetime(2027, 1, 1, tzinfo=UTC),
+            days_to_expiry=120,
+            bucket=ExpiryBucketLabel.LONG_TERM,
+            legs=2,
+            totals=totals,
+        )
+
+        row = design._aging_calendar_row(entry)
+
+        assert getattr(row, "className", None) == "aging-row--offsetting"
+        text = _collect_text(row)
+        assert "$0" in text
+        assert "L +$11,073" in text
+        assert "S -$11,073" in text
+
+    def test_different_strike_pair_shows_gross_without_the_flag(
+        self,
+    ) -> None:
+        """The issue's own case: different strikes net to a real,
+        non-zero mark and need no cancellation flag -- just the gross
+        breakdown a mixed row always carries.
+        """
+        totals = SignedTotals(
+            long_contracts=10,
+            short_contracts=-10,
+            long_value=51_134.0,
+            short_value=-11_073.0,
+            long_theta=-182.1,
+            short_theta=68.3,
+        )
+        entry = ExpiryCalendarEntry(
+            maturity_date=datetime(2027, 1, 1, tzinfo=UTC),
+            days_to_expiry=120,
+            bucket=ExpiryBucketLabel.LONG_TERM,
+            legs=2,
+            totals=totals,
+        )
+
+        row = design._aging_calendar_row(entry)
+
+        assert getattr(row, "className", None) is None
+        text = _collect_text(row)
+        assert "$40,061" in text
+        assert "L +$51,134" in text
+        assert "S -$11,073" in text
+
+    def test_pure_long_row_shows_no_gross_breakdown(self) -> None:
+        """A single-direction row has nothing to break down (#334)."""
+        totals = SignedTotals(
+            long_contracts=10,
+            short_contracts=0,
+            long_value=51_134.0,
+            short_value=0.0,
+            long_theta=-182.1,
+            short_theta=0.0,
+        )
+        entry = ExpiryCalendarEntry(
+            maturity_date=datetime(2027, 1, 1, tzinfo=UTC),
+            days_to_expiry=120,
+            bucket=ExpiryBucketLabel.LONG_TERM,
+            legs=1,
+            totals=totals,
+        )
+
+        row = design._aging_calendar_row(entry)
+
+        text = _collect_text(row)
+        assert "L " not in text
+        assert "S " not in text
+
+    def test_live_offsetting_pair_flagged_in_the_full_panel(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """End-to-end: a live book with a same-strike offsetting pair
+        renders the flagged row and an explanatory legend.
+        """
+        app = _app_with_ips(tmp_path)
+        maturity = datetime.now(tz=UTC) + timedelta(days=180)
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=maturity,
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=maturity,
+            quantity=-10,
+            option_type=OptionType.PUT,
+        )
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_position_aging_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+        )
+
+        text = _collect_text(panel).lower()
+        assert "not an empty" in text
+        assert "l +$" in text
+        assert "s -$" in text
 
 
 class TestMonetizationPanel:

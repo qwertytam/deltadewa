@@ -404,6 +404,59 @@ class IpsMaturityBuckets:
     edges_days: tuple[int, ...] = _DEFAULT_MATURITY_BUCKET_EDGES_DAYS
 
 
+# Handbook `Maturity Selection
+# <https://qwertytam.github.io/deltadewa-handbook/part-7/maturity-selection/>`_:
+# buy around 18 months, maintain a 12-24 month ladder. #316: the sizing
+# workbench and strike ladder used to default to 0.5y with no IPS section
+# backing that number, teaching an operator the wrong tenor. Distinct from
+# both IpsMaturityBuckets above (which only cuts the term structure for
+# REPORTING, not what to buy) and triggers.roll_at_months_remaining (which
+# says when to roll OUT of a tenor, not what tenor to enter) -- the #338
+# sweep already separated "reporting cut" from "roll trigger" by number;
+# this is a third, distinct question ("what to buy") that had no home at
+# all until now.
+_DEFAULT_ENTRY_TENOR_YEARS: Final[float] = 1.5
+_DEFAULT_MAINTAIN_MIN_YEARS: Final[float] = 1.0
+_DEFAULT_MAINTAIN_MAX_YEARS: Final[float] = 2.0
+
+
+@dataclass(frozen=True)
+class IpsMaturitySelection:
+    """Which tenors this program buys and holds (#316).
+
+    Handbook `Maturity Selection
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/maturity-selection/>`_
+    guidance: buy around 18 months out, maintain a 12-24 month ladder.
+    Policy, not presentation -- a planner's default *teaches* an operator
+    a tenor, and a hardcoded 0.5y taught the wrong one.
+
+    Attributes:
+        entry_tenor_years: The tenor a new tranche is bought at.
+        maintain_min_years: The shortest tenor this program holds before
+            a leg is due to roll.
+        maintain_max_years: The longest tenor this program ladders out to.
+
+    """
+
+    entry_tenor_years: float = _DEFAULT_ENTRY_TENOR_YEARS
+    maintain_min_years: float = _DEFAULT_MAINTAIN_MIN_YEARS
+    maintain_max_years: float = _DEFAULT_MAINTAIN_MAX_YEARS
+
+    @property
+    def ladder_maturities_years(self) -> tuple[float, float, float]:
+        """The strike ladder's default maturity rungs.
+
+        The maintain range's two ends with the entry tenor between them
+        -- derived, so a fourth literal (the old ``"0.25, 0.5, 1.0"``
+        dial default) cannot drift from the three fields above it.
+        """
+        return (
+            self.maintain_min_years,
+            self.entry_tenor_years,
+            self.maintain_max_years,
+        )
+
+
 @dataclass(frozen=True)
 class IpsVega:
     """Vega sufficiency band — "is the book big enough to answer a vol spike".
@@ -575,14 +628,17 @@ class IpsConfig:
     pricing_inputs: IpsPricingInputs = dataclass_field(
         default_factory=IpsPricingInputs,
     )
+    maturity_selection: IpsMaturitySelection = dataclass_field(
+        default_factory=IpsMaturitySelection,
+    )
     # #309: which of the optional sections above (market_environment,
-    # sizing, vega, pricing_inputs) were absent from the loaded ips.yaml
-    # and are running on their DEFAULT_* module constants instead of the
-    # operator's own numbers. Populated once, in load_ips_config, from the
-    # raw parsed YAML — never recomputed from this object's own field
-    # values, since a field that happens to equal its default (an
-    # operator who typed the same number back in) is not the same
-    # condition as a section that was never written at all.
+    # sizing, vega, pricing_inputs, maturity_selection) were absent from
+    # the loaded ips.yaml and are running on their DEFAULT_* module
+    # constants instead of the operator's own numbers. Populated once, in
+    # load_ips_config, from the raw parsed YAML — never recomputed from
+    # this object's own field values, since a field that happens to equal
+    # its default (an operator who typed the same number back in) is not
+    # the same condition as a section that was never written at all.
     defaulted_sections: frozenset[str] = dataclass_field(
         default_factory=frozenset,
     )
@@ -1039,6 +1095,51 @@ def _parse_maturity_buckets(config: dict[str, Any]) -> IpsMaturityBuckets:
     return IpsMaturityBuckets(edges_days=edges)
 
 
+def _parse_maturity_selection(config: dict[str, Any]) -> IpsMaturitySelection:
+    """Parse the optional ``maturity_selection`` policy section (#316).
+
+    Optional, like ``sizing`` and ``vega``: a missing section (or a
+    missing field) falls back to the ``_DEFAULT_ENTRY_TENOR_YEARS`` /
+    ``_DEFAULT_MAINTAIN_MIN_YEARS`` / ``_DEFAULT_MAINTAIN_MAX_YEARS``
+    constants, so every ips.yaml written before this section existed
+    keeps loading.
+    """
+    section = config.get("maturity_selection", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'maturity_selection' section must be a mapping",
+        )
+
+    entry_tenor_years = section.get(
+        "entry_tenor_years",
+        _DEFAULT_ENTRY_TENOR_YEARS,
+    )
+    maintain_min_years = section.get(
+        "maintain_min_years",
+        _DEFAULT_MAINTAIN_MIN_YEARS,
+    )
+    maintain_max_years = section.get(
+        "maintain_max_years",
+        _DEFAULT_MAINTAIN_MAX_YEARS,
+    )
+    if not (
+        0.0 < maintain_min_years <= entry_tenor_years <= maintain_max_years
+    ):
+        raise IpsConfigError(
+            "maturity_selection must satisfy 0 < maintain_min_years <= "
+            "entry_tenor_years <= maintain_max_years, got "
+            f"maintain_min_years={maintain_min_years}, "
+            f"entry_tenor_years={entry_tenor_years}, "
+            f"maintain_max_years={maintain_max_years}",
+        )
+
+    return IpsMaturitySelection(
+        entry_tenor_years=entry_tenor_years,
+        maintain_min_years=maintain_min_years,
+        maintain_max_years=maintain_max_years,
+    )
+
+
 def _parse_vega(config: dict[str, Any]) -> IpsVega:
     """Parse the optional ``vega`` policy section.
 
@@ -1191,6 +1292,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
             "vega",
             "pricing_inputs",
             "maturity_buckets",
+            "maturity_selection",
         )
         if name not in config
     )
@@ -1208,5 +1310,6 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         vega=_parse_vega(config),
         maturity_buckets=_parse_maturity_buckets(config),
         pricing_inputs=_parse_pricing_inputs(config),
+        maturity_selection=_parse_maturity_selection(config),
         defaulted_sections=defaulted_sections,
     )

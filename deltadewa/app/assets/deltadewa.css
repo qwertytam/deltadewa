@@ -647,6 +647,49 @@ body {
   color: #1b7a1b;
 }
 
+/* #326: a panel's dead end (bad input, blocked, empty answer, or an
+   unexpected error) is never rendered as bare .plain-language prose --
+   that identity collision with the panels' own explanatory sentences
+   is what made the strike ladder read as "nothing is shown" instead
+   of "here's why". One bordered notice shape, four kind modifiers. */
+.panel-notice {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid #999;
+  border-radius: 0 6px 6px 0;
+  background: #f7f7f7;
+}
+
+.panel-notice__headline {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.panel-notice__detail {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: #666;
+}
+
+.panel-notice--input {
+  border-left-color: #6a8caf;
+}
+
+.panel-notice--blocked {
+  border-left-color: #7a5b00;
+  background: #fff8e6;
+}
+
+.panel-notice--empty {
+  border-left-color: #7a5b00;
+  background: #fff8e6;
+}
+
+.panel-notice--error {
+  border-left-color: #b02a2a;
+  background: #fdecec;
+}
+
 .import-confirm-row {
   margin-top: 8px;
   padding: 8px 12px;
@@ -710,6 +753,19 @@ body {
    data, so it stays in the ladder — dimmed, not dropped. */
 .aging-row--empty {
   color: #8a8a8a;
+}
+
+/* #334: a long/short pair that nets to $0 is a real offsetting
+   position, not an empty row -- amber (matching .unsolvable-note)
+   rather than the grey used for a genuinely empty bucket above. */
+.aging-row--offsetting {
+  background: #fff8e6;
+}
+
+.aging-gross-line {
+  color: #7a7a7a;
+  font-size: 0.78rem;
+  margin-top: 2px;
 }
 
 /* /design: EXPLORATION zone — stress heatmaps, MC distribution */

@@ -475,6 +475,124 @@ class TestExpirationCalendar:
         assert aging.calendar[0].bucket == ExpiryBucketLabel.URGENT
 
 
+class TestSignedTotals:
+    """#334: opposing legs must not silently cancel to nothing.
+
+    ``position_value``/``position_theta`` stay the net (the roll-plan
+    number); ``totals`` carries the long/short breakdown a net of zero
+    can hide.
+    """
+
+    def test_different_strikes_do_not_price_identically(self) -> None:
+        """The issue's own regression: opposite-sign legs at DIFFERENT
+        strikes sharing a maturity must net to the true spread value,
+        not to zero -- their prices legitimately differ.
+        """
+        maturity = days_from_today(120)
+        long_leg = _make_position(
+            days_to_maturity=120,
+            quantity=10,
+            strike_price=90.0,
+        )
+        short_leg = _make_position(
+            days_to_maturity=120,
+            quantity=-10,
+            strike_price=80.0,
+        )
+        long_leg.option.maturity_date = maturity
+        short_leg.option.maturity_date = maturity
+
+        aging = evaluate_position_aging(
+            _portfolio_with(long_leg, short_leg),
+            _make_ips_config(),
+        )
+
+        entry = aging.calendar[0]
+        expected_value = long_leg.position_value() + short_leg.position_value()
+        expected_theta = long_leg.position_theta() + short_leg.position_theta()
+        assert entry.position_value == pytest.approx(expected_value)
+        assert entry.position_theta == pytest.approx(expected_theta)
+        # A 10-lot spread at a 10-point-wide strike is worth far more
+        # than a rounding artefact -- confirms this is not $0.
+        assert abs(entry.position_value) > 100.0
+        assert entry.totals.is_offsetting
+        assert entry.totals.long_value == pytest.approx(
+            long_leg.position_value(),
+        )
+        assert entry.totals.short_value == pytest.approx(
+            short_leg.position_value(),
+        )
+
+    def test_same_strike_opposite_legs_net_near_zero_but_stay_gross(
+        self,
+    ) -> None:
+        """The operator's actual report: a same-strike offsetting pair
+        legitimately nets to ~0, but the gross sides must still show a
+        real position was there -- not "nothing expires here".
+        """
+        maturity = days_from_today(120)
+        long_leg = _make_position(
+            days_to_maturity=120,
+            quantity=10,
+            strike_price=90.0,
+        )
+        short_leg = _make_position(
+            days_to_maturity=120,
+            quantity=-10,
+            strike_price=90.0,
+        )
+        long_leg.option.maturity_date = maturity
+        short_leg.option.maturity_date = maturity
+
+        aging = evaluate_position_aging(
+            _portfolio_with(long_leg, short_leg),
+            _make_ips_config(),
+        )
+
+        entry = aging.calendar[0]
+        assert entry.position_value == pytest.approx(0.0, abs=1e-6)
+        assert entry.position_theta == pytest.approx(0.0, abs=1e-6)
+        assert entry.totals.is_offsetting
+        assert entry.totals.long_value > 0.0
+        assert entry.totals.short_value < 0.0
+        assert entry.totals.long_theta < 0.0
+        assert entry.totals.short_theta > 0.0
+
+    def test_single_leg_date_is_not_offsetting(self) -> None:
+        """A pure-long (or pure-short) date has no cancellation to flag."""
+        aging = evaluate_position_aging(
+            _portfolio_with(_make_position(days_to_maturity=120)),
+            _make_ips_config(),
+        )
+
+        assert not aging.calendar[0].totals.is_offsetting
+
+    def test_bucket_totals_carry_the_same_breakdown(self) -> None:
+        """Bucket totals share the reduction with the calendar (#334) --
+        same offsetting-pair check, one bucket instead of one date.
+        """
+        long_leg = _make_position(
+            days_to_maturity=120,
+            quantity=10,
+            strike_price=90.0,
+        )
+        short_leg = _make_position(
+            days_to_maturity=125,
+            quantity=-10,
+            strike_price=80.0,
+        )
+
+        aging = evaluate_position_aging(
+            _portfolio_with(long_leg, short_leg),
+            _make_ips_config(),
+        )
+
+        bucket = next(b for b in aging.buckets if b.legs == 2)
+        assert bucket.totals.is_offsetting
+        expected_value = long_leg.position_value() + short_leg.position_value()
+        assert bucket.position_value == pytest.approx(expected_value)
+
+
 class TestValuationDateDrivesAging:
     """DTE comes from the portfolio's what-if date, never the wall clock."""
 
