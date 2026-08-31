@@ -109,4 +109,4 @@ IPS schedule: 2 step(s) defined.
 
 
 ---
-Running v0.8.5
+Running v0.8.6
