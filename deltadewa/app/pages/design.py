@@ -147,6 +147,7 @@ if TYPE_CHECKING:
         IpsConfig,
         IpsConvexity,
         IpsMarketEnvironment,
+        IpsMaturitySelection,
     )
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
@@ -158,12 +159,14 @@ _REQUIRED_ADD_FIELDS_MSG = "Strike, maturity, and quantity are required."
 
 # PLANNING zone: dial defaults. Carried over from the sizing/ladder cells of
 # hedge_design.ipynb, which Stage 4.3 deleted — these are the starting point
-# that notebook hardcoded, kept here as adjustable dial defaults. They are
-# presentation, not policy: nothing grades against them.
+# that notebook hardcoded, kept here as adjustable dial defaults. Genuinely
+# presentation, not policy: no IPS strike-selection section exists to read
+# them from, and inventing one is its own decision, not #316's (which is
+# about tenor, not delta/OTM). The two MATURITY dial defaults these used to
+# sit beside were #316's actual bug (0.5y, unbacked by any policy) and now
+# come from ips_config.maturity_selection instead — see render().
 _DEFAULT_SIZING_PCT_OTM = 20.0
-_DEFAULT_SIZING_MATURITY_YEARS = 0.5
 _DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
-_DEFAULT_LADDER_MATURITIES_YEARS = "0.25, 0.5, 1.0"
 
 # #326: safe_render's BLOCKED remediation pointer for the two panels that
 # raise ValueError on a book with no underlying position (size_hedge,
@@ -657,6 +660,16 @@ def _parse_float_list(raw: str | None) -> list[float] | None:
     except ValueError:
         return None
     return values or None
+
+
+def _ladder_maturities_text(selection: IpsMaturitySelection) -> str:
+    """Format the ladder dial's initial text from IPS policy (#316).
+
+    ``ladder_maturities_years`` is already derived from the three
+    ``maturity_selection`` fields, so this is only the text-rendering
+    step of that -- not a fourth place the tenor could drift from them.
+    """
+    return ", ".join(str(years) for years in selection.ladder_maturities_years)
 
 
 def _env_metric_row(
@@ -2538,6 +2551,12 @@ def render(app: ProgramDashApp) -> html.Div:
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
     default_style = ips_config.pricing.exercise_style.value
+    # #316: the sizing/ladder maturity dials' initial values come from
+    # policy (entry tenor / maintain range), not a hardcoded 0.5y.
+    sizing_maturity_default = ips_config.maturity_selection.entry_tenor_years
+    ladder_maturities_default = _ladder_maturities_text(
+        ips_config.maturity_selection,
+    )
     # One assessment shared by the market-environment and monetization
     # panels. Both need the same snapshot, and a second fetch could return a
     # different one — the two panels would then disagree on the same page.
@@ -2773,7 +2792,7 @@ def render(app: ProgramDashApp) -> html.Div:
                                     dcc.Input(
                                         id="sizing-maturity-years",
                                         type="number",
-                                        value=_DEFAULT_SIZING_MATURITY_YEARS,
+                                        value=sizing_maturity_default,
                                         debounce=True,
                                     ),
                                 ],
@@ -2798,7 +2817,7 @@ def render(app: ProgramDashApp) -> html.Div:
                             portfolio=portfolio,
                             ips_config=ips_config,
                             pct_otm=_DEFAULT_SIZING_PCT_OTM,
-                            maturity_years=_DEFAULT_SIZING_MATURITY_YEARS,
+                            maturity_years=sizing_maturity_default,
                             vol_override=None,
                         ),
                         id="plan-sizing-panel",
@@ -2829,7 +2848,7 @@ def render(app: ProgramDashApp) -> html.Div:
                                     dcc.Input(
                                         id="ladder-maturities-years",
                                         type="text",
-                                        value=_DEFAULT_LADDER_MATURITIES_YEARS,
+                                        value=ladder_maturities_default,
                                         debounce=True,
                                     ),
                                 ],
@@ -2843,9 +2862,7 @@ def render(app: ProgramDashApp) -> html.Div:
                             portfolio=portfolio,
                             ips_config=ips_config,
                             target_deltas_raw=_DEFAULT_LADDER_TARGET_DELTAS,
-                            maturities_years_raw=(
-                                _DEFAULT_LADDER_MATURITIES_YEARS
-                            ),
+                            maturities_years_raw=ladder_maturities_default,
                         ),
                         id="plan-ladder-panel",
                     ),

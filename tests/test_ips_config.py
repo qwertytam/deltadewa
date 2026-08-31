@@ -1013,6 +1013,117 @@ class TestSizing:
             load_ips_config(_write_yaml(tmp_path, config))
 
 
+class TestMaturitySelection:
+    """#316: which tenors the program buys and holds -- no more hardcoded
+    0.5y ladder/sizing default with nothing in the IPS behind it.
+    """
+
+    def test_defaults_when_section_absent(self, tmp_path: Path) -> None:
+        """A config without the section falls back to the handbook
+        18-month buy / 12-24 month maintain guidance.
+        """
+        path = _write_yaml(tmp_path, _VALID_CONFIG)
+        selection = load_ips_config(path).maturity_selection
+
+        assert selection.entry_tenor_years == pytest.approx(1.5)
+        assert selection.maintain_min_years == pytest.approx(1.0)
+        assert selection.maintain_max_years == pytest.approx(2.0)
+
+    def test_example_ips_yaml_maturity_selection(self) -> None:
+        """The tracked config/ips.example.yaml carries the section
+        explicitly, matching the code default.
+        """
+        selection = load_ips_config(EXAMPLE_IPS_YAML).maturity_selection
+
+        assert selection.entry_tenor_years == pytest.approx(1.5)
+        assert selection.maintain_min_years == pytest.approx(1.0)
+        assert selection.maintain_max_years == pytest.approx(2.0)
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        """A supplied section round-trips through the loader."""
+        config = {
+            **_VALID_CONFIG,
+            "maturity_selection": {
+                "entry_tenor_years": 1.0,
+                "maintain_min_years": 0.5,
+                "maintain_max_years": 1.5,
+            },
+        }
+        selection = load_ips_config(
+            _write_yaml(tmp_path, config),
+        ).maturity_selection
+
+        assert selection.entry_tenor_years == pytest.approx(1.0)
+        assert selection.maintain_min_years == pytest.approx(0.5)
+        assert selection.maintain_max_years == pytest.approx(1.5)
+
+    def test_entry_tenor_below_maintain_min_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A tenor policy that cannot describe a maturity range raises."""
+        config = {
+            **_VALID_CONFIG,
+            "maturity_selection": {
+                "entry_tenor_years": 0.5,
+                "maintain_min_years": 1.0,
+                "maintain_max_years": 2.0,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="maturity_selection"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_entry_tenor_above_maintain_max_raises(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The entry tenor must not sit outside the maintain range."""
+        config = {
+            **_VALID_CONFIG,
+            "maturity_selection": {
+                "entry_tenor_years": 3.0,
+                "maintain_min_years": 1.0,
+                "maintain_max_years": 2.0,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="maturity_selection"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_non_positive_maintain_min_raises(self, tmp_path: Path) -> None:
+        """A zero or negative floor cannot describe a maturity range."""
+        config = {
+            **_VALID_CONFIG,
+            "maturity_selection": {
+                "entry_tenor_years": 1.5,
+                "maintain_min_years": 0.0,
+                "maintain_max_years": 2.0,
+            },
+        }
+        with pytest.raises(IpsConfigError, match="maturity_selection"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_ladder_maturities_years_is_derived_not_a_fourth_literal(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The ladder's default rungs are the three fields, in order --
+        so a fourth hardcoded literal cannot drift from them.
+        """
+        config = {
+            **_VALID_CONFIG,
+            "maturity_selection": {
+                "entry_tenor_years": 1.25,
+                "maintain_min_years": 0.75,
+                "maintain_max_years": 1.75,
+            },
+        }
+        selection = load_ips_config(
+            _write_yaml(tmp_path, config),
+        ).maturity_selection
+
+        assert selection.ladder_maturities_years == (0.75, 1.25, 1.75)
+
+
 class TestPricingInputs:
     """Tests for the ``pricing_inputs`` policy section (Batch 3d, #367).
 
@@ -1099,7 +1210,7 @@ class TestDefaultedSections:
         self,
         tmp_path: Path,
     ) -> None:
-        """_VALID_CONFIG carries none of the four optional sections."""
+        """_VALID_CONFIG carries none of the five optional sections."""
         path = _write_yaml(tmp_path, _VALID_CONFIG)
 
         config = load_ips_config(path)
@@ -1111,6 +1222,7 @@ class TestDefaultedSections:
                 "vega",
                 "pricing_inputs",
                 "maturity_buckets",
+                "maturity_selection",
             },
         )
 
@@ -1136,6 +1248,7 @@ class TestDefaultedSections:
                 "vega",
                 "pricing_inputs",
                 "maturity_buckets",
+                "maturity_selection",
             },
         )
 

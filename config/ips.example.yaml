@@ -210,3 +210,18 @@ maturity_buckets:
   # entire 18-month ladder in one terminal bucket, so the panel answered
   # nothing.
   edges_days: [30, 90, 180, 365, 730]
+
+# Which tenors this program buys and holds (handbook part-7,
+# maturity-selection: buy around 18 months, maintain a 12-24 month ladder).
+# POLICY, not presentation (#316) — the sizing workbench and strike ladder
+# used to default to a hardcoded 0.5y with nothing in the IPS backing that
+# number, teaching an operator the wrong tenor. Distinct from
+# maturity_buckets above (which only cuts the term structure for
+# REPORTING) and from triggers.roll_at_months_remaining (which says when
+# to roll OUT of a tenor, not what to buy) — see #338's note there.
+# Optional — omit the section for the defaults below.
+maturity_selection:
+  entry_tenor_years: 1.5    # the tenor a new tranche is bought at
+  maintain_min_years: 1.0   # shortest tenor this program holds before a
+                             # leg is due to roll
+  maintain_max_years: 2.0   # longest tenor this program ladders out to

@@ -515,6 +515,43 @@ class TestBasisChip:
         assert text.count(design._BASIS_CRASH_SKEW) == 6
 
 
+class TestSizingLadderMaturityDefaults:
+    """#316: the maturity dials teach the IPS's own tenor, not 0.5y."""
+
+    def test_sizing_maturity_default_comes_from_the_ips_entry_tenor(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.ips_config
+        assert ips_config is not None
+
+        layout = design.render(app)
+
+        dial = _find_component(layout, "sizing-maturity-years")
+        assert dial is not None
+        assert dial.value == pytest.approx(
+            ips_config.maturity_selection.entry_tenor_years,
+        )
+        assert dial.value != pytest.approx(0.5)
+
+    def test_ladder_maturities_default_comes_from_the_ips_range(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        ips_config = app.ips_config
+        assert ips_config is not None
+        selection = ips_config.maturity_selection
+
+        layout = design.render(app)
+
+        dial = _find_component(layout, "ladder-maturities-years")
+        assert dial is not None
+        assert dial.value == design._ladder_maturities_text(selection)
+        assert dial.value != "0.25, 0.5, 1.0"
+
+
 class TestShapeNotice:
     """#261: the shape guard, restored — quiet unless the book is off-shape."""
 
