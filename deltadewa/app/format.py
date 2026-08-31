@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
+from deltadewa.analysis.roll_status import verdict_reason
 from deltadewa.clock import program_now
 
 if TYPE_CHECKING:
@@ -167,12 +168,11 @@ def signed_compact_currency(value: float) -> str:
 def roll_verdict_reason(record: RollStatusRecord) -> str:
     """Return the plain-language reason driving ``record.verdict``.
 
-    Matches ``record.verdict`` against the three per-trigger verdicts
-    (``time_trigger``, ``convexity_trigger``, ``drift_trigger``) and
-    returns that trigger's ``.reason``. When ``record.suppressed`` is
-    ``True`` — or, defensively, when none of the three verdicts match
-    ``record.verdict`` — this is the roll-suppression case, and a
-    sentence naming the suppression explicitly is returned instead.
+    A thin alias for
+    :func:`~deltadewa.analysis.roll_status.verdict_reason`, which is where
+    this logic now lives: the weekly digest needs the same sentence (#374)
+    and ``reporting/`` must not import from ``app/``. Kept so the pages and
+    their tests keep one formatting entry point.
 
     Args:
         record: One position's roll status record.
@@ -181,17 +181,4 @@ def roll_verdict_reason(record: RollStatusRecord) -> str:
         A one-sentence, human-readable explanation of the verdict.
 
     """
-    if not record.suppressed:
-        for trigger in (
-            record.time_trigger,
-            record.convexity_trigger,
-            record.drift_trigger,
-        ):
-            if trigger.verdict == record.verdict:
-                return trigger.reason
-
-    return (
-        "Strike drift alone flagged a roll, but convexity is in-band "
-        "and there's no time pressure, so this is held at "
-        f"{record.verdict.value}."
-    )
+    return verdict_reason(record)

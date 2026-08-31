@@ -23,6 +23,7 @@ class OptionPosition:
         entry_premium: float | None = None,
         position_id: str = "",
         volatility_as_of: dt | None = None,
+        structure_id: str | None = None,
     ) -> None:
         """Initialize an option position.
 
@@ -44,6 +45,16 @@ class OptionPosition:
             empty (the default) a fresh UUID is generated automatically.
             Pass an explicit value only when restoring a serialized position
             so that save→load preserves identity.
+            structure_id: Opaque tag grouping legs that trade as one
+            structure — a put spread, a collar — so a roll moves them
+            together (#333).  ``None`` (the default) means this leg stands
+            alone, which makes every pre-existing book a book of
+            single-leg structures and leaves an outright long put's
+            behaviour unchanged by construction.  Deliberately explicit
+            rather than inferred: "same maturity, same type, opposite
+            sign" mispairs a book that legs into positions separately or
+            holds several overlapping spreads on one expiry, which is
+            exactly the book this program runs.
             volatility_as_of: When a human last confirmed this leg's
             effective volatility (custom or inherited), or None if unknown
             — e.g. a position imported from a file predating #367's
@@ -63,6 +74,7 @@ class OptionPosition:
         self.entry_date = entry_date
         self.entry_premium = entry_premium
         self.position_id = position_id if position_id else str(uuid.uuid4())
+        self.structure_id = structure_id
         self.volatility_as_of = volatility_as_of
 
     def position_value(self) -> float:
@@ -127,4 +139,5 @@ class OptionPosition:
             "entry_spot": self.entry_spot,
             "entry_date": self.entry_date,
             "entry_premium": self.entry_premium,
+            "structure_id": self.structure_id,
         }

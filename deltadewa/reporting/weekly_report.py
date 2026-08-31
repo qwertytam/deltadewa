@@ -79,14 +79,25 @@ from typing import TYPE_CHECKING, Final
 
 from deltadewa import __version__
 from deltadewa.analysis import (
+    GRADABLE_VERDICTS,
     CrashShock,
     PortfolioAnalyzer,
+    RollVerdict,
     assess_market_environment,
     build_monetization_plan,
     build_provenance_ledger,
     compute_crash_convexity,
     evaluate_roll_status,
+    verdict_reason,
 )
+from deltadewa.analysis.hedge_triggers import (
+    HedgeTriggerReason,
+    HedgeTriggerThresholds,
+    TriggerStatus,
+    rally_reason,
+    worst_rally_from_entry,
+)
+from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
 from deltadewa.marketdata import (
@@ -158,19 +169,104 @@ _REPORT_EMAIL_FROM_ENV_VAR: Final[str] = "REPORT_EMAIL_FROM"
 _DIGEST_HEARTBEAT_ENV_VAR: Final[str] = "DIGEST_HEARTBEAT_URL"
 
 
+@dataclass(frozen=True)
+class RollLegRow:
+    """One leg's roll standing, ready to render (#374).
+
+    A rendering-ready triple rather than the ``RollStatusRecord`` itself, so
+    the two renderers below stay pure string work and the digest never
+    reaches back into the analysis layer to format a number.
+
+    Attributes:
+        verdict: The leg's ``RollVerdict`` value, ``EXPIRED`` included.
+        leg: ``"PUT 4200"`` — the same label ``/monitor`` uses.
+        reason: The plain-language reason from
+            ``roll_status.verdict_reason``.
+
+    """
+
+    verdict: str
+    leg: str
+    reason: str
+
+
+def _roll_leg_rows(
+    records: Sequence[RollStatusRecord],
+) -> tuple[RollLegRow, ...]:
+    """Build one row per leg, in portfolio order.
+
+    Every leg, not just the worst one. The crossing line above reports the
+    *change*; this reports the *standing state*, which is the division the
+    rest of the digest already uses — and it is what lets a reader act
+    without separately opening ``/monitor`` (#374).
+    """
+    return tuple(
+        RollLegRow(
+            verdict=record.verdict.value,
+            leg=_leg_label(record),
+            reason=verdict_reason(record),
+        )
+        for record in records
+    )
+
+
+def _leg_label(record: RollStatusRecord) -> str:
+    """Name one leg the way both dashboards do: ``"PUT 4200"``."""
+    option = record.position.option
+    return f"{option.option_type.value} {option.strike_price:,.0f}"
+
+
+def _worst_roll_record(
+    records: Sequence[RollStatusRecord],
+) -> RollStatusRecord | None:
+    """Return the record carrying the worst roll verdict, or ``None``.
+
+    Returns the *record*, not the verdict word (#374): the digest needs
+    which leg and why, and everything but the word used to be discarded
+    right here.
+
+    Only gradable verdicts are considered. ``EXPIRED`` has no severity by
+    design (#373) — an expired leg is gone, not urgent, and ranking it
+    would let it dominate the headline over a real roll. Expired legs are
+    reported through ``expired_leg_count`` instead, which crosses in its
+    own right so a book whose only live leg expires cannot read as though
+    the trigger resolved itself.
+
+    Ties break on portfolio order — the first record wins. That has to be
+    stable: two legs at ROLL that swapped places week to week would
+    manufacture a phantom crossing out of an unchanged book.
+    """
+    gradable = [
+        record for record in records if record.verdict in GRADABLE_VERDICTS
+    ]
+    if not gradable:
+        return None
+    return max(
+        gradable,
+        key=lambda record: _ROLL_SEVERITY[record.verdict.value],
+    )
+
+
 def _worst_roll_verdict(records: Sequence[RollStatusRecord]) -> str:
-    """Return the worst RollVerdict across every position's record.
+    """Return the worst gradable RollVerdict, or ``"N/A"``.
+
+    ``"N/A"`` now means "no leg carries a roll grade" — an empty book, or
+    one where every leg has expired (#373). Either way no position has a
+    roll verdict, which is what the word reports.
 
     Mirrors ``roll_status._SEVERITY`` locally rather than importing that
     module's private name — the same convention ``weekly_snapshot.py``
     uses for ``program_report._STALE_OR_WORSE``.
     """
-    if not records:
+    worst = _worst_roll_record(records)
+    if worst is None:
         return _NO_POSITIONS_ROLL_VERDICT
-    return max(
-        (record.verdict.value for record in records),
-        key=lambda v: _ROLL_SEVERITY[v],
-    )
+    return worst.verdict.value
+
+
+def _expired_leg_count(records: Sequence[RollStatusRecord]) -> int:
+    """Count legs already past maturity (#373)."""
+    return sum(1 for record in records if record.verdict is RollVerdict.EXPIRED)
 
 
 def _ordinal(n: int) -> str:
@@ -193,6 +289,9 @@ class WeeklyDigest:
         report: The underlying Part VII ``ProgramReport``.
         snapshot: This week's ``WeeklySnapshot`` (the new baseline).
         diff: Comparison against the prior snapshot (or the first-run case).
+        roll_legs: Every leg's roll standing, in portfolio order (#374) —
+            the state behind ``snapshot.worst_roll_verdict``, which is a
+            one-word reduction over all of them.
         headline: One-line verdict for a subject line or quick triage —
             ``"BREACH: <metric> out of policy (Nth week)"`` when IPS
             compliance is failing (outranks everything else, #296),
@@ -216,6 +315,7 @@ class WeeklyDigest:
     headline: str
     weekly_carry_cost: float
     elapsed_days: int
+    roll_legs: tuple[RollLegRow, ...] = ()
     backup_heartbeat_warning: str | None = None
 
 
@@ -265,12 +365,20 @@ def build_weekly_digest(
     roll_records: Sequence[RollStatusRecord],
     history: Sequence[WeeklySnapshot] = (),
     as_of: date,
+    rally: HedgeTriggerReason | None = None,
+    worst_rally_pct: float | None = None,
     backup_heartbeat_warning: str | None = None,
 ) -> WeeklyDigest:
     """Pure assembly: report + roll records + history -> a WeeklyDigest.
 
     No I/O, no clock — every input is supplied by the caller, which is what
     makes this deterministic and what the golden-file test calls directly.
+    ``rally``/``worst_rally_pct`` are the handbook Rule 2 book-level
+    reading (#297), computed by the caller from the portfolio the same way
+    ``roll_records`` is — this function never touches a portfolio. Omitting
+    them yields ``UNAVAILABLE``, which is honest: a digest assembled
+    without the reading has not measured it.
+
     ``backup_heartbeat_warning`` is no exception: ``main()`` reads it from
     disk (see ``_read_backup_heartbeat_warning``) and passes the resulting
     string (or ``None``) in here — this function still does no I/O of its
@@ -307,7 +415,12 @@ def build_weekly_digest(
         raise ValueError(msg)
 
     prior_snapshot = history[-1] if history else None
-    worst_roll = _worst_roll_verdict(roll_records)
+    worst_roll_record = _worst_roll_record(roll_records)
+    worst_roll = (
+        worst_roll_record.verdict.value
+        if worst_roll_record is not None
+        else _NO_POSITIONS_ROLL_VERDICT
+    )
     if prior_snapshot is not None:
         elapsed_days = max((as_of - prior_snapshot.as_of).days, 0)
         first_as_of = prior_snapshot.first_as_of
@@ -338,6 +451,23 @@ def build_weekly_digest(
         enriched_report,
         decision_verdict=report.decision.verdict,
         worst_roll_verdict=worst_roll,
+        worst_roll_leg=(
+            _leg_label(worst_roll_record)
+            if worst_roll_record is not None
+            else None
+        ),
+        worst_roll_reason=(
+            verdict_reason(worst_roll_record)
+            if worst_roll_record is not None
+            else None
+        ),
+        expired_leg_count=_expired_leg_count(roll_records),
+        rally_status=(
+            rally.status.value
+            if rally is not None
+            else TriggerStatus.UNAVAILABLE.value
+        ),
+        worst_rally_pct=worst_rally_pct,
         first_as_of=first_as_of,
         cumulative_carry_cost=cumulative_carry_cost,
     )
@@ -354,6 +484,7 @@ def build_weekly_digest(
             enriched_report.ips_compliance,
             breaches,
         ),
+        roll_legs=_roll_leg_rows(roll_records),
         weekly_carry_cost=weekly_carry_cost,
         elapsed_days=elapsed_days,
         backup_heartbeat_warning=backup_heartbeat_warning,
@@ -379,6 +510,51 @@ def _changes_markdown(title: str, changes: tuple[SnapshotChange, ...]) -> str:
     lines += [f"- **{c.label}:** {c.detail}" for c in changes]
     lines.append("")
     return "\n".join(lines)
+
+
+def _roll_legs_markdown(rows: tuple[RollLegRow, ...]) -> list[str]:
+    """Render the per-leg roll table (#374), or nothing for an empty book."""
+    if not rows:
+        return []
+    lines = [
+        "## Roll status by leg",
+        "",
+        (
+            "Where each leg stands right now. The crossing above reports "
+            "what *changed*; this is the standing state behind it."
+        ),
+        "",
+        "| Verdict | Leg | Reason |",
+        "| --- | --- | --- |",
+    ]
+    lines += [f"| {r.verdict} | {r.leg} | {r.reason} |" for r in rows]
+    lines.append("")
+    return lines
+
+
+def _roll_legs_html(rows: tuple[RollLegRow, ...]) -> str:
+    """HTML counterpart of :func:`_roll_legs_markdown` (#374).
+
+    Every cell is escaped: ``reason`` is engine-built prose today, but it
+    interpolates a strike and an expiry date, and this module escapes all
+    user-influenced strings on principle (see ``program_report``'s note).
+    """
+    if not rows:
+        return ""
+    body = "\n".join(
+        f"<tr><td>{escape(r.verdict)}</td><td>{escape(r.leg)}</td>"
+        f"<td>{escape(r.reason)}</td></tr>"
+        for r in rows
+    )
+    return (
+        "<h2>Roll status by leg</h2>\n"
+        "<p>Where each leg stands right now. The crossing above reports "
+        "what <em>changed</em>; this is the standing state behind it.</p>\n"
+        "<table>\n"
+        "<tr><th>Verdict</th><th>Leg</th><th>Reason</th></tr>\n"
+        f"{body}\n"
+        "</table>"
+    )
 
 
 def render_weekly_digest_markdown(digest: WeeklyDigest) -> str:
@@ -439,6 +615,8 @@ def render_weekly_digest_markdown(digest: WeeklyDigest) -> str:
                 ),
                 "",
             ]
+
+    lines += _roll_legs_markdown(digest.roll_legs)
 
     # Return framing (this week's/cumulative carry cost, point-in-time
     # premium) used to be repeated here in prose — now rendered once, by
@@ -522,6 +700,7 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
 {backup_heartbeat_html}
 <h2>What changed</h2>
 {change_html}
+{_roll_legs_html(digest.roll_legs)}
 <hr>"""
 
     footer_html = "\n".join(
@@ -719,13 +898,21 @@ def build_and_render(
         ips_config.pricing_inputs,
         as_of=as_of,
     )
-    carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics()
+    carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics(
+        MaturityBuckets.from_ips(ips_config.maturity_buckets),
+    )
     monetization_plan = build_monetization_plan(
         portfolio,
         ips_config,
         market_env=market_env,
     )
     roll_records = evaluate_roll_status(portfolio, ips_config)
+    # Handbook Rule 2 (#297), book-level: the most-rallied long put, named.
+    worst_rally = worst_rally_from_entry(portfolio)
+    rally_reading = rally_reason(
+        worst_rally,
+        HedgeTriggerThresholds.from_ips(ips_config.triggers),
+    )
 
     report = build_program_report(
         portfolio=portfolio,
@@ -743,6 +930,8 @@ def build_and_render(
     digest = build_weekly_digest(
         report=report,
         roll_records=roll_records,
+        rally=rally_reading,
+        worst_rally_pct=worst_rally[0] if worst_rally is not None else None,
         history=history,
         as_of=as_of,
         backup_heartbeat_warning=_read_backup_heartbeat_warning(export_dir),

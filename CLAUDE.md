@@ -231,13 +231,32 @@ last caller but were kept are annotated at the function; four sweep candidates
 were false positives and are recorded as such. See
 `docs/part-x-coverage.md`, "The Jupyter layer itself — retired (#279)".
 
-Two follow-ups came out of it, neither acted on:
+Two follow-ups came out of it, both now resolved:
 
-- **`triggers.rally_rebalance_pct` is validated but read by nothing** —
-  required with no default, in both example YAMLs, handbook-backed ("Rule 2 —
-  Market Rally Rebalance Trigger"), and skipped by
-  `HedgeTriggerThresholds.from_ips`. Pre-existing, and the only IPS key with no
-  reader. The key stays (thresholds are policy); the trigger needs building.
+- ~~**`triggers.rally_rebalance_pct` is validated but read by nothing**~~ —
+  **built in 5a (#297)**, and replaced rather than wired: the single scalar
+  became the handbook's four named Rule 2 bands (`rally_monitor_pct` /
+  `_review_pct` / `_action_pct` / `_urgent_pct` = 5/10/15/20), graded per
+  tranche by `roll_status` and book-level by `hedge_triggers`. **Breaking
+  change for a live `config/ips.yaml`.** The same archaeology filed **#384**:
+  `strike_drift_max_otm_pct` was transcribed from the handbook as a 45% OTM
+  *level* and implemented as a 40 pp *change since entry*, so it cannot fire
+  (a 16%-OTM put needs a ~91% rally). Its rule has since been deleted from the
+  handbook entirely — the rally trigger supersedes it.
+- ~~**Retiring the two `strike_drift_*` keys is #384's job, deliberately not
+  5a's.**~~ **Done** (fix/roll-and-exposure): `strike_drift_max_otm_pct` /
+  `strike_drift_review_fraction` are removed from `IpsTriggers` and both
+  shipped IPS files (**breaking change for a live `config/ips.yaml`**);
+  `RollStatusRecord.drift_trigger` and the `suppressed` MONITOR-demotion it
+  fed are removed from `roll_status.py` — the demotion existed only to
+  catch an over-eager `ROLL` sourced from the drift trigger, which cannot
+  happen once drift no longer contributes to the verdict, so it was dead
+  code, not a feature, once the trigger went. `roll_planner.gamma_theta_delay`
+  / `RollAction.DELAY` is a separate, general mechanism (fires on any
+  verdict source, not drift-specific) and is untouched.
+  `MoneynessDrift`/`drift_pct` — the underlying entry-vs-now %OTM reading —
+  also stays, still feeding the "OTM entry / now" column and
+  `gamma_theta_delay`'s nearer-the-money check.
 - **A second orphan set: the matplotlib half of `visualization/`.** `base.py`
   (`OptionCharts`) and its five mixins (`crash_charts`, `greeks_charts`,
   `pnl_charts`, `scenarios`, `theta_charts`), plus `convenience.py` and

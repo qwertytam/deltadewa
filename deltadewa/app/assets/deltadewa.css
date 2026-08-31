@@ -326,6 +326,22 @@ body {
   background: #c62828;
 }
 
+/* EXPIRED (#373) is a lifecycle fact, not a rung on the urgency scale, so
+   it is deliberately off the hold-to-roll colour ramp: slate, not red. An
+   expired leg is gone, not urgent, and must not compete visually with a
+   real ROLL sitting next to it in the same list. */
+
+.verdict-badge--expired {
+  background: #55606b;
+}
+
+.decision-note {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #6b7681;
+  flex-shrink: 0;
+}
+
 /* Hedge rebalance triggers (TriggerStatus). Shares the roll badge's shape
    deliberately — same visual grammar — but MONITOR is the only value the
    two enums have in common, so the rest get their own rules. UNAVAILABLE is
@@ -356,6 +372,35 @@ body {
 
 .verdict-badge--delay {
   background: #7a5ea8;
+}
+
+/* A leg the roll planner declines to recommend on (#333): a short leg that
+   rolls with its structure, a non-put, an expired leg. Listed rather than
+   dropped, and visually recessive so it cannot be mistaken for an action. */
+
+.verdict-badge--excluded {
+  background: #8d949c;
+}
+
+.plan-row--excluded {
+  opacity: 0.72;
+}
+
+/* A leg rendered under a multi-leg structure's group header (#333): the
+   header already names the structure and its net cost, so the leg row is
+   indented to read as a member of it rather than a peer of it. */
+
+.plan-row--grouped td:first-child {
+  padding-left: 28px;
+}
+
+.plan-group-header td {
+  background: #f0f1f3;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #55606b;
 }
 
 .plan-rationale {

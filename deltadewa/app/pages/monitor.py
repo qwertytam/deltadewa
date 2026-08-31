@@ -40,13 +40,14 @@ from deltadewa.analysis.market_environment import (
     DataQuality,
     assess_market_environment,
 )
+from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.monitor_scenario import (
     build_scenario,
     build_scenario_curve,
 )
 from deltadewa.analysis.provenance import build_provenance_ledger
-from deltadewa.analysis.roll_status import evaluate_roll_status
+from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
@@ -590,31 +591,51 @@ def _verdict_badge(record: RollStatusRecord) -> html.Span:
     )
 
 
+def _decision_row(record: RollStatusRecord) -> html.Div:
+    """Build one row of the DECISIONS list: badge, reason, convexity band.
+
+    An expired leg (#373) gets no band bar. It was excluded from the
+    convexity figure before pricing (#362), so rendering the book's band
+    against it would imply a reading this leg never contributed to — the
+    per-row broadcast #306 is about, at its worst. It gets a short note
+    saying so instead. The note deliberately does not restate #375's
+    caveat on the cost panel: that one explains why a *number* is smaller,
+    this one explains why a *leg* has no recommendation.
+    """
+    expired = record.verdict is RollVerdict.EXPIRED
+    trailing: Component = (
+        html.Span(
+            "excluded from convexity",
+            className="decision-note",
+        )
+        if expired
+        else band_bar(
+            value=record.crash_convexity_pct,
+            low=record.convexity_target_min_pct,
+            high=record.convexity_target_max_pct,
+        )
+    )
+    return html.Div(
+        [
+            _verdict_badge(record),
+            html.Span(
+                f"{record.position.option.option_type.value} "
+                f"{record.position.option.strike_price:,.0f} — "
+                f"{fmt.roll_verdict_reason(record)}",
+                className="decision-reason",
+            ),
+            trailing,
+        ],
+        className="decision-row",
+    )
+
+
 def _decisions_section(
     records: list[RollStatusRecord],
     plan: MonetizationPlan,
 ) -> html.Div:
     """Build the DECISIONS section: roll verdicts plus monetization."""
-    roll_rows = [
-        html.Div(
-            [
-                _verdict_badge(record),
-                html.Span(
-                    f"{record.position.option.option_type.value} "
-                    f"{record.position.option.strike_price:,.0f} — "
-                    f"{fmt.roll_verdict_reason(record)}",
-                    className="decision-reason",
-                ),
-                band_bar(
-                    value=record.crash_convexity_pct,
-                    low=record.convexity_target_min_pct,
-                    high=record.convexity_target_max_pct,
-                ),
-            ],
-            className="decision-row",
-        )
-        for record in records
-    ]
+    roll_rows = [_decision_row(record) for record in records]
 
     if plan.gain_basis == "unknown":
         monetization_children: list[Component] = [
@@ -650,7 +671,9 @@ def _decisions_section(
             html.P(
                 "HOLD — no action needed. MONITOR — watching a metric "
                 "approach its threshold. REVIEW — a trigger has fired. "
-                "ROLL — time to replace this position.",
+                "ROLL — time to replace this position. EXPIRED — this leg "
+                "is past its maturity: it is gone, not urgent, and is "
+                "excluded from the book's convexity.",
                 className="verdict-legend",
             ),
             html.P(
@@ -766,7 +789,9 @@ def _cost_and_protection(
         ips_convexity=convexity,
     )
     cost_section = build_cost_section(
-        carry_metrics=PortfolioAnalyzer(portfolio).calculate_carry_metrics(),
+        carry_metrics=PortfolioAnalyzer(portfolio).calculate_carry_metrics(
+            MaturityBuckets.from_ips(ips_config.maturity_buckets),
+        ),
         book_notional=(
             abs(portfolio.underlying_quantity) * portfolio.spot_price
         ),

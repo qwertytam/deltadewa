@@ -57,6 +57,7 @@ from deltadewa.analysis.hedge_triggers import (
     evaluate_hedge_trigger_set,
 )
 from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.position_aging import (
     ExpiryBoundaries,
@@ -69,7 +70,7 @@ from deltadewa.analysis.position_aging import (
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.roll_planner import build_roll_plan
-from deltadewa.analysis.roll_status import evaluate_roll_status
+from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.analysis.stress import (
     build_spot_vol_grid_spec,
@@ -382,14 +383,15 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
     option_type: str,
     exercise_style: str,
     entry_premium: float | None,
+    structure_id: str | None,
     version: int,
     state: ProgramState,
-) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any]:
     """Add a position from the BOOK zone's add-form.
 
     Returns:
         A tuple matching the callback's Outputs: the new ``book-version``
-        (or ``no_update`` on failure), a status message, and the six
+        (or ``no_update`` on failure), a status message, and the seven
         form fields' next values — cleared on success (so the operator
         isn't typing over stale values on the next add) and left as
         ``no_update`` on failure (so a typo can be fixed and resubmitted
@@ -400,6 +402,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         return (
             no_update,
             _status(_REQUIRED_ADD_FIELDS_MSG, error=True),
+            no_update,
             no_update,
             no_update,
             no_update,
@@ -424,6 +427,10 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
             option_type=OptionType(option_type),
             exercise_style=ExerciseStyle(exercise_style),
             entry_premium=entry_premium,
+            # Blank means "standalone leg", not "a structure named ''" —
+            # an empty text input yields "" and must not become a tag that
+            # silently groups every untagged leg into one structure (#333).
+            structure_id=(structure_id or "").strip() or None,
         )
 
     error = _guarded_mutation(_do_add)
@@ -431,6 +438,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         return (
             no_update,
             _status(error, error=True),
+            no_update,
             no_update,
             no_update,
             no_update,
@@ -456,6 +464,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         None,
         OptionType.PUT.value,
         reset_style,
+        None,
         None,
     )
 
@@ -1172,14 +1181,38 @@ def _otm_pair_text(moneyness: MoneynessDrift) -> str:
     return f"{entry} / {fmt.signed_percent(moneyness.current_otm_pct)}"
 
 
+def _dte_text(record: RollStatusRecord) -> str:
+    """Days-to-maturity cell — or the expiry date for a leg already gone.
+
+    ``-435d / 180d`` is technically the day count but reads as an extreme
+    roll urgency; the sign is the only signal and it is easy to miss (#373).
+    """
+    if record.verdict is RollVerdict.EXPIRED:
+        return f"expired {record.position.option.maturity_date.date()}"
+    return f"{record.days_to_maturity}d / {record.roll_window_days}d"
+
+
+def _leg_convexity_text(record: RollStatusRecord) -> str:
+    """Render this leg's own contribution to book crash convexity (#306).
+
+    The neighbouring Convexity cell is a **book-level** gate — the IPS band
+    is stated against the whole book, so it cannot be applied per leg. This
+    cell is the per-tranche number that gate never carried: contributions
+    sum exactly to the book figure, so this is the column that answers
+    *which* tranche to roll.
+
+    ``n/a`` for an expired leg, which was never priced — not ``+0.00``,
+    which would read as a worthless leg rather than an unpriced one.
+    """
+    contribution = record.leg_convexity_contribution_pct
+    if contribution is None:
+        return "n/a"
+    return f"{contribution:+.2f} pp"
+
+
 def _roll_record_row(record: RollStatusRecord) -> html.Tr:
     """One position's roll status, with all three trigger reasons (G3)."""
     position = record.position
-    suppressed_note = (
-        " (strike-drift roll suppressed — convexity in-band, no time pressure)"
-        if record.suppressed
-        else ""
-    )
     cost_text = (
         fmt.currency(record.estimated_roll_up_cost, decimals=2)
         if record.estimated_roll_up_cost is not None
@@ -1201,19 +1234,20 @@ def _roll_record_row(record: RollStatusRecord) -> html.Tr:
                 f"{position.option.strike_price:,.0f}",
             ),
             html.Td(_otm_pair_text(record.moneyness)),
-            html.Td(f"{record.days_to_maturity}d / {record.roll_window_days}d"),
+            html.Td(_dte_text(record)),
             html.Td(cost_text),
+            html.Td(_leg_convexity_text(record)),
             html.Td(
                 f"Time: {record.time_trigger.verdict.value} — "
                 f"{record.time_trigger.reason}"
             ),
             html.Td(
-                f"Convexity: {record.convexity_trigger.verdict.value} — "
-                f"{record.convexity_trigger.reason}",
+                f"Convexity (book): {record.convexity_trigger.verdict.value}"
+                f" — {record.convexity_trigger.reason}",
             ),
             html.Td(
-                f"Drift: {record.drift_trigger.verdict.value} — "
-                f"{record.drift_trigger.reason}{suppressed_note}",
+                f"Rally: {record.rally_trigger.verdict.value} — "
+                f"{record.rally_trigger.reason}",
             ),
         ],
     )
@@ -1250,9 +1284,10 @@ def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
             html.Th("OTM entry / now"),
             html.Th("DTE / window"),
             html.Th("Est. roll-up cost"),
+            html.Th("This leg's convexity"),
             html.Th("Time trigger"),
-            html.Th("Convexity trigger"),
-            html.Th("Drift trigger"),
+            html.Th("Convexity trigger (book)"),
+            html.Th("Rally trigger"),
         ],
     )
     rows = [_roll_record_row(record) for record in records]
@@ -1278,15 +1313,22 @@ def _render_roll_panel_logic(
     )
 
 
-def _roll_plan_row(record: RollPlanRecord) -> html.Tr:
+def _roll_plan_row(record: RollPlanRecord, *, grouped: bool = False) -> html.Tr:
     """One long put's recommended action, proposal, and reasoning.
 
     The reasoning cell is not decoration. ``DELAY`` is a recommendation
     to *not* act on a trigger that has fired, so it has to arrive with
     its justification attached or it reads as the tool losing the
     signal.
+
+    Args:
+        record: The leg to render.
+        grouped: Whether this row sits under a
+            :func:`_plan_group_header_row` — when it does, the header
+            already names the structure, so the leg text drops the
+            redundant ``(structure_id)`` suffix (#333).
+
     """
-    position = record.position
     strike_text = (
         f"{record.target_strike:,.0f}"
         if record.target_strike is not None
@@ -1297,26 +1339,105 @@ def _roll_plan_row(record: RollPlanRecord) -> html.Tr:
         if record.roll_up_cost is not None
         else "n/a"
     )
+    excluded = record.action is None
+    action_text = (
+        "—" if record.action is None else record.action.value.replace("_", " ")
+    )
+    action_class = (
+        "verdict-badge verdict-badge--excluded"
+        if record.action is None
+        else f"verdict-badge verdict-badge--{record.action.value.lower()}"
+    )
+    row_classes = " ".join(
+        cls
+        for cls in (
+            "plan-row--excluded" if excluded else None,
+            "plan-row--grouped" if grouped else None,
+        )
+        if cls is not None
+    )
     return html.Tr(
         [
-            html.Td(
-                html.Span(
-                    record.action.value.replace("_", " "),
-                    className=(
-                        "verdict-badge verdict-badge--"
-                        f"{record.action.value.lower()}"
-                    ),
-                ),
-            ),
-            html.Td(
-                f"{position.option.option_type.value} "
-                f"{position.option.strike_price:,.0f}",
-            ),
+            html.Td(html.Span(action_text, className=action_class)),
+            html.Td(_plan_leg_text(record, show_structure_suffix=not grouped)),
             html.Td(strike_text),
             html.Td(cost_text),
             html.Td(f"{record.gamma:,.4f} / {record.theta:,.2f}"),
             html.Td(record.rationale, className="plan-rationale"),
         ],
+        className=row_classes or None,
+    )
+
+
+def _plan_leg_text(
+    record: RollPlanRecord,
+    *,
+    show_structure_suffix: bool = True,
+) -> str:
+    """Name the leg, and the structure it rolls with when it has one.
+
+    ``show_structure_suffix=False`` drops the ``(structure_id)`` suffix for
+    a row already sitting under that structure's group header (#333) — the
+    tag would otherwise be said twice.
+    """
+    position = record.position
+    leg = (
+        f"{position.option.option_type.value} "
+        f"{position.option.strike_price:,.0f}"
+    )
+    if record.structure_id is None or not show_structure_suffix:
+        return leg
+    return f"{leg} ({record.structure_id})"
+
+
+def _group_plan_records(
+    records: list[RollPlanRecord],
+) -> list[tuple[str | None, list[RollPlanRecord]]]:
+    """Cluster *records* by ``structure_id`` for display only (#333).
+
+    Pure rendering grouping — the underlying records are unchanged, one
+    per leg, in whatever order ``build_roll_plan`` returned them. This
+    only decides how they're clustered on screen: legs sharing a tag move
+    together, in the order their tag was first seen; a leg with no tag is
+    always its own singleton group. Mirrors
+    :func:`~deltadewa.analysis.roll_planner.group_into_structures`'s own
+    tag-or-singleton grouping, but over :class:`RollPlanRecord` rather
+    than ``OptionPosition``.
+    """
+    grouped: dict[object, list[RollPlanRecord]] = {}
+    for record in records:
+        tag = record.structure_id
+        key: object = tag if tag is not None else object()
+        grouped.setdefault(key, []).append(record)
+    return [(legs[0].structure_id, legs) for legs in grouped.values()]
+
+
+def _plan_group_header_row(
+    structure_id: str,
+    legs: list[RollPlanRecord],
+) -> html.Tr:
+    """One header row naming a multi-leg structure's grouped rows (#333).
+
+    Target strike and roll-up cost are already identical across every leg
+    in the group — netted once in ``roll_planner`` — so they are stated
+    here rather than repeated silently on each leg row below.
+    """
+    priced = next((r for r in legs if r.target_strike is not None), None)
+    strike_text = (
+        f"target {priced.target_strike:,.0f}" if priced is not None else "n/a"
+    )
+    cost_text = (
+        fmt.signed_currency(priced.roll_up_cost)
+        if priced is not None and priced.roll_up_cost is not None
+        else "n/a"
+    )
+    return html.Tr(
+        html.Td(
+            f"{structure_id} — {len(legs)} legs, rolled as one structure "
+            f"({strike_text}, net cost {cost_text})",
+            colSpan=6,
+            className="plan-group-header",
+        ),
     )
 
 
@@ -1331,11 +1452,14 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
     what to roll *to* and what that would cost.
     """
     intro = html.P(
-        "One recommended action per long put — what to roll it to, and "
-        "what that roll would cost. Built on the same trigger grades as "
-        "the roll status table below, so the two never disagree: this "
-        "panel adds the handbook's gamma/theta judgement, which is the "
-        "only thing that can turn a fired trigger into DELAY.",
+        "One recommended action per leg — what to roll it to, and what "
+        "that roll would cost. Built on the same trigger grades as the "
+        "roll status table below, so the two never disagree: this panel "
+        "adds the handbook's gamma/theta judgement, which is the only "
+        "thing that can turn a fired trigger into DELAY. Legs that get no "
+        "recommendation of their own — short legs of a spread, non-puts, "
+        "expired legs — are still listed, greyed, with the reason: a leg "
+        "the planner skipped must never just be absent.",
         className="plain-language",
     )
     if not records:
@@ -1343,7 +1467,7 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
             [
                 intro,
                 html.P(
-                    "No long puts in the book yet.",
+                    "No positions in the book yet.",
                     className="plain-language",
                 ),
             ],
@@ -1359,13 +1483,20 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
             html.Th("Reasoning"),
         ],
     )
+    rows: list[html.Tr] = []
+    for structure_id, legs in _group_plan_records(records):
+        if structure_id is not None and len(legs) > 1:
+            rows.append(_plan_group_header_row(structure_id, legs))
+            rows.extend(_roll_plan_row(r, grouped=True) for r in legs)
+        else:
+            rows.extend(_roll_plan_row(r) for r in legs)
     return html.Div(
         [
             intro,
             html.Table(
                 [
                     html.Thead(header),
-                    html.Tbody([_roll_plan_row(r) for r in records]),
+                    html.Tbody(rows),
                 ],
                 className="planning-table",
             ),
@@ -2246,11 +2377,18 @@ def _vega_term_panel_view(exposure: MaturityVegaExposure) -> Component:
 def _render_vega_term_panel_logic(
     *,
     portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
 ) -> Component:
-    """Render the vega term exposure panel for the current book."""
+    """Render the vega term exposure panel for the current book.
+
+    Takes ``ips_config`` for the bucket edges (#305): where the term
+    structure is cut is policy, not presentation, and this is the panel the
+    old weekly-options edges rendered useless on an 18-month ladder.
+    """
+    buckets = MaturityBuckets.from_ips(ips_config.maturity_buckets)
     return _safe_render(
         lambda: _vega_term_panel_view(
-            PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(),
+            PortfolioAnalyzer(portfolio).calculate_vega_by_maturity(buckets),
         ),
     )
 
@@ -2369,6 +2507,23 @@ def render(app: ProgramDashApp) -> html.Div:
                             dcc.Input(
                                 id="add-entry-premium",
                                 type="number",
+                            ),
+                        ],
+                        className="editor-field",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Structure (optional)"),
+                            dcc.Input(
+                                id="add-structure-id",
+                                type="text",
+                                placeholder="e.g. collar-2027",
+                            ),
+                            html.Small(
+                                "Same tag on both legs of a spread — the "
+                                "roll planner then moves them together "
+                                "and nets their cost. Blank = standalone.",
+                                className="field-hint",
                             ),
                         ],
                         className="editor-field",
@@ -3034,7 +3189,10 @@ def render(app: ProgramDashApp) -> html.Div:
                         ],
                     ),
                     html.Div(
-                        _render_vega_term_panel_logic(portfolio=portfolio),
+                        _render_vega_term_panel_logic(
+                            portfolio=portfolio,
+                            ips_config=ips_config,
+                        ),
                         id="explore-vega-term-panel",
                     ),
                 ],
@@ -3111,6 +3269,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
         Output("add-option-type", "value"),
         Output("add-exercise-style", "value"),
         Output("add-entry-premium", "value"),
+        Output("add-structure-id", "value"),
         Input("add-submit", "n_clicks"),
         State("add-strike", "value"),
         State("add-maturity", "date"),
@@ -3118,6 +3277,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
         State("add-option-type", "value"),
         State("add-exercise-style", "value"),
         State("add-entry-premium", "value"),
+        State("add-structure-id", "value"),
         State("book-version", "data"),
         prevent_initial_call=True,
     )
@@ -3129,8 +3289,9 @@ def register_callbacks(  # pylint: disable=too-many-locals
         option_type: str,
         exercise_style: str,
         entry_premium: float | None,
+        structure_id: str | None,
         version: int,
-    ) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any]:
+    ) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any]:
         return _add_position_logic(
             strike=strike,
             maturity=maturity,
@@ -3138,6 +3299,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
             option_type=option_type,
             exercise_style=exercise_style,
             entry_premium=entry_premium,
+            structure_id=structure_id,
             version=version,
             state=app.program_state,
         )
@@ -3506,4 +3668,5 @@ def register_callbacks(  # pylint: disable=too-many-locals
     def _render_vega_term_panel(_version: int) -> Component:
         return _render_vega_term_panel_logic(
             portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
         )

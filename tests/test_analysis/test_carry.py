@@ -6,6 +6,7 @@ import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.carry import carry_vs_budget
+from deltadewa.analysis.maturity import DEFAULT_MATURITY_BUCKETS
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
 
@@ -20,14 +21,21 @@ class TestCarryMixin:
         )
         analyzer = PortfolioAnalyzer(portfolio)
 
-        metrics = analyzer.calculate_carry_metrics()
+        metrics = analyzer.calculate_carry_metrics(DEFAULT_MATURITY_BUCKETS)
 
         assert metrics["total_theta_daily"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["total_theta_weekly"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["total_theta_monthly"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["total_theta_annual"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["is_positive_carry"] is False
-        assert len(metrics["theta_by_bucket"]) == 0
+        # #305: an empty book has zero theta in every bucket — a real
+        # reading, not missing data (matches the vega panel's convention).
+        assert set(metrics["theta_by_bucket"]) == set(
+            DEFAULT_MATURITY_BUCKETS.labels,
+        )
+        assert all(
+            v == pytest.approx(0.0) for v in metrics["theta_by_bucket"].values()
+        )
 
     def test_calculate_carry_metrics_with_position(self) -> None:
         """Test carry metrics with a position."""
@@ -48,7 +56,7 @@ class TestCarryMixin:
         )
 
         analyzer = PortfolioAnalyzer(portfolio)
-        metrics = analyzer.calculate_carry_metrics()
+        metrics = analyzer.calculate_carry_metrics(DEFAULT_MATURITY_BUCKETS)
 
         # Check structure
         assert "total_theta_daily" in metrics
@@ -72,20 +80,24 @@ class TestCarryMixin:
         analyzer = PortfolioAnalyzer(portfolio)
 
         # pylint: disable=protected-access
-        metrics = analyzer._empty_carry_metrics()
+        metrics = analyzer._empty_carry_metrics(DEFAULT_MATURITY_BUCKETS)
 
         assert metrics["total_theta_daily"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["total_theta_weekly"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["total_theta_monthly"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["total_theta_annual"] == pytest.approx(0.0, abs=1e-9)
-        assert not metrics["theta_by_bucket"]
+        assert set(metrics["theta_by_bucket"]) == set(
+            DEFAULT_MATURITY_BUCKETS.labels,
+        )
         assert not metrics["theta_by_type"]
         assert metrics["covered_call_theta"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["long_call_theta"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["hedge_put_theta"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["short_put_theta"] == pytest.approx(0.0, abs=1e-9)
         assert metrics["net_carry"] == pytest.approx(0.0, abs=1e-9)
-        assert not metrics["carry_efficiency"]
+        assert set(metrics["carry_efficiency"]) == set(
+            DEFAULT_MATURITY_BUCKETS.labels,
+        )
         assert metrics["is_positive_carry"] is False
 
     def test_create_theta_summary_table(self) -> None:

@@ -11,8 +11,15 @@ from deltadewa.analysis.roll_planner import (
     RollPlanRecord,
     build_roll_plan,
     gamma_theta_delay,
+    group_into_structures,
+    net_structure_roll_cost,
+    structure_target_strikes,
 )
-from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
+from deltadewa.analysis.roll_status import (
+    RollVerdict,
+    estimate_roll_up_cost,
+    evaluate_roll_status,
+)
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
@@ -27,6 +34,7 @@ from deltadewa.ips_config import (
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.valuation import OptionValuation
+from tests.clock_helpers import days_from_today
 
 _SPOT = 100.0
 _VOL = 0.20
@@ -37,8 +45,6 @@ def _make_ips_config(
     *,
     roll_at_months_remaining: float = 1.0,
     roll_review_buffer: float = 1.5,
-    strike_drift_max_otm_pct: float = 45.0,
-    strike_drift_review_fraction: float = 0.75,
     crash_scenario_pct: float = -25.0,
     target_min_pct: float = 15.0,
     target_max_pct: float = 25.0,
@@ -58,10 +64,11 @@ def _make_ips_config(
             delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
             roll_at_months_remaining=roll_at_months_remaining,
-            rally_rebalance_pct=15.0,
-            strike_drift_max_otm_pct=strike_drift_max_otm_pct,
+            rally_monitor_pct=5.0,
+            rally_review_pct=10.0,
+            rally_action_pct=15.0,
+            rally_urgent_pct=20.0,
             roll_review_buffer=roll_review_buffer,
-            strike_drift_review_fraction=strike_drift_review_fraction,
         ),
         monetization=IpsMonetization(schedule=()),
     )
@@ -132,8 +139,10 @@ class TestGammaThetaDelay:
             delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
             roll_at_months_remaining=roll_at_months_remaining,
-            rally_rebalance_pct=15.0,
-            strike_drift_max_otm_pct=10.0,
+            rally_monitor_pct=5.0,
+            rally_review_pct=10.0,
+            rally_action_pct=15.0,
+            rally_urgent_pct=20.0,
         )
 
     def _convexity(
@@ -231,9 +240,9 @@ class TestBuildRollPlan:
     """Integration tests for build_roll_plan on crafted portfolios."""
 
     # ------------------------------------------------------------------
-    # Scenario A: put has rallied far OTM (drift > threshold → ROLL)
-    #   entry_spot=100, current spot=120, strike=80
-    #   entry_otm=20%, current_otm≈33%, drift≈13% > max_drift=10%
+    # Scenario A: put has rallied far OTM (rally trigger → ROLL)
+    #   entry_spot=100, current spot=120: +20% rally, exactly the handbook's
+    #   URGENT band edge (rally_urgent_pct=20.0), so rally_pct >= urgent → ROLL.
     # ------------------------------------------------------------------
 
     def _rallied_position(self) -> OptionPosition:
@@ -253,11 +262,7 @@ class TestBuildRollPlan:
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()
         portfolio = _portfolio_with(pos)
-        ips = _make_ips_config(
-            strike_drift_max_otm_pct=10.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-        )
+        ips = _make_ips_config(target_min_pct=15.0, target_max_pct=25.0)
 
         records = build_roll_plan(portfolio, ips)
 
@@ -272,7 +277,7 @@ class TestBuildRollPlan:
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()
         portfolio = _portfolio_with(pos)
-        ips = _make_ips_config(strike_drift_max_otm_pct=10.0)
+        ips = _make_ips_config()
 
         records = build_roll_plan(portfolio, ips)
 
@@ -289,17 +294,16 @@ class TestBuildRollPlan:
     ) -> None:
         """A rallied put is never deferred, however healthy the band.
 
-        The put has drifted *further* OTM (+13%), so the handbook's
-        gamma/theta deferral does not apply — this is Rule 2's market
-        rally rebalance trigger and the sanctioned action is to roll up.
-        Deferring here would sit on a live signal.
+        The put has drifted *further* OTM (a rally, not a decline), so the
+        handbook's gamma/theta deferral does not apply — this is Rule 2's
+        market rally rebalance trigger and the sanctioned action is to roll
+        up. Deferring here would sit on a live signal.
         """
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()  # 90 days >> 30-day window
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -307,14 +311,21 @@ class TestBuildRollPlan:
         records = build_roll_plan(portfolio, ips)
 
         assert records[0].action == RollAction.ROLL_NOW
-        assert "further OTM" in records[0].rationale
+        assert "Rally trigger" in records[0].rationale
 
     # ------------------------------------------------------------------
     # Scenario B: market has declined, put is nearer the money
     #   entry_spot=100, current spot=90, strike=80
-    #   entry_otm=20%, current_otm≈11%, drift≈-8.9%
-    #   With max_drift=10% and review_fraction=0.75 the drift trigger is
-    #   REVIEW, which is actionable but not suppressed by roll_status.
+    #   entry_otm=20%, current_otm≈11%, drift≈-8.9% (nearer the money —
+    #   and, since a decline never rallies, the rally trigger structurally
+    #   cannot fire either; see #384).
+    #   The actionable trigger here is time: at days_to_maturity=40 (vs a
+    #   30-day roll_window_days and a 1.5x review_buffer, i.e. inside the
+    #   REVIEW buffer but outside the mandatory window) the time trigger
+    #   itself reads REVIEW, which is exactly what gamma_theta_delay's own
+    #   docstring condition 1 allows deferring — "the position has not
+    #   entered the mandatory roll window" does not require the position to
+    #   be trigger-free, only outside the ROLL boundary.
     # ------------------------------------------------------------------
 
     def _declined_position(self, days_to_maturity: int = 90) -> OptionPosition:
@@ -332,12 +343,11 @@ class TestBuildRollPlan:
     ) -> None:
         """The handbook's sanctioned deferral: gaining gamma → DELAY."""
         _patch_convexity(monkeypatch, 20.0)
-        pos = self._declined_position()
+        pos = self._declined_position(days_to_maturity=40)
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
-            strike_drift_review_fraction=0.75,
+            roll_review_buffer=1.5,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -357,12 +367,11 @@ class TestBuildRollPlan:
         rationale must carry the IPS values it was measured against.
         """
         _patch_convexity(monkeypatch, 20.0)
-        pos = self._declined_position()
+        pos = self._declined_position(days_to_maturity=40)
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
-            strike_drift_review_fraction=0.75,
+            roll_review_buffer=1.5,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -415,7 +424,6 @@ class TestBuildRollPlan:
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -434,7 +442,6 @@ class TestBuildRollPlan:
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=10.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -462,7 +469,6 @@ class TestBuildRollPlan:
         portfolio = _portfolio_with(pos)
         ips = _make_ips_config(
             roll_at_months_remaining=1.0,
-            strike_drift_max_otm_pct=45.0,
             target_min_pct=15.0,
             target_max_pct=25.0,
         )
@@ -483,7 +489,7 @@ class TestBuildRollPlan:
         _patch_convexity(monkeypatch, 20.0)
         pos = self._rallied_position()
         portfolio = _portfolio_with(pos)
-        ips = _make_ips_config(strike_drift_max_otm_pct=10.0)
+        ips = _make_ips_config()
 
         plan_records = build_roll_plan(portfolio, ips)
         status_records = [
@@ -543,7 +549,7 @@ class TestBuildRollPlan:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Short put (quantity < 0) is not included in the plan."""
+        """Short put is listed with a reason, never silently dropped."""
         _patch_convexity(monkeypatch, 20.0)
         long_put = _make_put(quantity=5)
         short_put = _make_put(quantity=-5)
@@ -552,14 +558,19 @@ class TestBuildRollPlan:
 
         records = build_roll_plan(portfolio, ips)
 
-        assert len(records) == 1
-        assert records[0].position is long_put
+        assert len(records) == 2
+        by_position = {r.position.position_id: r for r in records}
+        assert by_position[long_put.position_id].action is not None
+        excluded = by_position[short_put.position_id]
+        assert excluded.action is None
+        assert excluded.excluded_reason is not None
+        assert "short put" in excluded.excluded_reason
 
     def test_call_position_excluded_from_plan(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """CALL position is not included in the put-only plan."""
+        """A CALL is listed with a reason, never silently dropped."""
         _patch_convexity(monkeypatch, 20.0)
         long_put = _make_put(quantity=5, spot_price=_SPOT)
         call_option = OptionValuation(
@@ -582,7 +593,11 @@ class TestBuildRollPlan:
 
         records = build_roll_plan(portfolio, ips)
 
-        assert len(records) == 1
+        assert len(records) == 2
+        excluded = next(r for r in records if r.action is None)
+        assert excluded.position is long_call
+        assert excluded.excluded_reason is not None
+        assert "not a protective put" in excluded.excluded_reason
         assert records[0].position is long_put
 
     # ------------------------------------------------------------------
@@ -614,3 +629,274 @@ class TestBuildRollPlan:
         # Long put: theta should be negative, gamma positive
         assert rec.theta < 0.0
         assert rec.gamma > 0.0
+
+
+# ======================================================================
+# #333 — spreads roll as a unit
+# ======================================================================
+
+
+def _spread_leg(
+    *,
+    strike_price: float,
+    quantity: int,
+    structure_id: str | None,
+    days_to_maturity: int = 200,
+) -> OptionPosition:
+    """A put leg tagged into a structure, seeded off the program clock."""
+    option = OptionValuation(
+        spot_price=_SPOT,
+        strike_price=strike_price,
+        maturity_date=days_from_today(days_to_maturity),
+        volatility=_VOL,
+        risk_free_rate=_RATE,
+        dividend_yield=0.0,
+        option_type=OptionType.PUT,
+        exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    return OptionPosition(
+        option=option,
+        quantity=quantity,
+        exercise_style=ExerciseStyle.EUROPEAN,
+        entry_spot=_SPOT,
+        entry_date=days_from_today(-30),
+        structure_id=structure_id,
+    )
+
+
+class TestGroupIntoStructures:
+    """Grouping is by the explicit tag only — never inferred."""
+
+    def test_untagged_legs_are_single_leg_structures(self) -> None:
+        """The property that leaves every pre-existing book unchanged."""
+        legs = [_make_put(quantity=5), _make_put(quantity=3)]
+
+        structures = group_into_structures(legs)
+
+        assert len(structures) == 2
+        assert all(not s.is_spread for s in structures)
+        assert all(s.structure_id is None for s in structures)
+
+    def test_shared_tag_groups_legs(self) -> None:
+        long_leg = _spread_leg(
+            strike_price=90.0,
+            quantity=5,
+            structure_id="spread-a",
+        )
+        short_leg = _spread_leg(
+            strike_price=80.0,
+            quantity=-5,
+            structure_id="spread-a",
+        )
+
+        structures = group_into_structures([long_leg, short_leg])
+
+        assert len(structures) == 1
+        assert structures[0].is_spread
+        assert structures[0].legs == (long_leg, short_leg)
+        assert structures[0].anchor is long_leg
+
+    def test_same_maturity_and_sign_are_not_inferred_together(self) -> None:
+        """Inference would mispair a book that legs in separately (#333)."""
+        a = _spread_leg(strike_price=90.0, quantity=5, structure_id=None)
+        b = _spread_leg(strike_price=80.0, quantity=-5, structure_id=None)
+
+        assert len(group_into_structures([a, b])) == 2
+
+    def test_overlapping_spreads_on_one_expiry_stay_distinct(self) -> None:
+        legs = [
+            _spread_leg(strike_price=90.0, quantity=5, structure_id="a"),
+            _spread_leg(strike_price=80.0, quantity=-5, structure_id="a"),
+            _spread_leg(strike_price=85.0, quantity=3, structure_id="b"),
+            _spread_leg(strike_price=75.0, quantity=-3, structure_id="b"),
+        ]
+
+        structures = group_into_structures(legs)
+
+        assert [s.structure_id for s in structures] == ["a", "b"]
+        assert all(len(s.legs) == 2 for s in structures)
+
+    def test_empty_book_yields_no_structures(self) -> None:
+        """Degenerate case: empty."""
+        assert group_into_structures([]) == ()
+
+    def test_structure_with_no_long_put_has_no_anchor(self) -> None:
+        """Degenerate case: nothing to plan a roll around."""
+        short_only = _spread_leg(
+            strike_price=80.0,
+            quantity=-5,
+            structure_id="s",
+        )
+
+        assert group_into_structures([short_only])[0].anchor is None
+
+
+class TestStructureGeometryAndCost:
+    """A spread keeps its percentage width, and its cost nets."""
+
+    def test_targets_preserve_percentage_width(self) -> None:
+        long_leg = _spread_leg(
+            strike_price=90.0,
+            quantity=5,
+            structure_id="s",
+        )
+        short_leg = _spread_leg(
+            strike_price=80.0,
+            quantity=-5,
+            structure_id="s",
+        )
+        structure = group_into_structures([long_leg, short_leg])[0]
+
+        targets = structure_target_strikes(structure, anchor_target_strike=99.0)
+
+        # 90 -> 99 is +10%; the short leg moves by the same ratio, so the
+        # spread stays 8/9ths as wide relative to its anchor.
+        assert targets[long_leg.position_id] == pytest.approx(99.0)
+        assert targets[short_leg.position_id] == pytest.approx(88.0)
+        ratio_before = short_leg.option.strike_price / 90.0
+        ratio_after = targets[short_leg.position_id] / 99.0
+        assert ratio_after == pytest.approx(ratio_before)
+
+    def test_netted_cost_is_the_sum_of_its_legs(self) -> None:
+        """The sign question: short quantity already carries the credit."""
+        long_leg = _spread_leg(
+            strike_price=90.0,
+            quantity=5,
+            structure_id="s",
+        )
+        short_leg = _spread_leg(
+            strike_price=80.0,
+            quantity=-5,
+            structure_id="s",
+        )
+        structure = group_into_structures([long_leg, short_leg])[0]
+        targets = structure_target_strikes(structure, anchor_target_strike=99.0)
+
+        netted = net_structure_roll_cost(structure, targets)
+        long_cost = estimate_roll_up_cost(
+            long_leg,
+            targets[long_leg.position_id],
+            long_leg.option.volatility,
+        )
+        short_cost = estimate_roll_up_cost(
+            short_leg,
+            targets[short_leg.position_id],
+            short_leg.option.volatility,
+        )
+
+        assert netted == pytest.approx(long_cost + short_cost)
+        # The short leg's contribution really is a credit — if it were not,
+        # summing the legs would be the wrong operation.
+        assert short_cost < 0
+        assert netted < long_cost
+
+    def test_single_leg_structure_costs_what_the_leg_costs(self) -> None:
+        """Degenerate case: an outright put is a structure of one."""
+        leg = _spread_leg(strike_price=90.0, quantity=5, structure_id=None)
+        structure = group_into_structures([leg])[0]
+        targets = structure_target_strikes(structure, anchor_target_strike=99.0)
+
+        assert net_structure_roll_cost(structure, targets) == pytest.approx(
+            estimate_roll_up_cost(leg, 99.0, leg.option.volatility),
+        )
+
+
+class TestRollPlanCoversEveryLeg:
+    """No leg is ever silently absent from the plan (#333)."""
+
+    def test_spread_legs_share_one_netted_cost(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _patch_convexity(monkeypatch, 20.0)
+        long_leg = _spread_leg(
+            strike_price=90.0,
+            quantity=5,
+            structure_id="s",
+        )
+        short_leg = _spread_leg(
+            strike_price=80.0,
+            quantity=-5,
+            structure_id="s",
+        )
+        portfolio = _portfolio_with(long_leg, short_leg)
+
+        records = build_roll_plan(portfolio, _make_ips_config())
+
+        assert len(records) == 2
+        by_id = {r.position.position_id: r for r in records}
+        planned = by_id[long_leg.position_id]
+        skipped = by_id[short_leg.position_id]
+        assert planned.structure_id == "s"
+        assert skipped.structure_id == "s"
+        assert skipped.action is None
+        assert skipped.excluded_reason is not None
+        assert "rolls with its structure" in skipped.excluded_reason
+
+    def test_outright_long_put_is_unchanged_by_the_structure_model(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The acceptance criterion: single-leg behaviour is untouched."""
+        _patch_convexity(monkeypatch, 20.0)
+        pos = _make_put(quantity=5)
+        portfolio = _portfolio_with(pos)
+
+        records = build_roll_plan(portfolio, _make_ips_config())
+
+        assert len(records) == 1
+        rec = records[0]
+        assert rec.structure_id is None
+        assert rec.excluded_reason is None
+        assert rec.action is not None
+        assert rec.target_strike is not None
+
+    def test_expired_leg_is_listed_as_expired_not_as_a_short_leg(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Expiry settles what to do with it, so it is reported first."""
+        _patch_convexity(monkeypatch, 20.0)
+        expired = _spread_leg(
+            strike_price=90.0,
+            quantity=-5,
+            structure_id=None,
+            days_to_maturity=-40,
+        )
+        portfolio = _portfolio_with(expired)
+
+        records = build_roll_plan(portfolio, _make_ips_config())
+
+        assert len(records) == 1
+        assert records[0].action is None
+        assert records[0].excluded_reason is not None
+        assert "expired" in records[0].excluded_reason
+
+    def test_records_come_back_in_portfolio_order(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _patch_convexity(monkeypatch, 20.0)
+        legs = [
+            _spread_leg(strike_price=90.0, quantity=5, structure_id="s"),
+            _make_put(quantity=3, strike_price=70.0),
+            _spread_leg(strike_price=80.0, quantity=-5, structure_id="s"),
+        ]
+        portfolio = _portfolio_with(*legs)
+
+        records = build_roll_plan(portfolio, _make_ips_config())
+
+        assert [r.position.position_id for r in records] == [
+            leg.position_id for leg in legs
+        ]
+
+    def test_empty_book_yields_an_empty_plan(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Degenerate case: empty."""
+        _patch_convexity(monkeypatch, 20.0)
+
+        portfolio = OptionPortfolio(spot_price=_SPOT)
+
+        assert build_roll_plan(portfolio, _make_ips_config()) == []

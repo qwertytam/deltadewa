@@ -216,6 +216,7 @@ class TestMutationsPersist:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -339,6 +340,7 @@ class TestExerciseStyleDefault:
             option_type=OptionType.PUT.value,
             exercise_style=ips_style.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -359,6 +361,7 @@ class TestGuardMechanism:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=7,
             state=app.program_state,
         )
@@ -381,6 +384,7 @@ class TestGuardMechanism:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=7,
             state=state,
         )
@@ -409,6 +413,7 @@ class TestAddPositionRejectsExpiredMaturity:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -433,6 +438,7 @@ class TestAddPositionRejectsExpiredMaturity:
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
             entry_premium=None,
+            structure_id=None,
             version=0,
             state=state,
         )
@@ -825,7 +831,7 @@ class TestRollStatusTable:
         text = _collect_text(panel)
         assert expected.time_trigger.reason in text
         assert expected.convexity_trigger.reason in text
-        assert expected.drift_trigger.reason in text
+        assert expected.rally_trigger.reason in text
 
     def test_crash_valuation_matches_engine_on_mixed_leg_book(
         self,
@@ -1016,12 +1022,12 @@ class TestRollPlanPanel:
         assert "verdict-badge--delay" in markup
         assert "DELAY" in _collect_text(row)
 
-    def test_empty_book_says_no_long_puts(self, tmp_path: Path) -> None:
+    def test_empty_book_says_no_positions(self, tmp_path: Path) -> None:
         app = _app_with_ips(tmp_path)
 
         text = _collect_text(self._panel(app)).lower()
 
-        assert "no long puts in the book yet" in text
+        assert "no positions in the book yet" in text
 
     def test_panel_renders_without_error_on_mixed_book(
         self,
@@ -1039,6 +1045,53 @@ class TestRollPlanPanel:
         text = _collect_text(self._panel(app))
 
         assert "traceback" not in text.lower()
+
+    def test_spread_legs_render_under_one_group_header(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#333: a display-only grouping, not a position merge.
+
+        Two legs sharing a ``structure_id`` roll together and net to one
+        cost (built earlier in #333); this pins that the *table* now
+        clusters them under one header row instead of repeating the tag
+        on every flat row (the field-test gap the header row fixes).
+        """
+        app = self._app_with_put(tmp_path)
+        app.program_state.set_underlying_quantity(1_000.0)
+        app.program_state.add_position(
+            strike_price=4500.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=10,
+            option_type=OptionType.PUT,
+            structure_id="test-spread",
+        )
+        app.program_state.add_position(
+            strike_price=4000.0,
+            maturity_date=datetime.now(tz=UTC) + timedelta(days=180),
+            quantity=-10,
+            option_type=OptionType.PUT,
+            structure_id="test-spread",
+        )
+
+        text = _collect_text(self._panel(app))
+
+        assert "test-spread" in text
+        assert "2 legs" in text
+        # The per-leg "(structure_id)" suffix is redundant once the group
+        # header already names it — it would otherwise be said twice.
+        assert "(test-spread)" not in text
+
+    def test_untagged_leg_carries_no_group_header(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A pre-existing, untagged book renders exactly as before #333."""
+        app = self._app_with_put(tmp_path)
+
+        markup = str(self._panel(app))
+
+        assert "plan-group-header" not in markup
 
 
 class TestPositionAgingPanel:
@@ -2135,8 +2188,10 @@ class TestVegaTermPanel:
 
     @staticmethod
     def _panel(app: ProgramDashApp) -> Component:
+        assert app.ips_config is not None
         return design._render_vega_term_panel_logic(
             portfolio=app.program_state.portfolio,
+            ips_config=app.ips_config,
         )
 
     def test_renders_bucketed_vega_for_multi_maturity_book(
@@ -2161,8 +2216,8 @@ class TestVegaTermPanel:
         text = _collect_text(self._panel(app))
 
         assert "Total vega" in text
-        assert "0-7 days (Weekly)" in text
-        assert "90+ days (Long-term)" in text
+        assert "0-30 days" in text
+        assert "181-365 days" in text
 
     def test_empty_book_renders_zeros_not_a_raise(
         self,

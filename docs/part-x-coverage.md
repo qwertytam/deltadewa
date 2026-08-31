@@ -757,7 +757,7 @@ key whose only reader was `dashboard/crash_payoff_display.py` — had already
 been wired to `app/pages/design.py:937` by #273's own fix.
 
 **One pre-existing gap surfaced by that sweep:** see
-[`triggers.rally_rebalance_pct`](#triggersrally_rebalance_pct-is-validated-but-unread).
+[`triggers.rally_rebalance_pct`](#triggersrally_rebalance_pct-is-validated-but-unread--built-297).
 
 **Four test suites outside the deleted directories** reached into the layer and
 were unhooked first, in their own commit, so the gate was green before anything
@@ -826,30 +826,65 @@ is passed bare to `FuncFormatter`, so call-syntax searches miss it),
 hits called `OptionPortfolio`'s **same-named** methods, the same bare-name
 collision the import-path qualification above exists to catch.
 
-### `triggers.rally_rebalance_pct` is validated but unread
+### `triggers.rally_rebalance_pct` is validated but unread — built (#297)
 
-Found by #279's #273-style key sweep. **Pre-existing — not caused by the
-deletion**, and the only key in the IPS with no reader at all.
+Found by #279's #273-style key sweep as the only key in the IPS with no
+reader at all. **Built in 5a**, and replaced rather than wired: the single
+scalar became the handbook's four named bands,
+`triggers.rally_monitor_pct` / `_review_pct` / `_action_pct` / `_urgent_pct`
+(5 / 10 / 15 / 20).
 
-It is declared required with no default (`ips_config.py:349`), validated
-(`ips_config.py:578`), documented as settable in `config/ips.example.yaml` and
-`examples/ips/ips_default.yaml` ("market rally that forces a re-strike
-review"), and backed by the handbook's [Rule 2 — Market Rally Rebalance
-Trigger](https://qwertytam.github.io/deltadewa-handbook/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger).
-`HedgeTriggerThresholds.from_ips` maps nine trigger fields and skips
-this one — while its docstring claimed *"Every threshold the IPS defines is
-mapped here"*. That docstring is corrected; the claim was the reason the gap
-survived review.
+The rename follows 4.2's precedent (`roll_time_months`,
+`delta_drift_*`): `rally_rebalance_pct` did not say *which* of [Rule 2 —
+Market Rally Rebalance
+Trigger](https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger)'s
+four boundaries it was, and its shipped value (12.0) sat on none of them.
+Its *original* value, before #245's sanitization rewrote it as an example,
+was 15.0 — a real band edge. Restating all four restores the provenance
+that sanitization erased.
 
-**The key is kept.** Thresholds are policy and belong in `ips.yaml`, so this is
-a surfacing gap to build, not dead schema to delete — the opposite disposition
-from `dashboard_config_*.yaml` below, where the policy had already migrated.
-Building the trigger is its own issue; #279 did not widen to cover it.
+**Two surfaces, one evaluator.** The handbook does not say whether Rule 2
+is per-tranche or book-level, and both readings are useful, so:
+`roll_status.evaluate_roll_status` grades each tranche against all four
+bands as a `RollStatusRecord` trigger (per-tranche is where the
+re-strike decision is made — each leg has its own `entry_spot`, and a
+ladder legged in over eighteen months has no single entry to measure
+from); `hedge_triggers` carries a fifth book-level row reduced as the
+worst leg, **named**, so the max hands back a pointer rather than a bare
+number. The digest reports the book-level status as a crossing and the
+worst leg's rally as a material move.
 
-Not to be mis-fixed: `strike_drift_max_otm_pct` and
-`strike_drift_review_fraction` *do* have live readers in
-`analysis/roll_status.py`. The strike-**drift** trigger exists; the
-rally-**level** one does not.
+Five regions onto four `RollVerdict` rungs: ACTION and URGENT both grade
+`ROLL`, with the band's own name and recommended action carried in the
+reason. Inventing a fifth enum member would imply an urgency the rest of
+the package has no vocabulary for; naming the band in the reason is this
+repo's standing convention for never letting a verdict arrive as a bare
+word.
+
+`evaluate_hedge_triggers`' printed console output gained a fifth section,
+which is the one deliberate break of M2.7's "printed output unchanged"
+note — that note was about the extraction not regressing, not a permanent
+freeze.
+
+**#384 has since retired the strike-drift trigger.** At the time 5a
+shipped, `strike_drift_max_otm_pct` and `strike_drift_review_fraction`
+*did* have live readers in `analysis/roll_status.py` — the strike-**drift**
+trigger existed, but it implemented a *retired* handbook rule (a 45% OTM
+**level**) as a 40 pp **change since entry**, and at that threshold could
+not fire for this program in the direction that mattered (a 16%-OTM put
+needs a ~91% rally to breach it). That was the full explanation for #297's
+"every surface says HOLD". A field test on 2026-08-31 produced a live
+instance of exactly this — every leg read `Drift: HOLD ... vs 40% max`
+while `Rally: REVIEW` fired on the same leg — and the user confirmed the
+retirement. `RollStatusRecord.drift_trigger` and the `suppressed`
+MONITOR-demotion it fed (the latter unreachable once drift stops
+contributing to `verdict = max(...)` — see the roll-suppression-guard
+trace in that PR) are both gone; `roll_planner.gamma_theta_delay` /
+`RollAction.DELAY` is unrelated and unaffected, since it triggers on any
+of the surviving verdict sources, not specifically on drift.
+`MoneynessDrift`/`drift_pct` stays as a live, undbanded reading (the
+"OTM entry / now" column on `/design`'s roll status table, and
+`gamma_theta_delay`'s nearer-the-money input).
 
 ## Open questions
 

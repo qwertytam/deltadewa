@@ -68,7 +68,33 @@ class WeeklySnapshot:
             ``ProgramReport``, computed separately by the caller.
         worst_roll_verdict: The worst ``RollVerdict`` across every
             position's ``RollStatusRecord`` (HOLD < MONITOR < REVIEW <
-            ROLL), or ``"N/A"`` when the book has no positions.
+            ROLL), or ``"N/A"`` when the book holds no *gradable* leg —
+            no positions at all, or every one already expired (#373).
+            The **only** roll field that is diffed week over week.
+        worst_roll_leg: Which leg earned ``worst_roll_verdict``, e.g.
+            ``"PUT 4200"`` — ``None`` when there is none (#374).
+        worst_roll_reason: That leg's plain-language trigger reason.
+            ``None`` when there is no worst leg (#374).
+
+            Both are carried for *rendering* and deliberately **not**
+            diffed. ``worst_roll_reason`` embeds a live day count, so
+            diffing it would fire a threshold crossing every single week as
+            the clock ticks — a phantom change on a book that had not
+            moved. The verdict word is the thing that genuinely crosses;
+            these two explain it.
+        rally_status: The book-level handbook Rule 2 reading
+            (``OK``/``MONITOR``/``ACTION``/``UNAVAILABLE``) — diffed as a
+            crossing (#297).
+        worst_rally_pct: The most-rallied long put's move since its own
+            entry spot, carried for rendering and reported as a material
+            move rather than a crossing. ``None`` when no long put has a
+            recorded entry spot — unavailable, not zero.
+        expired_leg_count: How many legs are already past maturity
+            (#373). Diffed as a **crossing**, not a material move: an
+            expired leg is excluded from ``worst_roll_verdict``, so
+            without this a book whose only live leg expires would report
+            ``ROLL -> N/A`` and read as though the problem resolved
+            itself. The two lines together tell the truth.
         ips_compliance_all_pass: ``IpsComplianceSection.all_pass``.
         ips_compliance_rows: ``(metric, passes)`` per compliance row, in
             report order.
@@ -97,6 +123,11 @@ class WeeklySnapshot:
     hedge_cost_verdict: str | None
     decision_verdict: str
     worst_roll_verdict: str
+    worst_roll_leg: str | None
+    worst_roll_reason: str | None
+    expired_leg_count: int
+    rally_status: str
+    worst_rally_pct: float | None
     ips_compliance_all_pass: bool
     ips_compliance_rows: tuple[tuple[str, bool], ...]
     premium_paid_point_in_time: float
@@ -127,6 +158,11 @@ class WeeklySnapshot:
             "hedge_cost_verdict": self.hedge_cost_verdict,
             "decision_verdict": self.decision_verdict,
             "worst_roll_verdict": self.worst_roll_verdict,
+            "worst_roll_leg": self.worst_roll_leg,
+            "worst_roll_reason": self.worst_roll_reason,
+            "expired_leg_count": self.expired_leg_count,
+            "rally_status": self.rally_status,
+            "worst_rally_pct": self.worst_rally_pct,
             "ips_compliance_all_pass": self.ips_compliance_all_pass,
             "ips_compliance_rows": [
                 list(row) for row in self.ips_compliance_rows
@@ -153,6 +189,15 @@ class WeeklySnapshot:
             hedge_cost_verdict=data["hedge_cost_verdict"],
             decision_verdict=data["decision_verdict"],
             worst_roll_verdict=data["worst_roll_verdict"],
+            # .get(): #374/#373 added these three after snapshots were
+            # already being persisted, and a history file is read back for
+            # standing-breach detection weeks later. Same discipline as the
+            # "payoff_ratio" key above — an older file must keep loading.
+            worst_roll_leg=data.get("worst_roll_leg"),
+            worst_roll_reason=data.get("worst_roll_reason"),
+            expired_leg_count=data.get("expired_leg_count", 0),
+            rally_status=data.get("rally_status", "UNAVAILABLE"),
+            worst_rally_pct=data.get("worst_rally_pct"),
             ips_compliance_all_pass=data["ips_compliance_all_pass"],
             ips_compliance_rows=tuple(
                 (row[0], row[1]) for row in data["ips_compliance_rows"]
@@ -162,11 +207,16 @@ class WeeklySnapshot:
         )
 
 
-def snapshot_from_report(
+def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argument is a distinct snapshot field the caller computes
     report: ProgramReport,
     *,
     decision_verdict: str,
     worst_roll_verdict: str,
+    worst_roll_leg: str | None,
+    worst_roll_reason: str | None,
+    expired_leg_count: int,
+    rally_status: str,
+    worst_rally_pct: float | None,
     first_as_of: date,
     cumulative_carry_cost: float,
 ) -> WeeklySnapshot:
@@ -205,6 +255,11 @@ def snapshot_from_report(
         hedge_cost_verdict=mc.hedge_cost_verdict,
         decision_verdict=decision_verdict,
         worst_roll_verdict=worst_roll_verdict,
+        worst_roll_leg=worst_roll_leg,
+        worst_roll_reason=worst_roll_reason,
+        expired_leg_count=expired_leg_count,
+        rally_status=rally_status,
+        worst_rally_pct=worst_rally_pct,
         ips_compliance_all_pass=bool(ic.all_pass),
         ips_compliance_rows=tuple(
             (row.metric, bool(row.passes)) for row in ic.rows
@@ -330,6 +385,64 @@ def _relative_material_move(
     )
 
 
+def _worst_roll_crossing(
+    prior: WeeklySnapshot,
+    current: WeeklySnapshot,
+) -> SnapshotChange | None:
+    """Build the worst-roll crossing, leg and reason attached (#374).
+
+    Before this, a crossing rendered as a bare ``"HOLD → ROLL"`` and
+    nothing anywhere in the digest's output path said *which* leg or
+    *why* — the digest is the surface a non-technical partner reads, and
+    per-leg detail existed only on ``/monitor``.
+
+    Only the verdict word is compared. The attribution is appended to the
+    already-decided change: ``worst_roll_reason`` carries a live day
+    count, so comparing it would fire a crossing every week on a book that
+    had not moved.
+    """
+    change = _str_crossing(
+        "Worst roll verdict",
+        prior.worst_roll_verdict,
+        current.worst_roll_verdict,
+    )
+    if change is None:
+        return None
+    if current.worst_roll_leg is None:
+        return change
+    attribution = current.worst_roll_leg
+    if current.worst_roll_reason:
+        attribution = f"{attribution}, {current.worst_roll_reason}"
+    return SnapshotChange(
+        label=change.label,
+        detail=f"{change.detail} ({attribution})",
+    )
+
+
+def _expired_leg_crossing(
+    prior: WeeklySnapshot,
+    current: WeeklySnapshot,
+) -> SnapshotChange | None:
+    """Report any change in the expired-leg count, as a crossing (#373).
+
+    A crossing rather than a material move, and deliberately with no noise
+    floor: one leg going from live to expired is exactly the event that
+    makes ``worst_roll_verdict`` fall (an expired leg is excluded from
+    that reduction), so it must be reported as loudly as the fall itself
+    or the digest reads as though a roll trigger resolved on its own.
+    """
+    if prior.expired_leg_count == current.expired_leg_count:
+        return None
+    noun = "leg" if current.expired_leg_count == 1 else "legs"
+    return SnapshotChange(
+        label="Expired legs",
+        detail=(
+            f"{prior.expired_leg_count} → {current.expired_leg_count} "
+            f"{noun} past maturity"
+        ),
+    )
+
+
 def diff_snapshots(
     prior: WeeklySnapshot | None,
     current: WeeklySnapshot,
@@ -354,10 +467,12 @@ def diff_snapshots(
             prior.decision_verdict,
             current.decision_verdict,
         ),
+        _worst_roll_crossing(prior, current),
+        _expired_leg_crossing(prior, current),
         _str_crossing(
-            "Worst roll verdict",
-            prior.worst_roll_verdict,
-            current.worst_roll_verdict,
+            "Rally trigger (since entry)",
+            prior.rally_status,
+            current.rally_status,
         ),
         _optional_bool_crossing(
             "Convexity band",
@@ -424,6 +539,13 @@ def diff_snapshots(
             prior.vix,
             current.vix,
             floor=_VIX_MATERIAL_MOVE_PTS,
+        ),
+        _material_move(
+            "Rally since entry (worst leg)",
+            prior.worst_rally_pct,
+            current.worst_rally_pct,
+            floor=1.0,
+            unit="%",
         ),
         _material_move(
             "SKEW percentile",

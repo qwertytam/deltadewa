@@ -119,10 +119,9 @@ class TestSignedCompactCurrency:
 def _make_record(
     *,
     verdict: RollVerdict,
-    suppressed: bool,
     time_verdict: RollVerdict,
     convexity_verdict: RollVerdict,
-    drift_verdict: RollVerdict,
+    rally_verdict: RollVerdict = RollVerdict.HOLD,
 ) -> RollStatusRecord:
     return RollStatusRecord(
         position=None,  # type: ignore[arg-type]
@@ -134,17 +133,17 @@ def _make_record(
         days_to_maturity=200,
         roll_window_days=30,
         crash_convexity_pct=20.0,
+        leg_convexity_contribution_pct=None,
         convexity_target_min_pct=15.0,
         convexity_target_max_pct=25.0,
         verdict=verdict,
-        suppressed=suppressed,
         estimated_roll_up_cost=None,
         time_trigger=TriggerReason(time_verdict, reason="time reason"),
         convexity_trigger=TriggerReason(
             convexity_verdict,
             reason="convexity reason",
         ),
-        drift_trigger=TriggerReason(drift_verdict, reason="drift reason"),
+        rally_trigger=TriggerReason(rally_verdict, reason="rally reason"),
     )
 
 
@@ -154,10 +153,8 @@ class TestRollVerdictReason:
     def test_matches_time_trigger(self) -> None:
         record = _make_record(
             verdict=RollVerdict.ROLL,
-            suppressed=False,
             time_verdict=RollVerdict.ROLL,
             convexity_verdict=RollVerdict.HOLD,
-            drift_verdict=RollVerdict.HOLD,
         )
 
         assert roll_verdict_reason(record) == "time reason"
@@ -165,34 +162,18 @@ class TestRollVerdictReason:
     def test_matches_convexity_trigger(self) -> None:
         record = _make_record(
             verdict=RollVerdict.MONITOR,
-            suppressed=False,
             time_verdict=RollVerdict.HOLD,
             convexity_verdict=RollVerdict.MONITOR,
-            drift_verdict=RollVerdict.HOLD,
         )
 
         assert roll_verdict_reason(record) == "convexity reason"
 
-    def test_matches_drift_trigger(self) -> None:
+    def test_matches_rally_trigger(self) -> None:
         record = _make_record(
             verdict=RollVerdict.ROLL,
-            suppressed=False,
             time_verdict=RollVerdict.HOLD,
             convexity_verdict=RollVerdict.HOLD,
-            drift_verdict=RollVerdict.ROLL,
+            rally_verdict=RollVerdict.ROLL,
         )
 
-        assert roll_verdict_reason(record) == "drift reason"
-
-    def test_suppressed_case_names_suppression(self) -> None:
-        record = _make_record(
-            verdict=RollVerdict.MONITOR,
-            suppressed=True,
-            time_verdict=RollVerdict.HOLD,
-            convexity_verdict=RollVerdict.HOLD,
-            drift_verdict=RollVerdict.ROLL,
-        )
-
-        reason = roll_verdict_reason(record)
-
-        assert "held at MONITOR" in reason
+        assert roll_verdict_reason(record) == "rally reason"

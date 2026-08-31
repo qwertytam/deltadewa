@@ -1,5 +1,6 @@
 """Tests for deltadewa.analysis.hedge_triggers."""
 
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import Mock
@@ -11,6 +12,8 @@ from deltadewa.analysis.hedge_triggers import (
     TriggerStatus,
     evaluate_hedge_trigger_set,
     evaluate_hedge_triggers,
+    rally_reason,
+    worst_rally_from_entry,
 )
 from deltadewa.constants import DAYS_PER_YEAR, ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsTriggers, load_ips_config
@@ -213,8 +216,10 @@ class TestIpsThresholdsMoveTriggers:
             delta_ratio_deviation_action_pct=10.0,
             theta_cost_acceptable_pct=2.0,
             roll_at_months_remaining=9.0,
-            rally_rebalance_pct=15.0,
-            strike_drift_max_otm_pct=45.0,
+            rally_monitor_pct=5.0,
+            rally_review_pct=10.0,
+            rally_action_pct=15.0,
+            rally_urgent_pct=20.0,
             expiry_urgent_days=9,
             expiry_soon_days=40,
             theta_cost_excellent_pct=0.5,
@@ -540,7 +545,7 @@ class TestEvaluateHedgeTriggerSet:
         }
         return HedgeTriggerThresholds(**{**defaults, **overrides})  # type: ignore[arg-type]
 
-    def test_returns_four_triggers_in_report_order(self) -> None:
+    def test_returns_every_trigger_in_report_order(self) -> None:
         triggers = evaluate_hedge_trigger_set(
             _mock_portfolio(net_delta=90.0, underlying_qty=100.0),
             self._thresholds(),
@@ -551,6 +556,7 @@ class TestEvaluateHedgeTriggerSet:
             "Expiry",
             "Theta cost",
             "Gamma drift",
+            "Rally since entry",
         ]
 
     @pytest.mark.parametrize(
@@ -676,3 +682,112 @@ class TestEvaluateHedgeTriggerSet:
         structured = evaluate_hedge_trigger_set(portfolio, thresholds)
 
         assert printed == structured.metrics
+
+
+class TestBookLevelRallyTrigger:
+    """#297: one book-level reading of a per-tranche quantity."""
+
+    @staticmethod
+    def _book(*legs: tuple[float, float | None, int]) -> OptionPortfolio:
+        """Build a book from ``(strike, entry_spot, quantity)`` triples."""
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=120.0,
+            volatility=0.2,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        for strike, entry_spot, quantity in legs:
+            portfolio.add_position(
+                strike_price=strike,
+                maturity_date=days_from_today(400),
+                quantity=quantity,
+                option_type=(
+                    OptionType.PUT if quantity > 0 else OptionType.CALL
+                ),
+            )
+            portfolio.positions[-1].entry_spot = entry_spot
+        return portfolio
+
+    def test_reports_the_worst_leg_and_names_it(self) -> None:
+        """A max must hand back a pointer, or the reader cannot act."""
+        book = self._book((90.0, 110.0, 1), (80.0, 100.0, 1))
+
+        worst = worst_rally_from_entry(book)
+
+        assert worst is not None
+        rally, leg = worst
+        assert rally == pytest.approx(20.0)
+        assert leg == "PUT 80"
+
+    def test_short_and_call_legs_are_not_protection(self) -> None:
+        book = self._book((90.0, 110.0, 1), (130.0, 50.0, -1))
+
+        worst = worst_rally_from_entry(book)
+
+        assert worst is not None
+        assert worst[1] == "PUT 90"
+
+    def test_unavailable_when_no_leg_records_an_entry_spot(self) -> None:
+        """Degenerate case: unmeasurable, which is not a 0% rally."""
+        book = self._book((90.0, None, 1))
+
+        assert worst_rally_from_entry(book) is None
+
+    def test_empty_book_is_unavailable(self) -> None:
+        """Degenerate case: empty."""
+        assert worst_rally_from_entry(self._book()) is None
+
+    def test_single_leg_is_its_own_worst(self) -> None:
+        """Degenerate case: one leg."""
+        worst = worst_rally_from_entry(self._book((90.0, 100.0, 1)))
+
+        assert worst is not None
+        assert worst[0] == pytest.approx(20.0)
+
+    def test_all_identical_legs_report_that_rally(self) -> None:
+        """Degenerate case: nothing to choose between."""
+        book = self._book((90.0, 100.0, 1), (90.0, 100.0, 1))
+
+        worst = worst_rally_from_entry(book)
+
+        assert worst is not None
+        assert worst[0] == pytest.approx(20.0)
+
+    def test_bands_map_onto_three_statuses_and_name_the_band(self) -> None:
+        t = HedgeTriggerThresholds()
+
+        assert rally_reason((2.0, "PUT 90"), t).status is TriggerStatus.OK
+        assert rally_reason((7.0, "PUT 90"), t).status is TriggerStatus.MONITOR
+        assert rally_reason((17.0, "PUT 90"), t).status is TriggerStatus.ACTION
+        assert rally_reason(None, t).status is TriggerStatus.UNAVAILABLE
+        assert "PUT 90" in rally_reason((17.0, "PUT 90"), t).reason
+
+    def test_unavailable_is_not_reported_as_ok(self) -> None:
+        """A metric that could not be measured must never read as fine."""
+        reason = rally_reason(None, HedgeTriggerThresholds())
+
+        assert reason.status is not TriggerStatus.OK
+        assert "cannot be measured" in reason.reason
+
+    def test_from_ips_maps_the_rally_bands(self) -> None:
+        """#297: the key that was validated and read by nothing.
+
+        Deliberately built from values that are NOT the dataclass defaults.
+        Reading these off ``ips.example.yaml`` proves nothing: it ships
+        5.0/15.0, which are exactly the defaults, so an unmapped field would
+        pass — and did, until policy-leak-checker caught it. This is the
+        same trap ``test_from_ips_maps_all_non_gamma_thresholds`` above
+        already guards against.
+        """
+        triggers = replace(
+            load_ips_config(EXAMPLE_IPS_YAML).triggers,
+            rally_monitor_pct=6.5,
+            rally_action_pct=17.5,
+        )
+
+        thresholds = HedgeTriggerThresholds.from_ips(triggers)
+
+        assert thresholds.rally_monitor_pct == pytest.approx(6.5)
+        assert thresholds.rally_action_pct == pytest.approx(17.5)
+        assert HedgeTriggerThresholds().rally_monitor_pct != pytest.approx(6.5)
+        assert HedgeTriggerThresholds().rally_action_pct != pytest.approx(17.5)

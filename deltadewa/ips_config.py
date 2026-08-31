@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -363,6 +364,46 @@ class IpsSizing:
     portfolio_beta: float = _DEFAULT_PORTFOLIO_BETA
 
 
+_DEFAULT_MATURITY_BUCKET_EDGES_DAYS: Final[tuple[int, ...]] = (
+    30,
+    90,
+    180,
+    365,
+    730,
+)
+"""Tail-hedge term-structure edges: 1M / 3M / 6M / 1Y / 2Y / 2Y+.
+
+The shipped default is sized for the program this package exists for. The
+previous scheme (0-7 / 8-30 / 31-60 / 61-90 / 90+) was sized for weekly
+options and put an entire 18-month ladder in one terminal bucket (#305).
+"""
+
+
+@dataclass(frozen=True)
+class IpsMaturityBuckets:
+    """Where the maturity term structure is cut, for vega and theta (#305).
+
+    These edges are **policy, not presentation**: they decide what
+    "long-dated" means for a given program, which is a mandate question of
+    the same class as the convexity band. A fund running 3-month rolls and
+    one running an 18-month ladder want genuinely different cuts, and the
+    same edges must drive both the vega term-exposure panel and the carry
+    panel's theta-by-bucket so the two can never disagree on a boundary.
+
+    Labels are derived from these edges rather than configured beside them
+    (see :class:`~deltadewa.analysis.maturity.MaturityBuckets`), so a label
+    cannot drift from the boundary it names.
+
+    Attributes:
+        edges_days: Strictly increasing, positive, inclusive upper bounds.
+            ``n`` edges yield ``n + 1`` buckets — an open-ended final bucket
+            above the last edge is always present.
+
+    """
+
+    edges_days: tuple[int, ...] = _DEFAULT_MATURITY_BUCKET_EDGES_DAYS
+
+
 @dataclass(frozen=True)
 class IpsVega:
     """Vega sufficiency band — "is the book big enough to answer a vol spike".
@@ -436,6 +477,36 @@ class IpsTriggers:
     trigger. It fires on gamma *drift* — the % of the hedged equity that net
     delta shifts per 1% spot move — not raw gamma, which scales with book size.
 
+    ``rally_monitor_pct`` / ``rally_review_pct`` / ``rally_action_pct`` /
+    ``rally_urgent_pct`` are the four bands of the handbook's `Rule 2 — Market
+    Rally Rebalance Trigger
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger>`_,
+    measured as the rally in spot **since a tranche's own entry**
+    (``OptionPosition.entry_spot``), and each carrying its own recommended
+    action: monitor and recompute convexity at current spot; review and roll
+    strikes up if the convexity target is no longer met; act, because strikes
+    are likely too deep OTM; or rebalance urgently, because the original
+    strikes may provide negligible protection.
+
+    They replace ``rally_rebalance_pct`` (#297), a single scalar that was
+    validated and read by nothing for two and a half months. Its name did not
+    say *which* of the handbook's four boundaries it was, and its shipped
+    value (12.0) sat on none of them — the same ambiguity 4.2 renamed
+    ``roll_time_months`` and ``delta_drift_*`` to remove. Its original value
+    (15.0, before #245's sanitization made it an example) *was* a handbook
+    band edge; restating all four restores the provenance that sanitization
+    erased. Required with no default, like ``entry_timing_tree``'s VIX
+    thresholds after M2.8: a band nobody stated is a band nobody chose.
+
+    They also retire (#384) a second, unrelated pair of fields that once
+    lived here: ``strike_drift_max_otm_pct`` / ``strike_drift_review_fraction``
+    implemented a handbook rule that has since been deleted from the
+    handbook entirely, and banded ``MoneynessDrift.drift_pct`` directly
+    against a flat threshold in a way that, by the scale relationship in
+    ``roll_status.rally_from_entry_pct``'s docstring, could not fire in the
+    direction the rule cared about. These four rally bands are what that
+    rule's replacement actually looks like.
+
     ``roll_at_months_remaining`` is maturity remaining, by name (4.2 renamed
     it from ``roll_time_months`` — that name alone did not say which referent
     was meant, and the two are not interchangeable: an 18-month put rolled on
@@ -454,11 +525,12 @@ class IpsTriggers:
     delta_ratio_deviation_action_pct: float
     theta_cost_acceptable_pct: float
     roll_at_months_remaining: float
-    rally_rebalance_pct: float
-    strike_drift_max_otm_pct: float
+    rally_monitor_pct: float
+    rally_review_pct: float
+    rally_action_pct: float
+    rally_urgent_pct: float
     target_delta_ratio_pct: float = _DEFAULT_TARGET_DELTA_RATIO_PCT
     roll_review_buffer: float = 1.5
-    strike_drift_review_fraction: float = 0.75
     expiry_urgent_days: int = _DEFAULT_EXPIRY_URGENT_DAYS
     expiry_soon_days: int = _DEFAULT_EXPIRY_SOON_DAYS
     theta_cost_excellent_pct: float = _DEFAULT_THETA_COST_EXCELLENT_PCT
@@ -497,6 +569,9 @@ class IpsConfig:
     )
     sizing: IpsSizing = dataclass_field(default_factory=IpsSizing)
     vega: IpsVega = dataclass_field(default_factory=IpsVega)
+    maturity_buckets: IpsMaturityBuckets = dataclass_field(
+        default_factory=IpsMaturityBuckets,
+    )
     pricing_inputs: IpsPricingInputs = dataclass_field(
         default_factory=IpsPricingInputs,
     )
@@ -697,8 +772,10 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             "delta_ratio_deviation_action_pct",
             "theta_cost_acceptable_pct",
             "roll_at_months_remaining",
-            "rally_rebalance_pct",
-            "strike_drift_max_otm_pct",
+            "rally_monitor_pct",
+            "rally_review_pct",
+            "rally_action_pct",
+            "rally_urgent_pct",
         )
     }
     for key, value in fields.items():
@@ -718,22 +795,13 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
             f"triggers.roll_at_months_remaining must be > 0, got "
             f"{fields['roll_at_months_remaining']}",
         )
+    _validate_rally_bands(fields)
 
     roll_review_buffer = section.get("roll_review_buffer", 1.5)
     if roll_review_buffer <= 1.0:
         raise IpsConfigError(
             "triggers.roll_review_buffer must be > 1.0, got "
             f"{roll_review_buffer}",
-        )
-
-    strike_drift_review_fraction = section.get(
-        "strike_drift_review_fraction",
-        0.75,
-    )
-    if not 0 < strike_drift_review_fraction < 1:
-        raise IpsConfigError(
-            "triggers.strike_drift_review_fraction must be in (0, 1), got "
-            f"{strike_drift_review_fraction}",
         )
 
     target_delta_ratio_pct = section.get(
@@ -799,7 +867,6 @@ def _parse_triggers(config: dict[str, Any]) -> IpsTriggers:
         **fields,
         target_delta_ratio_pct=target_delta_ratio_pct,
         roll_review_buffer=roll_review_buffer,
-        strike_drift_review_fraction=strike_drift_review_fraction,
         expiry_urgent_days=expiry_urgent_days,
         expiry_soon_days=expiry_soon_days,
         theta_cost_excellent_pct=theta_cost_excellent_pct,
@@ -902,6 +969,74 @@ def _parse_sizing(config: dict[str, Any]) -> IpsSizing:
         )
 
     return IpsSizing(portfolio_beta=portfolio_beta)
+
+
+def _validate_rally_bands(fields: dict[str, Any]) -> None:
+    """Reject a rally ladder that is not strictly increasing (#297).
+
+    The four bands are read as half-open intervals, so a non-increasing
+    ladder would make one of them unreachable — a policy an operator wrote
+    and the program silently never applies.
+    """
+    names = (
+        "rally_monitor_pct",
+        "rally_review_pct",
+        "rally_action_pct",
+        "rally_urgent_pct",
+    )
+    values = [fields[name] for name in names]
+    if values[0] <= 0:
+        raise IpsConfigError(
+            f"triggers.rally_monitor_pct must be > 0, got {values[0]}",
+        )
+    for (lower_name, lower), (upper_name, upper) in pairwise(
+        zip(names, values, strict=True),
+    ):
+        if lower >= upper:
+            raise IpsConfigError(
+                f"triggers.{lower_name} must be < {upper_name}, got "
+                f"{lower} >= {upper}",
+            )
+
+
+def _parse_maturity_buckets(config: dict[str, Any]) -> IpsMaturityBuckets:
+    """Parse the optional ``maturity_buckets`` policy section (#305).
+
+    Optional, like ``vega`` and ``sizing``: a missing section falls back to
+    ``_DEFAULT_MATURITY_BUCKET_EDGES_DAYS``, so every ips.yaml written before
+    this section existed keeps loading. Absence is reported through
+    ``IpsConfig.defaulted_sections`` rather than passing silently.
+    """
+    section = config.get("maturity_buckets", {})
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'maturity_buckets' section must be a mapping",
+        )
+
+    raw = section.get("edges_days", _DEFAULT_MATURITY_BUCKET_EDGES_DAYS)
+    if not isinstance(raw, (list, tuple)) or not raw:
+        raise IpsConfigError(
+            "maturity_buckets.edges_days must be a non-empty list of days, "
+            f"got {raw!r}",
+        )
+    try:
+        edges = tuple(int(value) for value in raw)
+    except (TypeError, ValueError) as exc:
+        raise IpsConfigError(
+            f"maturity_buckets.edges_days must be whole days, got {raw!r}",
+        ) from exc
+
+    if edges[0] <= 0:
+        raise IpsConfigError(
+            f"maturity_buckets.edges_days must be positive, got {edges[0]}",
+        )
+    if any(lower >= upper for lower, upper in pairwise(edges)):
+        raise IpsConfigError(
+            "maturity_buckets.edges_days must be strictly increasing, got "
+            f"{list(edges)}",
+        )
+
+    return IpsMaturityBuckets(edges_days=edges)
 
 
 def _parse_vega(config: dict[str, Any]) -> IpsVega:
@@ -1055,6 +1190,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
             "sizing",
             "vega",
             "pricing_inputs",
+            "maturity_buckets",
         )
         if name not in config
     )
@@ -1070,6 +1206,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         market_environment=_parse_market_environment(config),
         sizing=_parse_sizing(config),
         vega=_parse_vega(config),
+        maturity_buckets=_parse_maturity_buckets(config),
         pricing_inputs=_parse_pricing_inputs(config),
         defaulted_sections=defaulted_sections,
     )

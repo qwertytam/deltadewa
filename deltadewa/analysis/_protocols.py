@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.maturity import MaturityBuckets
     from deltadewa.portfolio.core import OptionPortfolio
 
 
@@ -27,12 +28,22 @@ class _AnalyzerProtocol(Protocol):
     # here for static type checking)
 
     # CarryMixin
-    def calculate_carry_metrics(self) -> dict[str, Any]: ...
-    def _empty_carry_metrics(self) -> dict[str, Any]: ...
+    def calculate_carry_metrics(
+        self,
+        buckets: MaturityBuckets,
+    ) -> dict[str, Any]: ...
+    def _empty_carry_metrics(
+        self,
+        buckets: MaturityBuckets,
+    ) -> dict[str, Any]: ...
     def create_theta_summary_table(self) -> pd.DataFrame: ...
 
     # MaturityMixin
-    def add_maturity_buckets(self, df: pd.DataFrame) -> pd.DataFrame: ...
+    def add_maturity_buckets(
+        self,
+        df: pd.DataFrame,
+        buckets: MaturityBuckets,
+    ) -> pd.DataFrame: ...
 
     # RecommendationsMixin
     def _calculate_option_alternatives(

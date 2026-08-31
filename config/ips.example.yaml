@@ -170,11 +170,21 @@ triggers:
                                    # is the gamma-runway threshold, this is
                                    # the roll trigger; kept at a different
                                    # number of days on purpose.
-  rally_rebalance_pct: 12.0      # EXAMPLE VALUE — market rally that forces a re-strike review
-  strike_drift_max_otm_pct: 40.0 # EXAMPLE VALUE
+  # Handbook Rule 2 — Market Rally Rebalance Trigger. Measured as the rally in
+  # spot since a tranche's OWN entry (entry_spot), not since program
+  # inception. Each band carries its own action: monitor / review and consider
+  # rolling up / act, strikes are too deep OTM / rebalance urgently, the
+  # original strikes may give negligible protection. Replaces the single
+  # rally_rebalance_pct (#297), whose name did not say which of these four
+  # boundaries it was and whose value sat on none of them.
+  rally_monitor_pct: 5.0    # monitor: recompute crash convexity at current spot
+  rally_review_pct: 10.0    # review: roll strikes up if convexity target missed
+  rally_action_pct: 15.0    # act: strikes likely too deep OTM, roll the ladder
+  rally_urgent_pct: 20.0    # urgent: close and re-establish
   roll_review_buffer: 1.5        # REVIEW fires within roll_at_months_remaining * this
-  strike_drift_review_fraction: 0.75  # REVIEW fires within this fraction
-                                       # of strike_drift_max_otm_pct
+  # strike_drift_max_otm_pct / strike_drift_review_fraction were retired
+  # here (#384): they implemented a handbook rule since deleted from the
+  # handbook, superseded by the four rally_* bands above.
   # Gamma drift = % of the hedged equity that net delta shifts per 1% spot move
   # (|gamma|*spot/|underlying_qty|); book-size-independent.
   gamma_drift_moderate_pct: 2.0  # drift below this -> LOW, above -> MODERATE
@@ -185,3 +195,18 @@ monetization:
     - {gain_pct: 100, sell_pct: 20}
     - {gain_pct: 250, sell_pct: 20}
     - {gain_pct: 500, sell_pct: 20}
+
+# Where the maturity term structure is cut, for the vega term-exposure panel
+# and the carry panel's theta-by-bucket (#305). POLICY, not presentation:
+# these edges decide what "long-dated" means for this program, and a fund
+# running 3-month rolls wants genuinely different cuts from one running an
+# 18-month ladder. Optional — omit the section for the tail-hedge defaults
+# below.
+maturity_buckets:
+  # Inclusive upper bounds in days, strictly increasing. n edges give n+1
+  # buckets: an open-ended final bucket above the last edge is always added.
+  # Below: 0-30 / 31-90 / 91-180 / 181-365 / 366-730 / 730+ days.
+  # The pre-#305 scheme (7/30/60/90) was sized for weekly options and put an
+  # entire 18-month ladder in one terminal bucket, so the panel answered
+  # nothing.
+  edges_days: [30, 90, 180, 365, 730]
