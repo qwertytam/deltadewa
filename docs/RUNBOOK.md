@@ -288,18 +288,31 @@ here (see §4's one-time note for the transition). If it's missing or
 invalid, `/monitor` renders a single "No IPS policy is loaded" screen in
 place of the crash-led content (there's no partial-policy state — see
 `docker compose logs -f app` for why it was skipped); to change it, edit
-`config/ips.yaml` directly on the droplet and rebuild
-(`docker compose build app jobs` — name both, §1, #293: `jobs` bakes in
-the same `COPY config ./config` and goes just as stale) — a live
-container won't pick up a host-side edit to it, and there's nothing to
-commit or push.
+`config/ips.yaml` directly on the droplet, then rebuild **and cut over** —
+a live container won't pick up a host-side edit to it, and there's nothing
+to commit or push:
+
+```bash
+# 1. Rebuild so the edited file is baked into the image. Name both
+#    services, §1, #293: `jobs` bakes in the same `COPY config ./config`
+#    and goes just as stale.
+docker compose build app jobs
+
+# 2. Cut over — the build alone changes nothing the running container
+#    serves. Skipping this leaves the old policy live with no error, and
+#    the Verify step below passing against the pre-edit image.
+docker compose up -d
+```
 
 **Verify:**
 
 ```bash
 curl http://<tailscale-ip>:8050/health
 # expect: "state_loaded": true, and market_data.source/as_of reflecting
-# the data's actual freshness
+# the data's actual freshness. After an ips.yaml edit, check
+# boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
+# degraded, by design, so a bare 200 here won't catch a policy file that
+# failed to load or a rebuild that was never cut over.
 ```
 
 Reload `http://<tailscale-ip>:8050/monitor` and confirm:
