@@ -61,6 +61,16 @@ body {
   color: #7a0000;
 }
 
+/* #381: the chrome's own degraded form, keyed by NoticeKind.ERROR. Reads
+   at least as loud as --unavailable by design — a failed freshness check
+   must never look quieter than a reading that came back stale. */
+
+.chrome-banner--error {
+  background: #ffcdd2;
+  color: #7a0000;
+  border-bottom: 3px solid #7a0000;
+}
+
 /* Portfolio-shape notice: quiet unless the book is non-conforming (#261) */
 
 .shape-notice:empty {
