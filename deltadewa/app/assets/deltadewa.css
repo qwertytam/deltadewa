@@ -95,6 +95,31 @@ body {
   line-height: 1.5;
 }
 
+/* #385: the parse error itself, and the caveat that it describes the
+   config baked into the running container rather than the host's copy. */
+
+.no-ips-reason {
+  max-width: 640px;
+  margin: 12px 0 4px;
+  line-height: 1.5;
+}
+
+.no-ips-reason code {
+  background: #fdecec;
+  border-left: 4px solid #b02a2a;
+  padding: 6px 10px;
+  display: inline-block;
+  font-size: 0.85rem;
+  color: #7a0000;
+}
+
+.no-ips-detail {
+  max-width: 640px;
+  line-height: 1.5;
+  font-size: 0.82rem;
+  color: #666;
+}
+
 /* Scenario explorer: dials, curve, numbers, cost panel */
 
 .scenario-explorer,

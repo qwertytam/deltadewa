@@ -52,6 +52,7 @@ from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.ips_notice import build_no_ips_layout
 from deltadewa.app.panel_guard import safe_render
 from deltadewa.app.provenance_panel import build_provenance_panel
 from deltadewa.app.shape_notice import shape_notice_text
@@ -77,6 +78,7 @@ if TYPE_CHECKING:
         IpsComplianceSection,
         ProtectionSection,
     )
+    from deltadewa.state import ProgramState
 
 _SPOT_SLIDER_MIN = -50.0
 _SPOT_SLIDER_MAX = 10.0
@@ -102,21 +104,16 @@ _STALE_OR_WORSE: frozenset[DataQuality] = frozenset(
 )
 
 
-def _no_ips_layout() -> html.Div:
+def _no_ips_layout(state: ProgramState) -> html.Div:
     """Build the single "no IPS policy loaded" state for the /monitor page."""
-    return html.Div(
-        [
-            html.H1("Monitor"),
-            html.P(
-                "No IPS policy is loaded, so there is no crash anchor to "
-                "render this page around. Check that config/ips.yaml (or "
-                "whatever path this program state was loaded with) exists "
-                "and parses — see the server log at startup for the "
-                "reason it was skipped.",
-                className="no-ips-message",
-            ),
-        ],
-        className="page page-monitor",
+    return build_no_ips_layout(
+        state,
+        title="Monitor",
+        lead=(
+            "No IPS policy is loaded, so there is no crash anchor to "
+            "render this page around."
+        ),
+        page_class="page-monitor",
     )
 
 
@@ -1097,7 +1094,7 @@ def render(app: ProgramDashApp) -> html.Div:
     where before this the whole page returned HTTP 500.
     """
     if app.ips_config is None:
-        return _no_ips_layout()
+        return _no_ips_layout(app.program_state)
 
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio

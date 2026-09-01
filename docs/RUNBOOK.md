@@ -286,8 +286,13 @@ time (`COPY config ./config` in the `Dockerfile`) — it is *not* on the
 include it, and `git checkout`/`git pull` never touch it once it exists
 here (see §4's one-time note for the transition). If it's missing or
 invalid, `/monitor` renders a single "No IPS policy is loaded" screen in
-place of the crash-led content (there's no partial-policy state — see
-`docker compose logs -f app` for why it was skipped); to change it, edit
+place of the crash-led content (there's no partial-policy state). **That
+screen names the parse error itself** (#385) — the missing key or bad
+value, verbatim — so you should not need `docker compose logs -f app` for
+this failure; the log is the fallback, not the first stop. Note what the
+screen also says: the file it is reporting on is the one baked into the
+*running container*, which is not the host's copy until you rebuild. To
+change it, edit
 `config/ips.yaml` directly on the droplet, then rebuild **and cut over** —
 a live container won't pick up a host-side edit to it, and there's nothing
 to commit or push:
