@@ -426,6 +426,27 @@ don't fix):
   `RollStatusRecord` to one severity word with no way back to which leg or
   why. Run before changing a table, a bucket scheme, a headline reduction,
   or any panel that shows one number standing for many.
+- **runbook-auditor** — checks that the ops docs (`docs/RUNBOOK.md`, and the
+  deploy/recovery steps in `README.md`/`QUICKSTART.md`) still describe the
+  system that exists: every command, path, service name, env var and file
+  reference resolved against the repo, the Dockerfile and `compose.yaml`,
+  reported EXECUTABLE / STALE / NO-OP / MISSING-STEP / VERIFICATION-BLIND /
+  UNVERIFIABLE — e.g. #386's `git pull` on a gitignored `config/ips.yaml`
+  (a no-op) and a bare `curl .../health` that can't catch a config that
+  failed to load (verification-blind). Run before a release, after any
+  change to compose, the Dockerfile, a required config key, or a cron
+  entry — and after any incident where an operator followed the docs and
+  still got a broken system.
+- **false-green-auditor** — checks whether a rendered verdict tells the
+  truth about the number behind it: traces every status line, headline,
+  badge or prose sentence on a surface that grades something for a reader
+  back to the value it describes, reported FAITHFUL / MISLABELLED /
+  OMITTED / UNGRADED / STALE-BLIND — e.g. #304's "attractive against the
+  IPS 3-6x band" rendered for a reading of 20.7, where `policy-leak-checker`
+  would have passed the same code because the band itself was read
+  correctly. Use on any dashboard panel, digest, or health endpoint, and
+  before closing any issue whose complaint is "the screen says fine and it
+  isn't".
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`
