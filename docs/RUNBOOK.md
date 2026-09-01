@@ -126,7 +126,10 @@ curl -m 5 http://<droplet-public-ip>:8050/health
 
 # From a machine ON the tailnet: must succeed
 curl http://<tailscale-ip>:8050/health
-# expected: {"status":"ok", ...}
+# expected: {"status":"ok", ...} — read past "status" though: check
+# boot_wiring.ips_loaded too (§12, #309). /health returns 200 even when
+# degraded, by design, so a bare 200 here doesn't confirm the IPS policy
+# actually loaded.
 ```
 
 If the public-IP curl returns JSON, stop — `BIND_ADDR` is wrong or unset
@@ -184,7 +187,23 @@ docker compose up -d
 cd deltadewa
 git fetch --tags
 git checkout <tag>
+
+# config/ips.yaml is baked in at build time, not live (§5) — a host-side
+# edit needs a rebuild before it takes effect. If this tag changed the
+# IPS schema (a new required field, a renamed key — check the release's
+# PR body/notes; that fact currently lives only there), edit
+# config/ips.yaml on the droplet now, before building, or the pre-flight
+# check below will fail against a stale-but-otherwise-valid file.
 docker compose build app jobs   # name both, or `jobs` drifts — §1, #293
+
+# Validate the freshly-built image's baked config BEFORE cutover, so a
+# missing/invalid ips.yaml is caught here rather than as a live "No IPS
+# policy is loaded" page. `run --rm`, not `exec`: at this point the OLD
+# container is still what `exec` would reach, so only running against
+# the image just built actually validates what's about to go live.
+docker compose run --rm app python -c \
+    "from deltadewa.ips_config import load_ips_config; load_ips_config('config/ips.yaml')"
+
 docker compose up -d
 
 # Logs
@@ -193,7 +212,9 @@ docker compose logs -f app
 # Restart (no rebuild)
 docker compose restart app
 
-# Health check
+# Health check — read past "status": "ok"; check boot_wiring.ips_loaded
+# too (§12, #309). /health returns 200 even when degraded, by design, so
+# a bare 200 here doesn't confirm the policy actually loaded.
 curl http://<tailscale-ip>:8050/health
 ```
 
@@ -349,7 +370,10 @@ docker compose up -d
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 # market_data.source should read CACHED (or STALE, not UNAVAILABLE) —
 # the restored exports/marketdata-cache/ means this box doesn't start
-# blind even before the next refresh cron fires.
+# blind even before the next refresh cron fires. Check
+# boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
+# degraded, by design, so 200 alone doesn't confirm the restored
+# config/ips.yaml actually loaded.
 ```
 
 **Email will fail until the SMTP relay's IP allowlist is updated.** A new
