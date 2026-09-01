@@ -2493,7 +2493,9 @@ listed here — **both now done.** **#279** (Stage 4.4, above) retired
 consumers; the second orphan set it found along the way — the matplotlib
 half of `visualization/` (8 modules, ~2,760 lines, 51 tests) — was
 deliberately kept out of #279 to keep that PR reviewable and is **still
-open**, with no issue filed for it yet. **#246** (PRs #289–#291) moved
+open, tracked as #312** — filed for exactly this, and the wording here
+was corrected on 2026-09-01 after a review found this doc claiming no
+issue existed for it when one already did. **#246** (PRs #289–#291) moved
 the handbook to its own public repo —
 [qwertytam/deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook),
 published at <https://qwertytam.github.io/deltadewa-handbook/> — with
