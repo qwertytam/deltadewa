@@ -2302,27 +2302,163 @@ sibling — a second open issue for one defect is itself a small instance of
 the "silence reads as fine" problem above: two trackers for one fault make
 it look like more coverage exists than does.
 
+## Batch 5 — the rally trigger, and the panels around it that couldn't act on it
+
+**Status: done** — PRs #389, #390 (both merged 2026-08-31).
+
+*Naming note: this "Batch 5" (the operator's own numbering for a run of
+post-Phase-4 feature branches) is unrelated to "Stage 5" elsewhere in
+this doc (the still-deferred git-history rewrite in "The exposure audit
+needed three passes," below) — the same digit, two different counters.*
+
+Two PRs, back to back on the same branch lineage, both post-Phase-4: **5a**
+closed the rally-rebalance trigger the IPS had carried unread since June (a
+finding Stage 4.4 had recorded rather than acted on) and the roll-side bugs
+turned up while building it; **5b** closed four panels that rendered
+*something* but not something a reader could act on. Neither reopens the
+M0–M4 milestone numbering above — each is tracked by issue number instead,
+per "A finding gets filed once".
+
+### 5a — the rally trigger (PR #389, branch `fix/roll-and-exposure`)
+
+- **#297** — the handbook's Rule 2 rally-rebalance trigger, validated,
+  documented, and read by nothing since Stage 4.4 recorded that as a
+  finding. `IpsTriggers.rally_rebalance_pct` — one scalar that sat on no
+  IPS-band boundary — is **replaced**, not wired: four named bands
+  (`rally_monitor_pct`/`_review_pct`/`_action_pct`/`_urgent_pct` =
+  5/10/15/20), graded per tranche by `roll_status` and book-level by
+  `hedge_triggers`. A second commit on the same issue fixed `from_ips`,
+  which parsed the file but never mapped the four new keys onto
+  `IpsTriggers` — the trigger was correct and unreachable at once, and the
+  test written for it constructed `IpsTriggers` directly rather than
+  through `from_ips`, so it could not have caught the gap it was meant to
+  guard.
+- **#384** — found by the same archaeology that built #297: the
+  neighbouring strike-drift trigger transcribed the handbook's 45%-OTM
+  *level* as a 40 pp *change since entry*, so it could not fire on this
+  program (a 16%-OTM put needs a ~91% rally to trip it) — and the
+  handbook has since deleted the rule outright in favour of the rally
+  trigger. `IpsTriggers.strike_drift_max_otm_pct`/`_review_fraction` and
+  `RollStatusRecord.drift_trigger` (with the `suppressed` MONITOR-demotion
+  it fed) are retired — the demotion existed only to catch an over-eager
+  `ROLL` sourced from the drift trigger, which cannot happen once drift no
+  longer contributes to the verdict, so it went as dead code, not a
+  feature. **Breaking for a live `config/ips.yaml`**, same as #297.
+- **#333** — a spread rolls as one structure and no leg is silently
+  dropped; the roll planner previously priced each leg of a spread
+  independently and could recommend rolling one side without the other.
+- **#305** — maturity buckets are policy
+  (`maturity_buckets.edges_days` in the IPS), replacing the pre-existing
+  7/30/60/90 scheme sized for weeklies, which put an entire 18-month
+  ladder in one terminal bucket and answered nothing for this program's
+  tenor.
+- **#373 / #306 / #374** — an expired leg reads as `EXPIRED`, not
+  `URGENT`; per-tranche convexity is computed per tranche instead of
+  broadcasting one book-level scalar onto every row; and the roll-status
+  verdict stops collapsing every `RollStatusRecord` to one severity word
+  with no way back to which leg fired it or why.
+
+**Verified at close-out:** gate green; `dash-smoke-runner` 296/296 app
+tests, with the `EXPIRED` verdict, the new roll-status columns, roll-plan
+exclusion of ineligible legs, the rally trigger, and per-tranche vega
+buckets all rendering.
+
+### 5b — panels that render something you can act on (PR #390, branch `fix/panels-that-render`)
+
+Ships as **v0.9.0** — minor, not patch, because #316 adds a new IPS
+section and #334 changes what an already-rendered figure means.
+
+- **#326** — the strike ladder had three distinct dead ends collapsed into
+  one undifferentiated paragraph: unparseable input, no underlying to size
+  against, and every requested rung mathematically unsolvable. A panel
+  that *raises* was already `panel_guard.safe_render`'s job (#363/#376);
+  the fix here is for a panel that returns nothing raised and nothing
+  useful — a new `NoticeKind` (`INPUT`/`BLOCKED`/`EMPTY`/`ERROR`) on a new
+  `panel_notice`, an `EMPTY` state that names every unsolvable rung and
+  draws no table, and a `blocked_hint` on `safe_render` naming which zone
+  to go fix.
+- **#334** — the expiration calendar and position-aging tables netted a
+  long and a short leg in one row down to a single figure, so a real
+  offsetting pair rendered as `$0`/`$0`, indistinguishable from an empty
+  row. The net stays the headline (it answers what unwinding the row
+  realises today); a new `SignedTotals` carries the gross sides too, and a
+  mixed row now shows an `L … · S …` line, flagged amber only when it also
+  nets to ~zero — the one case the issue was about. Investigated and ruled
+  out: the suspected cause (both legs pricing identically) doesn't hold —
+  different strikes price differently and net correctly; the `$0`/`$0` an
+  operator saw was a same-strike pair, a legibility defect, not a pricing
+  one.
+- **#316** — the sizing workbench and strike ladder seeded their maturity
+  dials from a hardcoded `0.5`/`0.5, 1.0, 2.0` rather than policy. New
+  optional `maturity_selection:` IPS section (`entry_tenor_years` /
+  `maintain_min_years` / `maintain_max_years`). **Additive, not
+  breaking** — omit the section and the 1.5/1.0/2.0 built-in defaults
+  apply.
+- **#330** — the time-x-price stress heatmap sorted its price index
+  descending, inverting it relative to the spot-x-vol heatmap beside it
+  on Plotly's bottom-to-top categorical axis. Confirmed
+  orientation-only: `matrix`/`text`/`y_labels` all derive from the same
+  `pivot.index`, so no cell can be mispaired with its label.
+- **#358 — decided, not built.** Sorting the 11 `.planning-table` tables
+  will be a small server-side sort over the domain objects, not a
+  `dash_table.DataTable` migration — DataTable cells are data, not
+  components, so the `verdict-badge` spans and conditional row classes
+  could not survive the move. Recorded on the issue and in PR #390's body
+  so Batch 7 does not re-decide it; not implemented here.
+
+**Verified at close-out:** `gate-runner` green — `pytest` 2112 passed,
+`mypy` strict clean (103 files), `pylint` 10.00/10; `dash-smoke-runner`
+323/323; `boot-wiring-checker` on `maturity_selection` WIRED end-to-end
+(schema → `_parse_maturity_selection` → `IpsConfig` → `state.py` →
+`factory.py` → `design.py`'s two dial defaults); `policy-leak-checker`
+CLEAN; `secret-scanner` CLEAN; `reduction-auditor`'s false-green pass on
+the calendar 7/7 FAITHFUL.
+
+### Not backfilled here
+
+Everything between Phase 4's close and 5a — roughly #292 through #383,
+including the clock-fixture seeding (#321/#343), the Batch 3d provenance
+ledger (#367/#368), the `/monitor` panel-level error boundary
+(#362/#363), and the crash-convexity/skew re-canon (#294/#303/#335/#338)
+— shipped across `v0.8.0`–`v0.8.6` but was never written up here in this
+doc's milestone format; `CLAUDE.md`'s "Work in progress" section is the
+running narrative for that stretch today, and `CHANGELOG.md` now has the
+release-by-release list (backfilled in #390). Folding that stretch into
+this doc's format is a separate pass, not done as part of recording
+Batch 5.
+
 ---
 
 ## Deferred — backlog, not in this plan
 
 Only the first is genuinely blocked. The 2026-08-06 re-audit reclassified
-the other two against the handbook's own definitions; M2.7 did not take
-them, but nothing is stopping them.
+the other two against the handbook's own definitions as surfacing gaps,
+not data gaps — M2.7 didn't take them, but nothing was stopping them, and
+M2.8 shipped both immediately after. Struck through below rather than
+removed, so the reclassification stays legible next to what it led to;
+only #12 and #9 are still actually deferred.
 
 - **#12 Liquidity Risk** — **data-blocked.** Needs a live options-chain feed
   (bid/ask, OI per strike); the free CBOE/FRED provider returns index-level
   series only.
-- **#13 Delta Drift** — **a surfacing gap, not a data gap.** Handbook §13
+- ~~**#13 Delta Drift** — a surfacing gap, not a data gap. Handbook §13
   defines it as `Δ(−5%) − Δ(0)` — two shocked deltas at one valuation date,
   not a series from position history. `analysis/scenarios.py` already prices
   `metric="net_delta"` at arbitrary shocked spots. Needs the scalar and a
-  panel. Do **not** wire `health.delta_drift_from_target` for this: despite
-  the name it is deviation from a target net-delta ratio, and since M2.7 it
-  backs `/design`'s hedge-trigger panel.
-- **#14 Vega Term Exposure** — **a surfacing gap.** Maturity-bucketed vega;
+  panel.~~ **Done in M2.8** (PR #232) —
+  `analysis/scenarios.ScenariosMixin.calculate_delta_drift`, on `/design`'s
+  PLANNING panel beside the hedge rebalance triggers. The caveat this
+  bullet used to carry (don't confuse it with
+  `health.delta_drift_from_target`) is itself now stale: 4.2 renamed that
+  symbol to `delta_deviation_from_target` (#335) specifically to free the
+  name "Delta drift" for this metric, which `/design` had been labelling
+  identically to it — the actual bug #335 reported.
+- ~~**#14 Vega Term Exposure** — a surfacing gap. Maturity-bucketed vega;
   `analysis/maturity.py`'s bucket logic (already used for theta carry)
-  extends directly.
+  extends directly.~~ **Done in M2.8** (PR #232) —
+  `analysis/maturity.MaturityMixin.calculate_vega_by_maturity`, reusing the
+  same bucketing helper `carry.py` already applies to theta, on `/design`'s
+  EXPLORATION panel.
 - **#9 Skew Exposure / Beta** — **never built**, as distinct from lost. No
   `∂V/∂skew` scalar has ever existed here; the coverage table's PARTIAL rests
   on the `vega` heatmap metric, which is a related but different quantity.
@@ -2351,11 +2487,17 @@ Opened during Phase 4 and deliberately not taken there:
   single-currency SPX program the config surface would cost more than it
   buys. Filed so the decision is recorded rather than re-litigated.
 
-Two more Phase 4 leftovers are tracked in their own issues rather than
-listed here: **#279** (retire `dashboard/` + `widgets/` as one batch — 21
-modules with zero product consumers, plus the 8 orphaned matplotlib modules
-M4.7 found) and **#246** (move the handbook to its own public repo, with
-stable anchors instead of line-number citations).
+Two more Phase 4 leftovers were tracked in their own issues rather than
+listed here — **both now done.** **#279** (Stage 4.4, above) retired
+`dashboard/` + `widgets/` as one batch, 21 modules with zero product
+consumers; the second orphan set it found along the way — the matplotlib
+half of `visualization/` (8 modules, ~2,760 lines, 51 tests) — was
+deliberately kept out of #279 to keep that PR reviewable and is **still
+open**, with no issue filed for it yet. **#246** (PRs #289–#291) moved
+the handbook to its own public repo —
+[qwertytam/deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook),
+published at <https://qwertytam.github.io/deltadewa-handbook/> — with
+stable anchors instead of line-number citations.
 
 ---
 
@@ -2373,7 +2515,7 @@ stable anchors instead of line-number citations).
 | M4      | M1.1                                         | Mi5         | M1.3                                         |
 | M5      | M2.2 (Dash-native)                           | Mi6         | M1.4                                         |
 | M6      | M2.2 (Dash-native; notebook version skipped) | Negligibles | Phase 3 / batch with nearest touch           |
-| M7      | Phase 3                                      | #12/#13/#14 | #12 data-blocked; #13/#14 surfacing gaps     |
+| M7      | Phase 3                                      | #12/#13/#14 | #12 data-blocked; #13/#14 → M2.8 (done)      |
 | M8      | M2.6                                         |             |                                              |
 | Mo1     | M1.2                                         |             |                                              |
 | Mo2     | M1.4                                         |             |                                              |
@@ -2400,7 +2542,31 @@ a future audit should not treat a closed index as coverage.
 | #179    | M4.6 (PR #268) + M4.7 (PR #278)        | #272    | M4.7 (PR #281)                               |
 | #180    | M4.6 (docs) + M4.7 (PR #277, the bug)  | #273    | M4.7 (PR #280)                               |
 | #182    | M4.5 (PR #265)                         | #274    | M4.7 (PR #278)                               |
-| #185    | M4.6 (PR #268); items 4/7 → issue only | #279    | deferred — see backlog                       |
+| #185    | M4.6 (PR #268); items 4/7 → issue only | #279    | Stage 4.4 (DONE)                             |
 
-Deferred, not closed: **#156**, **#70**, **#262**, **#264**, **#246** — all
-in the backlog section above.
+Deferred, not closed: **#156**, **#70**, **#262**, **#264** — all in the
+backlog section above. (**#279** and **#246**, both listed just above
+this table as "tracked in their own issues," are now done — see the
+paragraph there.)
+
+### Batch 5 findings
+
+Same caveat as the table above: none of these came from the 2026-07-15
+review, and most did not come from Phase 4 either — #297/#384 came from
+Stage 4.4's own follow-up archaeology, and #316/#326/#330/#334/#358 came
+from the 2026-08-06 Part X re-audit and subsequent field-testing.
+
+| Finding | PR                                            |
+| ------- | ----------------------------------------------- |
+| #297    | #389 — trigger, plus `from_ips`'s own mapping bug |
+| #333    | #389                                             |
+| #305    | #389                                             |
+| #373    | #389                                             |
+| #306    | #389                                             |
+| #374    | #389                                             |
+| #384    | #389                                             |
+| #326    | #390                                             |
+| #334    | #390                                             |
+| #316    | #390                                             |
+| #330    | #390                                             |
+| #358    | decided, not built — see #390's body and #358    |
