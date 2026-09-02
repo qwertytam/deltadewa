@@ -447,6 +447,16 @@ don't fix):
   correctly. Use on any dashboard panel, digest, or health endpoint, and
   before closing any issue whose complaint is "the screen says fine and it
   isn't".
+- **seam-finder** — maps intra-module coupling before a split: who calls
+  whom, what shares module-level state, what clusters — and reports
+  candidate seams with the cut cost of each (names crossing, how many
+  private) and whether the cut would be CLEAN or CYCLIC. Answers "where
+  does this file actually come apart?" rather than "where is the middle?";
+  refuses to propose a `utils`/`helpers` grab-bag for what doesn't cluster.
+  Run before splitting a large module, retiring half a package, or
+  extracting a layer not yet split out — e.g. #308 (`pages/design.py`),
+  #312 (the matplotlib half of `visualization/`), #313 (a position-history
+  layer).
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`

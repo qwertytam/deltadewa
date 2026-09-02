@@ -277,23 +277,44 @@ def create_app(
             market_data_payload = _market_data_payload(environment)
             pricing_inputs_payload = _pricing_inputs_payload(ledger)
 
-        checks = run_checks(state, cache_dir=default_cache_dir())
-        wiring_status, boot_wiring = summarize(checks)
+        # #395: the same guard as _assess_provenance() above, one call
+        # lower in the same route — run_checks()/summarize() carry no
+        # documented "never raises" contract, and a couple of the
+        # individual checks do attribute reads on state/state.portfolio
+        # that assume a shape. wiring_status defaults to "degraded" so a
+        # raise here still reads as unhealthy even before boot_wiring_error
+        # is consulted; boot_wiring stays None rather than a fabricated
+        # all-failing table, matching how market_data_payload/
+        # pricing_inputs_payload stay None above.
+        boot_wiring_error: str | None = None
+        wiring_status = "degraded"
+        boot_wiring: dict[str, dict[str, Any]] | None = None
+        try:
+            checks = run_checks(state, cache_dir=default_cache_dir())
+            wiring_status, boot_wiring = summarize(checks)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            _logger.exception("Boot-wiring checks failed for /health")
+            boot_wiring_error = f"{type(exc).__name__}: {exc}"
         # "status" reflects boot-wiring health, not just liveness — but
         # HTTP always stays 200 (see summarize()'s docstring): a policy
         # nit like a defaulted IPS section must never look like a reason
         # to restart-loop a working container. An unassessable provenance
-        # joins it as degraded rather than becoming a third status word:
-        # this is the field a dumb watcher greps, so two values it can act
-        # on beat three it has to learn. provenance_error is where the
-        # distinguishing detail lives. Note what this still does *not*
-        # cover: an assessment that succeeds and comes back stale leaves
-        # status "ok" — #393 owns that decision, deliberately not this
-        # one, since the threshold is an alarm-fatigue question of its
-        # own (see chrome.py on why the banner stays quiet at CACHED).
+        # or boot-wiring check joins it as degraded rather than becoming a
+        # third or fourth status word: this is the field a dumb watcher
+        # greps, so two values it can act on beat several it has to learn.
+        # provenance_error/boot_wiring_error are where the distinguishing
+        # detail lives. Note what this still does *not* cover: an
+        # assessment that succeeds and comes back stale leaves status "ok"
+        # — #393 owns that decision, deliberately not this one, since the
+        # threshold is an alarm-fatigue question of its own (see chrome.py
+        # on why the banner stays quiet at CACHED).
         status = (
             "degraded"
-            if wiring_status == "degraded" or provenance_error is not None
+            if (
+                wiring_status == "degraded"
+                or provenance_error is not None
+                or boot_wiring_error is not None
+            )
             else "ok"
         )
         return jsonify(
@@ -324,6 +345,11 @@ def create_app(
                 # the objects the real boot path constructed — see
                 # health_checks.py for which six and why.
                 "boot_wiring": boot_wiring,
+                # #395: null unless run_checks()/summarize() itself raised,
+                # in which case boot_wiring above is null and this names
+                # the fault — the same shape provenance_error carries for
+                # the assessment above it.
+                "boot_wiring_error": boot_wiring_error,
             },
         ), 200
 

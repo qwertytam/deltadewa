@@ -1,13 +1,16 @@
-"""#381: the chrome and /health guards, exercised through the real path.
+"""#381/#395: the chrome and /health guards, exercised through the real path.
 
 ``panel_guard.safe_render`` (#363) covers every panel *below* the layout.
-These two call sites sit one layer up: ``_serve_layout`` builds the chrome
+These call sites sit one layer up: ``_serve_layout`` builds the chrome
 that wraps every page, and ``/health`` backs the dead-man's-switch ping.
-An unguarded raise in either takes down more than itself — the layout
-takes ``/monitor``'s six guarded panels with it, and the endpoint takes
-the alarm that would have reported the fault (#364's shape).
+An unguarded raise in any of them takes down more than itself — the
+layout takes ``/monitor``'s six guarded panels with it, and the endpoint
+takes the alarm that would have reported the fault (#364's shape).
+``/health`` itself has two independent guards, ``_assess_provenance()``
+(#381) and ``run_checks()``/``summarize()`` (#395) — each degrades its
+own half of the payload without taking the other down.
 
-Both tests drive the real request path rather than calling the closures
+Every test drives the real request path rather than calling the closures
 directly: the layout through Dash's own ``/_dash-layout``, the endpoint
 through the Flask test client, so the guard is proven where it actually
 has to hold.
@@ -183,6 +186,81 @@ class TestHealthGuard:
 
         assert payload["provenance_error"] is None
         assert payload["market_data"] is not None
+
+
+class TestBootWiringGuard:
+    """#395: the same guard, one call lower — run_checks()/summarize()."""
+
+    def test_responds_200_degraded_with_a_named_reason(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        app = _app(tmp_path)
+
+        def _raise(*_args: object, **_kwargs: object) -> Never:
+            raise OSError(_BOOM)
+
+        monkeypatch.setattr("deltadewa.app.factory.run_checks", _raise)
+        client = app.server.test_client()
+
+        response = client.get("/health")
+
+        # 200, not 500 — same contract as the provenance guard above.
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["status"] == "degraded"
+        assert payload["boot_wiring_error"] == f"OSError: {_BOOM}"
+
+    def test_boot_wiring_is_null_not_a_fabricated_table(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        app = _app(tmp_path)
+
+        def _raise(*_args: object, **_kwargs: object) -> Never:
+            raise OSError(_BOOM)
+
+        monkeypatch.setattr("deltadewa.app.factory.summarize", _raise)
+        client = app.server.test_client()
+
+        payload = client.get("/health").get_json()
+
+        assert payload["boot_wiring"] is None
+
+    def test_provenance_still_reports_when_boot_wiring_fails(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # The diagnosis must survive the fault that needs diagnosing —
+        # the mirror image of TestHealthGuard's
+        # test_boot_wiring_still_reports_when_provenance_fails.
+        app = _app(tmp_path)
+
+        def _raise(*_args: object, **_kwargs: object) -> Never:
+            raise OSError(_BOOM)
+
+        monkeypatch.setattr("deltadewa.app.factory.run_checks", _raise)
+        client = app.server.test_client()
+
+        payload = client.get("/health").get_json()
+
+        assert payload["market_data"] is not None
+        assert payload["provenance_error"] is None
+
+    def test_boot_wiring_error_is_null_on_the_healthy_path(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app(tmp_path)
+        client = app.server.test_client()
+
+        payload = client.get("/health").get_json()
+
+        assert payload["boot_wiring_error"] is None
+        assert payload["boot_wiring"] is not None
 
 
 class TestNoSharedPrecomputedValue:
