@@ -20,6 +20,7 @@ from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_LOW,
     IpsConfigError,
     load_ips_config,
+    main,
 )
 
 EXAMPLE_IPS_YAML = Path(__file__).parent.parent / "config" / "ips.example.yaml"
@@ -1346,3 +1347,133 @@ class TestStrikeDriftRetirement:
         triggers = load_ips_config(path).triggers
 
         assert not hasattr(triggers, "strike_drift_max_otm_pct")
+
+
+class TestCheckCli:
+    """#301: ``python -m deltadewa.ips_config --check`` — a restore-drill
+    and deploy-pre-flight tool distinguishing the three outcomes a
+    version-skewed ips.yaml can hit: won't load at all, loads silently
+    defaulted, or loads silently carrying a retired key. See
+    ``docs/RUNBOOK.md`` §7's drill and §4's pre-flight.
+    """
+
+    def test_check_flag_is_required(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            main([])
+        assert exc_info.value.code == 2  # argparse's own usage-error code
+
+    def test_a_valid_file_exits_zero(self, tmp_path: Path) -> None:
+        path = _write_yaml(tmp_path, deepcopy(_VALID_CONFIG))
+
+        exit_code = main(["--check", str(path)])
+
+        assert exit_code == 0
+
+    def test_a_file_that_wont_load_exits_one_and_names_the_field(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The class-A failure — e.g. a pre-#297 file missing a required
+        rally band. load_ips_config's own message already names the
+        exact field; --check must pass it through, not swallow it.
+        """
+        config = deepcopy(_VALID_CONFIG)
+        del config["triggers"]["rally_monitor_pct"]
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", str(path)])
+
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "rally_monitor_pct" in captured.err
+
+    def test_a_defaulted_section_warns_but_exits_zero_without_strict(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The class-B failure — #305's maturity_buckets (or any other
+        optional section) absent and silently running on code defaults.
+        Not loud without --strict, matching a routine deploy pre-flight
+        where an operator legitimately omitting an optional section is
+        not a failed deploy.
+        """
+        config = deepcopy(_VALID_CONFIG)
+        assert "maturity_buckets" not in config
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", str(path)])
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "maturity_buckets" in captured.out
+        assert "built-in defaults" in captured.out
+
+    def test_a_defaulted_section_fails_under_strict(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        config = deepcopy(_VALID_CONFIG)
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", "--strict", str(path)])
+
+        assert exit_code == 2
+
+    def test_a_retired_key_warns_but_exits_zero_without_strict(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The class-C failure — #384's strike_drift_max_otm_pct still
+        present in the file, loading fine, doing nothing.
+        """
+        config = {
+            **deepcopy(_VALID_CONFIG),
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "strike_drift_max_otm_pct": 40.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", str(path)])
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "triggers.strike_drift_max_otm_pct" in captured.out
+        assert "not applied" in captured.out
+
+    def test_a_retired_key_fails_under_strict(self, tmp_path: Path) -> None:
+        config = {
+            **deepcopy(_VALID_CONFIG),
+            "triggers": {
+                **_VALID_CONFIG["triggers"],
+                "strike_drift_max_otm_pct": 40.0,
+            },
+        }
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", "--strict", str(path)])
+
+        assert exit_code == 2
+
+    def test_the_shipped_example_has_no_warnings_under_strict(self) -> None:
+        """The template every operator's real file starts from must
+        itself carry no defaulted section and no unrecognised key —
+        otherwise this check would cry wolf on a fresh copy.
+        """
+        exit_code = main(["--check", "--strict", str(EXAMPLE_IPS_YAML)])
+
+        assert exit_code == 0
+
+    def test_a_clean_file_reports_no_warnings_line(
+        self,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        exit_code = main(["--check", "--strict", str(EXAMPLE_IPS_YAML)])
+
+        captured = capsys.readouterr()
+        assert exit_code == 0
+        assert "warnings:" not in captured.out

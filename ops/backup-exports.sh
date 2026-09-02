@@ -21,6 +21,18 @@
 # everything else in exports/ — on a fresh box after a restore, that
 # means the app comes up STALE-with-numbers rather than UNAVAILABLE.
 #
+# exports/config-backup/ips.yaml is a copy of config/ips.yaml, staged by
+# stage_policy_snapshot() below (#301) so it rides this same push, remote
+# and credential — config/ips.yaml itself is baked into the image at
+# build time (Dockerfile COPY), never bind-mounted, so it is otherwise
+# unreachable from anywhere this cron or a container could back it up.
+# This does NOT change what SECURITY.md's public-repo rule covers: this
+# repo's tracked files are untouched, config/ips.yaml stays gitignored,
+# and *.example.yaml stays the tracked template. See SECURITY.md's "Why
+# the offsite backup carries policy but not secrets" for why pushing
+# policy (not .env) to this private remote is a deliberate, bounded
+# exception to that rule rather than a loosening of it.
+#
 # `age` encryption is deliberately deferred: a backup you cannot decrypt
 # is worse than one you can. Private repo now; `age` is a follow-up that
 # needs an explicit key-escrow step, not something to add silently later.
@@ -175,6 +187,102 @@ verify_remote_matches_head() {
     return 0
 }
 
+# #301: stage a copy of config/ips.yaml under exports/config-backup/
+# before `git add -A` picks it up below, so the nightly push carries the
+# program's real policy alongside its state — see the header comment
+# above and SECURITY.md for why that's safe to push to this private
+# remote. Content-addressed, not run-timestamped: the manifest this
+# writes only changes when the policy's bytes (or the checked-out app
+# version) actually change, so an unmodified policy leaves the working
+# tree exactly as clean as it was before this existed — the #252
+# no-op/remote-verification path above must keep seeing "nothing to
+# commit" on an ordinary night.
+#
+# A missing config/ips.yaml (e.g. a fresh checkout before the operator
+# has populated it) warns and marks, but never aborts: this is a backup
+# of program_state.json too, and a policy problem must not take that
+# down or trip the backup dead-man's-switch — the wrong alarm for the
+# wrong condition. The marker is cleared as soon as a real policy file
+# is found again, so it doesn't linger past the condition it describes.
+POLICY_SRC="${REPO_DIR}/config/ips.yaml"
+POLICY_BACKUP_DIR="${EXPORTS_DIR}/config-backup"
+POLICY_DEST="${POLICY_BACKUP_DIR}/ips.yaml"
+POLICY_MANIFEST="${POLICY_BACKUP_DIR}/MANIFEST.json"
+POLICY_MISSING_MARKER="${POLICY_BACKUP_DIR}/POLICY-MISSING.txt"
+
+stage_policy_snapshot() {
+    mkdir -p "${POLICY_BACKUP_DIR}"
+
+    if [ ! -f "${POLICY_SRC}" ]; then
+        echo "backup-exports: ${POLICY_SRC} not found, config-backup/ not updated this run" >&2
+        if [ ! -f "${POLICY_MISSING_MARKER}" ]; then
+            printf 'config/ips.yaml was not found on this host as of %s.\nThe policy snapshot in this directory (if any) is from an earlier run and may be stale.\n' \
+                "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                > "${POLICY_MISSING_MARKER}"
+        fi
+        return 0
+    fi
+    rm -f "${POLICY_MISSING_MARKER}"
+
+    # sha256sum (GNU coreutils, the droplet's Ubuntu image) or shasum
+    # (macOS, used by this suite's own tests) — whichever is present.
+    local policy_sha256
+    if command -v sha256sum >/dev/null 2>&1; then
+        policy_sha256="$(sha256sum "${POLICY_SRC}" | cut -d' ' -f1)"
+    elif command -v shasum >/dev/null 2>&1; then
+        policy_sha256="$(shasum -a 256 "${POLICY_SRC}" | cut -d' ' -f1)"
+    else
+        policy_sha256="unavailable"
+    fi
+
+    # The checked-out app's own version, read from a plain file — never
+    # `git describe`/`git log` against REPO_DIR: that's a `deploy`-owned
+    # checkout and this cron runs as root, which is exactly the dubious-
+    # ownership trap #237 exists to avoid, from the other direction.
+    local app_version="unknown"
+    if [ -f "${REPO_DIR}/pyproject.toml" ]; then
+        app_version="$(
+            sed -n 's/^version *= *"\(.*\)"/\1/p' "${REPO_DIR}/pyproject.toml" \
+                | head -1
+        )"
+        [ -n "${app_version}" ] || app_version="unknown"
+    fi
+
+    # policy_changed_at tracks the last run whose sha256 actually
+    # differed from the previous manifest — not "last run", which would
+    # just repeat today's date every night regardless of whether the
+    # policy moved, defeating the point of asking "how stale is this."
+    local old_sha256=""
+    local policy_changed_at
+    if [ -f "${POLICY_MANIFEST}" ]; then
+        old_sha256="$(
+            sed -n 's/.*"sha256": *"\([^"]*\)".*/\1/p' "${POLICY_MANIFEST}"
+        )"
+    fi
+    if [ "${old_sha256}" = "${policy_sha256}" ] && [ -f "${POLICY_MANIFEST}" ]; then
+        policy_changed_at="$(
+            sed -n 's/.*"policy_changed_at": *"\([^"]*\)".*/\1/p' "${POLICY_MANIFEST}"
+        )"
+    else
+        policy_changed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    fi
+
+    cp "${POLICY_SRC}" "${POLICY_DEST}"
+
+    # Written to a tmp file and compared before replacing the tracked
+    # manifest — see the no-churn note above the function.
+    local tmp_manifest
+    tmp_manifest="$(mktemp)"
+    printf '{\n  "written_by": "backup-exports.sh",\n  "source": "config/ips.yaml",\n  "sha256": "%s",\n  "app_version": "%s",\n  "policy_changed_at": "%s"\n}\n' \
+        "${policy_sha256}" "${app_version}" "${policy_changed_at}" \
+        > "${tmp_manifest}"
+    if ! cmp -s "${tmp_manifest}" "${POLICY_MANIFEST}" 2>/dev/null; then
+        mv "${tmp_manifest}" "${POLICY_MANIFEST}"
+    else
+        rm -f "${tmp_manifest}"
+    fi
+}
+
 cd "${EXPORTS_DIR}"
 
 if [ ! -d .git ]; then
@@ -205,6 +313,8 @@ fi
 # no global git config either.
 git config user.email "deltadewa-backup@localhost"
 git config user.name "deltadewa-backup"
+
+stage_policy_snapshot
 
 git add -A
 
