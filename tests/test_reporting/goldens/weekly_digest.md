@@ -110,3 +110,8 @@ IPS schedule: 2 step(s) defined.
 
 ---
 Running v0.9.1
+Dashboard: bookmark this program's own /monitor page — ask the operator for the address if you don't already have it saved.
+No digest for two weeks usually means the system itself is down, not a quiet market — see the continuity annex: https://qwertytam.github.io/deltadewa-handbook/part-7/continuity-planning/
+Theta: the ongoing daily cost of holding this hedge in a normal market — like an insurance premium (§1 Cost, above).
+Convexity: how much value the hedge itself gains if a crash happens — the reason it's held (§2 Protection, above).
+IPS: Investment Policy Statement — this program's own written rules behind every PASS/FAIL above (§6 IPS Compliance).

@@ -13,6 +13,17 @@ non-root user (`docker-entrypoint.sh`), not root — see §1's
 `docker compose build` step and §2's sanity check below. §10 has the
 full exports/.git ownership invariant #237 fixed.
 
+**Continuity note (#311):** this page is about the **droplet** dying —
+§7 covers that recovery. A different scenario, the **operator** being
+gone, is covered by
+[`docs/continuity-annex.md`](continuity-annex.md) (what the dashboard
+and the weekly digest can actually be trusted for once nobody is running
+them) and the handbook's [Continuity
+Planning](https://qwertytam.github.io/deltadewa-handbook/part-7/continuity-planning/)
+page (the decision and the concrete steps — wind down, run off, or
+maintain). Neither of those two documents carries this program's actual
+broker, accountant, or credentials; that stays in the private ops doc.
+
 ---
 
 ## 1. First-time setup — provision the droplet
@@ -363,7 +374,9 @@ their own — there's no Recompute button anywhere on this page.
 
 ## 7. Recovery — the droplet dies
 
-Target: **under 30 minutes, nothing memorised.**
+Target: **under 30 minutes, nothing memorised.** For the *operator*
+being gone rather than the droplet — a different scenario, with no
+30-minute target — see the Continuity note above.
 
 ```bash
 # 1. New droplet, repeat section 1 in full, up to (not including) the
@@ -714,13 +727,15 @@ needed here.
 - **`.env`** (repo root, gitignored — `.env.example` is the tracked
   template). Holds `BIND_ADDR` and everything the `jobs` compose service
   needs: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
-  `REPORT_EMAIL_TO`, `REPORT_EMAIL_FROM`, `FRED_API_KEY` (reserved, safe
-  to leave blank), `REFRESH_HEARTBEAT_URL`, `DIGEST_HEARTBEAT_URL`. Read
-  into the `jobs` container via `env_file: .env`; the six required-for-email
-  vars are also declared `${VAR:?...}` in `compose.yaml` so a
-  `docker compose run jobs ...` fails immediately, at the command line, if
-  `.env` was never populated — not three months later inside a Python
-  traceback.
+  `REPORT_EMAIL_TO`, `REPORT_EMAIL_FROM`, `REPORT_EMAIL_FROM_NAME`
+  (optional, #319 — a friendlier digest From display name; see below),
+  `FRED_API_KEY` (reserved, safe to leave blank),
+  `REFRESH_HEARTBEAT_URL`, `DIGEST_HEARTBEAT_URL`. Read into the `jobs`
+  container via `env_file: .env`; the six required-for-email vars (not
+  `REPORT_EMAIL_FROM_NAME`, which is cosmetic-only) are also declared
+  `${VAR:?...}` in `compose.yaml` so a `docker compose run jobs ...`
+  fails immediately, at the command line, if `.env` was never populated
+  — not three months later inside a Python traceback.
 
   The email transport (`deltadewa/reporting/email_smtp.py`) is plain
   stdlib SMTP, so the provider is interchangeable — any SMTP relay works
@@ -735,7 +750,12 @@ needed here.
   Amazon SES, sandbox mode is fine indefinitely for this use case — just
   verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
   `REPORT_EMAIL_FROM`) in the SES console rather than requesting
-  production access.
+  production access. `REPORT_EMAIL_FROM_NAME` (#319, optional) sets a
+  friendlier display name on the digest's From header — e.g. "The Smith
+  Family Hedge" instead of a raw relay-assigned address — without
+  changing `REPORT_EMAIL_FROM`'s actual sending address, which still
+  must stay a verified sender at the relay. Defaults to "Weekly Hedge
+  Digest" if left unset.
 
   **Why `.env` stays out of the backup, and where its recovery copy
   actually lives (#301).** `config/ips.yaml` rides the nightly offsite

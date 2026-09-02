@@ -32,10 +32,13 @@ With ``--send-email``, the digest is also sent over SMTP
 ``SMTP_PORT``, ``SMTP_USERNAME``, ``SMTP_PASSWORD``, ``REPORT_EMAIL_TO``,
 ``REPORT_EMAIL_FROM`` from the environment — any standard SMTP relay
 works, so switching providers is a config change, not a code change.
-This is opt-in (default off) so building the digest never requires mail
-credentials — only the cron line that actually wants delivery passes the
-flag. A missing/invalid env var or a failed send both exit **2**,
-distinct from the **1** used when the report itself was refused: at that
+The optional ``REPORT_EMAIL_FROM_NAME`` (#319, Batch 6) sets a friendlier
+display name on the From header without changing the actual sending
+address; see :func:`_from_header`. This is opt-in (default off) so
+building the digest never requires mail credentials — only the cron line
+that actually wants delivery passes the flag. A missing/invalid env var
+or a failed send both exit **2**, distinct from the **1** used when the
+report itself was refused: at that
 point the report files are already written successfully, and a delivery
 failure must never look like exit-0 success. On a confirmed send,
 ``DIGEST_HEARTBEAT_URL`` (``deltadewa.heartbeat``) is pinged — the *only*
@@ -73,6 +76,7 @@ import os
 import sys
 from dataclasses import dataclass, replace
 from datetime import date
+from email.utils import formataddr
 from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -167,6 +171,44 @@ _SMTP_PASSWORD_ENV_VAR: Final[str] = "SMTP_PASSWORD"  # ruff: ignore[hardcoded-p
 _REPORT_EMAIL_TO_ENV_VAR: Final[str] = "REPORT_EMAIL_TO"
 _REPORT_EMAIL_FROM_ENV_VAR: Final[str] = "REPORT_EMAIL_FROM"
 _DIGEST_HEARTBEAT_ENV_VAR: Final[str] = "DIGEST_HEARTBEAT_URL"
+
+# #319 (Batch 6b) — the footer for the non-technical reader.
+_REPORT_EMAIL_FROM_NAME_ENV_VAR: Final[str] = "REPORT_EMAIL_FROM_NAME"
+_DEFAULT_FROM_DISPLAY_NAME: Final[str] = "Weekly Hedge Digest"
+_BIND_ADDR_ENV_VAR: Final[str] = "BIND_ADDR"
+# compose.yaml's app service, both `ports:` and DELTADEWA_PORT.
+_MONITOR_PORT: Final[int] = 8050
+_CONTINUITY_ANNEX_URL: Final[str] = (
+    "https://qwertytam.github.io/deltadewa-handbook/part-7/continuity-planning/"
+)
+# Two or three terms, tied to the sections that render on every digest —
+# Cost (theta), Protection (convexity), IPS Compliance (IPS itself) — so
+# a definition is never printed for a term this week's reader can't
+# actually find above it. See docs/continuity-annex.md for what the
+# whole program (not just these three words) can be trusted for.
+_GLOSSARY: Final[tuple[tuple[str, str], ...]] = (
+    (
+        "Theta",
+        (
+            "the ongoing daily cost of holding this hedge in a normal "
+            "market — like an insurance premium (§1 Cost, above)."
+        ),
+    ),
+    (
+        "Convexity",
+        (
+            "how much value the hedge itself gains if a crash happens "
+            "— the reason it's held (§2 Protection, above)."
+        ),
+    ),
+    (
+        "IPS",
+        (
+            "Investment Policy Statement — this program's own written "
+            "rules behind every PASS/FAIL above (§6 IPS Compliance)."
+        ),
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -494,13 +536,72 @@ def build_weekly_digest(
 # ── Rendering ────────────────────────────────────────────────────────────
 
 
-def _footer_facts() -> tuple[str, ...]:
-    """Facts appended to the digest footer, one per line.
+def _monitor_url() -> str | None:
+    """Resolve this deployment's dashboard bookmark, or ``None``.
 
-    A tuple, not a hardcoded string: #319 (Batch 6) adds a further fact
-    here without restructuring this function or its callers.
+    Built from ``BIND_ADDR`` (RUNBOOK.md §10) — the only address this
+    specific droplet is actually reachable at over Tailscale, and already
+    read by the ``jobs`` container via ``env_file: .env`` (compose.yaml),
+    so this needs no new configuration. ``None`` (never a loopback guess)
+    when unset: a partner clicking a dead ``127.0.0.1`` link is worse
+    than the plain-text fallback :func:`_footer_facts` uses instead.
     """
-    return (f"Running v{__version__}",)
+    bind_addr = os.environ.get(_BIND_ADDR_ENV_VAR)
+    if not bind_addr:
+        return None
+    return f"http://{bind_addr}:{_MONITOR_PORT}/monitor"
+
+
+def _footer_facts() -> tuple[str, ...]:
+    """Facts appended to the digest footer, one per line (#319, Batch 6).
+
+    Everything here is either always true (the version) or ties to a
+    section (Cost, Protection, IPS Compliance) that renders on every
+    digest — see :data:`_GLOSSARY` — so nothing risks describing a term
+    or a link the reader in front of a particular week's digest can't
+    actually use. A tuple, not a hardcoded string, so a further fact can
+    be added without restructuring this function or its callers.
+    """
+    monitor_url = _monitor_url()
+    dashboard_fact = (
+        f"Dashboard: {monitor_url}"
+        if monitor_url is not None
+        else (
+            "Dashboard: bookmark this program's own /monitor page — ask "
+            "the operator for the address if you don't already have it "
+            "saved."
+        )
+    )
+    facts = [
+        f"Running v{__version__}",
+        dashboard_fact,
+        (
+            "No digest for two weeks usually means the system itself is "
+            "down, not a quiet market — see the continuity annex: "
+            f"{_CONTINUITY_ANNEX_URL}"
+        ),
+    ]
+    facts.extend(f"{term}: {definition}" for term, definition in _GLOSSARY)
+    return tuple(facts)
+
+
+def _from_header(from_addr: str) -> str:
+    """Format the SMTP From header: *from_addr* with a friendlier name.
+
+    ``REPORT_EMAIL_FROM`` (required, RUNBOOK.md §10) stays the actual
+    sending address — it must remain a verified/allowed sender at the
+    relay — this only changes what a recipient's inbox shows next to it,
+    from a raw address like ``deltadewa-a1c2@relay.example.com`` to
+    something a non-technical reader recognises (#319).
+    ``REPORT_EMAIL_FROM_NAME`` is optional and read fresh here, not added
+    to compose.yaml's required-for-email set: it's a cosmetic override, a
+    deploy should never fail loudly for leaving it unset.
+    """
+    display_name = os.environ.get(
+        _REPORT_EMAIL_FROM_NAME_ENV_VAR,
+        _DEFAULT_FROM_DISPLAY_NAME,
+    )
+    return formataddr((display_name, from_addr))
 
 
 def _changes_markdown(title: str, changes: tuple[SnapshotChange, ...]) -> str:
@@ -1025,7 +1126,7 @@ host, or RUNBOOK.md &sect;9.</p>
         subject=subject,
         html_body=body_html,
         to_addr=to_addr,
-        from_addr=from_addr,
+        from_addr=_from_header(from_addr),
     )
     config = SmtpConfig(
         host=host,
@@ -1256,7 +1357,7 @@ def _send_digest_email(
         subject=f"Weekly Hedge Digest — {digest.headline} ({as_of})",
         html_body=html_text,
         to_addr=to_addr,
-        from_addr=from_addr,
+        from_addr=_from_header(from_addr),
     )
     try:
         send_email(message, config=config)
