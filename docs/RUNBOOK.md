@@ -126,7 +126,10 @@ curl -m 5 http://<droplet-public-ip>:8050/health
 
 # From a machine ON the tailnet: must succeed
 curl http://<tailscale-ip>:8050/health
-# expected: {"status":"ok", ...}
+# expected: {"status":"ok", ...} — read past "status" though: check
+# boot_wiring.ips_loaded too (§12, #309). /health returns 200 even when
+# degraded, by design, so a bare 200 here doesn't confirm the IPS policy
+# actually loaded.
 ```
 
 If the public-IP curl returns JSON, stop — `BIND_ADDR` is wrong or unset
@@ -184,7 +187,23 @@ docker compose up -d
 cd deltadewa
 git fetch --tags
 git checkout <tag>
+
+# config/ips.yaml is baked in at build time, not live (§5) — a host-side
+# edit needs a rebuild before it takes effect. If this tag changed the
+# IPS schema (a new required field, a renamed key — check the release's
+# PR body/notes; that fact currently lives only there), edit
+# config/ips.yaml on the droplet now, before building, or the pre-flight
+# check below will fail against a stale-but-otherwise-valid file.
 docker compose build app jobs   # name both, or `jobs` drifts — §1, #293
+
+# Validate the freshly-built image's baked config BEFORE cutover, so a
+# missing/invalid ips.yaml is caught here rather than as a live "No IPS
+# policy is loaded" page. `run --rm`, not `exec`: at this point the OLD
+# container is still what `exec` would reach, so only running against
+# the image just built actually validates what's about to go live.
+docker compose run --rm app python -c \
+    "from deltadewa.ips_config import load_ips_config; load_ips_config('config/ips.yaml')"
+
 docker compose up -d
 
 # Logs
@@ -193,7 +212,9 @@ docker compose logs -f app
 # Restart (no rebuild)
 docker compose restart app
 
-# Health check
+# Health check — read past "status": "ok"; check boot_wiring.ips_loaded
+# too (§12, #309). /health returns 200 even when degraded, by design, so
+# a bare 200 here doesn't confirm the policy actually loaded.
 curl http://<tailscale-ip>:8050/health
 ```
 
@@ -265,20 +286,38 @@ time (`COPY config ./config` in the `Dockerfile`) — it is *not* on the
 include it, and `git checkout`/`git pull` never touch it once it exists
 here (see §4's one-time note for the transition). If it's missing or
 invalid, `/monitor` renders a single "No IPS policy is loaded" screen in
-place of the crash-led content (there's no partial-policy state — see
-`docker compose logs -f app` for why it was skipped); to change it, edit
-`config/ips.yaml` directly on the droplet and rebuild
-(`docker compose build app jobs` — name both, §1, #293: `jobs` bakes in
-the same `COPY config ./config` and goes just as stale) — a live
-container won't pick up a host-side edit to it, and there's nothing to
-commit or push.
+place of the crash-led content (there's no partial-policy state). **That
+screen names the parse error itself** (#385) — the missing key or bad
+value, verbatim — so you should not need `docker compose logs -f app` for
+this failure; the log is the fallback, not the first stop. Note what the
+screen also says: the file it is reporting on is the one baked into the
+*running container*, which is not the host's copy until you rebuild. To
+change it, edit
+`config/ips.yaml` directly on the droplet, then rebuild **and cut over** —
+a live container won't pick up a host-side edit to it, and there's nothing
+to commit or push:
+
+```bash
+# 1. Rebuild so the edited file is baked into the image. Name both
+#    services, §1, #293: `jobs` bakes in the same `COPY config ./config`
+#    and goes just as stale.
+docker compose build app jobs
+
+# 2. Cut over — the build alone changes nothing the running container
+#    serves. Skipping this leaves the old policy live with no error, and
+#    the Verify step below passing against the pre-edit image.
+docker compose up -d
+```
 
 **Verify:**
 
 ```bash
 curl http://<tailscale-ip>:8050/health
 # expect: "state_loaded": true, and market_data.source/as_of reflecting
-# the data's actual freshness
+# the data's actual freshness. After an ips.yaml edit, check
+# boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
+# degraded, by design, so a bare 200 here won't catch a policy file that
+# failed to load or a rebuild that was never cut over.
 ```
 
 Reload `http://<tailscale-ip>:8050/monitor` and confirm:
@@ -349,7 +388,10 @@ docker compose up -d
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 # market_data.source should read CACHED (or STALE, not UNAVAILABLE) —
 # the restored exports/marketdata-cache/ means this box doesn't start
-# blind even before the next refresh cron fires.
+# blind even before the next refresh cron fires. Check
+# boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
+# degraded, by design, so 200 alone doesn't confirm the restored
+# config/ips.yaml actually loaded.
 ```
 
 **Email will fail until the SMTP relay's IP allowlist is updated.** A new

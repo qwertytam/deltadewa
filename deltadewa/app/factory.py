@@ -10,8 +10,9 @@ Pages' own nav/title support.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from dash import Dash, Input, Output, dcc, html
 from flask import jsonify
@@ -22,6 +23,7 @@ from deltadewa.analysis.provenance import InputKind, build_provenance_ledger
 from deltadewa.app.chrome import build_chrome
 from deltadewa.app.health_checks import run_checks, summarize
 from deltadewa.app.pages import design, monitor
+from deltadewa.app.panel_guard import safe_chrome
 from deltadewa.clock import program_trading_date
 from deltadewa.ips_config import IpsPricingInputs
 from deltadewa.marketdata import default_cache_dir
@@ -29,15 +31,91 @@ from deltadewa.marketdata import default_cache_dir
 if TYPE_CHECKING:
     from flask import Flask, Response
 
+    from deltadewa.analysis.market_environment import MarketEnvironment
+    from deltadewa.analysis.provenance import ProvenanceLedger
     from deltadewa.ips_config import IpsConfig
     from deltadewa.marketdata import MarketDataProvider
     from deltadewa.state import ProgramState
+
+_logger = logging.getLogger(__name__)
 
 _DEFAULT_ROUTE = "/monitor"
 _ROUTES: dict[str, Callable[[ProgramDashApp], html.Div]] = {
     "/design": design.render,
     "/monitor": monitor.render,
 }
+
+
+def _market_data_payload(environment: MarketEnvironment) -> dict[str, Any]:
+    """Build ``/health``'s ``market_data`` object.
+
+    #368: ``fetched_at``/``series``/``oldest_series`` let an operator tell
+    "one series is on its normal, expected lag" apart from "the pipeline
+    stopped" — the confusion a 2026-08-25 field test hit with only
+    ``source``/``as_of`` available here.
+    """
+    return {
+        "source": environment.data_quality.value,
+        "as_of": (
+            environment.as_of.isoformat()
+            if environment.as_of is not None
+            else None
+        ),
+        "fetched_at": (
+            environment.fetched_at.isoformat()
+            if environment.fetched_at is not None
+            else None
+        ),
+        "oldest_series": environment.oldest_series,
+        "series": {
+            series.name: {
+                "quality": series.quality.value,
+                "as_of": (
+                    series.as_of.isoformat()
+                    if series.as_of is not None
+                    else None
+                ),
+                "fetched_at": (
+                    series.fetched_at.isoformat()
+                    if series.fetched_at is not None
+                    else None
+                ),
+            }
+            for series in environment.series
+        },
+    }
+
+
+def _pricing_inputs_payload(ledger: ProvenanceLedger) -> dict[str, Any]:
+    """Build ``/health``'s ``pricing_inputs`` object.
+
+    #367: a sibling of ``market_data``, deliberately never merged into it —
+    a stale hand-entered rate must not make this endpoint claim the
+    *fetched* market data feed is stale, which would just relocate #368's
+    confusion.
+    """
+    worst_hand_entered = ledger.worst_of(InputKind.HAND_ENTERED)
+    return {
+        "worst": (
+            worst_hand_entered.freshness.value
+            if worst_hand_entered is not None
+            else None
+        ),
+        "entries": [
+            {
+                "key": entry.key,
+                "label": entry.label,
+                "freshness": entry.freshness.value,
+                "as_of": (
+                    entry.as_of.isoformat() if entry.as_of is not None else None
+                ),
+                "age_days": entry.age_days,
+                "max_age_days": entry.max_age_days,
+                "detail": entry.detail,
+            }
+            for entry in ledger.by_kind(InputKind.HAND_ENTERED)
+        ],
+    }
 
 
 class FetchCapableProviderError(RuntimeError):
@@ -121,11 +199,18 @@ def create_app(
     )
     program_tz = ips_config.program.timezone if ips_config is not None else None
 
-    def _serve_layout() -> html.Div:
+    def _assess_provenance() -> tuple[MarketEnvironment, ProvenanceLedger]:
         # Re-assessed per request (not baked in once at startup) so a feed
         # outage that starts mid-session still shows STALE on the next
         # page load. Cheap: market_data is expected to be read-only, i.e.
         # a local cache read, never a network call.
+        #
+        # #381: this is shared *code*, never a shared *value*. Both
+        # _serve_layout() and /health call it fresh inside their own
+        # guard. Precomputing one result for both would mean a single
+        # raise took down the page and the endpoint that would have
+        # reported it — see safe_chrome()'s docstring, and #376's refusal
+        # of the same shortcut one layer down in monitor.py.
         environment = assess_market_environment(market_data, env_policy)
         ledger = build_provenance_ledger(
             environment,
@@ -133,9 +218,16 @@ def create_app(
             pricing_inputs_policy,
             as_of=program_trading_date(program_tz).date(),
         )
+        return environment, ledger
+
+    def _serve_layout() -> html.Div:
+        # Only the chrome is guarded: dcc.Location and page-content mount
+        # unconditionally, so a failed provenance assessment degrades the
+        # banner without taking routing — or /monitor's own safe_render-
+        # wrapped panels — down with it (#381).
         return html.Div(
             [
-                build_chrome(ledger),
+                safe_chrome(lambda: build_chrome(_assess_provenance()[1])),
                 dcc.Location(id="url", refresh=False),
                 html.Div(id="page-content"),
             ],
@@ -163,86 +255,58 @@ def create_app(
         # below is the same class: O(1) attribute reads, one Path.stat(),
         # or one mkdir+write+unlink — see health_checks.py's module
         # docstring (#309).
-        environment = assess_market_environment(market_data, env_policy)
-        ledger = build_provenance_ledger(
-            environment,
-            state.portfolio,
-            pricing_inputs_policy,
-            as_of=program_trading_date(program_tz).date(),
-        )
-        as_of = (
-            environment.as_of.isoformat()
-            if environment.as_of is not None
-            else None
-        )
-        worst_hand_entered = ledger.worst_of(InputKind.HAND_ENTERED)
+        # #381: the same guard _serve_layout() applies, for the same
+        # reason one layer up — a raise here 500s the endpoint the
+        # dead-man's switch reads, so the alarm dies with the program
+        # (#364). Called fresh, never sharing _serve_layout()'s value.
+        provenance_error: str | None = None
+        market_data_payload: dict[str, Any] | None = None
+        pricing_inputs_payload: dict[str, Any] | None = None
+        try:
+            environment, ledger = _assess_provenance()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            _logger.exception("Provenance assessment failed for /health")
+            # Deliberately not DataQuality.UNAVAILABLE in the block below:
+            # that is a real value meaning "the provider failed and every
+            # field is None" — a *successful* assessment with an empty
+            # answer. Reusing it here would make a genuine feed outage
+            # indistinguishable from a code fault. null plus a named
+            # error keeps the two apart.
+            provenance_error = f"{type(exc).__name__}: {exc}"
+        else:
+            market_data_payload = _market_data_payload(environment)
+            pricing_inputs_payload = _pricing_inputs_payload(ledger)
+
         checks = run_checks(state, cache_dir=default_cache_dir())
         wiring_status, boot_wiring = summarize(checks)
         # "status" reflects boot-wiring health, not just liveness — but
         # HTTP always stays 200 (see summarize()'s docstring): a policy
         # nit like a defaulted IPS section must never look like a reason
-        # to restart-loop a working container.
+        # to restart-loop a working container. An unassessable provenance
+        # joins it as degraded rather than becoming a third status word:
+        # this is the field a dumb watcher greps, so two values it can act
+        # on beat three it has to learn. provenance_error is where the
+        # distinguishing detail lives. Note what this still does *not*
+        # cover: an assessment that succeeds and comes back stale leaves
+        # status "ok" — #393 owns that decision, deliberately not this
+        # one, since the threshold is an alarm-fatigue question of its
+        # own (see chrome.py on why the banner stays quiet at CACHED).
+        status = (
+            "degraded"
+            if wiring_status == "degraded" or provenance_error is not None
+            else "ok"
+        )
         return jsonify(
             {
-                "status": wiring_status,
+                "status": status,
                 "state_loaded": state.loaded_from is not None,
-                # #368: fetched_at/series/oldest_series let an operator
-                # tell "one series is on its normal, expected lag" apart
-                # from "the pipeline stopped" — the confusion a 2026-08-25
-                # field test hit with only source/as_of available here.
-                "market_data": {
-                    "source": environment.data_quality.value,
-                    "as_of": as_of,
-                    "fetched_at": (
-                        environment.fetched_at.isoformat()
-                        if environment.fetched_at is not None
-                        else None
-                    ),
-                    "oldest_series": environment.oldest_series,
-                    "series": {
-                        series.name: {
-                            "quality": series.quality.value,
-                            "as_of": (
-                                series.as_of.isoformat()
-                                if series.as_of is not None
-                                else None
-                            ),
-                            "fetched_at": (
-                                series.fetched_at.isoformat()
-                                if series.fetched_at is not None
-                                else None
-                            ),
-                        }
-                        for series in environment.series
-                    },
-                },
-                # #367: a sibling object, deliberately never merged into
-                # market_data above — a stale hand-entered rate must not
-                # make this endpoint claim the *fetched* market data feed
-                # is stale, which would just relocate #368's confusion.
-                "pricing_inputs": {
-                    "worst": (
-                        worst_hand_entered.freshness.value
-                        if worst_hand_entered is not None
-                        else None
-                    ),
-                    "entries": [
-                        {
-                            "key": entry.key,
-                            "label": entry.label,
-                            "freshness": entry.freshness.value,
-                            "as_of": (
-                                entry.as_of.isoformat()
-                                if entry.as_of is not None
-                                else None
-                            ),
-                            "age_days": entry.age_days,
-                            "max_age_days": entry.max_age_days,
-                            "detail": entry.detail,
-                        }
-                        for entry in ledger.by_kind(InputKind.HAND_ENTERED)
-                    ],
-                },
+                "market_data": market_data_payload,
+                "pricing_inputs": pricing_inputs_payload,
+                # #381: null unless the assessment itself raised, in which
+                # case market_data/pricing_inputs above are null and this
+                # names the fault — so a heartbeat watcher gets *an*
+                # answer, and a diagnosis, instead of a 500.
+                "provenance_error": provenance_error,
                 # #355: who last wrote the shared state file, and whether
                 # it has changed since this worker last read or wrote it
                 # itself — a single Path.stat() under external_write_

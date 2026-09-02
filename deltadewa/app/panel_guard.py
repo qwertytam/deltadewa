@@ -24,6 +24,13 @@ panel's closure calls it fresh rather than reusing a value computed for
 the other panel, so a failure in one panel's copy cannot take the other
 down too. See ``design.py`` for worked examples of that pattern.
 
+#381 added the *page-scale* sibling, :func:`safe_chrome`, to this module
+rather than beside the thing it guards. The shared chrome is not a panel —
+it wraps every page — so it needs a shape :func:`panel_notice` does not
+have, but it is the same boundary question and deserves the same
+:class:`NoticeKind` vocabulary rather than a second notice idiom growing
+up next to the first.
+
 A panel that *raises* is only half the isolation story, though. #326
 found the strike-ladder panel going visually blank without raising at
 all — every rung unsolvable at the requested inputs — and every one of
@@ -189,4 +196,62 @@ def safe_render(
         return panel_notice(
             "Something went wrong — see the server log.",
             kind=NoticeKind.ERROR,
+        )
+
+
+def safe_chrome(build: Callable[[], Component]) -> Component:
+    """Render the shared chrome, turning a raise into a *louder* chrome.
+
+    :func:`safe_render`'s page-scale sibling (#381). ``build`` must
+    perform both the provenance assessment and the chrome construction,
+    for the reason in the module docstring — and, here, for a second one:
+    ``app/factory.py``'s ``_serve_layout`` and its ``/health`` route each
+    need this boundary, and each calls the assessment *fresh* inside its
+    own guard. Sharing one precomputed ledger between them would mean a
+    single raise took down the layout **and** the endpoint that would have
+    reported it — the alarm dying with the program (#364), which is the
+    shape #381 exists to remove.
+
+    Chrome is not a panel, so this cannot be a :func:`panel_notice`: that
+    is a bordered block *inside* a page, and rendering one above every
+    page would say "a panel broke" about a whole-page failure. The
+    degraded form must also be **louder** than any real banner, not
+    quieter. ``build_chrome`` mounts a banner only when something is
+    wrong, so absence of a banner reads as "every input is fresh" — a
+    chrome that failed silently would be indistinguishable from a clean
+    bill of health, which is the exact false green this batch exists to
+    remove. It therefore always mounts, at :attr:`NoticeKind.ERROR`.
+
+    The exception text is logged, never rendered: an arbitrary exception
+    is not written to be read by an operator. (``IpsConfigError`` is —
+    which is why #385 renders that one. The asymmetry is deliberate.)
+
+    Args:
+        build: Zero-argument callable producing the chrome ``Component``.
+
+    Returns:
+        ``build()``'s result, or the degraded chrome in its place.
+
+    """
+    try:
+        return build()
+    except Exception:  # pylint: disable=broad-exception-caught
+        _logger.exception("Unexpected error building the shared chrome")
+        return html.Div(
+            [
+                html.Div(
+                    "Data provenance unavailable.",
+                    className="chrome-stamp",
+                ),
+                html.Div(
+                    "PROVENANCE UNAVAILABLE — the freshness check itself "
+                    "failed, so nothing on this page has been graded for "
+                    "staleness. Treat every number here as unverified "
+                    "and see the server log.",
+                    className=(
+                        f"chrome-banner chrome-banner--{NoticeKind.ERROR}"
+                    ),
+                ),
+            ],
+            className="chrome",
         )

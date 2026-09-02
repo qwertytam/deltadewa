@@ -129,6 +129,8 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         serializer: PortfolioSerializer,
         default_exercise_style: ExerciseStyle | None,
         state_path: Path,
+        ips_path: Path,
+        ips_load_error: str | None = None,
         written_by: str | None = None,
         loaded_at: str | None = None,
         loaded_mtime: float | None = None,
@@ -137,6 +139,8 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         self._portfolio = portfolio
         self._loaded_from = loaded_from
         self._ips_config = ips_config
+        self._ips_path = ips_path
+        self._ips_load_error = ips_load_error
         self._serializer = serializer
         self._default_exercise_style = default_exercise_style
         self._changelog = PortfolioLogger(name="program_state.changelog")
@@ -201,6 +205,8 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         # depends on it: `program.timezone` decides which day's close the
         # positions are priced against (#182). Without an IPS the program
         # falls back to the US equity calendar, not to the server's UTC.
+        ips_path = Path(ips_path)
+        ips_load_error: str | None = None
         try:
             ips_config = load_ips_config(ips_path)
         except IpsConfigError as exc:
@@ -209,6 +215,13 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 exc,
             )
             ips_config = None
+            # #385: carried forward, not discarded. IpsConfigError's own
+            # messages are already written to be operator-readable
+            # (ips_config.py's _require_field / band checks), and the
+            # operator meeting this failure is looking at a page, not a
+            # terminal — reaching the log meant an SSH hop plus
+            # `docker compose logs app` for one str(exc).
+            ips_load_error = str(exc)
 
         # #295: an explicit caller override always wins; otherwise the
         # program's own policy sets the style positions get when they don't
@@ -279,6 +292,8 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             serializer=serializer,
             default_exercise_style=default_exercise_style,
             state_path=state_path,
+            ips_path=ips_path,
+            ips_load_error=ips_load_error,
             written_by=written_by,
             loaded_at=loaded_at,
             loaded_mtime=loaded_mtime,
@@ -331,6 +346,29 @@ class ProgramState:  # pylint: disable=too-many-public-methods
     def ips_config(self) -> IpsConfig | None:
         """The hedge program policy, loaded once at startup. Read-only."""
         return self._ips_config
+
+    @property
+    def ips_path(self) -> Path:
+        """The policy file this instance was loaded with (#385).
+
+        Recorded whether or not it loaded — ``load`` previously took this
+        and discarded it, so nothing said *which* file was tried. The
+        pages name it when reporting a load failure, since the operator's
+        first question is which ``ips.yaml`` this is.
+        """
+        return self._ips_path
+
+    @property
+    def ips_load_error(self) -> str | None:
+        """Why ``ips.yaml`` did not load, or ``None`` if it did (#385).
+
+        The ``IpsConfigError`` message itself, carried structurally from
+        the ``except`` block in :meth:`load` — never re-derived from log
+        text. ``None`` covers both "it loaded" and "no policy file was
+        involved at all" (a test constructing this directly); callers
+        distinguish those via :attr:`ips_config`.
+        """
+        return self._ips_load_error
 
     @property
     def dirty(self) -> bool:

@@ -86,6 +86,7 @@ from deltadewa.analysis.volatility import build_volatility_profile
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.ips_notice import build_no_ips_layout
 from deltadewa.app.panel_guard import NoticeKind, panel_notice
 from deltadewa.app.panel_guard import (
     incomplete_notice as _incomplete,
@@ -244,24 +245,18 @@ _EXPLORATION_EMPTY_BOOK_MSG = (
 _BASIS_PROPORTIONAL = "basis: proportional vol (GBM, risk-neutral drift)"
 
 
-def _no_ips_layout() -> html.Div:
+def _no_ips_layout(state: ProgramState) -> html.Div:
     """Build the single "no IPS policy loaded" state for the /design page."""
-    return html.Div(
-        [
-            html.H1("Design"),
-            html.P(
-                "No IPS policy is loaded, so there is no policy to plan "
-                "against — sizing targets, ladder bands, and roll "
-                "thresholds are all policy-derived, and the position "
-                "editor's exercise-style default has no source either. "
-                "Check that config/ips.yaml (or whatever path this "
-                "program state was loaded with) exists and parses — see "
-                "the server log at startup for the reason it was "
-                "skipped.",
-                className="no-ips-message",
-            ),
-        ],
-        className="page page-design",
+    return build_no_ips_layout(
+        state,
+        title="Design",
+        lead=(
+            "No IPS policy is loaded, so there is no policy to plan "
+            "against — sizing targets, ladder bands, and roll thresholds "
+            "are all policy-derived, and the position editor's "
+            "exercise-style default has no source either."
+        ),
+        page_class="page-design",
     )
 
 
@@ -2546,7 +2541,7 @@ def render(app: ProgramDashApp) -> html.Div:
     ``/monitor``'s (``test_pages.py``'s distinctness assertion).
     """
     if app.ips_config is None:
-        return _no_ips_layout()
+        return _no_ips_layout(app.program_state)
 
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
