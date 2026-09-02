@@ -652,8 +652,24 @@ two panels rendered dead. `boot_wiring` is the fix — seven explicit,
 post-boot assertions on the objects the app actually built (see
 `deltadewa/app/health_checks.py` for the full list and why these seven):
 
+`status` now covers two things, not one (#393): the boot wiring below,
+**and** data freshness. It is still only ever `"ok"` or `"degraded"` —
+whichever of the two is at fault, the distinguishing detail is in one of
+three sibling fields, all `null` when there is nothing to say:
+`provenance_error` and `boot_wiring_error` name a *fault while assessing*
+(#381/#395), and `freshness_reason` names a *condition that was assessed
+successfully*.
+
+An excerpt — the response also carries `state_loaded`, `state`, and the
+two never-merged freshness objects `market_data` and `pricing_inputs`
+(the latter two are what the `freshness_reason` bullets below send you
+to read):
+
 ```json
 "status": "ok",
+"freshness_reason": null,
+"provenance_error": null,
+"boot_wiring_error": null,
 "boot_wiring": {
   "ips_loaded": {"ok": true, "detail": "ips.yaml loaded"},
   "ips_sections_configured": {"ok": true, "detail": "...", "value": []},
@@ -668,6 +684,30 @@ post-boot assertions on the objects the app actually built (see
 - **`status` can read `"degraded"` while HTTP still returns 200** —
   `/health` stays a liveness probe (never restart-loop the container over
   it); `degraded` means *investigate*, not *the app is down*.
+- **`freshness_reason` is non-null when data freshness is what degraded
+  `status` (#393).** Two shapes, and they send you to different places:
+  `"market_data STALE (oldest series: vix)"` (also `STATIC` or
+  `UNAVAILABLE`) is the *machine* half — the refresh job or the provider;
+  start at §11's refresh command and its exit code, and at the REFRESH
+  heartbeat (§13), which would normally have alarmed first.
+  `"pricing_inputs UNKNOWN (...)"` is the *book* half — a hand-entered
+  input (spot, the risk-free rate, the dividend yield, or a leg's IV)
+  that has **never** been confirmed, which is what a book predating #367
+  looks like. Clear it by reviewing the numbers and using `/design`'s
+  confirm-gated *Mark pricing inputs reviewed* control; it will not come
+  back on its own, since new positions are stamped at entry.
+- **`"status": "ok"` still does not mean the book's hand-entered inputs
+  are current — this blind spot is deliberate (#393).** An input that is
+  merely *overdue* against `ips.yaml`'s `pricing_inputs` cadence grades
+  `AGING`, and `AGING` is intentionally left out of `status`: with the
+  shipped `spot_max_age_days: 1`, it is true on most days of a program
+  reviewed weekly, so putting it in the headline would leave `/health`
+  permanently degraded and train you to stop reading the field. It is
+  still reported in full — read `pricing_inputs.worst` and
+  `pricing_inputs.entries[*].freshness` in the same response, or just
+  look at the provenance banner on `/monitor`. See
+  `deltadewa/app/health_checks.py`'s module docstring before changing
+  where that line sits.
 - **`ips_sections_configured`'s `value` lists which of
   `market_environment`/`sizing`/`vega` fell back to code defaults.** This
   one never turns `status` to `degraded` on its own — a program

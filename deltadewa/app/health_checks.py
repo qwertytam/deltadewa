@@ -85,6 +85,108 @@ batch exists to remove.
 ``mkdir``+write+unlink. None fetches over the network and none prices the
 book — ``/health``'s own existing comment (``factory.py``) forbids both,
 since this backs a dead-man's-switch ping, not a page render.
+
+What ``status`` degrades on, and what it stays quiet about (#393)
+-----------------------------------------------------------------
+
+``status`` covers two things: the boot wiring above, and data freshness.
+``assess_freshness`` below is the second half. The rule, in one sentence:
+
+    ``status`` degrades on a freshness state only when that state means a
+    **machine stopped doing its job**, or that **no review has ever
+    happened at all**. It stays quiet when the state means a scheduled
+    human review is merely *overdue*.
+
+Concretely, over the ``ProvenanceLedger`` (``analysis/provenance.py``)
+``/health`` already builds for its ``market_data``/``pricing_inputs``
+objects — two channels, two cuts on the one ``FRESH < AGING < UNKNOWN <
+MISSING`` ordering:
+
+- **Fetched** (``market_data``) degrades at ``_STALE_OR_WORSE`` —
+  ``STALE``/``STATIC``/``UNAVAILABLE``. ``LIVE`` and ``CACHED`` stay
+  quiet.
+- **Hand-entered** (``pricing_inputs.worst``) degrades at ``UNKNOWN`` or
+  worse. ``AGING`` stays quiet. (``MISSING`` is unreachable here — see
+  ``Freshness.MISSING``.)
+
+**Why the two channels take different cuts.** They answer different
+questions, and only one of them is a fact about the program's health.
+
+The fetched channel's grade is a fact about *the machine*: the refresh
+job either ran and got data or it did not, and no human can make the
+reading fresher by hand. Anything worse than ``CACHED`` means an
+automated thing that should be running isn't — exactly what a
+dead-man's switch exists to report, and it clears by itself when the job
+recovers. ``CACHED`` is the normal steady state, and #368 is the record
+of why a routinely-lagged series (FRED's VIXCLS) must not read as a dead
+pipeline.
+
+The hand-entered channel's ``AGING`` is a fact about *the operator's
+review calendar*: "a confirmation is overdue against
+``ips_config.pricing_inputs``". Note the arithmetic before tightening
+this: the shipped policy is ``spot_max_age_days: 1``, so a book
+confirmed on Friday is ``AGING`` by Sunday and stays that way every day
+nobody logs in — on a program whose review rhythm is a *weekly* digest,
+that is most days. Wiring it into ``status`` would leave ``/health``
+degraded for the majority of the program's life, and a permanently
+degraded dead-man's switch is the same false-green failure arriving from
+the other side: the reader stops reading the field. It is the identical
+argument ``chrome.py``'s module docstring makes for why the banner never
+mounts on a merely ``CACHED`` reading. ``AGING`` already has the right
+surface — the banner and the provenance panel, read by the same human
+whose review is overdue — and ``/health`` still *renders* it under
+``pricing_inputs``; it just isn't in the headline.
+
+``UNKNOWN`` is in, and that is not an inversion of the ordering above —
+it is one notch higher on the same scale, for two reasons. It is
+categorically different from ``AGING``: ``AGING`` means a review is
+late, ``UNKNOWN`` means *there is no review to be late*, i.e. the ledger
+has no basis at all for a number the book is priced on (``Freshness``'s
+own docstring makes the same argument for ranking it worse — an aging
+input's damage is bounded, an unconfirmed one's is not). And it latches
+rather than recurs: ``add_position`` stamps ``volatility_as_of`` at
+entry and ``update_market_conditions`` stamps on change, so once an
+operator clears it with the confirm-gated
+``ProgramState.mark_inputs_reviewed`` no routine operation puts it back.
+A signal that fires once per book and then stays off is not alarm
+fatigue; it is the migration working.
+
+**One definition, not a second.** The fetched half reads the same
+``_STALE_OR_WORSE`` set the digest and ``/monitor`` already grade on,
+over the same enum and the same channel it was written for. What it
+deliberately does *not* read is ``ProvenanceLedger.combined_quality``,
+which is that set applied to *both* channels at once: it maps a
+hand-entered ``AGING`` to ``DataQuality.STALE``, so a spot stamp one day
+past a one-day cadence would become indistinguishable from a dead CBOE
+feed. That is precisely the merge #368 removed from this endpoint and
+that ``worst_of()`` exists to prevent, and it would import the
+``AGING``-fires-daily problem above along with it.
+
+**Still two status words, not three.** A watcher that greps only
+``status`` cannot tell a wiring fault from a freshness one, by design:
+the field answers one question — *should a human look at this program
+now?* — and both answers want the same first action, which is to open
+the payload. The distinguishing detail lives in three sibling nullable
+fields with one shape: ``provenance_error`` (#381) and
+``boot_wiring_error`` (#395) name a *fault in assessing*, and
+``freshness_reason`` names a *condition successfully assessed*. Hence
+"reason", not "error" — collapsing the two would undo the distinction
+#381 drew when it refused to reuse ``DataQuality.UNAVAILABLE`` for a
+code fault.
+
+**This endpoint is not the program's dead-man's switch.** The three
+heartbeats (refresh, digest, backup) are pinged by the cron jobs
+themselves on their own exit-code contracts; nothing pings or polls
+``/health``. So the freshness verdict here is a *cross-check* — a second,
+independent read from inside the app, whose distinctive value is the
+case where the refresh job pings healthy while this process reads a
+stale or different cache (the shape ``cache_manifest_matches`` covers).
+A dead pipeline is caught earlier and more reliably by the refresh
+heartbeat, which is what lets this rule afford to be conservative. Any
+"the system is down" promise made to a reader — the digest footer's, for
+instance — must stay anchored to the digest's own arrival, which is
+pinged only on a confirmed send, never to ``/health`` reading ``ok``
+from inside the process that would also be the thing failing.
 """
 
 from __future__ import annotations
@@ -94,15 +196,38 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Final
 
+from deltadewa.analysis.market_environment import DataQuality
+from deltadewa.analysis.provenance import Freshness, InputKind
 from deltadewa.marketdata import read_cache_manifest
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
+    from deltadewa.analysis.provenance import ProvenanceLedger
     from deltadewa.state import ProgramState
 
 _PROBE_FILENAME = ".health-probe"
+
+# Mirrors program_report._STALE_OR_WORSE locally rather than importing a
+# private name — the same convention weekly_snapshot.py, weekly_report.py
+# and pages/monitor.py already follow. Held as DataQuality members (not
+# their string values, as the reporting copies do) because this compares
+# against ProvenanceLedger.market_data_quality, an enum. Pinned equal to
+# "every DataQuality that is not Freshness.FRESH" by test, so the two
+# spellings of "not fresh" cannot drift apart silently.
+_STALE_OR_WORSE: Final[frozenset[DataQuality]] = frozenset(
+    {DataQuality.STALE, DataQuality.STATIC, DataQuality.UNAVAILABLE},
+)
+
+# The hand-entered channel's own cut, one notch higher on the shared
+# Freshness ordering — see the module docstring for why AGING is not in
+# it. MISSING is unreachable for a hand-entered entry (Freshness.MISSING)
+# and is listed only so the set is the ordering's own tail rather than a
+# single hand-picked member.
+_UNCONFIRMED_OR_WORSE: Final[frozenset[Freshness]] = frozenset(
+    {Freshness.UNKNOWN, Freshness.MISSING},
+)
 
 # The explicit registry #309's own comment asks for — grows one entry at a
 # time as new object-materialized keys are wired, rather than something
@@ -434,3 +559,46 @@ def summarize(
         for result in results
     }
     return status, boot_wiring
+
+
+def assess_freshness(ledger: ProvenanceLedger) -> str | None:
+    """Return why freshness degrades ``/health``'s ``status``, or ``None``.
+
+    The rule and the reasoning behind both cuts are in this module's
+    docstring — read that before changing either threshold. In short: the
+    fetched channel degrades at ``_STALE_OR_WORSE``, the hand-entered one
+    at ``UNKNOWN`` or worse, and a merely ``AGING`` hand-entered input is
+    deliberately quiet here while still being rendered in full under
+    ``pricing_inputs``.
+
+    Deliberately a plain function over an already-built ledger, not part
+    of ``summarize()``: that one has no ledger, and giving it one would
+    make the boot-wiring checks depend on the provenance layer for the
+    sake of a one-line ``or``. ``/health`` combines the two verdicts in
+    the route, the same shape #381 used for ``provenance_error``, which
+    is also what keeps the two guards there independent.
+
+    Args:
+        ledger: The ledger ``/health`` already built for its
+            ``market_data``/``pricing_inputs`` objects.
+
+    Returns:
+        ``None`` when nothing about freshness degrades ``status``;
+        otherwise a one-line reason naming the channel, its grade, and
+        the entry — ``/health``'s ``freshness_reason`` field.
+
+    """
+    if ledger.market_data_quality in _STALE_OR_WORSE:
+        # Named ahead of the hand-entered channel when both degrade: it
+        # is the half an operator acts on first (the refresh job, the
+        # provider), and the other half is still fully rendered under
+        # pricing_inputs. One reason, not one per channel.
+        reason = f"market_data {ledger.market_data_quality.value}"
+        if ledger.oldest_series is not None:
+            reason += f" (oldest series: {ledger.oldest_series})"
+        return reason
+
+    worst = ledger.worst_of(InputKind.HAND_ENTERED)
+    if worst is not None and worst.freshness in _UNCONFIRMED_OR_WORSE:
+        return f"pricing_inputs {worst.freshness.value} ({worst.detail})"
+    return None

@@ -11,6 +11,11 @@ from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider, write_cache_manifest
 from deltadewa.state import ProgramState
 from tests.clock_helpers import days_from_today
+from tests.test_app.freshness_fixtures import (
+    GradedProvider,
+    cached_provider,
+    stamp_inputs,
+)
 
 _MISSING_IPS = Path("does-not-exist-ips.yaml")
 _EXAMPLE_IPS = (
@@ -72,13 +77,31 @@ def _fully_wired_state(tmp_path: Path) -> ProgramState:
     from ``pricing.exercise_style`` by the real boot path (#295), not
     handed in by the test — the same distinction #295's own regression
     tests insist on.
+
+    #393: the pricing inputs are stamped too. An unstamped book grades
+    ``UNKNOWN`` (#367), which now degrades ``status`` regardless of the
+    boot wiring, so "fully wired" has to mean confirmed inputs as well
+    for the phrase to still describe a healthy program.
     """
     ips_path = _write_ips_fixture(tmp_path)
-    return ProgramState.load(tmp_path, ips_path=ips_path)
+    state = ProgramState.load(tmp_path, ips_path=ips_path)
+    stamp_inputs(state.portfolio)
+    return state
 
 
 def _provider() -> StaticProvider:
     return StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
+
+
+def _fresh_provider() -> GradedProvider:
+    """A provider grading ``CACHED`` — what ``status: ok`` now requires.
+
+    ``StaticProvider`` grades ``STATIC``, which #393 reports as degraded:
+    a book priced on synthetic numbers is not a healthy program. Tests
+    here that are about *boot wiring* still use ``_provider()``; the ones
+    asserting a genuinely healthy ``status`` need this.
+    """
+    return cached_provider()
 
 
 class TestHealth:
@@ -91,7 +114,7 @@ class TestHealth:
         _write_matching_manifest(tmp_path)
         app = create_app(
             state=_fully_wired_state(tmp_path),
-            market_data=_provider(),
+            market_data=_fresh_provider(),
         )
         client = app.server.test_client()
 
@@ -290,7 +313,7 @@ class TestBootWiring:
         _write_matching_manifest(tmp_path)
         app = create_app(
             state=_fully_wired_state(tmp_path),
-            market_data=_provider(),
+            market_data=_fresh_provider(),
         )
 
         payload = app.server.test_client().get("/health").get_json()
@@ -379,7 +402,8 @@ class TestBootWiring:
 
         _write_matching_manifest(tmp_path)
         state = ProgramState.load(tmp_path, ips_path=ips_path)
-        app = create_app(state=state, market_data=_provider())
+        stamp_inputs(state.portfolio)
+        app = create_app(state=state, market_data=_fresh_provider())
 
         payload = app.server.test_client().get("/health").get_json()
 
