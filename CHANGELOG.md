@@ -159,6 +159,49 @@ history for that record instead.
   future drift (#378 is scoped P2), not evidence of a divergence
   happening now.
 
+- **#386** — RUNBOOK §4's routine deploy steps rebuilt the image and cut
+  over in the same breath, so a breaking IPS schema change (config baked
+  in at build time) only surfaced as a live 500 after cutover, with no
+  step in between to catch it. §4 now runs
+  `docker compose run --rm app python -c "..."` against the freshly built
+  image before cutover — `run --rm` reaches the new image in a throwaway
+  container; `exec` would only reach the old one still running — and
+  states the "config is baked in at build time" fact once, in §4, instead
+  of only in §5. §5's own policy-edit procedure had the same gap (a single
+  rebuild instruction with no explicit cutover step) plus a verify `curl`
+  that didn't mention `boot_wiring.ips_loaded`; `/health` is 200 even when
+  degraded by design (#309), so a bare 200 there doesn't catch a policy
+  that failed to load or a rebuild that was never cut over. Both fixed the
+  same way: an explicit rebuild-then-cutover pair, and a verify step that
+  names the boot-wiring check to look at instead of just the status code.
+
+- **#381** — `_serve_layout()`'s chrome build and the `/health` route both
+  called `assess_market_environment`/`build_provenance_ledger` outside any
+  guard; `panel_guard.safe_render` (#363) covers every panel below them,
+  but a raise one layer up took the whole page, or the endpoint the
+  dead-man's-switch reads, with it. A new `panel_guard.safe_chrome`
+  (reusing the existing `NoticeKind` vocabulary rather than a second
+  notice idiom) now wraps the chrome build, degrading to a banner louder
+  than any real freshness warning — silence there would otherwise read as
+  "all inputs fresh." `/health` gets its own independent try/except around
+  a freshly-called `_assess_provenance()`, never a value shared with the
+  page render (the isolation `panel_guard`'s own docstring warns a shared
+  precomputed value would defeat, #376), and reports `status: "degraded"`
+  plus a named `provenance_error` at HTTP 200 rather than a 500 — so the
+  dead-man's-switch stays alive and diagnosable instead of dying with the
+  fault it exists to report (#364's shape, one layer up).
+
+- **#385** — an unloadable `ips.yaml` was logged and dropped
+  (`state.py`'s `except IpsConfigError`), so both `/monitor` and `/design`
+  could only say "see the server log at startup" for a message that was
+  one `str(exc)` away. `ProgramState.ips_load_error`/`ips_path` now carry
+  the parse error and the attempted path forward from `load()`'s except
+  block; a new `app/ips_notice.build_no_ips_layout` renders the exact
+  message on both pages, plus the container-vs-host caveat — the file
+  named is the one baked into the running container at its last build,
+  not necessarily the host's current copy, which is #386's subject and
+  exactly where the two can differ.
+
 ## [0.7.0] - 2026-08-11
 
 Phase 3 close-out work merged since `v0.6.0` — clock/day-count
