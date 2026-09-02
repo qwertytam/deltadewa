@@ -73,6 +73,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass, replace
 from datetime import date
@@ -585,6 +586,25 @@ def _footer_facts() -> tuple[str, ...]:
     return tuple(facts)
 
 
+_URL_PATTERN: Final[re.Pattern[str]] = re.compile(r"(https?://\S+)")
+
+
+def _linkify_urls(escaped_text: str) -> str:
+    """Wrap bare URLs in an already-``html.escape``d string with ``<a>``.
+
+    Field-tested (#319): a footer fact like ``Dashboard: http://...``
+    rendered as plain text is invisible as a link the moment the digest
+    is opened as a raw ``.html`` file rather than viewed through a mail
+    client's own auto-linkify pass — exactly what happened checking this
+    against the deployed app. Applied *after* escaping, not before: a
+    bare ``http(s)://`` URL contains no characters ``escape`` would
+    touch, so running the regex second is safe and keeps every other
+    caller of :func:`_footer_facts` (the markdown renderer, which wants
+    plain text, not HTML) untouched.
+    """
+    return _URL_PATTERN.sub(r'<a href="\1">\1</a>', escaped_text)
+
+
 def _from_header(from_addr: str) -> str:
     """Format the SMTP From header: *from_addr* with a friendlier name.
 
@@ -805,7 +825,8 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
 <hr>"""
 
     footer_html = "\n".join(
-        f'<p class="note">{escape(fact)}</p>' for fact in _footer_facts()
+        f'<p class="note">{_linkify_urls(escape(fact))}</p>'
+        for fact in _footer_facts()
     )
 
     return f"""<!DOCTYPE html>
@@ -1093,7 +1114,8 @@ def _send_build_failure_alert(exc: Exception, *, as_of: date) -> None:
 
     detail = escape(f"{type(exc).__name__}: {exc}")
     footer_html = "\n".join(
-        f'<p class="note">{escape(fact)}</p>' for fact in _footer_facts()
+        f'<p class="note">{_linkify_urls(escape(fact))}</p>'
+        for fact in _footer_facts()
     )
     subject = f"Weekly Hedge Digest — FAILED to build ({as_of})"
     body_html = f"""<!DOCTYPE html>
