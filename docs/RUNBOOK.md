@@ -582,6 +582,22 @@ one problem per run; work through it rather than guessing:
    rally_monitor_pct: 5.0  # PROVISIONAL — restored 2026-09-02, needs owner review
    ```
 
+   Validate each edit against the already-built `app` image (from step 3
+   above) without rebuilding for every field — bind-mount the host file
+   in read-only, the same pattern §7.1's drill uses, rather than
+   `docker compose run --rm app python -m deltadewa.ips_config --check
+   config/ips.yaml`, which would only ever see the image's *baked-in*
+   copy, not this in-progress edit:
+
+   ```bash
+   docker compose run --rm --no-deps \
+       -v "$(pwd)/config/ips.yaml:/restore/ips.yaml:ro" app \
+       python -m deltadewa.ips_config --check --strict /restore/ips.yaml
+   ```
+
+   Only once this reports no warnings does a real rebuild-and-cutover
+   (step 5 below) become worth doing.
+
 4. **Once it loads, resolve every warning `--strict` reported** — not
    just the load failure:
    - A **defaulted section** (silently running on this code's built-in
