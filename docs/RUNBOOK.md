@@ -201,8 +201,12 @@ docker compose build app jobs   # name both, or `jobs` drifts — §1, #293
 # policy is loaded" page. `run --rm`, not `exec`: at this point the OLD
 # container is still what `exec` would reach, so only running against
 # the image just built actually validates what's about to go live.
-docker compose run --rm app python -c \
-    "from deltadewa.ips_config import load_ips_config; load_ips_config('config/ips.yaml')"
+# No --strict here: an operator legitimately omitting an optional
+# section is not a failed deploy — that's what §7's restore drill uses
+# --strict for, where a silently-defaulted or silently-ignored value is
+# exactly what must not pass unnoticed.
+docker compose run --rm app python -m deltadewa.ips_config \
+    --check config/ips.yaml
 
 docker compose up -d
 
@@ -363,9 +367,13 @@ Target: **under 30 minutes, nothing memorised.**
 
 ```bash
 # 1. New droplet, repeat section 1 in full, up to (not including) the
-#    final `docker compose build app jobs` / `docker compose up -d`
+#    final `docker compose build app jobs` / `docker compose up -d`.
+#    §1's own `cp config/ips.example.yaml config/ips.yaml` step runs as
+#    part of this — leave it; step 2b below overwrites it with the real
+#    policy. Skipping it isn't a shortcut: later steps (docker compose
+#    run, the app itself) expect config/ips.yaml to exist.
 
-# 2. Restore exports/ from the offsite backup remote (see §8) — clone
+# 2a. Restore exports/ from the offsite backup remote (see §8) — clone
 #    it directly into the repo's exports/ directory (the bind-mount
 #    source). `sudo` is required, not optional: the SSH deploy key this
 #    needs (§10) is root-owned 0600 at /root/.ssh/backup_deploy_key, so
@@ -380,8 +388,40 @@ sudo rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it
 sudo git clone <BACKUP_REMOTE — see private ops doc> \
     ~/deltadewa/exports
 
+# 2b. Restore the policy file. config/ips.yaml is baked into the image at
+#    build time (§4/§5) — it is NOT part of the exports/ bind mount and
+#    NOT part of the code checkout in step 1 either (it's gitignored,
+#    #245). The only surviving copy is the nightly snapshot
+#    ops/backup-exports.sh stages under exports/config-backup/ (#301),
+#    which just landed with step 2a above. Read its manifest FIRST:
+cat ~/deltadewa/exports/config-backup/MANIFEST.json
+#   {"written_by": "backup-exports.sh", "source": "config/ips.yaml",
+#    "sha256": "<64 hex chars>", "app_version": "0.9.1",
+#    "policy_changed_at": "<UTC timestamp>"}
+#
+#   `app_version` is the last app version this exact policy file is KNOWN
+#   to load on. This matters because it will usually NOT be whatever tag
+#   step 1's plain `git clone` left you on: check out that exact version
+#   now — a policy file always loads on the version it was captured
+#   under — get the program running as it was, THEN upgrade forward
+#   through §4's normal deploy path, where the release notes carry each
+#   schema change. Do not skip straight to the latest tag here; that is
+#   what §7.2 below is for, when this version is unavailable.
+cd ~/deltadewa
+git fetch --tags
+git checkout v<app_version from the manifest above>   # e.g. v0.9.1
+cp ~/deltadewa/exports/config-backup/ips.yaml ~/deltadewa/config/ips.yaml
+
 # 3. Bring it up — build both, name both (§1, #293), then start
 docker compose build app jobs
+
+# Validate BEFORE cutover, same pre-flight §4 uses for a routine deploy —
+# `run --rm`, not `exec`, so this checks the image just built, not
+# whatever (if anything) is already running. If this fails, the file
+# doesn't load on this version either — see §7.2.
+docker compose run --rm app python -m deltadewa.ips_config \
+    --check config/ips.yaml
+
 docker compose up -d
 
 # 4. Confirm state actually came back
@@ -404,6 +444,172 @@ the mechanism that will actually catch it if this step gets missed — but
 don't rely on that: add the new IP to the allowlist as part of step 3
 above, not after the first missed digest surfaces it.
 
+**`.env` is not restored by any of the above.** It is deliberately never
+part of the offsite backup — see §10's "Why `.env` stays out of the
+backup." Recreate it from the private ops doc's own copy (kept current
+there per §14's quarterly review) before the jobs service can send email
+or the backup cron can run on this new droplet.
+
+### 7.1. Recovery drill — run this before you need it
+
+Run this **from the live droplet**, in a scratch directory outside
+`~/deltadewa/exports/` — the real bind mount is never touched, the live
+container is never restarted, and nothing here is destructive. Reuses the
+`app` image already built on this droplet, so there is nothing new to
+build. Fifteen to twenty minutes the first time; a few minutes once it's
+routine. See §14 for how often.
+
+1. **Clone the backup to a scratch directory** — never into the real
+   `~/deltadewa/exports/`:
+
+   ```bash
+   cd ~/deltadewa
+   DRILL=/tmp/deltadewa-drill-$(date -u +%Y%m%d)
+   sudo git clone <BACKUP_REMOTE — see private ops doc> "${DRILL}"
+   ```
+
+2. **Read the policy manifest** and confirm it's actually current:
+
+   ```bash
+   cat "${DRILL}/config-backup/MANIFEST.json"
+   ```
+
+   Compare its `sha256` against today's live file:
+
+   ```bash
+   sha256sum ~/deltadewa/config/ips.yaml   # or: shasum -a 256 ...
+   ```
+
+   Match confirms the nightly snapshot is picking up real edits — this
+   *is* #301's acceptance criterion, "a drill confirms recovery
+   reproduces the exact live policy." A mismatch means either
+   `stage_policy_snapshot()` isn't running (check
+   `/var/log/deltadewa-backup.log`), or the host file was edited without
+   a rebuild-and-cutover (§4/§5) since the last successful backup run.
+
+3. **Check `program_state.json`'s provenance (#355):**
+
+   ```bash
+   grep -A1 '"written_by"\|"exported_at"' "${DRILL}/program_state.json"
+   ```
+
+   - `written_by` should read `"app"`. If it reads
+     `"import_portfolio_cli"`, the last write into this backup came from
+     the CLI importer, not the live worker (#355) — the running app may
+     never have loaded what's in this file. Restart `app` on the
+     droplet, confirm `/health`'s `state.written_by` reads `"app"`, and
+     let the next nightly run recapture it.
+   - `exported_at` should be within the last week or so. This is the
+     only check here that catches a *frozen* state file:
+     `marketdata-cache/` inside `exports/` churns every night regardless,
+     so the backup repo keeps committing and looks healthy even if
+     `program_state.json` itself stopped updating months ago.
+
+4. **Validate the policy on the currently-deployed version** — the
+   same-version case, which should be routine:
+
+   ```bash
+   docker compose run --rm --no-deps \
+       -v "${DRILL}:/restore:ro" app \
+       python -m deltadewa.ips_config --check --strict \
+       /restore/config-backup/ips.yaml
+   ```
+
+   `--strict` here, unlike §4's pre-flight: a drill exists to catch a
+   silently-defaulted section or a silently-ignored retired key, not just
+   a load failure. Expect exit 0 — this proves today's snapshot loads
+   clean on what's actually running.
+
+5. **Exercise a version-skewed restore.** This is the step that changed
+   since #301 was filed — several IPS schema changes have shipped since
+   (#297 added four required trigger fields, #344 added another, #384
+   retired two), so an *old* snapshot will not load on current code.
+   Walk the backup's own history and pick an old revision:
+
+   ```bash
+   sudo git -C "${DRILL}" log --oneline -- config-backup/ips.yaml
+   sudo git -C "${DRILL}" show <an old commit>:config-backup/ips.yaml \
+       > /tmp/old-ips.yaml
+   docker compose run --rm --no-deps \
+       -v /tmp/old-ips.yaml:/restore/ips.yaml:ro app \
+       python -m deltadewa.ips_config --check --strict /restore/ips.yaml
+   ```
+
+   **Expect this to fail** against any revision predating #297 — that is
+   the drill working, not a bug. A commit against `crash_scenario_pct`
+   still not required, or a schema old enough to predate #384, is the
+   easiest one to reach for. If step 5 unexpectedly passes, the schema
+   hasn't actually changed since that snapshot — nothing further to do.
+   If it fails, that is exactly §7.2's scenario — read it now, before a
+   real recovery does.
+
+6. **Record the run** in the private ops doc: date, the backup commit
+   sha from step 1, the `app_version` from step 2, and the outcome of
+   steps 4 and 5. Then discard the scratch clone:
+
+   ```bash
+   # ${DRILL}/.git is root-owned (the sudo clone in step 1), same as the
+   # real exports/.git (§10's Ownership note) — needs sudo to remove.
+   # /tmp/old-ips.yaml was written by the shell's own `>` redirect in
+   # step 5, before sudo ever ran, so it's deploy-owned and needs none.
+   sudo rm -rf "${DRILL}"
+   rm -f /tmp/old-ips.yaml
+   ```
+
+### 7.2. If the restored policy won't load
+
+This is the actual recovery scenario for anything but the newest backup
+— not a fallback path, the expected one. `--check`'s error names exactly
+one problem per run; work through it rather than guessing:
+
+1. **Prefer time-travel over hand-repair.** Check out the tag
+   `MANIFEST.json`'s `app_version` names (`git checkout v<version>`, per
+   step 2b above) rather than the latest tag. A policy file always loads
+   on the version it was captured under — this gets the program running
+   exactly as it was. Only fall back to the steps below if that tag is
+   genuinely unavailable (a corrupted/incomplete checkout, or a version
+   old enough it predates something else you need).
+2. **Never seed a live file from `config/ips.example.yaml`.** It carries
+   `EXAMPLE VALUE` placeholders (#249/#257) — booting on it runs the
+   program on numbers that are not this program's, and nothing in the
+   app says so. Keep the restored file as the source of truth throughout.
+3. **Add only the fields the error names, one at a time, re-running
+   `--check --strict` after each.** For a genuinely new required field
+   (#297/#344-class), there is no correct value to invent — mark it
+   plainly and move on:
+
+   ```yaml
+   rally_monitor_pct: 5.0  # PROVISIONAL — restored 2026-09-02, needs owner review
+   ```
+
+4. **Once it loads, resolve every warning `--strict` reported** — not
+   just the load failure:
+   - A **defaulted section** (silently running on this code's built-in
+     defaults) is a decision to make explicitly, not leave implicit —
+     write in your own numbers, or knowingly accept the code defaults
+     and remove the ambiguity by saying so in a comment.
+   - An **unrecognised key** most often means one of two things, and
+     only a human can tell which: it's genuinely retired (delete it —
+     e.g. #384's `strike_drift_max_otm_pct`/`strike_drift_review_fraction`,
+     which read as policy and do nothing), or it was **renamed** and the
+     checker is reporting the old and new names as two separate,
+     unrelated facts (a missing field plus an unrecognised one). 4.2
+     renamed `triggers.roll_time_months` →
+     `triggers.roll_at_months_remaining`,
+     `triggers.delta_drift_warn_pct`/`_action_pct` →
+     `triggers.delta_ratio_deviation_warn_pct`/`_action_pct`. For a
+     rename, carry the OLD value across under the NEW name — never
+     substitute the example's placeholder for a value you actually have.
+5. **Rebuild and re-run §4's pre-flight**, then confirm `/health` shows
+   both `boot_wiring.ips_loaded` and no defaulted/unrecognised warnings
+   you didn't knowingly accept.
+6. **Every value tagged PROVISIONAL is an open policy decision, not a
+   closed recovery step.** File it (an issue, or however this program
+   normally tracks open decisions) so it doesn't quietly stay a guess.
+   A restore cannot recover a policy value that was never written under
+   the new schema — it can only get you to a short, named list of
+   decisions instead of a blank page. That is the honest ceiling here.
+
 ## 8. What lives where
 
 - **`exports/`** — the only stateful directory. Bind-mounted (not a named
@@ -413,11 +619,25 @@ above, not after the first missed digest surfaces it.
   CBOE/FRED cache both `app` and `jobs` share via `DELTADEWA_CACHE_DIR` —
   see `docs/market-data.md` for which readings live in it and which
   pricing inputs are hand-entered and never refresh),
-  `exports/reports/weekly/` (digest + snapshot history), and any
-  autosaves.
-- **Everything else** — code, config, the image itself — is rebuildable
-  from `git clone` + `docker compose build`. Nothing else on the droplet
-  needs to survive a rebuild.
+  `exports/reports/weekly/` (digest + snapshot history),
+  `exports/config-backup/` (see below), and any autosaves.
+- **`exports/config-backup/`** — a nightly copy of `config/ips.yaml` and
+  a small manifest (`ips.yaml`, `MANIFEST.json`: `sha256`, `app_version`,
+  `policy_changed_at`), staged by `ops/backup-exports.sh` on every run
+  (#301). This is a **copy for recovery, not a live source** — the app
+  never reads it; it only exists so the offsite push carries the
+  program's real policy, not just its portfolio state. `config/ips.yaml`
+  itself is baked into the image at build time (§4/§5), never
+  bind-mounted, so before this it was reachable from nowhere the backup
+  cron could see. **Policy travels in this backup; secrets do not** — see
+  §10's "Why `.env` stays out of the backup" for the split and the
+  reasoning; SECURITY.md has the full argument for why that split is
+  safe for this specific private remote.
+- **Everything else** — code, the image itself — is rebuildable from
+  `git clone` + `docker compose build`. `config/ips.yaml` is the one
+  exception: it's gitignored (#245), so a plain `git clone` does *not*
+  bring it back — see §7's recovery steps and `exports/config-backup/`
+  above for how it actually gets restored.
 - **Offsite backup**: `exports/` is *itself* a standalone git repo (nested
   inside this repo's already-gitignored `exports/`, so there's no
   submodule conflict), pushed nightly by root's cron to a private offsite
@@ -500,6 +720,24 @@ needed here.
   verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
   `REPORT_EMAIL_FROM`) in the SES console rather than requesting
   production access.
+
+  **Why `.env` stays out of the backup, and where its recovery copy
+  actually lives (#301).** `config/ips.yaml` rides the nightly offsite
+  push (`exports/config-backup/`, §8) — it's policy, not a secret, and
+  #245's own remediation already established that distinction for this
+  program. `.env` is different in kind, not just in sensitivity: every
+  value in it is a live credential, and the offsite backup is
+  **unencrypted** (`age` is a deliberate, not-yet-built follow-up — see
+  §8's note and `ops/backup-exports.sh`'s own header). Putting a
+  credential into a plaintext backup is an access loss, not a
+  confidentiality loss the way a policy number leaking would be — see
+  `SECURITY.md`'s "Why the offsite backup carries policy but not
+  secrets" for the full argument, including why this reasoning is
+  *specific to this private remote* and doesn't loosen anything about
+  the public repo. So `.env`'s only recovery copy is a plain copy kept
+  current in **the private ops doc** (§14's quarterly review is what
+  keeps it from going stale) — there is no automated backup for it, on
+  purpose. Recreating it on a new droplet is a manual step in §7.
 - **The offsite backup SSH deploy key** — `/root/.ssh/backup_deploy_key`
   (mode `0600`, root-owned), referenced by a `~/.ssh/config` alias so
   `ops/backup-exports.sh` never hardcodes the key path, and by
@@ -773,3 +1011,33 @@ see that banner but the `sudo tail .../deltadewa-backup.log` history
 shows real pushes/no-ops landing, the backup itself is fine — only
 `BACKUP_HEARTBEAT_URL` needs attention (dead URL, expired healthchecks.io
 check, DNS).
+
+## 14. Quarterly review — keeping recovery possible
+
+The heartbeats (§13) tell you the backup *ran*. None of them tell you
+whether what it carries would actually get the program back on its feet
+— that's a colder failure, only visible when you go looking, which is
+exactly why it belongs on a calendar rather than waiting to be noticed.
+About five minutes, quarterly:
+
+1. **The `.env` copy in the private ops doc still matches the live
+   file** — at minimum, the same set of keys; ideally, the same values.
+   It drifts silently whenever a credential is rotated or `.env.example`
+   gains a new var and nobody remembers the private doc also needs it.
+2. **Run §7.1's recovery drill, steps 1–4** (~5 minutes): clone the
+   backup, confirm the policy snapshot's checksum matches the live file,
+   confirm `program_state.json`'s provenance, confirm today's policy
+   loads clean under `--strict` on the currently-deployed version.
+3. **Run §7.1's step 5 (the version-skewed restore) too — and also,
+   separately, right after any release that adds or renames a required
+   IPS key**, not only on the quarterly cadence. That is the moment an
+   old backup actually goes stale; waiting for the next quarter to find
+   out means carrying an unverified backup for as long as three months.
+4. **`MANIFEST.json`'s `app_version` matches what's actually running.**
+   A mismatch here (without a version bump in between) would mean
+   `stage_policy_snapshot()` stopped reading `pyproject.toml` correctly
+   — worth a one-line sanity check, not a full investigation, since step
+   2 already exercises the same manifest.
+
+Record each run in the private ops doc (date, backup commit sha, pass/
+fail per step) — the same log §7.1 step 6 asks for after a drill.

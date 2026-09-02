@@ -138,6 +138,64 @@ full-history audit by class (not by file list) after any change to what
 the tracked configs carry; an audit scoped to named files cannot tell you
 what it missed.
 
+### Why the offsite backup carries policy but not secrets
+
+**[#301](https://github.com/qwertytam/deltadewa/issues/301)** — the
+nightly offsite backup (`ops/backup-exports.sh`, `docs/RUNBOOK.md` §7–§8)
+now stages a copy of `config/ips.yaml` into the pushed `exports/`
+tree, alongside the portfolio state that was already going there.
+`.env` — the SMTP credentials, the heartbeat URLs, the bind address —
+does not, and never will by the same mechanism; it is recreated from a
+plain copy in the private ops doc instead (§10, §14). **This is a
+scoped exception to the standing rule above, not a relaxation of it —
+read the boundary before extending either direction.**
+
+**Why pushing policy is safe here even though it wouldn't be safe in
+this public repo.** The standing rule's scope is *this repository*,
+where every tracked byte is permanently world-readable the moment it's
+pushed — the #245 history above is the proof: 772 clones from 234
+unknown parties in 14 days, and no rewrite reaches any of them. The
+offsite backup remote is a different environment: a private repo, one
+write-scoped SSH deploy key, no fork network, not indexed, not cloned
+by anyone but this program's own root cron. Nothing about this
+subsection licenses treating `config/ips.yaml` as safe to commit to
+*this* repo — it stays gitignored, `config/ips.example.yaml` stays the
+tracked template, unchanged by any of the above.
+
+The decisive point, though, isn't that the backup remote is private —
+it's that **its sensitivity ceiling was already set by
+`program_state.json`**, which has been going into that same push since
+before #301 and carries the actual positions and sizes: exactly the
+class this document's own "What was not exposed" note above says
+*cannot* be re-set once revealed. `config/ips.yaml` carries thresholds
+— carry budget, convexity bands, roll triggers — the class that
+*can*. Adding policy to a channel that already carries positions
+introduces no new class of exposure, only a new instance of a class
+already accepted for the same remote.
+
+**Why `.env` is different, not just "more sensitive."** The offsite
+backup is **unencrypted** — `age` encryption is a deliberate,
+not-yet-built follow-up (`ops/backup-exports.sh`'s own header: a
+backup you cannot decrypt is worse than one you can, and adding it
+needs an explicit key-escrow step, not a silent one). Every byte
+pushed there is plaintext at the remote and in every clone of it. A
+policy value in a compromised backup is a **confidentiality** loss —
+embarrassing, reveals risk tolerance, not actionable by an attacker on
+its own. A credential in one is an **access** loss — usable
+immediately, and it compounds: an SMTP credential lets someone send
+mail as this program; a leaked heartbeat URL lets someone fake a
+healthy dead-man's-switch. That asymmetry, not the relative
+sensitivity of the numbers, is why the line falls where it does.
+
+**Void if the backup remote's own privacy assumption changes** — if it
+is ever made public, shared more broadly than this program's own
+operator, or `age` encryption lands (which would change what *could*
+safely be added, not what already has been): re-derive this decision
+from scratch rather than assuming today's boundary still holds. Landing
+`age` is its own explicit decision, including the key-escrow question —
+it does not retroactively bless adding `.env` here without that
+decision being made on its own terms.
+
 ## Scope and what "secure" means here
 
 `deltadewa` is a single-name SPX tail-hedge dashboard, not a
