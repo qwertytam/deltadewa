@@ -109,7 +109,7 @@ IPS schedule: 2 step(s) defined.
 
 
 ---
-Running v0.9.1
+Running v0.9.2
 Dashboard: bookmark this program's own /monitor page — ask the operator for the address if you don't already have it saved.
 No digest for two weeks usually means the system itself is down, not a quiet market — see the continuity annex: https://qwertytam.github.io/deltadewa-handbook/part-7/continuity-planning/
 Theta: the ongoing daily cost of holding this hedge in a normal market — like an insurance premium (§1 Cost, above).

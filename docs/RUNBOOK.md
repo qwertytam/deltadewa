@@ -409,7 +409,7 @@ sudo git clone <BACKUP_REMOTE — see private ops doc> \
 #    which just landed with step 2a above. Read its manifest FIRST:
 cat ~/deltadewa/exports/config-backup/MANIFEST.json
 #   {"written_by": "backup-exports.sh", "source": "config/ips.yaml",
-#    "sha256": "<64 hex chars>", "app_version": "0.9.1",
+#    "sha256": "<64 hex chars>", "app_version": "0.9.2",
 #    "policy_changed_at": "<UTC timestamp>"}
 #
 #   `app_version` is the last app version this exact policy file is KNOWN
@@ -422,7 +422,7 @@ cat ~/deltadewa/exports/config-backup/MANIFEST.json
 #   what §7.2 below is for, when this version is unavailable.
 cd ~/deltadewa
 git fetch --tags
-git checkout v<app_version from the manifest above>   # e.g. v0.9.1
+git checkout v<app_version from the manifest above>   # e.g. v0.9.2
 cp ~/deltadewa/exports/config-backup/ips.yaml ~/deltadewa/config/ips.yaml
 
 # 3. Bring it up — build both, name both (§1, #293), then start
