@@ -78,6 +78,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -97,7 +98,26 @@ if TYPE_CHECKING:
 
 STATE_FILENAME: Final = "program_state.json"
 
+# #325: the /design import picker's second source, alongside a state's own
+# export directory — bundled example portfolios, not operator data. Shipped
+# into the production image at this same relative path (Dockerfile).
+_DEFAULT_EXAMPLES_DIR: Final = Path("examples/portfolios")
+
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ImportCandidate:
+    """One server-side file :meth:`ProgramState.list_import_candidates` offers.
+
+    Just enough to render one `/design` import-picker option: a path to
+    pass back in as the import target, and a modified time to tell two
+    same-named-looking files apart (or, more often, to show which export
+    is newest).
+    """
+
+    path: Path
+    modified_at: datetime
 
 
 class ConfirmationRequiredError(RuntimeError):
@@ -167,6 +187,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         ips_path: str | Path = Path("config/ips.yaml"),
         default_exercise_style: ExerciseStyle | None = None,
         writer_label: str = "app",
+        examples_dir: Path | None = None,
     ) -> ProgramState:
         """Load the shared program state from ``export_dir``.
 
@@ -181,6 +202,11 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 ``Path``, matching ``load_ips_config`` (#182). If missing or
                 invalid, ``ips_config`` is ``None`` and loading still
                 succeeds — this never raises for that reason.
+            examples_dir: The `/design` import picker's second listed
+                source (#325), alongside *export_dir* itself. Defaults to
+                ``_DEFAULT_EXAMPLES_DIR``; pass an explicit (e.g. empty)
+                directory in a test to isolate it from the repo's real
+                example portfolios.
             default_exercise_style: Exercise style applied to positions in
                 the loaded file that have no explicit ``exercise_style``.
                 When ``None`` (the default) and an IPS loaded, this is
@@ -195,8 +221,12 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             A ready-to-use ``ProgramState``.
 
         """
+        resolved_examples_dir = (
+            examples_dir if examples_dir is not None else _DEFAULT_EXAMPLES_DIR
+        )
         serializer = PortfolioSerializer(
             export_dir=export_dir,
+            examples_dir=resolved_examples_dir,
             writer_label=writer_label,
         )
         state_path = export_dir / STATE_FILENAME
@@ -478,7 +508,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             ).isoformat()
             return True
 
-    def export_snapshot(self, filename: str) -> Path:
+    def export_snapshot(self, filename: str, *, fmt: str = "json") -> Path:
         """Write a point-in-time copy of the live portfolio to *filename*.
 
         Unlike the mutators, this never touches ``dirty`` — it's a
@@ -497,17 +527,78 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             filename: Name of the file to write under this state's
                 export directory. Should not be ``STATE_FILENAME`` — a
                 snapshot is a separate artifact, not the autosave slot.
+            fmt: ``"json"`` (default) or ``"yaml"`` (#325) — YAML matches
+                the hand-edited/example files an operator actually diffs
+                an export against. The two share one importable shape
+                (``PortfolioSerializer._build_export_data``), so which one
+                is written is presentation, not a round-trip concern.
 
         Returns:
             Path to the written file.
 
+        Raises:
+            ValueError: ``fmt="yaml"`` but PyYAML isn't installed
+                (defensive — it's a main-group dependency, so this
+                shouldn't fire in practice).
+
         """
         with self._lock:
+            if fmt == "yaml":
+                path = self._serializer.export_to_yaml(
+                    self._portfolio,
+                    self._changelog,
+                    filename=filename,
+                )
+                if path is None:
+                    raise ValueError(
+                        "PyYAML not installed; cannot export to YAML.",
+                    )
+                return path
             return self._serializer.export_to_json(
                 self._portfolio,
                 self._changelog,
                 filename=filename,
             )
+
+    def list_import_candidates(self) -> list[ImportCandidate]:
+        """List server-side files `/design`'s import picker can offer.
+
+        Sources: this state's own export directory (autosaves and prior
+        snapshot exports) and ``examples_dir`` (bundled example
+        portfolios) — the two sources #325 asks for — each via the
+        serializer's own directory listing
+        (:meth:`PortfolioSerializer.list_available_files`). The live
+        autosave file (``STATE_FILENAME``) is excluded: re-importing the
+        running book onto itself isn't a meaningful choice. Sorted
+        newest-first.
+
+        Read-only, and deliberately takes no lock — same posture as
+        :attr:`portfolio` and :meth:`external_write_detected`: a listing
+        that's a moment stale costs nothing, since the confirm-gated
+        import that follows re-reads the chosen file fresh.
+        """
+        candidates: list[ImportCandidate] = []
+        for directory in (
+            self._serializer.export_dir,
+            self._serializer.examples_dir,
+        ):
+            if directory is None:
+                continue
+            available = self._serializer.list_available_files(directory)
+            for path in [*available["json"], *available["yaml"]]:
+                if path.name == STATE_FILENAME:
+                    continue
+                candidates.append(
+                    ImportCandidate(
+                        path=path,
+                        modified_at=datetime.fromtimestamp(
+                            path.stat().st_mtime,
+                            tz=UTC,
+                        ),
+                    ),
+                )
+        candidates.sort(key=lambda c: c.modified_at, reverse=True)
+        return candidates
 
     def _mutate_and_save(self) -> None:
         with self._lock:

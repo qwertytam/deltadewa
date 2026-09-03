@@ -638,6 +638,16 @@ body {
   margin: 12px 0 20px;
 }
 
+/* #387: the add-position form is a <fieldset> (not a <div>) so a single
+   `disabled` toggle locks every field while a submission is in flight —
+   strip its default browser chrome so it still reads as an .editor-form. */
+
+fieldset.editor-form {
+  border: none;
+  padding: 0;
+  min-width: 0;
+}
+
 .editor-field {
   flex: 1 1 160px;
   min-width: 140px;
@@ -648,6 +658,21 @@ body {
   font-size: 0.8rem;
   color: #555;
   margin-bottom: 4px;
+}
+
+/* #356: a unit suffix beside an otherwise-bare numeric input (e.g. the
+   sizing workbench's Strike (% OTM)), so the value doesn't read as an
+   unlabelled bare number next to fields like Maturity. */
+
+.input-with-suffix {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-suffix {
+  color: #555;
+  font-size: 0.85rem;
 }
 
 .position-table {

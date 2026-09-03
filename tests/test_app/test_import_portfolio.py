@@ -136,11 +136,16 @@ def test_refuses_to_overwrite_existing_state_without_force(
 
 
 def test_malformed_yaml_raises_and_writes_nothing(tmp_path: Path) -> None:
-    """A malformed portfolio file fails loudly instead of a partial write."""
+    """A malformed portfolio file fails loudly instead of a partial write.
+
+    #325 hardened persistence.py's importers to raise a legible
+    ``ValueError`` naming the missing section, rather than the bare
+    ``KeyError`` this used to surface.
+    """
     bad_yaml = tmp_path / "bad_portfolio.yaml"
     bad_yaml.write_text("positions:\n  - strike_price: 100.0\n")
 
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="market_parameters"):
         main(
             [
                 str(bad_yaml),

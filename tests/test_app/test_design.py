@@ -14,7 +14,10 @@ sharing a book across tests in this module would leak state between them).
 
 from __future__ import annotations
 
+import base64
+import contextlib
 import threading
+import time
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from dash import dcc, no_update
 from dash.development.base_component import Component
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from werkzeug.serving import make_server
 
 from deltadewa import __version__
@@ -115,6 +119,35 @@ def _find_component(node: object, component_id: str) -> Component | None:
             if found is not None:
                 return found
     return None
+
+
+def _find_by_class(node: object, class_name: str) -> Component | None:
+    """Recursively find the first component whose ``className`` matches."""
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            return node
+        return _find_by_class(getattr(node, "children", None), class_name)
+    if isinstance(node, (list, tuple)):
+        for child in node:
+            found = _find_by_class(child, class_name)
+            if found is not None:
+                return found
+    return None
+
+
+def _find_all_by_class(node: object, class_name: str) -> list[Component]:
+    """Recursively find every component whose ``className`` matches."""
+    found: list[Component] = []
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            found.append(node)
+        found.extend(
+            _find_all_by_class(getattr(node, "children", None), class_name),
+        )
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            found.extend(_find_all_by_class(child, class_name))
+    return found
 
 
 def _collect_text(node: object) -> str:
@@ -445,8 +478,11 @@ class TestAddPositionRejectsExpiredMaturity:
             state=state,
         )
 
-        _version, _status, *form_fields = result
+        _version, _status, *form_fields, form_disabled = result
         assert all(field is no_update for field in form_fields)
+        # #387: the form re-opens on failure too, so a typo can be fixed
+        # and resubmitted rather than left stuck behind a disabled form.
+        assert form_disabled is False
 
 
 class TestImportRefusal:
@@ -464,14 +500,20 @@ class TestImportRefusal:
 
         version, status, pending, hidden = design._import_logic(
             confirm=False,
-            target=str(tmp_path / "whatever.json"),
+            source_path=str(tmp_path / "whatever.json"),
+            upload_contents=None,
+            upload_filename=None,
+            pending_source=None,
             version=3,
             state=state,
         )
 
         assert version is no_update
         assert "confirm" in status.children.lower()
-        assert pending == str(tmp_path / "whatever.json")
+        assert pending == {
+            "kind": "path",
+            "value": str(tmp_path / "whatever.json"),
+        }
         assert hidden is False
         # The one position the forced-failure helper added is still
         # there — the refused import didn't touch the live book.
@@ -489,7 +531,10 @@ class TestImportRefusal:
 
         version, _status, pending, hidden = design._import_logic(
             confirm=True,
-            target=str(import_source),
+            source_path=None,
+            upload_contents=None,
+            upload_filename=None,
+            pending_source={"kind": "path", "value": str(import_source)},
             version=3,
             state=state,
         )
@@ -499,6 +544,179 @@ class TestImportRefusal:
         assert hidden is True
         assert state.portfolio.symbol == "OTHER"
         assert state.dirty is False
+
+
+def _as_upload_data_uri(path: Path, *, mime: str = "application/json") -> str:
+    """Encode a file's bytes as a ``dcc.Upload``-shaped data URI."""
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+class TestImportSourcesAndExportFormat:
+    """#325: the server-side picker, the upload path, and export format."""
+
+    def test_import_from_a_dropdown_selected_path_succeeds(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        import_source = _write_other_export(tmp_path)
+
+        version, status, pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=str(import_source),
+            upload_contents=None,
+            upload_filename=None,
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version == 4
+        assert "imported" in status.children.lower()
+        assert pending is None
+        assert hidden is True
+        assert state.portfolio.symbol == "OTHER"
+
+    def test_import_from_an_uploaded_file_succeeds(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        import_source = _write_other_export(tmp_path)
+
+        version, status, _pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents=_as_upload_data_uri(import_source),
+            upload_filename="import_me.json",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version == 4
+        assert "imported" in status.children.lower()
+        assert hidden is True
+        assert state.portfolio.symbol == "OTHER"
+
+    def test_upload_takes_priority_over_a_dropdown_selection(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        upload_source = _write_other_export(tmp_path)
+        # A dropdown selection is also present, but must be ignored — an
+        # upload is the more deliberate act.
+        stale_path = str(tmp_path / "does-not-exist.json")
+
+        design._import_logic(
+            confirm=False,
+            source_path=stale_path,
+            upload_contents=_as_upload_data_uri(upload_source),
+            upload_filename="import_me.json",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert state.portfolio.symbol == "OTHER"
+
+    def test_malformed_upload_gets_a_legible_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        version, status, pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents="data:application/json;base64,not-valid-base64!!!",
+            upload_filename="broken.json",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version is no_update
+        assert "could not be read" in status.children.lower()
+        # Not the broad_exception_caught fallback — a specific message.
+        assert "something went wrong" not in status.children.lower()
+        assert pending is no_update
+        assert hidden is True
+
+    def test_unsupported_upload_extension_gets_a_legible_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        contents = "data:text/plain;base64," + base64.b64encode(
+            b"not a portfolio",
+        ).decode("ascii")
+
+        version, status, _pending, _hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents=contents,
+            upload_filename="notes.txt",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version is no_update
+        assert "unsupported file format" in status.children.lower()
+
+    def test_no_source_chosen_prompts_to_choose_a_file(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        version, status, pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents=None,
+            upload_filename=None,
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version is no_update
+        assert "choose a file" in status.children.lower()
+        assert pending is no_update
+        assert hidden is no_update
+
+    def test_export_format_choice_controls_extension_and_reimports(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        _add_starter_position(state)
+
+        for export_format in ("json", "yaml"):
+            download, status = design._export_logic(
+                state=state,
+                fmt=export_format,
+            )
+
+            assert download["filename"].endswith(f".{export_format}")
+            assert "exported" in status.children.lower()
+            exported_path = state.state_path.parent / download["filename"]
+            reimported = PortfolioSerializer(
+                export_dir=tmp_path,
+            ).import_portfolio(exported_path)
+            assert len(reimported["portfolio"].positions) == len(
+                state.portfolio.positions,
+            )
 
 
 class TestBasisChip:
@@ -770,6 +988,35 @@ class TestSizingPanel:
         # Only the floor goes: the rest of the candidate still renders.
         assert f"{expected.contracts_needed:,} contracts needed" in text
         assert fmt.currency(expected.per_contract_payoff, decimals=2) in text
+
+
+class TestSizingWorkbenchLegibility:
+    """#356: a bare '20' has no unit; a blank override has no empty cue."""
+
+    def test_vol_override_has_an_auto_placeholder(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        vol_override = _find_component(layout, "sizing-vol-override")
+        assert vol_override is not None
+        assert vol_override.placeholder == "auto"
+
+    def test_pct_otm_input_carries_a_percent_suffix(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        wrapper = _find_by_class(layout, "input-with-suffix")
+        assert wrapper is not None
+        assert _find_component(wrapper, "sizing-pct-otm") is not None
+        assert "%" in _collect_text(wrapper)
 
 
 class TestStrikeLadderPanel:
@@ -2412,6 +2659,42 @@ class TestTimePricePanel:
         assert narrow.figure != wide.figure
 
 
+class TestExplorationDialStacking:
+    """#328: both heatmap panels' dials need /monitor's .dial-row fix.
+
+    Structural equivalence to the known-working `/monitor` pattern
+    (monitor.py:985) — no pixel diffing needed, since the CSS this
+    depends on (deltadewa.css:141) is unchanged and already proven there.
+    """
+
+    def test_spot_vol_and_time_price_dials_share_one_dial_row(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        rows = _find_all_by_class(layout, "dial-row")
+        # One per panel with paired sliders: spot x vol, then time x price
+        # (page.py's EXPLORATION zone order).
+        assert len(rows) == 2
+        spot_vol_row, time_price_row = rows
+
+        assert (
+            _find_component(spot_vol_row, "explore-spotvol-resolution")
+            is not None
+        )
+        assert (
+            _find_component(spot_vol_row, "explore-spotvol-days-forward")
+            is not None
+        )
+        assert _find_component(time_price_row, "explore-time-steps") is not None
+        assert (
+            _find_component(time_price_row, "explore-price-steps") is not None
+        )
+
+
 class TestMcPanel:
     """The Monte Carlo distribution panel: scenario-local (B0 F6)."""
 
@@ -2692,6 +2975,205 @@ class TestRemoveConfirmDialog:
         assert page.locator(".position-table tbody tr").count() == before_count
 
 
+def _fill_add_form(
+    page: Page,
+    *,
+    strike: str,
+    quantity: str,
+    maturity: str,
+) -> None:
+    """Fill the add-position form's three required fields."""
+    page.fill("#add-strike", strike)
+    page.fill("#add-quantity", quantity)
+    page.fill("#add-maturity", maturity)
+    page.keyboard.press(
+        "Enter"
+    )  # commits the typed date (dcc.DatePickerSingle)
+
+
+class TestAddPositionRace:
+    """#387: typing during an in-flight submission must not be wiped.
+
+    Needs a real browser — the race is a client-side DOM/timing question
+    (what's in the fields when a deferred response's Outputs land), not
+    something a direct ``_add_position_logic`` call can observe.
+    """
+
+    def test_typing_during_in_flight_submission_is_blocked_not_wiped(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        original_add_position = design_app.state.add_position
+
+        def _slow_add_position(*args: object, **kwargs: object) -> object:
+            time.sleep(1.0)
+            return original_add_position(*args, **kwargs)
+
+        monkeypatch.setattr(
+            design_app.state,
+            "add_position",
+            _slow_add_position,
+        )
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#add-strike", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        before_count = len(design_app.state.portfolio.positions)
+        _fill_add_form(
+            page,
+            strike="4400",
+            quantity="5",
+            maturity=_MATURITY_STR,
+        )
+        page.click("#add-submit")
+
+        # The whole form locks the instant the button is clicked — a
+        # clientside callback, no server round trip (see book.py's
+        # register()) — so there is no window in which a keystroke could
+        # land ahead of the deferred response and then get overwritten by
+        # it. Confirmed here rather than assumed: the fill below must be
+        # refused while the fieldset is disabled.
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === true",
+            timeout=2_000,
+        )
+        assert page.locator("#add-strike").is_disabled()
+        with pytest.raises(PlaywrightTimeoutError):
+            page.fill("#add-strike", "4600", timeout=500)
+
+        # Once the deferred response actually lands and the form re-opens,
+        # typing and submitting a second position works normally — no
+        # keystroke from the window above was ever at risk of being wiped,
+        # because none could register during it.
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === false",
+            timeout=5_000,
+        )
+        _fill_add_form(
+            page,
+            strike="4600",
+            quantity="7",
+            maturity=_MATURITY_STR,
+        )
+        page.click("#add-submit")
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === true",
+            timeout=2_000,
+        )
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === false",
+            timeout=5_000,
+        )
+
+        positions = design_app.state.portfolio.positions
+        assert len(positions) == before_count + 2
+        strikes = {pos.option.strike_price for pos in positions[-2:]}
+        assert strikes == {4400.0, 4600.0}
+
+    def test_rapid_double_click_adds_only_one_position(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The issue's "incidentally fixes double-click" claim."""
+        original_add_position = design_app.state.add_position
+
+        def _slow_add_position(*args: object, **kwargs: object) -> object:
+            time.sleep(1.0)
+            return original_add_position(*args, **kwargs)
+
+        monkeypatch.setattr(
+            design_app.state,
+            "add_position",
+            _slow_add_position,
+        )
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#add-strike", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        before_count = len(design_app.state.portfolio.positions)
+        _fill_add_form(
+            page,
+            strike="4700",
+            quantity="3",
+            maturity=_MATURITY_STR,
+        )
+        page.click("#add-submit")
+        # A rapid second click may land just before the clientside
+        # callback's disable takes effect, or just after — either timing
+        # is fine to tolerate here (Playwright's own actionability check
+        # refuses it when it lands after; the outcome, not this timing,
+        # is what the issue's acceptance criterion cares about).
+        with contextlib.suppress(PlaywrightTimeoutError):
+            page.click("#add-submit", timeout=300)
+
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === false",
+            timeout=5_000,
+        )
+        assert len(design_app.state.portfolio.positions) == before_count + 1
+
+
+class TestImportUploadFromBrowser:
+    """#325: the operator's-own-machine path — genuinely needs a browser.
+
+    ``dcc.Upload``'s ``contents``/``filename`` are populated by the
+    browser reading a real file the user picked; a direct
+    ``_import_logic`` call (``TestImportSourcesAndExportFormat`` above)
+    covers the decode/import logic once those strings exist, but not the
+    browser-side plumbing that produces them in the first place.
+    """
+
+    def test_uploading_a_file_and_clicking_import_replaces_the_book(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+        tmp_path: Path,
+    ) -> None:
+        upload_path = tmp_path / "upload_me.yaml"
+        upload_path.write_text(
+            "market_parameters:\n"
+            "  spot_price: 4500.0\n"
+            "  volatility: 0.2\n"
+            "  risk_free_rate: 0.03\n"
+            "  dividend_yield: 0.015\n"
+            "  contract_size: 100\n"
+            "  symbol: UPLOADED\n"
+            "positions:\n"
+            "  - option_type: PUT\n"
+            "    strike_price: 4000.0\n"
+            f'    maturity_date: "{_MATURITY.isoformat()}"\n'
+            "    quantity: 2\n",
+        )
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#import-upload", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        page.set_input_files(
+            "#import-upload input[type=file]",
+            str(upload_path),
+        )
+        page.wait_for_function(
+            "document.getElementById('import-upload')"
+            ".querySelector('input').files.length === 1",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        page.click("#import-submit")
+        page.wait_for_function(
+            "document.body.innerText.includes('Imported')",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        assert design_app.state.portfolio.symbol == "UPLOADED"
+        assert len(design_app.state.portfolio.positions) == 1
+        assert design_app.state.portfolio.positions[
+            0
+        ].option.strike_price == pytest.approx(4000.0)
+
+
 class TestPlanningZoneRendersClientSide:
     """The PLANNING zone must render with no console error or traceback.
 
@@ -2755,6 +3237,37 @@ class TestExplorationZoneRendersClientSide:
         assert js_errors == []
         assert "Traceback" not in page.content()
         assert page.locator(".zone-exploration .js-plotly-plot").count() == 3
+
+    def test_dial_rows_establish_the_stacking_context(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        """#328: the CSS that closes the stacking-context gap actually applies.
+
+        Structural coverage (``TestExplorationDialStacking``) confirms the
+        markup matches `/monitor`'s known-working shape; this confirms the
+        browser actually resolves ``.dial-row``'s ``position: relative`` +
+        non-auto ``z-index`` on the live page, not just in the stylesheet.
+        """
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            ".zone-exploration .dial-row",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        computed = page.eval_on_selector_all(
+            ".zone-exploration .dial-row",
+            "els => els.map(el => {"
+            "const s = getComputedStyle(el);"
+            "return [s.position, s.zIndex];"
+            "})",
+        )
+
+        assert len(computed) == 2
+        for position, z_index in computed:
+            assert position == "relative"
+            assert z_index != "auto"
 
 
 class TestPageFooter:

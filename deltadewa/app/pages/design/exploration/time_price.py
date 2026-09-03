@@ -139,41 +139,49 @@ def layout(
             ),
             html.Div(
                 [
-                    html.Label("Time steps"),
-                    dcc.Slider(
-                        id="explore-time-steps",
-                        min=5,
-                        max=20,
-                        step=1,
-                        value=_DEFAULT_TIME_STEPS,
-                        marks=None,
-                        updatemode="mouseup",
-                        tooltip={
-                            "placement": "bottom",
-                            "always_visible": True,
-                        },
+                    html.Div(
+                        [
+                            html.Label("Time steps"),
+                            dcc.Slider(
+                                id="explore-time-steps",
+                                min=5,
+                                max=20,
+                                step=1,
+                                value=_DEFAULT_TIME_STEPS,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Price steps"),
+                            dcc.Slider(
+                                id="explore-price-steps",
+                                min=5,
+                                max=19,
+                                step=2,
+                                value=_DEFAULT_PRICE_STEPS,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
                     ),
                 ],
-                className="dial",
-            ),
-            html.Div(
-                [
-                    html.Label("Price steps"),
-                    dcc.Slider(
-                        id="explore-price-steps",
-                        min=5,
-                        max=19,
-                        step=2,
-                        value=_DEFAULT_PRICE_STEPS,
-                        marks=None,
-                        updatemode="mouseup",
-                        tooltip={
-                            "placement": "bottom",
-                            "always_visible": True,
-                        },
-                    ),
-                ],
-                className="dial",
+                # #328: see spot_vol.py's matching comment — both dials
+                # need .dial-row's stacking context or the tooltip paints
+                # underneath the graph card below.
+                className="dial-row",
             ),
             dcc.Loading(
                 html.Div(

@@ -19,6 +19,11 @@ RUN poetry install --only main --no-root
 
 COPY deltadewa ./deltadewa
 COPY config ./config
+# #325: the /design import picker's second listed source
+# (examples/portfolios/, see deltadewa/state.py's _DEFAULT_EXAMPLES_DIR) —
+# without this the picker's server-side list is silently empty in
+# production, even though it works in a dev checkout.
+COPY examples ./examples
 COPY README.md ./
 RUN poetry install --only main
 

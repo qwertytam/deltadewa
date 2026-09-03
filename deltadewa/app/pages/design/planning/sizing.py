@@ -249,11 +249,20 @@ def layout(
                     html.Div(
                         [
                             html.Label("Strike (% OTM)"),
-                            dcc.Input(
-                                id="sizing-pct-otm",
-                                type="number",
-                                value=_DEFAULT_SIZING_PCT_OTM,
-                                debounce=True,
+                            html.Div(
+                                [
+                                    dcc.Input(
+                                        id="sizing-pct-otm",
+                                        type="number",
+                                        value=_DEFAULT_SIZING_PCT_OTM,
+                                        debounce=True,
+                                    ),
+                                    html.Span(
+                                        "%",
+                                        className="input-suffix",
+                                    ),
+                                ],
+                                className="input-with-suffix",
                             ),
                         ],
                         className="editor-field",
@@ -277,6 +286,10 @@ def layout(
                                 id="sizing-vol-override",
                                 type="number",
                                 debounce=True,
+                                # #356: blank means "using the portfolio
+                                # default", not "failed to load" — nothing
+                                # at rest distinguished the two.
+                                placeholder="auto",
                             ),
                         ],
                         className="editor-field",
