@@ -3025,7 +3025,7 @@ class TestAddPositionRace:
             page,
             strike="4400",
             quantity="5",
-            maturity="2027-06-01",
+            maturity=_MATURITY_STR,
         )
         page.click("#add-submit")
 
@@ -3055,7 +3055,7 @@ class TestAddPositionRace:
             page,
             strike="4600",
             quantity="7",
-            maturity="2027-07-01",
+            maturity=_MATURITY_STR,
         )
         page.click("#add-submit")
         page.wait_for_function(
@@ -3099,7 +3099,7 @@ class TestAddPositionRace:
             page,
             strike="4700",
             quantity="3",
-            maturity="2027-08-01",
+            maturity=_MATURITY_STR,
         )
         page.click("#add-submit")
         # A rapid second click may land just before the clientside
@@ -3145,7 +3145,7 @@ class TestImportUploadFromBrowser:
             "positions:\n"
             "  - option_type: PUT\n"
             "    strike_price: 4000.0\n"
-            '    maturity_date: "2027-06-01T00:00:00+00:00"\n'
+            f'    maturity_date: "{_MATURITY.isoformat()}"\n'
             "    quantity: 2\n",
         )
 
