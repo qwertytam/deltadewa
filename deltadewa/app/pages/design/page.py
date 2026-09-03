@@ -35,20 +35,13 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from dash import Input, Output, State, dcc, html, no_update
+from dash import Input, Output, dcc, html
 from dash.development.base_component import Component
 
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_repricing import CrashShock
-from deltadewa.analysis.decision_matrix import (
-    decision_matrix,
-    entry_timing_tree,
-)
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.maturity import MaturityBuckets
-from deltadewa.analysis.monetization import build_monetization_plan
-from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.stress import (
     build_spot_vol_grid_spec,
@@ -60,7 +53,6 @@ from deltadewa.analysis.stress import (
 )
 from deltadewa.analysis.volatility import build_volatility_profile
 from deltadewa.app import format as fmt
-from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.ips_notice import build_no_ips_layout
 from deltadewa.app.panel_guard import (
@@ -69,9 +61,7 @@ from deltadewa.app.panel_guard import (
 from deltadewa.app.panel_guard import (
     safe_render as _safe_render,
 )
-from deltadewa.app.provenance_panel import build_provenance_panel
 from deltadewa.app.shape_notice import shape_notice_text
-from deltadewa.clock import program_trading_date
 from deltadewa.portfolio.monte_carlo import drift_measure_label
 from deltadewa.visualization.distribution_charts_plotly import (
     plot_pnl_distribution,
@@ -83,30 +73,23 @@ from deltadewa.visualization.stress_charts_plotly import (
 )
 
 from . import book
-from .book import _mark_inputs_reviewed_logic
 from .planning import (
     convexity_cliff,
     delta_drift,
     hedge_triggers,
     ladder,
+    monetization,
     position_aging,
+    provenance,
     roll_plan,
     roll_status,
     sizing,
 )
+from .planning import market_env as market_env_panel
 
 if TYPE_CHECKING:
     from deltadewa.analysis.cache import ScenarioGridCache
-    from deltadewa.analysis.decision_matrix import (
-        DecisionResult,
-        EntryTimingResult,
-    )
-    from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.maturity import MaturityVegaExposure
-    from deltadewa.analysis.monetization import (
-        MonetizationPlan,
-        MonetizationStepStatus,
-    )
     from deltadewa.analysis.volatility import (
         PositionVolatilityDetail,
         VolatilityProfile,
@@ -114,7 +97,6 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import (
         IpsConfig,
-        IpsMarketEnvironment,
     )
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.state import ProgramState
@@ -127,9 +109,8 @@ _logger = logging.getLogger(__name__)
 # point. One literal, so the zone header and every panel's chip say the
 # same thing.
 _BASIS_CRASH_SKEW = "basis: crash-skew (IPS anchor)"
-# The market-environment panel reprices nothing — it reads the live feed —
-# so it must not carry PLANNING's crash-skew chip.
-_BASIS_LIVE_MARKET_DATA = "basis: live market data"
+# The market-environment panel's own _BASIS_LIVE_MARKET_DATA now lives in
+# planning/market_env.py, its only reader.
 # Nor does the trigger panel: it reads the book's Greeks at today's market,
 # with no crash shock applied at all.
 _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
@@ -187,371 +168,6 @@ def _no_ips_layout(state: ProgramState) -> html.Div:
             "exercise-style default has no source either."
         ),
         page_class="page-design",
-    )
-
-
-def _env_metric_row(
-    *,
-    label: str,
-    headline: str,
-    detail: str,
-    bar: Component | None = None,
-) -> Component:
-    """One market-environment metric: name, reading, and what it means."""
-    children: list[Component] = [
-        html.Span(label, className="env-metric-label"),
-        html.Span(headline, className="env-metric-value"),
-        html.Span(detail, className="env-metric-detail"),
-    ]
-    if bar is not None:
-        children.append(bar)
-    return html.Div(children, className="env-metric")
-
-
-def _env_unavailable_row(label: str, why: str) -> Component:
-    """One metric the provider didn't return.
-
-    Rendered as an explicit absence rather than omitted or zeroed: a
-    silently missing row reads as "nothing to report", which is the
-    opposite of what a failed fetch means.
-    """
-    return _env_metric_row(
-        label=label,
-        headline="unavailable",
-        detail=why,
-    )
-
-
-def _vol_regime_row(
-    market_env: MarketEnvironment,
-    policy: IpsMarketEnvironment,
-) -> Component:
-    """Part X #6 — the volatility regime, banded against the IPS."""
-    if market_env.vix is None or market_env.regime_label is None:
-        return _env_unavailable_row(
-            "Vol regime",
-            "no VIX reading in this snapshot",
-        )
-
-    percentile = (
-        f", regime percentile {market_env.regime_percentile:.0f}"
-        if market_env.regime_percentile is not None
-        else ""
-    )
-    # The IPS band is decimal implied vol compared against VIX/100
-    # (market_environment.classify_vix_regime), so the bar is drawn on the
-    # VIX level in vol points — the units the reading is actually in —
-    # rather than on the derived percentile.
-    return _env_metric_row(
-        label="Vol regime",
-        headline=f"{market_env.regime_label.value} — VIX {market_env.vix:.1f}",
-        detail=(
-            f"IPS band {policy.vol_regime_low * 100:.0f}-"
-            f"{policy.vol_regime_high * 100:.0f} VIX points{percentile}"
-        ),
-        bar=band_bar(
-            value=market_env.vix,
-            low=policy.vol_regime_low * 100,
-            high=policy.vol_regime_high * 100,
-        ),
-    )
-
-
-def _skew_row(
-    market_env: MarketEnvironment,
-    policy: IpsMarketEnvironment,
-) -> Component:
-    """Part X #7 — the SKEW percentile, banded against the IPS."""
-    if market_env.skew_percentile is None:
-        return _env_unavailable_row(
-            "Skew percentile",
-            "no SKEW reading in this snapshot",
-        )
-
-    # skew_percentile is a 0-1 fraction (the units get_skew_percentile
-    # returns and assess_market_environment compares in), while the IPS band
-    # is stated on 0-100. Converted back here, once, for display — the same
-    # boundary market_environment.py:303-308 crosses in the other direction.
-    percentile_pct = market_env.skew_percentile * 100
-    index_text = (
-        f", SKEW index {market_env.skew_index:.1f}"
-        if market_env.skew_index is not None
-        else ""
-    )
-    return _env_metric_row(
-        label="Skew percentile",
-        headline=f"{percentile_pct:.0f}th percentile",
-        detail=(
-            f"IPS band {policy.skew_low_pctile:.0f}-"
-            f"{policy.skew_high_pctile:.0f}{index_text}"
-        ),
-        bar=band_bar(
-            value=percentile_pct,
-            low=policy.skew_low_pctile,
-            high=policy.skew_high_pctile,
-        ),
-    )
-
-
-def _forward_variance_row(market_env: MarketEnvironment) -> Component:
-    """Part X #8 — forward variance, as a level with no band.
-
-    The IPS states no forward-variance band, so this deliberately gets no
-    ``band_bar``: inventing one here would be exactly the presentation-side
-    policy the ``market_environment`` section exists to prevent. It is read
-    alongside the hedge-cost verdict below instead.
-    """
-    if market_env.forward_vol_front_3m is None:
-        return _env_unavailable_row(
-            "Forward variance",
-            "needs both VIX and VIX3M; one is missing",
-        )
-
-    shape_text = (
-        f", term structure {market_env.term_shape.value}"
-        if market_env.term_shape is not None
-        else ""
-    )
-    return _env_metric_row(
-        label="Forward variance",
-        headline=f"{market_env.forward_vol_front_3m:.1f} vol points",
-        detail=(
-            f"front-to-3M implied forward vol; no IPS band{shape_text} — "
-            "read against the hedge-cost verdict below"
-        ),
-    )
-
-
-def _entry_timing_rows(timing: EntryTimingResult) -> list[Component]:
-    """Render the entry-timing tree's path, step by step."""
-    rows: list[Component] = [
-        html.P(
-            f"Entry timing: {timing.recommendation}",
-            className="env-verdict",
-        ),
-    ]
-    if timing.data_quality_note is not None:
-        rows.append(
-            html.P(timing.data_quality_note, className="plain-language"),
-        )
-    rows.extend(
-        html.P(
-            f"{step.step}. {step.label}: {step.value} — {step.recommendation}",
-            className="env-timing-step",
-        )
-        for step in timing.steps
-    )
-    return rows
-
-
-def _market_env_panel_view(
-    market_env: MarketEnvironment,
-    decision: DecisionResult,
-    timing: EntryTimingResult,
-    policy: IpsMarketEnvironment,
-) -> Component:
-    """Render the market environment panel: matrix inputs, then its verdict.
-
-    Part X #6, #7 and #8 are exactly the three inputs
-    :func:`~deltadewa.analysis.decision_matrix.decision_matrix` takes, so
-    they are shown here together with the verdict they produce. Splitting
-    them across surfaces — the numbers nowhere, the verdict in the Sunday
-    digest — is what the 2026-08-06 re-audit found had lost them.
-    """
-    cost_text = (
-        market_env.hedge_cost_verdict.value
-        if market_env.hedge_cost_verdict is not None
-        else "unavailable"
-    )
-    return html.Div(
-        [
-            html.P(
-                "The three readings the decision matrix takes, and the "
-                'verdict they produce — so "should I buy today" can be '
-                "asked on any day, not only when the weekly digest lands.",
-                className="plain-language",
-            ),
-            html.Div(
-                [
-                    _vol_regime_row(market_env, policy),
-                    _skew_row(market_env, policy),
-                    _forward_variance_row(market_env),
-                ],
-                className="env-metrics",
-            ),
-            html.P(
-                f"Hedge cost: {cost_text}",
-                className="env-verdict",
-            ),
-            html.P(
-                f"Decision: {decision.verdict.value} — {decision.rationale}",
-                className="env-verdict",
-            ),
-            *(
-                [
-                    html.P(
-                        decision.data_quality_note,
-                        className="plain-language",
-                    ),
-                ]
-                if decision.data_quality_note is not None
-                else []
-            ),
-            *_entry_timing_rows(timing),
-        ],
-    )
-
-
-def _render_market_env_panel_logic(
-    *,
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-    market_env: MarketEnvironment,
-) -> Component:
-    """Render the market environment panel for the current book and feed."""
-
-    def _build() -> Component:
-        convexity_now_pct = PortfolioAnalyzer(
-            portfolio,
-        ).calculate_crash_convexity_pct(
-            CrashShock.from_ips(ips_config.convexity),
-        )
-        plan = build_monetization_plan(
-            portfolio,
-            ips_config,
-            market_env=market_env,
-        )
-        decision = decision_matrix(
-            market_env,
-            convexity_now_pct=convexity_now_pct,
-            ips_convexity=ips_config.convexity,
-            monetization_plan=plan,
-        )
-        return _market_env_panel_view(
-            market_env,
-            decision,
-            entry_timing_tree(
-                market_env,
-                vix_very_high=ips_config.market_environment.vix_very_high,
-                vix_caution=ips_config.market_environment.vix_caution,
-                vix_low=ips_config.market_environment.vix_low,
-            ),
-            ips_config.market_environment,
-        )
-
-    return _safe_render(_build)
-
-
-def _render_provenance_panel_logic(
-    *,
-    app: ProgramDashApp,
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-) -> Component:
-    """Render the pricing-input provenance panel (Batch 3d, #367/#368).
-
-    Reassesses market data fresh in this closure rather than sharing
-    ``render()``'s own ``market_env`` — ``assess_market_environment``
-    never raises, so sharing would be safe, but a fresh call here keeps
-    this panel's isolation independent of whatever ``render()`` happens
-    to compute elsewhere, matching monitor.py's convention for this
-    specific panel.
-    """
-
-    def _build() -> Component:
-        environment = assess_market_environment(
-            app.market_data,
-            ips_config.market_environment,
-        )
-        ledger = build_provenance_ledger(
-            environment,
-            portfolio,
-            ips_config.pricing_inputs,
-            as_of=program_trading_date(ips_config.program.timezone).date(),
-        )
-        return build_provenance_panel(ledger)
-
-    return _safe_render(_build)
-
-
-def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
-    """One row of the IPS monetization schedule."""
-    return html.Tr(
-        [
-            html.Td(fmt.percent(step.gain_pct)),
-            html.Td(fmt.percent(step.sell_pct)),
-            html.Td("triggered" if step.triggered else "not yet"),
-        ],
-    )
-
-
-def _monetization_panel_view(plan: MonetizationPlan) -> Component:
-    """Render the full IPS monetization schedule at the current mark.
-
-    Unlike /monitor's one-sentence summary, shows every schedule step —
-    now meaningful for a hand-entered book once B0 gave entry_premium a
-    write path.
-    """
-    children: list[Component]
-    if plan.gain_basis == "unknown":
-        children = [
-            html.P(
-                "No entry price is recorded for the protective puts, so "
-                "hedge gain — and this monetization schedule — can't be "
-                "evaluated.",
-                className="plain-language",
-            ),
-        ]
-    else:
-        gain_text = (
-            fmt.percent(plan.current_gain_pct)
-            if plan.current_gain_pct is not None
-            else "n/a"
-        )
-        header = html.Tr(
-            [html.Th("Gain trigger"), html.Th("Sell %"), html.Th("Status")],
-        )
-        rows = [_monetization_step_row(step) for step in plan.steps]
-        children = [
-            html.P(
-                f"Current hedge gain: {gain_text}.",
-                className="plain-language",
-            ),
-            html.Table(
-                [html.Thead(header), html.Tbody(rows)],
-                className="planning-table",
-            ),
-            html.P(
-                "Recommended cumulative sell: "
-                f"{fmt.percent(plan.recommended_cumulative_sell_pct)} "
-                f"({fmt.compact_currency(plan.value_to_harvest)} to "
-                "harvest) — "
-                f"{fmt.percent(plan.remaining_sell_capacity)} remaining "
-                "sell capacity in the schedule.",
-            ),
-        ]
-    if plan.vol_spike_context is not None:
-        children.append(
-            html.P(plan.vol_spike_context, className="vol-spike-context"),
-        )
-    return html.Div(children)
-
-
-def _render_monetization_panel_logic(
-    *,
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-    market_env: MarketEnvironment | None,
-) -> Component:
-    """Render the monetization panel at the current mark."""
-    return _safe_render(
-        lambda: _monetization_panel_view(
-            build_monetization_plan(
-                portfolio,
-                ips_config,
-                market_env=market_env,
-            ),
-        ),
     )
 
 
@@ -944,24 +560,10 @@ def render(app: ProgramDashApp) -> html.Div:
                 "chip.",
                 className="plain-language",
             ),
-            html.Div(
-                [
-                    html.H3(
-                        [
-                            "Market environment",
-                            basis_chip(_BASIS_LIVE_MARKET_DATA),
-                        ],
-                    ),
-                    html.Div(
-                        _render_market_env_panel_logic(
-                            portfolio=portfolio,
-                            ips_config=ips_config,
-                            market_env=market_env,
-                        ),
-                        id="plan-market-env-panel",
-                    ),
-                ],
-                className="panel",
+            market_env_panel.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                market_env=market_env,
             ),
             sizing.layout(
                 portfolio=portfolio,
@@ -983,38 +585,10 @@ def render(app: ProgramDashApp) -> html.Div:
                 ips_config=ips_config,
                 basis_crash_skew=_BASIS_CRASH_SKEW,
             ),
-            html.Div(
-                [
-                    # No basis chip: unlike every other PLANNING panel,
-                    # this one grades staleness, not a priced quantity —
-                    # there is no crash-skew or book-greeks basis for it
-                    # to name (Batch 3d, #367/#368).
-                    html.H3("Pricing input provenance"),
-                    html.Div(
-                        _render_provenance_panel_logic(
-                            app=app,
-                            portfolio=portfolio,
-                            ips_config=ips_config,
-                        ),
-                        id="plan-provenance-panel",
-                    ),
-                    dcc.ConfirmDialogProvider(
-                        id="mark-inputs-reviewed-confirm",
-                        message=(
-                            "Mark every hand-entered pricing input "
-                            "(spot, risk-free rate, dividend yield, and "
-                            "every leg's volatility) as confirmed "
-                            "current, as of now? This clears any "
-                            "existing staleness signal — it does not "
-                            "change any value, only its confirmed date."
-                        ),
-                        children=html.Button(
-                            "Mark pricing inputs reviewed",
-                            className="btn btn-secondary",
-                        ),
-                    ),
-                ],
-                className="panel",
+            provenance.layout(
+                app=app,
+                portfolio=portfolio,
+                ips_config=ips_config,
             ),
             position_aging.layout(
                 portfolio=portfolio,
@@ -1031,19 +605,11 @@ def render(app: ProgramDashApp) -> html.Div:
                 portfolio=portfolio,
                 ips_config=ips_config,
             ),
-            html.Div(
-                [
-                    html.H3(["Monetization", basis_chip(_BASIS_CRASH_SKEW)]),
-                    html.Div(
-                        _render_monetization_panel_logic(
-                            portfolio=portfolio,
-                            ips_config=ips_config,
-                            market_env=market_env,
-                        ),
-                        id="plan-monetization-panel",
-                    ),
-                ],
-                className="panel",
+            monetization.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                market_env=market_env,
+                basis_crash_skew=_BASIS_CRASH_SKEW,
             ),
         ],
         className="zone-planning",
@@ -1449,49 +1015,9 @@ def register_callbacks(  # pylint: disable=too-many-locals
     ladder.register(app, ips_config=ips_config)
     roll_plan.register(app, ips_config=ips_config)
     roll_status.register(app, ips_config=ips_config)
-
-    @app.callback(
-        Output("plan-provenance-panel", "children"),
-        Input("book-version", "data"),
-    )
-    def _render_provenance_panel(_version: int) -> Component:
-        return _render_provenance_panel_logic(
-            app=app,
-            portfolio=app.program_state.portfolio,
-            ips_config=ips_config,
-        )
-
-    @app.callback(
-        Output("book-version", "data", allow_duplicate=True),
-        Output("mutation-status", "children", allow_duplicate=True),
-        Input("mark-inputs-reviewed-confirm", "submit_n_clicks"),
-        State("book-version", "data"),
-        prevent_initial_call=True,
-    )
-    def _mark_inputs_reviewed(
-        submit_n_clicks: int | None,
-        version: int,
-    ) -> tuple[Any, Any]:
-        if not submit_n_clicks:
-            return no_update, no_update
-        return _mark_inputs_reviewed_logic(
-            version=version,
-            state=app.program_state,
-        )
-
-    @app.callback(
-        Output("plan-monetization-panel", "children"),
-        Input("book-version", "data"),
-    )
-    def _render_monetization_panel(_version: int) -> Component:
-        return _render_monetization_panel_logic(
-            portfolio=app.program_state.portfolio,
-            ips_config=ips_config,
-            market_env=assess_market_environment(
-                app.market_data,
-                ips_config.market_environment,
-            ),
-        )
+    provenance.register(app, ips_config=ips_config)
+    monetization.register(app, ips_config=ips_config)
+    market_env_panel.register(app, ips_config=ips_config)
 
     @app.callback(
         Output("shape-notice", "children"),
@@ -1503,24 +1029,6 @@ def register_callbacks(  # pylint: disable=too-many-locals
         # like every other read-only panel on this page, not just render
         # once at page load.
         return shape_notice_text(app.program_state.portfolio)
-
-    @app.callback(
-        Output("plan-market-env-panel", "children"),
-        Input("book-version", "data"),
-    )
-    def _render_market_env_panel(_version: int) -> Component:
-        # Watches book-version like every other PLANNING panel: the readings
-        # themselves don't depend on the book, but the decision verdict does
-        # (it takes current convexity and the monetization plan), so an edit
-        # that moves convexity out of band has to move this verdict too.
-        return _render_market_env_panel_logic(
-            portfolio=app.program_state.portfolio,
-            ips_config=ips_config,
-            market_env=assess_market_environment(
-                app.market_data,
-                ips_config.market_environment,
-            ),
-        )
 
     @app.callback(
         Output("explore-volatility-panel", "children"),
