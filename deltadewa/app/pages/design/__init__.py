@@ -32,9 +32,6 @@ from .page import _aging_calendar_row as _aging_calendar_row
 from .page import _expiry_window_text as _expiry_window_text
 from .page import _ladder_maturities_text as _ladder_maturities_text
 from .page import (
-    _render_convexity_cliff_panel_logic as _render_convexity_cliff_panel_logic,
-)
-from .page import (
     _render_delta_drift_panel_logic as _render_delta_drift_panel_logic,
 )
 from .page import (
@@ -71,3 +68,6 @@ from .page import (
 from .page import _roll_plan_row as _roll_plan_row
 from .page import register_callbacks as register_callbacks
 from .page import render as render
+from .planning.convexity_cliff import (
+    _render_convexity_cliff_panel_logic as _render_convexity_cliff_panel_logic,
+)
