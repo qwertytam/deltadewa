@@ -52,7 +52,6 @@ from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.roll_planner import build_roll_plan
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
-from deltadewa.analysis.sizing import size_hedge
 from deltadewa.analysis.stress import (
     build_spot_vol_grid_spec,
     build_time_price_grid_spec,
@@ -61,13 +60,11 @@ from deltadewa.analysis.stress import (
     days_to_max_maturity,
     percentile_of_value,
 )
-from deltadewa.analysis.strike_ladder import build_strike_ladder
 from deltadewa.analysis.volatility import build_volatility_profile
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.ips_notice import build_no_ips_layout
-from deltadewa.app.panel_guard import NoticeKind, panel_notice
 from deltadewa.app.panel_guard import (
     incomplete_notice as _incomplete,
 )
@@ -93,7 +90,9 @@ from .planning import (
     convexity_cliff,
     delta_drift,
     hedge_triggers,
+    ladder,
     position_aging,
+    sizing,
 )
 
 if TYPE_CHECKING:
@@ -110,12 +109,6 @@ if TYPE_CHECKING:
     )
     from deltadewa.analysis.roll_planner import RollPlanRecord
     from deltadewa.analysis.roll_status import MoneynessDrift, RollStatusRecord
-    from deltadewa.analysis.sizing import HedgeSizingResult
-    from deltadewa.analysis.strike_ladder import (
-        LadderRung,
-        StrikeLadderResult,
-        UnsolvableRung,
-    )
     from deltadewa.analysis.volatility import (
         PositionVolatilityDetail,
         VolatilityProfile,
@@ -124,36 +117,11 @@ if TYPE_CHECKING:
     from deltadewa.ips_config import (
         IpsConfig,
         IpsMarketEnvironment,
-        IpsMaturitySelection,
     )
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.state import ProgramState
 
 _logger = logging.getLogger(__name__)
-
-# PLANNING zone: dial defaults. Carried over from the sizing/ladder cells of
-# hedge_design.ipynb, which Stage 4.3 deleted — these are the starting point
-# that notebook hardcoded, kept here as adjustable dial defaults. Genuinely
-# presentation, not policy: no IPS strike-selection section exists to read
-# them from, and inventing one is its own decision, not #316's (which is
-# about tenor, not delta/OTM). The two MATURITY dial defaults these used to
-# sit beside were #316's actual bug (0.5y, unbacked by any policy) and now
-# come from ips_config.maturity_selection instead — see render().
-_DEFAULT_SIZING_PCT_OTM = 20.0
-_DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
-
-# #326: safe_render's BLOCKED remediation pointer for the two panels that
-# raise ValueError on a book with no underlying position (size_hedge,
-# build_strike_ladder). Presentation, on the page that knows where the
-# fix lives -- not baked into the analysis-layer exception text.
-_SIZING_BLOCKED_HINT = (
-    "Set the underlying spot and quantity in the BOOK zone; sizing "
-    "needs them to size a candidate hedge."
-)
-_LADDER_BLOCKED_HINT = (
-    "Set the underlying spot and quantity in the BOOK zone; the ladder "
-    "sizes every rung against them."
-)
 
 # Every PLANNING panel prices this basis — size_hedge, build_strike_ladder,
 # and evaluate_roll_status each build CrashShock.from_ips(...) internally,
@@ -222,34 +190,6 @@ def _no_ips_layout(state: ProgramState) -> html.Div:
         ),
         page_class="page-design",
     )
-
-
-def _parse_float_list(raw: str | None) -> list[float] | None:
-    """Parse a comma-separated list of floats.
-
-    Returns ``None`` on a blank or malformed string — a dial-parsing
-    failure, not an engine error, so it's handled before :func:`_safe_render`
-    ever runs.
-    """
-    if raw is None or not raw.strip():
-        return None
-    try:
-        values = [
-            float(part.strip()) for part in raw.split(",") if part.strip()
-        ]
-    except ValueError:
-        return None
-    return values or None
-
-
-def _ladder_maturities_text(selection: IpsMaturitySelection) -> str:
-    """Format the ladder dial's initial text from IPS policy (#316).
-
-    ``ladder_maturities_years`` is already derived from the three
-    ``maturity_selection`` fields, so this is only the text-rendering
-    step of that -- not a fourth place the tenor could drift from them.
-    """
-    return ", ".join(str(years) for years in selection.ladder_maturities_years)
 
 
 def _env_metric_row(
@@ -502,301 +442,6 @@ def _render_market_env_panel_logic(
         )
 
     return _safe_render(_build)
-
-
-def _vega_sufficiency_block(
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-) -> Component:
-    """Render Part X #4 — is the book big enough to answer a vol spike.
-
-    Sits inside the sizing panel because it is the same question one step
-    back: sizing asks "how many contracts", this asks "does what we already
-    hold respond to volatility at all". It describes **the current book**,
-    not the sized candidate above it, and says so — otherwise the reading
-    is naturally taken for the candidate's.
-
-    The denominator is named for the same reason.
-    ``calculate_vega_sufficiency_pct`` normalizes by total portfolio value
-    (options **plus** underlying), which on a tail-hedge book is dominated
-    by the equity leg — a reader assuming the option book alone would take
-    this figure for something roughly two orders of magnitude larger.
-    """
-    band = ips_config.vega
-    value = PortfolioAnalyzer(portfolio).calculate_vega_sufficiency_pct()
-    verdict = (
-        "within band"
-        if band.sufficiency_min_pct <= value <= band.sufficiency_max_pct
-        else "outside band"
-    )
-    return html.Div(
-        [
-            html.H4("Vega sufficiency"),
-            html.P(
-                f"The book as it stands moves {fmt.percent(value)} of total "
-                "portfolio value (options plus underlying) per +10 vol "
-                f"points, against an IPS band of "
-                f"{fmt.percent(band.sufficiency_min_pct)}-"
-                f"{fmt.percent(band.sufficiency_max_pct)} ({verdict}). "
-                "This describes the current book, not the candidate sized "
-                "above.",
-                className="plain-language",
-            ),
-            band_bar(
-                value=value,
-                low=band.sufficiency_min_pct,
-                high=band.sufficiency_max_pct,
-            ),
-        ],
-        id="vega-sufficiency",
-    )
-
-
-def _sizing_panel_view(
-    result: HedgeSizingResult,
-    ips_config: IpsConfig,
-) -> Component:
-    """Render one sized candidate: the rationale first, then the answer.
-
-    The intrinsic floor is a labelled conservative lower bound, surfaced only
-    when the IPS opts in (``convexity.crash_floor_reported``) and never the
-    headline — it reads far below the repriced payoff (2.5x against 17.5x in
-    the handbook's worked example), so a program may reasonably keep it off
-    the page rather than risk it being read as the protection on offer. See
-    ``docs/repricing-methodology.md`` §3/§5.
-    """
-    conv = ips_config.convexity
-    carry_verdict = "within" if result.within_budget else "over"
-    convexity_verdict = "within" if result.meets_convexity_target else "over"
-    intrinsic_floor_text = (
-        " (intrinsic floor "
-        + fmt.currency(result.per_contract_intrinsic_floor, decimals=2)
-        + ")"
-        if conv.crash_floor_reported
-        else ""
-    )
-    return html.Div(
-        [
-            html.H4("Rationale"),
-            html.P(
-                f"Book notional {fmt.currency(result.book_notional)} x "
-                f"beta {result.portfolio_beta:.2f} = beta-adjusted "
-                f"notional {fmt.currency(result.beta_adjusted_notional)}. "
-                "The hedge must recover "
-                f"{fmt.currency(result.required_crash_offset)} beyond the "
-                "drawdown tolerance at the IPS crash.",
-                className="plain-language",
-            ),
-            html.H4("Candidate economics"),
-            html.P(
-                f"{result.candidate_pct_otm:.1f}% OTM, "
-                f"{result.candidate_maturity_years:.2f}y to expiry — "
-                "crash payoff "
-                f"{fmt.currency(result.per_contract_payoff, decimals=2)}"
-                f"/contract{intrinsic_floor_text}, "
-                f"carry {fmt.currency(result.per_contract_carry, decimals=2)}"
-                "/contract/year.",
-                className="plain-language",
-            ),
-            html.H4("Sizing"),
-            html.P(
-                f"{result.contracts_needed:,} contracts needed — implied "
-                f"annual carry {fmt.currency(result.implied_annual_carry)} "
-                f"vs {fmt.currency(result.carry_budget)} budget "
-                f"({carry_verdict} budget, headroom "
-                f"{fmt.signed_currency(result.carry_headroom)}; max "
-                f"affordable {result.max_affordable_contracts:,} contracts).",
-            ),
-            band_bar(
-                value=result.implied_annual_carry,
-                low=0.0,
-                high=result.carry_budget,
-            ),
-            html.P(
-                "Achieved convexity "
-                f"{fmt.percent(result.achieved_convexity_pct)} vs "
-                f"{fmt.percent(conv.target_min_pct)}-"
-                f"{fmt.percent(conv.target_max_pct)} target "
-                f"({convexity_verdict} target).",
-            ),
-            band_bar(
-                value=result.achieved_convexity_pct,
-                low=conv.target_min_pct,
-                high=conv.target_max_pct,
-            ),
-        ],
-    )
-
-
-def _render_sizing_panel_logic(
-    *,
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-    pct_otm: float | None,
-    maturity_years: float | None,
-    vol_override: float | None,
-) -> Component:
-    """Render the sizing panel: the candidate, then the book's vega reading.
-
-    The vega-sufficiency block is a sibling of the candidate rather than
-    part of :func:`_sizing_panel_view`, and is rendered *whatever* the
-    candidate does. It depends on neither the dials nor an underlying
-    position, so folding it into the candidate's own render would let an
-    unfinished dial or an empty book take Part X #4 off the page again —
-    which is the regression this restores.
-    """
-    candidate: Component
-    if pct_otm is None or maturity_years is None:
-        candidate = _incomplete(
-            "Enter a strike (% OTM) and a maturity (years) to size a "
-            "candidate hedge.",
-        )
-    else:
-
-        def _build() -> Component:
-            result = size_hedge(
-                portfolio,
-                ips_config,
-                candidate_pct_otm=pct_otm,
-                candidate_maturity_years=maturity_years,
-                vol=vol_override,
-            )
-            return _sizing_panel_view(result, ips_config)
-
-        candidate = _safe_render(_build, blocked_hint=_SIZING_BLOCKED_HINT)
-
-    return html.Div(
-        [
-            candidate,
-            _safe_render(
-                lambda: _vega_sufficiency_block(portfolio, ips_config),
-            ),
-        ],
-    )
-
-
-def _unsolvable_rung_line(rung: UnsolvableRung) -> html.P:
-    """One unsolvable ladder cell, surfaced explicitly — never dropped.
-
-    Not the ``Mi5`` finding (that's the unrelated ``include_underlying``
-    scalar/vectorized P&L default, already closed in M1.3/M1.4) — this
-    is M1.4's strike-ladder bullet's third clause, which was never given
-    its own finding number in ``docs/implementation-plan.md``.
-    """
-    return html.P(
-        f"{rung.target_delta:.2f}Δ @ {rung.maturity_years:.2f}y — "
-        f"{rung.reason}",
-        className="unsolvable-note",
-    )
-
-
-def _ladder_rung_row(rung: LadderRung) -> html.Tr:
-    """One solved ladder rung."""
-    verdict = "within" if rung.meets_target_within_budget else "over"
-    return html.Tr(
-        [
-            html.Td(f"{rung.target_delta:.2f}Δ"),
-            html.Td(f"{rung.maturity_years:.2f}y"),
-            html.Td(f"{rung.metrics.strike:,.0f}"),
-            html.Td(f"{rung.metrics.pct_otm:.1f}%"),
-            html.Td(f"{rung.metrics.put_delta:.3f}"),
-            html.Td(fmt.currency(rung.metrics.premium, decimals=2)),
-            html.Td(
-                fmt.currency(rung.metrics.per_contract_payoff, decimals=2),
-            ),
-            html.Td(f"{rung.contracts_needed:,}"),
-            html.Td(fmt.percent(rung.achieved_convexity_pct)),
-            html.Td(verdict),
-        ],
-    )
-
-
-def _ladder_panel_view(result: StrikeLadderResult) -> Component:
-    """Render the solved rungs table, then the unsolvable cells.
-
-    Unsolvable rungs are shown, never dropped — see
-    :func:`_unsolvable_rung_line` for the finding-ID note. #326's third
-    mode: when nothing at all solved, that is its own dead end (the
-    engine ran and answered "nothing"), rendered as a
-    :attr:`NoticeKind.EMPTY` notice rather than as a bare "Unsolvable"
-    heading — the same table-less shape #326 reported as
-    indistinguishable from a panel that had not built yet.
-    """
-    if not result.rungs and not result.unsolvable:
-        # Unreachable by construction: _render_ladder_panel_logic only
-        # calls build_strike_ladder with two non-empty sequences (a
-        # None list already short-circuits to the INPUT notice above
-        # it), and itertools.product of two non-empty sequences always
-        # yields at least one cell, which lands in rungs or unsolvable.
-        # Kept as a real INPUT notice rather than deleted, in case that
-        # invariant ever changes.
-        return _incomplete("No rungs requested.")
-
-    if not result.rungs:
-        return panel_notice(
-            "No rung solves at these inputs.",
-            kind=NoticeKind.EMPTY,
-            body=[_unsolvable_rung_line(rung) for rung in result.unsolvable],
-        )
-
-    header = html.Tr(
-        [
-            html.Th("Delta"),
-            html.Th("Maturity"),
-            html.Th("Strike"),
-            html.Th("%OTM"),
-            html.Th("Put delta"),
-            html.Th("Premium"),
-            html.Th("Crash payoff"),
-            html.Th("Contracts"),
-            html.Th("Achieved convexity"),
-            html.Th("Budget"),
-        ],
-    )
-    rows = [_ladder_rung_row(rung) for rung in result.rungs]
-    children: list[Component] = [
-        html.Table(
-            [html.Thead(header), html.Tbody(rows)],
-            className="planning-table",
-        ),
-    ]
-    if result.unsolvable:
-        # A partial answer, not an empty one -- the table above already
-        # says the panel worked, so this stays plain markup rather than
-        # a second notice.
-        children.append(html.H4("Unsolvable"))
-        children.extend(
-            _unsolvable_rung_line(rung) for rung in result.unsolvable
-        )
-    return html.Div(children)
-
-
-def _render_ladder_panel_logic(
-    *,
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-    target_deltas_raw: str | None,
-    maturities_years_raw: str | None,
-) -> Component:
-    """Render the strike ladder for comma-separated deltas/maturities."""
-    target_deltas = _parse_float_list(target_deltas_raw)
-    maturities_years = _parse_float_list(maturities_years_raw)
-    if target_deltas is None or maturities_years is None:
-        return _incomplete(
-            "Enter comma-separated deltas and maturities, e.g. "
-            "0.05, 0.10, 0.15 and 0.25, 0.5, 1.0.",
-        )
-
-    def _build() -> Component:
-        result = build_strike_ladder(
-            portfolio,
-            ips_config,
-            target_deltas=target_deltas,
-            maturities_years=maturities_years,
-        )
-        return _ladder_panel_view(result)
-
-    return _safe_render(_build, blocked_hint=_LADDER_BLOCKED_HINT)
 
 
 def _otm_pair_text(moneyness: MoneynessDrift) -> str:
@@ -1612,12 +1257,6 @@ def render(app: ProgramDashApp) -> html.Div:
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
     default_style = ips_config.pricing.exercise_style.value
-    # #316: the sizing/ladder maturity dials' initial values come from
-    # policy (entry tenor / maintain range), not a hardcoded 0.5y.
-    sizing_maturity_default = ips_config.maturity_selection.entry_tenor_years
-    ladder_maturities_default = _ladder_maturities_text(
-        ips_config.maturity_selection,
-    )
     # One assessment shared by the market-environment and monetization
     # panels. Both need the same snapshot, and a second fetch could return a
     # different one — the two panels would then disagree on the same page.
@@ -1670,107 +1309,15 @@ def render(app: ProgramDashApp) -> html.Div:
                 ],
                 className="panel",
             ),
-            html.Div(
-                [
-                    html.H3(
-                        ["Sizing workbench", basis_chip(_BASIS_CRASH_SKEW)]
-                    ),
-                    html.Div(
-                        [
-                            html.Div(
-                                [
-                                    html.Label("Strike (% OTM)"),
-                                    dcc.Input(
-                                        id="sizing-pct-otm",
-                                        type="number",
-                                        value=_DEFAULT_SIZING_PCT_OTM,
-                                        debounce=True,
-                                    ),
-                                ],
-                                className="editor-field",
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Maturity (years)"),
-                                    dcc.Input(
-                                        id="sizing-maturity-years",
-                                        type="number",
-                                        value=sizing_maturity_default,
-                                        debounce=True,
-                                    ),
-                                ],
-                                className="editor-field",
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Vol override (optional)"),
-                                    dcc.Input(
-                                        id="sizing-vol-override",
-                                        type="number",
-                                        debounce=True,
-                                    ),
-                                ],
-                                className="editor-field",
-                            ),
-                        ],
-                        className="editor-form",
-                    ),
-                    html.Div(
-                        _render_sizing_panel_logic(
-                            portfolio=portfolio,
-                            ips_config=ips_config,
-                            pct_otm=_DEFAULT_SIZING_PCT_OTM,
-                            maturity_years=sizing_maturity_default,
-                            vol_override=None,
-                        ),
-                        id="plan-sizing-panel",
-                    ),
-                ],
-                className="panel",
+            sizing.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                basis_crash_skew=_BASIS_CRASH_SKEW,
             ),
-            html.Div(
-                [
-                    html.H3(["Strike ladder", basis_chip(_BASIS_CRASH_SKEW)]),
-                    html.Div(
-                        [
-                            html.Div(
-                                [
-                                    html.Label("Target deltas"),
-                                    dcc.Input(
-                                        id="ladder-target-deltas",
-                                        type="text",
-                                        value=_DEFAULT_LADDER_TARGET_DELTAS,
-                                        debounce=True,
-                                    ),
-                                ],
-                                className="editor-field",
-                            ),
-                            html.Div(
-                                [
-                                    html.Label("Maturities (years)"),
-                                    dcc.Input(
-                                        id="ladder-maturities-years",
-                                        type="text",
-                                        value=ladder_maturities_default,
-                                        debounce=True,
-                                    ),
-                                ],
-                                className="editor-field",
-                            ),
-                        ],
-                        className="editor-form",
-                    ),
-                    html.Div(
-                        _render_ladder_panel_logic(
-                            portfolio=portfolio,
-                            ips_config=ips_config,
-                            target_deltas_raw=_DEFAULT_LADDER_TARGET_DELTAS,
-                            maturities_years_raw=ladder_maturities_default,
-                        ),
-                        id="plan-ladder-panel",
-                    ),
-                ],
-                className="panel",
+            ladder.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                basis_crash_skew=_BASIS_CRASH_SKEW,
             ),
             html.Div(
                 [
@@ -2265,45 +1812,8 @@ def register_callbacks(  # pylint: disable=too-many-locals
     position_aging.register(app, ips_config=ips_config)
     hedge_triggers.register(app, ips_config=ips_config)
     delta_drift.register(app)
-
-    @app.callback(
-        Output("plan-sizing-panel", "children"),
-        Input("book-version", "data"),
-        Input("sizing-pct-otm", "value"),
-        Input("sizing-maturity-years", "value"),
-        Input("sizing-vol-override", "value"),
-    )
-    def _render_sizing_panel(
-        _version: int,
-        pct_otm: float | None,
-        maturity_years: float | None,
-        vol_override: float | None,
-    ) -> Component:
-        return _render_sizing_panel_logic(
-            portfolio=app.program_state.portfolio,
-            ips_config=ips_config,
-            pct_otm=pct_otm,
-            maturity_years=maturity_years,
-            vol_override=vol_override,
-        )
-
-    @app.callback(
-        Output("plan-ladder-panel", "children"),
-        Input("book-version", "data"),
-        Input("ladder-target-deltas", "value"),
-        Input("ladder-maturities-years", "value"),
-    )
-    def _render_ladder_panel(
-        _version: int,
-        target_deltas_raw: str | None,
-        maturities_years_raw: str | None,
-    ) -> Component:
-        return _render_ladder_panel_logic(
-            portfolio=app.program_state.portfolio,
-            ips_config=ips_config,
-            target_deltas_raw=target_deltas_raw,
-            maturities_years_raw=maturities_years_raw,
-        )
+    sizing.register(app, ips_config=ips_config)
+    ladder.register(app, ips_config=ips_config)
 
     @app.callback(
         Output("plan-roll-plan-panel", "children"),
