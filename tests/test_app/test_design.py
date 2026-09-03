@@ -14,7 +14,9 @@ sharing a book across tests in this module would leak state between them).
 
 from __future__ import annotations
 
+import contextlib
 import threading
+import time
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from dash import dcc, no_update
 from dash.development.base_component import Component
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from werkzeug.serving import make_server
 
 from deltadewa import __version__
@@ -445,8 +448,11 @@ class TestAddPositionRejectsExpiredMaturity:
             state=state,
         )
 
-        _version, _status, *form_fields = result
+        _version, _status, *form_fields, form_disabled = result
         assert all(field is no_update for field in form_fields)
+        # #387: the form re-opens on failure too, so a typo can be fixed
+        # and resubmitted rather than left stuck behind a disabled form.
+        assert form_disabled is False
 
 
 class TestImportRefusal:
@@ -2690,6 +2696,148 @@ class TestRemoveConfirmDialog:
 
         assert len(design_app.state.portfolio.positions) == before_count
         assert page.locator(".position-table tbody tr").count() == before_count
+
+
+def _fill_add_form(
+    page: Page,
+    *,
+    strike: str,
+    quantity: str,
+    maturity: str,
+) -> None:
+    """Fill the add-position form's three required fields."""
+    page.fill("#add-strike", strike)
+    page.fill("#add-quantity", quantity)
+    page.fill("#add-maturity", maturity)
+    page.keyboard.press(
+        "Enter"
+    )  # commits the typed date (dcc.DatePickerSingle)
+
+
+class TestAddPositionRace:
+    """#387: typing during an in-flight submission must not be wiped.
+
+    Needs a real browser — the race is a client-side DOM/timing question
+    (what's in the fields when a deferred response's Outputs land), not
+    something a direct ``_add_position_logic`` call can observe.
+    """
+
+    def test_typing_during_in_flight_submission_is_blocked_not_wiped(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        original_add_position = design_app.state.add_position
+
+        def _slow_add_position(*args: object, **kwargs: object) -> object:
+            time.sleep(1.0)
+            return original_add_position(*args, **kwargs)
+
+        monkeypatch.setattr(
+            design_app.state,
+            "add_position",
+            _slow_add_position,
+        )
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#add-strike", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        before_count = len(design_app.state.portfolio.positions)
+        _fill_add_form(
+            page,
+            strike="4400",
+            quantity="5",
+            maturity="2027-06-01",
+        )
+        page.click("#add-submit")
+
+        # The whole form locks the instant the button is clicked — a
+        # clientside callback, no server round trip (see book.py's
+        # register()) — so there is no window in which a keystroke could
+        # land ahead of the deferred response and then get overwritten by
+        # it. Confirmed here rather than assumed: the fill below must be
+        # refused while the fieldset is disabled.
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === true",
+            timeout=2_000,
+        )
+        assert page.locator("#add-strike").is_disabled()
+        with pytest.raises(PlaywrightTimeoutError):
+            page.fill("#add-strike", "4600", timeout=500)
+
+        # Once the deferred response actually lands and the form re-opens,
+        # typing and submitting a second position works normally — no
+        # keystroke from the window above was ever at risk of being wiped,
+        # because none could register during it.
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === false",
+            timeout=5_000,
+        )
+        _fill_add_form(
+            page,
+            strike="4600",
+            quantity="7",
+            maturity="2027-07-01",
+        )
+        page.click("#add-submit")
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === true",
+            timeout=2_000,
+        )
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === false",
+            timeout=5_000,
+        )
+
+        positions = design_app.state.portfolio.positions
+        assert len(positions) == before_count + 2
+        strikes = {pos.option.strike_price for pos in positions[-2:]}
+        assert strikes == {4400.0, 4600.0}
+
+    def test_rapid_double_click_adds_only_one_position(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The issue's "incidentally fixes double-click" claim."""
+        original_add_position = design_app.state.add_position
+
+        def _slow_add_position(*args: object, **kwargs: object) -> object:
+            time.sleep(1.0)
+            return original_add_position(*args, **kwargs)
+
+        monkeypatch.setattr(
+            design_app.state,
+            "add_position",
+            _slow_add_position,
+        )
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#add-strike", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        before_count = len(design_app.state.portfolio.positions)
+        _fill_add_form(
+            page,
+            strike="4700",
+            quantity="3",
+            maturity="2027-08-01",
+        )
+        page.click("#add-submit")
+        # A rapid second click may land just before the clientside
+        # callback's disable takes effect, or just after — either timing
+        # is fine to tolerate here (Playwright's own actionability check
+        # refuses it when it lands after; the outcome, not this timing,
+        # is what the issue's acceptance criterion cares about).
+        with contextlib.suppress(PlaywrightTimeoutError):
+            page.click("#add-submit", timeout=300)
+
+        page.wait_for_function(
+            "document.getElementById('add-form-fieldset').disabled === false",
+            timeout=5_000,
+        )
+        assert len(design_app.state.portfolio.positions) == before_count + 1
 
 
 class TestPlanningZoneRendersClientSide:

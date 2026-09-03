@@ -197,16 +197,25 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
     structure_id: str | None,
     version: int,
     state: ProgramState,
-) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any]:
+) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any, bool]:
     """Add a position from the BOOK zone's add-form.
 
     Returns:
         A tuple matching the callback's Outputs: the new ``book-version``
-        (or ``no_update`` on failure), a status message, and the seven
-        form fields' next values — cleared on success (so the operator
-        isn't typing over stale values on the next add) and left as
-        ``no_update`` on failure (so a typo can be fixed and resubmitted
-        rather than retyped from scratch).
+        (or ``no_update`` on failure), a status message, the seven form
+        fields' next values — cleared on success (so the operator isn't
+        typing over stale values on the next add) and left as ``no_update``
+        on failure (so a typo can be fixed and resubmitted rather than
+        retyped from scratch) — and finally ``False`` for the
+        ``add-form-fieldset``'s ``disabled``, on every branch: a
+        clientside callback (see :func:`register`) sets it ``True`` the
+        instant the button is clicked, closing the window #387 reported
+        (typing a new entry while a submission is in flight, only to have
+        this response's field-clear silently overwrite it) by disabling
+        every field in the form, not just the button — nothing can be
+        typed into it until the response has landed. This is what
+        re-opens the form once the response — success or failure — has
+        actually been applied.
 
     """
     if strike is None or maturity is None or quantity is None:
@@ -220,6 +229,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
             no_update,
             no_update,
             no_update,
+            False,
         )
 
     maturity_date = datetime.strptime(maturity, "%Y-%m-%d").replace(
@@ -256,6 +266,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
             no_update,
             no_update,
             no_update,
+            False,
         )
 
     # Reset the exercise-style field back to the IPS default rather than
@@ -277,6 +288,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         reset_style,
         None,
         None,
+        False,
     )
 
 
@@ -469,7 +481,7 @@ def layout(
                 "there is no separate 'update' form.",
                 className="plain-language",
             ),
-            html.Div(
+            html.Fieldset(
                 [
                     html.Div(
                         [
@@ -553,7 +565,9 @@ def layout(
                         className="btn btn-primary",
                     ),
                 ],
+                id="add-form-fieldset",
                 className="editor-form",
+                disabled=False,
             ),
             html.Div(id=MUTATION_STATUS),
             html.H3("Positions"),
@@ -617,6 +631,27 @@ def register(app: ProgramDashApp) -> None:
     the callbacks below read ``ips_config``, so this needs no guard or
     capture of its own.
     """
+    # #387: the add-position form race. A plain (server) callback reads
+    # AND clears the form in one round trip, with nothing disabling the
+    # fields while a submission is in flight — typing a new entry then
+    # gets wiped by the previous submission's response landing on top of
+    # it. This clientside callback locks the *whole form* (every field,
+    # not just the button) the instant "Add position" is clicked, with no
+    # server round trip — a disabled <fieldset> natively disables every
+    # descendant control, including dcc.DatePickerSingle's plain <input>,
+    # so there is no window at all where a keystroke could land in it
+    # while a response is pending. The server callback below re-enables
+    # it once the response has actually been applied (every branch of
+    # `_add_position_logic` returns `False` for this Output — success and
+    # failure alike, so a rejected submission's fields stay editable
+    # rather than trapped behind a stuck-disabled form).
+    # dash has no stub for clientside_callback.
+    app.clientside_callback(  # type: ignore[no-untyped-call]
+        "function(n_clicks) { return true; }",
+        Output("add-form-fieldset", "disabled", allow_duplicate=True),
+        Input("add-submit", "n_clicks"),
+        prevent_initial_call=True,
+    )
 
     @app.callback(
         Output(BOOK_VERSION_STORE, "data", allow_duplicate=True),
@@ -628,6 +663,7 @@ def register(app: ProgramDashApp) -> None:
         Output("add-exercise-style", "value"),
         Output("add-entry-premium", "value"),
         Output("add-structure-id", "value"),
+        Output("add-form-fieldset", "disabled", allow_duplicate=True),
         Input("add-submit", "n_clicks"),
         State("add-strike", "value"),
         State("add-maturity", "date"),
@@ -649,7 +685,7 @@ def register(app: ProgramDashApp) -> None:
         entry_premium: float | None,
         structure_id: str | None,
         version: int,
-    ) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any]:
+    ) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any, bool]:
         return _add_position_logic(
             strike=strike,
             maturity=maturity,

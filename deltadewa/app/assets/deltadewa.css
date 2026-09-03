@@ -638,6 +638,16 @@ body {
   margin: 12px 0 20px;
 }
 
+/* #387: the add-position form is a <fieldset> (not a <div>) so a single
+   `disabled` toggle locks every field while a submission is in flight —
+   strip its default browser chrome so it still reads as an .editor-form. */
+
+fieldset.editor-form {
+  border: none;
+  padding: 0;
+  min-width: 0;
+}
+
 .editor-field {
   flex: 1 1 160px;
   min-width: 140px;
