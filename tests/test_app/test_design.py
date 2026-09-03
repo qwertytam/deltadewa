@@ -120,6 +120,35 @@ def _find_component(node: object, component_id: str) -> Component | None:
     return None
 
 
+def _find_by_class(node: object, class_name: str) -> Component | None:
+    """Recursively find the first component whose ``className`` matches."""
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            return node
+        return _find_by_class(getattr(node, "children", None), class_name)
+    if isinstance(node, (list, tuple)):
+        for child in node:
+            found = _find_by_class(child, class_name)
+            if found is not None:
+                return found
+    return None
+
+
+def _find_all_by_class(node: object, class_name: str) -> list[Component]:
+    """Recursively find every component whose ``className`` matches."""
+    found: list[Component] = []
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            found.append(node)
+        found.extend(
+            _find_all_by_class(getattr(node, "children", None), class_name),
+        )
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            found.extend(_find_all_by_class(child, class_name))
+    return found
+
+
 def _collect_text(node: object) -> str:
     """Recursively concatenate every string leaf under a component tree.
 
@@ -776,6 +805,35 @@ class TestSizingPanel:
         # Only the floor goes: the rest of the candidate still renders.
         assert f"{expected.contracts_needed:,} contracts needed" in text
         assert fmt.currency(expected.per_contract_payoff, decimals=2) in text
+
+
+class TestSizingWorkbenchLegibility:
+    """#356: a bare '20' has no unit; a blank override has no empty cue."""
+
+    def test_vol_override_has_an_auto_placeholder(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        vol_override = _find_component(layout, "sizing-vol-override")
+        assert vol_override is not None
+        assert vol_override.placeholder == "auto"
+
+    def test_pct_otm_input_carries_a_percent_suffix(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        wrapper = _find_by_class(layout, "input-with-suffix")
+        assert wrapper is not None
+        assert _find_component(wrapper, "sizing-pct-otm") is not None
+        assert "%" in _collect_text(wrapper)
 
 
 class TestStrikeLadderPanel:

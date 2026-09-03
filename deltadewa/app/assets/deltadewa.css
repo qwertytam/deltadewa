@@ -660,6 +660,21 @@ fieldset.editor-form {
   margin-bottom: 4px;
 }
 
+/* #356: a unit suffix beside an otherwise-bare numeric input (e.g. the
+   sizing workbench's Strike (% OTM)), so the value doesn't read as an
+   unlabelled bare number next to fields like Maturity. */
+
+.input-with-suffix {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-suffix {
+  color: #555;
+  font-size: 0.85rem;
+}
+
 .position-table {
   border-collapse: collapse;
   width: 100%;
