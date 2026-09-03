@@ -45,22 +45,9 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
-from deltadewa.analysis.hedge_triggers import (
-    HedgeTriggerThresholds,
-    evaluate_hedge_trigger_set,
-)
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.monetization import build_monetization_plan
-from deltadewa.analysis.position_aging import (
-    ExpiryBoundaries,
-    ExpiryBucketLabel,
-    ExpiryBucketTotal,
-    ExpiryCalendarEntry,
-    PositionAging,
-    SignedTotals,
-    evaluate_position_aging,
-)
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.repricing import proportional_vol
 from deltadewa.analysis.roll_planner import build_roll_plan
@@ -102,17 +89,18 @@ from deltadewa.visualization.stress_charts_plotly import (
 
 from . import book
 from .book import _mark_inputs_reviewed_logic
-from .planning import convexity_cliff
+from .planning import (
+    convexity_cliff,
+    delta_drift,
+    hedge_triggers,
+    position_aging,
+)
 
 if TYPE_CHECKING:
     from deltadewa.analysis.cache import ScenarioGridCache
     from deltadewa.analysis.decision_matrix import (
         DecisionResult,
         EntryTimingResult,
-    )
-    from deltadewa.analysis.hedge_triggers import (
-        HedgeTriggerReason,
-        HedgeTriggerSet,
     )
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.maturity import MaturityVegaExposure
@@ -122,7 +110,6 @@ if TYPE_CHECKING:
     )
     from deltadewa.analysis.roll_planner import RollPlanRecord
     from deltadewa.analysis.roll_status import MoneynessDrift, RollStatusRecord
-    from deltadewa.analysis.scenarios import DeltaDrift, DeltaDriftLeg
     from deltadewa.analysis.sizing import HedgeSizingResult
     from deltadewa.analysis.strike_ladder import (
         LadderRung,
@@ -180,16 +167,10 @@ _BASIS_LIVE_MARKET_DATA = "basis: live market data"
 # Nor does the trigger panel: it reads the book's Greeks at today's market,
 # with no crash shock applied at all.
 _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
-# Nor does the delta drift panel: it reprices at the handbook's own fixed
-# -5% spot shock (Part X #13 --
-# https://qwertytam.github.io/deltadewa-handbook/0.1/part-10/tier-4-tactical-optional-trading-metrics/#13-delta-drift),
-# not the IPS crash anchor -- a distinct basis from every other PLANNING
-# panel. Pinned to handbook version 0.1 because the -5% in the label below is
-# the handbook's figure rather than a choice made here; drop the /0.1/ segment
-# for the current page.
-_BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"
-# The convexity cliff panel's own _BASIS_MATURITY_CALENDAR now lives in
-# planning/convexity_cliff.py, the only reader.
+# The delta drift panel's own _BASIS_MINUS_5PCT, and the convexity cliff
+# panel's own _BASIS_MATURITY_CALENDAR, now live in
+# planning/delta_drift.py and planning/convexity_cliff.py — each is that
+# panel's only reader.
 # Nor does the EXPLORATION zone's volatility profile panel: it reads each
 # leg's own stored volatility and vega-weights them, but shocks nothing --
 # a structural read of today's book, like the vega term exposure panel,
@@ -1194,431 +1175,6 @@ def _render_provenance_panel_logic(
     return _safe_render(_build)
 
 
-def _day_range_text(low: int, high: int) -> str:
-    """Format an inclusive day range, naming a collapsed one as empty.
-
-    ``expiry_boundaries`` clamps its upper boundaries to keep the ladder
-    monotonic rather than raising, so a legal-but-degenerate IPS (a short
-    ``roll_at_months_remaining``, or a ``roll_review_buffer`` of 1.0) can
-    leave a bucket with no days in it at all. Printing the arithmetic range
-    would read as an inverted window; say the bucket is unreachable instead.
-    """
-    if low > high:
-        return "none (IPS windows meet)"
-    return f"{low}-{high}d"
-
-
-def _expiry_window_text(
-    label: ExpiryBucketLabel,
-    boundaries: ExpiryBoundaries,
-) -> str:
-    """Spell out the day window *label* covers, from *boundaries*.
-
-    The bucket labels deliberately carry no numbers (see
-    :class:`~deltadewa.analysis.position_aging.ExpiryBucketLabel`) — this is
-    where the IPS-resolved boundaries become visible, so editing
-    ``ips.yaml`` moves both the grading and the printed window. The
-    inclusive/exclusive edges here mirror
-    :func:`~deltadewa.analysis.position_aging.classify_expiry_bucket`
-    exactly.
-    """
-    windows = {
-        ExpiryBucketLabel.EXPIRED: "<= 0d",
-        ExpiryBucketLabel.URGENT: f"< {boundaries.urgent_days}d",
-        ExpiryBucketLabel.SOON: _day_range_text(
-            boundaries.urgent_days,
-            boundaries.soon_days - 1,
-        ),
-        ExpiryBucketLabel.ROLL_DUE: _day_range_text(
-            boundaries.soon_days,
-            boundaries.roll_due_days,
-        ),
-        ExpiryBucketLabel.ROLL_REVIEW: _day_range_text(
-            boundaries.roll_due_days + 1,
-            boundaries.roll_review_days,
-        ),
-        ExpiryBucketLabel.LONG_TERM: f"> {boundaries.roll_review_days}d",
-    }
-    return windows[label]
-
-
-def _nets_near_zero(value: float) -> bool:
-    """Whether *value* would render as a whole-dollar/theta zero (#334).
-
-    The columns this guards both format at zero decimals
-    (:func:`~deltadewa.app.format.currency`,
-    :func:`~deltadewa.app.format.signed_currency`), so anything that
-    rounds to ``0`` at that precision is what a reader would actually
-    see as "$0" / "+$0".
-    """
-    return abs(round(value)) == 0
-
-
-def _net_and_gross_cell(
-    *,
-    net_text: str,
-    long_text: str,
-    short_text: str,
-    show_gross: bool,
-) -> html.Td:
-    """Net on the first line; ``L ... - S ...`` muted underneath.
-
-    *show_gross* is ``False`` for a pure-long or pure-short row -- a
-    gross breakdown of a single side repeats the net and teaches
-    nothing (#334).
-    """
-    if not show_gross:
-        return html.Td(net_text)
-    return html.Td(
-        [
-            html.Div(net_text),
-            html.Div(
-                f"L {long_text} · S {short_text}",
-                className="aging-gross-line",
-            ),
-        ],
-    )
-
-
-def _aging_row_class(
-    totals: SignedTotals,
-    *,
-    legs: int,
-) -> str | None:
-    """Pick the row's styling hook: empty, offsetting, or plain.
-
-    ``aging-row--offsetting`` fires only when the net would otherwise
-    read as "$0" *and* both a long and a short leg produced it --
-    exactly the case #334 reported as indistinguishable from an empty
-    bucket. A non-empty net (e.g. a real spread's mark) needs no flag
-    even when it mixes long and short legs; that net is a meaningful
-    number, not a cancellation to call out.
-    """
-    if legs == 0:
-        return "aging-row--empty"
-    if totals.is_offsetting and _nets_near_zero(totals.net_value):
-        return "aging-row--offsetting"
-    return None
-
-
-def _aging_bucket_row(
-    total: ExpiryBucketTotal,
-    boundaries: ExpiryBoundaries,
-) -> html.Tr:
-    """One bucket's window, leg count and the size rolling off in it."""
-    totals = total.totals
-    show_gross = totals.is_offsetting
-    return html.Tr(
-        [
-            html.Td(total.label.value),
-            html.Td(_expiry_window_text(total.label, boundaries)),
-            html.Td(f"{total.legs}"),
-            html.Td(f"{total.contracts:+,}" if total.contracts else "0"),
-            _net_and_gross_cell(
-                net_text=fmt.currency(total.position_value),
-                long_text=fmt.signed_currency(totals.long_value),
-                short_text=fmt.signed_currency(totals.short_value),
-                show_gross=show_gross,
-            ),
-            _net_and_gross_cell(
-                net_text=fmt.signed_currency(total.position_theta),
-                long_text=fmt.signed_currency(totals.long_theta),
-                short_text=fmt.signed_currency(totals.short_theta),
-                show_gross=show_gross,
-            ),
-        ],
-        className=_aging_row_class(totals, legs=total.legs),
-    )
-
-
-def _aging_calendar_row(entry: ExpiryCalendarEntry) -> html.Tr:
-    """One dated roll-off: every leg sharing this maturity."""
-    totals = entry.totals
-    show_gross = totals.is_offsetting
-    return html.Tr(
-        [
-            html.Td(entry.maturity_date.strftime("%Y-%m-%d")),
-            html.Td(f"{entry.days_to_expiry}d"),
-            html.Td(entry.bucket.value),
-            html.Td(f"{entry.legs}"),
-            html.Td(f"{entry.contracts:+,}"),
-            _net_and_gross_cell(
-                net_text=fmt.currency(entry.position_value),
-                long_text=fmt.signed_currency(totals.long_value),
-                short_text=fmt.signed_currency(totals.short_value),
-                show_gross=show_gross,
-            ),
-            _net_and_gross_cell(
-                net_text=fmt.signed_currency(entry.position_theta),
-                long_text=fmt.signed_currency(totals.long_theta),
-                short_text=fmt.signed_currency(totals.short_theta),
-                show_gross=show_gross,
-            ),
-        ],
-        className=_aging_row_class(totals, legs=entry.legs),
-    )
-
-
-def _position_aging_panel_view(aging: PositionAging) -> Component:
-    """Render the bucket summary and the expiration calendar."""
-    if not aging.positions:
-        return _incomplete(
-            "Add a position in the BOOK zone to see the roll-off schedule.",
-        )
-
-    bucket_table = html.Table(
-        [
-            html.Thead(
-                html.Tr(
-                    [
-                        html.Th("Bucket"),
-                        html.Th("Window"),
-                        html.Th("Legs"),
-                        html.Th("Contracts"),
-                        html.Th("Value"),
-                        html.Th("Theta/day"),
-                    ],
-                ),
-            ),
-            html.Tbody(
-                [
-                    _aging_bucket_row(total, aging.boundaries)
-                    for total in aging.buckets
-                ],
-            ),
-        ],
-        className="planning-table",
-    )
-    calendar_table = html.Table(
-        [
-            html.Thead(
-                html.Tr(
-                    [
-                        html.Th("Expiry"),
-                        html.Th("DTE"),
-                        html.Th("Bucket"),
-                        html.Th("Legs"),
-                        html.Th("Contracts"),
-                        html.Th("Value"),
-                        html.Th("Theta/day"),
-                    ],
-                ),
-            ),
-            html.Tbody(
-                [_aging_calendar_row(entry) for entry in aging.calendar],
-            ),
-        ],
-        className="planning-table",
-    )
-    return html.Div(
-        [
-            html.P(
-                "Every window comes from ips.yaml — expiry_urgent_days, "
-                "expiry_soon_days, and the roll window "
-                "(roll_at_months_remaining x roll_review_buffer). The two roll "
-                "buckets are the same window the roll status table "
-                "grades against, so the two panels cannot disagree.",
-                className="plain-language",
-            ),
-            html.P(
-                "Value and Theta/day are the NET mark and daily bleed of "
-                "every leg in the row — what unwinding it realises today. "
-                "When a row mixes a long and a short leg, an 'L · S' line "
-                "underneath shows the gross sides that produced the net, "
-                "so a row highlighted amber is a real offsetting position "
-                "netting to $0 — not an empty one (#334).",
-                className="plain-language",
-            ),
-            bucket_table,
-            html.H4("Expiration calendar"),
-            html.P(
-                "One row per expiry date — how much of the book rolls off "
-                "at a time.",
-                className="plain-language",
-            ),
-            calendar_table,
-        ],
-    )
-
-
-def _render_position_aging_panel_logic(
-    *,
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-) -> Component:
-    """Render the per-leg expiry buckets and expiration calendar."""
-    return _safe_render(
-        lambda: _position_aging_panel_view(
-            evaluate_position_aging(portfolio, ips_config),
-        ),
-    )
-
-
-def _hedge_trigger_row(trigger: HedgeTriggerReason) -> html.Tr:
-    """One rebalance trigger: status badge, name, and the reason for it.
-
-    Reuses the ``verdict-badge`` styling the roll table already uses, so
-    the two tables read alike — but see :func:`_hedge_triggers_panel_view`
-    for why they are not the same set.
-    """
-    return html.Tr(
-        [
-            html.Td(
-                html.Span(
-                    trigger.status.value,
-                    className=(
-                        "verdict-badge verdict-badge--"
-                        f"{trigger.status.value.lower()}"
-                    ),
-                ),
-            ),
-            html.Td(trigger.label),
-            html.Td(trigger.reason),
-        ],
-    )
-
-
-def _hedge_triggers_panel_view(triggers: HedgeTriggerSet) -> Component:
-    """Render the book-level rebalance triggers, each with its reasoning.
-
-    Deliberately **not** merged into the roll panels above, despite the
-    shared vocabulary: the roll plan and its status table ask "should
-    this tranche be replaced" per position, while these four ask "is the
-    book still hedged the way policy says" for the book as a whole. They
-    are different questions with different thresholds, and a combined
-    table would imply one verdict where there are two.
-    """
-    header = html.Tr(
-        [html.Th("Status"), html.Th("Trigger"), html.Th("Reading vs policy")],
-    )
-    children: list[Component] = [
-        html.P(
-            "Book-level rebalance triggers — distinct from the roll panels "
-            "above, which judge each tranche separately. These ask whether "
-            "the book as a whole is still hedged the way the IPS says.",
-            className="plain-language",
-        ),
-        html.Table(
-            [
-                html.Thead(header),
-                html.Tbody([_hedge_trigger_row(t) for t in triggers]),
-            ],
-            className="planning-table",
-        ),
-    ]
-    if triggers.actions:
-        children.append(
-            html.Ul(
-                [
-                    html.Li(f"{priority}: {description}")
-                    for priority, description in triggers.actions
-                ],
-                className="trigger-actions",
-            ),
-        )
-    else:
-        children.append(
-            html.P(
-                "No action required — every trigger is inside its band.",
-                className="plain-language",
-            ),
-        )
-    return html.Div(children)
-
-
-def _render_hedge_triggers_panel_logic(
-    *,
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-) -> Component:
-    """Render the hedge rebalance triggers for the current book."""
-    return _safe_render(
-        lambda: _hedge_triggers_panel_view(
-            evaluate_hedge_trigger_set(
-                portfolio,
-                HedgeTriggerThresholds.from_ips(ips_config.triggers),
-            ),
-        ),
-    )
-
-
-def _delta_drift_leg_row(leg: DeltaDriftLeg) -> html.Tr:
-    """One option leg's delta today, at -5%, and the drift between them."""
-    label = (
-        f"{leg.position.option.option_type.value} "
-        f"{leg.position.option.strike_price:,.0f}"
-    )
-    return html.Tr(
-        [
-            html.Td(label),
-            html.Td(f"{leg.delta_now:,.1f}"),
-            html.Td(f"{leg.delta_shocked:,.1f}"),
-            html.Td(f"{leg.drift:,.1f}"),
-        ],
-    )
-
-
-def _delta_drift_panel_view(drift: DeltaDrift) -> Component:
-    """Render Part X §13: hedge delta today vs. at the handbook's -5% shock.
-
-    Sits beside the hedge triggers panel — same "does the book need
-    rebalancing" question, asked a different way: not whether a threshold
-    has been crossed, but how quickly the hedge itself would start
-    offsetting losses in an early-stage decline.
-    """
-    header = html.Tr(
-        [
-            html.Th("Leg"),
-            html.Th("Delta now"),
-            html.Th(f"Delta at {drift.shock_pct:.0f}%"),
-            html.Th("Drift"),
-        ],
-    )
-    return html.Div(
-        [
-            html.P(
-                "Hedge-only delta (options, no underlying) today vs. "
-                f"spot {drift.shock_pct:.0f}% — the handbook's own "
-                "worked example, not the IPS crash scenario. This "
-                "answers how fast the hedge starts biting in an "
-                'early-stage decline — it is not the "Delta ratio '
-                'deviation" trigger in the Hedge triggers panel above, '
-                "which instead measures how far net delta has wandered "
-                "from the book's target hedge ratio at today's market, "
-                "with no shock applied at all.",
-                className="plain-language",
-            ),
-            html.P(
-                f"Delta now {drift.delta_now:,.1f}, at "
-                f"{drift.shock_pct:.0f}% {drift.delta_shocked:,.1f} — "
-                f"drift {drift.drift:,.1f}.",
-                className="env-verdict",
-            ),
-            html.Table(
-                [
-                    html.Thead(header),
-                    html.Tbody(
-                        [_delta_drift_leg_row(leg) for leg in drift.legs],
-                    ),
-                ],
-                className="planning-table",
-            ),
-        ],
-    )
-
-
-def _render_delta_drift_panel_logic(
-    *,
-    portfolio: OptionPortfolio,
-) -> Component:
-    """Render the delta drift panel for the current book."""
-    return _safe_render(
-        lambda: _delta_drift_panel_view(
-            PortfolioAnalyzer(portfolio).calculate_delta_drift(),
-        ),
-    )
-
-
 def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
     """One row of the IPS monetization schedule."""
     return html.Tr(
@@ -2280,51 +1836,17 @@ def render(app: ProgramDashApp) -> html.Div:
                 ],
                 className="panel",
             ),
-            html.Div(
-                [
-                    html.H3(
-                        ["Position aging", basis_chip(_BASIS_BOOK_GREEKS)],
-                    ),
-                    html.Div(
-                        _render_position_aging_panel_logic(
-                            portfolio=portfolio,
-                            ips_config=ips_config,
-                        ),
-                        id="plan-position-aging-panel",
-                    ),
-                ],
-                className="panel",
+            position_aging.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                basis_book_greeks=_BASIS_BOOK_GREEKS,
             ),
-            html.Div(
-                [
-                    html.H3(
-                        [
-                            "Hedge rebalance triggers",
-                            basis_chip(_BASIS_BOOK_GREEKS),
-                        ],
-                    ),
-                    html.Div(
-                        _render_hedge_triggers_panel_logic(
-                            portfolio=portfolio,
-                            ips_config=ips_config,
-                        ),
-                        id="plan-hedge-triggers-panel",
-                    ),
-                ],
-                className="panel",
+            hedge_triggers.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                basis_book_greeks=_BASIS_BOOK_GREEKS,
             ),
-            html.Div(
-                [
-                    html.H3(
-                        ["Delta drift", basis_chip(_BASIS_MINUS_5PCT)],
-                    ),
-                    html.Div(
-                        _render_delta_drift_panel_logic(portfolio=portfolio),
-                        id="plan-delta-drift-panel",
-                    ),
-                ],
-                className="panel",
-            ),
+            delta_drift.layout(portfolio=portfolio),
             convexity_cliff.layout(
                 portfolio=portfolio,
                 ips_config=ips_config,
@@ -2740,6 +2262,9 @@ def register_callbacks(  # pylint: disable=too-many-locals
 
     book.register(app)
     convexity_cliff.register(app, ips_config=ips_config)
+    position_aging.register(app, ips_config=ips_config)
+    hedge_triggers.register(app, ips_config=ips_config)
+    delta_drift.register(app)
 
     @app.callback(
         Output("plan-sizing-panel", "children"),
@@ -2827,35 +2352,6 @@ def register_callbacks(  # pylint: disable=too-many-locals
         return _mark_inputs_reviewed_logic(
             version=version,
             state=app.program_state,
-        )
-
-    @app.callback(
-        Output("plan-position-aging-panel", "children"),
-        Input("book-version", "data"),
-    )
-    def _render_position_aging_panel(_version: int) -> Component:
-        return _render_position_aging_panel_logic(
-            portfolio=app.program_state.portfolio,
-            ips_config=ips_config,
-        )
-
-    @app.callback(
-        Output("plan-hedge-triggers-panel", "children"),
-        Input("book-version", "data"),
-    )
-    def _render_hedge_triggers_panel(_version: int) -> Component:
-        return _render_hedge_triggers_panel_logic(
-            portfolio=app.program_state.portfolio,
-            ips_config=ips_config,
-        )
-
-    @app.callback(
-        Output("plan-delta-drift-panel", "children"),
-        Input("book-version", "data"),
-    )
-    def _render_delta_drift_panel(_version: int) -> Component:
-        return _render_delta_drift_panel_logic(
-            portfolio=app.program_state.portfolio,
         )
 
     @app.callback(
