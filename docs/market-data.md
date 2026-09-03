@@ -223,6 +223,18 @@ digest's `data_quality` caveat take the ledger's single worst-of;
 `/health` and the provenance panel (`/monitor` and `/design`, collapsed
 by default) show the full, unmerged breakdown.
 
+`/health`'s `status` grades freshness per channel for the same reason
+(#393), and so **does not read `combined_quality`**: the fetched channel
+degrades at STALE-or-worse, the hand-entered one at `UNKNOWN` or worse.
+A merely `AGING` hand-entered input — one overdue against its
+`pricing_inputs` cadence rather than never confirmed — is reported in
+full under `pricing_inputs` but deliberately kept out of the headline,
+because with `spot_max_age_days: 1` it is true on most days of a
+weekly-rhythm program and a permanently degraded endpoint is a
+dead-man's switch nobody reads. `freshness_reason` names the channel and
+grade when one does degrade. The rule and its full reasoning live in
+`app/health_checks.py`'s module docstring.
+
 The banner mounts only when the ledger's worst channel is not `FRESH` —
 never for a merely `CACHED` fetched reading, the normal steady state. If
 every input #367 added made the banner louder, operators would stop

@@ -27,8 +27,12 @@ because the channel was never fetched at all in a way that makes an
 age meaningful (that last case does not occur for hand-entered inputs;
 see ``InputProvenance`` on ``MISSING``). ``ProvenanceLedger.combined_quality``
 maps the overall worst grade back onto ``DataQuality`` so the digest's
-existing ``_STALE_OR_WORSE`` gate and ``/health``'s vocabulary need no new
-grade string — see that property for the (deliberate, lossy) mapping.
+existing ``_STALE_OR_WORSE`` gate needs no new grade string — see that
+property for the (deliberate, lossy) mapping. ``/health`` is the one
+consumer that deliberately refuses it (#393): collapsing both channels
+would make a spot stamp one day past its cadence indistinguishable from
+a dead feed, so the endpoint grades each channel on its own cut instead
+— see ``app/health_checks.py``'s module docstring.
 """
 
 from __future__ import annotations
