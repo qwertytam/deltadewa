@@ -167,41 +167,50 @@ def layout(
             ),
             html.Div(
                 [
-                    html.Label("Grid resolution"),
-                    dcc.Slider(
-                        id="explore-spotvol-resolution",
-                        min=10,
-                        max=41,
-                        step=1,
-                        value=_DEFAULT_SPOTVOL_RESOLUTION,
-                        marks=None,
-                        updatemode="mouseup",
-                        tooltip={
-                            "placement": "bottom",
-                            "always_visible": True,
-                        },
+                    html.Div(
+                        [
+                            html.Label("Grid resolution"),
+                            dcc.Slider(
+                                id="explore-spotvol-resolution",
+                                min=10,
+                                max=41,
+                                step=1,
+                                value=_DEFAULT_SPOTVOL_RESOLUTION,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Days forward"),
+                            dcc.Slider(
+                                id="explore-spotvol-days-forward",
+                                min=0,
+                                max=max_days,
+                                step=max(1, max_days // 20),
+                                value=_DEFAULT_SPOTVOL_DAYS_FORWARD,
+                                marks=None,
+                                updatemode="mouseup",
+                                tooltip={
+                                    "placement": "bottom",
+                                    "always_visible": True,
+                                },
+                            ),
+                        ],
+                        className="dial",
                     ),
                 ],
-                className="dial",
-            ),
-            html.Div(
-                [
-                    html.Label("Days forward"),
-                    dcc.Slider(
-                        id="explore-spotvol-days-forward",
-                        min=0,
-                        max=max_days,
-                        step=max(1, max_days // 20),
-                        value=_DEFAULT_SPOTVOL_DAYS_FORWARD,
-                        marks=None,
-                        updatemode="mouseup",
-                        tooltip={
-                            "placement": "bottom",
-                            "always_visible": True,
-                        },
-                    ),
-                ],
-                className="dial",
+                # #328: both dials need the stacking context .dial-row
+                # establishes (deltadewa.css) — without it, the slider
+                # handle's own transform creates a nested stacking context
+                # that traps the tooltip underneath the graph card below.
+                className="dial-row",
             ),
             dcc.Loading(
                 html.Div(

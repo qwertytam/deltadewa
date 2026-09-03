@@ -2476,6 +2476,42 @@ class TestTimePricePanel:
         assert narrow.figure != wide.figure
 
 
+class TestExplorationDialStacking:
+    """#328: both heatmap panels' dials need /monitor's .dial-row fix.
+
+    Structural equivalence to the known-working `/monitor` pattern
+    (monitor.py:985) — no pixel diffing needed, since the CSS this
+    depends on (deltadewa.css:141) is unchanged and already proven there.
+    """
+
+    def test_spot_vol_and_time_price_dials_share_one_dial_row(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+
+        layout = design.render(app)
+
+        rows = _find_all_by_class(layout, "dial-row")
+        # One per panel with paired sliders: spot x vol, then time x price
+        # (page.py's EXPLORATION zone order).
+        assert len(rows) == 2
+        spot_vol_row, time_price_row = rows
+
+        assert (
+            _find_component(spot_vol_row, "explore-spotvol-resolution")
+            is not None
+        )
+        assert (
+            _find_component(spot_vol_row, "explore-spotvol-days-forward")
+            is not None
+        )
+        assert _find_component(time_price_row, "explore-time-steps") is not None
+        assert (
+            _find_component(time_price_row, "explore-price-steps") is not None
+        )
+
+
 class TestMcPanel:
     """The Monte Carlo distribution panel: scenario-local (B0 F6)."""
 
@@ -2961,6 +2997,37 @@ class TestExplorationZoneRendersClientSide:
         assert js_errors == []
         assert "Traceback" not in page.content()
         assert page.locator(".zone-exploration .js-plotly-plot").count() == 3
+
+    def test_dial_rows_establish_the_stacking_context(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        """#328: the CSS that closes the stacking-context gap actually applies.
+
+        Structural coverage (``TestExplorationDialStacking``) confirms the
+        markup matches `/monitor`'s known-working shape; this confirms the
+        browser actually resolves ``.dial-row``'s ``position: relative`` +
+        non-auto ``z-index`` on the live page, not just in the stylesheet.
+        """
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            ".zone-exploration .dial-row",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        computed = page.eval_on_selector_all(
+            ".zone-exploration .dial-row",
+            "els => els.map(el => {"
+            "const s = getComputedStyle(el);"
+            "return [s.position, s.zIndex];"
+            "})",
+        )
+
+        assert len(computed) == 2
+        for position, z_index in computed:
+            assert position == "relative"
+            assert z_index != "auto"
 
 
 class TestPageFooter:
