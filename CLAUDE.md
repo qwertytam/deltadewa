@@ -339,6 +339,31 @@ history keeps loading. `config/ips.example.yaml`'s `cliff_threshold_days`
 also moved 180 → 150 (#338), decoupling it from
 `roll_at_months_remaining`'s numeric coincidence (6.0 × 30 ≈ 180).
 
+**#308 has shipped**, splitting `app/pages/design.py` (3,812 lines) into
+`app/pages/design/` — the last issue before 1.0.0. `page.py` is now the
+composition layer (`render()`, `register_callbacks()`, the page-level
+`_no_ips_layout`/`_page_footer`, and the multi-reader basis-chip
+constants); `book.py` is the BOOK zone; `planning/` and `exploration/`
+hold one module per PLANNING/EXPLORATION panel, each exposing exactly
+`layout(...)` and `register(app)`. seam-finder's coupling data settled
+the seam: the by-zone/per-panel cut crosses 3 element ids
+(`book-version`, `mutation-status`, both owned by `book.py` and
+imported by name — never a bare literal — everywhere else); the
+layout/callbacks cut would have crossed all ~56, since Dash couples
+through id strings with no import to show for it, so `page.py` stays
+the only module both a panel's markup and its callback ever share.
+`tests/test_app/test_design_ids.py` pins that rule mechanically now: no
+id string may be created in one module and referenced as a literal in
+another. Two follow-ups came out of the split, filed rather than fixed
+under the "no behaviour change" acceptance criterion:
+`market_env.py`/`monetization.py` reproduce, not correct, the pre-#308
+asymmetry where `render()` shares one `assess_market_environment()`
+snapshot between the two panels but each panel's own callback
+re-assesses independently; and `reporting/program_report.py`'s line
+count in `pyproject.toml`'s `too-many-lines` disable comment was found
+stale (actual ~1,329, comment said ~1,000) but is unrelated to this
+split and was left alone.
+
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public
 [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,
@@ -454,9 +479,12 @@ don't fix):
   does this file actually come apart?" rather than "where is the middle?";
   refuses to propose a `utils`/`helpers` grab-bag for what doesn't cluster.
   Run before splitting a large module, retiring half a package, or
-  extracting a layer not yet split out — e.g. #308 (`pages/design.py`),
-  #312 (the matplotlib half of `visualization/`), #313 (a position-history
-  layer).
+  extracting a layer not yet split out — e.g. #312 (the matplotlib half of
+  `visualization/`), #313 (a position-history layer). #308
+  (`pages/design.py` → `pages/design/`) is the precedent: a per-panel
+  seam, not the layout/callbacks one, because every id in the file is
+  created by layout and referenced by a callback — see its close-out
+  below.
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`

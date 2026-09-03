@@ -76,7 +76,8 @@ book review. Three sections plus a collapsed table:
   bars, plus the monetization schedule at the current mark.
 - *Position detail* — a collapsed `<details>` per-leg ledger.
 
-**`/design`** (`deltadewa/app/pages/design.py`) — the operator's workbench.
+**`/design`** (`deltadewa/app/pages/design/` — a package since #308) —
+the operator's workbench.
 Three zones:
 
 - *BOOK* — position editor, underlying quantity with its **net-delta

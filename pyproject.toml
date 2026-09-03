@@ -154,9 +154,11 @@ disable = [
 	"too-few-public-methods",
 	# R0917 always co-fires with R0913; keeping one source of truth for arity
 	"too-many-positional-arguments",
-	# C0302 — app/pages/design.py (~3350 lines) and
-	# reporting/program_report.py (~1000) are large but cohesive, and both
-	# exceed pylint's 1000-line default
+	# C0302 — reporting/program_report.py (~1000 lines) exceeds pylint's
+	# 1000-line default; large but cohesive. app/pages/design.py used to be
+	# the other exception here (~3,812 lines) until #308 split it into
+	# app/pages/design/ (page.py plus per-panel modules), none of which
+	# comes close to the threshold on its own.
 	"too-many-lines",
 ]
 
