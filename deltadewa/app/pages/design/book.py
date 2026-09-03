@@ -24,7 +24,10 @@ PLANNING's markup).
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,6 +40,7 @@ from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.panel_guard import status_message as _status
 from deltadewa.clock import program_now
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.persistence import PortfolioSerializer
 from deltadewa.state import ConfirmationRequiredError
 
 if TYPE_CHECKING:
@@ -45,9 +49,15 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
-    from deltadewa.state import ProgramState
+    from deltadewa.state import ImportCandidate, ProgramState
 
 _logger = logging.getLogger(__name__)
+
+# #325: what a pending (refused, awaiting confirm) import remembers about
+# its source — a server-side path, or an upload's filename + data-URI
+# contents. JSON-serializable, so it round-trips through the
+# "import-pending-path" dcc.Store unchanged.
+_ImportSource = dict[str, str | None]
 
 _REQUIRED_ADD_FIELDS_MSG = "Strike, maturity, and quantity are required."
 
@@ -353,41 +363,129 @@ def _set_underlying_quantity_logic(
     return version + 1, _status("Underlying quantity updated.", error=False)
 
 
+def _decode_upload_contents(contents: str) -> bytes:
+    """Decode a ``dcc.Upload`` data URI (``data:<mime>;base64,<data>``).
+
+    Raises:
+        ValueError: *contents* isn't a base64 data URI, or its payload
+            isn't valid base64 — both surfaced as the one "couldn't be
+            read" message #325's malformed-file acceptance criterion asks
+            for, rather than a raw ``binascii.Error``.
+
+    """
+    _prefix, separator, encoded = contents.partition("base64,")
+    if not separator:
+        raise ValueError("The uploaded file could not be read.")
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except binascii.Error as exc:
+        raise ValueError("The uploaded file could not be read.") from exc
+
+
+def _apply_import(
+    source: _ImportSource,
+    *,
+    confirm: bool,
+    state: ProgramState,
+) -> None:
+    """Replace the live portfolio from *source* — a path or an upload.
+
+    Both origins funnel into the same ``ProgramState.import_portfolio``
+    call, so the confirm gate and the format-detecting importer behave
+    identically either way. An upload has no server path yet, so it's
+    decoded and written to a temp file under the state's own export
+    directory first — removed again in ``finally``, success or failure
+    alike, since a refused (dirty, unconfirmed) import is retried from the
+    *cached* upload contents (see :func:`_import_logic`), never from this
+    temp file.
+    """
+    if source["kind"] == "upload":
+        contents = source["contents"]
+        filename = source["filename"] or "upload"
+        if not contents:
+            raise ValueError("The uploaded file could not be read.")
+        if PortfolioSerializer.detect_file_format(filename) is None:
+            raise ValueError(f"Unsupported file format: {filename}")
+        payload = _decode_upload_contents(contents)
+        suffix = Path(filename).suffix
+        with tempfile.NamedTemporaryFile(
+            dir=state.state_path.parent,
+            suffix=suffix,
+            delete=False,
+        ) as handle:
+            handle.write(payload)
+        temp_path = Path(handle.name)
+        try:
+            state.import_portfolio(temp_path, confirm=confirm)
+        finally:
+            temp_path.unlink(missing_ok=True)
+        return
+
+    value = source["value"]
+    if not value:
+        raise ValueError("An import path is required.")
+    state.import_portfolio(Path(value), confirm=confirm)
+
+
 def _import_logic(
     *,
     confirm: bool,
-    target: str | None,
+    source_path: str | None,
+    upload_contents: str | None,
+    upload_filename: str | None,
+    pending_source: _ImportSource | None,
     version: int,
     state: ProgramState,
 ) -> tuple[Any, Component, Any, Any]:
     """Import a portfolio export, refusing over unsaved changes.
 
+    Two ways in (#325): *source_path*, chosen from the server-side file
+    picker, or *upload_contents*/*upload_filename*, from the operator's own
+    machine. An upload takes priority when both are present — choosing a
+    new file is the more deliberate act. On confirm, *pending_source* (not
+    the controls' current values) is replayed, so a confirm-retry imports
+    exactly what was refused even if the operator has since touched either
+    control.
+
     Doesn't route through :func:`_guarded_mutation` — unlike the other
     mutators, this needs to tell a policy refusal
     (``ConfirmationRequiredError``) apart from any other failure, since
-    only a refusal should remember *target* and reveal the confirm row;
+    only a refusal should remember the source and reveal the confirm row;
     any other failure (a bad path, a malformed file) should not offer
-    "confirm and retry," since retrying would just fail again the same
-    way.
+    "confirm and retry," since retrying would just fail again the same way.
 
     Returns:
-        ``(book_version, status, pending_path, confirm_row_hidden)``.
+        ``(book_version, status, pending_source, confirm_row_hidden)``.
 
     """
-    if not target:
+    source: _ImportSource | None
+    if confirm:
+        source = pending_source
+    elif upload_contents:
+        source = {
+            "kind": "upload",
+            "filename": upload_filename,
+            "contents": upload_contents,
+        }
+    elif source_path:
+        source = {"kind": "path", "value": source_path}
+    else:
+        source = None
+
+    if not source:
         # Unrelated to the confirm flow — leave any existing pending
-        # path/reveal state exactly as it was.
+        # source/reveal state exactly as it was.
         return (
             no_update,
-            _status("An import path is required.", error=True),
+            _status("Choose a file to import.", error=True),
             no_update,
             no_update,
         )
 
     try:
-        state.import_portfolio(Path(target), confirm=confirm)
+        _apply_import(source, confirm=confirm, state=state)
     except ConfirmationRequiredError as exc:
-        return no_update, _status(str(exc), error=True), target, False
+        return no_update, _status(str(exc), error=True), source, False
     except (ValueError, OSError) as exc:
         return no_update, _status(str(exc), error=True), no_update, True
     except Exception:  # pylint: disable=broad-exception-caught
@@ -420,11 +518,13 @@ def _import_logic(
     return version + 1, _status(message, error=False), None, True
 
 
-def _export_logic(*, state: ProgramState) -> tuple[Any, Component]:
+def _export_logic(*, state: ProgramState, fmt: str) -> tuple[Any, Component]:
     """Snapshot the live book and package it for browser download.
 
     Read-only — doesn't touch ``book-version``, correctly outside the
-    "failed mutation" concern entirely.
+    "failed mutation" concern entirely. *fmt* (#325) is ``"yaml"`` or
+    ``"json"``, from the export-format control; it decides both the
+    written format and the downloaded file's extension.
     """
     # Stamped in the program's timezone: the file name is what a human
     # sorts and cites, so it should read as the desk's clock, not UTC.
@@ -433,9 +533,9 @@ def _export_logic(*, state: ProgramState) -> tuple[Any, Component]:
         if state.ips_config is not None
         else None,
     )
-    filename = f"design-export-{stamp:%Y%m%dT%H%M%S}.json"
+    filename = f"design-export-{stamp:%Y%m%dT%H%M%S}.{fmt}"
     try:
-        path = state.export_snapshot(filename)
+        path = state.export_snapshot(filename, fmt=fmt)
     except Exception:  # pylint: disable=broad-exception-caught
         _logger.exception("Unexpected error exporting the /design book")
         return no_update, _status(
@@ -447,6 +547,26 @@ def _export_logic(*, state: ProgramState) -> tuple[Any, Component]:
         str(path),
     )
     return download, _status(f"Exported to {filename}.", error=False)
+
+
+def _import_picker_options(
+    candidates: Sequence[ImportCandidate],
+) -> list[dict[str, str]]:
+    """Format :meth:`ProgramState.list_import_candidates` for a Dropdown.
+
+    Filename plus modified time, per #325's acceptance criteria — enough
+    to tell two files apart without opening either.
+    """
+    return [
+        {
+            "label": (
+                f"{candidate.path.name} — modified "
+                f"{candidate.modified_at:%Y-%m-%d %H:%M} UTC"
+            ),
+            "value": str(candidate.path),
+        }
+        for candidate in candidates
+    ]
 
 
 def layout(
@@ -582,8 +702,27 @@ def layout(
                 [
                     html.Div(
                         [
-                            html.Label("Import path"),
-                            dcc.Input(id="import-path", type="text"),
+                            html.Label("Choose a file on the server"),
+                            dcc.Dropdown(
+                                id="import-source-picker",
+                                options=_import_picker_options(
+                                    app.program_state.list_import_candidates(),
+                                ),
+                                placeholder="Choose a file…",
+                            ),
+                        ],
+                        className="editor-field",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("...or upload one"),
+                            dcc.Upload(
+                                id="import-upload",
+                                children=html.Button(
+                                    "Choose file to upload",
+                                    className="btn",
+                                ),
+                            ),
                         ],
                         className="editor-field",
                     ),
@@ -591,6 +730,17 @@ def layout(
                         "Import",
                         id="import-submit",
                         className="btn btn-primary",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Export format"),
+                            dcc.RadioItems(
+                                id="export-format",
+                                options=["yaml", "json"],
+                                value="yaml",
+                            ),
+                        ],
+                        className="editor-field",
                     ),
                     html.Button(
                         "Export",
@@ -753,7 +903,9 @@ def register(app: ProgramDashApp) -> None:
         Output("import-confirm-row", "hidden"),
         Input("import-submit", "n_clicks"),
         Input("import-confirm-submit", "n_clicks"),
-        State("import-path", "value"),
+        State("import-source-picker", "value"),
+        State("import-upload", "contents"),
+        State("import-upload", "filename"),
         State("import-pending-path", "data"),
         State(BOOK_VERSION_STORE, "data"),
         prevent_initial_call=True,
@@ -761,17 +913,19 @@ def register(app: ProgramDashApp) -> None:
     def _import(  # pylint: disable=too-many-arguments
         _submit_clicks: int | None,
         _confirm_clicks: int | None,
-        path: str | None,
-        pending_path: str | None,
+        source_path: str | None,
+        upload_contents: str | None,
+        upload_filename: str | None,
+        pending_source: _ImportSource | None,
         version: int,
     ) -> tuple[Any, Component, Any, Any]:
-        if ctx.triggered_id == "import-confirm-submit":
-            confirm, target = True, pending_path
-        else:
-            confirm, target = False, path
+        confirm = ctx.triggered_id == "import-confirm-submit"
         return _import_logic(
             confirm=confirm,
-            target=target,
+            source_path=source_path,
+            upload_contents=upload_contents,
+            upload_filename=upload_filename,
+            pending_source=pending_source,
             version=version,
             state=app.program_state,
         )
@@ -780,10 +934,11 @@ def register(app: ProgramDashApp) -> None:
         Output("export-download", "data"),
         Output(MUTATION_STATUS, "children", allow_duplicate=True),
         Input("export-submit", "n_clicks"),
+        State("export-format", "value"),
         prevent_initial_call=True,
     )
-    def _export(_n_clicks: int) -> tuple[Any, Component]:
-        return _export_logic(state=app.program_state)
+    def _export(_n_clicks: int, fmt: str) -> tuple[Any, Component]:
+        return _export_logic(state=app.program_state, fmt=fmt)
 
     @app.callback(
         Output("position-table", "children"),

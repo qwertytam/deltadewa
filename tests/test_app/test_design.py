@@ -14,6 +14,7 @@ sharing a book across tests in this module would leak state between them).
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import threading
 import time
@@ -499,14 +500,20 @@ class TestImportRefusal:
 
         version, status, pending, hidden = design._import_logic(
             confirm=False,
-            target=str(tmp_path / "whatever.json"),
+            source_path=str(tmp_path / "whatever.json"),
+            upload_contents=None,
+            upload_filename=None,
+            pending_source=None,
             version=3,
             state=state,
         )
 
         assert version is no_update
         assert "confirm" in status.children.lower()
-        assert pending == str(tmp_path / "whatever.json")
+        assert pending == {
+            "kind": "path",
+            "value": str(tmp_path / "whatever.json"),
+        }
         assert hidden is False
         # The one position the forced-failure helper added is still
         # there — the refused import didn't touch the live book.
@@ -524,7 +531,10 @@ class TestImportRefusal:
 
         version, _status, pending, hidden = design._import_logic(
             confirm=True,
-            target=str(import_source),
+            source_path=None,
+            upload_contents=None,
+            upload_filename=None,
+            pending_source={"kind": "path", "value": str(import_source)},
             version=3,
             state=state,
         )
@@ -534,6 +544,179 @@ class TestImportRefusal:
         assert hidden is True
         assert state.portfolio.symbol == "OTHER"
         assert state.dirty is False
+
+
+def _as_upload_data_uri(path: Path, *, mime: str = "application/json") -> str:
+    """Encode a file's bytes as a ``dcc.Upload``-shaped data URI."""
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+class TestImportSourcesAndExportFormat:
+    """#325: the server-side picker, the upload path, and export format."""
+
+    def test_import_from_a_dropdown_selected_path_succeeds(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        import_source = _write_other_export(tmp_path)
+
+        version, status, pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=str(import_source),
+            upload_contents=None,
+            upload_filename=None,
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version == 4
+        assert "imported" in status.children.lower()
+        assert pending is None
+        assert hidden is True
+        assert state.portfolio.symbol == "OTHER"
+
+    def test_import_from_an_uploaded_file_succeeds(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        import_source = _write_other_export(tmp_path)
+
+        version, status, _pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents=_as_upload_data_uri(import_source),
+            upload_filename="import_me.json",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version == 4
+        assert "imported" in status.children.lower()
+        assert hidden is True
+        assert state.portfolio.symbol == "OTHER"
+
+    def test_upload_takes_priority_over_a_dropdown_selection(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        upload_source = _write_other_export(tmp_path)
+        # A dropdown selection is also present, but must be ignored — an
+        # upload is the more deliberate act.
+        stale_path = str(tmp_path / "does-not-exist.json")
+
+        design._import_logic(
+            confirm=False,
+            source_path=stale_path,
+            upload_contents=_as_upload_data_uri(upload_source),
+            upload_filename="import_me.json",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert state.portfolio.symbol == "OTHER"
+
+    def test_malformed_upload_gets_a_legible_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        version, status, pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents="data:application/json;base64,not-valid-base64!!!",
+            upload_filename="broken.json",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version is no_update
+        assert "could not be read" in status.children.lower()
+        # Not the broad_exception_caught fallback — a specific message.
+        assert "something went wrong" not in status.children.lower()
+        assert pending is no_update
+        assert hidden is True
+
+    def test_unsupported_upload_extension_gets_a_legible_message(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        contents = "data:text/plain;base64," + base64.b64encode(
+            b"not a portfolio",
+        ).decode("ascii")
+
+        version, status, _pending, _hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents=contents,
+            upload_filename="notes.txt",
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version is no_update
+        assert "unsupported file format" in status.children.lower()
+
+    def test_no_source_chosen_prompts_to_choose_a_file(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        version, status, pending, hidden = design._import_logic(
+            confirm=False,
+            source_path=None,
+            upload_contents=None,
+            upload_filename=None,
+            pending_source=None,
+            version=3,
+            state=state,
+        )
+
+        assert version is no_update
+        assert "choose a file" in status.children.lower()
+        assert pending is no_update
+        assert hidden is no_update
+
+    def test_export_format_choice_controls_extension_and_reimports(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        _add_starter_position(state)
+
+        for export_format in ("json", "yaml"):
+            download, status = design._export_logic(
+                state=state,
+                fmt=export_format,
+            )
+
+            assert download["filename"].endswith(f".{export_format}")
+            assert "exported" in status.children.lower()
+            exported_path = state.state_path.parent / download["filename"]
+            reimported = PortfolioSerializer(
+                export_dir=tmp_path,
+            ).import_portfolio(exported_path)
+            assert len(reimported["portfolio"].positions) == len(
+                state.portfolio.positions,
+            )
 
 
 class TestBasisChip:
@@ -2932,6 +3115,63 @@ class TestAddPositionRace:
             timeout=5_000,
         )
         assert len(design_app.state.portfolio.positions) == before_count + 1
+
+
+class TestImportUploadFromBrowser:
+    """#325: the operator's-own-machine path — genuinely needs a browser.
+
+    ``dcc.Upload``'s ``contents``/``filename`` are populated by the
+    browser reading a real file the user picked; a direct
+    ``_import_logic`` call (``TestImportSourcesAndExportFormat`` above)
+    covers the decode/import logic once those strings exist, but not the
+    browser-side plumbing that produces them in the first place.
+    """
+
+    def test_uploading_a_file_and_clicking_import_replaces_the_book(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+        tmp_path: Path,
+    ) -> None:
+        upload_path = tmp_path / "upload_me.yaml"
+        upload_path.write_text(
+            "market_parameters:\n"
+            "  spot_price: 4500.0\n"
+            "  volatility: 0.2\n"
+            "  risk_free_rate: 0.03\n"
+            "  dividend_yield: 0.015\n"
+            "  contract_size: 100\n"
+            "  symbol: UPLOADED\n"
+            "positions:\n"
+            "  - option_type: PUT\n"
+            "    strike_price: 4000.0\n"
+            '    maturity_date: "2027-06-01T00:00:00+00:00"\n'
+            "    quantity: 2\n",
+        )
+
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#import-upload", timeout=_PAGE_LOAD_TIMEOUT_MS)
+
+        page.set_input_files(
+            "#import-upload input[type=file]",
+            str(upload_path),
+        )
+        page.wait_for_function(
+            "document.getElementById('import-upload')"
+            ".querySelector('input').files.length === 1",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        page.click("#import-submit")
+        page.wait_for_function(
+            "document.body.innerText.includes('Imported')",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        assert design_app.state.portfolio.symbol == "UPLOADED"
+        assert len(design_app.state.portfolio.positions) == 1
+        assert design_app.state.portfolio.positions[
+            0
+        ].option.strike_price == pytest.approx(4000.0)
 
 
 class TestPlanningZoneRendersClientSide:

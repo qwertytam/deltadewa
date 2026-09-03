@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -421,6 +422,90 @@ class TestExportSnapshot:
             export_dir=tmp_path,
         ).import_from_json(written)
         assert len(reimported["portfolio"].positions) == 1
+
+    def test_yaml_format_writes_and_round_trips(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#325: export_snapshot(fmt="yaml") — same shape, different format."""
+        state = _load(tmp_path)
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+
+        written = state.export_snapshot("snapshot.yaml", fmt="yaml")
+
+        assert written.suffix == ".yaml"
+        assert written.exists()
+        reimported = PortfolioSerializer(
+            export_dir=tmp_path,
+        ).import_from_yaml(written)
+        assert len(reimported["portfolio"].positions) == 1
+
+
+class TestListImportCandidates:
+    """#325: the /design import picker's server-side file list."""
+
+    def test_combines_export_dir_and_examples_dir_newest_first(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        export_dir = tmp_path / "exports"
+        examples_dir = tmp_path / "examples"
+        state = ProgramState.load(
+            export_dir,
+            ips_path=tmp_path / _MISSING_IPS,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            examples_dir=examples_dir,
+        )
+
+        older = state.export_snapshot("older.json")
+        time.sleep(0.01)
+        (examples_dir / "example.yaml").write_text("market_parameters: {}\n")
+        newer = examples_dir / "example.yaml"
+
+        candidates = state.list_import_candidates()
+
+        paths = [c.path for c in candidates]
+        assert older in paths
+        assert newer in paths
+        assert paths.index(newer) < paths.index(older)
+
+    def test_excludes_the_live_autosave_file(self, tmp_path: Path) -> None:
+        export_dir = tmp_path / "exports"
+        state = ProgramState.load(
+            export_dir,
+            ips_path=tmp_path / _MISSING_IPS,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            examples_dir=tmp_path / "no-examples",
+        )
+        # A mutation autosaves STATE_FILENAME into export_dir.
+        state.add_position(
+            strike_price=100.0,
+            maturity_date=_MATURITY,
+            quantity=1,
+            option_type=OptionType.CALL,
+        )
+
+        names = {c.path.name for c in state.list_import_candidates()}
+
+        assert STATE_FILENAME not in names
+
+    def test_empty_when_neither_directory_has_files(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = ProgramState.load(
+            tmp_path / "exports",
+            ips_path=tmp_path / _MISSING_IPS,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+            examples_dir=tmp_path / "no-examples",
+        )
+
+        assert state.list_import_candidates() == []
 
 
 class TestDestructiveOpsRequireConfirm:

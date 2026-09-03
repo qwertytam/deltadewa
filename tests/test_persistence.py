@@ -1019,6 +1019,74 @@ class TestUniversalImport:
             serializer.import_portfolio(txt_path)
 
 
+class TestMalformedImportErrors:
+    """#325 acceptance criterion #4: a malformed file fails legibly.
+
+    Before this, a non-portfolio or syntactically broken file surfaced as
+    a bare ``KeyError``/``yaml.YAMLError`` — caught only by book.py's
+    generic "something went wrong" branch, not the specific message these
+    exercise.
+    """
+
+    @pytest.mark.skipif(not YAML_AVAILABLE, reason="PyYAML not installed")
+    def test_malformed_yaml_syntax_raises_legible_value_error(
+        self,
+        tmp_path,
+    ) -> None:
+        yaml_path = tmp_path / "broken.yaml"
+        yaml_path.write_text("market_parameters: [unclosed\n")
+
+        serializer = PortfolioSerializer(tmp_path)
+        with pytest.raises(ValueError, match="Malformed YAML"):
+            serializer.import_from_yaml(yaml_path)
+
+    def test_yaml_list_not_mapping_raises_legible_value_error(
+        self,
+        tmp_path,
+    ) -> None:
+        yaml_path = tmp_path / "list.yaml"
+        yaml_path.write_text("- one\n- two\n")
+
+        serializer = PortfolioSerializer(tmp_path)
+        with pytest.raises(ValueError, match="Not a portfolio file"):
+            serializer.import_from_yaml(yaml_path)
+
+    def test_json_list_not_mapping_raises_legible_value_error(
+        self,
+        tmp_path,
+    ) -> None:
+        json_path = tmp_path / "list.json"
+        json_path.write_text("[1, 2, 3]")
+
+        serializer = PortfolioSerializer(tmp_path)
+        with pytest.raises(ValueError, match="Not a portfolio file"):
+            serializer.import_from_json(json_path)
+
+    def test_yaml_missing_market_parameters_raises_legible_value_error(
+        self,
+        tmp_path,
+    ) -> None:
+        yaml_path = tmp_path / "no_market_params.yaml"
+        yaml_path.write_text("positions: []\n")
+
+        serializer = PortfolioSerializer(tmp_path)
+        with pytest.raises(ValueError, match="market_parameters"):
+            serializer.import_from_yaml(yaml_path)
+
+    def test_json_missing_positions_raises_legible_value_error(
+        self,
+        tmp_path,
+    ) -> None:
+        json_path = tmp_path / "no_positions.json"
+        json_path.write_text(
+            json.dumps({"market_parameters": {"spot_price": 100.0}}),
+        )
+
+        serializer = PortfolioSerializer(tmp_path)
+        with pytest.raises(ValueError, match="positions"):
+            serializer.import_from_json(json_path)
+
+
 # ========== Convenience Function Tests ==========
 
 

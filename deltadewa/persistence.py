@@ -27,6 +27,39 @@ except ImportError:
     YAML_AVAILABLE = False
 
 
+def _require_portfolio_shape(
+    data: object,
+    filepath: str | Path,
+) -> dict[str, Any]:
+    """Confirm *data* looks like a portfolio export before reading it.
+
+    #325's acceptance criterion #4: a malformed or non-portfolio file must
+    fail with a legible message, not a bare ``KeyError``/``TypeError`` from
+    subscripting whatever ``yaml.safe_load``/``json.load`` happened to
+    return. Both importers route their parsed top-level object through
+    this before touching ``market_parameters``/``positions``.
+
+    Returns:
+        *data*, narrowed to ``dict[str, Any]``, once it passes.
+
+    Raises:
+        ValueError: If *data* isn't a mapping, or is missing either of the
+            two sections every importer reads.
+
+    """
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Not a portfolio file: {filepath} does not contain a mapping "
+            "at the top level",
+        )
+    for required in ("market_parameters", "positions"):
+        if required not in data:
+            raise ValueError(
+                f"Not a portfolio file: {filepath} has no '{required}' section",
+            )
+    return data
+
+
 def _stamps_from_market_params(
     market_params: dict[str, Any],
 ) -> MarketParameterStamps:
@@ -455,6 +488,7 @@ class PortfolioSerializer:
         """
         with Path.open(Path(filepath), encoding="utf-8") as f:
             data = json.load(f)
+        data = _require_portfolio_shape(data, filepath)
 
         if not create_portfolio:
             return dict(data)
@@ -596,7 +630,13 @@ class PortfolioSerializer:
             )
 
         with Path.open(Path(filepath), encoding="utf-8") as f:
-            config = yaml.safe_load(f)
+            try:
+                config = yaml.safe_load(f)
+            except yaml.YAMLError as exc:
+                raise ValueError(
+                    f"Malformed YAML in {filepath}: {exc}",
+                ) from exc
+        config = _require_portfolio_shape(config, filepath)
 
         # Extract market parameters
         market_params = config["market_parameters"]
