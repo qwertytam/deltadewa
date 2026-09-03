@@ -327,7 +327,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
 
     @app.callback(
         Output("shape-notice", "children"),
-        Input("book-version", "data"),
+        Input(book.BOOK_VERSION_STORE, "data"),
     )
     def _render_shape_notice(_version: int) -> str | None:
         # Restores #261: /design can change the book's shape (add/remove a
