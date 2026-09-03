@@ -27,20 +27,22 @@ from .book import _remove_position_logic as _remove_position_logic
 from .book import (
     _set_underlying_quantity_logic as _set_underlying_quantity_logic,
 )
-from .page import _BASIS_CRASH_SKEW as _BASIS_CRASH_SKEW
-from .page import _render_mc_panel_logic as _render_mc_panel_logic
-from .page import (
+from .exploration.monte_carlo import (
+    _render_mc_panel_logic as _render_mc_panel_logic,
+)
+from .exploration.spot_vol import (
     _render_spot_vol_panel_logic as _render_spot_vol_panel_logic,
 )
-from .page import (
+from .exploration.time_price import (
     _render_time_price_panel_logic as _render_time_price_panel_logic,
 )
-from .page import (
+from .exploration.vega_term import (
     _render_vega_term_panel_logic as _render_vega_term_panel_logic,
 )
-from .page import (
+from .exploration.volatility_profile import (
     _render_volatility_profile_panel_logic as _render_volatility_profile_panel_logic,  # ruff: ignore[line-too-long]
 )
+from .page import _BASIS_CRASH_SKEW as _BASIS_CRASH_SKEW
 from .page import register_callbacks as register_callbacks
 from .page import render as render
 from .planning.convexity_cliff import (
