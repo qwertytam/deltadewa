@@ -35,7 +35,11 @@ from deltadewa.reporting.program_report import (
 )
 from deltadewa.reporting.weekly_report import (
     _expired_leg_count,
+    _footer_facts,
+    _from_header,
     _headline,
+    _linkify_urls,
+    _monitor_url,
     _read_backup_heartbeat_warning,
     _worst_roll_record,
     _worst_roll_verdict,
@@ -691,10 +695,172 @@ class TestHeadlineMechanism:
         assert headline.startswith("STALE DATA — ")
 
 
+class TestMonitorUrl:
+    """#319: the dashboard bookmark, built from BIND_ADDR (RUNBOOK §10)."""
+
+    def test_unset_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+
+        assert _monitor_url() is None
+
+    def test_blank_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An empty ``.env`` value reads as unset, not as a real address."""
+        monkeypatch.setenv("BIND_ADDR", "")
+
+        assert _monitor_url() is None
+
+    def test_set_builds_the_monitor_link(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("BIND_ADDR", "198.51.100.1")
+
+        assert _monitor_url() == "http://198.51.100.1:8050/monitor"
+
+
+class TestFromHeader:
+    """#319: a friendlier From display name, without changing the sender."""
+
+    def test_default_display_name_when_unset(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("REPORT_EMAIL_FROM_NAME", raising=False)
+
+        header = _from_header("hedge-program@example.com")
+
+        assert header == "Weekly Hedge Digest <hedge-program@example.com>"
+
+    def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("REPORT_EMAIL_FROM_NAME", "The Smith Family Hedge")
+
+        header = _from_header("hedge-program@example.com")
+
+        assert header == "The Smith Family Hedge <hedge-program@example.com>"
+
+    def test_sending_address_itself_is_unchanged(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The relay must still see exactly the verified sender address —
+        this only decorates what the recipient's inbox displays.
+        """
+        monkeypatch.delenv("REPORT_EMAIL_FROM_NAME", raising=False)
+
+        header = _from_header("hedge-program@example.com")
+
+        assert "hedge-program@example.com" in header
+
+
+class TestFooterFacts:
+    """#319: the digest footer for the non-technical reader."""
+
+    def test_always_includes_version(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+
+        facts = _footer_facts()
+
+        assert any(fact.startswith("Running v") for fact in facts)
+
+    def test_dashboard_fact_falls_back_without_bind_addr(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+
+        facts = _footer_facts()
+
+        dashboard_facts = [f for f in facts if f.startswith("Dashboard:")]
+        assert len(dashboard_facts) == 1
+        assert "http://" not in dashboard_facts[0]
+
+    def test_dashboard_fact_links_when_bind_addr_set(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("BIND_ADDR", "198.51.100.1")
+
+        facts = _footer_facts()
+
+        assert "Dashboard: http://198.51.100.1:8050/monitor" in facts
+
+    def test_continuity_line_names_the_two_week_signal(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+
+        facts = _footer_facts()
+
+        continuity_facts = [f for f in facts if "two weeks" in f]
+        assert len(continuity_facts) == 1
+        assert "continuity-planning" in continuity_facts[0]
+
+    def test_glossary_covers_theta_convexity_and_ips(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Exactly the terms tied to sections that render on every
+        digest (Cost, Protection, IPS Compliance) — see _GLOSSARY.
+        """
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+
+        facts = _footer_facts()
+
+        assert any(f.startswith("Theta:") for f in facts)
+        assert any(f.startswith("Convexity:") for f in facts)
+        assert any(f.startswith("IPS:") for f in facts)
+
+
+class TestLinkifyUrls:
+    """#319 field test: a footer fact's bare URL must render as a real
+    <a href> in HTML — plain text is invisible as a link the moment the
+    digest is opened as a raw .html file, not viewed through a mail
+    client's own auto-linkify pass.
+    """
+
+    def test_wraps_a_bare_url(self) -> None:
+        text = "Dashboard: http://198.51.100.1:8050/monitor"
+
+        result = _linkify_urls(text)
+
+        assert result == (
+            "Dashboard: "
+            '<a href="http://198.51.100.1:8050/monitor">'
+            "http://198.51.100.1:8050/monitor</a>"
+        )
+
+    def test_text_with_no_url_is_unchanged(self) -> None:
+        text = "Theta: the ongoing daily cost of holding this hedge."
+
+        assert _linkify_urls(text) == text
+
+    def test_wraps_every_url_when_more_than_one(self) -> None:
+        text = "See http://a.example.com and http://b.example.com too."
+
+        result = _linkify_urls(text)
+
+        assert result.count("<a href=") == 2
+
+
 class TestGoldenMarkdown:
     """Byte-for-byte regression on a pinned, fully-injected digest."""
 
-    def test_matches_golden_file(self) -> None:
+    def test_matches_golden_file(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # #319's footer reads BIND_ADDR/REPORT_EMAIL_FROM_NAME from the
+        # environment — stripped here so this byte-for-byte comparison
+        # can't depend on whatever a developer's or CI's ambient shell
+        # happens to have set (the same reasoning
+        # tests/test_ops/test_backup_exports.py's _run() strips
+        # BACKUP_REMOTE/BACKUP_HEARTBEAT_URL for).
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+        monkeypatch.delenv("REPORT_EMAIL_FROM_NAME", raising=False)
         report = _make_report()
         # Real roll records, not (): the per-leg roll table and the
         # attributed worst-roll crossing (#374) are digest output, so the
@@ -755,6 +921,52 @@ class TestRenderWeeklyDigestHtml:
         assert "<h2>3. Market Context</h2>" in html
         assert "<h2>6. IPS Compliance</h2>" in html
         assert "<h2>7. Decision &amp; entry timing</h2>" in html
+
+    def test_footer_renders_with_glossary_and_continuity_note(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """#319: the footer is real HTML markup, not silently dropped."""
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+
+        html = render_weekly_digest_html(self._digest())
+
+        assert "<footer>" in html
+        assert "</footer>" in html
+        assert 'class="note"' in html
+        assert "Theta:" in html
+        assert "two weeks" in html
+
+    def test_continuity_annex_url_is_a_real_link(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Always present regardless of BIND_ADDR — must be clickable."""
+        monkeypatch.delenv("BIND_ADDR", raising=False)
+
+        html = render_weekly_digest_html(self._digest())
+
+        assert (
+            '<a href="https://qwertytam.github.io/deltadewa-handbook/'
+            'part-7/continuity-planning/">' in html
+        )
+
+    def test_dashboard_url_is_a_real_link_when_bind_addr_set(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """#319 field test: a bare URL in a <p> is invisible as a link
+        the moment the digest is opened as a raw .html file rather than
+        a mail client that auto-linkifies plain text.
+        """
+        monkeypatch.setenv("BIND_ADDR", "198.51.100.1")
+
+        html = render_weekly_digest_html(self._digest())
+
+        assert (
+            '<a href="http://198.51.100.1:8050/monitor">'
+            "http://198.51.100.1:8050/monitor</a>" in html
+        )
 
 
 class TestStaleBanner:
@@ -1300,7 +1512,12 @@ class TestMainSendEmail:
         mock_send.assert_called_once()
         message = mock_send.call_args.args[0]
         assert message.to_addr == "ic@example.com"
-        assert message.from_addr == "hedge-program@example.com"
+        # #319: the sending address is unchanged, wrapped with a
+        # friendlier display name — see TestFromHeader for the helper
+        # itself.
+        assert message.from_addr == (
+            "Weekly Hedge Digest <hedge-program@example.com>"
+        )
         mock_ping.assert_called_once_with(
             "https://hc-ping.com/x",
             label="digest",

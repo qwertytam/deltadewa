@@ -18,11 +18,13 @@ prompt's example ``deltadewa.jobs.weekly_report`` path.
 from __future__ import annotations
 
 import http.server
+import json
 import os
 import shutil
 import socket
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -145,6 +147,26 @@ def _seeded_exports(tmp_path: Path) -> tuple[Path, Path]:
     exports.mkdir(parents=True)
     (exports / "program_state.json").write_text('{"positions": []}')
     return repo_dir, _bare_remote(tmp_path)
+
+
+def _write_policy(
+    repo_dir: Path,
+    *,
+    content: str = "program:\n  name: test\n",
+    version: str | None = "1.2.3",
+) -> Path:
+    """Seed ``config/ips.yaml`` (and optionally ``pyproject.toml``) under
+    a scratch repo_dir, for the #301 policy-snapshot tests below.
+    """
+    config = repo_dir / "config"
+    config.mkdir(parents=True, exist_ok=True)
+    policy = config / "ips.yaml"
+    policy.write_text(content)
+    if version is not None:
+        (repo_dir / "pyproject.toml").write_text(
+            f'[tool.poetry]\nversion = "{version}"\n',
+        )
+    return policy
 
 
 def _closed_local_port_url() -> str:
@@ -560,3 +582,155 @@ class TestBackupRemoteReconciliation:
         # exactly where the first run left it.
         log_a = _git("log", "--oneline", "main", cwd=remote_a)
         assert len(log_a.stdout.strip().splitlines()) == 1
+
+
+class TestPolicySnapshot:
+    """#301: config/ips.yaml is baked into the image, never bind-mounted,
+    so it is otherwise unreachable from the offsite backup — this stages
+    a copy under exports/config-backup/ on every run, before it's picked
+    up by the same `git add -A`/commit/push this class's siblings above
+    already exercise.
+    """
+
+    def test_policy_copied_and_manifest_written(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir, version="9.9.9")
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        backup_dir = repo_dir / "exports" / "config-backup"
+        assert (backup_dir / "ips.yaml").read_text() == (
+            (repo_dir / "config" / "ips.yaml").read_text()
+        )
+        manifest = json.loads((backup_dir / "MANIFEST.json").read_text())
+        assert manifest["written_by"] == "backup-exports.sh"
+        assert manifest["source"] == "config/ips.yaml"
+        assert manifest["app_version"] == "9.9.9"
+        assert len(manifest["sha256"]) == 64  # a real hex sha256
+        assert manifest["policy_changed_at"]
+        # No operational value belongs in a manifest that gets pushed
+        # offsite (persistence.py's written_by docstring states the same
+        # rule for program_state.json) — pin the key set stays exactly
+        # this, not "happens not to contain a remote today."
+        assert set(manifest) == {
+            "written_by",
+            "source",
+            "sha256",
+            "app_version",
+            "policy_changed_at",
+        }
+
+    def test_unchanged_policy_across_runs_stays_a_clean_noop(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The manifest must not churn when the policy hasn't changed —
+        an every-run-dirty manifest would defeat #252's clean-tree
+        remote-verification path (TestCleanTreeHeartbeatVerification).
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+        exports = repo_dir / "exports"
+        first_commit = _git("rev-parse", "HEAD", cwd=exports).stdout.strip()
+        manifest_path = exports / "config-backup" / "MANIFEST.json"
+        first_manifest = manifest_path.read_text()
+
+        second = _run(repo_dir, remote)
+
+        assert second.returncode == 0, second.stderr
+        assert "nothing to commit" in second.stdout
+        second_commit = _git("rev-parse", "HEAD", cwd=exports).stdout.strip()
+        assert second_commit == first_commit
+        assert manifest_path.read_text() == first_manifest
+
+    def test_changed_policy_updates_manifest_and_pushes(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        policy = _write_policy(repo_dir, content="program:\n  name: v1\n")
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+        manifest_path = repo_dir / "exports" / "config-backup" / "MANIFEST.json"
+        first_manifest = json.loads(manifest_path.read_text())
+        time.sleep(1.1)  # policy_changed_at has one-second resolution
+
+        policy.write_text("program:\n  name: v2\n")
+        second = _run(repo_dir, remote)
+
+        assert second.returncode == 0, second.stderr
+        assert "pushed" in second.stdout
+        second_manifest = json.loads(manifest_path.read_text())
+        assert second_manifest["sha256"] != first_manifest["sha256"]
+        assert (
+            second_manifest["policy_changed_at"]
+            != first_manifest["policy_changed_at"]
+        )
+        backup_dir = repo_dir / "exports" / "config-backup"
+        assert (backup_dir / "ips.yaml").read_text() == "program:\n  name: v2\n"
+
+    def test_missing_policy_warns_and_marks_but_does_not_fail_the_job(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A fresh checkout with no config/ips.yaml yet must not take
+        down the program_state.json backup or the heartbeat — see the
+        script's stage_policy_snapshot() comment.
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        assert "pushed" in result.stdout
+        assert "config/ips.yaml" in result.stderr
+        assert "not found" in result.stderr
+        marker = repo_dir / "exports" / "config-backup" / "POLICY-MISSING.txt"
+        assert marker.exists()
+        assert "not found on this host" in marker.read_text()
+
+    def test_policy_reappearing_clears_the_missing_marker(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+        marker = repo_dir / "exports" / "config-backup" / "POLICY-MISSING.txt"
+        assert marker.exists()
+
+        _write_policy(repo_dir)
+        second = _run(repo_dir, remote)
+
+        assert second.returncode == 0, second.stderr
+        assert not marker.exists()
+        assert (
+            repo_dir / "exports" / "config-backup" / "MANIFEST.json"
+        ).exists()
+
+    def test_manifest_key_set_carries_no_operational_value(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Nothing that could identify the remote, host, or credential
+        path belongs in an artifact this script itself pushes offsite —
+        the same rule persistence.py's writer_label docstring states for
+        program_state.json's metadata.written_by.
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir)
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        manifest_text = (
+            repo_dir / "exports" / "config-backup" / "MANIFEST.json"
+        ).read_text()
+        assert str(remote) not in manifest_text
+        assert "BACKUP_REMOTE" not in manifest_text

@@ -13,6 +13,9 @@ The IPS is the sole config the shipping Dash app loads.
 
 from __future__ import annotations
 
+import argparse
+import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from itertools import pairwise
@@ -22,6 +25,26 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from deltadewa.clock import DEFAULT_PROGRAM_TIMEZONE
 from deltadewa.constants import ExerciseStyle
+
+# The shipped template (#245) — the canonical key set an ips.yaml is
+# checked against by `--check` below. Resolved from this module's own
+# location, not the process cwd, so `python -m deltadewa.ips_config
+# --check <path>` finds it regardless of where it's invoked from (a
+# restore drill's scratch directory included) — the same reasoning
+# _DEFAULT_IPS_PATH-style module constants elsewhere (weekly_report.py,
+# refresh.py, import_portfolio.py) don't need, since they read
+# config/ips.yaml itself, always relative to the container's own
+# WORKDIR, never a path a caller hands in.
+_EXAMPLE_IPS_PATH: Final[Path] = (
+    Path(__file__).resolve().parent.parent / "config" / "ips.example.yaml"
+)
+
+# CLI-only default (see main() below) — matches the cwd-relative default
+# every other entry point (weekly_report.py, refresh.py,
+# import_portfolio.py) uses for the live file, since --check with no
+# argument is meant to answer "does the file this process would actually
+# load still load."
+_DEFAULT_IPS_PATH: Final[Path] = Path("config/ips.yaml")
 
 # Defaults for the crash-repricing knobs that live alongside
 # ``crash_scenario_pct`` in the ``convexity`` section. The crash *move* itself
@@ -1313,3 +1336,167 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         maturity_selection=_parse_maturity_selection(config),
         defaulted_sections=defaulted_sections,
     )
+
+
+def _load_raw_mapping(path: Path) -> dict[str, Any]:
+    """Parse ``path`` into a plain dict, or ``{}`` on any read/parse issue.
+
+    Used only for the ``--check`` key-diff below, never for the real load
+    path (``load_ips_config`` above owns validation) — a read failure
+    here degrades the diff, it does not hide a load error the caller
+    already surfaced.
+    """
+    try:
+        with Path.open(path, "r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle)
+    except (OSError, yaml.YAMLError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _flatten_keys(mapping: dict[str, Any], prefix: str = "") -> set[str]:
+    """Every dot-path key in a nested mapping.
+
+    E.g. ``triggers.rally_monitor_pct``. Descends into dict values only —
+    a list value (``monetization.schedule``)
+    is a leaf, since its entries are data, not named policy fields, and
+    recursing into list indices would make the diff noisy and
+    length-dependent rather than a stable key-set comparison.
+    """
+    keys: set[str] = set()
+    for key, value in mapping.items():
+        path = f"{prefix}{key}"
+        keys.add(path)
+        if isinstance(value, dict):
+            keys |= _flatten_keys(value, prefix=f"{path}.")
+    return keys
+
+
+def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
+    """Parse CLI arguments for ``python -m deltadewa.ips_config``."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Validate an ips.yaml file without starting the app — the "
+            "same load_ips_config() the app itself calls, plus a report "
+            "of sections silently running on this code's built-in "
+            "defaults and keys this loader does not recognise. Intended "
+            "for a deploy pre-flight (RUNBOOK §4) and a restore drill "
+            "(RUNBOOK §7)."
+        ),
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        required=True,
+        help=(
+            "Required flag naming the mode explicitly — currently the "
+            "only one this CLI has."
+        ),
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Exit 2 (not just 0) when the file loads but with a "
+            "warning: a defaulted section or an unrecognised key. Use "
+            "this in a restore drill, where a silently-defaulted or "
+            "silently-ignored policy value is exactly what must not "
+            "pass unnoticed; leave it off for a routine deploy "
+            "pre-flight, where an operator legitimately omitting an "
+            "optional section is not a failed deploy."
+        ),
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        type=Path,
+        default=_DEFAULT_IPS_PATH,
+        help=f"ips.yaml file to check (default: {_DEFAULT_IPS_PATH})",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """CLI entry point: validate an ips.yaml file (#301, ``--check``).
+
+    Reports three distinct outcomes a restore or a deploy can hit, only
+    the first of which is loud on its own:
+
+    - The file fails to load at all (a required field is missing or a
+      constraint fails) — ``load_ips_config``'s own message already
+      names the one field; exit 1.
+    - The file loads, but an entire optional section is absent and the
+      program is silently running on this code's built-in defaults
+      rather than the operator's own numbers (``IpsConfig.defaulted_sections``).
+    - The file loads, and carries a key this loader does not recognise
+      at all — e.g. a key retired from the schema (#384's
+      ``strike_drift_max_otm_pct``) that reads as policy in the file but
+      does nothing.
+
+    The latter two are warnings, not load failures: pass ``--strict`` to
+    turn either into a non-zero exit (2).
+
+    Returns:
+        0 -- loaded cleanly, or loaded with a warning and ``--strict``
+            was not passed.
+        1 -- the file did not load at all.
+        2 -- ``--strict`` was passed and the file loaded with a warning.
+
+    """
+    args = _parse_args(argv)
+    path: Path = args.path
+
+    try:
+        config = load_ips_config(path)
+    except IpsConfigError as exc:
+        print(
+            f"ips_config --check: {path} did not load: {exc}", file=sys.stderr
+        )
+        return 1
+
+    print(f"ips_config --check: {path} loaded successfully")
+
+    warnings: list[str] = [
+        f"section '{name}' is absent from the file — running on this "
+        "code's built-in defaults, not your own policy"
+        for name in sorted(config.defaulted_sections)
+    ]
+
+    if _EXAMPLE_IPS_PATH.exists():
+        file_keys = _flatten_keys(_load_raw_mapping(path))
+        example_keys = _flatten_keys(_load_raw_mapping(_EXAMPLE_IPS_PATH))
+        unrecognised = sorted(file_keys - example_keys)
+        missing_optional = sorted(example_keys - file_keys)
+        warnings.extend(
+            f"'{key}' is not a key this loader (or "
+            f"{_EXAMPLE_IPS_PATH.name}) recognises — it is silently "
+            "ignored, not applied; a retired key (see #384) reads as "
+            "policy in the file and does nothing"
+            for key in unrecognised
+        )
+        if missing_optional:
+            print(
+                f"ips_config --check: present in {_EXAMPLE_IPS_PATH.name} "
+                "but not in this file (fine if intentionally omitted — "
+                f"these have code defaults): {', '.join(missing_optional)}",
+            )
+    else:
+        print(
+            f"ips_config --check: could not find {_EXAMPLE_IPS_PATH} to "
+            "diff keys against — skipping the defaulted/unrecognised-key "
+            "comparison",
+            file=sys.stderr,
+        )
+
+    if warnings:
+        print("ips_config --check: warnings:")
+        for warning in warnings:
+            print(f"  - {warning}")
+        if args.strict:
+            return 2
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
