@@ -671,6 +671,34 @@ def hedge_value(
     )
 
 
+def gross_quantity(
+    positions: Sequence[OptionPosition],
+) -> tuple[int, int]:
+    """Sum *positions*' quantity, long and short kept apart (#337).
+
+    A plain net can read as "nothing here" when a book mixes long and
+    short legs — the same reading #334 fixed for
+    :class:`~deltadewa.analysis.position_aging.SignedTotals`. This is
+    that fix's shape, scaled down to the one pair of numbers a
+    position-detail total row needs. Unlike :func:`hedge_value`, this
+    does not exclude expired legs: it is a plain sum of what a leg
+    ledger's own Quantity column already shows per row, not a priced
+    figure.
+
+    Args:
+        positions: The legs to total.
+
+    Returns:
+        ``(long_contracts, short_contracts)`` — the sum of positive-
+        quantity legs and the sum of negative-quantity legs,
+        respectively. Either side is ``0`` when that side is empty.
+
+    """
+    long_contracts = sum(p.quantity for p in positions if p.quantity > 0)
+    short_contracts = sum(p.quantity for p in positions if p.quantity < 0)
+    return long_contracts, short_contracts
+
+
 def crash_convexity_pct(
     portfolio: OptionPortfolio,
     *,

@@ -231,11 +231,13 @@ def _make_plan(
                 gain_pct=50.0,
                 sell_pct=25.0,
                 triggered=True,
+                cumulative_sell_value=2_500.0,
             ),
             MonetizationStepStatus(
                 gain_pct=100.0,
                 sell_pct=25.0,
                 triggered=False,
+                cumulative_sell_value=0.0,
             ),
         ],
         recommended_cumulative_sell_pct=recommended_cumulative_sell_pct,

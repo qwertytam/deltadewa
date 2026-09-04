@@ -145,6 +145,21 @@ class TestPlotSpotVolHeatmap:
 
         assert STRESS_METRICS["pnl"].label in fig.layout.title.text
 
+    def test_x_axis_ticks_rotated_ninety_degrees(self) -> None:
+        """#331: 90 deg, not Plotly's 45 deg default -- and not clipped."""
+        fig = plot_spot_vol_heatmap(
+            _spot_vol_df(),
+            spot_scenarios=_SPOT_SCENARIOS,
+            vol_scenarios=_VOL_SCENARIOS,
+            original_spot=_ORIGINAL_SPOT,
+            avg_vol=_AVG_VOL,
+            metric="pnl",
+        )
+
+        assert fig.layout.xaxis.tickangle == 90
+        assert fig.layout.margin.b is not None
+        assert fig.layout.margin.b > 0
+
 
 class TestPlotTimePriceHeatmap:
     """Tests for plot_time_price_heatmap."""
@@ -235,3 +250,34 @@ class TestPlotTimePriceHeatmap:
 
         assert isinstance(fig, go.Figure)
         assert fig.layout.annotations
+
+    def test_x_axis_ticks_rotated_ninety_degrees(self) -> None:
+        """#331: the long two-line date labels need the full 90 deg."""
+        fig = plot_time_price_heatmap(
+            _time_price_df(),
+            original_spot=_ORIGINAL_SPOT,
+            original_date=datetime(2026, 1, 1, tzinfo=UTC),
+            metric="pnl",
+        )
+
+        assert fig.layout.xaxis.tickangle == 90
+        assert fig.layout.margin.b is not None
+        assert fig.layout.margin.b > 0
+
+
+class TestStressMetricLabelsStateComposition:
+    """#329: "pnl"/"value" must say "incl. underlying" like delta does.
+
+    A reader who has just learned the options-only/incl.-underlying
+    distinction from the delta dropdown entries has every reason to
+    apply it to pnl/value too -- these two used to say nothing.
+    """
+
+    def test_pnl_and_value_labels_state_underlying_is_included(self) -> None:
+        assert "incl. underlying" in STRESS_METRICS["pnl"].label
+        assert "incl. underlying" in STRESS_METRICS["value"].label
+
+    def test_delta_labels_still_distinguish_options_only(self) -> None:
+        """Guards the wording this fix is matching, not just copying."""
+        assert "options only" in STRESS_METRICS["delta"].label
+        assert "incl. underlying" in STRESS_METRICS["net_delta"].label

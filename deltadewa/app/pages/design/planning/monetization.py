@@ -43,6 +43,7 @@ def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
             html.Td(fmt.percent(step.gain_pct)),
             html.Td(fmt.percent(step.sell_pct)),
             html.Td("triggered" if step.triggered else "not yet"),
+            html.Td(fmt.compact_currency(step.cumulative_sell_value)),
         ],
     )
 
@@ -71,7 +72,15 @@ def _monetization_panel_view(plan: MonetizationPlan) -> Component:
             else "n/a"
         )
         header = html.Tr(
-            [html.Th("Gain trigger"), html.Th("Sell %"), html.Th("Status")],
+            [
+                html.Th("Gain trigger"),
+                html.Th("Sell %"),
+                html.Th("Status"),
+                # #327: explicit about granularity, per the issue -- a
+                # marginal (this-step-alone) figure sitting next to a
+                # cumulative summary line below would invite misreading.
+                html.Th("Cumulative value"),
+            ],
         )
         rows = [_monetization_step_row(step) for step in plan.steps]
         children = [

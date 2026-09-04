@@ -21,7 +21,10 @@ from deltadewa.analysis.stress import (
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
-from deltadewa.visualization.stress_charts_plotly import plot_spot_vol_heatmap
+from deltadewa.visualization.stress_charts_plotly import (
+    STRESS_BASELINE_NOTE,
+    plot_spot_vol_heatmap,
+)
 
 from ..book import BOOK_VERSION_STORE
 from ..dials import _EXPLORATION_EMPTY_BOOK_MSG, _METRIC_OPTIONS
@@ -98,7 +101,20 @@ def _render_spot_vol_panel_logic(  # pylint: disable=too-many-arguments
             avg_vol=grid_spec.avg_vol,
             metric=metric,
         )
-        return dcc.Graph(figure=fig)
+        graph = dcc.Graph(figure=fig)
+        # #329: only "pnl" is baseline-relative -- "value" is the book's
+        # absolute value in that scenario, no "minus today" step, so the
+        # note (which describes exactly that subtraction) would misstate
+        # it; every other metric is a raw Greek reading, not "vs
+        # current," for the same reason.
+        if metric != "pnl":
+            return graph
+        return html.Div(
+            [
+                graph,
+                html.P(STRESS_BASELINE_NOTE, className="plain-language"),
+            ],
+        )
 
     return _safe_render(_build)
 

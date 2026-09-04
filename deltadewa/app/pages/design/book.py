@@ -36,6 +36,7 @@ from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 from dash.development.base_component import Component
 
 from deltadewa.analysis.crash_repricing import is_expired
+from deltadewa.app import format as fmt
 from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.panel_guard import status_message as _status
 from deltadewa.clock import program_now
@@ -152,6 +153,23 @@ def _net_delta_readout(portfolio: OptionPortfolio) -> Component:
         f"Net delta {net_delta:,.0f} against "
         f"{portfolio.underlying_quantity:,.0f} shares of underlying — the "
         "book's total directional exposure, options and equity combined.",
+        className="plain-language",
+    )
+
+
+def _total_underlying_value_readout(portfolio: OptionPortfolio) -> Component:
+    """Render #324: underlying quantity x spot, read off the domain layer.
+
+    Reuses ``OptionPortfolio.total_underlying_value()`` rather than
+    multiplying the two BOOK-zone inputs together here — the page stays
+    a thin read of the number the carry budget and strike ladder are
+    already sizing against, not a second copy of the computation.
+    """
+    return html.P(
+        f"Total underlying value: "
+        f"{fmt.currency(portfolio.total_underlying_value())} — "
+        f"{portfolio.underlying_quantity:,.0f} shares at "
+        f"{fmt.currency(portfolio.spot_price, decimals=2)}.",
         className="plain-language",
     )
 
@@ -363,6 +381,39 @@ def _set_underlying_quantity_logic(
     return version + 1, _status("Underlying quantity updated.", error=False)
 
 
+def _set_spot_price_logic(
+    *,
+    value: float | None,
+    version: int,
+    state: ProgramState,
+) -> tuple[Any, Component]:
+    """Set the underlying's spot price (#324).
+
+    The BOOK zone's manual write path into
+    ``ProgramState.update_market_conditions`` — every planning panel
+    prices off this value, so it needs an editable control here rather
+    than only being settable by re-importing the whole book. Once a
+    cached market spot is wired up (the ``/monitor`` spot issue), this
+    becomes the manual override rather than the only source.
+    """
+    if value is None:
+        return no_update, _status(
+            "Spot price cannot be blank.",
+            error=True,
+        )
+    if value <= 0:
+        return no_update, _status(
+            "Spot price must be positive.",
+            error=True,
+        )
+    error = _guarded_mutation(
+        lambda: state.update_market_conditions(spot_price=value),
+    )
+    if error is not None:
+        return no_update, _status(error, error=True)
+    return version + 1, _status("Spot price updated.", error=False)
+
+
 def _decode_upload_contents(contents: str) -> bytes:
     """Decode a ``dcc.Upload`` data URI (``data:<mime>;base64,<data>``).
 
@@ -518,13 +569,17 @@ def _import_logic(
     return version + 1, _status(message, error=False), None, True
 
 
-def _export_logic(*, state: ProgramState, fmt: str) -> tuple[Any, Component]:
+def _export_logic(
+    *,
+    state: ProgramState,
+    export_format: str,
+) -> tuple[Any, Component]:
     """Snapshot the live book and package it for browser download.
 
     Read-only — doesn't touch ``book-version``, correctly outside the
-    "failed mutation" concern entirely. *fmt* (#325) is ``"yaml"`` or
-    ``"json"``, from the export-format control; it decides both the
-    written format and the downloaded file's extension.
+    "failed mutation" concern entirely. *export_format* (#325) is
+    ``"yaml"`` or ``"json"``, from the export-format control; it decides
+    both the written format and the downloaded file's extension.
     """
     # Stamped in the program's timezone: the file name is what a human
     # sorts and cites, so it should read as the desk's clock, not UTC.
@@ -533,9 +588,9 @@ def _export_logic(*, state: ProgramState, fmt: str) -> tuple[Any, Component]:
         if state.ips_config is not None
         else None,
     )
-    filename = f"design-export-{stamp:%Y%m%dT%H%M%S}.{fmt}"
+    filename = f"design-export-{stamp:%Y%m%dT%H%M%S}.{export_format}"
     try:
-        path = state.export_snapshot(filename, fmt=fmt)
+        path = state.export_snapshot(filename, fmt=export_format)
     except Exception:  # pylint: disable=broad-exception-caught
         _logger.exception("Unexpected error exporting the /design book")
         return no_update, _status(
@@ -592,8 +647,26 @@ def layout(
                 className="editor-field",
             ),
             html.Div(
+                [
+                    html.Label("Spot price"),
+                    dcc.Input(
+                        id="book-spot-price",
+                        type="number",
+                        value=portfolio.spot_price,
+                        debounce=True,
+                    ),
+                ],
+                className="editor-field",
+            ),
+            html.Div(
                 _safe_render(lambda: _net_delta_readout(portfolio)),
                 id="net-delta-readout",
+            ),
+            html.Div(
+                _safe_render(
+                    lambda: _total_underlying_value_readout(portfolio),
+                ),
+                id="book-total-underlying-value",
             ),
             html.H3("Add a position"),
             html.P(
@@ -899,6 +972,23 @@ def register(app: ProgramDashApp) -> None:
     @app.callback(
         Output(BOOK_VERSION_STORE, "data", allow_duplicate=True),
         Output(MUTATION_STATUS, "children", allow_duplicate=True),
+        Input("book-spot-price", "value"),
+        State(BOOK_VERSION_STORE, "data"),
+        prevent_initial_call=True,
+    )
+    def _set_spot_price(
+        value: float | None,
+        version: int,
+    ) -> tuple[Any, Component]:
+        return _set_spot_price_logic(
+            value=value,
+            version=version,
+            state=app.program_state,
+        )
+
+    @app.callback(
+        Output(BOOK_VERSION_STORE, "data", allow_duplicate=True),
+        Output(MUTATION_STATUS, "children", allow_duplicate=True),
         Output("import-pending-path", "data"),
         Output("import-confirm-row", "hidden"),
         Input("import-submit", "n_clicks"),
@@ -937,8 +1027,11 @@ def register(app: ProgramDashApp) -> None:
         State("export-format", "value"),
         prevent_initial_call=True,
     )
-    def _export(_n_clicks: int, fmt: str) -> tuple[Any, Component]:
-        return _export_logic(state=app.program_state, fmt=fmt)
+    def _export(_n_clicks: int, export_format: str) -> tuple[Any, Component]:
+        return _export_logic(
+            state=app.program_state,
+            export_format=export_format,
+        )
 
     @app.callback(
         Output("position-table", "children"),
@@ -956,3 +1049,13 @@ def register(app: ProgramDashApp) -> None:
     def _render_net_delta(_version: int) -> Component:
         portfolio = app.program_state.portfolio
         return _safe_render(lambda: _net_delta_readout(portfolio))
+
+    @app.callback(
+        Output("book-total-underlying-value", "children"),
+        Input(BOOK_VERSION_STORE, "data"),
+    )
+    def _render_total_underlying_value(_version: int) -> Component:
+        portfolio = app.program_state.portfolio
+        return _safe_render(
+            lambda: _total_underlying_value_readout(portfolio),
+        )

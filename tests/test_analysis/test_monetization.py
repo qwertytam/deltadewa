@@ -310,6 +310,62 @@ class TestValueToHarvest:
 
 
 # ---------------------------------------------------------------------------
+# build_monetization_plan — per-step cumulative_sell_value (#327)
+# ---------------------------------------------------------------------------
+
+
+class TestCumulativeSellValue:
+    """Each step's running-total dollar figure (#327)."""
+
+    def test_last_triggered_step_reconciles_with_value_to_harvest(
+        self,
+    ) -> None:
+        """The last triggered step's cumulative == the summary's harvest."""
+        portfolio = _portfolio_with_put()
+        pos = portfolio.positions[0]
+        # gain ≈ 250%: triggers the 100% and 200% steps, not the 400% one.
+        pos.entry_premium = pos.option.price() / 3.5
+        plan = build_monetization_plan(portfolio, _THREE_STEP_IPS)
+
+        triggered_steps = [s for s in plan.steps if s.triggered]
+        assert len(triggered_steps) == 2
+        assert triggered_steps[-1].cumulative_sell_value == pytest.approx(
+            plan.value_to_harvest,
+            rel=1e-9,
+        )
+
+    def test_running_total_not_marginal(self) -> None:
+        """Two triggered 25% steps: the second's total is double the first's,
+        not a repeat of the same marginal 25% figure.
+        """
+        portfolio = _portfolio_with_put()
+        pos = portfolio.positions[0]
+        pos.entry_premium = pos.option.price() / 3.5  # gain ≈ 250%
+        plan = build_monetization_plan(portfolio, _THREE_STEP_IPS)
+
+        first, second, third = plan.steps
+        assert first.triggered
+        assert second.triggered
+        assert not third.triggered
+        assert second.cumulative_sell_value == pytest.approx(
+            first.cumulative_sell_value * 2.0,
+            rel=1e-9,
+        )
+        assert third.cumulative_sell_value == pytest.approx(0.0)
+
+    def test_zero_when_gain_unknown(self) -> None:
+        """No cost basis → no triggers → every step's total is 0."""
+        portfolio = _portfolio_with_put()
+        # No entry_premium → gain_basis == "unknown".
+        plan = build_monetization_plan(portfolio, _THREE_STEP_IPS)
+
+        assert plan.gain_basis == "unknown"
+        assert all(
+            s.cumulative_sell_value == pytest.approx(0.0) for s in plan.steps
+        )
+
+
+# ---------------------------------------------------------------------------
 # build_monetization_plan — gain_basis and missing cost basis
 # ---------------------------------------------------------------------------
 
