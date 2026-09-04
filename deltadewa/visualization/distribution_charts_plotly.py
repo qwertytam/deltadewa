@@ -28,6 +28,24 @@ _LOSS_COLOR = DEFAULT_PALETTE.negative
 _MEDIAN_COLOR = DEFAULT_PALETTE.medium_grey
 _CDF_LINE_COLOR = DEFAULT_PALETTE.dark_background
 
+# #332: Plotly defaults every add_vline annotation to the same vertical
+# spot (the top of the axis), so with a tail-hedge book's tail statistics
+# clustered together, the PDF panel's up-to-four labels reliably collide.
+# Each successive annotation shifts down by this many pixels from "top" --
+# staggered by *insertion order*, not by a fixed per-metric slot, since
+# CVaR and worst-case are each conditionally present and any subset must
+# still read correctly. The start offset is not 0: "top" (yshift=0) is
+# the same row `make_subplots`' own subplot-title annotation occupies, so
+# the first line needs to already clear that before staggering begins.
+_PDF_ANNOTATION_YSHIFT_START = -34
+_PDF_ANNOTATION_YSHIFT_STEP = -22
+
+# #332: "bottom" (yshift=0) sits exactly on the x-axis line, on top of its
+# tick labels and title -- this lifts the CDF panel's one annotation clear
+# of that text while staying below the curve, which is what "bottom"
+# is for.
+_CDF_ANNOTATION_YSHIFT = 55
+
 
 def plot_pnl_distribution(  # pylint: disable=too-many-arguments,too-many-locals
     *,
@@ -118,37 +136,52 @@ def plot_pnl_distribution(  # pylint: disable=too-many-arguments,too-many-locals
         row=1,
         col=1,
     )
+    # #332: staggered by insertion order (see _PDF_ANNOTATION_YSHIFT_STEP)
+    # so no two of the up to four labels below land on the same row,
+    # regardless of which of the two conditional ones actually render.
+    next_pdf_yshift = _PDF_ANNOTATION_YSHIFT_START
     fig.add_vline(
         x=expected_pnl,
         line_dash="dash",
         line_color=_EXPECTED_COLOR,
         annotation_text=f"Expected: ${expected_pnl:,.0f}",
+        annotation_position="top",
+        annotation_yshift=next_pdf_yshift,
         row=1,
         col=1,
     )
+    next_pdf_yshift += _PDF_ANNOTATION_YSHIFT_STEP
     fig.add_vline(
         x=var_95,
         line_dash="dash",
         line_color=_VAR_COLOR,
         annotation_text=f"95% VaR: ${var_95:,.0f}",
+        annotation_position="top",
+        annotation_yshift=next_pdf_yshift,
         row=1,
         col=1,
     )
     if cvar_95 < expected_pnl:
+        next_pdf_yshift += _PDF_ANNOTATION_YSHIFT_STEP
         fig.add_vline(
             x=cvar_95,
             line_dash="dash",
             line_color=_CVAR_COLOR,
             annotation_text=f"95% CVaR: ${cvar_95:,.0f}",
+            annotation_position="top",
+            annotation_yshift=next_pdf_yshift,
             row=1,
             col=1,
         )
     if max_loss < 0:
+        next_pdf_yshift += _PDF_ANNOTATION_YSHIFT_STEP
         fig.add_vline(
             x=max_loss,
             line_dash="dot",
             line_color=_CVAR_COLOR,
             annotation_text=f"Worst case: ${max_loss:,.0f}",
+            annotation_position="top",
+            annotation_yshift=next_pdf_yshift,
             row=1,
             col=1,
         )
@@ -217,6 +250,13 @@ def plot_pnl_distribution(  # pylint: disable=too-many-arguments,too-many-locals
             f"Expected (~{expected_percentile * 100:.0f}th %ile, "
             f"{drift_label} drift)"
         ),
+        # #332: the CDF curve asymptotes toward 1.0 at the top of this
+        # axis, so the default top placement lands the label directly on
+        # the line. The bottom is empty by the same logic -- the yshift
+        # lifts it clear of the x-axis's own tick labels and title,
+        # which otherwise sit in that same bottom-of-plot spot.
+        annotation_position="bottom",
+        annotation_yshift=_CDF_ANNOTATION_YSHIFT,
         row=1,
         col=2,
     )

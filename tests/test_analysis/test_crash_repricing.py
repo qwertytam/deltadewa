@@ -1026,6 +1026,33 @@ class TestFixtureValuationDatePins:
         assert early == late
 
 
+class TestGrossQuantity:
+    """#337: long and short kept apart, not netted to a misleading total."""
+
+    def test_all_long_book(self) -> None:
+        portfolio = _make_appendix_book()
+
+        long_contracts, short_contracts = cr.gross_quantity(
+            portfolio.positions,
+        )
+
+        assert long_contracts == sum(qty for _strike, qty in _APPENDIX_LEGS)
+        assert short_contracts == 0
+
+    def test_mixed_book_keeps_sides_apart(self) -> None:
+        portfolio = _make_mixed_leg_book()
+
+        long_contracts, short_contracts = cr.gross_quantity(
+            portfolio.positions,
+        )
+
+        assert long_contracts == sum(qty for _strike, qty in _APPENDIX_LEGS)
+        assert short_contracts == -10
+
+    def test_empty_book(self) -> None:
+        assert cr.gross_quantity([]) == (0, 0)
+
+
 class TestHedgeOnlyInvariant:
     """§7.3 — the numerator is hedge-only (guards C1 from regressing)."""
 

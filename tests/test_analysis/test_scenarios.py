@@ -208,6 +208,54 @@ class TestScenariosMixin:
         assert "value" in result.columns
         assert len(result) == len(spot_scenarios) * len(vol_scenarios)
 
+    def test_scenario_grid_spot_vol_value_includes_underlying(self) -> None:
+        """#329: STRESS_METRICS["value"] says "incl. underlying" -- pin it.
+
+        Isolates the underlying's own marginal contribution (rather than
+        re-deriving the option leg's price) by diffing two otherwise
+        identical portfolios that differ only in ``underlying_quantity``:
+        the "value" column must differ by exactly
+        ``underlying_quantity_diff * spot`` at every scenario cell.
+        """
+
+        def _value_grid(*, underlying_quantity: float) -> np.ndarray:
+            portfolio = OptionPortfolio(
+                underlying_quantity=underlying_quantity,
+                spot_price=100.0,
+                volatility=0.3,
+                risk_free_rate=0.05,
+                default_exercise_style=ExerciseStyle.AMERICAN,
+            )
+            portfolio.add_position(
+                strike_price=105.0,
+                maturity_date=datetime.now(tz=UTC) + timedelta(days=30),
+                quantity=1,
+                option_type=OptionType.CALL,
+            )
+            analyzer = PortfolioAnalyzer(portfolio)
+            result = analyzer.scenario_grid_spot_vol(
+                spot_scenarios=spot_scenarios,
+                vol_scenarios=vol_scenarios,
+                vol_mapping=proportional_vol,
+                metric="value",
+            )
+            return result.sort_values(
+                ["volatility", "spot_price"],
+            )["value"].to_numpy()
+
+        spot_scenarios = np.array([95.0, 100.0, 105.0])
+        vol_scenarios = np.array([0.2, 0.3])
+
+        with_underlying = _value_grid(underlying_quantity=1_000.0)
+        without_underlying = _value_grid(underlying_quantity=0.0)
+
+        # Each vol row repeats the same spot sweep, so tiling the spot
+        # array once covers every cell in the sorted, flattened grid.
+        expected_diff = 1_000.0 * np.tile(spot_scenarios, len(vol_scenarios))
+        assert with_underlying - without_underlying == pytest.approx(
+            expected_diff,
+        )
+
     def test_scenario_grid_restores_state(self) -> None:
         """Test that scenario_grid restores original portfolio state."""
         portfolio = OptionPortfolio(

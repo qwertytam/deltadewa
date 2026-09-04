@@ -39,12 +39,24 @@ class MonetizationStepStatus:
         sell_pct: Fraction of hedge value to sell at this step (mirrors
             ``IpsMonetizationStep.sell_pct``).
         triggered: ``True`` when current hedge gain >= gain_pct.
+        cumulative_sell_value: Dollars sold if every triggered step
+            through and including this one fires — the running total
+            of ``sell_pct`` across triggered steps so far, times the
+            current long-put mark, the same computation
+            :attr:`MonetizationPlan.value_to_harvest` makes at plan
+            granularity (#327). Chosen over a marginal (this-step-alone)
+            figure because it reconciles directly against that existing
+            summary line rather than sitting beside it in a different
+            convention. ``0.0`` when this step hasn't triggered, or when
+            ``gain_basis`` is ``"unknown"`` (no triggers fire without a
+            known gain).
 
     """
 
     gain_pct: float
     sell_pct: float
     triggered: bool
+    cumulative_sell_value: float
 
 
 @dataclass(frozen=True)
@@ -166,17 +178,32 @@ def build_monetization_plan(
     current_gain_pct = compute_hedge_gain_pct(portfolio)
     current_hedge_mark = sum(p.position_value() for p in legs)
 
-    steps = [
-        MonetizationStepStatus(
-            gain_pct=step.gain_pct,
-            sell_pct=step.sell_pct,
-            triggered=(
-                current_gain_pct is not None
-                and current_gain_pct >= step.gain_pct
+    # Running total, not a per-step marginal figure: each triggered
+    # step's cumulative_sell_value is priced off the sum of sell_pct
+    # for every triggered step up to and including it, so the last
+    # triggered step in the schedule reconciles exactly against
+    # value_to_harvest below (#327) -- both cap the same way, at the
+    # same 100.0 ceiling.
+    running_sell_pct = 0.0
+    steps: list[MonetizationStepStatus] = []
+    for step in ips_config.monetization.schedule:
+        triggered = (
+            current_gain_pct is not None and current_gain_pct >= step.gain_pct
+        )
+        cumulative_sell_value = 0.0
+        if triggered:
+            running_sell_pct = min(100.0, running_sell_pct + step.sell_pct)
+            cumulative_sell_value = (
+                running_sell_pct / 100.0 * current_hedge_mark
+            )
+        steps.append(
+            MonetizationStepStatus(
+                gain_pct=step.gain_pct,
+                sell_pct=step.sell_pct,
+                triggered=triggered,
+                cumulative_sell_value=cumulative_sell_value,
             ),
         )
-        for step in ips_config.monetization.schedule
-    ]
 
     recommended_cumulative_sell_pct = min(
         100.0,

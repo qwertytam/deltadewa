@@ -30,6 +30,7 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
+    gross_quantity,
     hedge_value,
 )
 from deltadewa.analysis.hedge_efficiency import EfficiencyVerdict
@@ -1637,6 +1638,48 @@ class TestCollapsedPositionTable:
         # signed_currency rounds to the nearest whole dollar.
         assert _parse_dollar_amount(title) == pytest.approx(
             expected_value,
+            abs=1.0,
+        )
+
+    def test_footer_totals_reconcile_with_hedge_value(
+        self,
+        page: Page,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """#337: the total row, not a sum of the rendered row strings."""
+        page.goto(f"{monitor_app.url}/monitor", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "details.position-detail summary",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        page.click("details.position-detail summary")
+        page.wait_for_selector(
+            ".position-detail-table tfoot tr",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+
+        portfolio = monitor_app.state.portfolio
+        footer_cells = page.locator(
+            ".position-detail-table tfoot tr td",
+        )
+
+        # monitor_app's book is long 10 puts and short 5 calls (#334-style
+        # mixed leg fixture) -- a real long/short mix, not a coincidental
+        # net that would pass even if the sides were silently netted.
+        long_contracts, short_contracts = gross_quantity(
+            portfolio.positions,
+        )
+        assert long_contracts == 10
+        assert short_contracts == -5
+        quantity_text = footer_cells.nth(1).inner_text()
+        assert f"L {long_contracts:,.0f}" in quantity_text
+        assert f"S {short_contracts:,.0f}" in quantity_text
+
+        expected_total = hedge_value(portfolio)
+        title = footer_cells.nth(2).get_attribute("title")
+        assert title is not None
+        assert _parse_dollar_amount(title) == pytest.approx(
+            expected_total,
             abs=1.0,
         )
 

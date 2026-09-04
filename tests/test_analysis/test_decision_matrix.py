@@ -65,6 +65,7 @@ def _make_plan(*, harvest: float) -> MonetizationPlan:
                 gain_pct=25.0,
                 sell_pct=25.0,
                 triggered=True,
+                cumulative_sell_value=harvest,
             ),
         ],
         recommended_cumulative_sell_pct=25.0,

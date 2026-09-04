@@ -34,7 +34,11 @@ from dash.development.base_component import Component
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
-from deltadewa.analysis.crash_repricing import CrashShock, hedge_value
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    gross_quantity,
+    hedge_value,
+)
 from deltadewa.analysis.hedge_efficiency import EfficiencyVerdict
 from deltadewa.analysis.market_environment import (
     DataQuality,
@@ -717,6 +721,49 @@ def _position_row(
     )
 
 
+def _position_detail_footer(
+    records: list[RollStatusRecord],
+    portfolio: OptionPortfolio,
+) -> html.Tfoot:
+    """Build the total row (#337): quantity gross, value from hedge_value().
+
+    Deliberately a ``<tfoot>``, not another leg row in ``<tbody>`` — the
+    issue's own acceptance criterion, so the total reads as a total and
+    not a phantom extra leg. Quantity is long/short kept apart rather
+    than netted (``gross_quantity``, the same #334 shape as
+    ``analysis.position_aging.SignedTotals``) — a book that is long 65
+    and short 10 should not read as "55," which is indistinguishable
+    from an empty book. Current value comes from ``hedge_value(portfolio)``
+    with no ``positions=`` filter — the same helper each row already
+    calls per-leg, so the total reconciles leg-for-leg (both exclude an
+    expired leg from pricing, per ``hedge_value``'s own contract) rather
+    than being a second computation that could drift from the rows above
+    it.
+    """
+    long_contracts, short_contracts = gross_quantity(
+        [record.position for record in records],
+    )
+    if long_contracts and short_contracts:
+        quantity_text = f"L {long_contracts:,.0f} · S {short_contracts:,.0f}"
+    else:
+        quantity_text = f"{long_contracts + short_contracts:,.0f}"
+
+    total_value = hedge_value(portfolio)
+    return html.Tfoot(
+        html.Tr(
+            [
+                html.Td("Total", colSpan=4),
+                html.Td(quantity_text),
+                html.Td(
+                    fmt.signed_compact_currency(total_value),
+                    title=fmt.signed_currency(total_value),
+                ),
+            ],
+            className="position-detail-total",
+        ),
+    )
+
+
 def _position_detail_table(
     records: list[RollStatusRecord],
     portfolio: OptionPortfolio,
@@ -737,7 +784,11 @@ def _position_detail_table(
         [
             html.Summary("Position detail"),
             html.Table(
-                [html.Thead(header), html.Tbody(rows)],
+                [
+                    html.Thead(header),
+                    html.Tbody(rows),
+                    _position_detail_footer(records, portfolio),
+                ],
                 className="position-detail-table",
             ),
         ],

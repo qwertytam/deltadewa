@@ -20,7 +20,10 @@ from deltadewa.analysis.stress import (
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
-from deltadewa.visualization.stress_charts_plotly import plot_time_price_heatmap
+from deltadewa.visualization.stress_charts_plotly import (
+    STRESS_BASELINE_NOTE,
+    plot_time_price_heatmap,
+)
 
 from ..book import BOOK_VERSION_STORE
 from ..dials import _EXPLORATION_EMPTY_BOOK_MSG, _METRIC_OPTIONS
@@ -88,7 +91,17 @@ def _render_time_price_panel_logic(
             original_date=portfolio.valuation_date,
             metric=metric,
         )
-        return dcc.Graph(figure=fig)
+        graph = dcc.Graph(figure=fig)
+        # #329: only "pnl" is baseline-relative -- see spot_vol.py's
+        # identical guard for why "value" and every other metric skip it.
+        if metric != "pnl":
+            return graph
+        return html.Div(
+            [
+                graph,
+                html.P(STRESS_BASELINE_NOTE, className="plain-language"),
+            ],
+        )
 
     return _safe_render(_build)
 
