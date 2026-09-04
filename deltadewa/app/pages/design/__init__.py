@@ -5,7 +5,7 @@
 modules under `book.py`, `planning/`, and `exploration/`). Two consumers
 constrain what stays visible at exactly this path:
 `deltadewa.app.factory` imports `render` and `register_callbacks`, and
-`tests/test_app/test_design.py` reaches 27 private `_..._logic`/helper
+`tests/test_app/test_design.py` reaches 29 private `_..._logic`/helper
 names as `design._name` attribute lookups. Every name below is
 re-exported for that reason alone — not because it is meant as public
 API. The redundant `as`-alias form is required so mypy's
@@ -25,8 +25,12 @@ from .book import _import_logic as _import_logic
 from .book import _mark_inputs_reviewed_logic as _mark_inputs_reviewed_logic
 from .book import _net_delta_readout as _net_delta_readout
 from .book import _remove_position_logic as _remove_position_logic
+from .book import _set_spot_price_logic as _set_spot_price_logic
 from .book import (
     _set_underlying_quantity_logic as _set_underlying_quantity_logic,
+)
+from .book import (
+    _total_underlying_value_readout as _total_underlying_value_readout,
 )
 from .exploration.monte_carlo import (
     _render_mc_panel_logic as _render_mc_panel_logic,

@@ -586,6 +586,15 @@ class ScenariosMixin:
                         spot - state.spot_price
                     ) * underlying_quantity
                     total = (total - baseline_value) + underlying_pnl
+                elif metric == "value":
+                    # #329: STRESS_METRICS["value"]'s label says "incl.
+                    # underlying" -- without this, this heatmap's "value"
+                    # metric silently dropped the underlying leg (unlike
+                    # this same loop's "pnl" branch above, and unlike
+                    # scenario_grid's BatchPricer-backed "value", which
+                    # both already include it), making that label false
+                    # for this heatmap specifically.
+                    total += underlying_quantity * spot
 
                 results.append(
                     {

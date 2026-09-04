@@ -43,6 +43,7 @@ from deltadewa.analysis.market_environment import (
     RegimeLabel,
     TermShape,
 )
+from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.position_aging import (
     BUCKET_ORDER,
     ExpiryBoundaries,
@@ -165,6 +166,25 @@ def _collect_text(node: object) -> str:
     if isinstance(node, (list, tuple)):
         return " ".join(_collect_text(child) for child in node)
     return ""
+
+
+def _unwrap_graph(component: Component) -> dcc.Graph:
+    """Return *component* itself, or the first ``dcc.Graph`` beneath it.
+
+    #329: the pnl/value heatmap panels now wrap their ``dcc.Graph`` in an
+    ``html.Div`` alongside a plain-language baseline note, while every
+    other metric still returns the bare ``Graph`` — this normalises both
+    shapes for tests that only care about the figure.
+    """
+    if isinstance(component, dcc.Graph):
+        return component
+    children = getattr(component, "children", None)
+    if isinstance(children, (list, tuple)):
+        for child in children:
+            if isinstance(child, dcc.Graph):
+                return child
+    msg = f"No dcc.Graph found under {component!r}"
+    raise AssertionError(msg)
 
 
 def _write_other_export(tmp_path: Path) -> Path:
@@ -299,6 +319,35 @@ class TestMutationsPersist:
         assert version == 1
         assert state.portfolio.underlying_quantity == pytest.approx(500.0)
         assert state.dirty is False
+
+    def test_set_spot_price_persists(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        version, _status = design._set_spot_price_logic(
+            value=4321.0,
+            version=0,
+            state=state,
+        )
+
+        assert version == 1
+        assert state.portfolio.spot_price == pytest.approx(4321.0)
+        assert state.dirty is False
+
+    def test_set_spot_price_rejects_non_positive(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        before = state.portfolio.spot_price
+
+        version, status = design._set_spot_price_logic(
+            value=0.0,
+            version=0,
+            state=state,
+        )
+
+        assert version is no_update
+        assert "positive" in _collect_text(status).lower()
+        assert state.portfolio.spot_price == pytest.approx(before)
 
 
 class TestMarkInputsReviewed:
@@ -705,7 +754,7 @@ class TestImportSourcesAndExportFormat:
         for export_format in ("json", "yaml"):
             download, status = design._export_logic(
                 state=state,
-                fmt=export_format,
+                export_format=export_format,
             )
 
             assert download["filename"].endswith(f".{export_format}")
@@ -1791,6 +1840,62 @@ class TestMonetizationPanel:
         assert "no entry price is recorded" not in text
         assert "current hedge gain" in text
 
+    def test_cumulative_value_column_reconciles_with_plan(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#327: the rendered per-step dollars match the analysis layer's."""
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=days_from_today(180),
+            quantity=10,
+            option_type=OptionType.PUT,
+            entry_premium=1.0,  # far below mark -> every step triggers
+        )
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        plan = build_monetization_plan(state.portfolio, ips_config)
+        assert plan.steps  # the fixture IPS must carry a real schedule
+        assert plan.steps[-1].triggered
+
+        panel = design._render_monetization_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            market_env=None,
+        )
+
+        text = _collect_text(panel)
+        assert "Cumulative value" in text
+        for step in plan.steps:
+            assert fmt.compact_currency(step.cumulative_sell_value) in text
+
+    def test_unknown_gain_basis_shows_no_cumulative_column(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The degrade-to-message path never reaches the table at all."""
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=days_from_today(180),
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_monetization_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            market_env=None,
+        )
+
+        assert "Cumulative value" not in _collect_text(panel)
+
 
 def _make_market_env(**overrides: Any) -> MarketEnvironment:
     """A fully-populated LIVE environment, with per-test overrides.
@@ -2434,6 +2539,42 @@ class TestNetDeltaReadout:
         assert after != before
 
 
+class TestTotalUnderlyingValueReadout:
+    """#324: BOOK zone surfaces total_underlying_value(), not a page copy."""
+
+    def test_reconciles_with_the_domain_method(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        app.program_state.set_underlying_quantity(1_234.0)
+        app.program_state.update_market_conditions(spot_price=4_567.0)
+        portfolio = app.program_state.portfolio
+
+        readout = design._total_underlying_value_readout(portfolio)
+        text = _collect_text(readout)
+
+        assert fmt.currency(portfolio.total_underlying_value()) in text
+        # Pinned against the domain method, not against quantity * spot
+        # multiplied out again here — a page-side recomputation could
+        # drift from total_underlying_value() and this test would never
+        # notice.
+        assert portfolio.total_underlying_value() == pytest.approx(
+            1_234.0 * 4_567.0,
+        )
+
+    def test_moves_when_spot_changes(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        app.program_state.set_underlying_quantity(1_000.0)
+        before = _collect_text(
+            design._total_underlying_value_readout(app.program_state.portfolio),
+        )
+
+        app.program_state.update_market_conditions(spot_price=9_999.0)
+        after = _collect_text(
+            design._total_underlying_value_readout(app.program_state.portfolio),
+        )
+
+        assert after != before
+
+
 def _add_starter_position(state: ProgramState) -> None:
     """Add the same one-leg book every EXPLORATION test builds against."""
     state.add_position(
@@ -2597,9 +2738,40 @@ class TestSpotVolPanel:
         pnl_panel = _panel("pnl")
         vega_panel = _panel("vega")
 
-        assert isinstance(pnl_panel, dcc.Graph)
         assert isinstance(vega_panel, dcc.Graph)
-        assert pnl_panel.figure != vega_panel.figure
+        assert (
+            _unwrap_graph(pnl_panel).figure
+            != _unwrap_graph(
+                vega_panel,
+            ).figure
+        )
+
+    def test_baseline_note_shown_for_pnl_not_for_greeks(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#329: only "pnl" is baseline-relative -- "value" is absolute."""
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        def _panel(metric: str) -> Component:
+            return design._render_spot_vol_panel_logic(
+                portfolio=app.program_state.portfolio,
+                cache=app.scenario_cache,
+                spot_pct=50.0,
+                vol_pct=50.0,
+                resolution=11,
+                days_forward=0,
+                metric=metric,
+            )
+
+        pnl_text = _collect_text(_panel("pnl"))
+        value_text = _collect_text(_panel("value"))
+        vega_text = _collect_text(_panel("vega"))
+
+        assert "today's spot" in pnl_text
+        assert "today's spot" not in value_text
+        assert "today's spot" not in vega_text
 
 
 class TestTimePricePanel:
@@ -2654,9 +2826,31 @@ class TestTimePricePanel:
         narrow = _panel(5)
         wide = _panel(13)
 
-        assert isinstance(narrow, dcc.Graph)
-        assert isinstance(wide, dcc.Graph)
-        assert narrow.figure != wide.figure
+        assert _unwrap_graph(narrow).figure != _unwrap_graph(wide).figure
+
+    def test_baseline_note_shown_for_pnl_not_for_greeks(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#329: same guard as the spot/vol panel's, on this panel too."""
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        def _panel(metric: str) -> Component:
+            return design._render_time_price_panel_logic(
+                portfolio=app.program_state.portfolio,
+                cache=app.scenario_cache,
+                spot_pct=50.0,
+                num_time_steps=10,
+                num_price_steps=13,
+                metric=metric,
+            )
+
+        pnl_text = _collect_text(_panel("pnl"))
+        vega_text = _collect_text(_panel("vega"))
+
+        assert "today's spot" in pnl_text
+        assert "today's spot" not in vega_text
 
 
 class TestExplorationDialStacking:

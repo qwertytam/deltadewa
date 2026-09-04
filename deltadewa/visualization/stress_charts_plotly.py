@@ -29,6 +29,13 @@ _DIVERGING_COLORSCALE = "RdBu"
 
 _EMPTY_TEXT = "No scenario data"
 
+# #331: bottom margin for a 90 deg x-axis so the rotated tick labels
+# aren't clipped by the plot area's edge. Time/price's labels are two
+# lines (`_time_col_label`'s "Today"/"T+n" plus a date, joined with
+# `<br>`), so they need roughly double spot/vol's single-line headroom.
+_ROTATED_TICK_BOTTOM_MARGIN = 80
+_ROTATED_TWO_LINE_TICK_BOTTOM_MARGIN = 140
+
 
 @dataclass(frozen=True)
 class StressMetricSpec:
@@ -50,8 +57,20 @@ class StressMetricSpec:
 # _METRIC_CONFIG / _METRIC_LABELS, merged into one dataclass per metric
 # so the two never drift apart.
 STRESS_METRICS: dict[str, StressMetricSpec] = {
-    "pnl": StressMetricSpec("Total P&L vs current ($)", "${:,.0f}"),
-    "value": StressMetricSpec("Total portfolio value ($)", "${:,.0f}"),
+    # #329: "pnl"/"value" used to say nothing about composition, unlike
+    # the delta pair below -- a reader who'd just learned "options only"
+    # vs "incl. underlying" from the delta options had every reason to
+    # wonder which convention P&L followed. Both are combined
+    # hedge-and-underlying (see _calculate_portfolio_value_at), so both
+    # now say so explicitly, in the delta entries' own wording.
+    "pnl": StressMetricSpec(
+        "Total P&L vs current, incl. underlying ($)",
+        "${:,.0f}",
+    ),
+    "value": StressMetricSpec(
+        "Total portfolio value, incl. underlying ($)",
+        "${:,.0f}",
+    ),
     "net_delta": StressMetricSpec(
         "Net delta (shares equiv., incl. underlying)",
         "{:,.1f}",
@@ -70,6 +89,17 @@ STRESS_METRICS: dict[str, StressMetricSpec] = {
 def _metric_spec(metric: str) -> StressMetricSpec:
     """Look up a metric's presentation spec, falling back to P&L."""
     return STRESS_METRICS.get(metric, STRESS_METRICS["pnl"])
+
+
+# #329: one shared string for both heatmap panels' plain-language note, so
+# spot_vol.py and time_price.py can't drift apart in how they word the same
+# baseline. This module has no Dash import (chart builder only), so the
+# panels render it themselves as an html.P -- this is just the sentence.
+STRESS_BASELINE_NOTE = (
+    "Every cell is the book's value in that scenario minus its value "
+    "today, at today's spot and today's valuation date -- hedge and "
+    "underlying combined."
+)
 
 
 def _centered_diverging_kwargs(center: float = 0.0) -> dict[str, Any]:
@@ -212,6 +242,11 @@ def plot_spot_vol_heatmap(
         xaxis_title="Spot price ($)",
         yaxis_title="Average implied vol (absolute level)",
         yaxis_tickformat=".0%",
+        # #331: 90 deg rather than Plotly's 45 deg default, matching
+        # plot_time_price_heatmap so the EXPLORATION zone's two heatmaps
+        # read consistently.
+        xaxis_tickangle=90,
+        margin={"b": _ROTATED_TICK_BOTTOM_MARGIN},
     )
     return fig
 
@@ -305,5 +340,12 @@ def plot_time_price_heatmap(
         title=title,
         xaxis_title="Time forward",
         yaxis_title="Spot price (% from current)",
+        # #331: 90 deg rather than Plotly's 45 deg default -- at 45 deg
+        # these two-line date labels overlapped and ate a wide diagonal
+        # band of the plot area; at 90 deg they stack vertically and take
+        # less horizontal room. The taller bottom margin keeps the second
+        # line from being clipped.
+        xaxis_tickangle=90,
+        margin={"b": _ROTATED_TWO_LINE_TICK_BOTTOM_MARGIN},
     )
     return fig
