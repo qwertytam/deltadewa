@@ -63,6 +63,8 @@ from .planning.ladder import _ladder_maturities_text as _ladder_maturities_text
 from .planning.ladder import (
     _render_ladder_panel_logic as _render_ladder_panel_logic,
 )
+from .planning.ladder import _sort_rungs as _sort_rungs
+from .planning.ladder import _toggle_sort_state as _toggle_sort_state
 from .planning.market_env import (
     _render_market_env_panel_logic as _render_market_env_panel_logic,
 )

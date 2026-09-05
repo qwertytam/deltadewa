@@ -846,6 +846,30 @@ fieldset.editor-form {
   background: #f0f0f0;
 }
 
+/* #358: a header cell that's click-to-sort (currently only the strike
+ * ladder — the other .planning-table panels' plain-text <th>s are
+ * untouched by this rule, via :has()). The button fills the <th> so the
+ * whole cell is a click target, styled to read as a header label rather
+ * than a button. */
+.planning-table th:has(.sort-header) {
+  padding: 0;
+}
+
+.sort-header {
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sort-header:hover {
+  background: #e4e4e4;
+}
+
 .unsolvable-note {
   color: #7a5b00;
   font-size: 0.85rem;
@@ -952,4 +976,60 @@ fieldset.editor-form {
  * this — the target heading would sit half-hidden behind it. */
 [id] {
   scroll-margin-top: 4.5rem;
+}
+
+/* #388: print layout. CSS-only — no on-screen change, since every rule
+ * here is scoped inside @media print. A browser's default print layout
+ * has no signal about which elements must never split, so it breaks
+ * wherever the page height happens to land: a table row cut in half
+ * across a page boundary, or a panel's heading stranded on one page
+ * with its body starting on the next.
+ *
+ * `page-break-inside: avoid` is included alongside the modern
+ * `break-inside: avoid` on every rule below — one is the current
+ * standard property, the other is what older Chromium/WebKit print
+ * engines still look for; declaring both costs nothing and drops
+ * silently on an engine that only understands one. */
+
+@media print {
+  /* /design's PLANNING/EXPLORATION panels. */
+  .panel {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* /monitor has no single shared panel class (#308 predates this
+   * page's own split) — its per-section wrappers get the same
+   * treatment individually. */
+  .scenario-explorer,
+  .decisions-section,
+  .position-detail,
+  .compliance-strip,
+  .provenance-panel {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Every table row on every table in the app -- a row split mid-way
+   * between two pages is the defect the issue was filed over. */
+  .planning-table tr,
+  .position-table tr,
+  .position-detail-table tr,
+  .provenance-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* A table taller than one page still has to break somewhere; repeat
+   * the header row on the continuation page instead of losing column
+   * context. table-header-group is the CSS spec's own intended print
+   * behaviour for <thead> -- stated explicitly here rather than relied
+   * on implicitly, since that's what a print engine needs in order to
+   * actually repeat it. */
+  .planning-table thead,
+  .position-table thead,
+  .position-detail-table thead,
+  .provenance-table thead {
+    display: table-header-group;
+  }
 }

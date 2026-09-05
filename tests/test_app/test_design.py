@@ -24,13 +24,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from dash import dcc, no_update
+from dash import dcc, html, no_update
 from dash.development.base_component import Component
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from werkzeug.serving import make_server
 
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.candidate import CandidateMetrics
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
@@ -55,6 +56,7 @@ from deltadewa.analysis.position_aging import (
 from deltadewa.analysis.roll_planner import RollAction, build_roll_plan
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.strike_ladder import LadderRung
 from deltadewa.app import format as fmt
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import design
@@ -166,6 +168,24 @@ def _collect_text(node: object) -> str:
     if isinstance(node, (list, tuple)):
         return " ".join(_collect_text(child) for child in node)
     return ""
+
+
+def _ladder_row_texts(panel: Component) -> list[list[str]]:
+    """Every ``<Tr>`` in the ladder's ``<Tbody>``, as a list of cell strings.
+
+    Used only to confirm *rendered row order* — per-column sort
+    correctness itself is pinned directly on ``_sort_rungs`` in
+    :class:`TestLadderSortCorrectness`, not by re-deriving it from
+    formatted table text here.
+    """
+    table = _find_by_class(panel, "planning-table")
+    assert table is not None
+    tbody = next(
+        child for child in table.children if isinstance(child, html.Tbody)
+    )
+    return [
+        [_collect_text(cell) for cell in row.children] for row in tbody.children
+    ]
 
 
 def _unwrap_graph(component: Component) -> dcc.Graph:
@@ -1244,6 +1264,309 @@ class TestLadderPanelThreeDeadEnds:
         )
         assert "Table(" in repr(panel)
         assert "Unsolvable" in _collect_text(panel)
+
+
+def _rung(  # pylint: disable=too-many-arguments
+    *,
+    target_delta: float = 0.10,
+    maturity_years: float = 0.5,
+    strike: float = 4500.0,
+    pct_otm: float = 10.0,
+    put_delta: float = -0.10,
+    premium: float = 100.0,
+    per_contract_payoff: float = 500.0,
+    contracts_needed: int = 10,
+    achieved_convexity_pct: float = 4.0,
+    meets_target_within_budget: bool = True,
+) -> LadderRung:
+    """Build one ``LadderRung`` directly, bypassing the pricing engine.
+
+    #358's sort correctness is a pure function of these field values, not
+    of any real crash/candidate pricing — every field the sort touches
+    is set explicitly here so a test can craft exact ties, negative
+    values (``put_delta``), and orderings a real solve would be slow and
+    fragile to engineer.
+    """
+    metrics = CandidateMetrics(
+        strike=strike,
+        pct_otm=pct_otm,
+        put_delta=put_delta,
+        premium=premium,
+        per_contract_payoff=per_contract_payoff,
+        per_contract_intrinsic_floor=0.0,
+        per_contract_carry=0.0,
+    )
+    return LadderRung(
+        target_delta=target_delta,
+        maturity_years=maturity_years,
+        metrics=metrics,
+        portfolio_beta=1.0,
+        beta_adjusted_notional=1_000_000.0,
+        required_crash_offset=50_000.0,
+        contracts_needed=contracts_needed,
+        implied_annual_carry=1_000.0,
+        carry_budget=2_000.0,
+        within_budget=True,
+        carry_headroom=1_000.0,
+        max_affordable_contracts=20,
+        achieved_convexity_pct=achieved_convexity_pct,
+        meets_convexity=True,
+        meets_target_within_budget=meets_target_within_budget,
+    )
+
+
+class TestLadderSortCorrectness:
+    """#358: the strike-ladder table's columns are click-to-sort.
+
+    Every case here goes through :func:`design._sort_rungs` directly —
+    the pure function the panel's rendering calls, not the rendered
+    HTML — so each assertion is about the *data* ordering the issue
+    actually asked for ("sort the data, not the rendered strings"), not
+    about incidental markup.
+    """
+
+    def test_none_sort_state_returns_the_original_order(self) -> None:
+        rungs = [_rung(premium=300.0), _rung(premium=100.0)]
+
+        assert design._sort_rungs(rungs, None) == rungs
+
+    def test_cheapest_by_premium_ascending(self) -> None:
+        """The issue's own first example: find the cheapest rung."""
+        expensive = _rung(premium=300.0)
+        cheap = _rung(premium=50.0)
+        mid = _rung(premium=150.0)
+
+        sorted_rungs = design._sort_rungs(
+            [expensive, cheap, mid],
+            {"column": "premium", "direction": "asc"},
+        )
+
+        assert [r.metrics.premium for r in sorted_rungs] == [50.0, 150.0, 300.0]
+
+    def test_highest_achieved_convexity_descending(self) -> None:
+        """The issue's own second example: find the highest convexity."""
+        low = _rung(achieved_convexity_pct=2.0)
+        high = _rung(achieved_convexity_pct=9.0)
+        mid = _rung(achieved_convexity_pct=5.0)
+
+        sorted_rungs = design._sort_rungs(
+            [low, high, mid],
+            {"column": "achieved_convexity", "direction": "desc"},
+        )
+
+        assert [r.achieved_convexity_pct for r in sorted_rungs] == [
+            9.0,
+            5.0,
+            2.0,
+        ]
+
+    def test_integer_column_sorts_numerically_not_lexicographically(
+        self,
+    ) -> None:
+        """The classic string-sort trap: "10" < "100" < "2" as text.
+
+        ``contracts_needed`` is an int; a sort over its *formatted*
+        string ("2" vs "10" vs "100") would put 100 before 2. This
+        confirms the numeric value is what's compared.
+        """
+        two = _rung(contracts_needed=2)
+        ten = _rung(contracts_needed=10)
+        hundred = _rung(contracts_needed=100)
+
+        sorted_rungs = design._sort_rungs(
+            [hundred, two, ten],
+            {"column": "contracts", "direction": "asc"},
+        )
+
+        assert [r.contracts_needed for r in sorted_rungs] == [2, 10, 100]
+
+    def test_negative_put_delta_sorts_by_signed_value(self) -> None:
+        """put_delta is always negative -- -0.15 is *less than* -0.05."""
+        shallow = _rung(put_delta=-0.05)
+        deep = _rung(put_delta=-0.15)
+
+        sorted_rungs = design._sort_rungs(
+            [shallow, deep],
+            {"column": "put_delta", "direction": "asc"},
+        )
+
+        assert [r.metrics.put_delta for r in sorted_rungs] == [-0.15, -0.05]
+
+    def test_boolean_budget_column_false_sorts_before_true(self) -> None:
+        over_budget = _rung(meets_target_within_budget=False)
+        within_budget = _rung(meets_target_within_budget=True)
+
+        sorted_rungs = design._sort_rungs(
+            [within_budget, over_budget],
+            {"column": "budget", "direction": "asc"},
+        )
+
+        assert [r.meets_target_within_budget for r in sorted_rungs] == [
+            False,
+            True,
+        ]
+
+    def test_descending_reverses_the_same_column(self) -> None:
+        rungs = [
+            _rung(premium=50.0),
+            _rung(premium=300.0),
+            _rung(premium=150.0),
+        ]
+
+        sorted_rungs = design._sort_rungs(
+            rungs,
+            {"column": "premium", "direction": "desc"},
+        )
+
+        assert [r.metrics.premium for r in sorted_rungs] == [300.0, 150.0, 50.0]
+
+    def test_ties_keep_their_original_relative_order(self) -> None:
+        """Ties are broken deterministically -- Python's sort is stable.
+
+        Two rungs tied on the sort column (premium) must not reorder
+        between an identical pair of calls -- distinguished here by
+        maturity_years, which is not the sort column.
+        """
+        first = _rung(premium=100.0, maturity_years=0.25)
+        second = _rung(premium=100.0, maturity_years=1.0)
+
+        sorted_once = design._sort_rungs(
+            [first, second],
+            {"column": "premium", "direction": "asc"},
+        )
+        sorted_again = design._sort_rungs(
+            [first, second],
+            {"column": "premium", "direction": "asc"},
+        )
+
+        assert [r.maturity_years for r in sorted_once] == [0.25, 1.0]
+        assert sorted_once == sorted_again
+
+    def test_unknown_column_degrades_to_the_original_order(self) -> None:
+        """A schema drift (a renamed column) must not raise mid-render."""
+        rungs = [_rung(premium=300.0), _rung(premium=100.0)]
+
+        sorted_rungs = design._sort_rungs(
+            rungs,
+            {"column": "not-a-real-column", "direction": "asc"},
+        )
+
+        assert sorted_rungs == rungs
+
+
+class TestLadderSortToggle:
+    """#358: clicking a header toggles that column's sort direction."""
+
+    def test_a_new_column_starts_ascending(self) -> None:
+        next_state = design._toggle_sort_state(None, "premium")
+
+        assert next_state == {"column": "premium", "direction": "asc"}
+
+    def test_clicking_the_same_column_again_flips_to_descending(self) -> None:
+        first_click = design._toggle_sort_state(None, "premium")
+
+        second_click = design._toggle_sort_state(first_click, "premium")
+
+        assert second_click == {"column": "premium", "direction": "desc"}
+
+    def test_a_third_click_flips_back_to_ascending(self) -> None:
+        state = design._toggle_sort_state(None, "premium")
+        state = design._toggle_sort_state(state, "premium")
+
+        state = design._toggle_sort_state(state, "premium")
+
+        assert state == {"column": "premium", "direction": "asc"}
+
+    def test_clicking_a_different_column_resets_to_ascending(self) -> None:
+        """Switching columns doesn't carry the old column's direction."""
+        # A premium sort already toggled to descending -- constructed
+        # directly rather than via another _toggle_sort_state call,
+        # since clicking "premium" again would itself flip it back.
+        premium_desc = {"column": "premium", "direction": "desc"}
+
+        switched = design._toggle_sort_state(premium_desc, "achieved_convexity")
+
+        assert switched == {
+            "column": "achieved_convexity",
+            "direction": "asc",
+        }
+
+
+class TestLadderSortRendering:
+    """#358, end to end: a real (engine-priced) ladder, sorted by dial."""
+
+    def test_every_column_header_is_a_pattern_matched_sort_button(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10",
+            maturities_years_raw="0.5",
+        )
+
+        buttons = _find_all_by_class(panel, "sort-header")
+        assert len(buttons) == 10  # one per column, per the issue's list
+        ids = {button.id["column"] for button in buttons}
+        assert ids == {
+            "delta",
+            "maturity",
+            "strike",
+            "pct_otm",
+            "put_delta",
+            "premium",
+            "crash_payoff",
+            "contracts",
+            "achieved_convexity",
+            "budget",
+        }
+
+    def test_sort_state_reorders_the_real_rendered_table(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Maturities requested out of order render out of order — until
+        a sort_state is applied, at which point the *real*, engine-priced
+        table reorders to match it. Proves the wiring end to end, not
+        just ``_sort_rungs`` in isolation.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        unsorted_panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10",
+            maturities_years_raw="1.0, 0.25, 0.5",
+        )
+        # Column 1 is Maturity ("Xy" text); confirm the natural
+        # (delta-major, request order) order is indeed out of sequence
+        # before asserting the sort actually changed anything.
+        unsorted_maturities = [
+            row[1] for row in _ladder_row_texts(unsorted_panel)
+        ]
+        assert unsorted_maturities == ["1.00y", "0.25y", "0.50y"]
+
+        sorted_panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10",
+            maturities_years_raw="1.0, 0.25, 0.5",
+            sort_state={"column": "maturity", "direction": "asc"},
+        )
+        sorted_maturities = [row[1] for row in _ladder_row_texts(sorted_panel)]
+
+        assert sorted_maturities == ["0.25y", "0.50y", "1.00y"]
 
 
 class TestRollStatusTable:
