@@ -173,28 +173,55 @@ class this document's own "What was not exposed" note above says
 introduces no new class of exposure, only a new instance of a class
 already accepted for the same remote.
 
-**Why `.env` is different, not just "more sensitive."** The offsite
-backup is **unencrypted** — `age` encryption is a deliberate,
-not-yet-built follow-up (`ops/backup-exports.sh`'s own header: a
-backup you cannot decrypt is worse than one you can, and adding it
-needs an explicit key-escrow step, not a silent one). Every byte
-pushed there is plaintext at the remote and in every clone of it. A
-policy value in a compromised backup is a **confidentiality** loss —
-embarrassing, reveals risk tolerance, not actionable by an attacker on
-its own. A credential in one is an **access** loss — usable
-immediately, and it compounds: an SMTP credential lets someone send
-mail as this program; a leaked heartbeat URL lets someone fake a
-healthy dead-man's-switch. That asymmetry, not the relative
-sensitivity of the numbers, is why the line falls where it does.
+**Why `.env` was different, not just "more sensitive" — the reasoning
+behind the boundary before encryption landed.** Until #320, the offsite
+backup was **unencrypted**: every byte pushed there was plaintext at
+the remote and in every clone of it. A policy value in a compromised
+backup was a **confidentiality** loss — embarrassing, reveals risk
+tolerance, not actionable by an attacker on its own. A credential in
+one was an **access** loss — usable immediately, and it compounds: an
+SMTP credential lets someone send mail as this program; a leaked
+heartbeat URL lets someone fake a healthy dead-man's-switch. That
+asymmetry, not the relative sensitivity of the numbers, is why the
+line fell where it did.
 
-**Void if the backup remote's own privacy assumption changes** — if it
-is ever made public, shared more broadly than this program's own
-operator, or `age` encryption lands (which would change what *could*
-safely be added, not what already has been): re-derive this decision
-from scratch rather than assuming today's boundary still holds. Landing
-`age` is its own explicit decision, including the key-escrow question —
-it does not retroactively bless adding `.env` here without that
-decision being made on its own terms.
+**`age` has landed (#320) — re-derived, per this section's own former
+"Void if" clause, rather than assumed to still hold unchanged.** The
+push is now `age`-encrypted to two independent recipients
+(`ops/backup-exports.sh`'s `BACKUP_AGE_RECIPIENTS_FILE`; see
+`docs/RUNBOOK.md` §7/§8/§10). Recipient 1 is the operator's own key;
+recipient 2 is a second key deliberately escrowed for the continuity
+scenario — see `docs/continuity-annex.md` — so losing access to one
+does not lock recovery out. Only the two **public** keys ever touch
+the droplet; neither private key is generated, stored, or read by
+anything in this repo.
+
+**What changed, and what deliberately did not.** Encryption removes
+the confidentiality-loss half of the asymmetry above for what's
+already pushed — a compromised remote no longer hands out
+`config/ips.yaml` or `program_state.json` in the clear. **It does not
+change the answer for `.env`, and this is the re-derivation, not a
+restatement of the old one:** `.env`'s exclusion was never *only*
+about plaintext-vs-encrypted risk — it is architectural, stated
+independently in `ops/backup-exports.sh`'s own header and
+`docs/RUNBOOK.md` §10: the push credential (and everything else
+host-side) must never enter a container, and `.env` is read into the
+`jobs` container via `env_file: .env` by construction. Encrypting the
+channel changes nothing about that boundary — a credential inside an
+`age`-encrypted backup is still one more copy of a live secret sitting
+somewhere it doesn't need to, still subject to rotation the moment
+anyone with either private key is no longer trusted (an escrowed key
+is deliberately reachable by more than one person, which a rotatable
+credential should not be exposed to for a benefit — recoverability —
+`.env`'s own contents don't need). `.env` stays out, encrypted channel
+or not, and its only recovery copy stays the plain copy in the private
+ops doc (§14's quarterly review keeps it current) — nothing about
+landing `age` licenses revisiting that.
+
+**Still void if the backup remote's own privacy assumption changes**
+— if it is ever made public or shared more broadly than the operator
+and the escrow holder: re-derive this decision from scratch again
+rather than assuming today's boundary still holds.
 
 ## Scope and what "secure" means here
 

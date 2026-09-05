@@ -33,9 +33,33 @@
 # policy (not .env) to this private remote is a deliberate, bounded
 # exception to that rule rather than a loosening of it.
 #
-# `age` encryption is deliberately deferred: a backup you cannot decrypt
-# is worse than one you can. Private repo now; `age` is a follow-up that
-# needs an explicit key-escrow step, not something to add silently later.
+# #320: the push is now `age`-encrypted, to TWO independent recipients
+# (age -R, a recipients file of public keys — see BACKUP_AGE_RECIPIENTS_
+# FILE below) — the key-escrow step the paragraph above used to call a
+# prerequisite. Recipient 1 is the operator's own key; recipient 2 is a
+# second key deliberately escrowed for the continuity scenario (kept
+# somewhere reachable without the operator — see docs/continuity-annex.md)
+# — either PRIVATE key alone decrypts a backup, so losing access to one
+# does not lock the other out. Only the two PUBLIC keys ever touch this
+# droplet, in BACKUP_AGE_RECIPIENTS_FILE; neither private key is generated,
+# stored, or read here, and this script has no decrypt path at all — see
+# docs/RUNBOOK.md §7 for the restore-side decrypt step. See SECURITY.md's
+# "Why the offsite backup carries policy but not secrets" for what this
+# does and does not change: `.env` still never rides this channel, encrypted
+# or not — that boundary is architectural (host-only, never through a
+# container's env_file), not a confidentiality trade this encryption makes.
+#
+# What actually gets pushed changed shape here too: rather than the raw
+# files of exports/ tracked directly, a single encrypted archive
+# (exports.tar.age, built fresh from exports/'s own current content
+# every run) is the only thing exports/.git tracks — see
+# stage_encrypted_snapshot() below for why (age's ciphertext is
+# non-deterministic even for identical input, so diffing it directly
+# would defeat the existing "nothing changed tonight" no-op detection).
+# exports/.gitignore (written by this script, not hand-maintained)
+# untracks everything else, so a stray `git add -A` can never
+# accidentally commit a raw, unencrypted file here again.
+#
 #
 # Exit 0, quietly, when there is nothing new to commit — that is the
 # normal nightly state, not a "didn't run." Any git failure (init, add,
@@ -50,6 +74,16 @@
 #   DELTADEWA_REPO_DIR — the app repo checkout (default below)
 #   DELTADEWA_BACKUP_ENV_FILE — path to the optional token-alternative
 #                   file described below (default below)
+#   BACKUP_AGE_RECIPIENTS_FILE — path to the age recipients file (default
+#                   below). Its *content* (public keys, one per line —
+#                   age's own -R/--recipients-file format) is not
+#                   sensitive, unlike BACKUP_REMOTE/BACKUP_HEARTBEAT_URL
+#                   below — so a default path is fine here, and it may be
+#                   set via /etc/deltadewa/backup.env like they are, purely
+#                   for consistency with how this script already reads
+#                   host-side config, not because the value would be
+#                   harmful in .env. It still isn't read from .env: this
+#                   script never reads .env at all, for anything.
 #
 # Required, no default (#243 — a hardcoded remote here would be exactly
 # the kind of leak #245 fixed for config/ips.yaml):
@@ -74,6 +108,7 @@ set -euo pipefail
 REPO_DIR="${DELTADEWA_REPO_DIR:-/home/deploy/deltadewa}"
 EXPORTS_DIR="${REPO_DIR}/exports"
 BACKUP_ENV_FILE="${DELTADEWA_BACKUP_ENV_FILE:-/etc/deltadewa/backup.env}"
+BACKUP_AGE_RECIPIENTS_FILE="${BACKUP_AGE_RECIPIENTS_FILE:-/etc/deltadewa/backup-age-recipients.txt}"
 
 # Where a heartbeat-ping failure gets recorded so the weekly digest can
 # surface it (#252 — see ping_heartbeat() below). exports/ is the only
@@ -116,6 +151,21 @@ if [ -f "${BACKUP_ENV_FILE}" ]; then
 fi
 
 : "${BACKUP_REMOTE:?BACKUP_REMOTE is not set — see docs/RUNBOOK.md §10 (or the private ops doc) for the offsite backup remote URL}"
+
+# #320: fail loudly rather than push in the clear. A missing `age` binary
+# or an empty/missing recipients file must never silently fall back to
+# an unencrypted push — that would be the exact false-green failure this
+# feature exists to remove, arriving via the one path that's easiest to
+# miss (a cron nobody watches). Checked eagerly, before anything else
+# below does real work.
+if ! command -v age >/dev/null 2>&1; then
+    echo "backup-exports: 'age' is not installed — see docs/RUNBOOK.md §1 for the install step" >&2
+    exit 1
+fi
+if [ ! -s "${BACKUP_AGE_RECIPIENTS_FILE}" ]; then
+    echo "backup-exports: ${BACKUP_AGE_RECIPIENTS_FILE} is missing or empty — see docs/RUNBOOK.md §10 for setting up the two escrowed age recipients before backups can run" >&2
+    exit 1
+fi
 
 # Dead-man's-switch ping (healthchecks.io-compatible), the bash-side
 # equivalent of deltadewa/heartbeat.py's ping() — this cron runs on the
@@ -283,6 +333,119 @@ stage_policy_snapshot() {
     fi
 }
 
+# #320: build (or reuse) the single encrypted archive that is the only
+# thing exports/.git tracks — see the header comment for why this
+# exists at all, and CONTENT_SHA_MARKER below for why it isn't rebuilt
+# on every run regardless of whether anything changed.
+ARCHIVE_NAME="exports.tar.age"
+ARCHIVE_DEST="${EXPORTS_DIR}/${ARCHIVE_NAME}"
+# Local bookkeeping only — never committed (see the .gitignore this
+# function writes) and never needed to restore anything; a fresh clone
+# missing this file just means "treat as changed" on the next run, which
+# is always a safe, correct thing to do.
+CONTENT_SHA_MARKER="${EXPORTS_DIR}/.backup-content-sha256"
+
+stage_encrypted_snapshot() {
+    # Untracks everything except itself and the archive -- written every
+    # run (cheap, and self-healing if a future change ever adds a new
+    # top-level path here that should never be committed raw). A stray
+    # `git add -A` below can then never pick up a raw file by accident,
+    # no matter what stage_policy_snapshot or the running app just wrote
+    # into exports/.
+    cat > "${EXPORTS_DIR}/.gitignore" <<'EOF'
+# Written by ops/backup-exports.sh (#320) -- do not hand-edit. Only the
+# encrypted snapshot is tracked; everything else here is either this
+# repo's own git metadata or the live app's on-disk state, never
+# committed in the clear.
+*
+!.gitignore
+!exports.tar.age
+EOF
+
+    # One-time migration, safe to run every night forever: once nothing
+    # but .gitignore/exports.tar.age is tracked, this finds nothing and
+    # costs nothing. Removes from the INDEX only (--cached) -- the
+    # working-tree files (program_state.json and friends) are the
+    # running app's actual state and must never be touched here.
+    local tracked_raw_files
+    tracked_raw_files="$(
+        git ls-files 2>/dev/null | grep -v -x -e '.gitignore' -e "${ARCHIVE_NAME}" || true
+    )"
+    if [ -n "${tracked_raw_files}" ]; then
+        echo "backup-exports: untracking pre-#320 raw files (their plaintext content stays in this repo's history, per SECURITY.md's #245 precedent -- nothing here rewrites it)" >&2
+        echo "${tracked_raw_files}" | xargs -r git rm -r --cached -q --
+    fi
+
+    # Hash the file *contents* directly (path + sha256 of each file,
+    # sorted by path, then hashed as one listing) -- deliberately NOT a
+    # hash of a tar built from them. A tar archive embeds each entry's
+    # mtime, and stage_policy_snapshot() above re-`cp`s config-backup/
+    # ips.yaml on every run even when its bytes are unchanged (a fresh
+    # mtime every night) -- an mtime-sensitive hash would see "changed"
+    # every single night regardless of whether anything actually was,
+    # defeating the whole point of this check. This is unaffected by
+    # mtime, permissions, or which tar implementation later builds the
+    # real archive -- only file paths and their bytes feed it.
+    local sha_tool=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha_tool="sha256sum"
+    elif command -v shasum >/dev/null 2>&1; then
+        sha_tool="shasum -a 256"
+    fi
+
+    local new_sha256=""
+    if [ -n "${sha_tool}" ]; then
+        # shellcheck disable=SC2086 -- ${sha_tool} is deliberately
+        # unquoted: "shasum -a 256" must split into two argv words.
+        new_sha256="$(
+            find "${EXPORTS_DIR}" -mindepth 1 -type f \
+                ! -path "${EXPORTS_DIR}/.git*" \
+                ! -name "${ARCHIVE_NAME}" \
+                ! -name '.gitignore' \
+                ! -name '.backup-content-sha256' \
+                -print0 \
+                | sort -z \
+                | xargs -0 ${sha_tool} \
+                | ${sha_tool} \
+                | cut -d' ' -f1
+        )"
+    fi
+
+    local old_sha256=""
+    if [ -f "${CONTENT_SHA_MARKER}" ]; then
+        old_sha256="$(cat "${CONTENT_SHA_MARKER}")"
+    fi
+
+    if [ -n "${new_sha256}" ] && [ "${new_sha256}" = "${old_sha256}" ]; then
+        echo "backup-exports: content unchanged since last run, reusing exports.tar.age"
+        return 0
+    fi
+
+    # Only now is the actual tar built and encrypted -- its own mtimes/
+    # ordering don't matter here, since nothing downstream ever diffs
+    # its bytes; the change decision above already happened on content
+    # alone. Written to a temp file and moved into place, not `-o` on
+    # the real destination directly, so a killed-mid-run process can
+    # never leave a half-written, corrupt archive as the thing that gets
+    # committed.
+    #
+    # -R/--recipients-file: one or more age public keys, one per line
+    # (comments and blank lines ignored) -- any ONE of their matching
+    # private keys can decrypt the result (#320's two-recipient escrow;
+    # see the header comment and docs/continuity-annex.md).
+    local tmp_archive
+    tmp_archive="$(mktemp)"
+    tar --exclude='.git' --exclude="${ARCHIVE_NAME}" --exclude='.gitignore' \
+        --exclude='.backup-content-sha256' \
+        -C "${EXPORTS_DIR}" -cf - . \
+        | age -R "${BACKUP_AGE_RECIPIENTS_FILE}" -o "${tmp_archive}"
+    mv "${tmp_archive}" "${ARCHIVE_DEST}"
+
+    if [ -n "${new_sha256}" ]; then
+        printf '%s\n' "${new_sha256}" > "${CONTENT_SHA_MARKER}"
+    fi
+}
+
 cd "${EXPORTS_DIR}"
 
 if [ ! -d .git ]; then
@@ -315,6 +478,7 @@ git config user.email "deltadewa-backup@localhost"
 git config user.name "deltadewa-backup"
 
 stage_policy_snapshot
+stage_encrypted_snapshot
 
 git add -A
 
