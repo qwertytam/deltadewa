@@ -417,10 +417,14 @@ sudo git clone <BACKUP_REMOTE — see private ops doc> \
 #    `age` and the private key matter here; the key never lives on this
 #    droplet by design, so it comes from wherever you (or the escrow
 #    holder) keep it -- a password manager, a printed sheet, etc.
-# Replace AGE_KEY_FILE below with the real path (yours or the escrowed
-# one) -- left as literal text this fails as age's own clear
-# "AGE_KEY_FILE: no such file" rather than a `<placeholder>` silently
-# being read by bash as an input redirection (see §7.1 step 5's note).
+# Replace AGE_KEY_FILE below with the path to WHICHEVER private key
+# you have to hand -- deliberately either one, since both are valid
+# recipients: the operator's own (§10 names it operator-key.txt) or
+# the escrowed one (escrow-key.txt) -- there is no "the" key here, and
+# you do not need both for an actual recovery, only for §7.1's drill.
+# Left as literal text this fails as age's own clear "AGE_KEY_FILE: no
+# such file" rather than a `<placeholder>` silently being read by bash
+# as an input redirection (see §7.1 step 5's note).
 sudo age -d -i AGE_KEY_FILE \
     -o /tmp/exports.tar \
     ~/deltadewa/exports/exports.tar.age
@@ -516,10 +520,14 @@ routine. See §14 for how often.
    sudo git clone <BACKUP_REMOTE — see private ops doc> "${DRILL}"
 
    # Replace OPERATOR_KEY_FILE/ESCROW_KEY_FILE below with the two real
-   # paths (see docs/continuity-annex.md for what the escrowed one is
-   # and where it's meant to be reachable) -- left as literal text this
-   # fails as age's own clear "OPERATOR_KEY_FILE: no such file" rather
-   # than a `<placeholder>` silently read by bash as input redirection.
+   # paths -- §10 names them operator-key.txt/escrow-key.txt when it
+   # walks through generating them; see docs/continuity-annex.md for
+   # what the escrowed one is and where it's meant to be reachable.
+   # Unlike every other AGE_KEY_FILE in this doc, this step genuinely
+   # needs BOTH, not either -- it is the one place that checks the
+   # escrowed key still works at all. Left as literal text this fails
+   # as age's own clear "OPERATOR_KEY_FILE: no such file" rather than a
+   # `<placeholder>` silently read by bash as input redirection.
    sudo age -d -i OPERATOR_KEY_FILE \
        -o /tmp/drill-a.tar "${DRILL}/exports.tar.age"
    sudo age -d -i ESCROW_KEY_FILE \
@@ -609,6 +617,8 @@ routine. See §14 for how often.
    # a later step trips over a file that was never created.
    sudo git -C "${DRILL}" show OLD_COMMIT_SHA:exports.tar.age \
        > /tmp/old-exports.tar.age
+   # Same AGE_KEY_FILE as §7's decrypt step — whichever private key you
+   # have (operator-key.txt or escrow-key.txt, §10), either decrypts.
    sudo age -d -i AGE_KEY_FILE \
        -o /tmp/old-exports.tar /tmp/old-exports.tar.age
    mkdir -p /tmp/old-restore
@@ -889,8 +899,9 @@ needed here.
      private half wherever you keep other durable secrets (a password
      manager, an encrypted volume) — never in this repo, public or
      private-ops.
-  2. **The escrowed key**, generated the same way, whose private half is
-     deliberately kept somewhere reachable *without* the operator — see
+  2. **The escrowed key** (`age-keygen -o escrow-key.txt`, same as
+     above), whose private half is deliberately kept somewhere
+     reachable *without* the operator — see
      `docs/continuity-annex.md` for what it's for and the handbook's
      Continuity Planning page for where a real program actually stores
      it (printed and filed with the accountant, in a safe, etc. — an
