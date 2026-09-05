@@ -1025,7 +1025,16 @@ fieldset.editor-form {
    * context. table-header-group is the CSS spec's own intended print
    * behaviour for <thead> -- stated explicitly here rather than relied
    * on implicitly, since that's what a print engine needs in order to
-   * actually repeat it. */
+   * actually repeat it.
+   *
+   * #404: verified NOT to repeat under Chromium's headless
+   * print-to-PDF path (Playwright's page.pdf(), and a droplet's own
+   * headless print tooling) -- reproduced in a minimal, app-independent
+   * HTML file with this identical rule, so it's a Chromium/Skia PDF
+   * engine limitation, not a bug here. Kept anyway: spec-correct, costs
+   * nothing, and may still help an interactive browser Print Preview.
+   * See #404 before assuming a tall table's header "just works" on a
+   * continuation page. */
   .planning-table thead,
   .position-table thead,
   .position-detail-table thead,
