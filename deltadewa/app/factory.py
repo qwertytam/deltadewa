@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from dash import Dash, Input, Output, dcc, html
 from flask import jsonify
@@ -20,7 +20,13 @@ from flask import jsonify
 from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.provenance import InputKind, build_provenance_ledger
-from deltadewa.app.chrome import build_chrome
+from deltadewa.app.chrome import (
+    NAV_ID,
+    NavItem,
+    build_chrome,
+    build_page_nav,
+    nav_items,
+)
 from deltadewa.app.health_checks import assess_freshness, run_checks, summarize
 from deltadewa.app.pages import design, monitor
 from deltadewa.app.panel_guard import safe_chrome
@@ -29,6 +35,7 @@ from deltadewa.ips_config import IpsPricingInputs
 from deltadewa.marketdata import default_cache_dir
 
 if TYPE_CHECKING:
+    from dash.development.base_component import Component
     from flask import Flask, Response
 
     from deltadewa.analysis.market_environment import MarketEnvironment
@@ -44,6 +51,13 @@ _ROUTES: dict[str, Callable[[ProgramDashApp], html.Div]] = {
     "/design": design.render,
     "/monitor": monitor.render,
 }
+# #323: the one place the two routes' nav labels are named — both
+# ``_render_nav`` below and any test asserting "both routes link to the
+# sibling route" read this, rather than each hardcoding the pair.
+_NAV_ITEMS: Final[tuple[NavItem, ...]] = (
+    NavItem("/monitor", "Monitor"),
+    NavItem("/design", "Design"),
+)
 
 
 def _market_data_payload(environment: MarketEnvironment) -> dict[str, Any]:
@@ -221,13 +235,25 @@ def create_app(
         return environment, ledger
 
     def _serve_layout() -> html.Div:
-        # Only the chrome is guarded: dcc.Location and page-content mount
-        # unconditionally, so a failed provenance assessment degrades the
-        # banner without taking routing — or /monitor's own safe_render-
-        # wrapped panels — down with it (#381).
+        # Only the chrome (banner) is guarded: dcc.Location, nav, and
+        # page-content mount unconditionally, so a failed provenance
+        # assessment degrades the banner without taking routing — or nav,
+        # or /monitor's own safe_render-wrapped panels — down with it
+        # (#381, #323). Nav renders with current=None on this first,
+        # request-scoped build; ``_render_nav`` below corrects it as soon
+        # as the router's own pathname is known — a page-load flash of
+        # both links un-marked, never a missing nav.
         return html.Div(
             [
-                safe_chrome(lambda: build_chrome(_assess_provenance()[1])),
+                html.Div(
+                    [
+                        build_page_nav(_NAV_ITEMS, current=None),
+                        safe_chrome(
+                            lambda: build_chrome(_assess_provenance()[1]),
+                        ),
+                    ],
+                    className="chrome-shell",
+                ),
                 dcc.Location(id="url", refresh=False),
                 html.Div(id="page-content"),
             ],
@@ -236,6 +262,15 @@ def create_app(
     app.layout = _serve_layout
     design.register_callbacks(app)
     monitor.register_callbacks(app)
+
+    @app.callback(Output(NAV_ID, "children"), Input("url", "pathname"))
+    def _render_nav(pathname: str | None) -> list[Component]:
+        # A separate callback from _render_page below, deliberately: both
+        # read the same Input, but sharing one callback would let a nav
+        # rendering failure take page routing down with it, and vice
+        # versa (#323, the same isolation _assess_provenance's own
+        # docstring argues for one layer up).
+        return nav_items(_NAV_ITEMS, current=pathname)
 
     @app.callback(Output("page-content", "children"), Input("url", "pathname"))
     def _render_page(pathname: str | None) -> html.Div:

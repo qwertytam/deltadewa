@@ -364,6 +364,48 @@ count in `pyproject.toml`'s `too-many-lines` disable comment was found
 stale (actual ~1,329, comment said ~1,000) but is unrelated to this
 split and was left alone.
 
+**Batch 7e has shipped**, closing #323/#357 (navigation), #358 (sortable
+columns), #388 (print), and — in the same batch — #315 (headline tooltips)
+and #320 (encrypted offsite backup); #314 was closed as already satisfied
+by existing code, no change needed. Cross-page nav (`chrome.py`'s
+`build_page_nav`/`nav_items`) sits beside `safe_chrome`'s guarded provenance
+banner in a new `.chrome-shell`, not inside it — it has no data dependency
+and must survive a banner failure, the same isolation `safe_chrome` itself
+argues for one layer down. In-page navigation is a derived "jump to" TOC
+(new module `deltadewa/app/section_nav.py`), not a scroll-tracking rail —
+a scroll-spy needs either a real `assets/*.js` file (the one class of
+product code this repo's gate cannot see at all) or constant `dcc.Interval`
+polling, and #358 already declined client-side machinery for the same
+reason. Every panel under `pages/design/` carries a `SECTION: SectionSpec`
+constant driving both its own heading and its TOC entry, so the TOC cannot
+drift from the rendered page without a test catching it
+(`test_design_sections.py`'s document-order check, an anchor-uniqueness
+scan in `test_design_ids.py`); `/monitor`'s anchors wrap each panel's
+already-built output from *outside* its `safe_render` closure, since a
+panel built inside one loses its whole markup, heading included, on a
+degrade. The strike ladder's ten columns are click-to-sort
+(`ladder.py`'s `_sort_rungs`/`_toggle_sort_state`) — a small server-side
+sort over the domain objects the way #390 decided, not a `DataTable`
+migration, scoped to the strike ladder only. The `@media print` block
+added for #388 is verified working for its actual acceptance criteria (no
+split table row, no orphaned panel header) but its `table-header-group`
+repeat does **not** work under Chromium's headless print-to-PDF path — a
+confirmed engine limitation (reproduced in an isolated, app-independent
+HTML file), recorded as #404 rather than reopening #388. The offsite
+backup (`ops/backup-exports.sh`) is now `age`-encrypted to two independent
+recipients (#320) — the operator's own key and a second key escrowed for
+the continuity scenario (`docs/continuity-annex.md`); either alone
+decrypts a backup. What's tracked in the nested `exports/.git` repo
+changed shape from raw files to one encrypted archive rebuilt only when
+content actually changes (`age`'s ciphertext is non-deterministic even for
+identical input, so a naive diff-the-ciphertext check would re-commit
+every night regardless) — `SECURITY.md`, `docs/RUNBOOK.md` (§1/§7/§7.1/§8/
+§9/§10/§14), and `docs/continuity-annex.md` were all updated in the same
+change, per that file's own "Void if `age` lands" clause. `.env` still
+never rides this channel, encrypted or not — that exclusion was always
+architectural (host-only, never through a container's `env_file`), not a
+plaintext-vs-encrypted trade this batch could relax.
+
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public
 [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,

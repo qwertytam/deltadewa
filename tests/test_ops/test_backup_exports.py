@@ -17,12 +17,14 @@ prompt's example ``deltadewa.jobs.weekly_report`` path.
 
 from __future__ import annotations
 
+import functools
 import http.server
 import json
 import os
 import shutil
 import socket
 import subprocess  # ruff: ignore[suspicious-subprocess-import]
+import tempfile
 import threading
 import time
 from collections.abc import Iterator
@@ -34,12 +36,82 @@ import pytest
 _SCRIPT = Path(__file__).parent.parent.parent / "ops" / "backup-exports.sh"
 _BASH = shutil.which("bash") or "/bin/bash"
 _GIT = shutil.which("git") or "/usr/bin/git"
+_AGE = shutil.which("age")
+_AGE_KEYGEN = shutil.which("age-keygen")
+_TAR = shutil.which("tar") or "/usr/bin/tar"
+
+# #320: the script now refuses to run at all (exit 1, before touching
+# git) without `age` on PATH and a non-empty recipients file — every
+# test in this module drives the real script, so every test needs both.
+# Skipped, not failed, on a machine/CI image without `age` installed —
+# the same shape `_BASH`/`_GIT`'s own shutil.which already assumes for
+# tools this suite depends on but doesn't own the installation of.
+pytestmark = pytest.mark.skipif(
+    not (_AGE and _AGE_KEYGEN),
+    reason="age/age-keygen not installed — see docs/RUNBOOK.md §1",
+)
 
 # Vars the real environment might have set (a developer's own shell, or a
 # CI secret) that would silently make a "heartbeat unconfigured" test
 # stop being that test. Stripped from every _run() unless a test opts
 # in via extra_env.
 _HEARTBEAT_ENV_VARS = ("BACKUP_HEARTBEAT_URL",)
+
+
+def _generate_age_keypair(tmp_dir: Path, name: str) -> tuple[Path, str]:
+    """Generate one age keypair under *tmp_dir*; return (private key file,
+    public key string)."""
+    key_file = tmp_dir / f"{name}.txt"
+    keygen = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+        [_AGE_KEYGEN, "-o", str(key_file)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    # age-keygen prints "Public key: age1..." to stderr.
+    public_key = keygen.stderr.strip().rsplit(":", 1)[-1].strip()
+    return key_file, public_key
+
+
+def _age_decrypt(archive: Path, key_file: Path, dest: Path) -> None:
+    subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+        [_AGE, "-d", "-i", str(key_file), "-o", str(dest), str(archive)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+@functools.lru_cache(maxsize=1)
+def _default_age_identity() -> tuple[Path, Path]:
+    """One age keypair, generated once per test session.
+
+    Returns ``(private_key_file, recipients_file)``. #320: the script
+    fails loudly without a non-empty recipients file, so every existing
+    test in this module (none of which are *about* encryption
+    specifically) needs a valid one by default — the recipients file is
+    injected into every ``_run()`` call below, the same way
+    ``GIT_CONFIG_NOSYSTEM`` already is; the private key lets a test
+    decrypt what such a run pushed, when it wants to check the content
+    round-trips. A test that exercises the recipients-file requirement
+    itself, or the two-recipient escrow model with its own keys,
+    overrides ``BACKUP_AGE_RECIPIENTS_FILE`` via ``extra_env`` instead,
+    the same pattern ``BACKUP_REMOTE``/``BACKUP_HEARTBEAT_URL`` already
+    use.
+    """
+    tmp_dir = Path(tempfile.mkdtemp(prefix="deltadewa-age-test-"))
+    key_file, public_key = _generate_age_keypair(tmp_dir, "default")
+    recipients_file = tmp_dir / "recipients.txt"
+    recipients_file.write_text(public_key + "\n")
+    return key_file, recipients_file
+
+
+def _default_age_recipients_file() -> Path:
+    return _default_age_identity()[1]
+
+
+def _default_age_key_file() -> Path:
+    return _default_age_identity()[0]
 
 
 def _run(
@@ -50,6 +122,7 @@ def _run(
     env = {
         **os.environ,
         "DELTADEWA_REPO_DIR": str(repo_dir),
+        "BACKUP_AGE_RECIPIENTS_FILE": str(_default_age_recipients_file()),
         # GitHub-hosted Actions runners ship an unconditional
         # `safe.directory = *` in the SYSTEM git config
         # (/etc/gitconfig) — confirmed by inspecting a live runner —
@@ -734,3 +807,226 @@ class TestPolicySnapshot:
         ).read_text()
         assert str(remote) not in manifest_text
         assert "BACKUP_REMOTE" not in manifest_text
+
+
+class TestAgeEncryption:
+    """#320: the push is encrypted, to two independent recipients, and
+    only the encrypted archive (plus the .gitignore that keeps it that
+    way) is ever tracked.
+    """
+
+    def test_missing_recipients_file_fails_loudly(self, tmp_path: Path) -> None:
+        """Never falls back to an unencrypted push -- fails instead."""
+        repo_dir, remote = _seeded_exports(tmp_path)
+
+        result = _run(
+            repo_dir,
+            remote,
+            {"BACKUP_AGE_RECIPIENTS_FILE": str(tmp_path / "no-such-file.txt")},
+        )
+
+        assert result.returncode != 0
+        assert "missing or empty" in result.stderr
+        assert "pushed" not in result.stdout
+
+    def test_empty_recipients_file_fails_loudly(self, tmp_path: Path) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        empty_file = tmp_path / "empty-recipients.txt"
+        empty_file.write_text("")
+
+        result = _run(
+            repo_dir,
+            remote,
+            {"BACKUP_AGE_RECIPIENTS_FILE": str(empty_file)},
+        )
+
+        assert result.returncode != 0
+        assert "missing or empty" in result.stderr
+
+    def test_only_gitignore_and_archive_are_tracked(
+        self, tmp_path: Path
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir)
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        tracked = _git(
+            "ls-files",
+            cwd=repo_dir / "exports",
+        ).stdout.split()
+        assert set(tracked) == {".gitignore", "exports.tar.age"}
+
+    def test_pushed_archive_does_not_contain_plaintext_content(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The whole point: a compromised remote hands out ciphertext,
+        not the actual portfolio state.
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+        marker = "unmistakable-plaintext-marker-a1b2c3"
+        (repo_dir / "exports" / "program_state.json").write_text(
+            f'{{"marker": "{marker}"}}',
+        )
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        archive_bytes = (repo_dir / "exports" / "exports.tar.age").read_bytes()
+        assert marker.encode() not in archive_bytes
+
+    def test_decrypted_content_matches_what_was_staged(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        (repo_dir / "exports" / "program_state.json").write_text(
+            '{"marker": "real-state-v7"}',
+        )
+        _write_policy(repo_dir, content="program:\n  name: decrypt-test\n")
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        archive = repo_dir / "exports" / "exports.tar.age"
+        out_tar = tmp_path / "out.tar"
+        _age_decrypt(archive, _default_age_key_file(), out_tar)
+        extracted = tmp_path / "extracted"
+        extracted.mkdir()
+        subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
+            [_TAR, "-xf", str(out_tar), "-C", str(extracted)],
+            check=True,
+        )
+
+        assert (
+            extracted / "program_state.json"
+        ).read_text() == '{"marker": "real-state-v7"}'
+        assert (
+            extracted / "config-backup" / "ips.yaml"
+        ).read_text() == "program:\n  name: decrypt-test\n"
+
+    def test_two_recipients_can_both_decrypt_and_agree(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#320's own acceptance criterion: two independent decryption
+        paths, verified — not just that *a* key works.
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+        (repo_dir / "exports" / "program_state.json").write_text(
+            '{"marker": "escrow-round-trip"}',
+        )
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+        key_a, pub_a = _generate_age_keypair(keys_dir, "operator")
+        key_b, pub_b = _generate_age_keypair(keys_dir, "escrow")
+        recipients_file = tmp_path / "two-recipients.txt"
+        recipients_file.write_text(f"{pub_a}\n{pub_b}\n")
+
+        result = _run(
+            repo_dir,
+            remote,
+            {"BACKUP_AGE_RECIPIENTS_FILE": str(recipients_file)},
+        )
+
+        assert result.returncode == 0, result.stderr
+        archive = repo_dir / "exports" / "exports.tar.age"
+        out_a = tmp_path / "out-a.tar"
+        out_b = tmp_path / "out-b.tar"
+        _age_decrypt(archive, key_a, out_a)
+        _age_decrypt(archive, key_b, out_b)
+
+        assert out_a.read_bytes() == out_b.read_bytes()
+
+    def test_unchanged_content_leaves_the_archive_byte_identical(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The bug this design exists to avoid: age's ciphertext is
+        randomized per encryption, so a content-unaware "did anything
+        change" check would re-encrypt (and re-commit) every single
+        night regardless of whether anything did. Confirms the actual
+        archive bytes, not just the commit count, stay put on a
+        genuinely unchanged night.
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+        archive = repo_dir / "exports" / "exports.tar.age"
+        first_bytes = archive.read_bytes()
+
+        second = _run(repo_dir, remote)
+
+        assert second.returncode == 0, second.stderr
+        assert "nothing to commit" in second.stdout
+        assert archive.read_bytes() == first_bytes
+
+    def test_changed_content_produces_a_new_archive_and_commit(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        first = _run(repo_dir, remote)
+        assert first.returncode == 0, first.stderr
+        archive = repo_dir / "exports" / "exports.tar.age"
+        first_bytes = archive.read_bytes()
+
+        (repo_dir / "exports" / "program_state.json").write_text(
+            '{"positions": ["a new position"]}',
+        )
+        second = _run(repo_dir, remote)
+
+        assert second.returncode == 0, second.stderr
+        assert "pushed" in second.stdout
+        assert archive.read_bytes() != first_bytes
+        log = _git("log", "--oneline", "main", cwd=remote)
+        assert len(log.stdout.strip().splitlines()) == 2
+
+    def test_migrates_a_pre_320_repo_without_losing_history(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A backup repo from before #320 tracked raw files directly.
+        The first #320-aware run must untrack them (so a fresh clone's
+        HEAD is never plaintext again) while leaving the old plaintext
+        commit itself in history -- the same accepted-risk shape
+        SECURITY.md's #245 precedent already describes, not something
+        this script tries to rewrite.
+        """
+        repo_dir = tmp_path / "app"
+        exports = repo_dir / "exports"
+        exports.mkdir(parents=True)
+        (exports / "program_state.json").write_text('{"positions": []}')
+        remote = _bare_remote(tmp_path)
+        _git("init", "-q", "-b", "main", cwd=exports)
+        _git("config", "user.email", "test@example.com", cwd=exports)
+        _git("config", "user.name", "test", cwd=exports)
+        _git("add", "-A", cwd=exports)
+        _git("commit", "-q", "-m", "legacy: raw files", cwd=exports)
+        _git("remote", "add", "origin", str(remote), cwd=exports)
+        _git("push", "-q", "origin", "HEAD:main", cwd=exports)
+        legacy_commit = _git(
+            "rev-parse",
+            "HEAD",
+            cwd=exports,
+        ).stdout.strip()
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        tracked = _git("ls-files", cwd=exports).stdout.split()
+        assert set(tracked) == {".gitignore", "exports.tar.age"}
+        # The live working-tree file is untouched -- it's the app's own
+        # on-disk state, never something this migration should delete.
+        assert (exports / "program_state.json").read_text() == (
+            '{"positions": []}'
+        )
+        # The old plaintext commit is still reachable in history.
+        show_old = _git(
+            "show",
+            f"{legacy_commit}:program_state.json",
+            cwd=exports,
+        )
+        assert show_old.stdout == '{"positions": []}'

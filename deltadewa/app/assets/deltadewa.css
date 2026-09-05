@@ -24,14 +24,48 @@ body {
   padding: 16px 24px 48px;
 }
 
-/* Chrome: as-of stamp + provenance banner (shared by both pages) */
+/* Chrome shell: cross-page nav + chrome (as-of stamp/provenance banner),
+ * shared by both pages (#323). The sticky/shadow treatment lives on the
+ * shell, not on .chrome itself — two sticky siblings both pinned to
+ * top: 0 would overlap. */
 
-.chrome {
+.chrome-shell {
   position: sticky;
   top: 0;
   z-index: 10;
   background: #fafafa;
   box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
+.app-nav {
+  display: flex;
+  gap: 16px;
+  padding: 8px 24px;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #e3e3e3;
+}
+
+.app-nav__link {
+  color: #3a6ea5;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.app-nav__link:hover {
+  text-decoration: underline;
+}
+
+/* The current page: never a link to itself (#323's own acceptance
+ * criterion), so styled to read as a label, not an affordance. */
+.app-nav__current {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+/* Chrome: as-of stamp + provenance banner (shared by both pages) */
+
+.chrome {
+  background: #fafafa;
 }
 
 .chrome-stamp {
@@ -812,6 +846,30 @@ fieldset.editor-form {
   background: #f0f0f0;
 }
 
+/* #358: a header cell that's click-to-sort (currently only the strike
+ * ladder — the other .planning-table panels' plain-text <th>s are
+ * untouched by this rule, via :has()). The button fills the <th> so the
+ * whole cell is a click target, styled to read as a header label rather
+ * than a button. */
+.planning-table th:has(.sort-header) {
+  padding: 0;
+}
+
+.sort-header {
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sort-header:hover {
+  background: #e4e4e4;
+}
+
 .unsolvable-note {
   color: #7a5b00;
   font-size: 0.85rem;
@@ -845,4 +903,166 @@ fieldset.editor-form {
   box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
   padding: 20px 24px;
   margin-bottom: 24px;
+}
+
+/* In-page "jump to" nav (#357) — a derived TOC, not a scroll-tracking
+ * rail; see section_nav.py's module docstring for why. */
+
+.section-nav {
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+  padding: 12px 24px;
+  margin-bottom: 24px;
+  font-size: 0.85rem;
+}
+
+.section-nav__heading {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+}
+
+.section-nav__group {
+  margin-bottom: 8px;
+}
+
+.section-nav__group:last-child {
+  margin-bottom: 0;
+}
+
+.section-nav__group-label {
+  display: block;
+  font-weight: 600;
+  color: #3a5a7a;
+  margin-bottom: 2px;
+}
+
+.section-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.section-nav__item a {
+  color: #3a6ea5;
+  text-decoration: none;
+}
+
+.section-nav__item a:hover {
+  text-decoration: underline;
+}
+
+.back-to-top {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 0.8rem;
+  color: #3a6ea5;
+  text-decoration: none;
+}
+
+.back-to-top:hover {
+  text-decoration: underline;
+}
+
+/* A same-document jump lands right under the sticky chrome-shell without
+ * this — the target heading would sit half-hidden behind it. */
+[id] {
+  scroll-margin-top: 4.5rem;
+}
+
+/* #388: print layout. CSS-only — no on-screen change, since every rule
+ * here is scoped inside @media print. A browser's default print layout
+ * has no signal about which elements must never split, so it breaks
+ * wherever the page height happens to land: a table row cut in half
+ * across a page boundary, or a panel's heading stranded on one page
+ * with its body starting on the next.
+ *
+ * `page-break-inside: avoid` is included alongside the modern
+ * `break-inside: avoid` on every rule below — one is the current
+ * standard property, the other is what older Chromium/WebKit print
+ * engines still look for; declaring both costs nothing and drops
+ * silently on an engine that only understands one. */
+
+@media print {
+  /* /design's PLANNING/EXPLORATION panels. */
+  .panel {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* /monitor has no single shared panel class (#308 predates this
+   * page's own split) — its per-section wrappers get the same
+   * treatment individually. */
+  .scenario-explorer,
+  .decisions-section,
+  .position-detail,
+  .compliance-strip,
+  .provenance-panel {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Every table row on every table in the app -- a row split mid-way
+   * between two pages is the defect the issue was filed over. */
+  .planning-table tr,
+  .position-table tr,
+  .position-detail-table tr,
+  .provenance-table tr {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* A table taller than one page still has to break somewhere; repeat
+   * the header row on the continuation page instead of losing column
+   * context. table-header-group is the CSS spec's own intended print
+   * behaviour for <thead> -- stated explicitly here rather than relied
+   * on implicitly, since that's what a print engine needs in order to
+   * actually repeat it.
+   *
+   * #404: verified NOT to repeat under Chromium's headless
+   * print-to-PDF path (Playwright's page.pdf(), and a droplet's own
+   * headless print tooling) -- reproduced in a minimal, app-independent
+   * HTML file with this identical rule, so it's a Chromium/Skia PDF
+   * engine limitation, not a bug here. Kept anyway: spec-correct, costs
+   * nothing, and may still help an interactive browser Print Preview.
+   * See #404 before assuming a tall table's header "just works" on a
+   * continuation page. */
+  .planning-table thead,
+  .position-table thead,
+  .position-detail-table thead,
+  .provenance-table thead {
+    display: table-header-group;
+  }
+
+  /* #405: a Roll plan row the planner declines to recommend on (#333 --
+   * a short leg, a non-put, an expired leg) is "still listed, greyed",
+   * via opacity on the whole <tr> (.plan-row--excluded, deltadewa.css).
+   * A three-browser print-to-PDF field test found this whole row
+   * renders as ABSENT under Firefox specifically -- not faint, gone --
+   * while Chrome and Safari print it fine, dimmed as intended. opacity
+   * is a compositing property; every browser paints a literal color
+   * the same way, so print substitutes one for the effect instead of
+   * trusting opacity to survive every print pipeline. Colors below are
+   * the same 0.72-opacity-over-#fafafa blend already visible on
+   * screen, not a new look -- this changes the *mechanism*, not the
+   * appearance, and only for print. */
+  .plan-row--excluded {
+    opacity: 1;
+  }
+
+  .plan-row--excluded .verdict-badge--excluded {
+    background: #acb1b6;
+  }
+
+  .plan-row--excluded td {
+    color: #595959;
+  }
 }

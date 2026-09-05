@@ -8,7 +8,7 @@ is passed down to whichever panel needs it.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
@@ -20,6 +20,7 @@ from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -36,6 +37,12 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-position-aging",
+    title="Position aging",
+)
 
 
 def _day_range_text(low: int, high: int) -> str:
@@ -308,7 +315,8 @@ def layout(
     return html.Div(
         [
             html.H3(
-                ["Position aging", basis_chip(basis_book_greeks)],
+                [SECTION.title, basis_chip(basis_book_greeks)],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 _render_position_aging_panel_logic(

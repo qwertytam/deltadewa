@@ -8,7 +8,7 @@ heading and three of its five panels (this one, ``spot_vol``,
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, dcc, html
 
@@ -20,6 +20,7 @@ from deltadewa.analysis.stress import (
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 from deltadewa.visualization.stress_charts_plotly import (
     STRESS_BASELINE_NOTE,
     plot_time_price_heatmap,
@@ -39,6 +40,12 @@ _DEFAULT_TIME_SPOT_PCT = 50.0
 _DEFAULT_TIME_STEPS = 10
 _DEFAULT_PRICE_STEPS = 13
 _DEFAULT_TIME_METRIC = "pnl"
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-time-price",
+    title="Time x price heatmap",
+)
 
 
 def _render_time_price_panel_logic(
@@ -117,9 +124,10 @@ def layout(
         [
             html.H3(
                 [
-                    "Time x price heatmap",
+                    SECTION.title,
                     basis_chip(basis_proportional),
                 ],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 [

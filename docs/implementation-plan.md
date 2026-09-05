@@ -2399,12 +2399,14 @@ section and #334 changes what an already-rendered figure means.
   on Plotly's bottom-to-top categorical axis. Confirmed
   orientation-only: `matrix`/`text`/`y_labels` all derive from the same
   `pivot.index`, so no cell can be mispaired with its label.
-- **#358 — decided, not built.** Sorting the 11 `.planning-table` tables
-  will be a small server-side sort over the domain objects, not a
+- ~~**#358 — decided, not built.**~~ ✅ **BUILT (Batch 7e.2)** — the
+  approach recorded here held: a small server-side sort over the domain
+  objects (`_sort_rungs`/`_toggle_sort_state` in
+  `deltadewa/app/pages/design/planning/ladder.py`), not a
   `dash_table.DataTable` migration — DataTable cells are data, not
   components, so the `verdict-badge` spans and conditional row classes
-  could not survive the move. Recorded on the issue and in PR #390's body
-  so Batch 7 does not re-decide it; not implemented here.
+  could not have survived the move. Scoped to the strike ladder only, as
+  decided; the other ten `.planning-table` tables are unaffected.
 
 **Verified at close-out:** `gate-runner` green — `pytest` 2112 passed,
 `mypy` strict clean (103 files), `pylint` 10.00/10; `dash-smoke-runner`
@@ -2571,4 +2573,4 @@ from the 2026-08-06 Part X re-audit and subsequent field-testing.
 | #334    | #390                                             |
 | #316    | #390                                             |
 | #330    | #390                                             |
-| #358    | decided, not built — see #390's body and #358    |
+| #358    | decided in #390's body, built in Batch 7e.2      |

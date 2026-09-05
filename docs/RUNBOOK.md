@@ -67,6 +67,13 @@ sudo tailscale up        # opens an auth URL — approve in the tailnet admin
 # for every bookmark/curl in this doc
 tailscale ip -4
 
+# age (#320) — encrypts the nightly offsite backup (§7-§8, §10). Ubuntu
+# 24.04 carries it in the default repos; runs entirely on the host, as
+# root's own cron, never inside a container (same boundary as the SSH
+# deploy key below), so it belongs here with the other host tools, not
+# in the Dockerfile.
+sudo apt-get update && sudo apt-get install -y age
+
 # Clone
 git clone https://github.com/qwertytam/deltadewa.git
 cd deltadewa
@@ -401,6 +408,32 @@ sudo rm -rf ~/deltadewa/exports   # the bind-mount source; §1 hasn't created it
 sudo git clone <BACKUP_REMOTE — see private ops doc> \
     ~/deltadewa/exports
 
+# 2a-decrypt. What just landed is exports/exports.tar.age -- an
+#    age-encrypted archive (#320), not the files themselves. Nothing
+#    below (MANIFEST.json included) is readable until this runs. Either
+#    of the two escrowed recipients' private keys works — see
+#    docs/continuity-annex.md for what the second one is for and where
+#    it's meant to be reachable, and §10 below for the mechanism. Only
+#    `age` and the private key matter here; the key never lives on this
+#    droplet by design, so it comes from wherever you (or the escrow
+#    holder) keep it -- a password manager, a printed sheet, etc.
+# Replace AGE_KEY_FILE below with the path to WHICHEVER private key
+# you have to hand -- deliberately either one, since both are valid
+# recipients: the operator's own (§10 names it operator-key.txt) or
+# the escrowed one (escrow-key.txt) -- there is no "the" key here, and
+# you do not need both for an actual recovery, only for §7.1's drill.
+# Left as literal text this fails as age's own clear "AGE_KEY_FILE: no
+# such file" rather than a `<placeholder>` silently being read by bash
+# as an input redirection (see §7.1 step 5's note).
+sudo age -d -i AGE_KEY_FILE \
+    -o /tmp/exports.tar \
+    ~/deltadewa/exports/exports.tar.age
+sudo tar -xf /tmp/exports.tar -C ~/deltadewa/exports
+sudo rm -f /tmp/exports.tar   # root-owned (age -d ran via sudo above)
+#    ~/deltadewa/exports now holds program_state.json,
+#    marketdata-cache/, reports/weekly/, and config-backup/ — exactly
+#    what backup-exports.sh staged before encrypting, nothing more.
+
 # 2b. Restore the policy file. config/ips.yaml is baked into the image at
 #    build time (§4/§5) — it is NOT part of the exports/ bind mount and
 #    NOT part of the code checkout in step 1 either (it's gitignored,
@@ -473,13 +506,44 @@ build. Fifteen to twenty minutes the first time; a few minutes once it's
 routine. See §14 for how often.
 
 1. **Clone the backup to a scratch directory** — never into the real
-   `~/deltadewa/exports/`:
+   `~/deltadewa/exports/` — then **decrypt with BOTH escrowed keys
+   independently, and confirm they agree** (#320). This second half is
+   the drill's own check that the two-recipient design actually holds,
+   not just that *a* key works — an operator running this drill only
+   ever has their own key to hand, so exercising the escrowed one here,
+   deliberately, is the only place that check happens before a real
+   recovery needs it to:
 
    ```bash
    cd ~/deltadewa
    DRILL=/tmp/deltadewa-drill-$(date -u +%Y%m%d)
    sudo git clone <BACKUP_REMOTE — see private ops doc> "${DRILL}"
+
+   # Replace OPERATOR_KEY_FILE/ESCROW_KEY_FILE below with the two real
+   # paths -- §10 names them operator-key.txt/escrow-key.txt when it
+   # walks through generating them; see docs/continuity-annex.md for
+   # what the escrowed one is and where it's meant to be reachable.
+   # Unlike every other AGE_KEY_FILE in this doc, this step genuinely
+   # needs BOTH, not either -- it is the one place that checks the
+   # escrowed key still works at all. Left as literal text this fails
+   # as age's own clear "OPERATOR_KEY_FILE: no such file" rather than a
+   # `<placeholder>` silently read by bash as input redirection.
+   sudo age -d -i OPERATOR_KEY_FILE \
+       -o /tmp/drill-a.tar "${DRILL}/exports.tar.age"
+   sudo age -d -i ESCROW_KEY_FILE \
+       -o /tmp/drill-b.tar "${DRILL}/exports.tar.age"
+   diff /tmp/drill-a.tar /tmp/drill-b.tar && echo "both keys agree"
+
+   sudo tar -xf /tmp/drill-a.tar -C "${DRILL}"
+   sudo rm -f /tmp/drill-a.tar /tmp/drill-b.tar
    ```
+
+   Any difference at the `diff` line means the two recipients are no
+   longer both valid for the *same* encryption — e.g.
+   `BACKUP_AGE_RECIPIENTS_FILE` was edited to swap one out without the
+   escrow holder's copy being updated to match. Investigate before
+   trusting either decrypt, and before continuing to the steps below —
+   they all read files this extraction just produced.
 
 2. **Read the policy manifest** and confirm it's actually current:
 
@@ -537,16 +601,47 @@ routine. See §14 for how often.
    since #301 was filed — several IPS schema changes have shipped since
    (#297 added four required trigger fields, #344 added another, #384
    retired two), so an *old* snapshot will not load on current code.
-   Walk the backup's own history and pick an old revision:
+   Since #320, every commit is one encrypted archive rather than
+   `config-backup/ips.yaml` as its own tracked path — walk `exports.tar.age`'s
+   history instead, pick an old revision, and decrypt/extract *that one*
+   (step 1 already extracted today's):
 
    ```bash
-   sudo git -C "${DRILL}" log --oneline -- config-backup/ips.yaml
-   sudo git -C "${DRILL}" show <an old commit>:config-backup/ips.yaml \
-       > /tmp/old-ips.yaml
+   sudo git -C "${DRILL}" log --oneline -- exports.tar.age
+   # Replace OLD_COMMIT_SHA below with a real sha from the log above.
+   # Left as literal text this fails loudly ("OLD_COMMIT_SHA: command
+   # not found") rather than the confusing failure a `<placeholder>`
+   # produces if pasted as-is — bash reads `<` as input redirection, so
+   # `<an old commit>` silently tries to read a file literally named
+   # `an`, the command never runs, and nothing downstream notices until
+   # a later step trips over a file that was never created.
+   sudo git -C "${DRILL}" show OLD_COMMIT_SHA:exports.tar.age \
+       > /tmp/old-exports.tar.age
+   # Same AGE_KEY_FILE as §7's decrypt step — whichever private key you
+   # have (operator-key.txt or escrow-key.txt, §10), either decrypts.
+   sudo age -d -i AGE_KEY_FILE \
+       -o /tmp/old-exports.tar /tmp/old-exports.tar.age
+   mkdir -p /tmp/old-restore
+   sudo tar -xf /tmp/old-exports.tar -C /tmp/old-restore
    docker compose run --rm --no-deps \
-       -v /tmp/old-ips.yaml:/restore/ips.yaml:ro app \
+       -v /tmp/old-restore/config-backup/ips.yaml:/restore/ips.yaml:ro app \
        python -m deltadewa.ips_config --check --strict /restore/ips.yaml
    ```
+
+   **A backup remote old enough to carry pre-#320 commits** (raw files
+   tracked directly, no `.age` suffix) can read one of those directly,
+   the same way this step worked before #320 —
+   `git show OLD_COMMIT_SHA:config-backup/ips.yaml > /tmp/old-ips.yaml`,
+   no decrypt step needed for that specific commit. `git log --oneline
+   -- exports.tar.age` alone won't surface those — that path didn't
+   exist yet — so check `git log --oneline -- config-backup/ips.yaml`
+   too if the remote might be old enough.
+
+   **If nothing predates #297 yet** (a backup history still young — a
+   freshly-provisioned remote, or one recently migrated to #320's
+   format), there is no old snapshot to reach for. That's not a failure
+   to fix; skip this step for now and re-run it once the backup has
+   enough history, or at the next §14 quarterly review.
 
    **Expect this to fail** against any revision predating #297 — that is
    the drill working, not a bug. A commit against `crash_scenario_pct`
@@ -558,15 +653,14 @@ routine. See §14 for how often.
 
 6. **Record the run** in the private ops doc: date, the backup commit
    sha from step 1, the `app_version` from step 2, and the outcome of
-   steps 4 and 5. Then discard the scratch clone:
+   steps 4 and 5. Then discard the scratch clone and every step-5
+   temp file (all root-owned — `age -d`/`tar` above ran via `sudo`):
 
    ```bash
    # ${DRILL}/.git is root-owned (the sudo clone in step 1), same as the
    # real exports/.git (§10's Ownership note) — needs sudo to remove.
-   # /tmp/old-ips.yaml was written by the shell's own `>` redirect in
-   # step 5, before sudo ever ran, so it's deploy-owned and needs none.
    sudo rm -rf "${DRILL}"
-   rm -f /tmp/old-ips.yaml
+   sudo rm -rf /tmp/old-exports.tar.age /tmp/old-exports.tar /tmp/old-restore
    ```
 
 ### 7.2. If the restored policy won't load
@@ -671,10 +765,17 @@ one problem per run; work through it rather than guessing:
   inside this repo's already-gitignored `exports/`, so there's no
   submodule conflict), pushed nightly by root's cron to a private offsite
   git remote (`BACKUP_REMOTE` — see §10, and the private ops doc for
-  which host/repo) — see §9 (cron), §10 (the SSH deploy key), §12
-  (verifying the last push). `age` encryption is a deliberate follow-up,
-  not done yet: a backup you can't decrypt is worse than one you can, and
-  adding it needs an explicit key-escrow step first.
+  which host/repo) — see §9 (cron), §10 (the SSH deploy key and the age
+  recipients), §12 (verifying the last push). **What that repo tracks
+  changed shape in #320**: it no longer holds the raw files listed above
+  directly — it holds one `age`-encrypted archive, `exports.tar.age`,
+  rebuilt fresh from `exports/`'s own current content on every run that
+  actually changed something (`exports/.gitignore`, written by the
+  script itself, untracks everything else). A `git clone` of this remote
+  now needs a decrypt-then-extract step before any of the files above are
+  readable — see §7's "2a-decrypt" and §7.1's step 1. Encrypted to
+  **two** independent recipients (either private key alone decrypts it —
+  see §10 and `docs/continuity-annex.md` for the escrow half of that).
 
 ## 9. Cron setup
 
@@ -704,7 +805,11 @@ crontab -e
 # BACKUP_REMOTE is required — the script fails loudly at the first line
 # if it's unset (#243); see §10 for why neither value below goes in
 # .env or gets hardcoded in the script. BACKUP_HEARTBEAT_URL wires up
-# the third dead-man's-switch check — see §13.
+# the third dead-man's-switch check — see §13. Before this first runs:
+# `age` must be installed (§1) and BACKUP_AGE_RECIPIENTS_FILE (default
+# /etc/deltadewa/backup-age-recipients.txt, §10) must exist with both
+# recipients' public keys — the script fails loudly, not silently
+# unencrypted, if either is missing (#320).
 sudo crontab -e
 BACKUP_REMOTE=<see private ops doc>
 BACKUP_HEARTBEAT_URL=<see private ops doc>
@@ -758,22 +863,57 @@ needed here.
   Digest" if left unset.
 
   **Why `.env` stays out of the backup, and where its recovery copy
-  actually lives (#301).** `config/ips.yaml` rides the nightly offsite
-  push (`exports/config-backup/`, §8) — it's policy, not a secret, and
-  #245's own remediation already established that distinction for this
-  program. `.env` is different in kind, not just in sensitivity: every
-  value in it is a live credential, and the offsite backup is
-  **unencrypted** (`age` is a deliberate, not-yet-built follow-up — see
-  §8's note and `ops/backup-exports.sh`'s own header). Putting a
-  credential into a plaintext backup is an access loss, not a
-  confidentiality loss the way a policy number leaking would be — see
-  `SECURITY.md`'s "Why the offsite backup carries policy but not
-  secrets" for the full argument, including why this reasoning is
-  *specific to this private remote* and doesn't loosen anything about
-  the public repo. So `.env`'s only recovery copy is a plain copy kept
-  current in **the private ops doc** (§14's quarterly review is what
-  keeps it from going stale) — there is no automated backup for it, on
-  purpose. Recreating it on a new droplet is a manual step in §7.
+  actually lives (#301, re-derived for #320).** `config/ips.yaml` rides
+  the nightly offsite push (`exports/config-backup/`, §8) — it's
+  policy, not a secret, and #245's own remediation already established
+  that distinction for this program. `.env` is different in kind, not
+  just in sensitivity: every value in it is a live credential. The
+  offsite backup is now `age`-encrypted (#320, below) — but that change
+  does **not** move `.env` onto this channel, and the reason is no
+  longer only "the backup is plaintext": it's architectural.
+  `ops/backup-exports.sh` runs entirely host-side, root's own cron,
+  and never touches a container; `.env` is read into the `jobs`
+  container via `env_file: .env` by construction. A credential riding
+  the backup would be one more live copy of it sitting somewhere it
+  doesn't need to, reachable by anyone holding either escrowed
+  decryption key — a wider reach than a rotatable secret should have
+  for a benefit its own contents don't need. See `SECURITY.md`'s "Why
+  the offsite backup carries policy but not secrets" for the full,
+  now-re-derived argument. So `.env`'s only recovery copy is still a
+  plain copy kept current in **the private ops doc** (§14's quarterly
+  review is what keeps it from going stale) — there is no automated
+  backup for it, on purpose. Recreating it on a new droplet is a manual
+  step in §7.
+- **The age recipients file** — `/etc/deltadewa/backup-age-recipients.txt`
+  (`BACKUP_AGE_RECIPIENTS_FILE`; default path above), one age **public**
+  key per line (`age`'s own `-R`/`--recipients-file` format; blank lines
+  and `#` comments ignored). Not secret — a public key reveals nothing
+  usable on its own — so unlike the SSH deploy key and `.env` below, this
+  file's *content* is fine to read or copy around; only its *effect*
+  (which two people can ever decrypt a backup) needs care. Two lines,
+  by design (#320):
+
+  1. **The operator's own key.** Generate on any machine, never the
+     droplet itself (`age-keygen -o operator-key.txt`; the public key is
+     printed to stderr and also the second line of the file), keep the
+     private half wherever you keep other durable secrets (a password
+     manager, an encrypted volume) — never in this repo, public or
+     private-ops.
+  2. **The escrowed key** (`age-keygen -o escrow-key.txt`, same as
+     above), whose private half is deliberately kept somewhere
+     reachable *without* the operator — see
+     `docs/continuity-annex.md` for what it's for and the handbook's
+     Continuity Planning page for where a real program actually stores
+     it (printed and filed with the accountant, in a safe, etc. — an
+     operational detail for the private ops doc, not this public repo).
+
+  Add both **public** keys to this file, one per line, before the first
+  encrypted backup can run — `ops/backup-exports.sh` fails loudly at
+  start if the file is missing or empty rather than falling back to an
+  unencrypted push. Losing the recipients file itself is not a recovery
+  emergency: it only drives future encryptions, and can be rebuilt from
+  either party's own public key (`age-keygen -y <private-key-file>`
+  reprints it) at any time.
 - **The offsite backup SSH deploy key** — `/root/.ssh/backup_deploy_key`
   (mode `0600`, root-owned), referenced by a `~/.ssh/config` alias so
   `ops/backup-exports.sh` never hardcodes the key path, and by
@@ -1114,6 +1254,15 @@ About five minutes, quarterly:
    `stage_policy_snapshot()` stopped reading `pyproject.toml` correctly
    — worth a one-line sanity check, not a full investigation, since step
    2 already exercises the same manifest.
+5. **The escrow key holder still has their copy, and still knows what
+   it's for** (#320). Step 2's drill already proves the escrowed
+   *public* key on this droplet decrypts real backups — it cannot prove
+   the escrow holder's own copy of the matching *private* key is still
+   where they think it is, or that whoever holds it today is still the
+   right person. A quick check-in, not a technical drill: confirm they
+   can still locate it, and that `docs/continuity-annex.md`'s pointer to
+   this scenario still describes where to look. This is the one item on
+   this list a technical drill cannot substitute for.
 
 Record each run in the private ops doc (date, backup commit sha, pass/
 fail per step) — the same log §7.1 step 6 asks for after a drill.

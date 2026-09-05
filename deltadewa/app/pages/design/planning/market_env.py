@@ -17,7 +17,7 @@ to share.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
@@ -32,6 +32,7 @@ from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -50,6 +51,12 @@ if TYPE_CHECKING:
 # The market-environment panel reprices nothing — it reads the live feed —
 # so it must not carry PLANNING's crash-skew chip.
 _BASIS_LIVE_MARKET_DATA = "basis: live market data"
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-market-environment",
+    title="Market environment",
+)
 
 
 def _env_metric_row(
@@ -315,9 +322,10 @@ def layout(
         [
             html.H3(
                 [
-                    "Market environment",
+                    SECTION.title,
                     basis_chip(_BASIS_LIVE_MARKET_DATA),
                 ],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 _render_market_env_panel_logic(

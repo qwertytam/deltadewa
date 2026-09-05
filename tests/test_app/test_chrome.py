@@ -2,6 +2,8 @@
 
 from datetime import UTC, date, datetime
 
+from dash import dcc, html
+
 from deltadewa.analysis.market_environment import (
     DataQuality,
     MarketEnvironment,
@@ -11,7 +13,13 @@ from deltadewa.analysis.provenance import (
     ProvenanceLedger,
     build_provenance_ledger,
 )
-from deltadewa.app.chrome import build_chrome
+from deltadewa.app.chrome import (
+    NAV_ID,
+    NavItem,
+    build_chrome,
+    build_page_nav,
+    nav_items,
+)
 from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import IpsPricingInputs
 from deltadewa.portfolio.core import OptionPortfolio
@@ -298,3 +306,60 @@ class TestStampNamesTheLaggingSeries:
 
         assert "refreshed" not in chrome.children[0].children
         assert "oldest series" not in chrome.children[0].children
+
+
+class TestNavItems:
+    """``nav_items`` — the cross-page nav's children (#323)."""
+
+    _ITEMS = (NavItem("/monitor", "Monitor"), NavItem("/design", "Design"))
+
+    def test_every_item_renders_when_current_is_none(self) -> None:
+        """The pre-router-resolution state: fully navigable, no marker."""
+        children = nav_items(self._ITEMS, current=None)
+
+        assert len(children) == 2
+        assert all(isinstance(child, dcc.Link) for child in children)
+
+    def test_current_page_renders_as_an_unlinked_span(self) -> None:
+        children = nav_items(self._ITEMS, current="/design")
+
+        by_label = {child.children: child for child in children}
+        assert isinstance(by_label["Monitor"], dcc.Link)
+        assert isinstance(by_label["Design"], html.Span)
+
+    def test_current_page_is_never_rendered_as_a_link_to_itself(self) -> None:
+        """The literal acceptance criterion, checked at the markup level."""
+        children = nav_items(self._ITEMS, current="/monitor")
+
+        current = next(c for c in children if c.children == "Monitor")
+        assert not isinstance(current, dcc.Link)
+
+    def test_unknown_pathname_marks_nothing_current(self) -> None:
+        """A pathname matching no item degrades to "every item is a link"."""
+        children = nav_items(self._ITEMS, current="/does-not-exist")
+
+        assert all(isinstance(child, dcc.Link) for child in children)
+
+
+class TestBuildPageNav:
+    """``build_page_nav`` — the assembled nav bar."""
+
+    def test_carries_the_shared_nav_id(self) -> None:
+        nav = build_page_nav(
+            (NavItem("/monitor", "Monitor"), NavItem("/design", "Design")),
+            current="/monitor",
+        )
+
+        assert nav.id == NAV_ID
+
+    def test_never_wrapped_in_a_notice_on_its_own(self) -> None:
+        """Nav has no data dependency and cannot raise — see chrome.py's
+        module docstring: it is never passed through safe_chrome, only
+        the provenance-dependent banner is.
+        """
+        nav = build_page_nav(
+            (NavItem("/monitor", "Monitor"), NavItem("/design", "Design")),
+            current="/design",
+        )
+
+        assert "panel-notice" not in str(nav)

@@ -25,6 +25,19 @@ needs no special-casing: both sides are dict literals, never plain
 strings, so this test's string-literal scan simply never sees them. It
 would not need to, either — the create and the reference are already in
 the same module.
+
+#357 added a second uniqueness question the two checks above cannot
+see: every panel's ``SECTION: SectionSpec`` (or, for ``book.py``,
+``SECTIONS: tuple[SectionSpec, ...]``) carries its own ``anchor_id``,
+via ``SectionSpec(anchor_id=..., title=...)`` rather than an ``id=``
+keyword — invisible to :func:`_created_ids`/:func:`_referenced_ids` by
+construction, since neither the call target (``SectionSpec``, not
+``Output``/``Input``/``State``) nor the keyword name (``anchor_id``,
+not ``id``) matches what those scan for. Two panels accidentally
+sharing an anchor would make the TOC's "jump to" link for one of them
+land on the other's heading instead — a distinct failure mode from the
+Output/Input ambiguity the id checks above guard, so it gets its own
+scan rather than folding into ``_created_ids``.
 """
 
 from __future__ import annotations
@@ -79,6 +92,31 @@ def _referenced_ids(tree: ast.AST) -> set[str]:
     return ids
 
 
+def _section_anchor_ids(tree: ast.AST) -> set[str]:
+    """Every ``anchor_id=`` literal passed to a ``SectionSpec(...)`` call."""
+    ids: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "SectionSpec"
+        ):
+            for kw in node.keywords:
+                if kw.arg == "anchor_id":
+                    literal = _string_literal(kw.value)
+                    if literal is not None:
+                        ids.add(literal)
+            # SectionSpec's first positional field is anchor_id — no
+            # caller in this package uses it positionally today, but a
+            # scan that only understood the keyword form would silently
+            # stop covering a future one.
+            if node.args:
+                literal = _string_literal(node.args[0])
+                if literal is not None:
+                    ids.add(literal)
+    return ids
+
+
 def _design_modules() -> dict[str, ast.AST]:
     """Parse every non-``__init__`` module under ``pages/design/``."""
     trees: dict[str, ast.AST] = {}
@@ -124,6 +162,28 @@ def test_no_id_literal_is_created_by_two_modules() -> None:
     collisions = {
         element_id: names
         for element_id, names in owners.items()
+        if len(names) > 1
+    }
+    assert not collisions, collisions
+
+
+def test_no_section_anchor_id_is_created_by_two_modules() -> None:
+    """Every panel's TOC anchor id is unique (#357).
+
+    A collision here would send the "jump to" link for one panel's
+    section straight to a different panel's heading instead — invisible
+    to :func:`test_no_id_literal_is_created_by_two_modules` above, since
+    ``SectionSpec(anchor_id=...)`` is neither an ``id=`` keyword nor an
+    ``Output``/``Input``/``State`` call.
+    """
+    modules = _design_modules()
+    owners: dict[str, list[str]] = {}
+    for name, tree in modules.items():
+        for anchor_id in _section_anchor_ids(tree):
+            owners.setdefault(anchor_id, []).append(name)
+    collisions = {
+        anchor_id: names
+        for anchor_id, names in owners.items()
         if len(names) > 1
     }
     assert not collisions, collisions

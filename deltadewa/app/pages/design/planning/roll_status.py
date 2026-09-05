@@ -12,7 +12,7 @@ so the string lives in ``page.py`` and is passed down.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
@@ -20,6 +20,7 @@ from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -30,6 +31,12 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-roll-status",
+    title="Roll status by tranche",
+)
 
 
 def _otm_pair_text(moneyness: MoneynessDrift) -> str:
@@ -185,9 +192,10 @@ def layout(
         [
             html.H3(
                 [
-                    "Roll status by tranche",
+                    SECTION.title,
                     basis_chip(basis_crash_skew),
                 ],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 _render_roll_panel_logic(

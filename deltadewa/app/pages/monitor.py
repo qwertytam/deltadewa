@@ -26,7 +26,7 @@ what a single expired leg's crash-skew wing solve did before (#362).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, Patch, dcc, html
 from dash.development.base_component import Component
@@ -59,6 +59,13 @@ from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.ips_notice import build_no_ips_layout
 from deltadewa.app.panel_guard import safe_render
 from deltadewa.app.provenance_panel import build_provenance_panel
+from deltadewa.app.section_nav import (
+    TOP_ANCHOR_ID,
+    SectionGroup,
+    SectionSpec,
+    build_section_nav,
+    section_wrapper,
+)
 from deltadewa.app.shape_notice import shape_notice_text
 from deltadewa.clock import program_trading_date
 from deltadewa.reporting.program_report import (
@@ -88,6 +95,67 @@ _SPOT_SLIDER_MIN = -50.0
 _SPOT_SLIDER_MAX = 10.0
 _VOL_SLIDER_MIN = 0.0
 _VOL_SLIDER_MAX = 0.30
+
+# #315: hover definitions for the five scenario-numbers headline figures,
+# for an operator/partner returning weekly-to-monthly who needs to
+# re-load context without re-reading the source. Native title= tooltips,
+# matching the one precedent already on this page (Offset ratio's own
+# label, below) — no new UI idiom. Each names the exact field it reads
+# (see monitor_scenario.ScenarioResult's own docstring) rather than a
+# looser paraphrase, so the tooltip and the engine can't drift apart.
+_HEDGE_VALUE_SHOCKED_HELP: Final = (
+    "What the hedge (the long puts only, not the underlying) would be "
+    "worth if this scenario played out."
+)
+_HEDGE_GAIN_HELP: Final = (
+    "How much the hedge's own value changed under this scenario, from "
+    "where it stands today. Away from the IPS crash scenario, a hedge "
+    "losing value here is normal decay and rally erosion for a tail "
+    "hedge, not a signal on its own — the roll plan below, not this "
+    "number, decides whether to act."
+)
+_UNDERLYING_LOSS_HELP: Final = (
+    "How much the underlying shares alone would lose under this "
+    "scenario's spot move — the exposure the hedge exists to offset."
+)
+_NET_HELP: Final = (
+    "Hedge gain plus underlying loss combined — the bottom line for "
+    "hedge and underlying together under this scenario."
+)
+
+# #357: this page's TOC entries and each panel's anchor id, in render
+# order. /monitor has no zone tier (unlike /design's BOOK/PLANNING/
+# EXPLORATION), so build_section_nav gets one flat SectionGroup below —
+# same component, no group label. The shape notice is deliberately
+# excluded: it renders empty on a conforming book, so a TOC entry to it
+# would point at nothing most of the time.
+_SECTION_COMPLIANCE: Final = SectionSpec(
+    anchor_id="section-compliance",
+    title="Compliance",
+)
+_SECTION_CRASH_SCENARIO: Final = SectionSpec(
+    anchor_id="section-crash-scenario",
+    title="Crash scenario",
+)
+_SECTION_DECISIONS: Final = SectionSpec(
+    anchor_id="section-decisions",
+    title="Decisions",
+)
+_SECTION_POSITION_DETAIL: Final = SectionSpec(
+    anchor_id="section-position-detail",
+    title="Position detail",
+)
+_SECTION_PROVENANCE: Final = SectionSpec(
+    anchor_id="section-provenance",
+    title="Pricing input provenance",
+)
+_SECTIONS: Final = (
+    _SECTION_COMPLIANCE,
+    _SECTION_CRASH_SCENARIO,
+    _SECTION_DECISIONS,
+    _SECTION_POSITION_DETAIL,
+    _SECTION_PROVENANCE,
+)
 
 # Labels for the spot cross-check line (#336). STATIC reads "SYNTHETIC" —
 # matching chrome.py's own STATIC banner wording — rather than "STATIC",
@@ -291,7 +359,10 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
     """Build the scenario-numbers children.
 
     Shows hedge value (shocked), hedge gain, underlying loss, net, and
-    the offset ratio.
+    the offset ratio. #315: every label carries a hover definition (the
+    value spans keep their own, separate title= — the exact-precision
+    figure, unchanged), so a returning reader can re-orient without
+    leaving the page.
     """
     offset_text = (
         f"{result.offset_ratio:.2f}x"
@@ -304,6 +375,7 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
                 html.Span(
                     "Hedge value (shocked)",
                     className="big-number-label",
+                    title=_HEDGE_VALUE_SHOCKED_HELP,
                 ),
                 html.Span(
                     fmt.compact_currency(result.hedge_value_shocked),
@@ -319,7 +391,11 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
         ),
         html.Div(
             [
-                html.Span("Hedge gain", className="big-number-label"),
+                html.Span(
+                    "Hedge gain",
+                    className="big-number-label",
+                    title=_HEDGE_GAIN_HELP,
+                ),
                 html.Span(
                     fmt.signed_compact_currency(result.hedge_gain),
                     title=fmt.signed_currency(result.hedge_gain),
@@ -330,7 +406,11 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
         ),
         html.Div(
             [
-                html.Span("Underlying loss", className="big-number-label"),
+                html.Span(
+                    "Underlying loss",
+                    className="big-number-label",
+                    title=_UNDERLYING_LOSS_HELP,
+                ),
                 html.Span(
                     fmt.signed_compact_currency(result.underlying_loss),
                     title=fmt.signed_currency(result.underlying_loss),
@@ -341,7 +421,11 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
         ),
         html.Div(
             [
-                html.Span("Net", className="big-number-label"),
+                html.Span(
+                    "Net",
+                    className="big-number-label",
+                    title=_NET_HELP,
+                ),
                 html.Span(
                     fmt.signed_compact_currency(result.net),
                     title=fmt.signed_currency(result.net),
@@ -1150,15 +1234,38 @@ def render(app: ProgramDashApp) -> html.Div:
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
 
+    # #357: each anchor wraps the panel's already-built (safe_render'd)
+    # output rather than living inside that closure — see section_nav's
+    # module docstring's /monitor case. A raise inside one of these still
+    # degrades only that panel; the anchor (and the TOC link to it)
+    # survives regardless.
     return html.Div(
         [
-            html.H1("Monitor"),
+            html.H1("Monitor", id=TOP_ANCHOR_ID),
+            build_section_nav(
+                [SectionGroup(label=None, anchor_id=None, sections=_SECTIONS)],
+            ),
             _build_shape_notice_panel(portfolio),
-            _build_compliance_panel(app, ips_config, portfolio),
-            _build_scenario_explorer_panel(app, ips_config, portfolio),
-            _build_decisions_panel(app, ips_config, portfolio),
-            _build_position_detail_panel(ips_config, portfolio),
-            _build_provenance_panel(app, ips_config, portfolio),
+            section_wrapper(
+                _SECTION_COMPLIANCE,
+                _build_compliance_panel(app, ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_CRASH_SCENARIO,
+                _build_scenario_explorer_panel(app, ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_DECISIONS,
+                _build_decisions_panel(app, ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_POSITION_DETAIL,
+                _build_position_detail_panel(ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_PROVENANCE,
+                _build_provenance_panel(app, ips_config, portfolio),
+            ),
             _page_footer(),
         ],
         className="page page-monitor",

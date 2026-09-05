@@ -76,6 +76,25 @@ than taken on faith.
   restates the plainest version of that contract: **no digest for two
   weeks means the system itself is down**, not that the market has been
   quiet.
+- **The offsite backup is encrypted to two independent keys, one of
+  them meant for exactly this scenario.** `ops/backup-exports.sh`
+  `age`-encrypts every nightly push (#320); either of two recipients'
+  private keys decrypts it on its own — recipient 1 is the operator's
+  own, recipient 2 is a second key deliberately kept somewhere reachable
+  *without* the operator (with the accountant, in a safe — wherever this
+  program's own continuity plan records it; see RUNBOOK.md §10 for the
+  mechanism, the private ops doc for the actual location). If you are
+  reading this page because the operator is genuinely gone, that second
+  key — not a login the operator alone had — is what gets you into
+  `program_state.json` and the policy snapshot inside the backup.
+  **What this does not do:** recover anything if *both* keys are lost —
+  age has no backdoor, by design, and a backup nobody can decrypt is
+  exactly the failure this feature exists to prevent, not something it
+  can itself detect. Confirming the second key still works, and still
+  reaches whoever it's meant to, is a periodic check for the same
+  reason RUNBOOK.md §14 runs a recovery drill on the backup's *content*
+  — the drill covers the encryption too, decrypting once with each key
+  and confirming both give identical output.
 
 ## What this cannot do — read these limits as seriously as the list above
 

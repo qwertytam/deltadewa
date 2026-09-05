@@ -98,6 +98,74 @@ def _find_component(node: object, component_id: str) -> Component | None:
     return None
 
 
+def _find_by_class(node: object, class_name: str) -> Component | None:
+    """Recursively find the first component whose ``className`` matches."""
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            return node
+        return _find_by_class(getattr(node, "children", None), class_name)
+    if isinstance(node, (list, tuple)):
+        for child in node:
+            found = _find_by_class(child, class_name)
+            if found is not None:
+                return found
+    return None
+
+
+def _find_all_by_class(node: object, class_name: str) -> list[Component]:
+    """Recursively find every component whose ``className`` matches."""
+    found: list[Component] = []
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            found.append(node)
+        found.extend(
+            _find_all_by_class(getattr(node, "children", None), class_name),
+        )
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            found.extend(_find_all_by_class(child, class_name))
+    return found
+
+
+def _hrefs(node: object) -> list[str]:
+    """Every fragment ``href`` (``#...``) in *node*'s tree, in order."""
+    hrefs: list[str] = []
+    if isinstance(node, Component):
+        href = getattr(node, "href", None)
+        if isinstance(href, str) and href.startswith("#"):
+            hrefs.append(href)
+        hrefs.extend(_hrefs(getattr(node, "children", None)))
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            hrefs.extend(_hrefs(child))
+    return hrefs
+
+
+def _classnames_in_document_order(node: object) -> list[str]:
+    """Every component's ``className`` in the tree, in document order.
+
+    #357 wraps each panel's ``safe_render`` output in its own anchor
+    ``html.Div`` (``section_nav.section_wrapper``) so a degraded panel
+    still has somewhere for its TOC link to land — one extra, class-less
+    layer between the page and each panel's own class. A className check
+    against ``layout.children`` directly would stop seeing panels once
+    they're nested a level deeper; this walks the whole tree instead, so
+    the ordering assertion survives that wrapper.
+    """
+    classnames: list[str] = []
+    if isinstance(node, Component):
+        class_name = getattr(node, "className", None)
+        if isinstance(class_name, str):
+            classnames.append(class_name)
+        classnames.extend(
+            _classnames_in_document_order(getattr(node, "children", None)),
+        )
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            classnames.extend(_classnames_in_document_order(child))
+    return classnames
+
+
 def _app_with_spot(
     tmp_path: Path,
     *,
@@ -444,6 +512,79 @@ class TestSliderTooltips:
             assert slider.tooltip["always_visible"] is True
 
 
+def _big_number_label_titles(layout: object) -> dict[str, str | None]:
+    """Every ``.big-number-label`` span's text -> its ``title``, in order.
+
+    Used only to assert a hover definition exists and says something
+    specific — not to pin the exact wording, which would make the test
+    brittle to a copyedit.
+    """
+    labels = _find_all_by_class(layout, "big-number-label")
+    return {
+        getattr(label, "children", None): getattr(label, "title", None)
+        for label in labels
+    }
+
+
+class TestScenarioNumberTooltips:
+    """#315: hover definitions on the five scenario-numbers headline figures.
+
+    A returning operator/partner needs to re-load context without
+    re-reading the source — each label's own ``title=`` (the existing,
+    established idiom on this page: Offset ratio already had one) is
+    the memory aid; the value spans keep their separate, unrelated
+    precision tooltip.
+    """
+
+    def test_every_headline_label_has_a_hover_definition(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        titles = _big_number_label_titles(layout)
+        expected_labels = {
+            "Hedge value (shocked)",
+            "Hedge gain",
+            "Underlying loss",
+            "Net",
+            "Offset ratio",
+        }
+        assert expected_labels <= titles.keys()
+        for label in expected_labels:
+            title = titles[label]
+            assert title, f"{label!r} has no hover definition"
+
+    def test_hedge_gain_tooltip_names_the_roll_plan_as_the_action_signal(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The issue's own example: a big loss here, away from the crash
+        scenario, is normal decay/rally erosion, not a reason to act on
+        its own -- and the tooltip has to say what *does* decide that.
+        """
+        layout = monitor.render(monitor_app.app)
+
+        titles = _big_number_label_titles(layout)
+        hedge_gain_title = titles["Hedge gain"]
+        assert hedge_gain_title is not None
+        assert "roll plan" in hedge_gain_title.lower()
+
+    def test_label_tooltip_is_independent_of_the_value_tooltip(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The label's definition and the value's precision figure are
+        two different elements with two different title=s -- confirming
+        adding the former didn't clobber the latter.
+        """
+        layout = monitor.render(monitor_app.app)
+
+        value_span = _find_component(layout, "hedge-value-shocked")
+        assert value_span is not None
+        assert "$" in (value_span.title or "")
+
+
 class TestBasisChip:
     """Main plan mechanism 3: /monitor names its basis, shared with PLANNING."""
 
@@ -454,6 +595,34 @@ class TestBasisChip:
         layout = monitor.render(monitor_app.app)
 
         assert "basis: crash-skew (IPS anchor)" in str(layout)
+
+
+class TestSectionNav:
+    """#357: /monitor gets the same "jump to" TOC idiom as /design, flat."""
+
+    def test_toc_links_every_section_in_render_order(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        toc = _find_by_class(layout, "section-nav")
+        assert toc is not None
+        assert _hrefs(toc) == [
+            "#section-compliance",
+            "#section-crash-scenario",
+            "#section-decisions",
+            "#section-position-detail",
+            "#section-provenance",
+        ]
+
+    def test_h1_carries_the_shared_top_anchor(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        assert _find_component(layout, "page-top") is not None
 
 
 class TestProvenancePanel:
@@ -537,9 +706,7 @@ class TestComplianceStrip:
     ) -> None:
         """The strip must not be scrollable-past before the rest loads."""
         layout = monitor.render(monitor_app.app)
-        classes_in_order = [
-            getattr(child, "className", None) for child in layout.children
-        ]
+        classes_in_order = _classnames_in_document_order(layout)
 
         assert "compliance-strip" in classes_in_order
         assert "scenario-explorer" in classes_in_order
@@ -705,6 +872,36 @@ class TestPanelIsolation:
         assert "crash skew anchor delta is not bracketed" in str(layout)
         assert "Traceback" not in str(layout)
         assert _find_component(layout, "spot-slider") is not None
+
+    def test_degraded_panels_keep_their_toc_anchor(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """#357: a panel's TOC anchor lives on a wrapper outside its own
+        ``safe_render`` closure — see ``section_nav``'s module docstring
+        on why /monitor needs this (unlike /design, where the heading
+        itself always renders). This is the test that pins it: even
+        with ``build_scenario`` raising and the Crash scenario panel
+        fully degraded, its ``section-crash-scenario`` anchor — the
+        target of the TOC's "Crash scenario" link — must still be
+        reachable on the page.
+        """
+
+        def _raise(*_args: object, **_kwargs: object) -> ScenarioResult:
+            msg = "synthetic scenario failure"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(monitor, "build_scenario", _raise)
+
+        layout = monitor.render(monitor_app.app)
+
+        # The panel itself degraded (same assertion the sibling test above
+        # makes)...
+        assert _find_component(layout, "payoff-curve") is None
+        assert "Something went wrong" in str(layout)
+        # ...but its anchor is still there for the TOC link to land on.
+        assert _find_component(layout, "section-crash-scenario") is not None
 
 
 class TestExpiredLegDoesNotBreakMonitor:

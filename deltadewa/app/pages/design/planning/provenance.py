@@ -16,7 +16,7 @@ control it responds to is this panel's, not BOOK's.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from dash import Input, Output, State, dcc, html, no_update
 
@@ -24,6 +24,7 @@ from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.provenance_panel import build_provenance_panel
+from deltadewa.app.section_nav import SectionSpec
 from deltadewa.clock import program_trading_date
 
 from ..book import (
@@ -38,6 +39,12 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-provenance",
+    title="Pricing input provenance",
+)
 
 
 def _render_provenance_panel_logic(
@@ -85,7 +92,7 @@ def layout(
             # grades staleness, not a priced quantity — there is no
             # crash-skew or book-greeks basis for it to name (Batch 3d,
             # #367/#368).
-            html.H3("Pricing input provenance"),
+            html.H3(SECTION.title, id=SECTION.anchor_id),
             html.Div(
                 _render_provenance_panel_logic(
                     app=app,

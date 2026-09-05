@@ -8,7 +8,7 @@ heading and three of its five panels (this one, ``spot_vol``,
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 import numpy as np
 from dash import Input, Output, dcc, html
@@ -22,6 +22,7 @@ from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 from deltadewa.portfolio.monte_carlo import drift_measure_label
 from deltadewa.visualization.distribution_charts_plotly import (
     plot_pnl_distribution,
@@ -38,6 +39,12 @@ if TYPE_CHECKING:
 
 _DEFAULT_MC_PATHS = 100_000
 _DEFAULT_MC_SEED = 42
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-monte-carlo",
+    title="Monte Carlo distribution",
+)
 
 
 def _mc_stats_block(results: dict[str, Any]) -> Component:
@@ -148,9 +155,10 @@ def layout(
         [
             html.H3(
                 [
-                    "Monte Carlo distribution",
+                    SECTION.title,
                     basis_chip(basis_proportional),
                 ],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 [

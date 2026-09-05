@@ -202,6 +202,69 @@ history for that record instead.
   not necessarily the host's current copy, which is #386's subject and
   exactly where the two can differ.
 
+- **#323/#357** — there was no in-app navigation at all: switching pages
+  meant editing the URL by hand, and a long single-scroll `/design` had
+  no way to jump to a section. Cross-page nav (`chrome.py`'s
+  `build_page_nav`/`nav_items`) sits in the shared chrome as a sibling of
+  `safe_chrome`'s guarded provenance banner, not inside it — nav has no
+  data dependency and must survive a banner failure. In-page nav is a
+  derived "jump to" TOC (new module `app/section_nav.py`), not a
+  scroll-tracking rail — a scroll-spy needs either a real `assets/*.js`
+  file (the one class of product code this repo's gate cannot see) or
+  constant `dcc.Interval` polling, and #358 had already declined
+  client-side machinery for the same reason. Every panel under
+  `pages/design/` gets one `SECTION: SectionSpec` constant driving both
+  its heading and its TOC entry, so the TOC cannot drift from the
+  rendered page without a test catching it.
+
+- **#358** — the strike ladder's results table had no way to sort by any
+  column (e.g. cheapest by Premium, highest Achieved convexity). A small
+  server-side sort over the domain objects (`ladder.py`'s
+  `_sort_rungs`/`_toggle_sort_state`), per #390's decision — not a
+  `dash_table.DataTable` migration, since DataTable cells are data, not
+  the `verdict-badge` components this table renders. Every comparator
+  normalizes to `float` so there's one numeric ordering, not a mixed
+  `float | int | bool` union; the sort is stable, so tied rows keep their
+  original order across re-renders.
+
+- **#388** — no `@media print` block existed at all, so a Chromium
+  print-to-PDF of either page split table rows and panel headers across
+  page boundaries wherever the page height happened to land.
+  `break-inside: avoid` (plus the legacy `page-break-inside` fallback) on
+  `/design`'s `.panel` wrapper and `/monitor`'s five per-section wrappers,
+  and on every `<tr>` across all four table classes in the app; no
+  on-screen change, since every rule is scoped inside `@media print`.
+  `table-header-group` on `<thead>` (so a table spanning a break repeats
+  its header) does not actually take effect under Chromium's headless
+  print-to-PDF path — a confirmed engine limitation, not an app defect —
+  recorded separately as #404 rather than reopening this issue.
+
+- **#315** — the five scenario-numbers headline figures on `/monitor`
+  (Hedge value shocked, Hedge gain, Underlying loss, Net, Offset ratio)
+  had no hover definition, unlike Offset ratio's own pre-existing one; a
+  returning operator or partner had to re-derive what each meant from
+  memory. Each label now carries a native `title=` tooltip naming the
+  exact field it reads (`monitor_scenario.ScenarioResult`'s own
+  docstring), so the tooltip can't drift from the engine; Hedge gain's
+  also names the roll plan, not the number itself, as what decides
+  whether a large loss away from the crash scenario is worth acting on.
+
+- **#320** — the nightly offsite backup (`ops/backup-exports.sh`) was
+  unencrypted, plaintext at the remote and in every clone of it. The push
+  is now `age`-encrypted to two independent recipients — the operator's
+  own key and a second key deliberately escrowed for the continuity
+  scenario (`docs/continuity-annex.md`); either alone decrypts a backup.
+  What the nested `exports/.git` repo tracks changed shape from the raw
+  files directly to a single encrypted archive, rebuilt only when content
+  actually changes — `age`'s ciphertext is non-deterministic even for
+  identical input, so a naive diff-the-ciphertext check would re-commit
+  every single night regardless of whether anything did.
+  `SECURITY.md`/`docs/RUNBOOK.md`/`docs/continuity-annex.md` were all
+  updated in the same change. `.env` still never rides this channel,
+  encrypted or not — that exclusion was always architectural (host-only,
+  never through a container's `env_file`), not a plaintext-vs-encrypted
+  trade this closes.
+
 ## [0.7.0] - 2026-08-11
 
 Phase 3 close-out work merged since `v0.6.0` — clock/day-count

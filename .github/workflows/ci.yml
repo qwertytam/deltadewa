@@ -21,6 +21,14 @@ jobs:
       - name: Handbook citation form
         run: ops/check-handbook-citations.sh
 
+      # #320: tests/test_ops/test_backup_exports.py drives the real
+      # ops/backup-exports.sh, which now requires `age` on PATH (RUNBOOK
+      # §1's droplet install step, mirrored here) — those tests skip
+      # gracefully without it, but skipping silently in CI forever would
+      # mean they never actually run.
+      - name: Install age
+        run: sudo apt-get update && sudo apt-get install -y age
+
       - name: Install Poetry
         run: pipx install "poetry>=2.0,<3"
 
