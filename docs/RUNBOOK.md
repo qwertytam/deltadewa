@@ -417,7 +417,11 @@ sudo git clone <BACKUP_REMOTE — see private ops doc> \
 #    `age` and the private key matter here; the key never lives on this
 #    droplet by design, so it comes from wherever you (or the escrow
 #    holder) keep it -- a password manager, a printed sheet, etc.
-sudo age -d -i <path to an age private key — yours or the escrowed one> \
+# Replace AGE_KEY_FILE below with the real path (yours or the escrowed
+# one) -- left as literal text this fails as age's own clear
+# "AGE_KEY_FILE: no such file" rather than a `<placeholder>` silently
+# being read by bash as an input redirection (see §7.1 step 5's note).
+sudo age -d -i AGE_KEY_FILE \
     -o /tmp/exports.tar \
     ~/deltadewa/exports/exports.tar.age
 sudo tar -xf /tmp/exports.tar -C ~/deltadewa/exports
@@ -511,9 +515,14 @@ routine. See §14 for how often.
    DRILL=/tmp/deltadewa-drill-$(date -u +%Y%m%d)
    sudo git clone <BACKUP_REMOTE — see private ops doc> "${DRILL}"
 
-   sudo age -d -i <recipient 1 — the operator's own key> \
+   # Replace OPERATOR_KEY_FILE/ESCROW_KEY_FILE below with the two real
+   # paths (see docs/continuity-annex.md for what the escrowed one is
+   # and where it's meant to be reachable) -- left as literal text this
+   # fails as age's own clear "OPERATOR_KEY_FILE: no such file" rather
+   # than a `<placeholder>` silently read by bash as input redirection.
+   sudo age -d -i OPERATOR_KEY_FILE \
        -o /tmp/drill-a.tar "${DRILL}/exports.tar.age"
-   sudo age -d -i <recipient 2 — the escrowed key, see docs/continuity-annex.md> \
+   sudo age -d -i ESCROW_KEY_FILE \
        -o /tmp/drill-b.tar "${DRILL}/exports.tar.age"
    diff /tmp/drill-a.tar /tmp/drill-b.tar && echo "both keys agree"
 
@@ -584,16 +593,45 @@ routine. See §14 for how often.
    since #301 was filed — several IPS schema changes have shipped since
    (#297 added four required trigger fields, #344 added another, #384
    retired two), so an *old* snapshot will not load on current code.
-   Walk the backup's own history and pick an old revision:
+   Since #320, every commit is one encrypted archive rather than
+   `config-backup/ips.yaml` as its own tracked path — walk `exports.tar.age`'s
+   history instead, pick an old revision, and decrypt/extract *that one*
+   (step 1 already extracted today's):
 
    ```bash
-   sudo git -C "${DRILL}" log --oneline -- config-backup/ips.yaml
-   sudo git -C "${DRILL}" show <an old commit>:config-backup/ips.yaml \
-       > /tmp/old-ips.yaml
+   sudo git -C "${DRILL}" log --oneline -- exports.tar.age
+   # Replace OLD_COMMIT_SHA below with a real sha from the log above.
+   # Left as literal text this fails loudly ("OLD_COMMIT_SHA: command
+   # not found") rather than the confusing failure a `<placeholder>`
+   # produces if pasted as-is — bash reads `<` as input redirection, so
+   # `<an old commit>` silently tries to read a file literally named
+   # `an`, the command never runs, and nothing downstream notices until
+   # a later step trips over a file that was never created.
+   sudo git -C "${DRILL}" show OLD_COMMIT_SHA:exports.tar.age \
+       > /tmp/old-exports.tar.age
+   sudo age -d -i AGE_KEY_FILE \
+       -o /tmp/old-exports.tar /tmp/old-exports.tar.age
+   mkdir -p /tmp/old-restore
+   sudo tar -xf /tmp/old-exports.tar -C /tmp/old-restore
    docker compose run --rm --no-deps \
-       -v /tmp/old-ips.yaml:/restore/ips.yaml:ro app \
+       -v /tmp/old-restore/config-backup/ips.yaml:/restore/ips.yaml:ro app \
        python -m deltadewa.ips_config --check --strict /restore/ips.yaml
    ```
+
+   **A backup remote old enough to carry pre-#320 commits** (raw files
+   tracked directly, no `.age` suffix) can read one of those directly,
+   the same way this step worked before #320 —
+   `git show OLD_COMMIT_SHA:config-backup/ips.yaml > /tmp/old-ips.yaml`,
+   no decrypt step needed for that specific commit. `git log --oneline
+   -- exports.tar.age` alone won't surface those — that path didn't
+   exist yet — so check `git log --oneline -- config-backup/ips.yaml`
+   too if the remote might be old enough.
+
+   **If nothing predates #297 yet** (a backup history still young — a
+   freshly-provisioned remote, or one recently migrated to #320's
+   format), there is no old snapshot to reach for. That's not a failure
+   to fix; skip this step for now and re-run it once the backup has
+   enough history, or at the next §14 quarterly review.
 
    **Expect this to fail** against any revision predating #297 — that is
    the drill working, not a bug. A commit against `crash_scenario_pct`
@@ -605,15 +643,14 @@ routine. See §14 for how often.
 
 6. **Record the run** in the private ops doc: date, the backup commit
    sha from step 1, the `app_version` from step 2, and the outcome of
-   steps 4 and 5. Then discard the scratch clone:
+   steps 4 and 5. Then discard the scratch clone and every step-5
+   temp file (all root-owned — `age -d`/`tar` above ran via `sudo`):
 
    ```bash
    # ${DRILL}/.git is root-owned (the sudo clone in step 1), same as the
    # real exports/.git (§10's Ownership note) — needs sudo to remove.
-   # /tmp/old-ips.yaml was written by the shell's own `>` redirect in
-   # step 5, before sudo ever ran, so it's deploy-owned and needs none.
    sudo rm -rf "${DRILL}"
-   rm -f /tmp/old-ips.yaml
+   sudo rm -rf /tmp/old-exports.tar.age /tmp/old-exports.tar /tmp/old-restore
    ```
 
 ### 7.2. If the restored policy won't load
