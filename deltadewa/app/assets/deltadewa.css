@@ -1041,4 +1041,28 @@ fieldset.editor-form {
   .provenance-table thead {
     display: table-header-group;
   }
+
+  /* #405: a Roll plan row the planner declines to recommend on (#333 --
+   * a short leg, a non-put, an expired leg) is "still listed, greyed",
+   * via opacity on the whole <tr> (.plan-row--excluded, deltadewa.css).
+   * A three-browser print-to-PDF field test found this whole row
+   * renders as ABSENT under Firefox specifically -- not faint, gone --
+   * while Chrome and Safari print it fine, dimmed as intended. opacity
+   * is a compositing property; every browser paints a literal color
+   * the same way, so print substitutes one for the effect instead of
+   * trusting opacity to survive every print pipeline. Colors below are
+   * the same 0.72-opacity-over-#fafafa blend already visible on
+   * screen, not a new look -- this changes the *mechanism*, not the
+   * appearance, and only for print. */
+  .plan-row--excluded {
+    opacity: 1;
+  }
+
+  .plan-row--excluded .verdict-badge--excluded {
+    background: #acb1b6;
+  }
+
+  .plan-row--excluded td {
+    color: #595959;
+  }
 }
