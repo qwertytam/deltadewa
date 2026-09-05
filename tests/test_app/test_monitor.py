@@ -98,6 +98,59 @@ def _find_component(node: object, component_id: str) -> Component | None:
     return None
 
 
+def _find_by_class(node: object, class_name: str) -> Component | None:
+    """Recursively find the first component whose ``className`` matches."""
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            return node
+        return _find_by_class(getattr(node, "children", None), class_name)
+    if isinstance(node, (list, tuple)):
+        for child in node:
+            found = _find_by_class(child, class_name)
+            if found is not None:
+                return found
+    return None
+
+
+def _hrefs(node: object) -> list[str]:
+    """Every fragment ``href`` (``#...``) in *node*'s tree, in order."""
+    hrefs: list[str] = []
+    if isinstance(node, Component):
+        href = getattr(node, "href", None)
+        if isinstance(href, str) and href.startswith("#"):
+            hrefs.append(href)
+        hrefs.extend(_hrefs(getattr(node, "children", None)))
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            hrefs.extend(_hrefs(child))
+    return hrefs
+
+
+def _classnames_in_document_order(node: object) -> list[str]:
+    """Every component's ``className`` in the tree, in document order.
+
+    #357 wraps each panel's ``safe_render`` output in its own anchor
+    ``html.Div`` (``section_nav.section_wrapper``) so a degraded panel
+    still has somewhere for its TOC link to land — one extra, class-less
+    layer between the page and each panel's own class. A className check
+    against ``layout.children`` directly would stop seeing panels once
+    they're nested a level deeper; this walks the whole tree instead, so
+    the ordering assertion survives that wrapper.
+    """
+    classnames: list[str] = []
+    if isinstance(node, Component):
+        class_name = getattr(node, "className", None)
+        if isinstance(class_name, str):
+            classnames.append(class_name)
+        classnames.extend(
+            _classnames_in_document_order(getattr(node, "children", None)),
+        )
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            classnames.extend(_classnames_in_document_order(child))
+    return classnames
+
+
 def _app_with_spot(
     tmp_path: Path,
     *,
@@ -456,6 +509,34 @@ class TestBasisChip:
         assert "basis: crash-skew (IPS anchor)" in str(layout)
 
 
+class TestSectionNav:
+    """#357: /monitor gets the same "jump to" TOC idiom as /design, flat."""
+
+    def test_toc_links_every_section_in_render_order(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        toc = _find_by_class(layout, "section-nav")
+        assert toc is not None
+        assert _hrefs(toc) == [
+            "#section-compliance",
+            "#section-crash-scenario",
+            "#section-decisions",
+            "#section-position-detail",
+            "#section-provenance",
+        ]
+
+    def test_h1_carries_the_shared_top_anchor(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        assert _find_component(layout, "page-top") is not None
+
+
 class TestProvenancePanel:
     """Batch 3d / #367: the full pricing-input breakdown, on /monitor."""
 
@@ -537,9 +618,7 @@ class TestComplianceStrip:
     ) -> None:
         """The strip must not be scrollable-past before the rest loads."""
         layout = monitor.render(monitor_app.app)
-        classes_in_order = [
-            getattr(child, "className", None) for child in layout.children
-        ]
+        classes_in_order = _classnames_in_document_order(layout)
 
         assert "compliance-strip" in classes_in_order
         assert "scenario-explorer" in classes_in_order
@@ -705,6 +784,36 @@ class TestPanelIsolation:
         assert "crash skew anchor delta is not bracketed" in str(layout)
         assert "Traceback" not in str(layout)
         assert _find_component(layout, "spot-slider") is not None
+
+    def test_degraded_panels_keep_their_toc_anchor(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """#357: a panel's TOC anchor lives on a wrapper outside its own
+        ``safe_render`` closure — see ``section_nav``'s module docstring
+        on why /monitor needs this (unlike /design, where the heading
+        itself always renders). This is the test that pins it: even
+        with ``build_scenario`` raising and the Crash scenario panel
+        fully degraded, its ``section-crash-scenario`` anchor — the
+        target of the TOC's "Crash scenario" link — must still be
+        reachable on the page.
+        """
+
+        def _raise(*_args: object, **_kwargs: object) -> ScenarioResult:
+            msg = "synthetic scenario failure"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(monitor, "build_scenario", _raise)
+
+        layout = monitor.render(monitor_app.app)
+
+        # The panel itself degraded (same assertion the sibling test above
+        # makes)...
+        assert _find_component(layout, "payoff-curve") is None
+        assert "Something went wrong" in str(layout)
+        # ...but its anchor is still there for the TOC link to land on.
+        assert _find_component(layout, "section-crash-scenario") is not None
 
 
 class TestExpiredLegDoesNotBreakMonitor:

@@ -7,7 +7,7 @@ so the string lives in ``page.py`` and is passed down.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, dcc, html
 
@@ -17,6 +17,7 @@ from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import NoticeKind, panel_notice
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -46,6 +47,12 @@ _DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
 _LADDER_BLOCKED_HINT = (
     "Set the underlying spot and quantity in the BOOK zone; the ladder "
     "sizes every rung against them."
+)
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-strike-ladder",
+    title="Strike ladder",
 )
 
 
@@ -217,7 +224,10 @@ def layout(
     )
     return html.Div(
         [
-            html.H3(["Strike ladder", basis_chip(basis_crash_skew)]),
+            html.H3(
+                [SECTION.title, basis_chip(basis_crash_skew)],
+                id=SECTION.anchor_id,
+            ),
             html.Div(
                 [
                     html.Div(

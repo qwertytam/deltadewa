@@ -26,7 +26,7 @@ what a single expired leg's crash-skew wing solve did before (#362).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, Patch, dcc, html
 from dash.development.base_component import Component
@@ -59,6 +59,13 @@ from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.ips_notice import build_no_ips_layout
 from deltadewa.app.panel_guard import safe_render
 from deltadewa.app.provenance_panel import build_provenance_panel
+from deltadewa.app.section_nav import (
+    TOP_ANCHOR_ID,
+    SectionGroup,
+    SectionSpec,
+    build_section_nav,
+    section_wrapper,
+)
 from deltadewa.app.shape_notice import shape_notice_text
 from deltadewa.clock import program_trading_date
 from deltadewa.reporting.program_report import (
@@ -88,6 +95,40 @@ _SPOT_SLIDER_MIN = -50.0
 _SPOT_SLIDER_MAX = 10.0
 _VOL_SLIDER_MIN = 0.0
 _VOL_SLIDER_MAX = 0.30
+
+# #357: this page's TOC entries and each panel's anchor id, in render
+# order. /monitor has no zone tier (unlike /design's BOOK/PLANNING/
+# EXPLORATION), so build_section_nav gets one flat SectionGroup below —
+# same component, no group label. The shape notice is deliberately
+# excluded: it renders empty on a conforming book, so a TOC entry to it
+# would point at nothing most of the time.
+_SECTION_COMPLIANCE: Final = SectionSpec(
+    anchor_id="section-compliance",
+    title="Compliance",
+)
+_SECTION_CRASH_SCENARIO: Final = SectionSpec(
+    anchor_id="section-crash-scenario",
+    title="Crash scenario",
+)
+_SECTION_DECISIONS: Final = SectionSpec(
+    anchor_id="section-decisions",
+    title="Decisions",
+)
+_SECTION_POSITION_DETAIL: Final = SectionSpec(
+    anchor_id="section-position-detail",
+    title="Position detail",
+)
+_SECTION_PROVENANCE: Final = SectionSpec(
+    anchor_id="section-provenance",
+    title="Pricing input provenance",
+)
+_SECTIONS: Final = (
+    _SECTION_COMPLIANCE,
+    _SECTION_CRASH_SCENARIO,
+    _SECTION_DECISIONS,
+    _SECTION_POSITION_DETAIL,
+    _SECTION_PROVENANCE,
+)
 
 # Labels for the spot cross-check line (#336). STATIC reads "SYNTHETIC" —
 # matching chrome.py's own STATIC banner wording — rather than "STATIC",
@@ -1150,15 +1191,38 @@ def render(app: ProgramDashApp) -> html.Div:
     ips_config = app.ips_config
     portfolio = app.program_state.portfolio
 
+    # #357: each anchor wraps the panel's already-built (safe_render'd)
+    # output rather than living inside that closure — see section_nav's
+    # module docstring's /monitor case. A raise inside one of these still
+    # degrades only that panel; the anchor (and the TOC link to it)
+    # survives regardless.
     return html.Div(
         [
-            html.H1("Monitor"),
+            html.H1("Monitor", id=TOP_ANCHOR_ID),
+            build_section_nav(
+                [SectionGroup(label=None, anchor_id=None, sections=_SECTIONS)],
+            ),
             _build_shape_notice_panel(portfolio),
-            _build_compliance_panel(app, ips_config, portfolio),
-            _build_scenario_explorer_panel(app, ips_config, portfolio),
-            _build_decisions_panel(app, ips_config, portfolio),
-            _build_position_detail_panel(ips_config, portfolio),
-            _build_provenance_panel(app, ips_config, portfolio),
+            section_wrapper(
+                _SECTION_COMPLIANCE,
+                _build_compliance_panel(app, ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_CRASH_SCENARIO,
+                _build_scenario_explorer_panel(app, ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_DECISIONS,
+                _build_decisions_panel(app, ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_POSITION_DETAIL,
+                _build_position_detail_panel(ips_config, portfolio),
+            ),
+            section_wrapper(
+                _SECTION_PROVENANCE,
+                _build_provenance_panel(app, ips_config, portfolio),
+            ),
             _page_footer(),
         ],
         className="page page-monitor",

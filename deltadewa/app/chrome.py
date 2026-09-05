@@ -1,8 +1,21 @@
-"""Shared chrome: the as-of stamp and provenance banner.
+"""Shared chrome: cross-page nav, the as-of stamp, and the provenance banner.
 
 Rendered once, above the page content, so it appears identically on every
 page regardless of route — a reader who lands on either page sees the same
 honest answer to "how fresh is this."
+
+#323: :func:`build_page_nav` is the cross-page nav, added alongside the
+provenance banner rather than folded into it. ``app/factory.py`` mounts
+them as siblings inside one ``.chrome-shell`` — nav is never wrapped in
+:func:`~deltadewa.app.panel_guard.safe_chrome`, because it has no data
+dependency to guard: it renders a fixed pair of links and cannot raise.
+Wrapping it would only add a way for it to disappear along with a
+provenance failure, stranding an operator on whatever page they were on
+with no way to leave it — the same shape #381 exists to remove, one layer
+up. The only fallible part is *which* link is "current", and that comes
+from the router's own pathname via a separate callback
+(``factory._render_nav``) — sharing ``_render_page``'s callback would let
+a nav-side failure take routing down with it.
 
 Batch 3d / #367: the banner used to grade only ``MarketEnvironment`` — the
 six *fetched* market readings — and said nothing about the four inputs a
@@ -34,16 +47,102 @@ policy, or grading logic lives here.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from dash import html
+from dash import dcc, html
 
 from deltadewa.analysis.market_environment import DataQuality
 from deltadewa.analysis.provenance import Freshness, InputKind
 from deltadewa.clock import program_now
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from dash.development.base_component import Component
+
     from deltadewa.analysis.provenance import ProvenanceLedger
+
+#: The nav's own element id — imported by name (never written as a bare
+#: literal a second time) wherever it needs to be Output/Input'd, the same
+#: discipline #308 pinned for ``pages/design/``.
+NAV_ID: Final[str] = "page-nav"
+
+
+@dataclass(frozen=True, slots=True)
+class NavItem:
+    """One cross-page nav entry: the route and its label."""
+
+    href: str
+    label: str
+
+
+def nav_items(
+    items: Sequence[NavItem],
+    *,
+    current: str | None,
+) -> list[Component]:
+    """Build the nav's children: a link for every route but the current one.
+
+    The current page renders as a plain, unlinked ``html.Span`` (not a
+    ``dcc.Link`` styled to look inert) — the acceptance criterion is that
+    the current page is never *rendered as a link to itself*, which a CSS
+    treatment of an otherwise-real link would not actually satisfy.
+
+    Args:
+        items: The full set of routes to offer.
+        current: The pathname to mark as current (e.g. from
+            ``dcc.Location``'s ``pathname``), or ``None`` before the
+            router's own callback has resolved it — every item then
+            renders as a link, which is the correct degraded state (see
+            the module docstring): fully navigable, just without a
+            marker yet.
+
+    Returns:
+        One component per item, in the given order.
+
+    """
+    children: list[Component] = []
+    for item in items:
+        if item.href == current:
+            children.append(
+                html.Span(item.label, className="app-nav__current"),
+            )
+        else:
+            children.append(
+                dcc.Link(
+                    item.label,
+                    href=item.href,
+                    className="app-nav__link",
+                ),
+            )
+    return children
+
+
+def build_page_nav(
+    items: Sequence[NavItem],
+    *,
+    current: str | None,
+) -> html.Nav:
+    """Build the cross-page nav bar.
+
+    Args:
+        items: The routes to link between (``/monitor``, ``/design``).
+        current: The active route's pathname, or ``None`` before the
+            router callback has resolved it.
+
+    Returns:
+        An ``html.Nav`` (id :data:`NAV_ID`, class ``app-nav``) — the
+        ``id`` is what ``factory._render_nav`` re-renders on every
+        ``dcc.Location`` pathname change.
+
+    """
+    return html.Nav(
+        nav_items(items, current=current),
+        id=NAV_ID,
+        className="app-nav",
+    )
+
 
 _FETCHED_BANNER_TEXT: Final[dict[DataQuality, str]] = {
     DataQuality.STATIC: (

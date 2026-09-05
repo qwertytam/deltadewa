@@ -6,8 +6,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from dash import dcc, html
 from dash.development.base_component import Component
 
+import deltadewa.app.factory as factory_module
 from deltadewa.app.factory import (
     FetchCapableProviderError,
     ProgramDashApp,
@@ -240,3 +242,73 @@ def _find_offset_ratio_span(node: object) -> str | None:
             if found is not None:
                 return found
     return None
+
+
+def _hrefs(node: object) -> list[str]:
+    """Every link-like component's ``href`` in *node*'s tree, in order.
+
+    Mirrors ``test_section_nav.py``'s identically-named helper — kept
+    local rather than shared, matching this file's own per-file
+    duplication of ``_collect_text``.
+    """
+    hrefs: list[str] = []
+    if isinstance(node, (dcc.Link, html.A)):
+        href = getattr(node, "href", None)
+        if isinstance(href, str):
+            hrefs.append(href)
+    children = getattr(node, "children", None)
+    if isinstance(children, (list, tuple)):
+        for child in children:
+            hrefs.extend(_hrefs(child))
+    elif children is not None:
+        hrefs.extend(_hrefs(children))
+    return hrefs
+
+
+class TestCrossPageNav:
+    """#323: the shared chrome carries a link between /monitor and /design."""
+
+    def test_both_routes_are_linked_from_the_initial_layout(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Nav is route-blind chrome, not per-page markup — one instance,
+        shared by construction, carries both routes' links regardless of
+        which page is ultimately requested.
+        """
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        hrefs = _hrefs(app.layout())
+
+        assert "/monitor" in hrefs
+        assert "/design" in hrefs
+
+    def test_nav_survives_a_failed_provenance_assessment(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """#381's isolation, one layer up: a chrome (banner) failure must
+        never take navigation down with it — nav is a sibling of
+        safe_chrome's guarded call, not nested inside it (see chrome.py's
+        module docstring).
+        """
+
+        def _raise(*_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(
+            factory_module,
+            "assess_market_environment",
+            _raise,
+        )
+        app = create_app(state=_state(tmp_path), market_data=_provider())
+
+        layout = app.layout()
+
+        # The degraded chrome still mounted (#381's own contract)...
+        assert "PROVENANCE UNAVAILABLE" in _collect_text(layout)
+        # ...and nav, which has no data dependency at all, is untouched.
+        hrefs = _hrefs(layout)
+        assert "/monitor" in hrefs
+        assert "/design" in hrefs

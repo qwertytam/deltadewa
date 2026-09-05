@@ -16,7 +16,7 @@ so the string lives in ``page.py`` and is passed down.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, dcc, html
 
@@ -27,6 +27,7 @@ from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -55,6 +56,12 @@ _DEFAULT_SIZING_PCT_OTM = 20.0
 _SIZING_BLOCKED_HINT = (
     "Set the underlying spot and quantity in the BOOK zone; sizing "
     "needs them to size a candidate hedge."
+)
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-sizing",
+    title="Sizing workbench",
 )
 
 
@@ -243,7 +250,10 @@ def layout(
     sizing_maturity_default = ips_config.maturity_selection.entry_tenor_years
     return html.Div(
         [
-            html.H3(["Sizing workbench", basis_chip(basis_crash_skew)]),
+            html.H3(
+                [SECTION.title, basis_chip(basis_crash_skew)],
+                id=SECTION.anchor_id,
+            ),
             html.Div(
                 [
                     html.Div(

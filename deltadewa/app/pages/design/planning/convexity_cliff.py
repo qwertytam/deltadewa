@@ -8,7 +8,7 @@ book-Greeks chip; it prices ``_BASIS_MATURITY_CALENDAR`` instead.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
@@ -16,6 +16,7 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.health import NO_LONG_PUTS_CLIFF_DAYS
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -31,6 +32,12 @@ if TYPE_CHECKING:
 # date against the valuation date. Nothing is priced and no Greek is read,
 # so it cannot honestly carry even the book-Greeks chip.
 _BASIS_MATURITY_CALENDAR = "basis: position maturities (nothing priced)"
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-convexity-cliff",
+    title="Convexity cliff",
+)
 
 
 def _cliff_verdict(days: int, conv: IpsConvexity) -> str:
@@ -137,9 +144,10 @@ def layout(
         [
             html.H3(
                 [
-                    "Convexity cliff",
+                    SECTION.title,
                     basis_chip(_BASIS_MATURITY_CALENDAR),
                 ],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 _render_convexity_cliff_panel_logic(

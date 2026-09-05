@@ -32,7 +32,7 @@ changed, re-read it."
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, dcc, html
 
@@ -40,6 +40,12 @@ from deltadewa import __version__
 from deltadewa.analysis.market_environment import assess_market_environment
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.ips_notice import build_no_ips_layout
+from deltadewa.app.section_nav import (
+    TOP_ANCHOR_ID,
+    SectionGroup,
+    back_to_top_link,
+    build_section_nav,
+)
 from deltadewa.app.shape_notice import shape_notice_text
 
 from . import book
@@ -95,6 +101,37 @@ _BASIS_BOOK_GREEKS = "basis: book Greeks at today's market"
 # the cache (M2.1 finding (c): VolMapping is required, never defaulted).
 _BASIS_PROPORTIONAL = "basis: proportional vol (GBM, risk-neutral drift)"
 
+# #357: the zone headings' own anchor ids — book.ZONE_ANCHOR is the third,
+# owned by book.py since it renders that H2.
+_PLANNING_ZONE_ANCHOR: Final = "zone-planning"
+_EXPLORATION_ZONE_ANCHOR: Final = "zone-exploration"
+
+# #357: the page's TOC is derived from the same per-panel SECTION constants
+# each layout() call below uses for its own heading — one source, so a
+# panel added to a zone without adding it here fails
+# test_design_sections.py's document-order check rather than silently
+# drifting from the rendered page.
+_PLANNING_SECTIONS: Final = (
+    market_env_panel.SECTION,
+    sizing.SECTION,
+    ladder.SECTION,
+    roll_plan.SECTION,
+    roll_status.SECTION,
+    provenance.SECTION,
+    position_aging.SECTION,
+    hedge_triggers.SECTION,
+    delta_drift.SECTION,
+    convexity_cliff.SECTION,
+    monetization.SECTION,
+)
+_EXPLORATION_SECTIONS: Final = (
+    volatility_profile.SECTION,
+    spot_vol.SECTION,
+    time_price.SECTION,
+    monte_carlo.SECTION,
+    vega_term.SECTION,
+)
+
 
 def _no_ips_layout(state: ProgramState) -> html.Div:
     """Build the single "no IPS policy loaded" state for the /design page."""
@@ -144,7 +181,10 @@ def render(app: ProgramDashApp) -> html.Div:
 
     planning_zone = html.Div(
         [
-            html.H2(["Planning", basis_chip(_BASIS_CRASH_SKEW)]),
+            html.H2(
+                ["Planning", basis_chip(_BASIS_CRASH_SKEW)],
+                id=_PLANNING_ZONE_ANCHOR,
+            ),
             html.P(
                 "Every panel below that prices the book prices the IPS "
                 "crash — the same basis /monitor's gauge uses. Those agree "
@@ -205,13 +245,17 @@ def render(app: ProgramDashApp) -> html.Div:
                 market_env=market_env,
                 basis_crash_skew=_BASIS_CRASH_SKEW,
             ),
+            back_to_top_link(),
         ],
         className="zone-planning",
     )
 
     exploration_zone = html.Div(
         [
-            html.H2(["Exploration", basis_chip(_BASIS_PROPORTIONAL)]),
+            html.H2(
+                ["Exploration", basis_chip(_BASIS_PROPORTIONAL)],
+                id=_EXPLORATION_ZONE_ANCHOR,
+            ),
             html.P(
                 "These grids price a generic volatility move — every leg "
                 "scaled so the vega-weighted average reaches the level on "
@@ -245,13 +289,40 @@ def render(app: ProgramDashApp) -> html.Div:
                 ips_config=ips_config,
                 basis_book_greeks=_BASIS_BOOK_GREEKS,
             ),
+            back_to_top_link(),
         ],
         className="zone-exploration",
     )
 
+    # #357: derived from the same SECTION constants every panel's own
+    # layout() renders its heading id from — see _PLANNING_SECTIONS/
+    # _EXPLORATION_SECTIONS above and book.SECTIONS. A panel added to a
+    # zone without adding it to one of those tuples is caught by
+    # test_design_sections.py, not by a reader noticing it's unreachable.
+    section_nav = build_section_nav(
+        [
+            SectionGroup(
+                label="Book",
+                anchor_id=book.ZONE_ANCHOR,
+                sections=book.SECTIONS,
+            ),
+            SectionGroup(
+                label="Planning",
+                anchor_id=_PLANNING_ZONE_ANCHOR,
+                sections=_PLANNING_SECTIONS,
+            ),
+            SectionGroup(
+                label="Exploration",
+                anchor_id=_EXPLORATION_ZONE_ANCHOR,
+                sections=_EXPLORATION_SECTIONS,
+            ),
+        ],
+    )
+
     return html.Div(
         [
-            html.H1("Design"),
+            html.H1("Design", id=TOP_ANCHOR_ID),
+            section_nav,
             html.Div(
                 shape_notice_text(portfolio),
                 id="shape-notice",

@@ -11,7 +11,7 @@ so the string lives in ``page.py`` and is passed down.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
@@ -20,6 +20,7 @@ from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -34,6 +35,12 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-monetization",
+    title="Monetization",
+)
 
 
 def _monetization_step_row(step: MonetizationStepStatus) -> html.Tr:
@@ -136,7 +143,10 @@ def layout(
     """Build the Monetization panel."""
     return html.Div(
         [
-            html.H3(["Monetization", basis_chip(basis_crash_skew)]),
+            html.H3(
+                [SECTION.title, basis_chip(basis_crash_skew)],
+                id=SECTION.anchor_id,
+            ),
             html.Div(
                 _render_monetization_panel_logic(
                     portfolio=portfolio,

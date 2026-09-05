@@ -13,7 +13,7 @@ default proportional-vol basis.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
@@ -21,6 +21,7 @@ from deltadewa.analysis.volatility import build_volatility_profile
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 from ..dials import _EXPLORATION_EMPTY_BOOK_MSG
@@ -40,6 +41,12 @@ if TYPE_CHECKING:
 # read of today's book, like the vega term exposure panel, not a stress
 # scenario.
 _BASIS_BOOK_VOLATILITY = "basis: each leg's stored volatility (nothing shocked)"
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-volatility-profile",
+    title="Volatility profile",
+)
 
 
 def _volatility_profile_row(
@@ -122,9 +129,10 @@ def layout(*, portfolio: OptionPortfolio) -> html.Div:
         [
             html.H3(
                 [
-                    "Volatility profile",
+                    SECTION.title,
                     basis_chip(_BASIS_BOOK_VOLATILITY),
                 ],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 _render_volatility_profile_panel_logic(

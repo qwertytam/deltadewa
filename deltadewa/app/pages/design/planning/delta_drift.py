@@ -7,13 +7,14 @@ anchor — a distinct basis from every other PLANNING panel, so it prices
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 
 from ..book import BOOK_VERSION_STORE
 
@@ -32,6 +33,12 @@ if TYPE_CHECKING:
 # the handbook's figure rather than a choice made here; drop the /0.1/ segment
 # for the current page.
 _BASIS_MINUS_5PCT = "basis: spot -5%, flat vol (not the IPS crash)"
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-delta-drift",
+    title="Delta drift",
+)
 
 
 def _delta_drift_leg_row(leg: DeltaDriftLeg) -> html.Tr:
@@ -116,7 +123,8 @@ def layout(*, portfolio: OptionPortfolio) -> html.Div:
     return html.Div(
         [
             html.H3(
-                ["Delta drift", basis_chip(_BASIS_MINUS_5PCT)],
+                [SECTION.title, basis_chip(_BASIS_MINUS_5PCT)],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 _render_delta_drift_panel_logic(portfolio=portfolio),

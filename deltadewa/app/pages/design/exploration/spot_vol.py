@@ -8,7 +8,7 @@ heading and three of its five panels (this one, ``time_price``,
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, dcc, html
 
@@ -21,6 +21,7 @@ from deltadewa.analysis.stress import (
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
+from deltadewa.app.section_nav import SectionSpec
 from deltadewa.visualization.stress_charts_plotly import (
     STRESS_BASELINE_NOTE,
     plot_spot_vol_heatmap,
@@ -44,6 +45,12 @@ _DEFAULT_SPOTVOL_METRIC = "pnl"
 _FALLBACK_MAX_DAYS = 90  # matches build_spot_vol_grid_spec's own default
 # for an empty book, used only to bound the days-forward slider at layout
 # time before any position has been added.
+
+#: #357: this panel's TOC entry and heading id, from one source.
+SECTION: Final[SectionSpec] = SectionSpec(
+    anchor_id="section-spot-vol",
+    title="Spot x vol heatmap",
+)
 
 
 def _render_spot_vol_panel_logic(  # pylint: disable=too-many-arguments
@@ -138,7 +145,8 @@ def layout(
     return html.Div(
         [
             html.H3(
-                ["Spot x vol heatmap", basis_chip(basis_proportional)],
+                [SECTION.title, basis_chip(basis_proportional)],
+                id=SECTION.anchor_id,
             ),
             html.Div(
                 [

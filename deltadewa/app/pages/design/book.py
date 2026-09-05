@@ -30,7 +30,7 @@ import logging
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 from dash.development.base_component import Component
@@ -39,6 +39,7 @@ from deltadewa.analysis.crash_repricing import is_expired
 from deltadewa.app import format as fmt
 from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.panel_guard import status_message as _status
+from deltadewa.app.section_nav import SectionSpec, back_to_top_link
 from deltadewa.clock import program_now
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.persistence import PortfolioSerializer
@@ -67,6 +68,17 @@ _REQUIRED_ADD_FIELDS_MSG = "Strike, maturity, and quantity are required."
 # and the provenance panel's "mark inputs reviewed" control writes both.
 BOOK_VERSION_STORE = "book-version"
 MUTATION_STATUS = "mutation-status"
+
+#: #357: this zone's three TOC entries and heading ids, in render order.
+SECTIONS: Final[tuple[SectionSpec, ...]] = (
+    SectionSpec(anchor_id="section-add-position", title="Add a position"),
+    SectionSpec(anchor_id="section-positions", title="Positions"),
+    SectionSpec(anchor_id="section-import-export", title="Import / export"),
+)
+
+#: #357: this zone's own TOC group heading id — the anchor a "Book" link
+#: in the page-level TOC's group label jumps to.
+ZONE_ANCHOR: Final[str] = "zone-book"
 
 
 def _guarded_mutation(action: Callable[[], None]) -> str | None:
@@ -633,7 +645,7 @@ def layout(
     """Build the BOOK zone: editor form, position table, import/export."""
     return html.Div(
         [
-            html.H2("Book"),
+            html.H2("Book", id=ZONE_ANCHOR),
             html.Div(
                 [
                     html.Label("Underlying quantity"),
@@ -668,7 +680,7 @@ def layout(
                 ),
                 id="book-total-underlying-value",
             ),
-            html.H3("Add a position"),
+            html.H3(SECTIONS[0].title, id=SECTIONS[0].anchor_id),
             html.P(
                 "Editing a position is remove + add, not in-place edit — "
                 "there is no separate 'update' form.",
@@ -763,14 +775,14 @@ def layout(
                 disabled=False,
             ),
             html.Div(id=MUTATION_STATUS),
-            html.H3("Positions"),
+            html.H3(SECTIONS[1].title, id=SECTIONS[1].anchor_id),
             html.Div(
                 _render_position_table_logic(
                     positions=app.program_state.positions_snapshot(),
                 ),
                 id="position-table",
             ),
-            html.H3("Import / export"),
+            html.H3(SECTIONS[2].title, id=SECTIONS[2].anchor_id),
             html.Div(
                 [
                     html.Div(
@@ -838,6 +850,7 @@ def layout(
                 className="import-confirm-row",
                 hidden=True,
             ),
+            back_to_top_link(),
             dcc.Download(id="export-download"),
             dcc.Store(id=BOOK_VERSION_STORE, data=0),
             dcc.Store(id="import-pending-path", data=None),
