@@ -112,6 +112,21 @@ def _find_by_class(node: object, class_name: str) -> Component | None:
     return None
 
 
+def _find_all_by_class(node: object, class_name: str) -> list[Component]:
+    """Recursively find every component whose ``className`` matches."""
+    found: list[Component] = []
+    if isinstance(node, Component):
+        if getattr(node, "className", None) == class_name:
+            found.append(node)
+        found.extend(
+            _find_all_by_class(getattr(node, "children", None), class_name),
+        )
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            found.extend(_find_all_by_class(child, class_name))
+    return found
+
+
 def _hrefs(node: object) -> list[str]:
     """Every fragment ``href`` (``#...``) in *node*'s tree, in order."""
     hrefs: list[str] = []
@@ -495,6 +510,79 @@ class TestSliderTooltips:
             slider = _find_component(layout, slider_id)
             assert slider is not None, f"{slider_id} not found in layout"
             assert slider.tooltip["always_visible"] is True
+
+
+def _big_number_label_titles(layout: object) -> dict[str, str | None]:
+    """Every ``.big-number-label`` span's text -> its ``title``, in order.
+
+    Used only to assert a hover definition exists and says something
+    specific — not to pin the exact wording, which would make the test
+    brittle to a copyedit.
+    """
+    labels = _find_all_by_class(layout, "big-number-label")
+    return {
+        getattr(label, "children", None): getattr(label, "title", None)
+        for label in labels
+    }
+
+
+class TestScenarioNumberTooltips:
+    """#315: hover definitions on the five scenario-numbers headline figures.
+
+    A returning operator/partner needs to re-load context without
+    re-reading the source — each label's own ``title=`` (the existing,
+    established idiom on this page: Offset ratio already had one) is
+    the memory aid; the value spans keep their separate, unrelated
+    precision tooltip.
+    """
+
+    def test_every_headline_label_has_a_hover_definition(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        layout = monitor.render(monitor_app.app)
+
+        titles = _big_number_label_titles(layout)
+        expected_labels = {
+            "Hedge value (shocked)",
+            "Hedge gain",
+            "Underlying loss",
+            "Net",
+            "Offset ratio",
+        }
+        assert expected_labels <= titles.keys()
+        for label in expected_labels:
+            title = titles[label]
+            assert title, f"{label!r} has no hover definition"
+
+    def test_hedge_gain_tooltip_names_the_roll_plan_as_the_action_signal(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The issue's own example: a big loss here, away from the crash
+        scenario, is normal decay/rally erosion, not a reason to act on
+        its own -- and the tooltip has to say what *does* decide that.
+        """
+        layout = monitor.render(monitor_app.app)
+
+        titles = _big_number_label_titles(layout)
+        hedge_gain_title = titles["Hedge gain"]
+        assert hedge_gain_title is not None
+        assert "roll plan" in hedge_gain_title.lower()
+
+    def test_label_tooltip_is_independent_of_the_value_tooltip(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """The label's definition and the value's precision figure are
+        two different elements with two different title=s -- confirming
+        adding the former didn't clobber the latter.
+        """
+        layout = monitor.render(monitor_app.app)
+
+        value_span = _find_component(layout, "hedge-value-shocked")
+        assert value_span is not None
+        assert "$" in (value_span.title or "")
 
 
 class TestBasisChip:

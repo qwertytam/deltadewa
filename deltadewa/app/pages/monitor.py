@@ -96,6 +96,33 @@ _SPOT_SLIDER_MAX = 10.0
 _VOL_SLIDER_MIN = 0.0
 _VOL_SLIDER_MAX = 0.30
 
+# #315: hover definitions for the five scenario-numbers headline figures,
+# for an operator/partner returning weekly-to-monthly who needs to
+# re-load context without re-reading the source. Native title= tooltips,
+# matching the one precedent already on this page (Offset ratio's own
+# label, below) — no new UI idiom. Each names the exact field it reads
+# (see monitor_scenario.ScenarioResult's own docstring) rather than a
+# looser paraphrase, so the tooltip and the engine can't drift apart.
+_HEDGE_VALUE_SHOCKED_HELP: Final = (
+    "What the hedge (the long puts only, not the underlying) would be "
+    "worth if this scenario played out."
+)
+_HEDGE_GAIN_HELP: Final = (
+    "How much the hedge's own value changed under this scenario, from "
+    "where it stands today. Away from the IPS crash scenario, a hedge "
+    "losing value here is normal decay and rally erosion for a tail "
+    "hedge, not a signal on its own — the roll plan below, not this "
+    "number, decides whether to act."
+)
+_UNDERLYING_LOSS_HELP: Final = (
+    "How much the underlying shares alone would lose under this "
+    "scenario's spot move — the exposure the hedge exists to offset."
+)
+_NET_HELP: Final = (
+    "Hedge gain plus underlying loss combined — the bottom line for "
+    "hedge and underlying together under this scenario."
+)
+
 # #357: this page's TOC entries and each panel's anchor id, in render
 # order. /monitor has no zone tier (unlike /design's BOOK/PLANNING/
 # EXPLORATION), so build_section_nav gets one flat SectionGroup below —
@@ -332,7 +359,10 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
     """Build the scenario-numbers children.
 
     Shows hedge value (shocked), hedge gain, underlying loss, net, and
-    the offset ratio.
+    the offset ratio. #315: every label carries a hover definition (the
+    value spans keep their own, separate title= — the exact-precision
+    figure, unchanged), so a returning reader can re-orient without
+    leaving the page.
     """
     offset_text = (
         f"{result.offset_ratio:.2f}x"
@@ -345,6 +375,7 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
                 html.Span(
                     "Hedge value (shocked)",
                     className="big-number-label",
+                    title=_HEDGE_VALUE_SHOCKED_HELP,
                 ),
                 html.Span(
                     fmt.compact_currency(result.hedge_value_shocked),
@@ -360,7 +391,11 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
         ),
         html.Div(
             [
-                html.Span("Hedge gain", className="big-number-label"),
+                html.Span(
+                    "Hedge gain",
+                    className="big-number-label",
+                    title=_HEDGE_GAIN_HELP,
+                ),
                 html.Span(
                     fmt.signed_compact_currency(result.hedge_gain),
                     title=fmt.signed_currency(result.hedge_gain),
@@ -371,7 +406,11 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
         ),
         html.Div(
             [
-                html.Span("Underlying loss", className="big-number-label"),
+                html.Span(
+                    "Underlying loss",
+                    className="big-number-label",
+                    title=_UNDERLYING_LOSS_HELP,
+                ),
                 html.Span(
                     fmt.signed_compact_currency(result.underlying_loss),
                     title=fmt.signed_currency(result.underlying_loss),
@@ -382,7 +421,11 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
         ),
         html.Div(
             [
-                html.Span("Net", className="big-number-label"),
+                html.Span(
+                    "Net",
+                    className="big-number-label",
+                    title=_NET_HELP,
+                ),
                 html.Span(
                     fmt.signed_compact_currency(result.net),
                     title=fmt.signed_currency(result.net),
