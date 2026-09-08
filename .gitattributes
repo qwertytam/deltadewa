@@ -1,0 +1,31 @@
+# Normalise line endings on commit; pin LF in the working tree. Without
+# this, a Windows checkout (core.autocrlf=true is a common Windows git
+# default) converts every text file to CRLF, and nothing stops a CRLF
+# file being committed either. See W1: this is what makes
+# tests/test_reporting/goldens/ a byte-for-byte comparison worth trusting.
+#
+# Do NOT "fix" this by setting core.autocrlf instead — that is per-machine
+# config, invisible to anyone else who clones the repo. This file is the
+# repo-level answer that applies on every clone regardless of local config.
+* text=auto eol=lf
+
+# The weekly-digest golden is compared byte-for-byte
+# (tests/test_reporting/test_weekly_report.py) — pin it explicitly rather
+# than relying on the blanket rule above.
+tests/test_reporting/goldens/* text eol=lf
+
+# Nothing under these paths is text today, but both are where a future
+# asset (a chart export under examples/, an icon under app/assets/) would
+# land — mark binary so git never tries to normalise it.
+deltadewa/app/assets/*.png binary
+deltadewa/app/assets/*.jpg binary
+deltadewa/app/assets/*.jpeg binary
+deltadewa/app/assets/*.gif binary
+deltadewa/app/assets/*.ico binary
+deltadewa/app/assets/*.woff binary
+deltadewa/app/assets/*.woff2 binary
+examples/**/*.png binary
+examples/**/*.jpg binary
+examples/**/*.jpeg binary
+examples/**/*.gif binary
+examples/**/*.pdf binary
