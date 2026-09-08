@@ -120,8 +120,8 @@ class EntryTimingResult:
         should_enter: ``True`` when conditions support entering a new
             hedge position.
         steps: The path taken through the tree (1-3 steps).
-        data_quality_note: Set when the tree declined due to non-LIVE
-            data quality.
+        data_quality_note: Set when the tree declined because data
+            quality was worse than LIVE or CACHED.
 
     """
 
@@ -229,9 +229,12 @@ def decision_matrix(
     under-hedged book (adequacy takes priority) and does not justify
     harvesting an adequate one.
 
-    When ``market_env.data_quality`` is not ``LIVE``, the environment
-    verdict is ``INSUFFICIENT_DATA`` — synthetic or absent data should
-    never drive a trading decision.  Hedge adequacy is still classified
+    When ``market_env.data_quality`` is worse than ``LIVE`` or ``CACHED``
+    (i.e. ``STALE``, ``STATIC``, or ``UNAVAILABLE``), the environment
+    verdict is ``INSUFFICIENT_DATA`` — synthetic, absent, or stale data
+    should never drive a trading decision.  A within-TTL cache hit is the
+    normal path, not a degraded one, so it does not trigger this.  Hedge
+    adequacy is still classified
     because it depends only on portfolio convexity and IPS policy.
 
     Args:
@@ -326,10 +329,14 @@ def entry_timing_tree(
     - ``skew_high`` / ``skew_low`` are 0-1 fractions, matching
       ``MarketEnvironment.skew_percentile`` (e.g. 0.75 = the 75th percentile).
 
-    Declines on non-``LIVE`` ``data_quality``; returns
-    ``should_enter=False`` with a ``data_quality_note``.  Also returns
+    Declines when ``data_quality`` is worse than ``LIVE`` or ``CACHED``
+    (i.e. ``STALE``, ``STATIC``, or ``UNAVAILABLE``); returns
+    ``should_enter=False`` with a ``data_quality_note``.  A within-TTL
+    cache hit is treated as trustworthy, not degraded, so it proceeds
+    through the tree like a live reading.  Also returns
     ``INSUFFICIENT_DATA`` when a required field is ``None`` despite
-    ``LIVE`` quality, including as many completed steps as possible.
+    ``LIVE`` or ``CACHED`` quality, including as many completed steps as
+    possible.
 
     Args:
         market_env: Market environment snapshot.
