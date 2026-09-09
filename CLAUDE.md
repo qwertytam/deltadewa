@@ -406,6 +406,45 @@ never rides this channel, encrypted or not — that exclusion was always
 architectural (host-only, never through a container's `env_file`), not a
 plaintext-vs-encrypted trade this batch could relax.
 
+**Batch 8b has shipped**, closing #398 and confirming #399 and an N8e
+review finding. #398: the digest's `"STALE DATA — "` headline (and the
+embedded program report's own §3 "⚠ Data quality" caveat) gated on
+`ProvenanceLedger.combined_quality`, the same worst-of merge across the
+fetched and hand-entered channels #393/PR #397 already refused for
+`/health`'s `status` for exactly this reason — a hand-entered input that
+is merely `AGING` (routine under `spot_max_age_days: 1`; a book confirmed
+Friday is `AGING` by Sunday) maps onto `DataQuality.STALE` through that
+merge, so the digest cried wolf on a healthy feed every ordinary week.
+Rather than writing the digest a second, textually-identical copy of
+`/health`'s two-channel rule, `assess_freshness` (plus its
+`STALE_OR_WORSE`/`UNCONFIRMED_OR_WORSE` threshold sets) moved out of
+`app/health_checks.py` into `analysis/provenance.py` as its natural,
+UI-free home; `health_checks.py` now just re-exports it, so `/health`'s
+own callers and tests are unchanged. The rule now drives one new field
+threaded through, computed once where the ledger is already built and
+never re-derived downstream: `MarketContextSection.needs_alarm` →
+`WeeklySnapshot.data_quality_alarm`, read by both of `program_report.py`'s
+renderers, `weekly_report.py`'s headline and caveats, and
+`weekly_snapshot.py`'s week-over-week "Data quality" crossing (which had
+the identical defect — a `combined_quality` string flip across the old
+membership boundary, not the real two-channel one). `data_quality` itself
+is unchanged and still always shown verbatim (`combined_quality`'s value
+stays informative even when it isn't alarm-worthy) — except a
+false-green-auditor pass on this batch found that a bare `"STALE"` table
+cell reads as an alarm word on its own with no caveat above it to explain
+why it's quiet; `program_report.py`'s new `_data_quality_cell` helper
+appends a one-line qualifier ("hand-entered input overdue for review —
+not a live-feed problem") for exactly that one reachable combination.
+**#399** was re-checked against this codebase and found **already fully
+shipped** by #396 (`5902eb8`) — `_footer_facts()` already carries the
+`/monitor` link, the "no digest for two weeks" dead-man's-switch line,
+and the three-term glossary, all under existing test coverage; no code
+changed for it here. The N8e review finding — whether the digest's
+entry-timing verdict still renders now that data quality reads `CACHED`
+— is confirmed fine on inspection of a real built digest:
+`decision_matrix`/`entry_timing_tree` gate on `market_env.data_quality`
+directly, never on `combined_quality`, so this bug never reached them.
+
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public
 [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,

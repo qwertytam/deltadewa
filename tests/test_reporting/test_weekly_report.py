@@ -74,6 +74,15 @@ _AS_OF = date(2026, 8, 5)
 _PRIOR_AS_OF = date(2026, 7, 29)
 _FIRST_AS_OF = date(2026, 7, 1)
 
+# Test-local only: lets _make_report's needs_alarm default from
+# data_quality the way the old (pre-#398) combined-quality check did, so
+# every existing data_quality= call site below keeps exercising the same
+# scenario without also passing needs_alarm explicitly. Real needs_alarm
+# is computed by analysis.provenance.assess_freshness — see
+# TestAgingHandEnteredDoesNotAlarm for the case this default can't
+# represent (data_quality and needs_alarm diverging).
+_DEFAULT_STALE_OR_WORSE = frozenset({"STALE", "STATIC", "UNAVAILABLE"})
+
 
 def _make_decision(verdict: str = "MAINTAIN") -> DecisionSection:
     return DecisionSection(
@@ -88,9 +97,12 @@ def _make_decision(verdict: str = "MAINTAIN") -> DecisionSection:
 def _make_report(
     *,
     data_quality: str = "CACHED",
+    needs_alarm: bool | None = None,
     within_budget: bool = False,
     decision: DecisionSection | None = None,
 ) -> ProgramReport:
+    if needs_alarm is None:
+        needs_alarm = data_quality in _DEFAULT_STALE_OR_WORSE
     return ProgramReport(
         header=ReportHeader(
             program_name="SPX Tail Hedge",
@@ -127,6 +139,7 @@ def _make_report(
             skew_percentile=0.45,
             hedge_cost_verdict="FAIR",
             data_quality=data_quality,
+            needs_alarm=needs_alarm,
         ),
         return_framing=ReturnFramingSection(carry_drag_annual_pct=1.15),
         monetization=MonetizationSection(
@@ -174,6 +187,7 @@ def _prior_snapshot() -> WeeklySnapshot:
         as_of=_PRIOR_AS_OF,
         first_as_of=_FIRST_AS_OF,
         data_quality="LIVE",
+        data_quality_alarm=False,
         carry_pct_of_notional=1.0,
         within_budget=True,
         convexity_pct=18.0,
@@ -625,12 +639,19 @@ class TestHeadlineMechanism:
     """_headline() directly — the invariant and the STALE-prefix compose."""
 
     def _snapshot(
-        self, *, all_pass: bool, data_quality: str = "CACHED"
+        self,
+        *,
+        all_pass: bool,
+        data_quality: str = "CACHED",
+        needs_alarm: bool | None = None,
     ) -> WeeklySnapshot:
+        if needs_alarm is None:
+            needs_alarm = data_quality in _DEFAULT_STALE_OR_WORSE
         return replace(
             _prior_snapshot(),
             as_of=_AS_OF,
             data_quality=data_quality,
+            data_quality_alarm=needs_alarm,
             ips_compliance_all_pass=all_pass,
             ips_compliance_rows=(
                 ("Annual carry cost", all_pass),
@@ -1041,6 +1062,70 @@ class TestStaleBanner:
 
     def test_html_caveat_absent_when_cached(self) -> None:
         report = _make_report(data_quality="CACHED", within_budget=True)
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            as_of=_AS_OF,
+        )
+
+        html = render_weekly_digest_html(digest)
+
+        assert 'class="caveat"' not in html
+
+
+class TestAgingHandEnteredDoesNotAlarm:
+    """#398: a merely-AGING hand-entered input must not cry STALE DATA.
+
+    ``combined_quality`` maps a hand-entered ``AGING`` input onto
+    ``DataQuality.STALE`` (the same string a genuinely dead fetched feed
+    produces), so these tests pin the case that string alone cannot
+    distinguish: ``data_quality="STALE"`` with ``needs_alarm=False`` —
+    the shape a real digest would build via
+    ``analysis.provenance.assess_freshness`` when the fetched market
+    data is healthy but a spot/rate/dividend/IV stamp is merely overdue.
+    """
+
+    def test_headline_carries_no_stale_prefix(self) -> None:
+        report = _make_report(
+            data_quality="STALE",
+            needs_alarm=False,
+            within_budget=True,
+        )
+
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            as_of=_AS_OF,
+        )
+
+        assert not digest.headline.startswith("STALE DATA — ")
+
+    def test_markdown_caveat_is_absent(self) -> None:
+        report = _make_report(
+            data_quality="STALE",
+            needs_alarm=False,
+            within_budget=True,
+        )
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            as_of=_AS_OF,
+        )
+
+        md = render_weekly_digest_markdown(digest)
+
+        assert "DATA QUALITY" not in md
+        # Still shown in the embedded report's own table row — but
+        # qualified, not a bare "STALE" that would itself read as an
+        # alarm word (the false-green-auditor's finding on #398).
+        assert "| Data quality | STALE (hand-entered input" in md
+
+    def test_html_caveat_is_absent(self) -> None:
+        report = _make_report(
+            data_quality="STALE",
+            needs_alarm=False,
+            within_budget=True,
+        )
         digest = build_weekly_digest(
             report=report,
             roll_records=(),

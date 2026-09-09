@@ -19,11 +19,13 @@ if TYPE_CHECKING:
 
     from deltadewa.reporting.program_report import ProgramReport
 
-# Mirrors program_report._STALE_OR_WORSE locally rather than importing a
-# private name across modules — same convention that module itself uses to
-# avoid reaching into deltadewa.marketdata.Source (which has no UNAVAILABLE
-# member; a provider never returns that source itself).
-_STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
+# Only for reconstructing a WeeklySnapshot JSON file persisted before
+# #398 added data_quality_alarm, in from_json_dict below — never a live
+# rule. A pre-#398 file has no field to read the real two-channel #393
+# alarm decision back from, so this approximates the file's own old
+# (and, per #398, slightly over-eager) combined_quality-membership check
+# rather than leaving such a snapshot's alarm state undefined.
+_LEGACY_STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
     {"STALE", "STATIC", "UNAVAILABLE"},
 )
 
@@ -44,11 +46,23 @@ class WeeklySnapshot:
         first_as_of: The ``as_of`` of the very first snapshot ever taken —
             carried forward unchanged on every subsequent run. The origin
             date for "since inception" framing.
-        data_quality: ``MarketContextSection.data_quality`` — already the
-            worst ``Source`` across every live market-data observation
-            used (``Observation.combine`` inside
-            ``assess_market_environment``); nothing else in this assembly
-            carries a ``Source`` to combine.
+        data_quality: ``MarketContextSection.data_quality`` —
+            ``provenance_ledger.combined_quality.value`` (#367): the
+            worst grade across both the fetched market-data channel
+            *and* every hand-entered pricing input, not market data
+            alone. Always rendered verbatim; see ``data_quality_alarm``
+            for whether it should actually alarm a reader.
+        data_quality_alarm: ``MarketContextSection.needs_alarm`` —
+            whether ``data_quality`` should trip the digest's "STALE
+            DATA —" headline/caveat (#393/#398,
+            ``analysis.provenance.assess_freshness``). Deliberately a
+            separate field rather than re-derived from ``data_quality``
+            downstream: a hand-entered input that is merely ``AGING``
+            maps onto ``data_quality == "STALE"`` through
+            ``combined_quality``'s lossy channel merge but must not
+            alarm — computing that distinction requires the
+            ``ProvenanceLedger`` itself, which this snapshot does not
+            carry.
         carry_pct_of_notional: ``CostSection.carry_pct_of_notional``.
         within_budget: ``CostSection.within_budget``.
         convexity_pct: ``ProtectionSection.convexity_pct``.
@@ -112,6 +126,7 @@ class WeeklySnapshot:
     as_of: date
     first_as_of: date
     data_quality: str
+    data_quality_alarm: bool
     carry_pct_of_notional: float
     within_budget: bool
     convexity_pct: float | None
@@ -147,6 +162,7 @@ class WeeklySnapshot:
             "as_of": self.as_of.isoformat(),
             "first_as_of": self.first_as_of.isoformat(),
             "data_quality": self.data_quality,
+            "data_quality_alarm": self.data_quality_alarm,
             "carry_pct_of_notional": self.carry_pct_of_notional,
             "within_budget": self.within_budget,
             "convexity_pct": self.convexity_pct,
@@ -178,6 +194,16 @@ class WeeklySnapshot:
             as_of=date.fromisoformat(data["as_of"]),
             first_as_of=date.fromisoformat(data["first_as_of"]),
             data_quality=data["data_quality"],
+            # .get() with a reconstructed default: #398 added this field
+            # after snapshots were already being persisted. A pre-#398
+            # file has no real two-channel verdict to read back, so this
+            # falls back to the file's own old (over-eager)
+            # combined_quality-membership check — see
+            # _LEGACY_STALE_OR_WORSE's own comment.
+            data_quality_alarm=data.get(
+                "data_quality_alarm",
+                data["data_quality"] in _LEGACY_STALE_OR_WORSE,
+            ),
             carry_pct_of_notional=data["carry_pct_of_notional"],
             within_budget=data["within_budget"],
             convexity_pct=data["convexity_pct"],
@@ -242,6 +268,7 @@ def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argumen
         as_of=report.header.as_of,
         first_as_of=first_as_of,
         data_quality=mc.data_quality,
+        data_quality_alarm=mc.needs_alarm,
         carry_pct_of_notional=c.carry_pct_of_notional,
         within_budget=bool(c.within_budget),
         convexity_pct=p.convexity_pct,
@@ -515,16 +542,18 @@ def diff_snapshots(
             ),
         )
 
-    data_quality_change = _str_crossing(
-        "Data quality",
-        prior.data_quality,
-        current.data_quality,
-    )
-    if data_quality_change is not None and (
-        (prior.data_quality in _STALE_OR_WORSE)
-        != (current.data_quality in _STALE_OR_WORSE)
-    ):
-        crossings.append(data_quality_change)
+    # Gated on data_quality_alarm (#393/#398's two-channel rule), not on
+    # data_quality's own STALE_OR_WORSE membership: the latter also flips
+    # for a hand-entered input that merely goes AGING (maps to "STALE"
+    # via combined_quality) and must not read as a crossing worth a line
+    # in the digest — see WeeklySnapshot.data_quality_alarm's docstring.
+    if prior.data_quality_alarm != current.data_quality_alarm:
+        crossings.append(
+            SnapshotChange(
+                label="Data quality",
+                detail=f"{prior.data_quality} → {current.data_quality}",
+            ),
+        )
 
     material_move_candidates = (
         _material_move(

@@ -402,3 +402,78 @@ def build_provenance_ledger(
         market_data_quality=environment.data_quality,
         oldest_series=environment.oldest_series,
     )
+
+
+# ── The #393/#398 alarm rule ────────────────────────────────────────────
+#
+# Originated in app/health_checks.py for /health's status field (#393,
+# PR #397) and generalized here (#398) once the weekly digest was found
+# gating its own "STALE DATA —" headline and caveat on combined_quality
+# instead — the same merge this module's docstring already explains is
+# wrong for /health, for the identical reason: it maps a hand-entered
+# input that is merely AGING (routine under a short review cadence, e.g.
+# spot_max_age_days: 1 — a book confirmed Friday is AGING by Sunday) onto
+# DataQuality.STALE, so a healthy program alarms on an ordinary week.
+#
+# Public (no leading underscore): more than one module now imports these
+# directly, so mirroring them locally per-module (the convention several
+# small `_STALE_OR_WORSE` copies elsewhere in this codebase still follow,
+# for genuinely trivial constant sets) would recreate the exact "two
+# definitions" defect this generalization exists to remove. Consumers:
+# app/health_checks.py (re-exports these under their old private names
+# for its own callers/tests), reporting/program_report.py, and
+# reporting/weekly_snapshot.py / reporting/weekly_report.py (via the
+# needs_alarm flag program_report.py threads through).
+STALE_OR_WORSE: Final[frozenset[DataQuality]] = frozenset(
+    {DataQuality.STALE, DataQuality.STATIC, DataQuality.UNAVAILABLE},
+)
+UNCONFIRMED_OR_WORSE: Final[frozenset[Freshness]] = frozenset(
+    {Freshness.UNKNOWN, Freshness.MISSING},
+)
+
+
+def assess_freshness(ledger: ProvenanceLedger) -> str | None:
+    """Return why *ledger* should alarm a reader, or ``None``.
+
+    One rule, two channels, two cuts on the one ``FRESH < AGING < UNKNOWN
+    < MISSING`` ordering — originally written for ``/health``'s
+    ``status`` field (#393) and now shared by the weekly digest's
+    headline/caveat and the embedded program report's own Market Context
+    caveat (#398), so the three surfaces cannot drift into disagreeing
+    verdicts the way #367/#368 already had to fix once for the banner.
+
+    - **Fetched** (``market_data_quality``) degrades at
+      ``STALE_OR_WORSE`` — ``STALE``/``STATIC``/``UNAVAILABLE``. ``LIVE``
+      and ``CACHED`` stay quiet.
+    - **Hand-entered** (``worst_of(InputKind.HAND_ENTERED)``) degrades
+      only at ``UNKNOWN`` or worse. ``AGING`` stays quiet — see this
+      module's docstring and ``app/health_checks.py``'s for the full
+      argument (an aging input's damage is bounded and expected under a
+      weekly review rhythm; an unconfirmed one's is not).
+
+    Deliberately does **not** read ``combined_quality`` — see that
+    property's own docstring for why collapsing the two channels first
+    would reintroduce exactly this bug.
+
+    Args:
+        ledger: An already-built ``ProvenanceLedger``.
+
+    Returns:
+        ``None`` when nothing about freshness should alarm; otherwise a
+        one-line reason naming the channel, its grade, and the entry.
+
+    """
+    if ledger.market_data_quality in STALE_OR_WORSE:
+        # Named ahead of the hand-entered channel when both degrade: it
+        # is the half an operator acts on first (the refresh job, the
+        # provider), and the other half is still fully rendered
+        # elsewhere. One reason, not one per channel.
+        reason = f"market_data {ledger.market_data_quality.value}"
+        if ledger.oldest_series is not None:
+            reason += f" (oldest series: {ledger.oldest_series})"
+        return reason
+
+    worst = ledger.worst_of(InputKind.HAND_ENTERED)
+    if worst is not None and worst.freshness in UNCONFIRMED_OR_WORSE:
+        return f"pricing_inputs {worst.freshness.value} ({worst.detail})"
+    return None

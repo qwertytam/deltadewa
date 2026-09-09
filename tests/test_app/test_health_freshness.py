@@ -2,9 +2,10 @@
 
 One rule, two channels, two cuts on the one ``FRESH < AGING < UNKNOWN <
 MISSING`` ordering — stated with its reasoning in ``health_checks.py``'s
-module docstring. The fetched channel degrades at ``_STALE_OR_WORSE``;
-the hand-entered one at ``UNKNOWN`` or worse, so a merely ``AGING``
-input stays quiet.
+module docstring, and (since #398) implemented in
+``analysis.provenance.assess_freshness``, shared with the weekly digest.
+The fetched channel degrades at ``STALE_OR_WORSE``; the hand-entered one
+at ``UNKNOWN`` or worse, so a merely ``AGING`` input stays quiet.
 
 The boundary that most needs a test is the *quiet* one. With the shipped
 ``spot_max_age_days: 1``, ``AGING`` is true on most days of a program
@@ -30,10 +31,10 @@ import pytest
 from deltadewa.analysis.market_environment import DataQuality
 from deltadewa.analysis.provenance import (
     _QUALITY_TO_FRESHNESS,
+    STALE_OR_WORSE,
     Freshness,
 )
 from deltadewa.app.factory import create_app
-from deltadewa.app.health_checks import _STALE_OR_WORSE
 from deltadewa.constants import ExerciseStyle
 from deltadewa.marketdata import (
     MarketDataUnavailableError,
@@ -249,21 +250,23 @@ class TestStatusStaysTwoValued:
 
 
 class TestOneDefinitionOfNotFresh:
-    """``_STALE_OR_WORSE`` and ``Freshness`` must not drift apart."""
+    """``STALE_OR_WORSE`` and ``Freshness`` must not drift apart."""
 
     def test_stale_or_worse_is_exactly_the_not_fresh_qualities(self) -> None:
         # #393 asked for the existing definition to be reused rather than
-        # a second one invented. health_checks.py holds a local mirror,
-        # the convention four other modules already follow — this is what
-        # keeps the mirror honest: the set must stay exactly "every
-        # DataQuality the provenance layer does not call FRESH".
+        # a second one invented; #398 then generalized it out of
+        # health_checks.py into analysis/provenance.py so the weekly
+        # digest could reuse it too, rather than mirroring it a second
+        # time. This is what keeps that one definition honest: the set
+        # must stay exactly "every DataQuality the provenance layer does
+        # not call FRESH".
         not_fresh = {
             quality
             for quality in DataQuality
             if _QUALITY_TO_FRESHNESS[quality] is not Freshness.FRESH
         }
 
-        assert not_fresh == _STALE_OR_WORSE
+        assert not_fresh == STALE_OR_WORSE
 
     def test_unavailable_feed_degrades(self, tmp_path: Path) -> None:
         # The set's remaining member, reached the way the real provider

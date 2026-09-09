@@ -102,7 +102,7 @@ Concretely, over the ``ProvenanceLedger`` (``analysis/provenance.py``)
 objects — two channels, two cuts on the one ``FRESH < AGING < UNKNOWN <
 MISSING`` ordering:
 
-- **Fetched** (``market_data``) degrades at ``_STALE_OR_WORSE`` —
+- **Fetched** (``market_data``) degrades at ``STALE_OR_WORSE`` —
   ``STALE``/``STATIC``/``UNAVAILABLE``. ``LIVE`` and ``CACHED`` stay
   quiet.
 - **Hand-entered** (``pricing_inputs.worst``) degrades at ``UNKNOWN`` or
@@ -151,16 +151,22 @@ operator clears it with the confirm-gated
 A signal that fires once per book and then stays off is not alarm
 fatigue; it is the migration working.
 
-**One definition, not a second.** The fetched half reads the same
-``_STALE_OR_WORSE`` set the digest and ``/monitor`` already grade on,
-over the same enum and the same channel it was written for. What it
-deliberately does *not* read is ``ProvenanceLedger.combined_quality``,
-which is that set applied to *both* channels at once: it maps a
-hand-entered ``AGING`` to ``DataQuality.STALE``, so a spot stamp one day
-past a one-day cadence would become indistinguishable from a dead CBOE
-feed. That is precisely the merge #368 removed from this endpoint and
-that ``worst_of()`` exists to prevent, and it would import the
-``AGING``-fires-daily problem above along with it.
+**One definition, not a second.** ``assess_freshness`` itself — this
+rule, both cuts, and the ``STALE_OR_WORSE``/``UNCONFIRMED_OR_WORSE`` sets
+— now lives in ``analysis/provenance.py`` and is imported here rather
+than defined here (#398). It started life in this module for #393; #398
+found the weekly digest gating its own "STALE DATA —" headline (and the
+embedded program report's own Market Context caveat) on
+``ProvenanceLedger.combined_quality`` instead — that set applied to
+*both* channels at once, mapping a hand-entered ``AGING`` to
+``DataQuality.STALE``, so a spot stamp one day past a one-day cadence
+read as indistinguishable from a dead CBOE feed on the digest, the exact
+merge this endpoint has always deliberately refused (per #368,
+``worst_of()`` exists to prevent it). Rather than writing the digest a
+second, textually-identical copy of this rule — the same defect as two
+compliance graders answering the same question differently — the rule
+was generalized to its natural analysis-layer home so every alarm-shaped
+surface reads one definition.
 
 **Still two status words, not three.** A watcher that greps only
 ``status`` cannot tell a wiring fault from a freshness one, by design:
@@ -196,38 +202,23 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Final
 
-from deltadewa.analysis.market_environment import DataQuality
-from deltadewa.analysis.provenance import Freshness, InputKind
+from deltadewa.analysis.provenance import assess_freshness
 from deltadewa.marketdata import read_cache_manifest
+
+# Re-exported (not consumed in this module — factory.py and this
+# module's own tests import assess_freshness from here) since #398
+# moved its implementation to analysis/provenance.py. Named in __all__
+# rather than `import ... as assess_freshness` so ruff's and pylint's
+# unused-import checks agree it's intentional.
+__all__ = ["assess_freshness"]
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
     from pathlib import Path
 
-    from deltadewa.analysis.provenance import ProvenanceLedger
     from deltadewa.state import ProgramState
 
 _PROBE_FILENAME = ".health-probe"
-
-# Mirrors program_report._STALE_OR_WORSE locally rather than importing a
-# private name — the same convention weekly_snapshot.py, weekly_report.py
-# and pages/monitor.py already follow. Held as DataQuality members (not
-# their string values, as the reporting copies do) because this compares
-# against ProvenanceLedger.market_data_quality, an enum. Pinned equal to
-# "every DataQuality that is not Freshness.FRESH" by test, so the two
-# spellings of "not fresh" cannot drift apart silently.
-_STALE_OR_WORSE: Final[frozenset[DataQuality]] = frozenset(
-    {DataQuality.STALE, DataQuality.STATIC, DataQuality.UNAVAILABLE},
-)
-
-# The hand-entered channel's own cut, one notch higher on the shared
-# Freshness ordering — see the module docstring for why AGING is not in
-# it. MISSING is unreachable for a hand-entered entry (Freshness.MISSING)
-# and is listed only so the set is the ordering's own tail rather than a
-# single hand-picked member.
-_UNCONFIRMED_OR_WORSE: Final[frozenset[Freshness]] = frozenset(
-    {Freshness.UNKNOWN, Freshness.MISSING},
-)
 
 # The explicit registry #309's own comment asks for — grows one entry at a
 # time as new object-materialized keys are wired, rather than something
@@ -567,44 +558,9 @@ def summarize(
     return status, boot_wiring
 
 
-def assess_freshness(ledger: ProvenanceLedger) -> str | None:
-    """Return why freshness degrades ``/health``'s ``status``, or ``None``.
-
-    The rule and the reasoning behind both cuts are in this module's
-    docstring — read that before changing either threshold. In short: the
-    fetched channel degrades at ``_STALE_OR_WORSE``, the hand-entered one
-    at ``UNKNOWN`` or worse, and a merely ``AGING`` hand-entered input is
-    deliberately quiet here while still being rendered in full under
-    ``pricing_inputs``.
-
-    Deliberately a plain function over an already-built ledger, not part
-    of ``summarize()``: that one has no ledger, and giving it one would
-    make the boot-wiring checks depend on the provenance layer for the
-    sake of a one-line ``or``. ``/health`` combines the two verdicts in
-    the route, the same shape #381 used for ``provenance_error``, which
-    is also what keeps the two guards there independent.
-
-    Args:
-        ledger: The ledger ``/health`` already built for its
-            ``market_data``/``pricing_inputs`` objects.
-
-    Returns:
-        ``None`` when nothing about freshness degrades ``status``;
-        otherwise a one-line reason naming the channel, its grade, and
-        the entry — ``/health``'s ``freshness_reason`` field.
-
-    """
-    if ledger.market_data_quality in _STALE_OR_WORSE:
-        # Named ahead of the hand-entered channel when both degrade: it
-        # is the half an operator acts on first (the refresh job, the
-        # provider), and the other half is still fully rendered under
-        # pricing_inputs. One reason, not one per channel.
-        reason = f"market_data {ledger.market_data_quality.value}"
-        if ledger.oldest_series is not None:
-            reason += f" (oldest series: {ledger.oldest_series})"
-        return reason
-
-    worst = ledger.worst_of(InputKind.HAND_ENTERED)
-    if worst is not None and worst.freshness in _UNCONFIRMED_OR_WORSE:
-        return f"pricing_inputs {worst.freshness.value} ({worst.detail})"
-    return None
+# assess_freshness itself now lives in analysis/provenance.py (#398) — the
+# weekly digest needed the identical two-channel rule and duplicating it
+# would have been the same "two definitions" defect #393 already argued
+# against for combined_quality. Imported above (aliased to its original
+# private names, alongside the two threshold sets) so every existing
+# caller and test in this module keeps working unchanged.

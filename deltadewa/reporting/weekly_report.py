@@ -19,9 +19,17 @@ it renders once, in the report, not a second time in this lede (Issue
 #171).
 
 Locked policy: **send stamped-stale, never silently skip.** The staleness
-banner is always rendered, using ``MarketContextSection.data_quality`` —
-already the worst ``Source`` across every live observation this assembly
-makes (``Observation.combine`` inside ``assess_market_environment``).
+caveat block always shows ``MarketContextSection.data_quality`` verbatim
+when it renders — ``provenance_ledger.combined_quality.value`` (#367),
+the worst grade across the fetched market-data channel *and* every
+hand-entered pricing input. Whether it — and the headline's own
+``"STALE DATA — "`` prefix — actually renders is a **separate** decision,
+``MarketContextSection.needs_alarm`` /
+``WeeklySnapshot.data_quality_alarm``: the #393/#398 two-channel rule
+(``analysis.provenance.assess_freshness``), shared with ``/health``,
+under which a hand-entered input that is merely ``AGING`` stays quiet
+even though it maps onto ``data_quality == "STALE"`` through
+``combined_quality``'s lossy merge.
 
 Only ``main()``'s ``--as-of`` default reads the wall clock; everything
 downstream is a pure function of its arguments, which is what makes the
@@ -155,10 +163,6 @@ _ROLL_SEVERITY: Final[dict[str, int]] = {
     "ROLL": 3,
 }
 _NO_POSITIONS_ROLL_VERDICT: Final[str] = "N/A"
-
-_STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
-    {"STALE", "STATIC", "UNAVAILABLE"},
-)
 
 _EXIT_OK: Final[int] = 0
 _EXIT_REFUSED: Final[int] = 1
@@ -298,8 +302,10 @@ def _worst_roll_verdict(records: Sequence[RollStatusRecord]) -> str:
     roll verdict, which is what the word reports.
 
     Mirrors ``roll_status._SEVERITY`` locally rather than importing that
-    module's private name — the same convention ``weekly_snapshot.py``
-    uses for ``program_report._STALE_OR_WORSE``.
+    module's private name — a trivial constant duplicated per-module,
+    unlike the #393/#398 alarm rule (``analysis.provenance.
+    assess_freshness``), which is genuine decision logic and is shared,
+    not mirrored.
     """
     worst = _worst_roll_record(records)
     if worst is None:
@@ -377,7 +383,11 @@ def _headline(
     overall PASS" true by construction (#296). The ``"STALE DATA — "``
     prefix is applied identically to all three branches, unchanged from
     before — it's orthogonal to compliance state and must compose with it,
-    never replace or gate it.
+    never replace or gate it. Gated on ``snapshot.data_quality_alarm``
+    (#393/#398's two-channel rule), not on ``data_quality`` itself — a
+    hand-entered input that is merely ``AGING`` must not trip this prefix
+    even though it can read ``data_quality == "STALE"`` through
+    ``combined_quality``'s channel merge.
     """
     if not snapshot.ips_compliance_all_pass:
         failing = [row.metric for row in compliance.rows if not row.passes]
@@ -397,7 +407,7 @@ def _headline(
         base = f"ACTION: {diff.crossings[0].label}"
     else:
         base = "NO ACTION"
-    if snapshot.data_quality in _STALE_OR_WORSE:
+    if snapshot.data_quality_alarm:
         return f"STALE DATA — {base}"
     return base
 
@@ -689,7 +699,7 @@ def render_weekly_digest_markdown(digest: WeeklyDigest) -> str:
         "",
     ]
 
-    if s.data_quality in _STALE_OR_WORSE:
+    if s.data_quality_alarm:
         lines += [
             (
                 f"> ⚠ **DATA QUALITY: {s.data_quality}** — every figure "
@@ -773,7 +783,7 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
     diff = digest.diff
 
     caveat_html = ""
-    if s.data_quality in _STALE_OR_WORSE:
+    if s.data_quality_alarm:
         caveat_html = (
             f'<div class="caveat">&#9888;&#160;<strong>DATA QUALITY: '
             f"{s.data_quality}</strong> &#8212; every figure below is a "
