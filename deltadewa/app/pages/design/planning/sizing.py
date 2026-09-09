@@ -28,6 +28,7 @@ from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import incomplete_notice as _incomplete
 from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.section_nav import SectionSpec
+from deltadewa.reporting.program_report import build_vega_section
 
 from ..book import BOOK_VERSION_STORE
 
@@ -82,14 +83,34 @@ def _vega_sufficiency_block(
     (options **plus** underlying), which on a tail-hedge book is dominated
     by the equity leg — a reader assuming the option book alone would take
     this figure for something roughly two orders of magnitude larger.
+
+    The band comparison comes from
+    :func:`~deltadewa.reporting.program_report.build_vega_section`, not
+    from an ``<=`` written out here (#409). This block used to grade the
+    reading itself, which made it a second opinion on a question
+    ``/monitor``'s compliance strip now answers — and while the strip did
+    not ask it at all, this panel could read "outside band" beside a strip
+    reading PASS. Same section, same boolean, one answer.
     """
-    band = ips_config.vega
-    value = PortfolioAnalyzer(portfolio).calculate_vega_sufficiency_pct()
-    verdict = (
-        "within band"
-        if band.sufficiency_min_pct <= value <= band.sufficiency_max_pct
-        else "outside band"
+    section = build_vega_section(
+        sufficiency_pct=PortfolioAnalyzer(
+            portfolio,
+        ).calculate_vega_sufficiency_pct(),
+        ips_vega=ips_config.vega,
     )
+    value = section.sufficiency_pct
+    if value is None:  # pragma: no cover - the reading is always taken here
+        return html.Div(
+            [
+                html.H4("Vega sufficiency"),
+                html.P(
+                    "Vega sufficiency could not be measured for this book.",
+                    className="plain-language",
+                ),
+            ],
+            id="vega-sufficiency",
+        )
+    verdict = "within band" if section.meets_target else "outside band"
     return html.Div(
         [
             html.H4("Vega sufficiency"),
@@ -97,16 +118,16 @@ def _vega_sufficiency_block(
                 f"The book as it stands moves {fmt.percent(value)} of total "
                 "portfolio value (options plus underlying) per +10 vol "
                 f"points, against an IPS band of "
-                f"{fmt.percent(band.sufficiency_min_pct)}-"
-                f"{fmt.percent(band.sufficiency_max_pct)} ({verdict}). "
+                f"{fmt.percent(section.floor_pct)}-"
+                f"{fmt.percent(section.ceiling_pct)} ({verdict}). "
                 "This describes the current book, not the candidate sized "
                 "above.",
                 className="plain-language",
             ),
             band_bar(
                 value=value,
-                low=band.sufficiency_min_pct,
-                high=band.sufficiency_max_pct,
+                low=section.floor_pct,
+                high=section.ceiling_pct,
             ),
         ],
         id="vega-sufficiency",

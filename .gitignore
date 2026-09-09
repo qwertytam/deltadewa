@@ -93,13 +93,6 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# tests/test_ops/test_docker_entrypoint.py's "ran" marker: on Windows the
-# entrypoint script under test is invoked through a POSIX shell (Git Bash),
-# which doesn't parse pytest's WindowsPath tmp_path — the whole path string
-# lands as one literal filename in the repo root instead of under tmp_path.
-# Harmless 4-byte artifacts; ignored rather than fixed here.
-*.marker
-
 # Translations
 *.mo
 *.pot

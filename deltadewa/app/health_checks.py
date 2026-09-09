@@ -468,9 +468,15 @@ def check_cache_manifest_matches(cache_dir: Path) -> CheckResult:
             f"{_age_suffix(manifest.written_at)})"
         )
     else:
+        # Quoted literally, not via !r: repr() of a Windows path doubles
+        # every backslash ('C:\\Users\\...'), which both reads worse for
+        # an operator and breaks a plain `str(path) in detail` check —
+        # the other two path-valued !r uses in this module (written_by,
+        # loaded_at) are plain labels with no backslashes to mangle, so
+        # they keep repr's quoting.
         detail = (
-            f"refresh manifest recorded cache_dir={manifest.cache_dir!r} "
-            f"but this app process resolved cache_dir={str(cache_dir)!r} "
+            f"refresh manifest recorded cache_dir='{manifest.cache_dir}' "
+            f"but this app process resolved cache_dir='{cache_dir}' "
             "— app and jobs may be resolving DELTADEWA_CACHE_DIR "
             "differently"
         )

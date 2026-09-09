@@ -473,8 +473,24 @@ def rally_reason(
     Public, unlike the other four ``_*_reason`` banders: the weekly digest
     reports this same book-level reading (#297), and mirroring the banding
     there would be a second place for the handbook's thresholds to drift.
+
+    **The label names the basis (#412).** Rally-since-entry is computed on
+    two bases by two producers — per tranche from each leg's own
+    ``entry_spot``
+    (:func:`~deltadewa.analysis.roll_status._rally_trigger_verdict`, all
+    four handbook bands) and book-level as the worst leg (here, banded on
+    the outer two). The split is deliberate and documented in
+    ``docs/part-x-coverage.md``'s "Two surfaces, one evaluator", but a
+    reader seeing a book-level figure beside a per-leg column had nothing
+    on screen telling them which was which — and if every leg happens to
+    share one entry spot, as this program's book does, the two readings are
+    numerically identical and the distinction is invisible. So the basis
+    now travels with the label, the same way the roll-status table already
+    marks its convexity column "(book)". ``weekly_snapshot`` already
+    labelled its own crossing "(worst leg)"; this brings the panel and the
+    console into line with it.
     """
-    label = "Rally since entry"
+    label = "Rally since entry (book — worst leg)"
     if worst is None:
         return HedgeTriggerReason(
             label=label,
@@ -913,7 +929,7 @@ def _print_rally_trigger(
     action in the reason itself, so re-deriving anything here would be a
     second opinion on a settled reading.
     """
-    print("5️⃣  RALLY SINCE ENTRY:")
+    print("5️⃣  RALLY SINCE ENTRY (BOOK — WORST LEG):")
     reporter.divider()
     label = f"    {rally.reason}"
     if rally.status is TriggerStatus.UNAVAILABLE:

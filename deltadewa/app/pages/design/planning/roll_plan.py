@@ -182,9 +182,13 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
     intro = html.P(
         "One recommended action per leg — what to roll it to, and what "
         "that roll would cost. Built on the same trigger grades as the "
-        "roll status table below, so the two never disagree: this panel "
-        "adds the handbook's gamma/theta judgement, which is the only "
-        "thing that can turn a fired trigger into DELAY. Legs that get no "
+        "roll status table below, so the two never disagree. Two things "
+        "can stop a fired trigger from becoming a roll: the handbook's "
+        "gamma/theta judgement defers one that is warranted (DELAY), and "
+        "a trigger whose own action is conditional — the rally REVIEW "
+        "band — can have that condition come back false, in which case no "
+        "roll is warranted at all (CHECKED). Both say why in the "
+        "reasoning cell. Legs that get no "
         "recommendation of their own — short legs of a spread, non-puts, "
         "expired legs — are still listed, greyed, with the reason: a leg "
         "the planner skipped must never just be absent.",

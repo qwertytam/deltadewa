@@ -203,6 +203,26 @@ class MonteCarloMixin:
         grid = self._horizon_spot_grid(final_spots)
         grid_values = pricer.portfolio_values_at(grid, horizon_date)
 
+        # `pricer` above is a scratch BatchPricer: every OptionValuation it
+        # constructs while pricing the grid at `horizon_date` unconditionally
+        # writes the *global* QuantLib Settings.instance().evaluationDate to
+        # `horizon_date` (valuation.py's _setup_quantlib()), and nothing
+        # restores it once this method returns. Left dirty, any *live*
+        # position's own long-lived OptionValuation (held on
+        # OptionPosition.option, reused for the program's life) reads that
+        # wrong global back the next time something calls its cached
+        # price()/delta()/vega()/theta(): isExpired() is the one place
+        # pricing consults the global rather than the object's own pinned
+        # reference date, so a position maturing at or before `horizon_date`
+        # -- exactly the nearest tranche, since days_to_expiry defaults to
+        # the nearest maturity below -- silently reads back 0.0 for price
+        # and every Greek, and GreeksCache latches that 0.0 in until an
+        # unrelated mutation invalidates it. Mirrors the restore
+        # analysis/scenarios.py's scenario_grid performs after its own
+        # BatchPricer sweep, for the same reason.
+        for position in self.positions:
+            position.option.sync_global_evaluation_date()
+
         initial_cost = self.total_value()
         if len(grid) == 1:
             option_value = np.full(len(final_spots), grid_values[0])

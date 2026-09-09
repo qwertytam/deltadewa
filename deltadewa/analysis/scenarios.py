@@ -604,4 +604,23 @@ class ScenariosMixin:
                     },
                 )
 
+        # Every shocked_leg_option() construction above writes the *global*
+        # QuantLib Settings.instance().evaluationDate to `shocked_date`
+        # (valuation.py's _setup_quantlib()) -- harmless mid-loop since each
+        # cell reads its own result immediately, but left there once this
+        # method returns. At days_forward=0 that global happens to already
+        # equal today's date, so the leak was invisible; a nonzero
+        # days_forward (the live /design spot/vol panel exposes this as a
+        # dial) leaves it advanced with nothing to restore it. The next
+        # *first read* of any persistent position whose maturity falls at or
+        # before that date then finds isExpired() consulting the live
+        # (wrong) global and silently reads back 0.0 -- the same failure
+        # monte_carlo.py's _simulate_horizon_pnls had. sync_global_
+        # evaluation_date() only re-asserts the global (a no-op when it
+        # already matches); it does not touch position state, so this holds
+        # the "never mutates the portfolio" contract in this method's own
+        # docstring.
+        for position in positions:
+            position.option.sync_global_evaluation_date()
+
         return pd.DataFrame(results)

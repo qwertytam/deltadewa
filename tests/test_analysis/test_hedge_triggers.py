@@ -556,7 +556,9 @@ class TestEvaluateHedgeTriggerSet:
             "Expiry",
             "Theta cost",
             "Gamma drift",
-            "Rally since entry",
+            # Names its basis (#412): this row is the book's worst-rallied
+            # leg, not the per-tranche reading the roll-status table shows.
+            "Rally since entry (book — worst leg)",
         ]
 
     @pytest.mark.parametrize(

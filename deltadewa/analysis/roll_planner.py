@@ -2,13 +2,25 @@
 
 Converts the HOLD/MONITOR/REVIEW/ROLL verdict produced by
 :func:`~deltadewa.analysis.roll_status.evaluate_roll_status` into a
-concrete :class:`RollAction` (ROLL_NOW, DELAY, or HOLD) for each long
-protective put, applying the `handbook
-<https://github.com/qwertytam/deltadewa-handbook>`_ gamma/theta nuance: defer a
-mechanical roll only when the position is outside the mandatory roll
-window, has moved nearer the money since entry, and crash convexity is
-still within the IPS target band.  See :func:`gamma_theta_delay` for why
-the middle condition is load-bearing.
+concrete :class:`RollAction` (ROLL_NOW, DELAY, CHECKED, or HOLD) for each
+long protective put.
+
+Two things can stop a fired trigger from becoming a roll, and they are
+different judgements:
+
+- :func:`gamma_theta_delay` — the `handbook
+  <https://github.com/qwertytam/deltadewa-handbook>`_'s gamma/theta nuance.
+  Defer a mechanical roll only when the position is outside the mandatory
+  roll window, has moved nearer the money since entry, and crash convexity
+  is still within the IPS target band. See that function for why the middle
+  condition is load-bearing. The roll *is* warranted; it is being deferred.
+- :func:`rally_review_cleared` — the handbook's Rule 2 REVIEW band is the
+  one band whose action is stated as a conditional ("roll strikes up **if**
+  the convexity target is no longer met"). When that condition is false, no
+  roll is warranted at all. Before #408 this planner completed the
+  conditional in the wrong direction and escalated every rally REVIEW
+  straight to ROLL_NOW, on a condition it never evaluated, while the
+  roll-status table beside it still read REVIEW.
 """
 
 from __future__ import annotations
@@ -40,7 +52,15 @@ if TYPE_CHECKING:
 class RollAction(StrEnum):
     """Recommended action for a long put position.
 
-    Verdicts in increasing order of urgency are HOLD, DELAY, ROLL_NOW.
+    Actions in increasing order of urgency are HOLD, CHECKED, DELAY,
+    ROLL_NOW.
+
+    Unlike :class:`~deltadewa.analysis.roll_status.RollVerdict`, this scale
+    is not reduced anywhere — ``/design``'s roll-plan panel is its only
+    consumer, and the digest's worst-verdict line reduces ``RollVerdict``
+    instead. So the order below lives in this docstring rather than in a
+    ``_SEVERITY`` map, and adding a member here costs a badge rule, not a
+    reduction audit (#408).
     """
 
     ROLL_NOW = "ROLL_NOW"
@@ -50,6 +70,18 @@ class RollAction(StrEnum):
     """A trigger fired but the gamma/theta nuance says defer the roll.
 
     Only reachable when the put is gaining gamma — never on a rally.
+    """
+
+    CHECKED = "CHECKED"
+    """A trigger fired, its own stated condition was evaluated, and it does
+    not call for a roll (#408).
+
+    Distinct from ``HOLD``, which means nothing fired at all, and from
+    ``DELAY``, which defers a roll that *is* warranted. Reached only by the
+    handbook's `Rule 2 REVIEW band
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger>`_,
+    the one band whose action is conditional ("roll strikes up **if** the
+    convexity target is no longer met") — see :func:`rally_review_cleared`.
     """
 
     HOLD = "HOLD"
@@ -196,8 +228,88 @@ def gamma_theta_delay(
     return not_in_roll_window and in_target_band and nearer_the_money
 
 
+def rally_review_cleared(record: RollStatusRecord) -> bool:
+    """Return True when a rally REVIEW's own condition says "no roll" (#408).
+
+    The handbook's `Rule 2 — Market Rally Rebalance Trigger
+    <https://qwertytam.github.io/deltadewa-handbook/0.1/part-7/rolling-rules/#rule-2-market-rally-rebalance-trigger>`_
+    states four bands, and only the REVIEW band's action is *conditional*:
+    "Review trigger — roll strikes up **if** the convexity target is no
+    longer met." Every other band prescribes outright.
+
+    Until this function existed the planner completed that conditional in
+    the wrong direction. ``build_roll_plan`` treated REVIEW and ROLL alike
+    as "actionable", and :func:`gamma_theta_delay` — the only
+    verdict-softening path — requires the put to have moved *nearer* the
+    money, which a rally can never satisfy. So a rally REVIEW had no route
+    to anything but ``ROLL_NOW``: the plan said act today, on a condition
+    it never evaluated, while the roll-status table beside it still said
+    REVIEW.
+
+    All four conditions are required:
+
+    1. ``record.verdict is REVIEW`` — ROLL is unconditional in every band
+       that produces it (ACTION and URGENT both grade ROLL), and must keep
+       escalating.
+    2. the rally trigger is what earned that REVIEW — otherwise this is
+       some other rule's REVIEW and Rule 2's condition does not govern it.
+    3. the **time** trigger is not also at REVIEW. Rule 1's review buffer
+       is a separate rule with no convexity condition attached; a leg
+       approaching its roll window is due a look regardless of how the
+       book's convexity reads, so a Rule 1 REVIEW still reaches
+       ``DELAY``/``ROLL_NOW`` as before.
+    4. ``record.convexity_target_met`` — the condition itself, read off the
+       one boolean
+       :func:`~deltadewa.analysis.roll_status.meets_convexity_target`
+       resolved for the whole book, never recomputed here.
+
+    Args:
+        record: One leg's roll status, from
+            :func:`~deltadewa.analysis.roll_status.evaluate_roll_status`.
+
+    Returns:
+        ``True`` when the leg's REVIEW came from Rule 2 alone and the
+        convexity target is still met, so no roll is warranted —
+        :attr:`RollAction.CHECKED`. ``False`` otherwise, including every
+        case where the rally is at or past the ACTION band.
+
+    """
+    return (
+        record.verdict is RollVerdict.REVIEW
+        and record.rally_trigger.verdict is RollVerdict.REVIEW
+        and record.time_trigger.verdict is not RollVerdict.REVIEW
+        and record.convexity_target_met
+    )
+
+
+def _checked_rationale(record: RollStatusRecord) -> str:
+    """State the recomputation that turned a fired trigger into no action.
+
+    ``CHECKED`` is a recommendation to *not* act on a live trigger, so —
+    exactly like :func:`_delay_rationale` — it has to arrive with its
+    justification attached or it reads as the tool losing the signal. The
+    rally trigger's own reason already carries the resolved conditional
+    (``roll_status._convexity_recheck``), so this quotes it rather than
+    wording the recomputation a second time and risking the two drifting.
+    """
+    return (
+        f"Rally trigger: {record.rally_trigger.reason}"
+        " No roll warranted while that holds; revisit if convexity leaves"
+        " the band or the rally reaches the action band."
+    )
+
+
 def _roll_now_rationale(record: RollStatusRecord) -> str:
-    """One-sentence rationale identifying the primary ROLL_NOW trigger."""
+    """One-sentence rationale identifying the primary ROLL_NOW trigger.
+
+    Since #408 a *rally*-sourced ROLL_NOW can only arrive here from the
+    ACTION/URGENT bands (which grade ROLL outright) or from a REVIEW band
+    whose condition was evaluated and found true — a rally REVIEW with
+    convexity still in band is :attr:`RollAction.CHECKED` and never reaches
+    this function. Either way the rally trigger's own reason now names the
+    band's action or states the recomputation, so quoting it is a complete
+    justification rather than a conditional passed through unevaluated.
+    """
     if record.days_to_maturity <= record.roll_window_days:
         return (
             f"Time trigger: {record.days_to_maturity}d to expiry"
@@ -210,7 +322,11 @@ def _roll_now_rationale(record: RollStatusRecord) -> str:
             f" {record.convexity_target_min_pct:.1f}%."
         )
     if record.rally_trigger.verdict == record.verdict:
-        return f"Rally trigger: {record.rally_trigger.reason}."
+        reason = record.rally_trigger.reason
+        # The REVIEW band's reason already ends in a full stop, having
+        # resolved its own conditional; the other three bands do not.
+        stop = "" if reason.endswith(".") else "."
+        return f"Rally trigger: {reason}{stop}"
     return f"Roll recommended ({record.verdict})."
 
 
@@ -406,8 +522,9 @@ def build_roll_plan(
     1. Selects a target strike via *target_basis*.
     2. Prices the roll via
        :func:`~deltadewa.analysis.roll_status.estimate_roll_up_cost`.
-    3. Applies :func:`gamma_theta_delay` to map the verdict to a
-       :class:`RollAction`.
+    3. Maps the verdict to a :class:`RollAction`, applying
+       :func:`rally_review_cleared` (the Rule 2 REVIEW band's own
+       condition) and :func:`gamma_theta_delay` (the gamma/theta nuance).
 
     A spread rolls as a unit: the anchor long put's target sets the
     structure's new geometry, every leg moves by the same ratio so a 5%-wide
@@ -474,7 +591,14 @@ def _excluded(
     structure: RollStructure,
     reason: str,
 ) -> RollPlanRecord:
-    """Build a record for a leg this planner declines to recommend on."""
+    """Build a record for a leg this planner declines to recommend on.
+
+    ``meets_convexity_target`` is still read off the record rather than
+    hardcoded ``False`` (#408). It is a **book**-level fact, like the
+    ``convexity_now_pct`` beside it — a leg getting no roll recommendation
+    does not make the book's convexity target unmet, and a field saying
+    otherwise is a wrong number waiting for its first reader.
+    """
     return RollPlanRecord(
         position=record.position,
         verdict=record.verdict,
@@ -485,7 +609,7 @@ def _excluded(
         target_strike=None,
         roll_up_cost=None,
         convexity_now_pct=record.crash_convexity_pct,
-        meets_convexity_target=False,
+        meets_convexity_target=record.convexity_target_met,
         gamma=record.position.option.gamma() * record.position.contract_size,
         theta=record.position.option.theta() * record.position.contract_size,
         rationale=reason,
@@ -519,6 +643,62 @@ def _exclusion_reason(
             else "short put — no standalone roll recommendation (#333)"
         )
     return None
+
+
+def _decide_action(
+    record: RollStatusRecord,
+    *,
+    ips_triggers: IpsTriggers,
+    ips_convexity: IpsConvexity,
+) -> tuple[RollAction, str]:
+    """Map one leg's roll verdict to an action, and say why.
+
+    The whole of #408's decision, in one place: a fired trigger becomes a
+    roll unless something says otherwise, and there are exactly two things
+    that can — :func:`rally_review_cleared` (the Rule 2 REVIEW band's own
+    condition came back false, so no roll is warranted) and
+    :func:`gamma_theta_delay` (the roll is warranted but deferred).
+
+    CHECKED is tested before DELAY only for readability — a trigger's own
+    condition is resolved before the gamma/theta nuance is applied to it.
+    The two are mutually exclusive by construction: a rally moves a put
+    *further* OTM, so a rally REVIEW always has ``drift_pct > 0`` and can
+    never satisfy ``gamma_theta_delay``'s nearer-the-money condition. A
+    test pins that rather than leaving it resting on this ordering.
+
+    Args:
+        record: One leg's roll status.
+        ips_triggers: IPS trigger policy (the roll window).
+        ips_convexity: IPS convexity policy (the target band).
+
+    Returns:
+        The action and its rationale. Every rationale states its grounds:
+        a recommendation to *not* act on a live trigger reads as the tool
+        losing the signal unless it arrives with its justification.
+
+    """
+    months_to_maturity = record.days_to_maturity / const.CALENDAR_DAYS_PER_MONTH
+    convexity_now_pct = record.crash_convexity_pct
+
+    if record.verdict not in (RollVerdict.ROLL, RollVerdict.REVIEW):
+        return RollAction.HOLD, "No trigger active; holding."
+    if rally_review_cleared(record):
+        return RollAction.CHECKED, _checked_rationale(record)
+    if gamma_theta_delay(
+        months_to_maturity=months_to_maturity,
+        convexity_now_pct=convexity_now_pct,
+        drift_pct=record.moneyness.drift_pct,
+        ips_triggers=ips_triggers,
+        ips_convexity=ips_convexity,
+    ):
+        return RollAction.DELAY, _delay_rationale(
+            record,
+            months_to_maturity=months_to_maturity,
+            convexity_now_pct=convexity_now_pct,
+            ips_triggers=ips_triggers,
+            ips_convexity=ips_convexity,
+        )
+    return RollAction.ROLL_NOW, _roll_now_rationale(record)
 
 
 def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # one structure's full roll context; every argument is a distinct input
@@ -579,42 +759,17 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
             )
             continue
 
-        months_to_maturity = (
-            record.days_to_maturity / const.CALENDAR_DAYS_PER_MONTH
-        )
         convexity_now_pct = record.crash_convexity_pct
-        meets_convexity_target = (
-            ips_convexity.target_min_pct
-            <= convexity_now_pct
-            <= ips_convexity.target_max_pct
-        )
-
-        actionable = record.verdict in (RollVerdict.ROLL, RollVerdict.REVIEW)
-        if actionable and gamma_theta_delay(
-            months_to_maturity=months_to_maturity,
-            convexity_now_pct=convexity_now_pct,
-            drift_pct=record.moneyness.drift_pct,
+        # Read off the record, not recomputed (#408): the roll-status
+        # table's convexity trigger, the rally REVIEW band's condition and
+        # this plan now grade on one boolean, so they cannot disagree about
+        # whether the target is met for a book they are both describing.
+        meets_convexity_target = record.convexity_target_met
+        action, rationale = _decide_action(
+            record,
             ips_triggers=ips_triggers,
             ips_convexity=ips_convexity,
-        ):
-            action = RollAction.DELAY
-        elif actionable:
-            action = RollAction.ROLL_NOW
-        else:
-            action = RollAction.HOLD
-
-        if action == RollAction.HOLD:
-            rationale = "No trigger active; holding."
-        elif action == RollAction.DELAY:
-            rationale = _delay_rationale(
-                record,
-                months_to_maturity=months_to_maturity,
-                convexity_now_pct=convexity_now_pct,
-                ips_triggers=ips_triggers,
-                ips_convexity=ips_convexity,
-            )
-        else:
-            rationale = _roll_now_rationale(record)
+        )
         if structure.is_spread:
             rationale = (
                 f"{rationale} Rolls as one structure with "

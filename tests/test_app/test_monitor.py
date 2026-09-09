@@ -40,6 +40,7 @@ from deltadewa.app.pages import monitor
 from deltadewa.clock import days_between
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
+from deltadewa.reporting.program_report import build_ips_compliance
 from deltadewa.state import ProgramState
 from tests.clock_helpers import days_from_today
 
@@ -250,12 +251,27 @@ def _app_with_convexity_band(
     else:
         target_min_pct = measured_pct - 5.0
         target_max_pct = measured_pct + 5.0
+    # The vega band is derived from the book the same way, and for the same
+    # reason (#409): vega sufficiency is now a third compliance row, so a
+    # fixture that only forces the convexity band would read FAIL on vega
+    # whichever way convexity was forced — and "a passing book" would no
+    # longer be what this fixture builds. Straddling the measured reading
+    # keeps the pass/fail under the caller's `band` argument, where the
+    # tests expect it.
+    measured_vega_pct = PortfolioAnalyzer(
+        state.portfolio,
+    ).calculate_vega_sufficiency_pct()
     forced_ips_config = dataclasses.replace(
         ips_config,
         convexity=dataclasses.replace(
             ips_config.convexity,
             target_min_pct=target_min_pct,
             target_max_pct=target_max_pct,
+        ),
+        vega=dataclasses.replace(
+            ips_config.vega,
+            sufficiency_min_pct=measured_vega_pct - 1.0,
+            sufficiency_max_pct=measured_vega_pct + 1.0,
         ),
     )
     return create_app(
@@ -673,6 +689,39 @@ class TestComplianceStrip:
         text = str(strip)
         assert "PASS" in text
         assert "FAIL" not in text
+
+    def test_the_pass_line_names_every_metric_it_graded(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#409: the PASS sentence is derived from the rows, not written.
+
+        The old wording enumerated "carry and crash convexity" as a
+        literal, which stayed narrowly true while ``build_ips_compliance``
+        silently omitted a third banded IPS metric. Asserting against the
+        rows themselves — rather than against a pinned sentence — is what
+        makes this catch the *next* omission rather than only this one.
+        """
+        app = _app_with_convexity_band(tmp_path, band="around")
+        ips_config = app.ips_config
+        assert ips_config is not None
+        cost, protection, vega = monitor._compliance_sections(
+            app.program_state.portfolio,
+            ips_config,
+        )
+        compliance = build_ips_compliance(cost, protection, vega)
+
+        layout = monitor.render(app)
+        strip = _find_component(layout, "compliance-strip")
+
+        assert strip is not None
+        text = str(strip)
+        assert compliance.rows  # a PASS over nothing would prove nothing
+        for row in compliance.rows:
+            first_word = row.metric.split()[0].lower()
+            assert first_word in text.lower(), (
+                f"the PASS line does not name the {row.metric!r} row"
+            )
 
     def test_expired_leg_caveat_present_when_book_has_one(
         self,
