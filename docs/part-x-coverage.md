@@ -148,7 +148,7 @@ default is chipped:
 | 1 | Crash Convexity Chart | 1 | `/monitor` — *Crash scenario*, `payoff-curve` | `analysis/monitor_scenario.build_scenario_curve`, `visualization/crash_charts_plotly.plot_scenario_curve` | **PRESENT** |
 | 2 | Crash Scenario Table & Payoff Ratio | 1 | `/monitor` — *Crash scenario*, `_scenario_numbers` (offset ratio) | `analysis/monitor_scenario.build_scenario` | **PRESENT** (form changed — see [Conscious retirements](#conscious-retirements)) |
 | 3 | Theta Carry (Insurance Cost) | 1 | `/monitor` — *Crash scenario*, `_cost_panel`; also digest `CostSection` | `analysis/carry.carry_vs_budget` via `monitor_scenario` | **PRESENT** |
-| 4 | Vega Sufficiency Gauge | 1 | `/design` PLANNING — *Sizing workbench*, `_vega_sufficiency_block` | `analysis/health.HealthMixin.calculate_vega_sufficiency_pct`; band from `IpsVega` | **PRESENT** (M2.7) |
+| 4 | Vega Sufficiency Gauge | 1 | `/design` PLANNING — *Sizing workbench*, `_vega_sufficiency_block`; **also `/monitor`'s compliance strip and the digest's §6 since Batch 8a.2 (#409)** | `analysis/health.HealthMixin.calculate_vega_sufficiency_pct`; band from `IpsVega`, graded once by `reporting/program_report.build_vega_section` | **PRESENT** (M2.7; graded for compliance since 8a.2) |
 | 5 | Carry vs. Convexity Chart | 1 | `/monitor` — `_cost_panel`, `_efficiency_sentence`. Both axes separately: cost panel and *Decisions* band bars | `analysis/hedge_efficiency.hedge_efficiency`, on `ScenarioResult.efficiency` | **PRESENT** (M2.7) |
 | 6 | Volatility Regime Indicator | 2 | `/design` PLANNING — *Market environment*; also the digest | `analysis/market_environment.classify_vix_regime` | **PRESENT** (M2.7) |
 | 7 | Skew Percentile Gauge | 2 | `/design` PLANNING — *Market environment*; also the digest | `analysis/market_environment` (`skew_percentile`), `marketdata` `get_skew_percentile` | **PRESENT** (M2.7) |
@@ -862,6 +862,22 @@ the package has no vocabulary for; naming the band in the reason is this
 repo's standing convention for never letting a verdict arrive as a bare
 word.
 
+**Batch 8a.2 put that split on the screen (#412).** The contract above was
+only ever written down here, and review #3 found the consequence: on the
+live book every leg shares one `entry_spot`, so the per-tranche readings
+are numerically identical and indistinguishable from a book-level figure
+broadcast down the column. Both producers are correct and neither changed;
+the *labels* did. The roll-status table's per-leg columns now read "OTM
+entry / now (this leg)" and "Rally trigger (this leg)" beside the
+"Convexity trigger (book)" that was already marked, and
+`hedge_triggers.rally_reason`'s label reads "Rally since entry (book —
+worst leg)", matching the wording `weekly_snapshot` already used for its
+own crossing. A leg with no recorded `entry_spot` now says so in the
+reason ("rally since entry unavailable") rather than grading `HOLD` with a
+reason that reads like a measured zero — the verdict stays `HOLD` because
+`RollVerdict` has no `UNAVAILABLE` rung and adding one would land on the
+digest's severity scale.
+
 `evaluate_hedge_triggers`' printed console output gained a fifth section,
 which is the one deliberate break of M2.7's "printed output unchanged"
 note — that note was about the extraction not regressing, not a permanent
@@ -909,3 +925,86 @@ Not decided by M2.7 or M2.8, and not blocking anything.
 of this list) are resolved, not open: M2.8 moved them to
 `IpsMarketEnvironment` and made the parameters required, closing the
 M1.4-class leak M2.7 had surfaced but not fixed.
+
+### The roll plan completes the handbook's conditional (#408, Batch 8a.2)
+
+Handbook Rule 2 states four rally bands, and only the REVIEW band's action
+is *conditional*: "roll strikes up **if** the convexity target is no longer
+met." `roll_planner.build_roll_plan` treated `REVIEW` and `ROLL` alike as
+actionable, and `gamma_theta_delay` — the only softening path — requires
+the put to have moved *nearer* the money, which a rally structurally cannot
+satisfy. So a rally REVIEW had exactly one destination, `ROLL_NOW`, on a
+condition nothing evaluated: review #3 caught the live book calling three
+long legs `ROLL NOW` at ~$140K of combined roll-up cost (the same book
+measures $125K at the spot this batch was verified against) while the
+roll-status table and `/monitor`'s Decisions read `REVIEW` for the same
+legs at the same instant, with the unresolved conditional rendered verbatim
+in the reasoning cell.
+
+Two changes, at two layers:
+
+- `roll_status._rally_trigger_verdict` now **resolves** the conditional in
+  the reason it writes ("Recomputed: crash convexity 10.6% is still inside
+  the 10-20% IPS target band, so the target IS met…"). The verdict is
+  unchanged — `REVIEW` is a true statement about which band the rally
+  landed in, and this table is the evidence layer. Resolving it at the
+  source is what makes the roll-status table, `/monitor`'s Decisions and
+  the roll plan's rationale agree by construction: all three render this
+  one string.
+- `roll_planner` gained `RollAction.CHECKED` and `rally_review_cleared`.
+  `CHECKED` is distinct from `HOLD` (nothing fired) and from `DELAY` (a
+  warranted roll, deferred): a trigger fired, its own stated condition was
+  evaluated, and it does not call for a roll. Unlike `RollVerdict`,
+  `RollAction` is reduced nowhere — `/design`'s roll-plan panel is its only
+  consumer — so a new member costs a badge rule, not the reduction audit
+  #373's `EXPIRED` needed.
+
+`ROLL_NOW` on a rally is therefore legitimate on two distinct grounds, and
+they were always separate paths: at or past the ACTION band (≥15%) the
+handbook prescribes outright and `_rally_trigger_verdict` already grades
+`ROLL`; inside the REVIEW band it requires the convexity target to be
+genuinely unmet. `tests/test_analysis/test_roll_and_compliance_agree.py`
+pins that as a property over a grid of rally × convexity × maturity, stated
+against the raw trigger facts rather than against `rally_review_cleared`.
+
+### "Compliant" now includes vega sufficiency (#409, Batch 8a.2)
+
+`build_ips_compliance` is documented as the program's single definition of
+"compliant" (#298) and produced two rows: carry and crash convexity. Vega
+sufficiency is a banded IPS metric (`vega:`, promoted there in M2.7 for
+exactly this reason — see [Where the vega band went](#where-the-vega-band-went)),
+computed by `health.calculate_vega_sufficiency_pct` and rendered on three
+surfaces, and graded against policy on none of them. A book below the floor
+read `PASS` while `/monitor`'s own efficiency sentence, in the same panel,
+said "Cheap, but too small."
+
+It is now a third row, via a new `VegaSection`/`build_vega_section` pair
+mirroring `CostSection`/`ProtectionSection` — so `/design`'s sizing panel,
+`/monitor`'s strip and the digest's §6 all read one boolean. The strip's
+`PASS` sentence is assembled from the row names rather than spelling them
+out, since the old hardcoded "carry and crash convexity both within policy"
+is precisely what let the omission stay invisible.
+
+**This puts the live book into a standing breach on the day it ships**, and
+that is the correct reading of the configured band: the book has been below
+the vega floor throughout. The digest headline becomes `BREACH: Vega
+sufficiency out of policy (1st week)` — `1st`, not a fabricated run, because
+`standing_breaches` stops walking history at the first snapshot where a
+metric passes *or is absent*, and no prior snapshot carries this row.
+Operators should note that `config/ips.yaml`'s `vega:` numbers are the
+shipped defaults rather than a deliberate policy choice (the handbook gives
+no numeric band; see that file's own comment), so the honest responses are
+to set the band deliberately or to accept the breach — not to narrow the
+definition of compliant again.
+
+Which IPS thresholds belong in that definition is now written down and
+enforced: `tests/test_reporting/test_ips_band_registry.py` classifies every
+field on every IPS section as COMPLIANCE, TRIGGER, INTERPRETATION or
+NOT_A_BAND, and fails until a newly added one is classified. The criterion
+is what a failure means — a compliance row is a standing constraint on the
+book's *shape*, remediable only by resizing or restructuring; a trigger says
+"an event occurred, act"; an interpretation band labels a reading without a
+pass/fail. `triggers.delta_ratio_deviation_*` is the deliberate borderline:
+classified TRIGGER because it lives under `triggers:`, is surfaced as a
+rebalance trigger, and is remedied by a hedge adjustment rather than by
+resizing the programme.

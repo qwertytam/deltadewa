@@ -95,6 +95,7 @@ IPS schedule: 2 step(s) defined.
 |--------|--------|--------|--------|
 | Annual carry cost | ≤ 1.00% of notional | 1.15% | ✗ FAIL |
 | Crash convexity (-25% shock) | 15.0%–25.0% of book | 19.0% | ✓ PASS |
+| Vega sufficiency | 1.5%–4.0% per +10 vol pts | 2.5% | ✓ PASS |
 
 **Overall: ✗ FAIL**
 

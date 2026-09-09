@@ -32,6 +32,7 @@ from deltadewa.reporting.program_report import (
     ProtectionSection,
     ReportHeader,
     ReturnFramingSection,
+    VegaSection,
 )
 from deltadewa.reporting.weekly_report import (
     _expired_leg_count,
@@ -114,6 +115,12 @@ def _make_report(
             premium_paid=300_000.0,
             premium_basis="paid",
         ),
+        vega=VegaSection(
+            sufficiency_pct=2.5,
+            floor_pct=1.5,
+            ceiling_pct=4.0,
+            meets_target=True,
+        ),
         market_context=MarketContextSection(
             vix=22.0,
             regime_label="NORMAL",
@@ -143,6 +150,16 @@ def _make_report(
                     metric="Crash convexity (-25% shock)",
                     target="15.0%\u201325.0% of book",
                     actual="19.0%",
+                    passes=True,
+                ),
+                # The third standing band (#409). Passing, so this fixture
+                # keeps exercising the single-metric BREACH headline the
+                # carry row above drives, rather than silently switching
+                # every test here to the "N IPS metrics" wording.
+                IpsComplianceRow(
+                    metric="Vega sufficiency",
+                    target="1.5%\u20134.0% per +10 vol pts",
+                    actual="2.5%",
                     passes=True,
                 ),
             ),
@@ -233,6 +250,7 @@ def _roll_record(
         leg_convexity_contribution_pct=4.5,
         convexity_target_min_pct=10.0,
         convexity_target_max_pct=20.0,
+        convexity_target_met=True,
         verdict=verdict,
         estimated_roll_up_cost=None,
         time_trigger=trigger,

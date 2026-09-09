@@ -25,7 +25,7 @@ from deltadewa.constants import OptionType
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
-    from deltadewa.ips_config import IpsConfig, IpsTriggers
+    from deltadewa.ips_config import IpsConfig, IpsConvexity, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
 
@@ -124,6 +124,14 @@ class RollStatusRecord:
     :func:`~deltadewa.analysis.crash_repricing.crash_hedge_value` excludes
     from pricing entirely (#362). Zero would read as "this leg is worthless";
     ``None`` reads as "this leg was not priced", which is what happened.
+
+    ``convexity_target_met`` is :func:`meets_convexity_target` applied to
+    ``crash_convexity_pct`` and the band beside it, resolved once here so
+    every consumer grades on the same boolean rather than repeating the
+    comparison (#408). Like ``crash_convexity_pct`` itself it is a
+    **book-level** fact, so it is populated for an expired leg too — the
+    book has a convexity standing whether or not this particular leg
+    contributed to it.
     """
 
     position: OptionPosition
@@ -134,6 +142,7 @@ class RollStatusRecord:
     leg_convexity_contribution_pct: float | None
     convexity_target_min_pct: float
     convexity_target_max_pct: float
+    convexity_target_met: bool
     verdict: RollVerdict
     estimated_roll_up_cost: float | None
     time_trigger: TriggerReason
@@ -225,6 +234,44 @@ def _time_trigger_verdict(
     return TriggerReason(RollVerdict.HOLD, reason=reason)
 
 
+def meets_convexity_target(
+    crash_convexity_pct: float,
+    *,
+    target_min_pct: float,
+    target_max_pct: float,
+) -> bool:
+    """Whether book crash convexity lies inside the IPS target band.
+
+    The program's one band-membership test (#408). Three callers used to
+    write this comparison out for themselves — the convexity trigger below,
+    the handbook's Rule 2 REVIEW-band condition, and ``roll_planner``'s
+    ``RollPlanRecord.meets_convexity_target`` — which is three chances for
+    "is the target met" to answer differently on two panels showing the
+    same book. The answer is now computed once and carried on
+    :attr:`RollStatusRecord.convexity_target_met`.
+
+    Band membership only: it does not say *which* side an out-of-band
+    reading fell on. :func:`_convexity_trigger_verdict` still needs that
+    (below the floor is under-hedged and grades ``ROLL``; above the ceiling
+    is over-hedged and grades ``MONITOR``), so it asks that question
+    separately.
+
+    Args:
+        crash_convexity_pct: The book's crash convexity, as a percent of
+            book notional.
+        target_min_pct: IPS band floor.
+        target_max_pct: IPS band ceiling.
+
+    Returns:
+        ``True`` when the reading is inside the band, inclusive of both
+        edges — the same convention
+        :attr:`~deltadewa.reporting.program_report.ProtectionSection.meets_target`
+        uses, and pinned against it by test.
+
+    """
+    return target_min_pct <= crash_convexity_pct <= target_max_pct
+
+
 def _convexity_trigger_verdict(
     crash_convexity_pct: float,
     target_min_pct: float,
@@ -236,7 +283,11 @@ def _convexity_trigger_verdict(
     )
     if crash_convexity_pct < target_min_pct:
         return TriggerReason(RollVerdict.ROLL, reason=reason)
-    if crash_convexity_pct > target_max_pct:
+    if not meets_convexity_target(
+        crash_convexity_pct,
+        target_min_pct=target_min_pct,
+        target_max_pct=target_max_pct,
+    ):
         return TriggerReason(RollVerdict.MONITOR, reason=reason)
     return TriggerReason(RollVerdict.HOLD, reason=reason)
 
@@ -283,9 +334,45 @@ def rally_from_entry_pct(
     return (current_spot - entry_spot) / entry_spot * 100.0
 
 
+def _convexity_recheck(
+    crash_convexity_pct: float,
+    convexity: IpsConvexity,
+) -> str:
+    """Resolve the REVIEW band's "if the convexity target is no longer met".
+
+    One sentence, stating the recomputation and its answer, so the
+    conditional never reaches a reader unevaluated (#408). Both branches
+    quote the reading and the band they were measured against — the same
+    never-a-bare-verdict convention every other reason in this module
+    follows.
+    """
+    band = (
+        f"{convexity.target_min_pct:.0f}-{convexity.target_max_pct:.0f}%"
+        " IPS target band"
+    )
+    if meets_convexity_target(
+        crash_convexity_pct,
+        target_min_pct=convexity.target_min_pct,
+        target_max_pct=convexity.target_max_pct,
+    ):
+        return (
+            f"Recomputed: crash convexity {crash_convexity_pct:.1f}% is"
+            f" still inside the {band}, so the target IS met and this"
+            " band calls for no roll."
+        )
+    return (
+        f"Recomputed: crash convexity {crash_convexity_pct:.1f}% is"
+        f" outside the {band}, so the target is no longer met — roll"
+        " strikes up."
+    )
+
+
 def _rally_trigger_verdict(
     rally_pct: float | None,
     triggers: IpsTriggers,
+    *,
+    crash_convexity_pct: float,
+    convexity: IpsConvexity,
 ) -> TriggerReason:
     """Band a rally-since-entry reading against the handbook's four bands.
 
@@ -296,11 +383,52 @@ def _rally_trigger_verdict(
     own name and recommended action are carried in the reason, which is
     this package's standing convention for never letting a verdict arrive
     as a bare word.
+
+    **The REVIEW band is a conditional, and this function resolves it
+    (#408).** Alone among the four, the handbook's REVIEW band does not
+    prescribe an action outright — it says *"roll strikes up IF the
+    convexity target is no longer met"*. Rendering that sentence without
+    evaluating the "if" left three surfaces (``/design``'s roll plan and
+    roll status table, ``/monitor``'s Decisions) each handing the reader an
+    open conditional, and the roll planner completing it in the wrong
+    direction. So *crash_convexity_pct* / *convexity* come in here, where
+    the conditional is written, and the answer is appended to the reason —
+    which every one of those surfaces already renders. Resolving it once at
+    the source is what makes them agree by construction rather than by
+    three parallel edits.
+
+    The **verdict** is unchanged by the recomputation: REVIEW is a true
+    statement about which band the rally landed in, and this table is the
+    evidence layer. Turning the resolved condition into an *action* is
+    :func:`~deltadewa.analysis.roll_planner.rally_review_cleared`'s job,
+    one layer up.
+
+    Args:
+        rally_pct: Percent rally since this tranche's own entry spot, or
+            ``None`` when it has none recorded.
+        triggers: IPS trigger policy, supplying the four band edges.
+        crash_convexity_pct: The book's crash convexity — the reading the
+            REVIEW band's condition is stated against.
+        convexity: IPS convexity policy, supplying the target band.
+
+    Returns:
+        The band's verdict and a reason naming the reading, the band, the
+        band's own recommended action, and — in the REVIEW band — whether
+        that band's condition actually holds right now.
+
     """
     if rally_pct is None:
+        # Not "0% rally": unmeasurable. The verdict stays HOLD because
+        # RollVerdict has no UNAVAILABLE rung and adding one would land on
+        # the digest's severity scale (see _SEVERITY), so the reason is the
+        # only place that can say so — and it must, or a leg with no entry
+        # data reads as one that is comfortably below the monitor band.
         return TriggerReason(
             RollVerdict.HOLD,
-            reason="no entry spot recorded",
+            reason=(
+                "rally since entry unavailable — no entry spot recorded"
+                " for this leg"
+            ),
         )
 
     reading = f"{rally_pct:+.1f}% rally since entry"
@@ -328,7 +456,8 @@ def _rally_trigger_verdict(
             reason=(
                 f"{reading} — REVIEW band ({triggers.rally_review_pct:.0f}-"
                 f"{triggers.rally_action_pct:.0f}%): roll strikes up if the"
-                " convexity target is no longer met"
+                " convexity target is no longer met."
+                f" {_convexity_recheck(crash_convexity_pct, convexity)}"
             ),
         )
     if rally_pct >= triggers.rally_monitor_pct:
@@ -519,6 +648,14 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
     # state — the property that makes the contributions sum back to it (#306).
     shock = CrashShock.from_ips(convexity)
     crash_convexity_pct = analyzer.calculate_crash_convexity_pct(shock)
+    # Resolved once for the whole book (#408): the convexity trigger, the
+    # rally REVIEW band's own condition, and the roll planner's action all
+    # grade on this one boolean rather than three separate comparisons.
+    convexity_target_met = meets_convexity_target(
+        crash_convexity_pct,
+        target_min_pct=convexity.target_min_pct,
+        target_max_pct=convexity.target_max_pct,
+    )
 
     # Measure DTE against the portfolio's (what-if) valuation date, not the
     # wall clock, so moving the valuation date moves every roll verdict.
@@ -550,6 +687,7 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                     leg_convexity_contribution_pct=None,
                     convexity_target_min_pct=convexity.target_min_pct,
                     convexity_target_max_pct=convexity.target_max_pct,
+                    convexity_target_met=convexity_target_met,
                     verdict=RollVerdict.EXPIRED,
                     estimated_roll_up_cost=None,
                     time_trigger=expired_trigger,
@@ -572,6 +710,8 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
         rally_trigger = _rally_trigger_verdict(
             rally_from_entry_pct(position, current_spot),
             triggers,
+            crash_convexity_pct=crash_convexity_pct,
+            convexity=convexity,
         )
         time_verdict = time_trigger.verdict
         convexity_verdict = convexity_trigger.verdict
@@ -617,6 +757,7 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                 ),
                 convexity_target_min_pct=convexity.target_min_pct,
                 convexity_target_max_pct=convexity.target_max_pct,
+                convexity_target_met=convexity_target_met,
                 verdict=verdict,
                 estimated_roll_up_cost=estimated_roll_up_cost,
                 time_trigger=time_trigger,

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import MonetizationPlan
     from deltadewa.analysis.provenance import ProvenanceLedger
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsVega
     from deltadewa.portfolio.core import OptionPortfolio
 
 # Cites #70 ("Track hedge historical P&L"), the issue realized-gains
@@ -242,6 +242,40 @@ class MonetizationSection:
 
 
 @dataclass(frozen=True)
+class VegaSection:
+    """Vega sufficiency and its IPS band (#409).
+
+    The third standing constraint on the book's *shape*, alongside
+    :class:`CostSection`'s carry budget and :class:`ProtectionSection`'s
+    convexity band — and, until #409, the only one of the three that
+    :func:`build_ips_compliance` never asked about. The reading was
+    computed and rendered in three places (``/design``'s sizing panel,
+    ``/monitor``'s efficiency sentence, ``analysis/health.py``) and graded
+    for policy in none of them, so a book could sit below the floor while
+    the compliance strip said PASS.
+
+    Attributes:
+        sufficiency_pct: Book % value change per +10 vol points, from
+            ``PortfolioAnalyzer.calculate_vega_sufficiency_pct``. ``None``
+            when the reading could not be taken.
+        floor_pct: IPS ``vega.sufficiency_min_pct`` — below it the hedge
+            barely responds to a volatility spike.
+        ceiling_pct: IPS ``vega.sufficiency_max_pct`` — above it the book
+            is vega-dominated rather than convexity-driven.
+        meets_target: True when *sufficiency_pct* is inside the band,
+            inclusive of both edges. ``None`` alongside a ``None``
+            reading — never ``False``, which would grade an unmeasured
+            book as a breaching one.
+
+    """
+
+    sufficiency_pct: float | None
+    floor_pct: float
+    ceiling_pct: float
+    meets_target: bool | None
+
+
+@dataclass(frozen=True)
 class IpsComplianceRow:
     """One row in the IPS compliance summary table.
 
@@ -311,6 +345,7 @@ class ProgramReport:
     header: ReportHeader
     cost: CostSection
     protection: ProtectionSection
+    vega: VegaSection
     market_context: MarketContextSection
     return_framing: ReturnFramingSection
     monetization: MonetizationSection
@@ -327,6 +362,7 @@ def build_program_report(  # pylint: disable=too-many-arguments
     ips_config: IpsConfig,
     crash_result: CrashConvexityResult,
     carry_metrics: dict[str, Any],
+    vega_sufficiency_pct: float | None,
     market_env: MarketEnvironment,
     provenance_ledger: ProvenanceLedger,
     period_label: str,
@@ -347,6 +383,13 @@ def build_program_report(  # pylint: disable=too-many-arguments
         crash_result: Pre-computed from ``compute_crash_convexity``.
         carry_metrics: Dict from
             ``PortfolioAnalyzer.calculate_carry_metrics``.
+        vega_sufficiency_pct: Pre-computed from
+            ``PortfolioAnalyzer.calculate_vega_sufficiency_pct`` (#409) —
+            passed in rather than read off *portfolio* here, the same way
+            *carry_metrics* is, so this builder keeps its standing "does
+            not reprice; every figure is consumed as supplied" contract.
+            ``None`` when the reading could not be taken; the compliance
+            row then reports it as unmeasured rather than as a breach.
         market_env: Pre-assessed from ``assess_market_environment``.
         provenance_ledger: Pre-built from
             ``analysis.provenance.build_provenance_ledger``, over the
@@ -383,6 +426,10 @@ def build_program_report(  # pylint: disable=too-many-arguments
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
     protection = build_protection_section(crash_result)
+    vega = build_vega_section(
+        sufficiency_pct=vega_sufficiency_pct,
+        ips_vega=ips_config.vega,
+    )
     market_context = _build_market_context(market_env, provenance_ledger)
     decision = _build_decision(
         ips_config=ips_config,
@@ -395,6 +442,7 @@ def build_program_report(  # pylint: disable=too-many-arguments
         header=header,
         cost=cost,
         protection=protection,
+        vega=vega,
         market_context=market_context,
         return_framing=ReturnFramingSection(
             carry_drag_annual_pct=cost.carry_pct_of_notional,
@@ -418,7 +466,7 @@ def build_program_report(  # pylint: disable=too-many-arguments
                 else None
             ),
         ),
-        ips_compliance=build_ips_compliance(cost, protection),
+        ips_compliance=build_ips_compliance(cost, protection, vega),
         decision=decision,
     )
 
@@ -556,6 +604,49 @@ def build_protection_section(
     )
 
 
+def build_vega_section(
+    *,
+    sufficiency_pct: float | None,
+    ips_vega: IpsVega,
+) -> VegaSection:
+    """Build the VegaSection from an already-computed reading (#409).
+
+    Public (no leading underscore), and takes the reading rather than a
+    portfolio: reused by ``/monitor``'s IPS compliance strip and by
+    ``/design``'s sizing panel — see ``build_cost_section`` — so the one
+    band comparison lives here instead of being re-typed at each surface.
+    Taking a float keeps this module's standing contract that it never
+    reprices ("every figure is drawn from the arguments supplied by the
+    caller"); both callers get the number from the single
+    ``PortfolioAnalyzer.calculate_vega_sufficiency_pct``.
+
+    Args:
+        sufficiency_pct: Book % value change per +10 vol points, or
+            ``None`` when it could not be measured.
+        ips_vega: The IPS ``vega:`` policy section.
+
+    Returns:
+        The reading, the band it was measured against, and whether it sits
+        inside — ``meets_target=None`` for a ``None`` reading, so an
+        unmeasured book is never graded as a breaching one.
+
+    """
+    return VegaSection(
+        sufficiency_pct=sufficiency_pct,
+        floor_pct=ips_vega.sufficiency_min_pct,
+        ceiling_pct=ips_vega.sufficiency_max_pct,
+        meets_target=(
+            None
+            if sufficiency_pct is None
+            else (
+                ips_vega.sufficiency_min_pct
+                <= sufficiency_pct
+                <= ips_vega.sufficiency_max_pct
+            )
+        ),
+    )
+
+
 def _build_market_context(
     market_env: MarketEnvironment,
     provenance_ledger: ProvenanceLedger,
@@ -587,17 +678,39 @@ def _build_market_context(
 def build_ips_compliance(
     cost: CostSection,
     protection: ProtectionSection,
+    vega: VegaSection,
 ) -> IpsComplianceSection:
-    """Build the IPS compliance table from cost and protection sections.
+    """Build the IPS compliance table from cost, protection and vega.
 
     Public (no leading underscore): this is the program's single
     definition of "compliant" (Batch 3b). ``/monitor``'s compliance strip
-    (#298) calls this directly, on ``CostSection``/``ProtectionSection``
-    it builds via ``build_cost_section``/``build_protection_section`` —
-    never a second pass/fail comparison of its own. Two graders that
-    agree today would silently diverge the first time an IPS band moves;
-    routing every surface through this one function is what keeps that
-    from happening.
+    (#298) calls this directly, on the sections it builds via
+    ``build_cost_section``/``build_protection_section``/
+    ``build_vega_section`` — never a second pass/fail comparison of its
+    own. Two graders that agree today would silently diverge the first
+    time an IPS band moves; routing every surface through this one
+    function is what keeps that from happening.
+
+    **What belongs here (#409).** A row is a standing constraint on the
+    book's *shape* — one a reader can only answer by resizing or
+    restructuring. Carry (the budget ceiling), crash convexity (the target
+    band) and vega sufficiency (the sufficiency band) are the three the IPS
+    states that way. The IPS's other numbers are *triggers* (the four rally
+    bands, delta-ratio deviation, expiry days, theta cost, gamma drift, the
+    convexity cliff), which say "an event occurred, act" and are surfaced
+    by ``analysis/hedge_triggers.py`` and ``analysis/roll_status.py``; or
+    *interpretation* bands (the hedge-efficiency ratio, the
+    market-environment regimes), which label a reading without a pass/fail
+    — and the efficiency ratio in particular is derived from carry and
+    convexity, so grading it here would double-count two rows that are
+    already present. ``tests/test_reporting/test_ips_band_registry.py``
+    pins that classification over every band the IPS defines, so a new one
+    cannot be added without someone deciding which kind it is.
+
+    Vega sufficiency was missing until #409, which is exactly the failure
+    that classification is meant to prevent: the metric was computed and
+    rendered on three surfaces and graded for policy on none of them, so a
+    book below the floor read PASS.
     """
     rows: list[IpsComplianceRow] = [
         IpsComplianceRow(
@@ -674,9 +787,64 @@ def build_ips_compliance(
             ),
         )
 
+    rows.append(_vega_compliance_row(vega))
+
     return IpsComplianceSection(
         rows=tuple(rows),
         all_pass=all(r.passes for r in rows),
+    )
+
+
+def _vega_compliance_row(vega: VegaSection) -> IpsComplianceRow:
+    """One compliance row for vega sufficiency (#409).
+
+    Same shape as the carry and convexity rows above: target, actual,
+    pass/fail, and an ``action`` set exactly when the row fails. The action
+    branches on *which side* of the band the reading fell — below the floor
+    the hedge barely responds to a vol spike (buy more vega), above the
+    ceiling the book is vega-dominated rather than convexity-driven (a
+    different problem with the opposite remedy), and an unmeasured reading
+    is neither.
+    """
+    # The en dash matches the convexity row's own target string above,
+    # built the same way and read on the same table.
+    target = (
+        f"{vega.floor_pct:.1f}%\u2013{vega.ceiling_pct:.1f}% per +10 vol pts"
+    )
+    if vega.sufficiency_pct is None:
+        return IpsComplianceRow(
+            metric="Vega sufficiency",
+            target=target,
+            actual="—",
+            passes=False,
+            action=(
+                "Vega sufficiency could not be measured — check that the"
+                " book has a value to measure the vol shock against."
+            ),
+        )
+
+    passes = bool(vega.meets_target)
+    action: str | None = None
+    if not passes:
+        if vega.sufficiency_pct < vega.floor_pct:
+            action = (
+                "Vega sufficiency is below the IPS floor — the book will"
+                " barely respond to a volatility spike; increase hedge"
+                " size, or roll to longer-dated or nearer-the-money"
+                " strikes, to raise vega."
+            )
+        else:
+            action = (
+                "Vega sufficiency is above the IPS ceiling — the book is"
+                " vega-dominated rather than convexity-driven; trim vega"
+                " or shift toward deeper, more convex strikes."
+            )
+    return IpsComplianceRow(
+        metric="Vega sufficiency",
+        target=target,
+        actual=f"{vega.sufficiency_pct:.1f}%",
+        passes=passes,
+        action=action,
     )
 
 

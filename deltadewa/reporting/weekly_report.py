@@ -1020,9 +1020,14 @@ def build_and_render(
         ips_config.pricing_inputs,
         as_of=as_of,
     )
-    carry_metrics = PortfolioAnalyzer(portfolio).calculate_carry_metrics(
+    analyzer = PortfolioAnalyzer(portfolio)
+    carry_metrics = analyzer.calculate_carry_metrics(
         MaturityBuckets.from_ips(ips_config.maturity_buckets),
     )
+    # The third compliance band (#409), computed here beside carry for the
+    # same reason: build_program_report consumes figures, it does not
+    # derive them.
+    vega_sufficiency_pct = analyzer.calculate_vega_sufficiency_pct()
     monetization_plan = build_monetization_plan(
         portfolio,
         ips_config,
@@ -1041,6 +1046,7 @@ def build_and_render(
         ips_config=ips_config,
         crash_result=crash_result,
         carry_metrics=carry_metrics,
+        vega_sufficiency_pct=vega_sufficiency_pct,
         market_env=market_env,
         provenance_ledger=provenance_ledger,
         period_label=period_label,

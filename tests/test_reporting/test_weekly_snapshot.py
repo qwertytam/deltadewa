@@ -17,6 +17,7 @@ from deltadewa.reporting.program_report import (
     ProtectionSection,
     ReportHeader,
     ReturnFramingSection,
+    VegaSection,
 )
 from deltadewa.reporting.weekly_snapshot import (
     WeeklySnapshot,
@@ -68,6 +69,12 @@ def _make_report(
             meets_target=meets_target,
             premium_paid=300_000.0,
             premium_basis="paid",
+        ),
+        vega=VegaSection(
+            sufficiency_pct=2.5,
+            floor_pct=1.5,
+            ceiling_pct=4.0,
+            meets_target=True,
         ),
         market_context=MarketContextSection(
             vix=vix,

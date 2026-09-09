@@ -149,13 +149,19 @@ def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
         [
             html.Th("Verdict"),
             html.Th("Position"),
-            html.Th("OTM entry / now"),
+            # The basis travels with the header (#412). "(book)" was
+            # already on the convexity column; these two are the per-leg
+            # counterparts, and the book's legs currently share one
+            # entry_spot, which makes every row's rally read identically —
+            # indistinguishable from a book-level figure broadcast down the
+            # column unless the header says which it is.
+            html.Th("OTM entry / now (this leg)"),
             html.Th("DTE / window"),
             html.Th("Est. roll-up cost"),
             html.Th("This leg's convexity"),
             html.Th("Time trigger"),
             html.Th("Convexity trigger (book)"),
-            html.Th("Rally trigger"),
+            html.Th("Rally trigger (this leg)"),
         ],
     )
     rows = [_roll_record_row(record) for record in records]

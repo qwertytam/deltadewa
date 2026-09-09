@@ -261,6 +261,7 @@ def _build(
     data_quality: DataQuality = DataQuality.LIVE,
     schedule_steps: int = 2,
     monetization_plan: MonetizationPlan | None = None,
+    vega_sufficiency_pct: float | None = 2.5,
 ) -> ProgramReport:
     portfolio = _make_portfolio(
         underlying_quantity=underlying_quantity,
@@ -280,6 +281,7 @@ def _build(
             meets_target=meets_target,
         ),
         carry_metrics=_make_carry_metrics(theta_annual),
+        vega_sufficiency_pct=vega_sufficiency_pct,
         market_env=market_env,
         provenance_ledger=_make_provenance_ledger(portfolio, market_env),
         period_label="Q2 2026",
@@ -463,6 +465,7 @@ class TestBuildProgramReport:
             ips_config=_make_ips_config(),
             crash_result=_make_crash_result(),
             carry_metrics=_make_carry_metrics(),
+            vega_sufficiency_pct=2.5,
             market_env=market_env,
             provenance_ledger=ledger,
             period_label="Q2 2026",
@@ -490,6 +493,7 @@ class TestBuildProgramReport:
             ips_config=_make_ips_config(),
             crash_result=_make_crash_result(),
             carry_metrics=_make_carry_metrics(),
+            vega_sufficiency_pct=2.5,
             market_env=market_env,
             provenance_ledger=ledger,
             period_label="Q2 2026",
@@ -571,9 +575,13 @@ class TestBuildProgramReport:
         assert report.ips_compliance.all_pass is False
 
     def test_ips_compliance_row_count(self) -> None:
-        """Exactly two compliance rows: carry and convexity."""
+        """Exactly three rows: carry, convexity and vega sufficiency (#409)."""
         report = _build()
-        assert len(report.ips_compliance.rows) == 2
+        assert [row.metric for row in report.ips_compliance.rows] == [
+            "Annual carry cost",
+            "Crash convexity (-25% shock)",
+            "Vega sufficiency",
+        ]
 
     def test_passing_rows_have_no_action(self) -> None:
         """action is None exactly when passes is True (#307)."""

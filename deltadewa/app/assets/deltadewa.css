@@ -443,6 +443,16 @@ body {
   background: #7a5ea8;
 }
 
+/* CHECKED (#408): a trigger fired, its own stated condition was evaluated,
+   and it does not call for a roll. Deliberately not HOLD's blue — something
+   did fire and was resolved, which is not the same as a quiet leg — and not
+   DELAY's purple, because nothing is being deferred: this is a closed
+   question, not a considered pause. Teal, off the hold-to-roll ramp. */
+
+.verdict-badge--checked {
+  background: #2f7168;
+}
+
 /* A leg the roll planner declines to recommend on (#333): a short leg that
    rolls with its structure, a non-put, an expired leg. Listed rather than
    dropped, and visually recessive so it cannot be mistaken for an action. */

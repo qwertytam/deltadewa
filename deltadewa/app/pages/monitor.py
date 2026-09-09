@@ -72,6 +72,7 @@ from deltadewa.reporting.program_report import (
     build_cost_section,
     build_ips_compliance,
     build_protection_section,
+    build_vega_section,
     expired_legs_caveat,
 )
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
@@ -88,6 +89,7 @@ if TYPE_CHECKING:
         CostSection,
         IpsComplianceSection,
         ProtectionSection,
+        VegaSection,
     )
     from deltadewa.state import ProgramState
 
@@ -273,6 +275,25 @@ def _spot_headline(
     )
 
 
+def _metric_list(compliance: IpsComplianceSection) -> str:
+    """Name every metric the compliance section actually graded (#409).
+
+    Lower-cased and comma-joined with a trailing "and", e.g. ``"carry
+    cost, crash convexity and vega sufficiency"``. The PASS line is built
+    from this rather than from a hand-written list of metric names, so a
+    row added to ``build_ips_compliance`` cannot leave the sentence
+    describing a narrower question than the verdict answers.
+
+    Metric names are lower-cased only at their first character — "IPS" and
+    similar stay as written — because the row labels are title-cased for a
+    table header and this sentence is prose.
+    """
+    names = [row.metric[:1].lower() + row.metric[1:] for row in compliance.rows]
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
 def _compliance_strip(
     compliance: IpsComplianceSection,
     data_quality: DataQuality,
@@ -314,8 +335,16 @@ def _compliance_strip(
 
     """
     if compliance.all_pass:
+        # The metrics are named from the rows themselves, never spelled out
+        # here (#409). The old wording enumerated "carry and crash
+        # convexity" as a literal, which stayed narrowly true while
+        # ``build_ips_compliance`` silently omitted a third banded IPS
+        # metric — a reader taking PASS to mean "in policy" had no way to
+        # see the sentence was describing a smaller question than they
+        # were asking. Deriving it means the line cannot narrow again
+        # without the row disappearing too.
         text = (
-            "IPS compliance: PASS — carry and crash convexity both "
+            f"IPS compliance: PASS — {_metric_list(compliance)} all "
             "within policy."
         )
         modifier = "pass"
@@ -901,11 +930,16 @@ def _page_footer() -> html.Div:
     )
 
 
-def _cost_and_protection(
+def _compliance_sections(
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
-) -> tuple[CostSection, ProtectionSection]:
-    """Cost + protection sections at the IPS crash anchor.
+) -> tuple[CostSection, ProtectionSection, VegaSection]:
+    """Build the three graded sections at the IPS crash anchor.
+
+    One per standing IPS band — carry, crash convexity, vega sufficiency
+    (#409) — packaged exactly as ``build_ips_compliance`` consumes them, so
+    ``/monitor`` and the weekly digest grade the same book off the same
+    three inputs.
 
     A plain helper, not itself panel-guarded: :func:`_build_compliance_panel`
     and :func:`_build_scenario_explorer_panel` each call this from *inside*
@@ -920,8 +954,9 @@ def _cost_and_protection(
         shock=CrashShock.from_ips(convexity),
         ips_convexity=convexity,
     )
+    analyzer = PortfolioAnalyzer(portfolio)
     cost_section = build_cost_section(
-        carry_metrics=PortfolioAnalyzer(portfolio).calculate_carry_metrics(
+        carry_metrics=analyzer.calculate_carry_metrics(
             MaturityBuckets.from_ips(ips_config.maturity_buckets),
         ),
         book_notional=(
@@ -930,7 +965,11 @@ def _cost_and_protection(
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
     protection_section = build_protection_section(crash_result)
-    return cost_section, protection_section
+    vega_section = build_vega_section(
+        sufficiency_pct=analyzer.calculate_vega_sufficiency_pct(),
+        ips_vega=ips_config.vega,
+    )
+    return cost_section, protection_section, vega_section
 
 
 def _build_shape_notice_panel(portfolio: OptionPortfolio) -> Component:
@@ -961,11 +1000,15 @@ def _build_compliance_panel(
     """
 
     def _build() -> Component:
-        cost_section, protection_section = _cost_and_protection(
+        cost_section, protection_section, vega_section = _compliance_sections(
             portfolio,
             ips_config,
         )
-        compliance = build_ips_compliance(cost_section, protection_section)
+        compliance = build_ips_compliance(
+            cost_section,
+            protection_section,
+            vega_section,
+        )
         market_env = assess_market_environment(
             app.market_data,
             ips_config.market_environment,
@@ -1027,15 +1070,11 @@ def _build_scenario_explorer_panel(
         )
         # Book-level facts for the efficiency sentence's "cheap but too
         # small" combination (#304) — this panel's own copy of the same
-        # convexity_pct the compliance strip grades, plus vega
-        # sufficiency (design.py's own band-membership call).
-        _cost_section, protection_section = _cost_and_protection(
-            portfolio,
-            ips_config,
+        # convexity_pct and vega sufficiency the compliance strip grades.
+        _cost_section, protection_section, vega_section = _compliance_sections(
+            portfolio, ips_config
         )
-        vega_sufficiency_pct = PortfolioAnalyzer(
-            portfolio,
-        ).calculate_vega_sufficiency_pct()
+        vega_sufficiency_pct = vega_section.sufficiency_pct
 
         return html.Div(
             [
