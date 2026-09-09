@@ -64,6 +64,26 @@ def _fake_bin_dir(tmp_path: Path, *, root: bool) -> Path:
     return fakebin
 
 
+def _marker_command(marker: Path) -> list[str]:
+    """The wrapped command under test: write *marker*, via a real shell.
+
+    ``marker`` is embedded in a string handed to ``sh -c``, so it has to be
+    a path *that shell* can parse — not necessarily the same string
+    ``str(marker)`` gives Python. On native Windows, ``marker`` is a
+    ``WindowsPath`` whose backslashes and drive-letter colon are fine for
+    Python's own filesystem calls but not for a POSIX shell: unquoted, `sh`
+    treats each backslash as an escape and silently drops it, collapsing
+    the whole path into one literal relative filename — which then lands
+    wherever the subprocess's cwd happens to be (this repo's root, for a
+    test run from here) rather than under ``tmp_path``. ``as_posix()``
+    (forward slashes, drive letter kept) is what Git Bash's `sh` actually
+    parses back to the same file, and it is a no-op on a POSIX ``Path``, so
+    this needs no platform branch — the same command string is correct on
+    every platform this suite runs on.
+    """
+    return ["sh", "-c", f"echo ran > {marker.as_posix()}"]
+
+
 def _run_entrypoint(
     tmp_path: Path,
     exports_dir: Path,
@@ -115,7 +135,7 @@ class TestEntrypointOwnershipScope:
             tmp_path,
             exports,
             root=True,
-            command=["sh", "-c", f"echo ran > {marker}"],
+            command=_marker_command(marker),
         )
 
         assert result.returncode == 0, result.stderr
@@ -133,7 +153,7 @@ class TestEntrypointOwnershipScope:
             tmp_path,
             exports,
             root=True,
-            command=["sh", "-c", f"echo ran > {marker}"],
+            command=_marker_command(marker),
         )
 
         assert result.returncode == 0, result.stderr
@@ -159,7 +179,7 @@ class TestEntrypointOwnershipScope:
             tmp_path,
             exports,
             root=True,
-            command=["sh", "-c", f"echo ran > {marker}"],
+            command=_marker_command(marker),
         )
 
         assert result.returncode == 0, result.stderr
@@ -183,7 +203,7 @@ class TestEntrypointOwnershipScope:
             tmp_path,
             exports,
             root=True,
-            command=["sh", "-c", f"echo ran > {marker}"],
+            command=_marker_command(marker),
         )
 
         assert result.returncode == 0, result.stderr
@@ -206,7 +226,7 @@ class TestEntrypointNonRootDefensiveBranch:
             tmp_path,
             exports,
             root=False,
-            command=["sh", "-c", f"echo ran > {marker}"],
+            command=_marker_command(marker),
         )
 
         assert result.returncode == 0, result.stderr
