@@ -527,6 +527,20 @@ don't fix):
   seam, not the layout/callbacks one, because every id in the file is
   created by layout and referenced by a callback — see its close-out
   below.
+- **agreement-auditor** — finds quantities the program computes more than
+  once by different routes, with nothing asserting the answers match.
+  Traces each quantity (a leg's value today, a verdict, an as-of date, a
+  total) to every producer and reports SINGLE-SOURCE / DERIVED /
+  PARALLEL-UNCHECKED / DIVERGENT / CONTRACT-ONLY. Different from
+  `false-green-auditor` (grades a rendered sentence against the value
+  behind it) and `reduction-auditor` (grades an aggregation's inputs and
+  outputs) — this one grades the existence of a second code path and the
+  absence of a referee between them. Run it whenever two surfaces show the
+  same thing, before adding a second way to compute something that already
+  exists, and whenever a bug report starts "same book, same instant, two
+  answers" — e.g. Batch 8a.1's N1, where `/design`'s today-marks path and
+  `/monitor`'s position detail priced the same June tranche to `$0` and
+  `+$8.29K` respectively, with nothing comparing them.
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`
