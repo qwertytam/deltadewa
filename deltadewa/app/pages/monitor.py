@@ -661,6 +661,7 @@ def _cost_panel(
                     value=result.carry.carry_pct_of_notional,
                     low=0.0,
                     high=budget_pct,
+                    fmt=fmt.percent,
                 ),
             ],
         ),
@@ -727,6 +728,7 @@ def _decision_row(record: RollStatusRecord) -> html.Div:
             value=record.crash_convexity_pct,
             low=record.convexity_target_min_pct,
             high=record.convexity_target_max_pct,
+            fmt=fmt.percent,
         )
     )
     return html.Div(

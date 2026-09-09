@@ -128,6 +128,7 @@ def _vega_sufficiency_block(
                 value=value,
                 low=section.floor_pct,
                 high=section.ceiling_pct,
+                fmt=fmt.percent,
             ),
         ],
         id="vega-sufficiency",
@@ -188,11 +189,13 @@ def _sizing_panel_view(
                 f"({carry_verdict} budget, headroom "
                 f"{fmt.signed_currency(result.carry_headroom)}; max "
                 f"affordable {result.max_affordable_contracts:,} contracts).",
+                className="plain-language",
             ),
             band_bar(
                 value=result.implied_annual_carry,
                 low=0.0,
                 high=result.carry_budget,
+                fmt=fmt.currency,
             ),
             html.P(
                 "Achieved convexity "
@@ -200,11 +203,13 @@ def _sizing_panel_view(
                 f"{fmt.percent(conv.target_min_pct)}-"
                 f"{fmt.percent(conv.target_max_pct)} target "
                 f"({convexity_verdict} target).",
+                className="plain-language",
             ),
             band_bar(
                 value=result.achieved_convexity_pct,
                 low=conv.target_min_pct,
                 high=conv.target_max_pct,
+                fmt=fmt.percent,
             ),
         ],
     )

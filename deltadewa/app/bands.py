@@ -8,16 +8,32 @@ values that already exist on ``ScenarioResult``/``RollStatusRecord``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from dash import html
 
 _DOMAIN_PAD_FRACTION = 0.25
 
 
-def band_bar(*, value: float, low: float, high: float) -> html.Div:
-    """Build a horizontal "is this in range" bar.
+def _default_fmt(value: float) -> str:
+    """Format a label when the caller doesn't supply its own units."""
+    return f"{value:.1f}"
+
+
+def band_bar(
+    *,
+    value: float,
+    low: float,
+    high: float,
+    fmt: Callable[[float], str] = _default_fmt,
+) -> html.Div:
+    """Build a horizontal "is this in range" bar, labelled at five points.
 
     A shaded good-zone ``[low, high]`` and a marker at *value*,
-    colour-coded by whether *value* falls inside the zone.
+    colour-coded by whether *value* falls inside the zone. Five points
+    are labelled so a reader isn't left inferring the scale from the
+    prose above the bar: the track's own left/right extremes, ``low``,
+    ``high``, and *value* itself at the marker.
 
     Domain is padded 25% beyond ``[low, high]`` on each side, and
     further extended to include *value* itself if *value* falls outside
@@ -29,10 +45,17 @@ def band_bar(*, value: float, low: float, high: float) -> html.Div:
         value: The value to mark on the bar.
         low: The lower bound of the good zone.
         high: The upper bound of the good zone.
+        fmt: Formats each of the five labels in the caller's own units
+            — a percentage panel passes
+            :func:`deltadewa.app.format.percent`, a dollar panel
+            :func:`deltadewa.app.format.currency`. Defaults to one
+            decimal place, unitless.
 
     Returns:
         An ``html.Div`` (class ``band-bar``) containing a ``.band-track``
-        with a ``.band-good-zone`` and a ``.band-marker``.
+        (``.band-good-zone``, ``.band-marker`` and the *value* label) and
+        a ``.band-scale-labels`` row naming the track's own extremes,
+        ``low`` and ``high``.
 
     Raises:
         ValueError: If ``low >= high``.
@@ -71,8 +94,39 @@ def band_bar(*, value: float, low: float, high: float) -> html.Div:
                         ),
                         style={"left": f"{_pct(value)}%"},
                     ),
+                    html.Span(
+                        fmt(value),
+                        className=(
+                            "band-value-label "
+                            f"band-value-label--{marker_modifier}"
+                        ),
+                        style={"left": f"{_pct(value)}%"},
+                    ),
                 ],
                 className="band-track",
+            ),
+            html.Div(
+                [
+                    html.Span(
+                        fmt(domain_low),
+                        className="band-label band-label--edge-start",
+                    ),
+                    html.Span(
+                        fmt(low),
+                        className="band-label band-label--mid",
+                        style={"left": f"{_pct(low)}%"},
+                    ),
+                    html.Span(
+                        fmt(high),
+                        className="band-label band-label--mid",
+                        style={"left": f"{_pct(high)}%"},
+                    ),
+                    html.Span(
+                        fmt(domain_high),
+                        className="band-label band-label--edge-end",
+                    ),
+                ],
+                className="band-scale-labels",
             ),
         ],
         className="band-bar",

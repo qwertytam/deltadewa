@@ -23,6 +23,15 @@ def _marker(bar):
     return _track(bar).children[1]
 
 
+def _value_label(bar):
+    return _track(bar).children[2]
+
+
+def _scale_labels(bar):
+    """Return the .band-scale-labels row (the second child of the outer div)."""
+    return bar.children[1]
+
+
 class TestBandBar:
     """Tests for band_bar."""
 
@@ -97,3 +106,84 @@ class TestBandBar:
     def test_low_equal_high_raises(self) -> None:
         with pytest.raises(ValueError, match="low"):
             band_bar(value=20.0, low=20.0, high=20.0)
+
+
+class TestBandBarLabels:
+    """Tests for the five point labels: two domain edges, low, high, value."""
+
+    def test_value_label_uses_default_formatter(self) -> None:
+        bar = band_bar(value=20.0, low=15.0, high=25.0)
+
+        assert _value_label(bar).children == "20.0"
+
+    def test_value_label_carries_the_marker_modifier(self) -> None:
+        within = band_bar(value=20.0, low=15.0, high=25.0)
+        outside = band_bar(value=5.0, low=15.0, high=25.0)
+
+        assert "band-value-label--within" in _value_label(within).className
+        assert "band-value-label--outside" in _value_label(outside).className
+
+    def test_value_label_is_positioned_at_the_marker(self) -> None:
+        bar = band_bar(value=20.0, low=15.0, high=25.0)
+
+        marker_left = _marker(bar).style["left"]
+        assert _value_label(bar).style["left"] == marker_left
+
+    def test_scale_labels_name_low_high_and_the_track_extremes(self) -> None:
+        bar = band_bar(value=20.0, low=15.0, high=25.0)
+
+        labels = _scale_labels(bar).children
+        edge_start, low_label, high_label, edge_end = labels
+        assert low_label.children == "15.0"
+        assert high_label.children == "25.0"
+        # Domain is low/high padded 25% each side: pad = 2.5.
+        assert edge_start.children == "12.5"
+        assert edge_end.children == "27.5"
+
+    def test_edge_labels_have_no_inline_position_style(self) -> None:
+        # 0%/100% is exact by construction (they *are* the domain's own
+        # extremes), so CSS pins them with left:0/right:0 rather than a
+        # computed inline style.
+        bar = band_bar(value=20.0, low=15.0, high=25.0)
+
+        edge_start, _low, _high, edge_end = _scale_labels(bar).children
+        assert not hasattr(edge_start, "style")
+        assert not hasattr(edge_end, "style")
+
+    def test_mid_labels_are_positioned_at_low_and_high(self) -> None:
+        bar = band_bar(value=20.0, low=15.0, high=25.0)
+        good_zone = _good_zone(bar)
+        zone_left = good_zone.style["left"]
+        zone_right_pct = float(good_zone.style["left"].rstrip("%")) + float(
+            good_zone.style["width"].rstrip("%"),
+        )
+
+        _edge_start, low_label, high_label, _edge_end = _scale_labels(
+            bar,
+        ).children
+        assert low_label.style["left"] == zone_left
+        assert float(high_label.style["left"].rstrip("%")) == pytest.approx(
+            zone_right_pct,
+        )
+
+    def test_domain_extends_to_cover_a_wildly_out_of_range_value(self) -> None:
+        bar = band_bar(value=-500.0, low=15.0, high=25.0)
+
+        edge_start, *_rest = _scale_labels(bar).children
+        assert edge_start.children == "-500.0"
+
+    def test_custom_fmt_is_used_for_every_label(self) -> None:
+        bar = band_bar(
+            value=20.0,
+            low=15.0,
+            high=25.0,
+            fmt=lambda v: f"${v:.0f}",
+        )
+
+        labels = _scale_labels(bar).children
+        edge_start, low_label, high_label, edge_end = labels
+        assert _value_label(bar).children == "$20"
+        assert low_label.children == "$15"
+        assert high_label.children == "$25"
+        assert edge_start.children == "$12"
+        assert edge_end.children == "$28"

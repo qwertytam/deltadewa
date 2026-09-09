@@ -158,6 +158,7 @@ def _skew_row(
             value=percentile_pct,
             low=policy.skew_low_pctile,
             high=policy.skew_high_pctile,
+            fmt=lambda v: f"{v:.0f}",
         ),
     )
 

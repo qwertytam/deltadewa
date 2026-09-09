@@ -275,6 +275,50 @@ body {
   font-size: 0.75rem;
 }
 
+/* Market-environment metric row (Part X #6/#7/#8): label, headline
+   reading, supporting detail, and an optional band bar. These classes
+   had no rules at all until now — every span rendered with bare
+   browser defaults, so adjacent spans touched with no separating
+   space ("VIX 15.3IPS band...") and rows had no breathing room around
+   the band bar beneath them. */
+
+.env-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin: 12px 0;
+}
+
+.env-metric {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: 10px;
+  column-gap: 6px;
+}
+
+.env-metric-label {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.env-metric-label::after {
+  content: ":";
+}
+
+.env-metric-value {
+  color: #1a1a1a;
+}
+
+.env-metric-detail {
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.env-metric .band-bar {
+  flex-basis: 100%;
+}
+
 /* IPS compliance strip (#298): one line, above the scenario explorer, so
    a FAIL cannot be scrolled past. Left accent border carries the verdict
    at a glance; same card shape as .scenario-explorer/.decisions-section
@@ -599,10 +643,12 @@ body {
   font-weight: 600;
 }
 
-/* Band bar: "is this in range" horizontal indicator */
+/* Band bar: "is this in range" horizontal indicator, labelled at the
+   track's own extremes, the good-zone bounds, and the value itself so
+   a reader isn't left inferring the scale from the prose above it. */
 
 .band-bar {
-  margin-top: 6px;
+  margin-top: 26px;
   min-width: 160px;
 }
 
@@ -638,6 +684,54 @@ body {
 
 .band-marker--outside {
   background: #c62828;
+}
+
+/* The value's own reading, floating above the marker so it never
+   overlaps the good-zone/edge labels sitting below the track. */
+.band-value-label {
+  position: absolute;
+  bottom: 12px;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.band-value-label--within {
+  color: #2e7d32;
+}
+
+.band-value-label--outside {
+  color: #c62828;
+}
+
+/* The track's own left/right extremes plus low/high — one row below
+   the track, positioned on the same percentage scale _pct() drew the
+   good zone and marker on. */
+.band-scale-labels {
+  position: relative;
+  height: 14px;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: #777;
+}
+
+.band-label {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+}
+
+.band-label--edge-start {
+  left: 0;
+}
+
+.band-label--edge-end {
+  right: 0;
+}
+
+.band-label--mid {
+  transform: translateX(-50%);
 }
 
 /* /design: BOOK zone — editor, form, status, confirm */
