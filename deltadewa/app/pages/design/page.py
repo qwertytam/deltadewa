@@ -56,6 +56,7 @@ from .exploration import (
     vega_term,
     volatility_profile,
 )
+from .planning import compliance as compliance_panel
 from .planning import (
     convexity_cliff,
     delta_drift,
@@ -112,6 +113,7 @@ _EXPLORATION_ZONE_ANCHOR: Final = "zone-exploration"
 # test_design_sections.py's document-order check rather than silently
 # drifting from the rendered page.
 _PLANNING_SECTIONS: Final = (
+    compliance_panel.SECTION,
     market_env_panel.SECTION,
     sizing.SECTION,
     ladder.SECTION,
@@ -193,6 +195,11 @@ def render(app: ProgramDashApp) -> html.Div:
                 "shock, or just the position calendar — carries its own "
                 "chip.",
                 className="plain-language",
+            ),
+            compliance_panel.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                market_env=market_env,
             ),
             market_env_panel.layout(
                 portfolio=portfolio,
@@ -379,6 +386,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
     ips_config = app.ips_config
 
     book.register(app)
+    compliance_panel.register(app, ips_config=ips_config)
     convexity_cliff.register(app, ips_config=ips_config)
     position_aging.register(app, ips_config=ips_config)
     hedge_triggers.register(app, ips_config=ips_config)

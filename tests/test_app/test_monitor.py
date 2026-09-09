@@ -35,6 +35,8 @@ from deltadewa.analysis.crash_repricing import (
 )
 from deltadewa.analysis.hedge_efficiency import EfficiencyVerdict
 from deltadewa.analysis.monitor_scenario import ScenarioResult, build_scenario
+from deltadewa.app import compliance as compliance_module
+from deltadewa.app.compliance import compliance_sections_at_ips_anchor
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import monitor
 from deltadewa.clock import days_between
@@ -705,7 +707,7 @@ class TestComplianceStrip:
         app = _app_with_convexity_band(tmp_path, band="around")
         ips_config = app.ips_config
         assert ips_config is not None
-        cost, protection, vega = monitor._compliance_sections(
+        cost, protection, vega = compliance_sections_at_ips_anchor(
             app.program_state.portfolio,
             ips_config,
         )
@@ -853,19 +855,24 @@ class TestPanelIsolation:
     ) -> None:
         """The #362 shape: the crash-convexity call itself raises.
 
-        ``compute_crash_convexity`` (via ``_cost_and_protection``) is
-        called independently by both the compliance strip and the
-        scenario explorer's cost panel — each inside its own
-        ``safe_render`` closure — so *both* degrade here, and correctly
-        so: neither panel has a real convexity figure to show. Decisions
-        and position detail don't touch this call and stay intact.
+        ``compute_crash_convexity`` (via
+        ``compliance.compliance_sections_at_ips_anchor``) is called
+        independently by both the compliance strip and the scenario
+        explorer's cost panel — each inside its own ``safe_render``
+        closure — so *both* degrade here, and correctly so: neither
+        panel has a real convexity figure to show. Decisions and
+        position detail don't touch this call and stay intact.
         """
 
         def _raise(*_args: object, **_kwargs: object) -> None:
             msg = "synthetic crash convexity failure"
             raise RuntimeError(msg)
 
-        monkeypatch.setattr(monitor, "compute_crash_convexity", _raise)
+        monkeypatch.setattr(
+            compliance_module,
+            "compute_crash_convexity",
+            _raise,
+        )
 
         layout = monitor.render(monitor_app.app)
 

@@ -58,13 +58,19 @@ from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.analysis.strike_ladder import LadderRung
 from deltadewa.app import format as fmt
+from deltadewa.app.compliance import (
+    compliance_sections_at_ips_anchor,
+    compliance_strip,
+)
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import design
+from deltadewa.app.pages.design.planning import compliance as compliance_panel
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
 from deltadewa.persistence import PortfolioSerializer
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.reporting import PortfolioLogger
+from deltadewa.reporting.program_report import build_ips_compliance
 from deltadewa.state import ProgramState
 from tests.clock_helpers import days_from_today
 
@@ -2382,6 +2388,96 @@ class TestMarketEnvironmentPanel:
         ) in text
 
 
+class TestCompliancePanel:
+    """The IPS compliance strip (#298), now also on /design (Batch 8a.4).
+
+    ``/monitor`` has carried this since #298; ``/design`` never did, and
+    field-testing the June 2026 book against the live app found nothing
+    that documented leaving it off deliberately. Both pages now call
+    ``app.compliance`` end to end — the check that matters here is not
+    just "does it render" but "does it say the same thing /monitor
+    says for the same book", since that agreement is the entire point
+    of sharing the module rather than writing a second grader.
+    """
+
+    @staticmethod
+    def _panel(app: ProgramDashApp) -> Component:
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+        return design._render_compliance_panel_logic(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+            market_env=_make_market_env(),
+        )
+
+    def test_renders_the_compliance_strip(self, tmp_path: Path) -> None:
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+
+        panel = self._panel(app)
+
+        assert _find_component(panel, "compliance-strip") is not None
+
+    def test_carries_its_own_basis_chip_not_the_zone_shared_one(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Compliance mixes bases (today's carry/vega, IPS-crash convexity).
+
+        Every other PLANNING panel prices the single crash-skew basis and
+        shares that zone-level chip; this one legitimately doesn't, so it
+        must carry its own rather than silently going unlabelled.
+        """
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        layout = compliance_panel.layout(
+            portfolio=app.program_state.portfolio,
+            ips_config=ips_config,
+            market_env=_make_market_env(),
+        )
+
+        text = _collect_text(layout)
+        assert "basis:" in text
+        assert "crash-skew" not in text
+
+    def test_agrees_with_monitor_on_the_same_book(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The referee test: same book, same instant, one verdict.
+
+        Built independently of ``design._render_compliance_panel_logic``
+        — straight from ``app.compliance``, the way ``/monitor`` itself
+        does — so this fails if the two pages ever diverge, not just if
+        the panel forgets to call the shared module.
+        """
+        app = _app_with_ips(tmp_path)
+        _add_starter_position(app.program_state)
+        ips_config = app.program_state.ips_config
+        assert ips_config is not None
+
+        design_text = _collect_text(self._panel(app))
+
+        cost, protection, vega = compliance_sections_at_ips_anchor(
+            app.program_state.portfolio,
+            ips_config,
+        )
+        reference = build_ips_compliance(cost, protection, vega)
+        reference_strip = compliance_strip(
+            reference,
+            DataQuality.LIVE,
+            protection.excluded_expired_legs,
+        )
+        reference_text = _collect_text(reference_strip)
+
+        assert ("PASS" in design_text) == ("PASS" in reference_text)
+        assert ("FAIL" in design_text) == ("FAIL" in reference_text)
+        assert design_text == reference_text
+
+
 class TestHedgeTriggersPanel:
     """Part X #11's other half — the book-level rebalance triggers.
 
@@ -3711,11 +3807,11 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 11 PLANNING panels + 5 EXPLORATION panels share the .panel class
-        # (Batch 3d added the provenance panel, #367/#368). A count, not a
-        # list, so a panel disappearing fails loudly; update it when a
-        # panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 16
+        # 12 PLANNING panels + 5 EXPLORATION panels share the .panel class
+        # (Batch 8a.4 added the compliance panel, #298 on /design for the
+        # first time). A count, not a list, so a panel disappearing fails
+        # loudly; update it when a panel is deliberately added or removed.
+        assert page.locator(".panel").count() == 17
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1
