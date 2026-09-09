@@ -28,6 +28,15 @@ from deltadewa.reporting.weekly_snapshot import (
 
 _AS_OF = date(2026, 8, 5)
 
+# Test-local only: lets _make_report's needs_alarm default from
+# data_quality the way the old (pre-#398) combined-quality check did,
+# so every existing data_quality= call site below keeps exercising the
+# same scenario without having to also pass needs_alarm explicitly. Real
+# needs_alarm is computed by analysis.provenance.assess_freshness — see
+# TestDiffSnapshotsCrossings' explicit-needs_alarm tests for the case
+# this default can't represent (data_quality and needs_alarm diverging).
+_DEFAULT_STALE_OR_WORSE = frozenset({"STALE", "STATIC", "UNAVAILABLE"})
+
 
 def _make_report(
     *,
@@ -41,11 +50,14 @@ def _make_report(
     regime_label: str | None = "NORMAL",
     hedge_cost_verdict: str | None = "FAIR",
     data_quality: str = "LIVE",
+    needs_alarm: bool | None = None,
     compliance_rows: tuple[tuple[str, bool], ...] = (
         ("Annual carry cost", True),
         ("Crash convexity (-25% shock)", True),
     ),
 ) -> ProgramReport:
+    if needs_alarm is None:
+        needs_alarm = data_quality in _DEFAULT_STALE_OR_WORSE
     return ProgramReport(
         header=ReportHeader(
             program_name="SPX Tail Hedge",
@@ -82,6 +94,7 @@ def _make_report(
             skew_percentile=skew_percentile,
             hedge_cost_verdict=hedge_cost_verdict,
             data_quality=data_quality,
+            needs_alarm=needs_alarm,
         ),
         return_framing=ReturnFramingSection(
             carry_drag_annual_pct=carry_pct_of_notional,
@@ -143,6 +156,7 @@ class TestSnapshotFromReport:
         assert snap.as_of == report.header.as_of
         assert snap.first_as_of == date(2026, 7, 1)
         assert snap.data_quality == report.market_context.data_quality
+        assert snap.data_quality_alarm == report.market_context.needs_alarm
         assert snap.carry_pct_of_notional == report.cost.carry_pct_of_notional
         assert snap.within_budget == report.cost.within_budget
         assert snap.convexity_pct == report.protection.convexity_pct
@@ -167,6 +181,27 @@ class TestSnapshotJsonRoundTrip:
         restored = WeeklySnapshot.from_json_dict(snap.to_json_dict())
 
         assert restored == snap
+
+    def test_missing_data_quality_alarm_key_reconstructs_from_the_string(
+        self,
+    ) -> None:
+        """#398: a pre-#398 snapshot file has no real field to read back.
+
+        ``from_json_dict`` falls back to the file's own old
+        combined_quality-membership check rather than raising or
+        silently defaulting to a fixed value.
+        """
+        stale_before_398 = _snapshot(data_quality="STALE").to_json_dict()
+        del stale_before_398["data_quality_alarm"]
+        healthy_before_398 = _snapshot(data_quality="LIVE").to_json_dict()
+        del healthy_before_398["data_quality_alarm"]
+
+        assert WeeklySnapshot.from_json_dict(
+            stale_before_398,
+        ).data_quality_alarm
+        assert not WeeklySnapshot.from_json_dict(
+            healthy_before_398,
+        ).data_quality_alarm
 
 
 class TestDiffSnapshotsFirstRun:
@@ -277,6 +312,34 @@ class TestDiffSnapshotsCrossings:
     def test_recovering_from_stale_is_also_a_crossing(self) -> None:
         prior = _snapshot(data_quality="STALE")
         current = _snapshot(data_quality="LIVE")
+
+        diff = diff_snapshots(prior, current)
+
+        assert any(c.label == "Data quality" for c in diff.crossings)
+
+    def test_hand_entered_aging_does_not_cross_despite_stale_string(
+        self,
+    ) -> None:
+        """#398: the alarm flag drives this, not the STALE_OR_WORSE string.
+
+        Both weeks display ``data_quality == "STALE"`` (as a merely-
+        ``AGING`` hand-entered input maps through ``combined_quality``),
+        but neither actually crosses the #393/#398 alarm threshold — no
+        crossing line should fire on an unchanged, quiet condition.
+        """
+        prior = _snapshot(data_quality="STALE", needs_alarm=False)
+        current = _snapshot(data_quality="STALE", needs_alarm=False)
+
+        diff = diff_snapshots(prior, current)
+
+        assert not any(c.label == "Data quality" for c in diff.crossings)
+
+    def test_alarm_state_flip_crosses_even_if_the_string_does_not(
+        self,
+    ) -> None:
+        """The reverse of the case above: the flag is what actually moved."""
+        prior = _snapshot(data_quality="STALE", needs_alarm=False)
+        current = _snapshot(data_quality="STALE", needs_alarm=True)
 
         diff = diff_snapshots(prior, current)
 

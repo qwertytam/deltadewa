@@ -20,6 +20,7 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
+from deltadewa.analysis.provenance import assess_freshness
 
 if TYPE_CHECKING:
     from deltadewa.analysis.crash_payoff import CrashConvexityResult
@@ -50,19 +51,6 @@ _WEEKLY_CARRY_NOTE: str = (
     "Before/after-hedge total return (start/end book value) is not "
     "tracked; the figures above are carry consumption only, not a return."
 )
-
-# Qualities worse than a fresh-enough disk-cache hit. CACHED is the healthy
-# steady state once a refresh cron exists (M2.6) — a value is only LIVE on
-# the call that fetched it — so the caveat must fire on "worse than CACHED",
-# not "not LIVE", or it becomes a permanent warning on every scheduled
-# report. There is no shared severity ordering to reuse here: ``Source``
-# (deltadewa.marketdata) has no UNAVAILABLE member, since a provider never
-# returns that source — assess_market_environment substitutes it itself
-# when every provider call fails.
-_STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
-    {"STALE", "STATIC", "UNAVAILABLE"},
-)
-
 
 # ── Section dataclasses ───────────────────────────────────────────────────
 
@@ -155,7 +143,20 @@ class MarketContextSection:
             ``None``.
         hedge_cost_verdict: ``"CHEAP"``, ``"FAIR"``, or ``"EXPENSIVE"``;
             ``None`` when unavailable.
-        data_quality: ``"LIVE"``, ``"STATIC"``, or ``"UNAVAILABLE"``.
+        data_quality: ``provenance_ledger.combined_quality.value`` —
+            ``"LIVE"``, ``"CACHED"``, ``"STALE"``, ``"STATIC"``, or
+            ``"UNAVAILABLE"`` (#367). Always shown verbatim wherever this
+            section renders, regardless of ``needs_alarm`` below — it is
+            informative context, not itself an alarm decision.
+        needs_alarm: Whether this reading should trip a reader-facing
+            alarm (the digest's "STALE DATA —" headline/caveat, and this
+            same section's own "⚠ Data quality" caveat) —
+            ``analysis.provenance.assess_freshness(provenance_ledger) is
+            not None`` (#393/#398). Deliberately **not** derived from
+            ``data_quality`` downstream: a hand-entered input that is
+            merely ``AGING`` maps onto ``data_quality == "STALE"`` via
+            ``combined_quality``'s lossy channel merge, but must not
+            alarm — see ``assess_freshness``'s docstring.
 
     """
 
@@ -164,6 +165,7 @@ class MarketContextSection:
     skew_percentile: float | None
     hedge_cost_verdict: str | None
     data_quality: str
+    needs_alarm: bool
 
 
 @dataclass(frozen=True)
@@ -657,6 +659,11 @@ def _build_market_context(
     than ``market_env.data_quality`` directly (#367) — see
     ``build_program_report``'s docstring on why. Every other field still
     comes from *market_env* itself; only the grade's source changes.
+
+    ``needs_alarm`` is computed separately, from ``assess_freshness``
+    (#393/#398) — *not* derived from ``data_quality`` above, since that
+    would reintroduce the same combined-quality merge bug for a
+    hand-entered input that is merely ``AGING``.
     """
     return MarketContextSection(
         vix=market_env.vix,
@@ -672,6 +679,7 @@ def _build_market_context(
             else None
         ),
         data_quality=provenance_ledger.combined_quality.value,
+        needs_alarm=assess_freshness(provenance_ledger) is not None,
     )
 
 
@@ -864,6 +872,31 @@ def _fmt_pct(value: float | None, decimals: int = 2) -> str:
     return f"{value:.{decimals}f}%"
 
 
+def _data_quality_cell(mc: MarketContextSection) -> str:
+    """Build the Market Context table's "Data quality" value, qualified.
+
+    ``mc.data_quality`` is shown here unconditionally, whether or not
+    ``needs_alarm`` fires the caveat above it (#398) — but ``"STALE"``
+    reads as an alarm word on its own, and the only way to reach
+    ``data_quality == "STALE"`` with ``needs_alarm`` false is a
+    hand-entered input that is merely ``AGING`` (``combined_quality``
+    maps ``AGING`` to ``DataQuality.STALE`` — the identical string a
+    genuinely dead fetched feed produces). Left unqualified, a reader
+    skimming this row alone — the false-green-auditor's finding — could
+    reasonably read that as something to act on, exactly the alarm the
+    caveat's absence says isn't warranted. Every other reachable
+    combination (``needs_alarm`` true; or false with ``LIVE``/``CACHED``)
+    needs no qualifier: either the caveat right above already explains
+    it, or the grade itself already reads as healthy.
+    """
+    if not mc.needs_alarm and mc.data_quality not in ("LIVE", "CACHED"):
+        return (
+            f"{mc.data_quality} (hand-entered input overdue for "
+            "review — not a live-feed problem)"
+        )
+    return mc.data_quality
+
+
 def _pass_fail_md(value: bool | None) -> str:
     """Markdown pass/fail indicator (✓ PASS / ✗ FAIL / —)."""
     if value is None:
@@ -1038,7 +1071,7 @@ def render_markdown(report: ProgramReport) -> str:
     mc = report.market_context
     lines.append("## 3. Market Context")
     lines.append("")
-    if mc.data_quality in _STALE_OR_WORSE:
+    if mc.needs_alarm:
         lines += [
             (
                 f"> ⚠ Data quality: **{mc.data_quality}**"
@@ -1060,7 +1093,7 @@ def render_markdown(report: ProgramReport) -> str:
         f"| VIX regime | {mc.regime_label or '—'} |",
         f"| SKEW percentile | {skew_str} |",
         f"| Hedge-cost verdict | {mc.hedge_cost_verdict or '—'} |",
-        f"| Data quality | {mc.data_quality} |",
+        f"| Data quality | {_data_quality_cell(mc)} |",
         "",
     ]
 
@@ -1298,7 +1331,7 @@ def render_html_body(report: ProgramReport) -> str:
 
     # ── Pre-compute per-section fragments ──────────────────────────────
     caveat_html = ""
-    if mc.data_quality in _STALE_OR_WORSE:
+    if mc.needs_alarm:
         caveat_html = (
             '<div class="caveat">&#9888;&#160;Data quality:'
             f" <strong>{escape(mc.data_quality)}</strong>"
@@ -1472,7 +1505,7 @@ ratio-disambiguation/">Ratio Disambiguation</a> page.</p>
 <tr><td>SKEW percentile</td><td>{skew_str}</td></tr>
 <tr><td>Hedge-cost verdict</td>\
 <td>{_html_or_dash(mc.hedge_cost_verdict)}</td></tr>
-<tr><td>Data quality</td><td>{escape(mc.data_quality)}</td></tr>
+<tr><td>Data quality</td><td>{escape(_data_quality_cell(mc))}</td></tr>
 </table>
 
 <h2>4. Return Framing</h2>

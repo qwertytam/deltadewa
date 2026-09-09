@@ -83,6 +83,7 @@ from deltadewa.analysis.provenance import (
     InputKind,
     InputProvenance,
     ProvenanceLedger,
+    assess_freshness,
     build_provenance_ledger,
 )
 from deltadewa.analysis.repricing import (
@@ -198,6 +199,7 @@ __all__ = [
     "TriggerStatus",
     "UnsolvableRung",
     "VolMapping",
+    "assess_freshness",
     "assess_market_environment",
     "beta_adjusted_notional",
     "build_monetization_plan",

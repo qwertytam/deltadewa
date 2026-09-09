@@ -504,6 +504,65 @@ class TestBuildProgramReport:
         # hand-entered inputs (UNKNOWN) are worse and must win.
         assert market_env.data_quality == DataQuality.LIVE
         assert report.market_context.data_quality == "STATIC"
+        # UNKNOWN is UNCONFIRMED_OR_WORSE, so this must alarm (#398).
+        assert report.market_context.needs_alarm is True
+
+    def test_hand_entered_aging_reads_stale_but_does_not_alarm(self) -> None:
+        """#398: an overdue-but-confirmed spot must not alarm the digest.
+
+        Under the shipped ``spot_max_age_days: 1``, a spot stamped 3 days
+        ago against an otherwise-LIVE feed grades ``AGING`` — which
+        ``combined_quality`` maps onto ``DataQuality.STALE`` (the same
+        string a genuinely dead feed would produce), but the #393/#398
+        alarm rule must stay quiet: an aging hand-entered input is a
+        review-calendar fact, not a machine-stopped fact.
+        """
+        as_of_midnight = datetime.datetime.combine(
+            _AS_OF,
+            datetime.time(),
+            tzinfo=datetime.UTC,
+        )
+        portfolio = OptionPortfolio(
+            underlying_quantity=100.0,
+            spot_price=5_000.0,
+            stamps=MarketParameterStamps(
+                spot_as_of=as_of_midnight - datetime.timedelta(days=3),
+                risk_free_rate_as_of=as_of_midnight,
+                dividend_yield_as_of=as_of_midnight,
+            ),
+        )
+        market_env = _make_market_env(DataQuality.LIVE)
+        ledger = build_provenance_ledger(
+            market_env,
+            portfolio,
+            IpsPricingInputs(),  # spot_max_age_days defaults to 1
+            as_of=_AS_OF,
+        )
+
+        report = build_program_report(
+            portfolio=portfolio,
+            ips_config=_make_ips_config(),
+            crash_result=_make_crash_result(),
+            carry_metrics=_make_carry_metrics(),
+            vega_sufficiency_pct=2.5,
+            market_env=market_env,
+            provenance_ledger=ledger,
+            period_label="Q2 2026",
+            as_of=_AS_OF,
+        )
+
+        assert market_env.data_quality == DataQuality.LIVE
+        assert report.market_context.data_quality == "STALE"
+        assert report.market_context.needs_alarm is False
+
+        md = render_markdown(report)
+        html = render_html_body(report)
+        assert "reference values" not in md
+        assert "reference values" not in html
+        # Still shown in the table — informative, not an alarm — but
+        # qualified: a bare "STALE" here would itself read as an alarm
+        # word (the false-green-auditor's finding on #398).
+        assert "| Data quality | STALE (hand-entered input" in md
 
     def test_return_framing_carry_drag(self) -> None:
         """carry_drag_annual_pct mirrors cost.carry_pct_of_notional."""

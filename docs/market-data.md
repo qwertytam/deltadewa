@@ -210,30 +210,44 @@ at all.
 `ProvenanceLedger` covering the fetched market-data channel and every
 hand-entered input side by side. `ProvenanceLedger.worst` is the single
 worst channel across both; `.combined_quality` re-expresses that worst
-channel as a `DataQuality` string, so the digest's existing
-STALE-or-worse gate and `/health`'s vocabulary need no new grade. This
-is a deliberate, lossy mapping (`AGING → STALE`, `UNKNOWN → STATIC`,
+channel as a `DataQuality` string, so the digest's `data_quality` table
+row and `/health`'s vocabulary need no new grade string. This is a
+deliberate, lossy mapping (`AGING → STALE`, `UNKNOWN → STATIC`,
 `MISSING → UNAVAILABLE`) — see the property's own docstring.
 
 `/health`'s `market_data` and `pricing_inputs` objects are **never
 merged**: a stale hand-entered rate must not make `/health` claim the
 *fetched* market data feed itself is stale, which would just relocate
-the #368 confusion into a new field. Only the chrome banner and the
-digest's `data_quality` caveat take the ledger's single worst-of;
+the #368 confusion into a new field. Only the chrome banner takes the
+ledger's single worst-of unconditionally (`needs_banner`, below); the
+digest's own caveat/headline display `combined_quality`'s string but no
+longer *gate on* it directly (see the next paragraph — #398).
 `/health` and the provenance panel (`/monitor` and `/design`, collapsed
 by default) show the full, unmerged breakdown.
 
-`/health`'s `status` grades freshness per channel for the same reason
-(#393), and so **does not read `combined_quality`**: the fetched channel
-degrades at STALE-or-worse, the hand-entered one at `UNKNOWN` or worse.
-A merely `AGING` hand-entered input — one overdue against its
-`pricing_inputs` cadence rather than never confirmed — is reported in
-full under `pricing_inputs` but deliberately kept out of the headline,
-because with `spot_max_age_days: 1` it is true on most days of a
-weekly-rhythm program and a permanently degraded endpoint is a
-dead-man's switch nobody reads. `freshness_reason` names the channel and
-grade when one does degrade. The rule and its full reasoning live in
-`app/health_checks.py`'s module docstring.
+`/health`'s `status` grades freshness per channel (#393), and so
+**does not read `combined_quality`**: the fetched channel degrades at
+STALE-or-worse, the hand-entered one at `UNKNOWN` or worse. A merely
+`AGING` hand-entered input — one overdue against its `pricing_inputs`
+cadence rather than never confirmed — is reported in full under
+`pricing_inputs` but deliberately kept out of the headline, because with
+`spot_max_age_days: 1` it is true on most days of a weekly-rhythm
+program and a permanently degraded endpoint is a dead-man's switch
+nobody reads. `freshness_reason` names the channel and grade when one
+does degrade. **This same two-channel rule —
+`analysis.provenance.assess_freshness` — now also gates the weekly
+digest's `"STALE DATA — "` headline prefix and its `"DATA QUALITY: X"`
+caveat (both the digest's own lede and the embedded program report's §3
+Market Context section), via `MarketContextSection.needs_alarm` /
+`WeeklySnapshot.data_quality_alarm` (#398)**: before #398 those two
+surfaces gated on `combined_quality`'s STALE-or-worse membership
+directly, which meant the identical AGING-hand-entered-input case that
+`/health` already stayed quiet on would falsely alarm the digest every
+ordinary week. The rule and its full reasoning live in
+`analysis/provenance.py`'s `assess_freshness` docstring (moved there
+from `app/health_checks.py`'s module docstring by #398, which still
+carries the original argument in full and now also records why the
+digest reuses it instead of a second copy).
 
 The banner mounts only when the ledger's worst channel is not `FRESH` —
 never for a merely `CACHED` fetched reading, the normal steady state. If
