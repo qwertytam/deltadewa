@@ -8,14 +8,13 @@ No arithmetic happens in this module — every number comes from
 ``analysis/`` (``monitor_scenario.build_scenario``,
 ``monitor_scenario.build_scenario_curve``,
 ``roll_status.evaluate_roll_status``,
-``monetization.build_monetization_plan``,
-``crash_payoff.compute_crash_convexity``) and ``reporting.program_report``
-(``build_cost_section``, ``build_protection_section``,
-``build_ips_compliance`` — the IPS compliance strip, #298, reuses the
-digest's own section builders and its single compliance definition
-rather than writing a second one), and is only formatted here
-(``app.format``) or handed to a chart builder
-(``visualization.crash_charts_plotly``).
+``monetization.build_monetization_plan``) and ``reporting.program_report``
+(``build_ips_compliance``), and is only formatted here (``app.format``)
+or handed to a chart builder (``visualization.crash_charts_plotly``). The
+IPS compliance strip itself — section computation and rendering — now
+lives in ``app.compliance``, shared with ``/design`` (Batch 8a.4): #298's
+single compliance definition, applied to the *page*, not just the digest,
+once a second page needed to show it.
 
 Each panel in :func:`render` is built by its own
 :func:`~deltadewa.app.panel_guard.safe_render`-wrapped function (#363): a
@@ -33,7 +32,6 @@ from dash.development.base_component import Component
 
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     gross_quantity,
@@ -44,7 +42,6 @@ from deltadewa.analysis.market_environment import (
     DataQuality,
     assess_market_environment,
 )
-from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.monitor_scenario import (
     build_scenario,
@@ -56,6 +53,10 @@ from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.compliance import (
+    compliance_sections_at_ips_anchor,
+    compliance_strip,
+)
 from deltadewa.app.ips_notice import build_no_ips_layout
 from deltadewa.app.panel_guard import safe_render
 from deltadewa.app.provenance_panel import build_provenance_panel
@@ -68,13 +69,7 @@ from deltadewa.app.section_nav import (
 )
 from deltadewa.app.shape_notice import shape_notice_text
 from deltadewa.clock import program_trading_date
-from deltadewa.reporting.program_report import (
-    build_cost_section,
-    build_ips_compliance,
-    build_protection_section,
-    build_vega_section,
-    expired_legs_caveat,
-)
+from deltadewa.reporting.program_report import build_ips_compliance
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
 if TYPE_CHECKING:
@@ -85,12 +80,6 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
-    from deltadewa.reporting.program_report import (
-        CostSection,
-        IpsComplianceSection,
-        ProtectionSection,
-        VegaSection,
-    )
     from deltadewa.state import ProgramState
 
 _SPOT_SLIDER_MIN = -50.0
@@ -168,14 +157,6 @@ _SPOT_QUALITY_LABEL: dict[DataQuality, str] = {
     DataQuality.STALE: "STALE",
     DataQuality.STATIC: "SYNTHETIC",
 }
-
-# Mirrors chrome._BANNER_QUALITIES and program_report._STALE_OR_WORSE
-# locally rather than importing either module-private name — the
-# established convention (see weekly_snapshot.py's own copy) for a set
-# every module that reads DataQuality needs but none owns.
-_STALE_OR_WORSE: frozenset[DataQuality] = frozenset(
-    {DataQuality.STALE, DataQuality.STATIC, DataQuality.UNAVAILABLE},
-)
 
 
 def _no_ips_layout(state: ProgramState) -> html.Div:
@@ -272,115 +253,6 @@ def _spot_headline(
             ),
         ],
         className="spot-headline",
-    )
-
-
-def _metric_list(compliance: IpsComplianceSection) -> str:
-    """Name every metric the compliance section actually graded (#409).
-
-    Lower-cased and comma-joined with a trailing "and", e.g. ``"carry
-    cost, crash convexity and vega sufficiency"``. The PASS line is built
-    from this rather than from a hand-written list of metric names, so a
-    row added to ``build_ips_compliance`` cannot leave the sentence
-    describing a narrower question than the verdict answers.
-
-    Metric names are lower-cased only at their first character — "IPS" and
-    similar stay as written — because the row labels are title-cased for a
-    table header and this sentence is prose.
-    """
-    names = [row.metric[:1].lower() + row.metric[1:] for row in compliance.rows]
-    if len(names) == 1:
-        return names[0]
-    return f"{', '.join(names[:-1])} and {names[-1]}"
-
-
-def _compliance_strip(
-    compliance: IpsComplianceSection,
-    data_quality: DataQuality,
-    excluded_expired: tuple[str, ...] = (),
-) -> html.Div:
-    """Build the one-line IPS compliance strip (#298).
-
-    The program's single definition of "compliant" is
-    ``reporting.program_report.build_ips_compliance`` — the same function
-    the weekly digest's §6 calls. This renders its result; it never
-    re-derives pass/fail from a band comparison of its own, so this line
-    and the digest's Overall verdict cannot silently disagree.
-
-    :func:`render` builds this unconditionally, before the scenario
-    explorer, from the *stored* book at the IPS anchor — never from
-    ``register_callbacks``' scenario dials, so moving a dial changes the
-    numbers below without moving this line. Compliance is a statement
-    about the book and the policy, not about a what-if.
-
-    Args:
-        compliance: This week's compliance result, computed at the IPS
-            anchor via ``build_ips_compliance``.
-        data_quality: The page's ``MarketEnvironment.data_quality`` —
-            used only to add a caveat line, never to gate the verdict
-            itself (carry and crash convexity are QuantLib repricing of
-            the book's own hand-entered inputs; market data is not one
-            of their inputs, so a stale market-data week must not hide a
-            real breach).
-        excluded_expired: ``ProtectionSection.excluded_expired_legs``
-            (#375) — long-put leg labels dropped from the convexity
-            figures for being already expired. Empty ``()`` (the
-            default) renders no caveat.
-
-    Returns:
-        ``id="compliance-strip"`` — a FAIL book cannot render
-        ``/monitor`` without this id present
-        (``tests/test_app/test_monitor.py``'s structural guard asserts
-        exactly that, rather than pinning a string).
-
-    """
-    if compliance.all_pass:
-        # The metrics are named from the rows themselves, never spelled out
-        # here (#409). The old wording enumerated "carry and crash
-        # convexity" as a literal, which stayed narrowly true while
-        # ``build_ips_compliance`` silently omitted a third banded IPS
-        # metric — a reader taking PASS to mean "in policy" had no way to
-        # see the sentence was describing a smaller question than they
-        # were asking. Deriving it means the line cannot narrow again
-        # without the row disappearing too.
-        text = (
-            f"IPS compliance: PASS — {_metric_list(compliance)} all "
-            "within policy."
-        )
-        modifier = "pass"
-    else:
-        clauses = [
-            f"{row.metric} {row.actual} vs. target {row.target}"
-            for row in compliance.rows
-            if not row.passes
-        ]
-        text = "IPS compliance: FAIL — " + "; ".join(clauses) + "."
-        modifier = "fail"
-
-    children: list[Component] = [
-        html.P(
-            text,
-            className=f"compliance-verdict compliance-verdict--{modifier}",
-        ),
-    ]
-    if data_quality in _STALE_OR_WORSE:
-        children.append(
-            html.P(
-                f"Market data is {data_quality.value} — this verdict is "
-                "computed from the book and the IPS policy, not from "
-                "market data.",
-                className="plain-language",
-            ),
-        )
-    expired_caveat = expired_legs_caveat(excluded_expired)
-    if expired_caveat is not None:
-        children.append(
-            html.P(expired_caveat, className="plain-language"),
-        )
-    return html.Div(
-        children,
-        id="compliance-strip",
-        className="compliance-strip",
     )
 
 
@@ -932,48 +804,6 @@ def _page_footer() -> html.Div:
     )
 
 
-def _compliance_sections(
-    portfolio: OptionPortfolio,
-    ips_config: IpsConfig,
-) -> tuple[CostSection, ProtectionSection, VegaSection]:
-    """Build the three graded sections at the IPS crash anchor.
-
-    One per standing IPS band — carry, crash convexity, vega sufficiency
-    (#409) — packaged exactly as ``build_ips_compliance`` consumes them, so
-    ``/monitor`` and the weekly digest grade the same book off the same
-    three inputs.
-
-    A plain helper, not itself panel-guarded: :func:`_build_compliance_panel`
-    and :func:`_build_scenario_explorer_panel` each call this from *inside*
-    their own :func:`~deltadewa.app.panel_guard.safe_render` closure rather
-    than sharing one precomputed value, so a raise here degrades only
-    whichever panel's own call hit it (#363) — see ``panel_guard``'s module
-    docstring for why a shared value would make that isolation fake.
-    """
-    convexity = ips_config.convexity
-    crash_result = compute_crash_convexity(
-        portfolio,
-        shock=CrashShock.from_ips(convexity),
-        ips_convexity=convexity,
-    )
-    analyzer = PortfolioAnalyzer(portfolio)
-    cost_section = build_cost_section(
-        carry_metrics=analyzer.calculate_carry_metrics(
-            MaturityBuckets.from_ips(ips_config.maturity_buckets),
-        ),
-        book_notional=(
-            abs(portfolio.underlying_quantity) * portfolio.spot_price
-        ),
-        budget_annual_pct=ips_config.budget.annual_carry_pct,
-    )
-    protection_section = build_protection_section(crash_result)
-    vega_section = build_vega_section(
-        sufficiency_pct=analyzer.calculate_vega_sufficiency_pct(),
-        ips_vega=ips_config.vega,
-    )
-    return cost_section, protection_section, vega_section
-
-
 def _build_shape_notice_panel(portfolio: OptionPortfolio) -> Component:
     """Build the book-shape notice; degrades independently (#363)."""
 
@@ -995,16 +825,16 @@ def _build_compliance_panel(
     """Build the IPS compliance strip; degrades independently (#298, #363).
 
     Computed at the *stored* book and the IPS anchor shock — deliberately
-    not from the scenario explorer's dial-driven numbers — and via the
-    same section builders + ``build_ips_compliance`` the weekly digest's
-    §6 calls, so this line and the digest's Overall verdict read off one
-    definition of "compliant".
+    not from the scenario explorer's dial-driven numbers — and via
+    ``app.compliance``'s shared section builders + ``build_ips_compliance``
+    the weekly digest's §6 and ``/design``'s own compliance panel call, so
+    this line and the digest's Overall verdict read off one definition of
+    "compliant".
     """
 
     def _build() -> Component:
-        cost_section, protection_section, vega_section = _compliance_sections(
-            portfolio,
-            ips_config,
+        cost_section, protection_section, vega_section = (
+            compliance_sections_at_ips_anchor(portfolio, ips_config)
         )
         compliance = build_ips_compliance(
             cost_section,
@@ -1015,7 +845,7 @@ def _build_compliance_panel(
             app.market_data,
             ips_config.market_environment,
         )
-        return _compliance_strip(
+        return compliance_strip(
             compliance,
             market_env.data_quality,
             protection_section.excluded_expired_legs,
@@ -1073,8 +903,8 @@ def _build_scenario_explorer_panel(
         # Book-level facts for the efficiency sentence's "cheap but too
         # small" combination (#304) — this panel's own copy of the same
         # convexity_pct and vega sufficiency the compliance strip grades.
-        _cost_section, protection_section, vega_section = _compliance_sections(
-            portfolio, ips_config
+        _cost_section, protection_section, vega_section = (
+            compliance_sections_at_ips_anchor(portfolio, ips_config)
         )
         vega_sufficiency_pct = vega_section.sufficiency_pct
 

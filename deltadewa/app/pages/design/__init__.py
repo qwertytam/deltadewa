@@ -50,6 +50,9 @@ from .exploration.volatility_profile import (
 from .page import _BASIS_CRASH_SKEW as _BASIS_CRASH_SKEW
 from .page import register_callbacks as register_callbacks
 from .page import render as render
+from .planning.compliance import (
+    _render_compliance_panel_logic as _render_compliance_panel_logic,
+)
 from .planning.convexity_cliff import (
     _render_convexity_cliff_panel_logic as _render_convexity_cliff_panel_logic,
 )
