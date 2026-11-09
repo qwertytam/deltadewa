@@ -6,7 +6,6 @@ This module provides consistent formatting functions for scalar values:
 - Number formatting (format_number, format_number_auto_precision)
 - Greek value formatting (format_greek_value)
 - Spot price with percentage change (format_spot_with_pct)
-- Axis formatter factories for matplotlib
 
 All formatters in this module are self-contained with no dependencies
 on other formatter submodules.
@@ -15,22 +14,9 @@ on other formatter submodules.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from matplotlib.ticker import FuncFormatter
+from typing import Any, cast
 
 import pandas as pd
-
-FUNC_FORMATTER: type[FuncFormatter] | None = None  # pylint: disable=invalid-name
-try:
-    from matplotlib.ticker import FuncFormatter as _FuncFormatter
-
-    FUNC_FORMATTER = _FuncFormatter  # pylint: disable=invalid-name
-    MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    FUNC_FORMATTER = None  # pylint: disable=invalid-name
-    MATPLOTLIB_AVAILABLE = False
 
 
 def format_currency(
@@ -82,7 +68,15 @@ def format_currency(
 
 
 def format_currency_for_axis(x: float, pos: int | None = None) -> str:
-    """FuncFormatter-compatible currency formatter for matplotlib axes.
+    """Format a currency tick label (``FuncFormatter`` call signature).
+
+    .. note::
+
+       **No product caller since #312.** This was a matplotlib
+       ``FuncFormatter`` callback for the retired matplotlib charts;
+       the Plotly charts format their own ticks. Kept, with its test,
+       as a plain ``(value, pos) -> str`` formatter rather than
+       deleted: nothing in it depends on matplotlib.
 
     Args:
         x: Value to format
@@ -169,7 +163,15 @@ def format_ordinal_percentile(fraction: float) -> str:
 
 
 def format_percentage_for_axis(x: float, pos: int | None = None) -> str:
-    """FuncFormatter-compatible percentage formatter for matplotlib axes.
+    """Format a percentage tick label (``FuncFormatter`` call signature).
+
+    .. note::
+
+       **No product caller since #312.** This was a matplotlib
+       ``FuncFormatter`` callback for the retired matplotlib charts;
+       the Plotly charts format their own ticks. Kept, with its test,
+       as a plain ``(value, pos) -> str`` formatter rather than
+       deleted: nothing in it depends on matplotlib.
 
     Args:
         x: Value to format (in decimal form, e.g., 0.25 = 25%)
@@ -299,9 +301,16 @@ def format_spot_with_pct(
 ) -> str:
     """Format spot price with percentage change for axis labels.
 
+    .. note::
+
+       **No product caller since #312.** This was a matplotlib
+       ``FuncFormatter`` callback for the retired matplotlib charts;
+       the Plotly charts format their own ticks. Kept, with its test,
+       as a plain ``(value, pos) -> str`` formatter rather than
+       deleted: nothing in it depends on matplotlib.
+
     Note: Parameter order (x, current_spot, pos) is intentional for clarity
-          when used with lambda/partial. Use get_spot_price_axis_formatter()
-          factory function for direct FuncFormatter compatibility.
+          when used with lambda/partial.
 
     Args:
         x: Spot price value
@@ -361,69 +370,6 @@ def format_currency_for_df(value: object) -> str:
         return "-" if value is None else str(value)
 
 
-# ============================================================================
-# Axis Formatter Factories
-# ============================================================================
-
-
-def get_currency_axis_formatter(compact: bool = True) -> FuncFormatter:
-    """Return a matplotlib FuncFormatter for currency values.
-
-    Args:
-        compact: Use compact notation (k, M) for large values
-
-    Returns:
-        FuncFormatter instance for matplotlib axes
-
-    """
-    if FUNC_FORMATTER is None:
-        raise ImportError("matplotlib is required for axis formatters")
-
-    if compact:
-        return FUNC_FORMATTER(format_currency_for_axis)
-    return FUNC_FORMATTER(
-        lambda x, pos: format_currency(x, compact=False, precision=0),  # ruff: ignore[unused-lambda-argument]
-    )
-
-
-def get_percentage_axis_formatter(from_decimal: bool = True) -> FuncFormatter:
-    """Return a matplotlib FuncFormatter for percentage values.
-
-    Args:
-        from_decimal: If True, input values are decimals (0.25 = 25%)
-
-    Returns:
-        FuncFormatter instance for matplotlib axes
-
-    """
-    if FUNC_FORMATTER is None:
-        raise ImportError("matplotlib is required for axis formatters")
-
-    if from_decimal:
-        return FUNC_FORMATTER(format_percentage_for_axis)
-    return FUNC_FORMATTER(
-        lambda x, pos: format_percentage(x, from_decimal=False, decimals=0),  # ruff: ignore[unused-lambda-argument]
-    )
-
-
-def get_spot_price_axis_formatter(current_spot: float) -> FuncFormatter:
-    """Return a matplotlib FuncFormatter for spot price with % change.
-
-    Args:
-        current_spot: Current spot price to calculate percentage from
-
-    Returns:
-        FuncFormatter instance for matplotlib axes
-
-    """
-    if FUNC_FORMATTER is None:
-        raise ImportError("matplotlib is required for axis formatters")
-
-    return FUNC_FORMATTER(
-        lambda x, pos: format_spot_with_pct(x, current_spot, pos),
-    )
-
-
 __all__ = [
     "format_currency",
     "format_currency_for_axis",
@@ -434,7 +380,4 @@ __all__ = [
     "format_percentage",
     "format_percentage_for_axis",
     "format_spot_with_pct",
-    "get_currency_axis_formatter",
-    "get_percentage_axis_formatter",
-    "get_spot_price_axis_formatter",
 ]

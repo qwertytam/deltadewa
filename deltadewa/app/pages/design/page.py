@@ -56,8 +56,8 @@ from .exploration import (
     vega_term,
     volatility_profile,
 )
-from .planning import compliance as compliance_panel
 from .planning import (
+    book_changes,
     convexity_cliff,
     delta_drift,
     hedge_triggers,
@@ -72,6 +72,7 @@ from .planning import (
     sizing,
     skew_beta,
 )
+from .planning import compliance as compliance_panel
 from .planning import market_env as market_env_panel
 
 if TYPE_CHECKING:
@@ -125,6 +126,7 @@ _PLANNING_SECTIONS: Final = (
     roll_status.SECTION,
     provenance.SECTION,
     liquidity.SECTION,
+    book_changes.SECTION,
     position_aging.SECTION,
     hedge_triggers.SECTION,
     delta_drift.SECTION,
@@ -243,6 +245,7 @@ def render(app: ProgramDashApp) -> html.Div:
                 ips_config=ips_config,
             ),
             liquidity.layout(portfolio=portfolio, ips_config=ips_config),
+            book_changes.layout(app=app),
             position_aging.layout(
                 portfolio=portfolio,
                 ips_config=ips_config,
@@ -412,6 +415,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
     roll_status.register(app, ips_config=ips_config)
     provenance.register(app, ips_config=ips_config)
     liquidity.register(app, ips_config=ips_config)
+    book_changes.register(app)
     monetization.register(app, ips_config=ips_config)
     market_env_panel.register(app, ips_config=ips_config)
     volatility_profile.register(app)

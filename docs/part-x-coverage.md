@@ -278,8 +278,12 @@ descends from the same code path.
 **The hedge-success gauge — omitted, per M2.4 finding M2.** A permanently
 neutral gauge is worse than no gauge. *Rationale:* it needs realized-carry
 tracking, which needs the position-history layer
-[#70](https://github.com/qwertytam/deltadewa/issues/70) owns; until then any
+[#70](https://github.com/qwertytam/deltadewa/issues/70) owned; until then any
 value it shows is a proxy. `analysis/health.py` records this at the function.
+**8e.1 built that layer** (#313, which absorbed #70; see "The position
+history (8e.1)" below), so this retirement is now lifted *in principle*.
+The gauge is #313's named follow-on, rebuilt on realized carry. Do
+not re-add the old crash-payoff proxy.
 
 **`/monitor` is not a gauge wall.** The principle behind every
 `/design`-first placement in M2.7: `/monitor` answers three questions (what
@@ -463,12 +467,13 @@ The chart function and its tests are kept; only the surface is retired.
 *Rationale:* the display was a `ConsoleReporter` print of a per-session,
 kernel-lifetime log — a form that does not survive the move to a persistent,
 shared, server-side `ProgramState`. **The data is not retired.**
-`ProgramState` constructs its own `PortfolioLogger` at `state.py:82` and
-threads it through mutation and import (`state.py:187`, `:213`), backed by
-`reporting/audit.py`'s `PortfolioChangeTracker` — so every edit made through
-`/design` is still being recorded. What is retired is the view of it, and
-rebuilding that view for the persistent model is
-[#262](https://github.com/qwertytam/deltadewa/issues/262).
+`ProgramState` constructs its own `PortfolioLogger` and threads it through
+mutation and import, backed by `reporting/audit.py`'s
+`PortfolioChangeTracker`. **That premise was wrong** (found in #313): no
+mutator ever called `log_portfolio_change`, so the log was always empty.
+The retired view was rebuilt, on the position history instead, in
+[#262](https://github.com/qwertytam/deltadewa/issues/262): see "Book changes
+(#262)" below.
 
 ### Deferred, with an issue
 
@@ -844,7 +849,9 @@ It is a **candidate panel**, not dead code, and is annotated as such.
 **Four sweep candidates were false positives** and are deliberately untouched.
 Recorded so a later pass does not "finish the job" wrongly:
 `formatters.format_currency_for_axis` (five live `visualization/` callers — it
-is passed bare to `FuncFormatter`, so call-syntax searches miss it),
+is passed bare to `FuncFormatter`, so call-syntax searches miss it; **those
+callers were the matplotlib half, retired in #312, so this is now a
+test-only orphan and is annotated as such**),
 `volatility.get_volatility_stats` (live via `build_volatility_profile`),
 `crash_payoff.default_crash_shock` (live internal call), and
 `ProgramState.update_position` / `set_volatility` — where the retired-layer
@@ -1104,3 +1111,224 @@ beyond "payoff >= target, cost <= budget"); a tenor-ladder template (the
 handbook's "1/3 every quarter" is a process, the roll planner's job); merging the
 sizing workbench into the composer (a one-rung ladder *is* a sized candidate: the
 natural end state, a separate change because it retires a panel).
+
+## The matplotlib half of `visualization/` — retired (#312)
+
+#279 deliberately left the older, matplotlib generation of the chart builders
+standing to keep its own PR reviewable. #312 retired it, staged the way #279
+was: unhook first, so the gate was green before anything was deleted.
+
+**Removed:** `base.py` (`OptionCharts`), its five mixins (`crash_charts`,
+`greeks_charts`, `pnl_charts`, `scenarios`, `theta_charts`), `convenience.py`
+and `_protocols.py` — 8 modules — with the 7 test files that exercised only
+them (**51 tests**: 11 + 14 + 5 + 9 + 6 + 2 + 4; the suite went 2774 → 2723
+and no surviving test was edited). `visualization/` is now `__init__.py` and
+three Plotly modules.
+
+**Why it was safe.** Two read-only audits ran before any deletion. A seam map
+found **zero import edges in either direction** between the halves: the three
+`*_plotly` modules import nothing from the matplotlib set, the set imports
+nothing from them, and `__init__.py` has no code and re-exports nothing. So
+`base.py`, `convenience.py` and `_protocols.py`, the suspected straddlers,
+did not straddle. An import-path-qualified consumer trace found no production
+or test importer outside `visualization/` and `tests/test_visualization/`.
+`scenarios.py` and the `_protocols.py` family collide by bare name with live
+modules in `analysis/`, `marketdata/` and `portfolio/`; those were discarded
+as same-name hits, the collision #279's method exists to catch.
+
+**What the import audit missed, and the second one found.** The consumer
+trace grepped for `matplotlib` *imports*. pandas, however, imports
+matplotlib lazily inside `Styler.background_gradient`, so five functions in
+`formatters/dataframes.py` (`apply_gradient_style` and the portfolio, Greeks,
+scenario and pivot-table formatters built on it) depended on it without ever
+naming it. A probe with matplotlib blocked confirmed they raise
+`ImportError`. They had no product caller and no test named them, and since
+matplotlib was `dev`-only they could never have run in the production image,
+so they were retired with the half: the same "Styler colourings for
+`ipywidgets`" class #279 removed from this module. Without that,
+`matplotlib` could not have left `poetry.lock`.
+
+**Symbols that lost their last caller.** Disposed of on #279's reasoning.
+*Deleted* (zero callers anywhere, tests included): the three
+`get_*_axis_formatter` factories and `FUNC_FORMATTER` /
+`MATPLOTLIB_AVAILABLE` in `formatters/values.py`, the module's only
+production-path matplotlib import. *Kept and annotated at the function*
+(tested, and nothing in them depends on matplotlib):
+`format_currency_for_axis`, `format_percentage_for_axis` and
+`format_spot_with_pct`. Candidates for a later sweep, **not** taken here:
+`colours.Palette` fields `positive`, `axis`, `orange_faded`, `yellow`,
+`white` and `black` are now unused outside the retired charts (data, not
+logic, so harmless), and `formatters/dataframes.py`'s remaining helpers
+(`prepare_dataframe_display`, `apply_format_dict`, `highlight_*`,
+`to_excel_styled`) still have no product caller, as they did before.
+
+**Recorded, not acted on** (#448). With `pnl_charts.py` gone, **nothing reads
+`OptionPortfolio.monte_carlo_results` back**; `reporting/audit.py` only marks
+it stale. `run_monte_carlo_simulation`'s `persist_cache` contract, and the
+`/design` panel's `persist_cache=False` containment, therefore protect a cache
+with no reader. Removing it changes the engine's behaviour, which this
+deletion is not allowed to do, so it is left as a decision for its own issue.
+
+**Dependencies.** `matplotlib`, `pillow` and their transitives (`contourpy`,
+`cycler`, `fonttools`, `kiwisolver`, `pyparsing`) left `poetry.lock`: 78 → 71
+packages, nothing added, no other version moved. Verified with the packages
+actually uninstalled (`poetry install --sync`), not just unreferenced. **The
+production image is unchanged**: both packages were in the `dev` group and the
+Dockerfile installs `--only main`, contrary to the premise of #312's
+acceptance criterion and of this file's earlier note. The saving is to the
+dev/CI environment, about 57 MB installed (matplotlib 28, fonttools 14,
+pillow 12, contourpy 1, pyparsing 1).
+
+## The position history (8e.1)
+
+Issue #313 (absorbing #70): digest §4 rendered `PENDING` since M2.6 because
+nothing recorded what the hedge actually cost. The handbook now specifies the
+method ([Realized Carry Methodology](https://qwertytam.github.io/deltadewa-handbook/part-7/realized-carry-methodology/)):
+`V0 + P - R - V1`, gross against the carry budget, net of monetization, with
+fills recorded as events (a roll is two) and boundary marks computed once and
+shared by the two periods that meet at them.
+
+**What existed was not enough, and why a third store.**
+- `program_state.json` is overwritten in place, and `remove_position` dropped a
+  leg with no proceeds.
+- `session_changelog` was always empty: no mutator ever called
+  `log_portfolio_change`.
+- `WeeklySnapshot.cumulative_carry_cost` is theta integrated over time, the
+  handbook's *forward* measure, not realized carry.
+- The offsite backup is nightly encrypted copies of those, so it cannot
+  recover what they never recorded.
+
+The new layer holds exactly the two things that existed nowhere: **fills**
+(P, R) and **marks** (V0, V1).
+
+**Where, and what bounds it.** `exports/history/events.jsonl` and
+`marks.jsonl` are inside the bind-mounted, nightly-backed-up `exports/`, with no
+backup-script change. Events are written only when a person changes the book;
+marks are at most one per program date, taken weekly. That comes to roughly
+200 KB a year, and it is **never pruned**, because pruning would break
+quarters-sum-to-the-year and reconciliation.
+
+**Decisions, so they are not re-litigated.**
+- **Unknown is not zero.** An uncaptured fee or price is `None`. The figure is
+  still computed from what was recorded, and the gap is a named *break* that
+  makes the period not reconcilable.
+- **Edits without a fill are recorded, not forbidden.** `update_position`
+  (contract or quantity), `remove_position`, `clear_positions` and
+  `import_portfolio` write a `BookEdit`, so `/design`'s correction workflow
+  keeps working and the period says it cannot tie to a statement.
+- **The history starts at an opening mark.** Legs held before it enter at V0,
+  never as synthetic opens from `entry_premium` (that would charge years of
+  premium to week one). Every surface says "No position history before
+  <date>". One mark reads "not yet measurable", never 0.
+- **Periods are spans between marks.** A quarter uses the nearest marks and
+  states their dates; there is no interpolation.
+- **One basis at both ends.** Only `MODEL` exists today (the analytic engine at
+  the hand-entered IVs). A future mid-market basis would be a new enum value,
+  and mixed-basis periods are refused.
+- **After-hedge return uses net carry.** Monetization proceeds are cash the
+  hedged portfolio received. Before-hedge return is a price return, ex-dividends
+  (the program records a yield assumption, not dividends received). Both are
+  unavailable, with the reason stated, when the underlying holding changed
+  between the marks.
+- **Mutate, then journal, then save.** Journaling first would record edits that
+  validation then refused. A failed append reverts to the last save when the
+  file on disk provably is that save.
+- **No new IPS keys.** With one legal basis, a basis key would have nothing to
+  choose. Spot age at each mark is carried as a fact, not graded here.
+
+**Surfaces.**
+- Digest §4: realized carry since inception (gross and net), the latest
+  period, before/after-hedge return, and breaks (five listed, the rest
+  counted). The theta rows are relabelled "theta … (model)" whenever realized
+  rows sit beside them.
+- `python -m deltadewa.history_cli init|mark|status`.
+- `/design`'s Book changes panel (#262, below). Not on `/monitor`.
+
+**Not built (follow-ons to #313).**
+- `/design` close/settle/roll forms with fees and reason. Until then, closing
+  a leg in the UI is a `DELETE` edit, honestly unreconcilable. (#446)
+- An unsettled-expiry prompt. (#446)
+- Program cost since inception on `/monitor`. (#447)
+- The hedge-success gauge. (#447)
+
+**Failure isolation, as audited.** A blast-radius audit of the history code
+(a read-only agent over every surface it touches) found three real defects,
+fixed before merge, and four gaps left as follow-ons.
+
+*Fixed:*
+- **A non-UTF-8 or unreadable history file escaped as exit 3.** The store's
+  read raised `UnicodeDecodeError` / `OSError`, which the digest's
+  `HistoryCorruptError` handler did not catch, so a section-four problem
+  replaced the whole week's digest with a failure alert and skipped the
+  heartbeat. Every read failure now raises `HistoryCorruptError`, and the
+  digest's §4 builder is guarded broadly, the way `_take_weekly_mark` already
+  was.
+- **The revert after a failed journal write could skip the `dirty` flag.**
+  `_revert_unjournaled_change` runs inside an `except`; if its own reload
+  raised, `dirty` was never set, so `/health` read "no unsaved changes" over
+  a book holding an unjournaled change, and the original error was masked.
+  It now never raises: a failed revert falls through to keep-and-flag.
+- **A multi-record change was journaled one record at a time.** A failure
+  after the first record of a roll, or of clearing the book, left the
+  history holding half of a change that was then reverted. `append_events`
+  validates the whole set and writes it in one call.
+
+*Left as follow-ons:*
+- **`/health` has no history check** (#445), so a corrupt `events.jsonl` leaves every
+  health check green. `state.history is not None` would always pass; a real
+  check needs to confirm the directory is writable, that `history_start`
+  exists, and that the latest mark is recent.
+- **The digest heartbeat cannot see history health.** An unreadable history
+  gives an UNREADABLE §4 on an otherwise good digest; it sends and pings
+  green. §4 is the only signal, and the headline does not carry it.
+- **With an empty book the digest refuses before sending**, so a mark failure
+  that week is only logged.
+- **Nothing exercises the trade methods in production** (#446). `open_position`,
+  `close_position`, `settle_position` and `roll_position` have no caller
+  outside tests (the first follow-on above).
+
+## Book changes (#262)
+
+Issue #262 asked for a view of `ProgramState`'s change log, on the premise
+that the data was recorded and only its display was lost. It was not: the
+`PortfolioLogger` `ProgramState` builds had no writer (no mutator called
+`log_portfolio_change`) and reset at every restart, so every export's
+`session_changelog` was empty. The durable record of every change to the book
+is the position history (#313), so the panel reads that and **builds no store
+of its own**: `analysis/book_changes.py` turns `events.jsonl` into rows,
+`planning/book_changes.py` lays them out.
+
+**Where.** A `/design` PLANNING panel beside provenance and liquidity, the
+other book-hygiene panels. It refreshes on `book.BOOK_VERSION_STORE`, which
+every BOOK mutation bumps. Read-only: no control, no BOOK write.
+
+**Decisions.**
+- **Scope is a window, with the total always stated.** The notebook version
+  was per-session; this is a long-lived program. The most recent 25 are
+  listed (a display constant in the panel, not policy) and the headline says
+  "N changes recorded; showing the latest 25". The full record is the
+  history file and `history_cli status`.
+- **The two forms the issue asked about are one list.** The working log is
+  the table; "since I last looked" is the headline's count of changes
+  recorded after the latest boundary mark, with an "After last mark" column.
+- **Nothing is hidden.** A superseded fill stays in the list, dimmed and
+  labelled, beside its correction.
+- **Unknown is said.** A trade entered without fees shows "fees not captured"
+  and cash "not captured", never `$0.00`. An edit shows "—" for cash: no cash
+  moved, so none was recorded.
+- **It reports lots the history cannot explain**, using the existing
+  `reconcile_book`, and says plainly when every lot is explained. A change
+  that reached the book without going through `ProgramState` shows up here.
+- **A broken history degrades this panel only.** A corrupt file is reported
+  with its line number and "nothing was skipped or repaired"; any other raise
+  is contained by `panel_guard`.
+
+**Not done.** `/monitor`: digest §4 already tells the IC reader when a period
+cannot be reconciled, and a second surface would need its own pin. The dead
+`PortfolioLogger` and the always-empty `session_changelog` key in every
+export are still there. Removing them changes the export format, a separate
+decision from this panel.
+
+**A convention worth knowing.** Negative money renders `$-50,006.50`, sign
+after the dollar sign. That is the app-wide convention (`fmt.currency`,
+pinned by `test_formatters.py`), not a bug in this panel.

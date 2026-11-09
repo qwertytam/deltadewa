@@ -102,21 +102,17 @@ dev = [
 	# ipyfilechooser, seaborn, and the mistune/bleach/tornado/pip pins that
 	# existed only to hold that stack's transitives to patched versions.
 	#
-	# matplotlib STAYS: it is imported at module scope by ten
-	# deltadewa/visualization/ submodules and by formatters/values.py, and
-	# tests/test_visualization/ exercises them. It is `dev` rather than main
-	# because visualization/__init__.py carries no re-exports and the app
-	# imports only the *_plotly submodules, so matplotlib is never on the
-	# production import path (Dockerfile installs --only main).
-	"matplotlib>=3.7.0",
-	# Kept for transitive-pin hygiene, but NOT Jupyter residue — both are
-	# required by packages that survive: pillow by matplotlib, pygments by
-	# pytest (a main dependency).
+	# matplotlib and pillow are gone (#312). matplotlib was imported at
+	# module scope by the eight modules of the retired matplotlib half of
+	# deltadewa/visualization/, and pandas' Styler.background_gradient
+	# imports it lazily (the formatters/dataframes.py functions that called
+	# it went in the same change). pillow was never imported directly; its
+	# only dependent was matplotlib, and with it went contourpy, cycler,
+	# fonttools, kiwisolver and pyparsing. Neither was ever in the
+	# production image (the Dockerfile installs --only main).
 	#
-	# pillow is floored at 13.0: every open Pillow advisory is fixed only
-	# in 13.0.0, and the old <13.0 cap left Dependabot no in-range fix.
-	# Nothing imports PIL directly; matplotlib needs only pillow>=9.
-	"pillow (>=13.0,<14.0)",
+	# pygments is kept for transitive-pin hygiene, not as Jupyter residue:
+	# pytest, a main dependency, requires it.
 	"pygments (>=2.20,<3.0)",
 ]
 # Test-only: the Playwright browser driver behind tests/test_app's Dash

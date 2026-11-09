@@ -1,14 +1,19 @@
 """DataFrame Styling and Formatting Utilities for Options Dashboard.
 
-This module provides consistent styling and formatting functions for DataFrames:
+This module provides styling and formatting functions for DataFrames:
 - Core display preparation and styling helpers
-- High-level formatters for portfolio, Greeks, and scenario analysis
-- Pivot table formatting
+- A risk-metrics formatter
 - Conditional formatting (negative values, max/min highlighting)
 - Export and display utilities
 
 ``create_diverging_style`` and ``apply_table_preset`` were retired with the
 Jupyter layer in #279 — both were reached only from that layer.
+``apply_gradient_style``, ``format_portfolio_dataframe``,
+``format_greeks_dataframe``, ``format_scenario_dataframe`` and
+``format_pivot_table`` followed in #312: each coloured a Styler with
+``background_gradient``, which imports matplotlib when called. None had a
+product caller or a test, and matplotlib is a dev-only dependency that was
+never in the production image, so they could not have run there.
 
 All functions work with pandas DataFrames and Styler objects.
 """
@@ -20,7 +25,6 @@ from collections.abc import Callable, Hashable, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
-    Literal,
     cast,
 )
 
@@ -95,41 +99,6 @@ def prepare_dataframe_display(
     return df_display
 
 
-def apply_gradient_style(
-    styler: Styler,
-    columns: str | list[str],
-    cmap: str = "RdYlGn",
-    vmin: float | None = None,
-    vmax: float | None = None,
-    axis: Literal["index", "columns", 0, 1] | None = None,
-) -> Styler:
-    """Apply color gradient to specified columns.
-
-    Args:
-        styler: Pandas Styler object
-        columns: Column name(s) to apply gradient to
-        cmap: Colormap name (default: 'RdYlGn' for red-yellow-green)
-        vmin: Minimum value for color scale
-        vmax: Maximum value for color scale
-        axis: Axis along which to apply gradient (one of 'index', 'columns', 0,
-        1, or None)
-
-    Returns:
-        Styler with gradient applied
-
-    """
-    if isinstance(columns, str):
-        columns = [columns]
-
-    return styler.background_gradient(
-        subset=cast("list[Hashable]", columns),
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-        axis=axis,
-    )
-
-
 def apply_format_dict(
     styler: Styler,
     format_dict: Mapping[Any, str | Callable[[object], str]] | None,
@@ -157,118 +126,6 @@ def apply_format_dict(
 # ============================================================================
 # High-Level Formatting Functions
 # ============================================================================
-
-
-def format_portfolio_dataframe(
-    df: pd.DataFrame,
-    gradient_column: str = "position_value",
-    start_index: int = 1,
-    title_case: bool = True,
-    cmap: str = "RdYlGn",
-    include_greeks: bool = True,
-    sort_by: list[str] | None = None,
-) -> Styler:
-    """Format portfolio positions DataFrame with standard styling.
-
-    Args:
-        df: Portfolio DataFrame (from portfolio.to_dataframe())
-        gradient_column: Column to apply color gradient to
-        start_index: Starting index number
-        title_case: Convert column names to title case
-        cmap: Colormap for gradient
-        include_greeks: Include Greek columns in formatting
-        sort_by: Optional list of columns to sort by
-
-    Returns:
-        Styled DataFrame ready for display
-
-    """
-    # Prepare display DataFrame
-    df_display = prepare_dataframe_display(
-        df=df,
-        title_case=title_case,
-        start_index=start_index,
-        sort_by=sort_by,
-    )
-
-    # Define format dictionary
-    fmt = {
-        "Strike" if title_case else "strike": "{:,.2f}",
-        "Quantity" if title_case else "quantity": "{:.0f}",
-        "Price" if title_case else "price": "${:,.2f}",
-        "Position Value" if title_case else "position_value": "${:,.2f}",
-    }
-
-    if include_greeks:
-        greek_fmt = {
-            "Delta" if title_case else "delta": "{:,.4f}",
-            "Position Delta" if title_case else "position_delta": "{:,.2f}",
-            "Gamma" if title_case else "gamma": "{:,.6f}",
-            "Position Gamma" if title_case else "position_gamma": "{:,.4f}",
-            "Vega" if title_case else "vega": "{:,.4f}",
-            "Position Vega" if title_case else "position_vega": "{:,.2f}",
-            "Theta" if title_case else "theta": "{:,.4f}",
-            "Position Theta" if title_case else "position_theta": "{:,.2f}",
-            "Rho" if title_case else "rho": "{:,.4f}",
-            "Position Rho" if title_case else "position_rho": "{:,.2f}",
-        }
-        fmt.update(greek_fmt)
-
-    # Create styled DataFrame (use apply_format_dict to satisfy typing)
-    styled = apply_format_dict(df_display.style, fmt)
-
-    # Apply gradient if column exists
-    gradient_col_display = (
-        gradient_column.replace("_", " ").title()
-        if title_case
-        else gradient_column
-    )
-    if gradient_col_display in df_display.columns:
-        styled = apply_gradient_style(styled, gradient_col_display, cmap=cmap)
-
-    return styled
-
-
-def format_greeks_dataframe(
-    df: pd.DataFrame,
-    metric: str = "delta",
-    title_case: bool = True,
-    cmap: str = "RdBu_r",
-    precision: int = 4,
-    sort_by: list[str] | None = None,
-) -> Styler:
-    """Format Greeks analysis DataFrame (e.g., delta by strike/maturity).
-
-    Args:
-        df: Greeks DataFrame
-        metric: Which Greek is being displayed (affects color scheme)
-        title_case: Convert column names to title case
-        cmap: Colormap for gradient
-        precision: Decimal precision for display
-        sort_by: Optional list of columns to sort by
-
-    Returns:
-        Styled DataFrame
-
-    """
-    df_display = prepare_dataframe_display(
-        df,
-        title_case,
-        sort_by=sort_by,
-        start_index=None,
-    )
-
-    # Determine format based on metric
-    if metric.lower() in ["delta", "gamma", "vega", "theta", "rho"]:
-        fmt_str = f"{{:,.{precision}f}}"
-    else:
-        fmt_str = "{:,.2f}"
-
-    # Apply styling
-    styled = df_display.style.background_gradient(cmap=cmap, axis=None)
-    styled = styled.format(fmt_str, na_rep="-")
-
-    return styled
 
 
 def format_risk_metrics_dataframe(
@@ -314,118 +171,6 @@ def format_risk_metrics_dataframe(
                 fmt[col_display] = "{:.2%}"
 
     styled = apply_format_dict(df_display.style, fmt)
-    return styled
-
-
-def format_scenario_dataframe(
-    df: pd.DataFrame,
-    metric_column: str = "portfolio_value",
-    title_case: bool = True,
-    cmap: str = "RdYlGn",
-    sort_by: list[str] | None = None,
-) -> Styler:
-    """Format scenario analysis DataFrame with color gradients.
-
-    Args:
-        df: Scenario analysis DataFrame
-        metric_column: Column to highlight with gradient
-        title_case: Convert column names to title case
-        cmap: Colormap for gradient
-        sort_by: Optional list of columns to sort by
-
-    Returns:
-        Styled DataFrame
-
-    """
-    df_display = prepare_dataframe_display(
-        df,
-        title_case,
-        sort_by=sort_by,
-        start_index=1,
-    )
-
-    # Format dictionary
-    fmt = {
-        "Spot Price" if title_case else "spot_price": "${:,.2f}",
-        "Volatility" if title_case else "volatility": "{:.2%}",
-        "Portfolio Value" if title_case else "portfolio_value": "${:,.2f}",
-        "Portfolio Pnl" if title_case else "portfolio_pnl": "${:,.2f}",
-        "Net Delta" if title_case else "net_delta": "{:,.2f}",
-        "Total Gamma" if title_case else "total_gamma": "{:,.4f}",
-        "Total Vega" if title_case else "total_vega": "{:,.2f}",
-    }
-
-    # Use typed helper to apply format mappings to avoid mypy typing issues
-    styled = apply_format_dict(df_display.style, fmt)
-
-    # Apply gradient to metric column
-    metric_col_display = (
-        metric_column.replace("_", " ").title() if title_case else metric_column
-    )
-    if metric_col_display in df_display.columns:
-        styled = apply_gradient_style(styled, metric_col_display, cmap=cmap)
-
-    return styled
-
-
-# ============================================================================
-# Pivot Table Formatting
-# ============================================================================
-
-
-def format_pivot_table(
-    pivot: pd.DataFrame,
-    format_str: str = "{:,.2f}",
-    cmap: str = "RdYlGn",
-    _highlight_zeros: bool = True,
-) -> Styler:
-    """Format pivot table with consistent styling.
-
-    Args:
-        pivot: Pivot table DataFrame
-        format_str: Format string for cell values
-        cmap: Colormap for background gradient
-        _highlight_zeros: Reserved; zero-highlighting not yet implemented.
-
-    Returns:
-        Styled pivot table
-
-    """
-    styled = pivot.style.background_gradient(cmap=cmap, axis=None)
-    styled = styled.format(format_str, na_rep="-")
-
-    # Add borders for better readability (use set_table_styles to avoid typing
-    # issues)
-    styled = styled.set_table_styles(
-        [
-            {
-                "selector": "td",
-                "props": [
-                    ("border", "1px solid #ddd"),
-                    ("padding", "5px"),
-                    ("text-align", "center"),
-                ],
-            },
-        ],
-        overwrite=False,
-    )
-
-    # Style the headers
-    styled = styled.set_table_styles(
-        [
-            {
-                "selector": "th",
-                "props": [
-                    ("background-color", DEFAULT_PALETTE.very_light_grey),
-                    ("font-weight", "bold"),
-                    ("text-align", "center"),
-                    ("border", "1px solid #ddd"),
-                ],
-            },
-            {"selector": "td", "props": [("text-align", "right")]},
-        ],
-    )
-
     return styled
 
 
@@ -496,11 +241,6 @@ def highlight_max_min(
         ],
         subset=[column],
     )
-
-
-# ============================================================================
-# Table Styling Presets
-# ============================================================================
 
 
 # ============================================================================
@@ -575,13 +315,8 @@ def display_dataframe_summary(df: pd.DataFrame, max_rows: int = 10) -> None:
 
 __all__ = [
     "apply_format_dict",
-    "apply_gradient_style",
     "display_dataframe_summary",
-    "format_greeks_dataframe",
-    "format_pivot_table",
-    "format_portfolio_dataframe",
     "format_risk_metrics_dataframe",
-    "format_scenario_dataframe",
     "highlight_max_min",
     "highlight_negative_values",
     "prepare_dataframe_display",

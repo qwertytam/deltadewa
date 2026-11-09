@@ -1831,7 +1831,7 @@ Two findings were recorded rather than acted on, both now in
   `part-x-coverage.md`. The same work turned up **#384**: the neighbouring
   strike-drift trigger implements a *retired* handbook rule (a 45% OTM level)
   as a 40 pp change since entry, and cannot fire for this program.
-- **A second orphan set**: the matplotlib half of `deltadewa/visualization/` —
+- ~~**A second orphan set**~~ **(retired in #312, below)**: the matplotlib half of `deltadewa/visualization/` —
   `base.py` (`OptionCharts`) and its five mixins, plus `convenience.py` and
   `_protocols.py`. 8 modules, ~2,760 lines, 51 tests, no importer outside
   `visualization/` and its own tests. Retiring it is what would let
@@ -2474,15 +2474,22 @@ Opened during Phase 4 and deliberately not taken there:
   backtesting).** The blocker behind **#12** above; the free CBOE/FRED
   provider returns index-level series only. Everything data-blocked in this
   plan is waiting on this one issue.
-- **#70 — track hedge historical P&L.** The position-history layer. Also the
+- ~~**#70 — track hedge historical P&L.** The position-history layer. Also the
   blocker behind the **hedge-success gauge**, which M2.4 (finding M2)
   deliberately omitted and M4.1's gauge audit re-confirmed as omitted: it
   cannot compute a real value without this. The one Jupyter-era gauge with no
-  Dash home for a reason.
-- **#262 — surface the session change log in the Dash app.** From M4.4's
-  parity pass: `ProgramState` still *records* the change log
-  (`state.py:82`); only the notebook's *display* of it went. The fifth of the
-  five parity items, and the only one M4.8 did not take.
+  Dash home for a reason.~~ **Closed as a duplicate of #313** (2026-11-09),
+  whose 8e.1 built the history layer: `exports/history/`, fills and
+  boundary marks, realized carry in digest §4. The hedge-success gauge is
+  #313's named follow-on. See `docs/part-x-coverage.md`, "The
+  position history (8e.1)".
+- ~~**#262 — surface the session change log in the Dash app.**~~ **Built.**
+  From M4.4's parity pass. The premise that `ProgramState` "still *records*
+  the change log" was wrong: it constructs a `PortfolioLogger`, but no
+  mutator ever called `log_portfolio_change`, so every export's
+  `session_changelog` was empty, and it reset at each process start anyway.
+  The panel instead renders the position history's `events.jsonl` (#313).
+  See `docs/part-x-coverage.md`, "Book changes (#262)".
 - **#264 — make the currency symbol configurable.** Raised out of #182 and
   explicitly not taken there: the hardcoded `$` is a design constraint rather
   than a defect, already centralized behind `formatters.values`, and for a
@@ -2494,8 +2501,8 @@ listed here — **both now done.** **#279** (Stage 4.4, above) retired
 `dashboard/` + `widgets/` as one batch, 21 modules with zero product
 consumers; the second orphan set it found along the way — the matplotlib
 half of `visualization/` (8 modules, ~2,760 lines, 51 tests) — was
-deliberately kept out of #279 to keep that PR reviewable and is **still
-open, tracked as #312** — filed for exactly this, and the wording here
+deliberately kept out of #279 to keep that PR reviewable and was
+**tracked as #312, since retired** — filed for exactly this, and the wording here
 was corrected on 2026-09-01 after a review found this doc claiming no
 issue existed for it when one already did. **#246** (PRs #289–#291) moved
 the handbook to its own public repo —
@@ -2548,8 +2555,9 @@ a future audit should not treat a closed index as coverage.
 | #182    | M4.5 (PR #265)                         | #274    | M4.7 (PR #278)                               |
 | #185    | M4.6 (PR #268); items 4/7 → issue only | #279    | Stage 4.4 (DONE)                             |
 
-Deferred, not closed: **#156**, **#70**, **#262**, **#264** — all in the
-backlog section above. (**#279** and **#246**, both listed just above
+Deferred, not closed: **#156** and **#264** — both in the backlog section
+above (**#70** was closed as a duplicate of #313 in 8e.1, and **#262** was
+built on its history layer). (**#279** and **#246**, both listed just above
 this table as "tracked in their own issues," are now done — see the
 paragraph there.)
 

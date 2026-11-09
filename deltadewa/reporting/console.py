@@ -6,11 +6,11 @@ tables, status messages, and progress bars.
 IPython is a notebook-only dependency (not in the production/`jobs`
 image — see the M2.6 close-out) and is only needed by
 ``clear_and_print``, used from notebook widgets. The import is deferred
-into that method, guarded like ``formatters.values``' matplotlib import,
-so the rest of ``ConsoleReporter`` — and everything that transitively
-imports this module via ``deltadewa.reporting``'s package ``__init__``,
-including production code that only wants ``PortfolioLogger`` — stays
-importable without it.
+into that method, guarded the way ``formatters.dataframes`` guards its
+IPython import, so the rest of ``ConsoleReporter`` — and everything that
+transitively imports this module via ``deltadewa.reporting``'s package
+``__init__``, including production code that only wants
+``PortfolioLogger`` — stays importable without it.
 """
 
 from typing import Any

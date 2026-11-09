@@ -64,6 +64,11 @@ The package is layered. Put logic in the lower layers; keep the UI dumb.
   destructive ops/import). Not per-session — one hedge program, one instance.
 - `visualization/` — chart builders.
 - `persistence.py` — portfolio load/save (YAML/JSON). Round-trip new fields here.
+- Position history (#313) — `portfolio/history.py` (records: `Fill`,
+  `BookEdit`, `BookMark`; pure), `history_store.py` (append-only
+  `exports/history/*.jsonl`), `analysis/realized_carry.py` (the identity),
+  `history_cli.py` (`init`/`mark`/`status`). Every `ProgramState` mutator
+  journals to it; **a new mutator must too**.
 - `reporting/` — console/text output.
 
 Rule of thumb: if it has a number in it, it belongs in `analysis/` or `portfolio/`
@@ -257,14 +262,18 @@ Two follow-ups came out of it, both now resolved:
   `MoneynessDrift`/`drift_pct` — the underlying entry-vs-now %OTM reading —
   also stays, still feeding the "OTM entry / now" column and
   `gamma_theta_delay`'s nearer-the-money check.
-- **A second orphan set: the matplotlib half of `visualization/`.** `base.py`
-  (`OptionCharts`) and its five mixins (`crash_charts`, `greeks_charts`,
-  `pnl_charts`, `scenarios`, `theta_charts`), plus `convenience.py` and
-  `_protocols.py` — 8 modules, ~2,760 lines, 51 tests, **no importer outside
-  `visualization/` and its own tests**. The live chart modules are the three
-  `*_plotly` ones. Retiring this set is what would let `matplotlib` and
-  `pillow` go; it was deliberately kept out of #279 to keep that PR
-  reviewable.
+- ~~**A second orphan set: the matplotlib half of `visualization/`.**~~
+  **Retired in #312.** `base.py` (`OptionCharts`), its five mixins,
+  `convenience.py` and `_protocols.py` (8 modules, 51 tests) are gone, and
+  `matplotlib`, `pillow` and their five transitives left `poetry.lock`
+  (78 → 71 packages). `visualization/` is now the three `*_plotly`
+  modules, independent leaves with no re-exports. **Do not re-add a
+  matplotlib chart or a `Styler.background_gradient` call**: neither
+  dependency is installed any more, and pandas imports matplotlib lazily,
+  so a gradient colouring fails at call time rather than at import. The
+  production image was never affected: both packages were `dev`-group.
+  See `docs/part-x-coverage.md`, "The matplotlib half of `visualization/` —
+  retired (#312)".
 
 Still open: **#12 Liquidity Risk**'s full metric is genuinely data-blocked
 (needs per-strike bid/ask and open interest, which the free CBOE/FRED
@@ -507,6 +516,33 @@ entry-timing verdict still renders now that data quality reads `CACHED`
 `decision_matrix`/`entry_timing_tree` gate on `market_env.data_quality`
 directly, never on `combined_quality`, so this bug never reached them.
 
+**8e.1 has shipped** (#313, absorbing #70, closed as its duplicate): the
+position history, and digest §4 without `PENDING`. The handbook's
+[Realized Carry Methodology](https://qwertytam.github.io/deltadewa-handbook/part-7/realized-carry-methodology/)
+dictated the record shape. There are **fills** (OPEN/CLOSE/SETTLE, price and
+fees, a roll as two linked fills, CLOSE carrying a ROUTINE/MONETIZATION
+reason) and **boundary marks** (one per program date, weekly, taken by the
+digest job before it builds and isolated from it both ways). Nothing a period
+figure could be derived from is stored.
+
+The rules:
+- **Unknown is not zero.** An uncaptured fee is `None` and a named break.
+- **Edits without a fill are journaled as `BookEdit`, not forbidden.** That is
+  what `/design`'s delete and edit write until #313's trade forms (a follow-on).
+- **The history starts at an opening mark.** Legs already held enter at V0,
+  never as synthetic opens, and every surface says "No position history
+  before <date>".
+- **Mutate, then journal, then save.**
+
+The audit that motivated it also found that `ProgramState`'s change log was
+never written: no mutator called `log_portfolio_change`, which corrects #262's
+premise: **#262 is built** on the history (a `/design` Book changes panel,
+`analysis/book_changes.py`), not on that logger, which is still there and
+still empty. Follow-ons to #313: the `/design` close/settle/roll forms, an
+unsettled-expiry prompt, `/monitor` cost since inception, and the hedge-success
+gauge rebuilt on realized carry. See `docs/part-x-coverage.md`, "The position
+history (8e.1)", and RUNBOOK §5.1 (run `history_cli init` once).
+
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public
 [deltadewa-handbook](https://github.com/qwertytam/deltadewa-handbook) repo,
@@ -623,7 +659,8 @@ don't fix):
   refuses to propose a `utils`/`helpers` grab-bag for what doesn't cluster.
   Run before splitting a large module, retiring half a package, or
   extracting a layer not yet split out — e.g. #312 (the matplotlib half of
-  `visualization/`), #313 (a position-history layer). #308
+  `visualization/`, now retired: the halves had zero import edges, so the
+  answer was "nothing straddles"), #313 (a position-history layer). #308
   (`pages/design.py` → `pages/design/`) is the precedent: a per-panel
   seam, not the layout/callbacks one, because every id in the file is
   created by layout and referenced by a callback — see its close-out

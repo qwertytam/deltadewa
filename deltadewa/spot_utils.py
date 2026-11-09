@@ -6,7 +6,7 @@ the portfolio and analysis layers:
 
 - portfolio layer: data + computation (should not depend on analysis)
 - analysis layer: aggregation + interpretation (depends on portfolio)
-- visualization/widgets layer: presentation (depends on both)
+- app/visualization layer: presentation (depends on both)
 
 By extracting these pure utilities here, portfolio.risk can use them without
 depending on the analysis layer.
@@ -28,8 +28,8 @@ def generate_spot_range(
     """Generate a spot price range for analysis.
 
     This is the single source of truth for spot range generation across
-    the entire codebase. All consumers (portfolio/risk.py, visualization
-    pnl_charts.py, analysis/risk_reward.py) should use this function.
+    the entire codebase. All consumers (portfolio/risk.py,
+    analysis/risk_reward.py) should use this function.
 
     Args:
         spot_price: Current spot price of the underlying asset

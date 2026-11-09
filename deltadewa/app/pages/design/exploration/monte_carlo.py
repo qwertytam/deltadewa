@@ -88,10 +88,11 @@ def _render_mc_panel_logic(
 ) -> Component:
     """Run a scenario-local Monte Carlo simulation and render it.
 
-    Always passes ``persist_cache=False`` — this is a what-if panel, not
-    the shared book-level cache other readers (``visualization/
-    pnl_charts.py``, ``widgets/summary.py``) rely on (B0's containment,
-    F6). ``horizon_days``/``expected_return_pct``/``seed`` blank map to
+    Always passes ``persist_cache=False`` — this is a what-if panel, and
+    it must not overwrite the shared book-level cache
+    (``portfolio.monte_carlo_results``; B0's containment, F6). No reader of
+    that cache remains since #279 and #312, but the containment is kept.
+    ``horizon_days``/``expected_return_pct``/``seed`` blank map to
     the engine's own ``None`` defaults (nearest maturity, risk-neutral
     drift, true randomness), not to a fabricated zero.
     """
