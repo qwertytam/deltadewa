@@ -162,6 +162,9 @@ _CLASSIFICATION: Final[dict[str, BandKind]] = {
     "sizing.portfolio_beta": BandKind.NOT_A_BAND,
     "maturity_buckets.edges_days": BandKind.NOT_A_BAND,
     "market_environment.data_ttl_minutes": BandKind.NOT_A_BAND,
+    # The window the skew percentile is ranked over (#317) — it sets what
+    # the 30/70 band is applied *to*, but is not itself a threshold.
+    "market_environment.skew_lookback_days": BandKind.NOT_A_BAND,
 }
 
 #: IPS sections that define no thresholds at all — names, an exercise

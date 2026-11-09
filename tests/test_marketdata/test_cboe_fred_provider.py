@@ -280,6 +280,48 @@ class TestReadOnlyMode:
 
         assert percentile == pytest.approx(1.0, rel=1e-7)
 
+    def test_get_skew_percentile_refuses_a_truncated_window(
+        self,
+        tmp_path,
+    ) -> None:
+        """A series shorter than the window raises, never ranks short (#317).
+
+        The 10-row fixture would otherwise rank over all 10 sessions and
+        hand back a percentile labelled with an 11-session window it was
+        never computed over.
+        """
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(_SKEW_CSV)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        with pytest.raises(MarketDataError, match="fewer than the 11-session"):
+            provider.get_skew_percentile(lookback_days=11)
+
+    def test_get_skew_percentile_ranks_only_the_window(self, tmp_path) -> None:
+        """Only the trailing window is ranked — the window moves the answer.
+
+        Fixture closes are 120..129 ascending, so the latest (129) is the
+        maximum of any trailing window; a window of 10 vs 5 gives the same
+        1.0. Re-ranking against a descending tail proves the slice is the
+        trailing *lookback_days* rows and nothing earlier.
+        """
+        rows = [129.0 - i for i in range(10)]  # 129 .. 120, latest = 120
+        csv = (
+            "DATE,SKEW\n"
+            + "\n".join(
+                f"{(i % 12) + 1:02d}/01/2026,{value}"
+                for i, value in enumerate(rows)
+            )
+            + "\n"
+        )
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _mock_response(csv)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        # Latest is the window minimum: rank = 1 / window.
+        assert provider.get_skew_percentile(10).value == pytest.approx(0.1)
+        assert provider.get_skew_percentile(4).value == pytest.approx(0.25)
+
     def test_get_vix_history_returns_last_n_closes(self, tmp_path) -> None:
         """get_vix_history returns the last-N VIXCLS closes, oldest first."""
         session = MagicMock(spec=requests.Session)

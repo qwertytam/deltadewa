@@ -79,7 +79,7 @@ class GradedProvider(StaticProvider):
 
     def get_skew_percentile(
         self,
-        lookback_days: int = 252,
+        lookback_days: int,
     ) -> Observation[float]:
         """Return the fixed skew percentile at this provider's grade."""
         _ = lookback_days

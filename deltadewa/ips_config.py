@@ -167,6 +167,16 @@ DEFAULT_VOL_REGIME_HIGH: Final[float] = 0.35
 DEFAULT_SKEW_LOW_PCTILE: Final[float] = 30.0
 DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 70.0
 DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
+# The trailing window, in trading sessions, the SKEW index is ranked over
+# to produce the skew percentile (#317). The handbook ranks over a
+# trailing five years "by editorial convention" and permits any other
+# window "provided it states the window every time it quotes a percentile"
+# (part-3/volatility-skew/#the-lookback-window) — which is why every
+# surface quoting a skew percentile renders this window beside it.
+DEFAULT_SKEW_LOOKBACK_DAYS: Final[int] = 252
+# A percentile needs a distribution: fewer than two observations ranks the
+# current reading only against itself (always the 100th percentile).
+_MIN_SKEW_LOOKBACK_DAYS: Final[int] = 2
 
 # Defaults for the entry-timing VIX thresholds (M2.8). Seeded from the
 # values ``decision_matrix.entry_timing_tree`` used to hardcode as Python
@@ -266,6 +276,10 @@ class IpsMarketEnvironment:
         ``vix_very_high``/``vix_caution``/``vix_low`` are VIX levels (vol
         points, e.g. ``40.0``), the entry-timing tree's three stops (M2.8) —
         see :func:`~deltadewa.analysis.decision_matrix.entry_timing_tree`.
+        ``skew_lookback_days`` is the SKEW-percentile rank window in trading
+        sessions (``252`` ≈ one year, ``1260`` ≈ five) — the denominator of
+        the skew percentile the 30/70 band above is applied to, so it is
+        policy, not a provider detail (#317).
         ``spot_divergence_warn_pct`` is a percent (e.g. ``2.0`` for 2%): how
         far the observed market spot may diverge from the book's
         hand-entered spot before ``/monitor``'s cross-check flags it — see
@@ -283,6 +297,7 @@ class IpsMarketEnvironment:
     vix_caution: float = _DEFAULT_VIX_CAUTION
     vix_low: float = _DEFAULT_VIX_LOW
     spot_divergence_warn_pct: float = DEFAULT_SPOT_DIVERGENCE_WARN_PCT
+    skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS
 
 
 @dataclass(frozen=True)
@@ -983,6 +998,10 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         "spot_divergence_warn_pct",
         DEFAULT_SPOT_DIVERGENCE_WARN_PCT,
     )
+    skew_lookback_days = section.get(
+        "skew_lookback_days",
+        DEFAULT_SKEW_LOOKBACK_DAYS,
+    )
 
     if vol_low >= vol_high:
         raise IpsConfigError(
@@ -1014,6 +1033,17 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         spot_divergence_warn_pct,
         "market_environment.spot_divergence_warn_pct",
     )
+    # bool is an int subclass; a YAML `true` is not a window.
+    if (
+        isinstance(skew_lookback_days, bool)
+        or not isinstance(skew_lookback_days, int)
+        or skew_lookback_days < _MIN_SKEW_LOOKBACK_DAYS
+    ):
+        raise IpsConfigError(
+            "market_environment.skew_lookback_days must be an integer >= "
+            f"{_MIN_SKEW_LOOKBACK_DAYS} (trading sessions), got "
+            f"{skew_lookback_days!r}",
+        )
 
     return IpsMarketEnvironment(
         vol_regime_low=vol_low,
@@ -1026,6 +1056,7 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         vix_caution=vix_caution,
         vix_low=vix_low,
         spot_divergence_warn_pct=spot_divergence_warn_pct,
+        skew_lookback_days=skew_lookback_days,
     )
 
 

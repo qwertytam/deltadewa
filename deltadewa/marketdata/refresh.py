@@ -87,7 +87,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.heartbeat import ping
-from deltadewa.ips_config import IpsConfigError, load_ips_config
+from deltadewa.ips_config import (
+    DEFAULT_SKEW_LOOKBACK_DAYS,
+    IpsConfigError,
+    load_ips_config,
+)
 from deltadewa.marketdata import (
     CboeFredProvider,
     MarketDataError,
@@ -118,8 +122,17 @@ _EXIT_WRITE_UNREADABLE: Final[int] = 3
 def _series(
     provider: MarketDataProvider,
     symbol: str,
+    *,
+    skew_lookback_days: int,
 ) -> list[tuple[str, Callable[[], Observation[Any]]]]:
     """List the (name, fetch) pairs the app depends on, in fetch order.
+
+    ``skew_percentile`` is fetched at the IPS's own window
+    (*skew_lookback_days*, #317) — not to rank it (the cache holds the
+    whole series either way) but so a SKEW series shorter than the
+    window the app will rank it over fails *here*, logged by the job
+    whose output an operator reads, rather than only as an
+    ``UNAVAILABLE`` environment on the read-only app.
 
     Five of the six mirror exactly the calls ``assess_market_environment``
     makes (``vix``, ``vix_term_structure``, ``skew_index``,
@@ -155,7 +168,10 @@ def _series(
         ("vix_history", provider.get_vix_history),
         ("vix_term_structure", provider.get_vix_term_structure),
         ("skew_index", provider.get_skew_index),
-        ("skew_percentile", provider.get_skew_percentile),
+        (
+            "skew_percentile",
+            lambda: provider.get_skew_percentile(skew_lookback_days),
+        ),
         ("spot", lambda: provider.get_spot(symbol)),
     ]
 
@@ -163,6 +179,8 @@ def _series(
 def refresh_all(
     provider: MarketDataProvider,
     symbol: str,
+    *,
+    skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS,
 ) -> tuple[dict[str, datetime], int]:
     """Refresh every series the app depends on, independently.
 
@@ -179,6 +197,8 @@ def refresh_all(
     Args:
         provider: A live (``read_only=False``) provider to fetch through.
         symbol: Underlying symbol to warm the spot cache for.
+        skew_lookback_days: The IPS skew-percentile window; see
+            ``_series``.
 
     Returns:
         ``(live, total)`` — ``live`` maps each series name that fetched
@@ -186,7 +206,11 @@ def refresh_all(
         to disk; ``total`` is the total number of series attempted.
 
     """
-    series = _series(provider, symbol)
+    series = _series(
+        provider,
+        symbol,
+        skew_lookback_days=skew_lookback_days,
+    )
     live: dict[str, datetime] = {}
     for name, fetch in series:
         try:
@@ -218,6 +242,8 @@ def verify_read_back(
     cache_dir: Path,
     symbol: str,
     live: Mapping[str, datetime],
+    *,
+    skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS,
 ) -> tuple[str, ...]:
     """Confirm each just-refreshed series reads back through the app's own path.
 
@@ -245,6 +271,8 @@ def verify_read_back(
     Args:
         cache_dir: The resolved cache directory the writer just used.
         symbol: Underlying symbol, for the ``spot`` series.
+        skew_lookback_days: The IPS skew-percentile window; see
+            ``_series``.
         live: The series names and ``fetched_at`` timestamps
             ``refresh_all`` reported as freshly written.
 
@@ -257,7 +285,9 @@ def verify_read_back(
         return ()
 
     reader = CboeFredProvider(cache_dir=cache_dir, read_only=True)
-    fetch_by_name = dict(_series(reader, symbol))
+    fetch_by_name = dict(
+        _series(reader, symbol, skew_lookback_days=skew_lookback_days),
+    )
 
     verified: list[str] = []
     for name, recorded_fetched_at in live.items():
@@ -369,10 +399,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             force_fetch=True,
         )
 
-        live, total = refresh_all(provider, args.symbol)
+        skew_lookback_days = (
+            ips_config.market_environment.skew_lookback_days
+            if ips_config is not None
+            else DEFAULT_SKEW_LOOKBACK_DAYS
+        )
+        live, total = refresh_all(
+            provider,
+            args.symbol,
+            skew_lookback_days=skew_lookback_days,
+        )
         _logger.info("Fetched %d/%d series live", len(live), total)
 
-        verified = verify_read_back(cache_dir, args.symbol, live)
+        verified = verify_read_back(
+            cache_dir,
+            args.symbol,
+            live,
+            skew_lookback_days=skew_lookback_days,
+        )
         _logger.info(
             "Verified %d/%d fetched series read back through the app's "
             "own path",

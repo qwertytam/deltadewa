@@ -13,6 +13,7 @@ from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import (
     DEFAULT_DATA_TTL_MINUTES,
     DEFAULT_SKEW_HIGH_PCTILE,
+    DEFAULT_SKEW_LOOKBACK_DAYS,
     DEFAULT_SKEW_LOW_PCTILE,
     DEFAULT_SPOT_DIVERGENCE_WARN_PCT,
     DEFAULT_TERM_CONTANGO_TOLERANCE,
@@ -622,6 +623,7 @@ class TestMarketEnvironment:
         assert env.vix_caution == pytest.approx(25.0)
         assert env.vix_low == pytest.approx(15.0)
         assert env.spot_divergence_warn_pct == DEFAULT_SPOT_DIVERGENCE_WARN_PCT
+        assert env.skew_lookback_days == DEFAULT_SKEW_LOOKBACK_DAYS
 
     def test_example_ips_yaml_market_environment(self) -> None:
         """The tracked config/ips.example.yaml carries the policy bands."""
@@ -653,6 +655,7 @@ class TestMarketEnvironment:
                 "vix_caution": 22.0,
                 "vix_low": 13.0,
                 "spot_divergence_warn_pct": 3.5,
+                "skew_lookback_days": 504,
             },
         }
         env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
@@ -667,6 +670,7 @@ class TestMarketEnvironment:
         assert env.vix_caution == pytest.approx(22.0)
         assert env.vix_low == pytest.approx(13.0)
         assert env.spot_divergence_warn_pct == pytest.approx(3.5)
+        assert env.skew_lookback_days == 504
 
     def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
         """vol_regime_low >= vol_regime_high raises IpsConfigError."""
@@ -776,6 +780,25 @@ class TestMarketEnvironment:
             IpsConfigError,
             match="spot_divergence_warn_pct",
         ):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    @pytest.mark.parametrize("window", [0, 1, -252, 252.5, "1260", True])
+    def test_invalid_skew_lookback_days_raises(
+        self,
+        tmp_path: Path,
+        window: object,
+    ) -> None:
+        """The skew window must be an integer session count >= 2 (#317).
+
+        Fewer than two sessions ranks the reading only against itself; a
+        float or string is not a session count; YAML ``true`` is an int
+        subclass in Python and must not slip through as ``1``.
+        """
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {"skew_lookback_days": window},
+        }
+        with pytest.raises(IpsConfigError, match="skew_lookback_days"):
             load_ips_config(_write_yaml(tmp_path, config))
 
 

@@ -124,7 +124,7 @@ class TestStaticProviderProvenance:
             provider.get_vix_history(),
             provider.get_vix_term_structure(),
             provider.get_skew_index(),
-            provider.get_skew_percentile(),
+            provider.get_skew_percentile(252),
         ]
 
         assert all(obs.source is Source.STATIC for obs in observations)

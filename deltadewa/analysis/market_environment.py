@@ -143,6 +143,12 @@ class MarketEnvironment:
             ``series``' names), or ``None`` when ``data_quality`` is
             ``STATIC`` or ``UNAVAILABLE`` (neither has a meaningful
             "oldest" among synthetic/absent timestamps).
+        skew_lookback_days: The trading-session window ``skew_percentile``
+            was ranked over (``IpsMarketEnvironment.skew_lookback_days``,
+            #317), carried so every surface quoting the percentile can
+            state its window — the handbook's condition for any window
+            (see :func:`describe_lookback`). ``None`` when
+            ``data_quality`` is ``UNAVAILABLE``.
 
     """
 
@@ -163,12 +169,41 @@ class MarketEnvironment:
     series: tuple[SeriesProvenance, ...] = ()
     fetched_at: datetime | None = None
     oldest_series: str | None = None
+    skew_lookback_days: int | None = None
 
 
 _VIX_LABEL_LOW_PCT: Final[float] = 25.0
 _VIX_LABEL_HIGH_PCT: Final[float] = 75.0
 _VIX_TENOR_YEARS: Final[float] = 1 / 12
 _VIX3M_TENOR_YEARS: Final[float] = 3 / 12
+# A calendar convention (the count every 252-session "year" in this codebase
+# already assumes), not policy: it only turns a session count into words.
+_SESSIONS_PER_YEAR: Final[int] = 252
+
+
+def describe_lookback(sessions: int) -> str:
+    """Name a percentile rank window for a reader, e.g. ``"trailing 5y"``.
+
+    The handbook lets a program rank skew over any window "provided it
+    states the window every time it quotes a percentile"
+    (`The Lookback Window
+    <https://qwertytam.github.io/deltadewa-handbook/part-3/volatility-skew/#the-lookback-window>`_),
+    so every surface rendering ``MarketEnvironment.skew_percentile``
+    renders this beside it. Whole years read as years; anything else
+    reads as a session count rather than a rounded, misleading year.
+
+    Args:
+        sessions: The window in trading sessions.
+
+    Returns:
+        ``"trailing Ny"`` for a whole number of 252-session years,
+        otherwise ``"trailing N sessions"``.
+
+    """
+    years, remainder = divmod(sessions, _SESSIONS_PER_YEAR)
+    if remainder == 0 and years > 0:
+        return f"trailing {years}y"
+    return f"trailing {sessions} sessions"
 
 
 def _interpolate_percentile(value: float, low: float, high: float) -> float:
@@ -334,8 +369,6 @@ def _oldest_series_name(
 def assess_market_environment(
     provider: MarketDataProvider,
     env_policy: IpsMarketEnvironment | None = None,
-    *,
-    skew_lookback_days: int = 252,
 ) -> MarketEnvironment:
     """Assess current market conditions from a ``MarketDataProvider``.
 
@@ -352,15 +385,11 @@ def assess_market_environment(
             (``ips_config.market_environment``). ``None`` uses the
             ``IpsMarketEnvironment`` defaults (the ``DEFAULT_*`` single source).
             The skew percentile band is converted to the 0-1 fraction
-            ``get_skew_percentile`` returns once, here at the edge.
-        skew_lookback_days: Lookback window passed to
-            ``get_skew_percentile`` (default 252). No caller overrides
-            this, so 252 (one trading year) is the window every skew
-            percentile the program reports is actually computed against.
-            It is unsourced against the handbook's own five-year canon
-            (see ``MarketDataProvider.get_skew_percentile``, #317) — a
-            live contradiction, not yet resolved here because changing it
-            changes every skew percentile the program reports.
+            ``get_skew_percentile`` returns once, here at the edge. The
+            skew percentile is ranked over its ``skew_lookback_days``
+            (#317) — policy, read here and nowhere else, and recorded on
+            the returned snapshot so every surface can state the window
+            it quotes.
 
     Returns:
         A fully classified ``MarketEnvironment``, or a degraded one with
@@ -376,6 +405,7 @@ def assess_market_environment(
         policy.skew_high_pctile / 100.0,
     )
     term_tolerance = policy.term_contango_tolerance
+    skew_lookback_days = policy.skew_lookback_days
     try:
         vix_obs = provider.get_vix()
         term_obs = provider.get_vix_term_structure()
@@ -459,4 +489,5 @@ def assess_market_environment(
         series=series,
         fetched_at=provenance.fetched_at,
         oldest_series=oldest_series,
+        skew_lookback_days=skew_lookback_days,
     )
