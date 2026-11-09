@@ -72,6 +72,38 @@ than the app silently swapping its own book. That check is a single
 it deliberately does **not** take the lock, for the same reason
 ``portfolio`` doesn't: it must stay cheap enough for a liveness probe, and a
 stale read of it costs at most one late warning, never a torn book.
+
+Position history (#313)
+-----------------------
+Every change to the book is also journaled to ``exports/history/``
+(:mod:`deltadewa.history_store`), so realized carry can be measured. The
+mutator decides which record:
+
+* a trade method (``open_position``, ``close_position``,
+  ``settle_position``, ``roll_position``) writes a
+  :class:`~deltadewa.portfolio.history.Fill` with its price and fees;
+* ``add_position`` writes an ``OPEN`` fill at ``entry_premium`` with the
+  fees *not captured*. It is the existing entry form, and the form has no
+  fee field;
+* ``update_position`` (when it changes a lot's contract or quantity),
+  ``remove_position``, ``clear_positions`` and ``import_portfolio``
+  change the book without a fill, so they write a
+  :class:`~deltadewa.portfolio.history.BookEdit`. Any period containing
+  one reports itself as not reconcilable, naming the edit.
+
+Market-input setters (spot, volatility, rates) write nothing: they move
+the marks, not the book.
+
+The order is **mutate, then journal, then save**, under the same lock.
+Journaling first would record an edit that never happened every time the
+mutation's own validation refused it, and that is the common failure: a
+mistyped strike or an expired maturity. So the history is read once
+before mutating, which fails fast on a corrupt file. If the append itself
+then fails, the in-memory book is reverted to its last save, but only
+when the file on disk is provably that save (same mtime, nothing
+unsaved). Otherwise the change is left unsaved and marked dirty, and
+``analysis.realized_carry.reconcile_book`` will name the lot the history
+does not explain. Either way, the error is raised.
 """
 
 from __future__ import annotations
@@ -79,21 +111,35 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from deltadewa import create_empty_portfolio
-from deltadewa.clock import program_trading_date
+from deltadewa.clock import program_now, program_trading_date
 from deltadewa.constants import OptionType
+from deltadewa.history_store import HISTORY_DIRNAME, HistoryStore
 from deltadewa.ips_config import IpsConfigError, load_ips_config
 from deltadewa.persistence import PortfolioSerializer
+from deltadewa.portfolio.history import (
+    BookEdit,
+    CloseReason,
+    ContractTerms,
+    EditKind,
+    Fill,
+    FillKind,
+    new_event_id,
+)
 from deltadewa.reporting import PortfolioLogger
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from zoneinfo import ZoneInfo
+
     from deltadewa.constants import ExerciseStyle
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.history import OpenOrder
     from deltadewa.portfolio.position import OptionPosition
 
 STATE_FILENAME: Final = "program_state.json"
@@ -154,8 +200,15 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         written_by: str | None = None,
         loaded_at: str | None = None,
         loaded_mtime: float | None = None,
+        history: HistoryStore | None = None,
     ) -> None:
-        """Wrap already-resolved state; prefer :meth:`load`."""
+        """Wrap already-resolved state; prefer :meth:`load`.
+
+        ``history`` is ``None`` only for a state constructed directly,
+        e.g. in a test; :meth:`load` always attaches one. Without it,
+        nothing is journaled.
+        """
+        self._history = history
         self._portfolio = portfolio
         self._loaded_from = loaded_from
         self._ips_config = ips_config
@@ -188,6 +241,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         default_exercise_style: ExerciseStyle | None = None,
         writer_label: str = "app",
         examples_dir: Path | None = None,
+        history_dir: Path | None = None,
     ) -> ProgramState:
         """Load the shared program state from ``export_dir``.
 
@@ -216,6 +270,10 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             writer_label: Identifies this process in every export it
                 writes from here on (#355) — e.g. ``"app"`` for the live
                 worker, ``"import_portfolio_cli"`` for the importer.
+                Every history record this instance writes carries it too.
+            history_dir: Where the position history lives (#313).
+                Defaults to ``export_dir/history``, which is what puts
+                it inside the nightly offsite backup.
 
         Returns:
             A ready-to-use ``ProgramState``.
@@ -327,7 +385,17 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             written_by=written_by,
             loaded_at=loaded_at,
             loaded_mtime=loaded_mtime,
+            history=HistoryStore(
+                history_dir
+                if history_dir is not None
+                else export_dir / HISTORY_DIRNAME,
+            ),
         )
+
+    @property
+    def history(self) -> HistoryStore | None:
+        """The position-history store this state journals to (#313)."""
+        return self._history
 
     @property
     def portfolio(self) -> OptionPortfolio:
@@ -605,6 +673,150 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             self._dirty = True
             self.save_if_dirty()
 
+    # ── Position history (#313) ─────────────────────────────────────────
+
+    def _timezone(self) -> ZoneInfo | None:
+        if self._ips_config is None:
+            return None
+        return self._ips_config.program.timezone
+
+    def _program_date(self, instant: datetime | None = None) -> date:
+        """Return the program trading date, of *instant* or of now."""
+        if instant is not None and instant.tzinfo is None:
+            return instant.date()
+        return program_trading_date(self._timezone(), now=instant).date()
+
+    def _check_history_readable(self) -> None:
+        """Fail before mutating if the history cannot take a record."""
+        if self._history is not None:
+            self._history.load()
+
+    def _journal_and_save(self, records: Sequence[Fill | BookEdit]) -> None:
+        """Journal *records* for a mutation already applied, then save.
+
+        Called under the lock, after the in-memory book has changed. See
+        the module docstring's "Position history" for why the order is
+        mutate, journal, save, and what happens when the journal write
+        fails.
+        """
+        if self._history is not None:
+            try:
+                for record in records:
+                    if isinstance(record, Fill):
+                        self._history.append_fill(record)
+                    else:
+                        self._history.append_edit(record)
+            except Exception:
+                self._revert_unjournaled_change()
+                raise
+        self._mutate_and_save()
+
+    def _revert_unjournaled_change(self) -> None:
+        """Put the book back to its last save after a failed journal write.
+
+        Only when the state file on disk is exactly what this instance
+        last wrote or loaded, and nothing was unsaved before: then that
+        file *is* the book before the mutation, and reloading it undoes
+        the change cleanly. Otherwise reloading would lose something, so
+        the change is kept, marked unsaved, and left for
+        ``reconcile_book`` to report.
+        """
+        try:
+            on_disk = self._state_path.stat().st_mtime
+        except FileNotFoundError:
+            on_disk = None
+        if (
+            not self._dirty
+            and on_disk is not None
+            and on_disk == self._own_mtime
+        ):
+            result = self._serializer.import_from_json(
+                self._state_path,
+                default_exercise_style=self._default_exercise_style,
+                valuation_date=self._portfolio.valuation_date,
+            )
+            self._portfolio = result["portfolio"]
+            _logger.error(
+                "Position history write failed; the book was reverted to "
+                "its last save so the two still agree",
+            )
+            return
+        self._dirty = True
+        _logger.error(
+            "Position history write failed and the book could not be "
+            "reverted safely; the change is unsaved and the history does "
+            "not record it",
+        )
+
+    def _find_position(self, position_id: str) -> tuple[int, OptionPosition]:
+        for index, position in enumerate(self._portfolio.positions):
+            if position.position_id == position_id:
+                return index, position
+        raise KeyError(f"no position with id {position_id!r}")
+
+    def _edit(  # pylint: disable=too-many-arguments
+        self,
+        kind: EditKind,
+        *,
+        position_id: str | None,
+        before: tuple[ContractTerms, int] | None,
+        after: tuple[ContractTerms, int] | None,
+        detail: str,
+    ) -> BookEdit:
+        return BookEdit(
+            event_id=new_event_id(),
+            kind=kind,
+            effective_date=self._program_date(),
+            recorded_at=program_now(self._timezone()),
+            written_by=self._serializer.writer_label,
+            position_id=position_id,
+            before=before[0] if before else None,
+            after=after[0] if after else None,
+            quantity_before=before[1] if before else None,
+            quantity_after=after[1] if after else None,
+            detail=detail,
+        )
+
+    def _fill(  # pylint: disable=too-many-arguments
+        self,
+        kind: FillKind,
+        position: OptionPosition,
+        *,
+        quantity: int,
+        price_per_share: float | None,
+        fees: float | None,
+        trade_date: date,
+        reason: CloseReason | None = None,
+        roll_id: str | None = None,
+        note: str | None = None,
+    ) -> Fill:
+        return Fill(
+            event_id=new_event_id(),
+            kind=kind,
+            trade_date=trade_date,
+            recorded_at=program_now(self._timezone()),
+            written_by=self._serializer.writer_label,
+            position_id=position.position_id,
+            terms=ContractTerms.from_position(position),
+            quantity=quantity,
+            price_per_share=price_per_share,
+            fees=fees,
+            reason=reason,
+            roll_id=roll_id,
+            note=note,
+        )
+
+    @staticmethod
+    def _lot(position: OptionPosition) -> tuple[ContractTerms, int]:
+        return ContractTerms.from_position(position), int(position.quantity)
+
+    @staticmethod
+    def _describe_lot(lot: tuple[ContractTerms, int]) -> str:
+        terms, quantity = lot
+        return f"{quantity:+d} x {terms.describe()}"
+
+    # ── Mutators ────────────────────────────────────────────────────────
+
     def add_position(  # pylint: disable=too-many-arguments
         self,
         strike_price: float,
@@ -619,8 +831,15 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         entry_premium: float | None = None,
         structure_id: str | None = None,
     ) -> OptionPosition:
-        """Add a position. See ``OptionPortfolio.add_position``."""
+        """Add a position. See ``OptionPortfolio.add_position``.
+
+        Journaled as an ``OPEN`` fill at ``entry_premium``, dated
+        ``entry_date`` (or today), with fees *not captured*: this is the
+        existing entry form, which has no fee field. Use
+        :meth:`open_position` to record a trade with its fees.
+        """
         with self._lock:
+            self._check_history_readable()
             position = self._portfolio.add_position(
                 strike_price=strike_price,
                 maturity_date=maturity_date,
@@ -634,7 +853,19 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 entry_premium=entry_premium,
                 structure_id=structure_id,
             )
-            self._mutate_and_save()
+            self._journal_and_save(
+                [
+                    self._fill(
+                        FillKind.OPEN,
+                        position,
+                        quantity=int(quantity),
+                        price_per_share=entry_premium,
+                        fees=None,
+                        trade_date=self._program_date(entry_date),
+                        note="entered through add_position; fees not captured",
+                    ),
+                ],
+            )
             return position
 
     def update_position(  # pylint: disable=too-many-arguments
@@ -659,8 +890,16 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         concurrent ``remove_position`` that shifts the list still leaves
         this editing a different leg than the operator picked. That needs
         stable position IDs, not a lock.
+
+        A change to the lot's contract or quantity is journaled as an
+        ``AMEND`` book edit, a change with no fill. A volatility-only
+        edit changes the marks, not the book, and is not journaled.
         """
         with self._lock:
+            self._check_history_readable()
+            positions = self._portfolio.positions
+            target = positions[index] if 0 <= index < len(positions) else None
+            before = self._lot(target) if target is not None else None
             self._portfolio.update_position(
                 index,
                 quantity=quantity,
@@ -672,7 +911,23 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 exercise_style=exercise_style,
                 stamp_as_of=stamp_as_of,
             )
-            self._mutate_and_save()
+            records: list[Fill | BookEdit] = []
+            if target is not None and before is not None:
+                after = self._lot(target)
+                if after != before:
+                    records.append(
+                        self._edit(
+                            EditKind.AMEND,
+                            position_id=target.position_id,
+                            before=before,
+                            after=after,
+                            detail=(
+                                f"{self._describe_lot(before)} edited to "
+                                f"{self._describe_lot(after)}"
+                            ),
+                        ),
+                    )
+            self._journal_and_save(records)
 
     def set_volatility(
         self,
@@ -784,24 +1039,69 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             self._mutate_and_save()
 
     def remove_position(self, index: int, *, confirm: bool = False) -> None:
-        """Remove a position by index. Destructive — requires confirm=True."""
+        """Remove a position by index. Destructive — requires confirm=True.
+
+        Journaled as a ``DELETE`` book edit: the lot leaves with no
+        proceeds recorded. To record the cash, use :meth:`close_position`
+        or :meth:`settle_position` instead.
+        """
         if not confirm:
             raise ConfirmationRequiredError(
                 "remove_position is destructive; pass confirm=True",
             )
         with self._lock:
+            self._check_history_readable()
+            positions = self._portfolio.positions
+            target = positions[index] if 0 <= index < len(positions) else None
             self._portfolio.remove_position(index)
-            self._mutate_and_save()
+            records: list[Fill | BookEdit] = []
+            if target is not None:
+                lot = self._lot(target)
+                records.append(
+                    self._edit(
+                        EditKind.DELETE,
+                        position_id=target.position_id,
+                        before=lot,
+                        after=None,
+                        detail=(
+                            f"{self._describe_lot(lot)} removed with no "
+                            "proceeds recorded"
+                        ),
+                    ),
+                )
+            self._journal_and_save(records)
 
     def clear_positions(self, *, confirm: bool = False) -> None:
-        """Remove every position. Destructive — requires confirm=True."""
+        """Remove every position. Destructive — requires confirm=True.
+
+        Journaled as one ``DELETE`` book edit per lot.
+        """
         if not confirm:
             raise ConfirmationRequiredError(
                 "clear_positions is destructive; pass confirm=True",
             )
         with self._lock:
+            self._check_history_readable()
+            lots = [
+                (position.position_id, self._lot(position))
+                for position in self._portfolio.positions
+            ]
             self._portfolio.clear_positions()
-            self._mutate_and_save()
+            self._journal_and_save(
+                [
+                    self._edit(
+                        EditKind.DELETE,
+                        position_id=position_id,
+                        before=lot,
+                        after=None,
+                        detail=(
+                            f"{self._describe_lot(lot)} removed by clearing "
+                            "the book, with no proceeds recorded"
+                        ),
+                    )
+                    for position_id, lot in lots
+                ],
+            )
 
     def import_portfolio(
         self,
@@ -824,6 +1124,10 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         be discarded anyway. The cost is that a large or slow source file
         blocks mutators for the duration of the read.
 
+        Journaled as one ``REPLACE`` book edit: the whole book changed
+        with no fill, so lot-level reconciliation restarts at the next
+        mark.
+
         Args:
             filepath: Path to a JSON or YAML portfolio export.
             default_exercise_style: Exercise style applied to positions with
@@ -840,6 +1144,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 raise ConfirmationRequiredError(
                     "unsaved changes would be discarded; pass confirm=True",
                 )
+            self._check_history_readable()
             style = (
                 default_exercise_style
                 if default_exercise_style is not None
@@ -849,5 +1154,301 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 filepath,
                 default_exercise_style=style,
             )
+            lots_before = len(self._portfolio.positions)
             self._portfolio = result["portfolio"]
-            self._mutate_and_save()
+            self._journal_and_save(
+                [
+                    self._edit(
+                        EditKind.REPLACE,
+                        position_id=None,
+                        before=None,
+                        after=None,
+                        detail=(
+                            f"book replaced from {Path(filepath).name}: "
+                            f"{lots_before} lots before, "
+                            f"{len(self._portfolio.positions)} after"
+                        ),
+                    ),
+                ],
+            )
+
+    # ── Trades, recorded with their cash (#313) ─────────────────────────
+
+    def open_position(
+        self,
+        order: OpenOrder,
+        *,
+        trade_date: date | None = None,
+        roll_id: str | None = None,
+        note: str | None = None,
+    ) -> OptionPosition:
+        """Open a lot and record the trade as an ``OPEN`` fill.
+
+        Args:
+            order: The contract, quantity, fill price and fees.
+            trade_date: When it traded; today's program date if ``None``.
+            roll_id: Links this open to the close it rolls from.
+            note: Free text kept with the fill.
+
+        Returns:
+            The new position.
+
+        """
+        with self._lock:
+            self._check_history_readable()
+            position = self._add_from_order(order, trade_date=trade_date)
+            self._journal_and_save(
+                [
+                    self._open_fill(
+                        position,
+                        order,
+                        trade_date=trade_date,
+                        roll_id=roll_id,
+                        note=note,
+                    ),
+                ],
+            )
+            return position
+
+    def close_position(  # pylint: disable=too-many-arguments
+        self,
+        position_id: str,
+        *,
+        contracts: int,
+        price_per_share: float,
+        fees: float,
+        reason: CloseReason,
+        trade_date: date | None = None,
+        note: str | None = None,
+        confirm: bool = False,
+    ) -> None:
+        """Close all or part of a lot and record the proceeds.
+
+        Args:
+            position_id: The lot.
+            contracts: How many contracts to close, as a positive count.
+                The direction comes from the lot: closing a long lot
+                sells, closing a short lot buys back.
+            price_per_share: The fill price.
+            fees: Commissions and fees, ``>= 0``.
+            reason: ``ROUTINE`` or ``MONETIZATION``: whether the proceeds
+                reduce gross carry or are reported as a harvested gain.
+            trade_date: When it traded; today's program date if ``None``.
+            note: Free text kept with the fill.
+            confirm: Must be ``True``; this removes contracts from the book.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+            KeyError: If no lot has *position_id*.
+            ValueError: If *contracts* is not between 1 and the lot size.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "close_position removes contracts; pass confirm=True",
+            )
+        with self._lock:
+            self._check_history_readable()
+            index, position = self._find_position(position_id)
+            held = int(position.quantity)
+            if not 0 < contracts <= abs(held):
+                raise ValueError(
+                    f"cannot close {contracts} of a {abs(held)}-contract lot",
+                )
+            direction = 1 if held > 0 else -1
+            fill = self._fill(
+                FillKind.CLOSE,
+                position,
+                quantity=-direction * contracts,
+                price_per_share=price_per_share,
+                fees=fees,
+                trade_date=trade_date or self._program_date(),
+                reason=reason,
+                note=note,
+            )
+            if contracts == abs(held):
+                self._portfolio.remove_position(index)
+            else:
+                self._portfolio.update_position(
+                    index,
+                    quantity=held - direction * contracts,
+                )
+            self._journal_and_save([fill])
+
+    def settle_position(  # pylint: disable=too-many-arguments
+        self,
+        position_id: str,
+        *,
+        settlement_per_share: float,
+        fees: float,
+        trade_date: date | None = None,
+        note: str | None = None,
+        confirm: bool = False,
+    ) -> None:
+        """Settle an expired lot and record the settlement cash.
+
+        SPX options are European and cash-settled, so expiry, exercise and
+        assignment are all settlements. A worthless expiry settles at
+        ``0.0``. The lot leaves the book.
+
+        Args:
+            position_id: The lot.
+            settlement_per_share: Intrinsic value per share at the
+                settlement price; ``0.0`` when it expired worthless.
+            fees: Commissions and fees, ``>= 0``.
+            trade_date: The settlement date; today's program date if
+                ``None``. Must be on or after the lot's expiry.
+            note: Free text kept with the fill.
+            confirm: Must be ``True``; this removes the lot from the book.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+            KeyError: If no lot has *position_id*.
+            ValueError: If *trade_date* is before the lot's expiry.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "settle_position removes the lot; pass confirm=True",
+            )
+        with self._lock:
+            self._check_history_readable()
+            index, position = self._find_position(position_id)
+            settled_on = trade_date or self._program_date()
+            expiry = position.option.maturity_date.date()
+            if settled_on < expiry:
+                raise ValueError(
+                    f"lot expires {expiry}; it cannot settle on {settled_on}",
+                )
+            fill = self._fill(
+                FillKind.SETTLE,
+                position,
+                quantity=-int(position.quantity),
+                price_per_share=settlement_per_share,
+                fees=fees,
+                trade_date=settled_on,
+                reason=CloseReason.ROUTINE,
+                note=note,
+            )
+            self._portfolio.remove_position(index)
+            self._journal_and_save([fill])
+
+    def roll_position(  # pylint: disable=too-many-arguments
+        self,
+        position_id: str,
+        *,
+        close_price_per_share: float,
+        close_fees: float,
+        into: OpenOrder,
+        reason: CloseReason = CloseReason.ROUTINE,
+        trade_date: date | None = None,
+        note: str | None = None,
+        confirm: bool = False,
+    ) -> OptionPosition:
+        """Close a whole lot and open its replacement, as two linked fills.
+
+        The handbook records a roll as two events, each at its own fill
+        price, even when the broker priced it as one package: the net
+        debit can be recovered by subtraction, but the two fills cannot
+        be recovered from the net. Both fills share one ``roll_id``.
+
+        Args:
+            position_id: The lot being rolled out of.
+            close_price_per_share: Its fill price.
+            close_fees: Its commissions and fees.
+            into: The lot being rolled into, with its own fill and fees.
+            reason: The close's reason; a scheduled roll is ``ROUTINE``.
+            trade_date: When it traded; today's program date if ``None``.
+            note: Free text kept with both fills.
+            confirm: Must be ``True``; this removes the old lot.
+
+        Returns:
+            The new position.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+            KeyError: If no lot has *position_id*.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "roll_position removes the old lot; pass confirm=True",
+            )
+        with self._lock:
+            self._check_history_readable()
+            index, old = self._find_position(position_id)
+            roll_id = new_event_id()
+            traded = trade_date or self._program_date()
+            close_fill = self._fill(
+                FillKind.CLOSE,
+                old,
+                quantity=-int(old.quantity),
+                price_per_share=close_price_per_share,
+                fees=close_fees,
+                trade_date=traded,
+                reason=reason,
+                roll_id=roll_id,
+                note=note,
+            )
+            # Add before removing: if the new lot is refused (an expired
+            # maturity, say), nothing has changed yet. Appending leaves
+            # the old lot's index where it was.
+            new = self._add_from_order(into, trade_date=traded)
+            self._portfolio.remove_position(index)
+            self._journal_and_save(
+                [
+                    close_fill,
+                    self._open_fill(
+                        new,
+                        into,
+                        trade_date=traded,
+                        roll_id=roll_id,
+                        note=note,
+                    ),
+                ],
+            )
+            return new
+
+    def _add_from_order(
+        self,
+        order: OpenOrder,
+        *,
+        trade_date: date | None,
+    ) -> OptionPosition:
+        today = self._program_date()
+        traded = trade_date or today
+        entry_date = program_trading_date(
+            self._timezone(),
+        ).replace(year=traded.year, month=traded.month, day=traded.day)
+        return self._portfolio.add_position(
+            strike_price=order.strike_price,
+            maturity_date=order.maturity_date,
+            quantity=order.quantity,
+            option_type=order.option_type,
+            contract_size=order.contract_size,
+            volatility=order.volatility,
+            exercise_style=order.exercise_style,
+            entry_date=entry_date,
+            entry_premium=order.price_per_share,
+            structure_id=order.structure_id,
+        )
+
+    def _open_fill(
+        self,
+        position: OptionPosition,
+        order: OpenOrder,
+        *,
+        trade_date: date | None,
+        roll_id: str | None,
+        note: str | None,
+    ) -> Fill:
+        return self._fill(
+            FillKind.OPEN,
+            position,
+            quantity=order.quantity,
+            price_per_share=order.price_per_share,
+            fees=order.fees,
+            trade_date=trade_date or self._program_date(),
+            roll_id=roll_id,
+            note=note,
+        )

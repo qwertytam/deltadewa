@@ -563,6 +563,54 @@ class BookMark:  # pylint: disable=too-many-instance-attributes  # the mark's in
         )
 
 
+@dataclass(frozen=True)
+class OpenOrder:  # pylint: disable=too-many-instance-attributes  # one field per order term
+    """What an operator bought or sold to open a lot, at its fill.
+
+    The request half of ``ProgramState.open_position`` and the opening
+    leg of ``ProgramState.roll_position``. ``fees`` is required here,
+    unlike on :class:`Fill`: a trade entered through these methods is
+    entered *as* a fill, so the operator is asked for the fee rather than
+    allowed to leave it uncaptured. ``0.0`` is a legal answer.
+
+    Attributes:
+        strike_price: Strike.
+        maturity_date: Expiry (timezone-aware).
+        option_type: Put or call.
+        quantity: Signed contracts: ``+`` bought, ``-`` sold.
+        price_per_share: The fill price per share.
+        fees: Commissions and fees for this leg, ``>= 0``.
+        contract_size: Shares per contract; the book's default if
+            ``None``.
+        volatility: A per-lot volatility, or ``None`` for the book's.
+        exercise_style: The pricing style; the book's default if ``None``.
+        structure_id: Groups lots that trade as one structure (#333).
+
+    """
+
+    strike_price: float
+    maturity_date: datetime
+    option_type: OptionType
+    quantity: int
+    price_per_share: float
+    fees: float
+    contract_size: int | None = None
+    volatility: float | None = None
+    exercise_style: ExerciseStyle | None = None
+    structure_id: str | None = None
+
+    def __post_init__(self) -> None:
+        """Reject an order no fill could have produced."""
+        if self.quantity == 0:
+            raise ValueError("an order must open a non-zero quantity")
+        if self.price_per_share < 0:
+            raise ValueError(
+                f"price_per_share must be >= 0, got {self.price_per_share}",
+            )
+        if self.fees < 0:
+            raise ValueError(f"fees must be >= 0, got {self.fees}")
+
+
 HistoryRecord = Fill | BookEdit | BookMark
 
 _DECODERS: Final[dict[str, Callable[[dict[str, Any]], HistoryRecord]]] = {
