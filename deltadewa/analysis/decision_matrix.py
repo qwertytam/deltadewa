@@ -45,6 +45,39 @@ _VERDICT_QUALITIES: Final[frozenset[DataQuality]] = frozenset(
     {DataQuality.LIVE, DataQuality.CACHED},
 )
 
+# What each withheld grade means to the operator reading /design or the
+# digest (#411 / N5). These notes are rendered verbatim on both surfaces,
+# so they say what happened and what it costs — never a class or
+# attribute name. LIVE/CACHED are absent: they never withhold a verdict.
+_WITHHELD_QUALITY_MEANING: Final[dict[DataQuality, str]] = {
+    DataQuality.STALE: (
+        "the last refresh failed, so these readings are past the age they "
+        "can be trusted at"
+    ),
+    DataQuality.STATIC: (
+        "these are fixed reference values, not market readings"
+    ),
+    DataQuality.UNAVAILABLE: "the market-data provider returned nothing",
+}
+
+
+def _withheld_quality_note(quality: DataQuality, what: str) -> str:
+    """Explain, in operator terms, why *what* was withheld for *quality*."""
+    meaning = _WITHHELD_QUALITY_MEANING.get(quality, "it is not usable")
+    return (
+        f"Market data is {quality.value}: {meaning}. {what} needs live or "
+        "recently cached data."
+    )
+
+
+def _missing_reading_note(reading: str, step: str) -> str:
+    """Explain a reading absent from an otherwise usable snapshot."""
+    return (
+        f"The {reading} reading is missing from an otherwise usable "
+        f"market-data snapshot, so the entry-timing check stops at its "
+        f"{step} step. Check the market-data refresh."
+    )
+
 
 class DecisionVerdict(StrEnum):
     """Overall verdict from the tail-hedge decision matrix."""
@@ -258,9 +291,9 @@ def decision_matrix(
     )
 
     if market_env.data_quality not in _VERDICT_QUALITIES:
-        note = (
-            f"data_quality is {market_env.data_quality}"
-            " — enable live data for an environment verdict"
+        note = _withheld_quality_note(
+            market_env.data_quality,
+            "An environment verdict",
         )
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
@@ -279,12 +312,15 @@ def decision_matrix(
     if cost is None:
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
+            # MarketEnvironment.hedge_cost_verdict is None although
+            # data_quality is in _VERDICT_QUALITIES.
             rationale=(
-                "hedge_cost_verdict is None despite usable data quality"
+                "The hedge-cost read could not be formed from this snapshot"
             ),
             data_quality_note=(
-                "MarketEnvironment.hedge_cost_verdict is None"
-                " — provider may be missing skew or term-structure data"
+                "The hedge-cost read is missing although the market data is"
+                " usable — the skew or term-structure reading is probably"
+                " absent from this snapshot. Check the market-data refresh."
             ),
             hedge_adequacy=adequacy,
             cost_verdict=None,
@@ -363,9 +399,9 @@ def entry_timing_tree(
 
     """
     if market_env.data_quality not in _VERDICT_QUALITIES:
-        note = (
-            f"data_quality is {market_env.data_quality}"
-            " — enable live data for an entry-timing recommendation"
+        note = _withheld_quality_note(
+            market_env.data_quality,
+            "An entry-timing recommendation",
         )
         return EntryTimingResult(
             recommendation="INSUFFICIENT_DATA",
@@ -384,7 +420,7 @@ def entry_timing_tree(
                 step=1,
                 label="VIX",
                 value=None,
-                recommendation=("VIX unavailable despite LIVE data quality"),
+                recommendation="VIX reading missing from this snapshot",
                 proceed=False,
             ),
         )
@@ -392,9 +428,8 @@ def entry_timing_tree(
             recommendation="INSUFFICIENT_DATA",
             should_enter=False,
             steps=steps,
-            data_quality_note=(
-                "MarketEnvironment.vix is None with LIVE data_quality"
-            ),
+            # MarketEnvironment.vix is None with a usable data_quality.
+            data_quality_note=_missing_reading_note("VIX", "first"),
         )
 
     if vix > vix_very_high:
@@ -459,9 +494,7 @@ def entry_timing_tree(
                 step=2,
                 label="skew_percentile",
                 value=None,
-                recommendation=(
-                    "Skew percentile unavailable despite LIVE data quality"
-                ),
+                recommendation="Skew percentile missing from this snapshot",
                 proceed=False,
             ),
         )
@@ -469,9 +502,11 @@ def entry_timing_tree(
             recommendation="INSUFFICIENT_DATA",
             should_enter=False,
             steps=steps,
-            data_quality_note=(
-                "MarketEnvironment.skew_percentile is None"
-                " with LIVE data_quality"
+            # MarketEnvironment.skew_percentile is None with a usable
+            # data_quality.
+            data_quality_note=_missing_reading_note(
+                "skew percentile",
+                "second",
             ),
         )
 
@@ -516,9 +551,7 @@ def entry_timing_tree(
                 step=3,
                 label="term_shape",
                 value=None,
-                recommendation=(
-                    "Term structure unavailable despite LIVE data quality"
-                ),
+                recommendation="Term structure missing from this snapshot",
                 proceed=False,
             ),
         )
@@ -526,8 +559,11 @@ def entry_timing_tree(
             recommendation="INSUFFICIENT_DATA",
             should_enter=False,
             steps=steps,
-            data_quality_note=(
-                "MarketEnvironment.term_shape is None with LIVE data_quality"
+            # MarketEnvironment.term_shape is None with a usable
+            # data_quality.
+            data_quality_note=_missing_reading_note(
+                "term-structure",
+                "third",
             ),
         )
 

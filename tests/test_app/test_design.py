@@ -2349,8 +2349,12 @@ class TestMarketEnvironmentPanel:
 
         text = _collect_text(self._panel(tmp_path, env))
 
-        assert "INSUFFICIENT_DATA" in text
-        assert "data_quality" in text
+        # N5: the reason is stated in operator words, not as the internal
+        # token and attribute name it used to render verbatim.
+        assert "INSUFFICIENT DATA" in text
+        assert "Market data is STATIC" in text
+        assert "INSUFFICIENT_DATA" not in text
+        assert "data_quality" not in text
 
     def test_unavailable_readings_are_stated_not_zeroed(
         self,

@@ -524,9 +524,11 @@ def _build_decision(
             ),
             entry_recommendation=entry.recommendation,
             should_enter=entry.should_enter,
+            # ProtectionSection.convexity_pct is None: no IPS convexity
+            # policy was loaded.
             data_quality_note=(
-                "ProtectionSection.convexity_pct is None — no IPS "
-                "convexity policy loaded"
+                "No convexity target is loaded from ips.yaml, so the hedge"
+                " cannot be graded against one."
             ),
         )
 

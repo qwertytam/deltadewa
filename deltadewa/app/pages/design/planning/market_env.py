@@ -17,7 +17,7 @@ to share.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, NamedTuple
 
 from dash import Input, Output, html
 
@@ -40,11 +40,14 @@ from deltadewa.app.section_nav import SectionSpec
 from ..book import BOOK_VERSION_STORE
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from dash.development.base_component import Component
 
     from deltadewa.analysis.decision_matrix import (
         DecisionResult,
         EntryTimingResult,
+        EntryTimingStep,
     )
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.app.factory import ProgramDashApp
@@ -200,11 +203,74 @@ def _forward_variance_row(market_env: MarketEnvironment) -> Component:
     )
 
 
-def _entry_timing_rows(timing: EntryTimingResult) -> list[Component]:
+def _verdict_word(token: str) -> str:
+    """Render an analysis verdict token for a reader.
+
+    ``INSUFFICIENT_DATA`` is an enum value, not a word; the panel shows it
+    as ``INSUFFICIENT DATA`` (N5). Single-word verdicts (``BUY``,
+    ``CHEAP``) pass through unchanged.
+    """
+    return token.replace("_", " ")
+
+
+def _vix_step_value(value: float | str, _env: MarketEnvironment) -> str:
+    return f"{float(value):.1f}"
+
+
+def _skew_step_value(value: float | str, env: MarketEnvironment) -> str:
+    # The same formatter as the skew row above, so step 2 and the row
+    # cannot disagree on rounding or omit the window (#317).
+    return describe_skew_percentile(float(value), env.skew_lookback_days)
+
+
+def _term_step_value(value: float | str, _env: MarketEnvironment) -> str:
+    return str(value).lower()
+
+
+class _StepFormat(NamedTuple):
+    """How one entry-timing step's factor reads on the page."""
+
+    name: str
+    value: Callable[[float | str, MarketEnvironment], str]
+
+
+#: N5: every factor label ``entry_timing_tree`` emits, mapped to the words a
+#: reader sees. Before this the panel rendered the label and value raw —
+#: ``skew_percentile: 0.876984126984127``. A test drives the tree through
+#: every branch and fails if a label is missing from this table.
+TIMING_STEP_FORMATS: Final[dict[str, _StepFormat]] = {
+    "VIX": _StepFormat("VIX", _vix_step_value),
+    "skew_percentile": _StepFormat("Skew", _skew_step_value),
+    "term_shape": _StepFormat("Term structure", _term_step_value),
+}
+
+
+def format_timing_step(
+    step: EntryTimingStep,
+    market_env: MarketEnvironment,
+) -> str:
+    """Render one entry-timing step as a sentence a reader can use."""
+    fmt = TIMING_STEP_FORMATS.get(step.label)
+    # Unreachable for any label the tree emits today (pinned by test); a
+    # new label still reads as words rather than a Python identifier.
+    name = fmt.name if fmt is not None else step.label.replace("_", " ")
+    if step.value is None:
+        value_text = "unavailable"
+    elif fmt is not None:
+        value_text = fmt.value(step.value, market_env)
+    else:
+        value_text = str(step.value)
+    return f"{step.step}. {name}: {value_text} — {step.recommendation}"
+
+
+def _entry_timing_rows(
+    timing: EntryTimingResult,
+    market_env: MarketEnvironment,
+) -> list[Component]:
     """Render the entry-timing tree's path, step by step."""
     rows: list[Component] = [
         html.P(
-            f"Entry timing: {timing.recommendation}",
+            f"Entry timing: {_verdict_word(timing.recommendation)}",
             className="env-verdict",
         ),
     ]
@@ -214,7 +280,7 @@ def _entry_timing_rows(timing: EntryTimingResult) -> list[Component]:
         )
     rows.extend(
         html.P(
-            f"{step.step}. {step.label}: {step.value} — {step.recommendation}",
+            format_timing_step(step, market_env),
             className="env-timing-step",
         )
         for step in timing.steps
@@ -262,7 +328,8 @@ def _market_env_panel_view(
                 className="env-verdict",
             ),
             html.P(
-                f"Decision: {decision.verdict.value} — {decision.rationale}",
+                f"Decision: {_verdict_word(decision.verdict.value)} — "
+                f"{decision.rationale}",
                 className="env-verdict",
             ),
             *(
@@ -275,7 +342,7 @@ def _market_env_panel_view(
                 if decision.data_quality_note is not None
                 else []
             ),
-            *_entry_timing_rows(timing),
+            *_entry_timing_rows(timing, market_env),
         ],
     )
 
