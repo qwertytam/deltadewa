@@ -9,6 +9,7 @@ import pandas as pd
 from deltadewa.clock import program_now, program_trading_date
 from deltadewa.constants import ExerciseStyle, FDGridResolution, OptionType
 from deltadewa.portfolio.greeks import GreeksMixin
+from deltadewa.portfolio.liquidity import LiquidityObservation
 from deltadewa.portfolio.monte_carlo import MonteCarloMixin
 from deltadewa.portfolio.pnl import PnLMixin
 from deltadewa.portfolio.position import OptionPosition
@@ -517,10 +518,17 @@ class OptionPortfolioBase:
             # Keep existing volatility
             option_volatility = pos.option.volatility
 
-        if (
+        # Strike, maturity and type identify the listed contract; exercise
+        # style is how this program *prices* it (a modelling choice — SPX
+        # is European either way), so changing it reprices without making
+        # the leg a different contract.
+        contract_changed = (
             strike_price != pos.option.strike_price
             or maturity_date != pos.option.maturity_date
             or opt_type != pos.option.option_type
+        )
+        if (
+            contract_changed
             or exercise_style != pos.option.exercise_style
             or volatility is not None
         ):
@@ -539,6 +547,12 @@ class OptionPortfolioBase:
             # Keep OptionPosition.exercise_style in sync with the new
             # OptionValuation
             pos.exercise_style = pos.option.exercise_style
+        if contract_changed:
+            # 8c / N10: a recorded quote described the old contract, not
+            # this one. Keeping it would grade a spread nobody read for
+            # this strike/expiry; dropping it makes the leg read "never
+            # checked" until the operator records the new contract's quote.
+            pos.liquidity = None
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert portfolio to pandas DataFrame."""
@@ -715,6 +729,58 @@ class OptionPortfolioBase:
         )
         for pos in self.positions:
             pos.volatility_as_of = effective_stamp
+        # Deliberately not pos.liquidity: an observation is a quote the
+        # operator read, not a confirmation of a value already held, so
+        # "mark inputs reviewed" cannot refresh it (8c / N10).
+
+    def record_liquidity(  # pylint: disable=too-many-arguments
+        self,
+        position_id: str,
+        *,
+        bid: float,
+        ask: float,
+        open_interest: int | None,
+        observed_at: dt | None = None,
+    ) -> LiquidityObservation:
+        """Record the operator's quote for one leg (8c, N10).
+
+        Keyed by ``position_id``, not list index: an index chosen in the
+        browser can point at a different leg by the time the request
+        lands (see ``ProgramState.update_position``).
+
+        Args:
+            position_id: The leg the quote was read for.
+            bid: Per-share bid.
+            ask: Per-share ask.
+            open_interest: Contracts of open interest, or ``None``.
+            observed_at: When the quote was read. Defaults to
+                ``program_now()``.
+
+        Returns:
+            The stored observation.
+
+        Raises:
+            KeyError: If no position has *position_id*.
+            ValueError: If the quote is not one a market could show — see
+                :class:`~deltadewa.portfolio.liquidity.LiquidityObservation`.
+
+        """
+        position = next(
+            (pos for pos in self.positions if pos.position_id == position_id),
+            None,
+        )
+        if position is None:
+            raise KeyError(f"no position with id {position_id!r}")
+        observation = LiquidityObservation(
+            bid=bid,
+            ask=ask,
+            open_interest=open_interest,
+            observed_at=observed_at
+            if observed_at is not None
+            else program_now(),
+        )
+        position.liquidity = observation
+        return observation
 
     def __repr__(
         self: "_PortfolioProtocol",
