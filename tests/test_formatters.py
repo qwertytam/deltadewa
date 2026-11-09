@@ -1,6 +1,7 @@
 """Tests for deltadewa.formatters module - centralized formatting functions."""
 
 import pandas as pd
+import pytest
 
 from deltadewa.formatters import dataframes
 from deltadewa.formatters.values import (
@@ -9,6 +10,7 @@ from deltadewa.formatters.values import (
     format_greek_value,
     format_number,
     format_number_auto_precision,
+    format_ordinal_percentile,
     format_percentage,
     format_percentage_for_axis,
     format_spot_with_pct,
@@ -235,3 +237,29 @@ class TestNotebookDegradation:
 
         out = capsys.readouterr().out
         assert "3 rows x 1 columns" in out
+
+
+class TestFormatOrdinalPercentile:
+    """format_ordinal_percentile — English ordinals, not a bare "th" (N5)."""
+
+    @pytest.mark.parametrize(
+        ("fraction", "expected"),
+        [
+            (0.0, "0th"),
+            (0.01, "1st"),
+            (0.02, "2nd"),
+            (0.03, "3rd"),
+            (0.04, "4th"),
+            (0.11, "11th"),
+            (0.12, "12th"),
+            (0.13, "13th"),
+            (0.21, "21st"),
+            (0.22, "22nd"),
+            (0.876984126984127, "88th"),
+            (0.875, "88th"),  # exactly 87.5: half rounds up, not to even
+            (1.0, "100th"),
+        ],
+    )
+    def test_ordinal(self, fraction: float, expected: str) -> None:
+        """Each rank gets the English suffix, rounded half up."""
+        assert format_ordinal_percentile(fraction) == expected

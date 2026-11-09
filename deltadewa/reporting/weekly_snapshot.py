@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any, Final
 
+from deltadewa.analysis.market_environment import describe_lookback
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -28,6 +30,12 @@ if TYPE_CHECKING:
 _LEGACY_STALE_OR_WORSE: Final[frozenset[str]] = frozenset(
     {"STALE", "STATIC", "UNAVAILABLE"},
 )
+
+# Only for reconstructing a WeeklySnapshot JSON file persisted before 8c
+# added skew_lookback_days (#317). Not a default and not policy: it is the
+# historical fact that every skew percentile before 8c was ranked over 252
+# sessions — four unsourced 252 literals no caller ever overrode.
+_LEGACY_SKEW_LOOKBACK_DAYS: Final[int] = 252
 
 # Noise floors: a move smaller than these is real but not worth a line in
 # a digest an operator is meant to actually read every week.
@@ -76,6 +84,13 @@ class WeeklySnapshot:
         vix: ``MarketContextSection.vix``.
         skew_percentile: ``MarketContextSection.skew_percentile`` (0-1
             fraction).
+        skew_lookback_days: The session window ``skew_percentile`` was
+            ranked over (#317). Two weeks ranked over different windows
+            are not comparable, so the week-over-week diff reports the
+            window change instead of a move. A snapshot persisted before
+            8c has no key and reads back as ``252`` — not a guess: every
+            skew percentile before 8c was ranked over 252 sessions, the
+            unsourced default no caller ever overrode.
         regime_label: ``MarketContextSection.regime_label``.
         hedge_cost_verdict: ``MarketContextSection.hedge_cost_verdict``.
         decision_verdict: ``DecisionResult.verdict`` — not part of
@@ -147,6 +162,9 @@ class WeeklySnapshot:
     ips_compliance_rows: tuple[tuple[str, bool], ...]
     premium_paid_point_in_time: float
     cumulative_carry_cost: float
+    # 8c / #317: defaulted and last so every existing constructor call
+    # stays valid. See the class docstring.
+    skew_lookback_days: int | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-safe dict (dates as ISO strings).
@@ -185,6 +203,7 @@ class WeeklySnapshot:
             ],
             "premium_paid_point_in_time": self.premium_paid_point_in_time,
             "cumulative_carry_cost": self.cumulative_carry_cost,
+            "skew_lookback_days": self.skew_lookback_days,
         }
 
     @classmethod
@@ -230,6 +249,12 @@ class WeeklySnapshot:
             ),
             premium_paid_point_in_time=data["premium_paid_point_in_time"],
             cumulative_carry_cost=data["cumulative_carry_cost"],
+            # .get() with the pre-8c window: see the class docstring and
+            # _LEGACY_SKEW_LOOKBACK_DAYS's comment.
+            skew_lookback_days=data.get(
+                "skew_lookback_days",
+                _LEGACY_SKEW_LOOKBACK_DAYS,
+            ),
         )
 
 
@@ -278,6 +303,7 @@ def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argumen
         ),
         vix=mc.vix,
         skew_percentile=mc.skew_percentile,
+        skew_lookback_days=mc.skew_lookback_days,
         regime_label=mc.regime_label,
         hedge_cost_verdict=mc.hedge_cost_verdict,
         decision_verdict=decision_verdict,
@@ -409,6 +435,52 @@ def _relative_material_move(
     return SnapshotChange(
         label=label,
         detail=f"{prior:.2f}% → {current:.2f}% ({sign}{current - prior:.2f}pp)",
+    )
+
+
+def _skew_percentile_move(
+    prior: WeeklySnapshot,
+    current: WeeklySnapshot,
+) -> SnapshotChange | None:
+    """Return the SKEW-percentile material move, or the window change.
+
+    A percentile ranked over a different window is a different number, not
+    a moved one (#317): the week the IPS window changes (e.g. 252 → 1260
+    sessions), a 90.5 → 87.6 "move" would be the window, not the market.
+    So when the windows differ this reports the change of window and
+    deliberately no delta. A missing window on either side (an
+    unavailable environment) compares as before — ``_material_move``
+    already returns ``None`` when either reading is missing.
+    """
+    prior_window = prior.skew_lookback_days
+    current_window = current.skew_lookback_days
+    if (
+        prior_window is not None
+        and current_window is not None
+        and prior_window != current_window
+    ):
+        return SnapshotChange(
+            label="SKEW percentile",
+            detail=(
+                f"window changed {describe_lookback(prior_window)}"
+                f" → {describe_lookback(current_window)}"
+                " — not comparable week over week"
+            ),
+        )
+    return _material_move(
+        "SKEW percentile",
+        (
+            prior.skew_percentile * 100
+            if prior.skew_percentile is not None
+            else None
+        ),
+        (
+            current.skew_percentile * 100
+            if current.skew_percentile is not None
+            else None
+        ),
+        floor=_SKEW_MATERIAL_MOVE_FRACTION * 100,
+        unit="%",
     )
 
 
@@ -576,21 +648,7 @@ def diff_snapshots(
             floor=1.0,
             unit="%",
         ),
-        _material_move(
-            "SKEW percentile",
-            (
-                prior.skew_percentile * 100
-                if prior.skew_percentile is not None
-                else None
-            ),
-            (
-                current.skew_percentile * 100
-                if current.skew_percentile is not None
-                else None
-            ),
-            floor=_SKEW_MATERIAL_MOVE_FRACTION * 100,
-            unit="%",
-        ),
+        _skew_percentile_move(prior, current),
         _relative_material_move(
             "Carry as % of notional",
             prior.carry_pct_of_notional,

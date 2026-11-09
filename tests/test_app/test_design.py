@@ -2301,8 +2301,21 @@ class TestMarketEnvironmentPanel:
 
         text = _collect_text(self._panel(tmp_path, env))
 
-        assert "22th percentile" in text
-        assert "0th percentile" not in text.replace("22th percentile", "")
+        # "22nd", not the pre-8c "22th" (format_ordinal_percentile).
+        assert "22nd percentile" in text
+        assert "0th percentile" not in text
+
+    def test_skew_percentile_states_its_window(self, tmp_path: Path) -> None:
+        """The skew row names the window it was ranked over (#317).
+
+        The handbook permits any rank window only "provided it states the
+        window every time it quotes a percentile".
+        """
+        env = _make_market_env(skew_percentile=0.88, skew_lookback_days=1260)
+
+        text = _collect_text(self._panel(tmp_path, env))
+
+        assert "88th percentile (trailing 5y)" in text
 
     def test_forward_variance_carries_no_band(self, tmp_path: Path) -> None:
         """The IPS states no forward-variance band, so none is invented."""

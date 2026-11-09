@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
+from deltadewa.formatters.values import format_ordinal_percentile
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
@@ -204,6 +205,36 @@ def describe_lookback(sessions: int) -> str:
     if remainder == 0 and years > 0:
         return f"trailing {years}y"
     return f"trailing {sessions} sessions"
+
+
+def describe_skew_percentile(
+    fraction: float,
+    lookback_days: int | None,
+) -> str:
+    """Render a skew percentile with the window it was ranked over.
+
+    E.g. ``"88th percentile (trailing 5y)"``. The one formatter every
+    surface quoting a skew percentile uses — the ``/design`` skew row,
+    the entry-timing step, and the program report —
+    so the handbook's "state the window every time" condition (#317) is
+    met by construction and the surfaces cannot disagree on rounding.
+
+    Args:
+        fraction: The percentile as a 0-1 fraction.
+        lookback_days: The window it was ranked over, in sessions.
+            ``None`` only for a reading whose window was never recorded,
+            which is then said rather than guessed.
+
+    Returns:
+        The ordinal percentile with its window in parentheses.
+
+    """
+    window = (
+        describe_lookback(lookback_days)
+        if lookback_days is not None
+        else "window not recorded"
+    )
+    return f"{format_ordinal_percentile(fraction)} percentile ({window})"
 
 
 def _interpolate_percentile(value: float, low: float, high: float) -> float:

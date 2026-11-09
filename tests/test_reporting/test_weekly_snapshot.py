@@ -346,6 +346,66 @@ class TestDiffSnapshotsCrossings:
         assert any(c.label == "Data quality" for c in diff.crossings)
 
 
+class TestSkewWindow:
+    """The skew percentile's window travels with it (8c, #317)."""
+
+    def test_pre_8c_file_reads_back_as_252_sessions(self) -> None:
+        """A snapshot with no window key was ranked over 252 — a fact.
+
+        Every skew percentile before 8c was ranked over the unsourced 252
+        default no caller ever overrode, so this is not a guess.
+        """
+        before_8c = _snapshot().to_json_dict()
+        del before_8c["skew_lookback_days"]
+
+        restored = WeeklySnapshot.from_json_dict(before_8c)
+
+        assert restored.skew_lookback_days == 252
+
+    def test_window_round_trips(self) -> None:
+        snap = replace(_snapshot(), skew_lookback_days=1260)
+
+        restored = WeeklySnapshot.from_json_dict(snap.to_json_dict())
+
+        assert restored.skew_lookback_days == 1260
+
+    def test_window_change_reports_the_window_not_a_move(self) -> None:
+        """252 -> 1260 is a different number, not a moved one.
+
+        The 2026-11-06 reading was 90.5 on 252 sessions and 87.6 on 1260;
+        a diff across the switch must not report a market move.
+        """
+        prior = replace(
+            _snapshot(skew_percentile=0.905),
+            skew_lookback_days=252,
+        )
+        current = replace(
+            _snapshot(skew_percentile=0.20),  # would be a huge "move"
+            skew_lookback_days=1260,
+        )
+
+        diff = diff_snapshots(prior, current)
+
+        skew = [m for m in diff.material_moves if m.label == "SKEW percentile"]
+        assert len(skew) == 1
+        assert "trailing 1y → trailing 5y" in skew[0].detail
+        assert "not comparable" in skew[0].detail
+        assert "→ 20.00%" not in skew[0].detail
+
+    def test_same_window_move_is_still_reported(self) -> None:
+        prior = replace(_snapshot(skew_percentile=0.30), skew_lookback_days=252)
+        current = replace(
+            _snapshot(skew_percentile=0.80),
+            skew_lookback_days=252,
+        )
+
+        diff = diff_snapshots(prior, current)
+
+        skew = [m for m in diff.material_moves if m.label == "SKEW percentile"]
+        assert len(skew) == 1
+        assert "30.00% → 80.00%" in skew[0].detail
+
+
 class TestDiffSnapshotsMaterialMoves:
     """Numeric moves past a noise floor, without a crossing."""
 

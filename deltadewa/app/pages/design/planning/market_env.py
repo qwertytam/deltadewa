@@ -27,7 +27,10 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
-from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.market_environment import (
+    assess_market_environment,
+    describe_skew_percentile,
+)
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
@@ -149,7 +152,12 @@ def _skew_row(
     )
     return _env_metric_row(
         label="Skew percentile",
-        headline=f"{percentile_pct:.0f}th percentile",
+        # The window is stated every time (#317) — the handbook's condition
+        # for ranking skew over any window at all.
+        headline=describe_skew_percentile(
+            market_env.skew_percentile,
+            market_env.skew_lookback_days,
+        ),
         detail=(
             f"IPS band {policy.skew_low_pctile:.0f}-"
             f"{policy.skew_high_pctile:.0f}{index_text}"
