@@ -266,10 +266,46 @@ Two follow-ups came out of it, both now resolved:
   `pillow` go; it was deliberately kept out of #279 to keep that PR
   reviewable.
 
-Still open: **#12 Liquidity Risk** is genuinely data-blocked (needs per-strike
-bid/ask and open interest, which the free CBOE/FRED provider doesn't return).
-**#9**'s skew-beta scalar has never existed — an unbuilt feature, not a
-regression.
+Still open: **#12 Liquidity Risk**'s full metric is genuinely data-blocked
+(needs per-strike bid/ask and open interest, which the free CBOE/FRED
+provider doesn't return) — 8c gave it a hand-entered checklist, below.
+**#9**'s skew-beta scalar, never built before, was built in 8c.
+
+**8c has shipped** (#317, N5/#411, N9/#415, N10/#416, N11/#417), from
+review #3's market-environment and Part X findings:
+
+- **#317 — the skew-percentile window is IPS policy.**
+  `market_environment.skew_lookback_days` (default **1260**, the
+  handbook's trailing five years; was four unsourced 252 literals) is the
+  only source of the window, `get_skew_percentile`'s `lookback_days` is
+  required, a series shorter than the window raises rather than ranking a
+  truncated sample, and every surface states the window
+  (`describe_skew_percentile`: "88th percentile (trailing 5y)") — the
+  handbook's condition for any window. **Breaking for a live
+  `config/ips.yaml`**: set the key explicitly. Moving 252 → 1260 did not
+  flip the 2026-11-06 verdict (90.5 → 87.6, both above 70) but reads LOW
+  far less often; see `docs/market-data.md`.
+- **N5 — `/design`'s market-environment panel renders words, not
+  internals.** Entry-timing steps go through `format_timing_step`
+  (`market_env.py`), `decision_matrix`'s `data_quality_note` strings are
+  operator prose at the source, and `MarketEnvironment.regime_percentile`
+  is renamed **`regime_band_position_pct`**: it was #175's "not a
+  percentile" mislabel on a path #175's fix never reached (VIX 25.64
+  rendered "regime percentile 53" against a true trailing-year rank of
+  95). `health.compute_vol_regime` remains the true-rank figure; nothing
+  compares the two (a candidate agreement-auditor finding).
+- **N9 — skew beta** (`analysis/skew_beta.py`): ∂V/∂Skew by composition
+  of `hedge_value` and `crash_skew_vol` at +1 vol point on the IPS wing,
+  on its own `/design` panel. **Ungraded** — the handbook gives no band.
+- **N10 — Part X #12 as a checklist.** Operator-recorded
+  `LiquidityObservation`s per leg (`portfolio/liquidity.py`), graded by
+  `analysis/liquidity.py` against an optional `liquidity:` IPS section
+  with **no code defaults** (the handbook gives no number), aged by
+  `provenance.grade_hand_entered` (now public), and **kept out of the
+  provenance ledger and its alarm** on purpose. `/design` only.
+- **N11 — forward variance stays unbanded** and now says exactly what
+  stands in: the term shape, which is what the hedge-cost verdict
+  actually reads.
 
 **Batch 3d has shipped**, closing #367 (the banner graded only the six
 *fetched* market readings, never the four hand-entered pricing inputs a

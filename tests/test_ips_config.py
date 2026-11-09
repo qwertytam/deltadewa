@@ -1444,6 +1444,30 @@ class TestCheckCli:
         assert "maturity_buckets" in captured.out
         assert "built-in defaults" in captured.out
 
+    def test_absent_liquidity_is_reported_as_ungraded_not_defaulted(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """8c: `liquidity` has no code defaults, so "these have code
+        defaults" would be false about it — it gets its own line saying
+        the feature runs ungraded.
+        """
+        config = deepcopy(_VALID_CONFIG)
+        assert "liquidity" not in config
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", str(path)])
+
+        out = capsys.readouterr().out
+        defaults_line = next(
+            line for line in out.splitlines() if "have code defaults" in line
+        )
+        assert exit_code == 0
+        assert "liquidity" not in defaults_line
+        assert "NO code defaults" in out
+        assert "ungraded" in out
+
     def test_a_defaulted_section_fails_under_strict(
         self,
         tmp_path: Path,

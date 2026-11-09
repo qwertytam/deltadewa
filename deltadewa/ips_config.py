@@ -39,6 +39,14 @@ _EXAMPLE_IPS_PATH: Final[Path] = (
     Path(__file__).resolve().parent.parent / "config" / "ips.example.yaml"
 )
 
+# Optional sections whose absence means "this grading is off", not "this
+# runs on built-in defaults" — the handbook gives no number to default to
+# (8c / N10). --check reports them on their own line rather than under the
+# "these have code defaults" message, which would be false for them.
+_SECTIONS_WITHOUT_CODE_DEFAULTS: Final[frozenset[str]] = frozenset(
+    {"liquidity"},
+)
+
 # CLI-only default (see main() below) — matches the cwd-relative default
 # every other entry point (weekly_report.py, refresh.py,
 # import_portfolio.py) uses for the live file, since --check with no
@@ -1595,11 +1603,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             "policy in the file and does nothing"
             for key in unrecognised
         )
+        # 8c: a section with no code defaults is not "defaulted" when it
+        # is absent — it is off. Saying "these have code defaults" about
+        # `liquidity` would be false, so it gets its own line.
+        absent_no_default = sorted(
+            {key.split(".")[0] for key in missing_optional}
+            & _SECTIONS_WITHOUT_CODE_DEFAULTS,
+        )
+        missing_optional = [
+            key
+            for key in missing_optional
+            if key.split(".")[0] not in _SECTIONS_WITHOUT_CODE_DEFAULTS
+        ]
         if missing_optional:
             print(
                 f"ips_config --check: present in {_EXAMPLE_IPS_PATH.name} "
                 "but not in this file (fine if intentionally omitted — "
                 f"these have code defaults): {', '.join(missing_optional)}",
+            )
+        if absent_no_default:
+            print(
+                "ips_config --check: optional sections absent from this "
+                "file that have NO code defaults — the feature they grade "
+                "runs ungraded until you add them: "
+                f"{', '.join(absent_no_default)}",
             )
     else:
         print(

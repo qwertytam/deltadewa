@@ -52,7 +52,9 @@ them. M2.7 closed all five, and also surfaced a policy leak of its own
 from `ips.yaml`, went from dormant to user-visible the moment M2.7 put the
 matrix on a page). M2.8 closed the two remaining surfacing gaps the
 re-audit had found (#13, #14) and fixed that leak, leaving #12 as the only
-item still genuinely blocked. This document now records the resulting
+item still genuinely blocked (8c has since given it a hand-entered
+checklist — see [Outstanding](#outstanding) — and built #9's never-built
+skew-beta scalar). This document now records the resulting
 state, plus the retirements that *were* deliberate, so the next audit can
 tell the three (regression, leak, genuine gap) apart.
 
@@ -150,13 +152,13 @@ default is chipped:
 | 3 | Theta Carry (Insurance Cost) | 1 | `/monitor` — *Crash scenario*, `_cost_panel`; also digest `CostSection` | `analysis/carry.carry_vs_budget` via `monitor_scenario` | **PRESENT** |
 | 4 | Vega Sufficiency Gauge | 1 | `/design` PLANNING — *Sizing workbench*, `_vega_sufficiency_block`; **also `/monitor`'s compliance strip and the digest's §6 since Batch 8a.2 (#409)** | `analysis/health.HealthMixin.calculate_vega_sufficiency_pct`; band from `IpsVega`, graded once by `reporting/program_report.build_vega_section` | **PRESENT** (M2.7; graded for compliance since 8a.2) |
 | 5 | Carry vs. Convexity Chart | 1 | `/monitor` — `_cost_panel`, `_efficiency_sentence`. Both axes separately: cost panel and *Decisions* band bars | `analysis/hedge_efficiency.hedge_efficiency`, on `ScenarioResult.efficiency` | **PRESENT** (M2.7) |
-| 6 | Volatility Regime Indicator | 2 | `/design` PLANNING — *Market environment*; also the digest | `analysis/market_environment.classify_vix_regime` | **PRESENT** (M2.7) |
-| 7 | Skew Percentile Gauge | 2 | `/design` PLANNING — *Market environment*; also the digest | `analysis/market_environment` (`skew_percentile`), `marketdata` `get_skew_percentile` | **PRESENT** (M2.7) |
-| 8 | Forward Variance Level | 2 | `/design` PLANNING — *Market environment* | `analysis/market_environment.forward_vol` → `MarketEnvironment.forward_vol_front_3m` | **PRESENT** (M2.7) |
-| 9 | Skew Exposure / Beta | 3 | `/design` EXPLORATION — `vega` heatmap metric | `visualization/stress_charts_plotly.STRESS_METRICS["vega"]` | **PARTIAL** — the ∂V/∂skew scalar is **NEVER BUILT**, see below |
+| 6 | Volatility Regime Indicator | 2 | `/design` PLANNING — *Market environment*; also the digest | `analysis/market_environment.classify_vix_regime` | **PRESENT** (M2.7). The figure beside the label is a band position, not a percentile — renamed `regime_band_position_pct` in 8c (N5) |
+| 7 | Skew Percentile Gauge | 2 | `/design` PLANNING — *Market environment*; also the digest | `analysis/market_environment` (`skew_percentile`), `marketdata` `get_skew_percentile` | **PRESENT** (M2.7); window is IPS policy and stated on every surface since 8c (#317) |
+| 8 | Forward Variance Level | 2 | `/design` PLANNING — *Market environment* | `analysis/market_environment.forward_vol` → `MarketEnvironment.forward_vol_front_3m` | **PRESENT** (M2.7) as a level, **unbanded** — the handbook gives no cut; the row says the term shape stands in (8c, #417) |
+| 9 | Skew Exposure / Beta | 3 | `/design` PLANNING — **Skew exposure (skew beta)** | `analysis/skew_beta.calculate_skew_beta` | **PRESENT** (8c, N9) — ungraded: the handbook gives no band |
 | 10 | Net Delta Exposure | 3 | `/design` BOOK — `_net_delta_readout`; grid form via the `net_delta` heatmap metric | `portfolio/greeks.net_delta` via `summary_stats()` | **PRESENT** (M2.7) |
 | 11 | Hedge Rebalance Triggers | 3 | `/monitor` — *Decisions*; `/design` PLANNING — *Roll plan*, *Roll status by tranche*, **Hedge rebalance triggers**, *Monetization* | `analysis/roll_status.evaluate_roll_status`, `analysis/roll_planner.build_roll_plan`, `analysis/hedge_triggers.evaluate_hedge_trigger_set`, `analysis/monetization` | **PRESENT** — both trigger sets now live (see note); `roll_planner` gained its consumer in #258 |
-| 12 | Liquidity Risk | 4 | none | none — needs per-strike bid/ask and open interest | **OUTSTANDING** — genuinely data-blocked |
+| 12 | Liquidity Risk | 4 | `/design` PLANNING — **Liquidity check (hand-entered)** | `analysis/liquidity.assess_liquidity` over operator-recorded `LiquidityObservation`s | **PARTIAL** (8c, N10) — a hand-entered checklist; the real metric is still blocked on #156 |
 | 13 | Delta Drift | 4 | `/design` PLANNING — **Delta drift** | `analysis/scenarios.ScenariosMixin.calculate_delta_drift` | **PRESENT** (M2.8) |
 | 14 | Vega Term Exposure | 4 | `/design` EXPLORATION — **Vega term exposure** | `analysis/maturity.MaturityMixin.calculate_vega_by_maturity` | **PRESENT** (M2.8) |
 | 15 | Hedge Efficiency Ratio | 4 | `/monitor` `_cost_panel`; digest `ProtectionSection.payoff_vs_premium` | Same function as #5 — see below | **PRESENT** (M2.7) |
@@ -288,9 +290,21 @@ them under a higher tier. This is why #4, #6, #7, #8 and #10 went to
 plain-language sentence there, with no big number and no band bar of its
 own. A test pins that.
 
-## Never built
+## Never built — until 8c
 
-**#9's skew-beta scalar.** No `∂V/∂skew` function has ever existed in this
+**#9's skew-beta scalar** — *built in 8c (N9, #415)*:
+`analysis/skew_beta.calculate_skew_beta` reprices the book with one vol
+point of extra downside skew at the IPS wing anchor (`crash_skew_vol` with
+no spot move and no flat bump) against today's `hedge_value`, and
+`/design`'s **Skew exposure (skew beta)** panel shows it as one number with
+one chip. It is **ungraded**: the handbook rates skew beta only
+qualitatively (low for ATM puts, high for deep-OTM tails) and gives no
+number, so there is no IPS key and the panel says so. It is deliberately
+not gated on fetched data quality, contrary to #415's draft criterion —
+it reads no feed, only the hand-entered leg vols #367 already grades. The
+history below is kept as the record of why it stayed unbuilt.
+
+Before 8c, no `∂V/∂skew` function had ever existed in this
 codebase — not in the notebooks, not in `widgets/`, not in `analysis/`. The
 2026-06-30 audit marked #9 PARTIAL on the strength of the `vega` heatmap
 metric, which is a related but different quantity, and the 2026-08-06
@@ -305,14 +319,23 @@ express but nothing currently drives.
 
 ## Outstanding
 
-**#12 Liquidity Risk** — genuinely data-blocked, and now the *only* item in
-this state. Needs per-strike bid/ask spreads and open interest from a live
-options-chain feed; the free CBOE/FRED provider returns index-level series
-only. There is no stub on either Dash page (the notebooks had one), so the
-item is currently invisible rather than marked "planned". Tracked in #156
-(the options-chain feed), which also unlocks skew-aware pricing and
-backtesting — #12 is the Part X piece of that issue's scope, not a
-separate effort.
+**#12 Liquidity Risk** — **partial since 8c (N10)**, and still the only
+item whose full metric is data-blocked. It needs per-strike bid/ask
+spreads and open interest from a live options-chain feed; the free
+CBOE/FRED provider returns index-level series only. Tracked in #156 (the
+options-chain feed), which also unlocks skew-aware pricing and
+backtesting — #12 is the Part X piece of that issue's scope.
+
+What 8c added in the meantime is a checklist, not the metric: the
+operator records a quote per held leg on `/design`'s **Liquidity check
+(hand-entered)** panel, `ips.yaml`'s optional `liquidity:` section grades
+its spread (and, if a minimum is set, its open interest), and its age is
+graded by #367's hand-entry rule. The panel states what it cannot see —
+unheld strikes, depth, volume, stress-time widening, automatic refresh —
+on every render. See `docs/market-data.md`, "Liquidity: hand-entered
+quotes, not a feed", including why it stays out of the provenance ledger
+and its alarm. #416's structural "deep-OTM + long-dated" proxy was not
+built; a measured quote supersedes a heuristic about one.
 
 **#13 Delta Drift** and **#14 Vega Term Exposure** were surfacing gaps, not
 data gaps — both closed in M2.8. See the coverage table above:
