@@ -95,4 +95,8 @@ def test_chip_names_the_ips_wing(tmp_path: Path) -> None:
         ips_config=app.ips_config,
     )
 
-    assert f"IPS {wing:g}Δ wing" in _collect_text(panel)
+    text = _collect_text(panel)
+    assert f"IPS {wing:g}Δ wing" in text
+    # The number uses the book's hand-entered spot, not a live one.
+    assert "book spot" in text
+    assert "today's spot" not in text

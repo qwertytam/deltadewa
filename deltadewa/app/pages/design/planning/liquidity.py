@@ -129,8 +129,10 @@ def _checked_text(leg: LegLiquidity) -> str:
 
 
 def _due_text(leg: LegLiquidity) -> str:
+    if leg.roll_due and leg.capture_due:
+        return "yes — leg is in its roll window; read today's quote"
     if leg.roll_due:
-        return "yes — leg is in its roll window"
+        return "no — read today, for the roll"
     if leg.observation is None:
         return "yes — never checked"
     if leg.capture_due:

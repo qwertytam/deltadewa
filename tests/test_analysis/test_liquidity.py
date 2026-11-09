@@ -168,8 +168,9 @@ class TestRollWindow:
     def test_roll_due_leg_needs_a_capture_even_with_a_fresh_quote(
         self,
     ) -> None:
+        """Fresh by cadence (3 days old) is not good enough for a roll."""
         portfolio = _book(1)
-        _record(portfolio, 0)
+        _record(portfolio, 0)  # 2026-11-06, as_of 2026-11-09
         leg_id = portfolio.positions[0].position_id
 
         leg = assess_liquidity(
@@ -181,6 +182,22 @@ class TestRollWindow:
 
         assert leg.roll_due
         assert leg.capture_due
+
+    def test_a_quote_read_today_satisfies_the_roll(self) -> None:
+        """Recording the roll's quote clears the flag the same day."""
+        portfolio = _book(1)
+        _record(portfolio, 0, observed=_AS_OF)
+        leg_id = portfolio.positions[0].position_id
+
+        leg = assess_liquidity(
+            portfolio,
+            _POLICY,
+            as_of=_AS_OF,
+            roll_due_ids=frozenset({leg_id}),
+        ).legs[0]
+
+        assert leg.roll_due
+        assert not leg.capture_due
 
     @pytest.mark.parametrize(
         ("verdict", "due"),

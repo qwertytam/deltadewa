@@ -53,7 +53,7 @@ _NO_BAND_TEXT = (
 def _basis_label(ips_config: IpsConfig) -> str:
     """Name the basis: what was bumped, where, and what was held still."""
     wing = ips_config.convexity.skew_reference_delta * 100
-    return f"basis: +1 vol pt skew at the IPS {wing:g}Δ wing, today's spot"
+    return f"basis: +1 vol pt skew at the IPS {wing:g}Δ wing, book spot"
 
 
 def _skew_beta_view(beta: SkewBeta | None) -> Component:
@@ -84,9 +84,11 @@ def _skew_beta_view(beta: SkewBeta | None) -> Component:
             html.P(
                 "How much the option legs' value changes if out-of-the-"
                 "money put vol rises one point relative to at-the-money "
-                "vol, with spot and at-the-money vol unchanged — the "
-                "handbook's ∂V/∂Skew. Long puts gain; short puts give it "
-                f"back.{expired_text}",
+                "vol, with the book's recorded spot and at-the-money vol "
+                "unchanged — the handbook's ∂V/∂Skew. Only out-of-the-money "
+                "puts are bumped: long ones gain, short ones give it back; "
+                "calls and in-the-money puts are unchanged."
+                f"{expired_text}",
                 className="plain-language",
             ),
             html.P(_NO_BAND_TEXT, className="plain-language"),

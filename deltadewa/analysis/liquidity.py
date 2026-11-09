@@ -102,7 +102,8 @@ class LegLiquidity:
             ``None`` without a recorded, non-zero open interest.
         roll_due: The leg's roll status is ``ROLL`` or ``REVIEW``.
         capture_due: A fresh quote is due now — never checked, the last
-            check not ``FRESH``, or the leg is in a roll window.
+            check not ``FRESH``, or the leg is in a roll window and its
+            quote was not read on the program trading date.
 
     """
 
@@ -226,6 +227,15 @@ def _assess_leg(
         else None
     )
     stale = freshness is not None and freshness.freshness is not Freshness.FRESH
+    # A leg in its roll window wants the quote it will actually trade on:
+    # one read on the program trading date satisfies it; any earlier one,
+    # however recent by the review cadence, does not. (Before this rule a
+    # roll-window leg read "needs a fresh quote" even straight after one
+    # was recorded — the smoke run caught it.) Calendar dates, the same
+    # discipline grade_hand_entered applies.
+    read_today = (
+        observation is not None and observation.observed_at.date() >= as_of
+    )
     return LegLiquidity(
         position_id=position.position_id,
         label=label,
@@ -244,7 +254,9 @@ def _assess_leg(
         ),
         held_share_of_oi_pct=_held_share_of_oi_pct(position, observation),
         roll_due=roll_due,
-        capture_due=observation is None or stale or roll_due,
+        capture_due=(
+            observation is None or stale or (roll_due and not read_today)
+        ),
     )
 
 
@@ -267,8 +279,8 @@ def assess_liquidity(
         as_of: The program trading date (``program_trading_date().date()``)
             every quote's age is measured against.
         roll_due_ids: Legs about to be traded
-            (:func:`roll_due_position_ids`), which need a fresh quote
-            regardless of how recent the last one is.
+            (:func:`roll_due_position_ids`), which need a quote read on
+            *as_of* itself, however recent the last one is by cadence.
 
     Returns:
         A :class:`LiquidityChecklist` in book order.

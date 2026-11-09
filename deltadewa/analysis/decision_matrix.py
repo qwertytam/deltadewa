@@ -46,9 +46,13 @@ _VERDICT_QUALITIES: Final[frozenset[DataQuality]] = frozenset(
 # so they say what happened and what it costs — never a class or
 # attribute name. LIVE/CACHED are absent: they never withhold a verdict.
 _WITHHELD_QUALITY_MEANING: Final[dict[DataQuality, str]] = {
+    # Not "the refresh failed": the deployed app is read-only, so STALE
+    # there means only that the cached readings are past their trust
+    # window (ips.yaml data_ttl_minutes) — the refresh job may simply not
+    # have run yet, or may have failed; this layer cannot tell which.
     DataQuality.STALE: (
-        "the last refresh failed, so these readings are past the age they "
-        "can be trusted at"
+        "these cached readings are older than the IPS trusts them for "
+        "(data_ttl_minutes) — the market-data refresh has not renewed them"
     ),
     DataQuality.STATIC: (
         "these are fixed reference values, not market readings"
