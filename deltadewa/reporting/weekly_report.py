@@ -113,6 +113,8 @@ from deltadewa.analysis.hedge_triggers import (
 from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
+from deltadewa.history_cli import MarkOutcome, take_mark
+from deltadewa.history_store import HistoryCorruptError
 from deltadewa.marketdata import (
     CboeFredProvider,
     default_cache_dir,
@@ -128,7 +130,10 @@ from deltadewa.reporting.program_report import (
     HTML_STYLE,
     IpsComplianceSection,
     ProgramReport,
+    RealizedCarrySection,
+    RealizedStatus,
     build_program_report,
+    build_realized_carry_section,
     render_html_body,
     render_markdown,
 )
@@ -154,6 +159,10 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_EXPORT_DIR = Path("exports")
 _DEFAULT_IPS_PATH = Path("config/ips.yaml")
 _WEEKLY_DIR_NAME = "reports/weekly"
+# Stamped on the boundary marks this job takes (#313, #355). Not passed to
+# ProgramState.load: this job never saves the book, and that label is for
+# the process that does.
+_WRITER_LABEL: Final[str] = "weekly_report"
 _DEFAULT_ELAPSED_DAYS: Final[int] = 7  # nominal week, used only on first run
 
 _ROLL_SEVERITY: Final[dict[str, int]] = {
@@ -421,6 +430,7 @@ def build_weekly_digest(
     rally: HedgeTriggerReason | None = None,
     worst_rally_pct: float | None = None,
     backup_heartbeat_warning: str | None = None,
+    realized: RealizedCarrySection | None = None,
 ) -> WeeklyDigest:
     """Pure assembly: report + roll records + history -> a WeeklyDigest.
 
@@ -459,6 +469,12 @@ def build_weekly_digest(
     rendered ``PENDING`` — a genuine contradiction inside one document.
     Populating the report's own fields instead makes it the single place
     those numbers render; the lede no longer repeats them.
+
+    ``realized`` is §4's realized-carry section from the position history
+    (#313), assembled by the caller (``build_and_render`` reads the
+    history; this function still does no I/O). ``None``, the default,
+    keeps the theta-only framing, which is what every caller built
+    without a history (including the golden-file test) gets.
     """
     if report.decision is None:
         msg = (
@@ -497,6 +513,7 @@ def build_weekly_digest(
             cumulative_carry_cost=cumulative_carry_cost,
             cumulative_since=first_as_of,
             premium_paid_point_in_time=report.protection.premium_paid,
+            realized=realized,
         ),
     )
 
@@ -952,6 +969,64 @@ def _read_backup_heartbeat_warning(export_dir: Path) -> str | None:
     )
 
 
+# ── Position history (#313) ─────────────────────────────────────────────
+
+
+def _take_weekly_mark(state: ProgramState, *, as_of: date) -> MarkOutcome:
+    """Take this week's boundary mark, isolated from the digest build.
+
+    Runs before the digest is built, and before its refusals: a digest
+    that raises (#364) or refuses an empty book must not cost the week
+    its mark (a book that has closed everything still needs its V1 = 0
+    boundary). The reverse holds too: a mark that fails is logged and
+    reported in §4, never raised, so it cannot stop the digest or its
+    heartbeat.
+    """
+    try:
+        return take_mark(state, written_by=_WRITER_LABEL, as_of=as_of)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        _logger.exception("weekly_report: weekly mark FAILED")
+        return MarkOutcome(
+            mark=None,
+            written=False,
+            message=f"no mark taken — the mark step failed: {exc}",
+        )
+
+
+def _realized_section(
+    state: ProgramState,
+    mark_outcome: MarkOutcome | None,
+) -> RealizedCarrySection:
+    """Read the history for §4, degrading to a stated error, never raising.
+
+    An unreadable history is a §4 problem, not a digest problem: the rest
+    of the report is still true, so it still sends, and §4 says why it
+    has no figures.
+    """
+    mark_note = (
+        mark_outcome.message
+        if mark_outcome is not None and mark_outcome.mark is None
+        else None
+    )
+    store = state.history
+    if store is None:
+        return RealizedCarrySection(
+            status=RealizedStatus.UNREADABLE,
+            error="this run has no position-history store",
+            mark_note=mark_note,
+        )
+    try:
+        history = store.load()
+    except HistoryCorruptError as exc:
+        _logger.exception("weekly_report: position history unreadable")
+        return RealizedCarrySection(
+            status=RealizedStatus.UNREADABLE,
+            error=str(exc),
+            mark_note=mark_note,
+        )
+    return build_realized_carry_section(history, mark_note=mark_note)
+
+
 # ── Guarded body build (#364) ───────────────────────────────────────────
 
 
@@ -978,6 +1053,7 @@ def build_and_render(
     as_of: date,
     period_label: str,
     export_dir: Path,
+    mark_outcome: MarkOutcome | None = None,
 ) -> _RenderedDigest:
     """Assemble and render this week's digest. Performs no writes.
 
@@ -998,6 +1074,8 @@ def build_and_render(
         period_label: Human-readable period label for the report header.
         export_dir: Shared state/export directory — read for market-data
             cache resolution and the prior snapshot history.
+        mark_outcome: What this run's mark step did (#313), so §4 can say
+            why there is no new mark when there is none.
 
     Returns:
         The assembled digest and its rendered markdown/HTML strings.
@@ -1073,6 +1151,7 @@ def build_and_render(
         history=history,
         as_of=as_of,
         backup_heartbeat_warning=_read_backup_heartbeat_warning(export_dir),
+        realized=_realized_section(state, mark_outcome),
     )
 
     return _RenderedDigest(
@@ -1280,6 +1359,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         period_label = args.period_label or f"Week of {as_of}"
 
+        # Before the refusals and the build: see _take_weekly_mark.
+        mark_outcome = _take_weekly_mark(state, as_of=as_of)
+        print(f"weekly_report: {mark_outcome.message}")
+
         if ips_config is None:
             print(
                 f"weekly_report: {args.ips_path} unavailable; refusing to "
@@ -1303,6 +1386,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             as_of=as_of,
             period_label=period_label,
             export_dir=args.export_dir,
+            mark_outcome=mark_outcome,
         )
     except Exception as exc:  # pylint: disable=broad-exception-caught
         # Unanticipated on purpose, and deliberately wraps state loading

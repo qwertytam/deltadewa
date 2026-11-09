@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
+from enum import StrEnum
 from html import escape
 from typing import TYPE_CHECKING, Any, Final
 
@@ -22,6 +23,13 @@ from deltadewa.analysis.decision_matrix import (
 )
 from deltadewa.analysis.market_environment import describe_skew_percentile
 from deltadewa.analysis.provenance import assess_freshness
+from deltadewa.analysis.realized_carry import (
+    HedgedReturn,
+    RealizedCarry,
+    hedged_return,
+    latest_period,
+    since_inception,
+)
 
 if TYPE_CHECKING:
     from deltadewa.analysis.crash_payoff import CrashConvexityResult
@@ -30,6 +38,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.provenance import ProvenanceLedger
     from deltadewa.ips_config import IpsConfig, IpsVega
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.history import PositionHistory
 
 # One unbroken literal, deliberately: the "Handbook links" workflow greps
 # the tree for handbook URLs, and a `\` line continuation inside the URL
@@ -182,6 +191,93 @@ class MarketContextSection:
     skew_lookback_days: int | None = None
 
 
+class RealizedStatus(StrEnum):
+    """How far the position history (#313) has got."""
+
+    NOT_STARTED = "NOT_STARTED"
+    ONE_MARK = "ONE_MARK"
+    MEASURED = "MEASURED"
+    UNREADABLE = "UNREADABLE"
+
+
+@dataclass(frozen=True)
+class RealizedCarrySection:  # pylint: disable=too-many-instance-attributes  # one field per rendered row
+    """Realized carry and hedged return, from the position history (#313).
+
+    Attributes:
+        status: Whether there is anything to measure yet.
+        history_start: The first mark's date. Nothing before it is known.
+        opening_value: The hedge book's value at that first mark, the
+            value the book held before the history enters at.
+        basis: The marks' pricing basis, stated with every figure.
+        inception: Realized carry from the first mark to the latest.
+        inception_return: Before/after-hedge return over the same span.
+        latest: Realized carry between the two most recent marks, when
+            that is a shorter span than ``inception``.
+        mark_note: Why this week has no new mark, when it has none.
+        error: Why the history could not be read, when it could not.
+
+    """
+
+    status: RealizedStatus
+    history_start: datetime.date | None = None
+    opening_value: float | None = None
+    basis: str | None = None
+    inception: RealizedCarry | None = None
+    inception_return: HedgedReturn | None = None
+    latest: RealizedCarry | None = None
+    mark_note: str | None = None
+    error: str | None = None
+
+
+def build_realized_carry_section(
+    history: PositionHistory,
+    *,
+    mark_note: str | None = None,
+) -> RealizedCarrySection:
+    """Assemble §4's realized-carry figures from the position history.
+
+    Pure: every number comes from
+    :mod:`deltadewa.analysis.realized_carry`; this only chooses which
+    spans to show. Since inception, plus the latest period when the two
+    differ.
+
+    Args:
+        history: Everything recorded.
+        mark_note: The weekly mark step's message when it took no mark.
+
+    Returns:
+        The section, with ``status`` saying whether anything is measured.
+
+    """
+    if not history.marks:
+        return RealizedCarrySection(
+            status=RealizedStatus.NOT_STARTED,
+            mark_note=mark_note,
+        )
+    first = history.marks[0]
+    inception = since_inception(history)
+    latest = latest_period(history)
+    return RealizedCarrySection(
+        status=(
+            RealizedStatus.ONE_MARK
+            if inception is None
+            else RealizedStatus.MEASURED
+        ),
+        history_start=first.mark_date,
+        opening_value=first.hedge_value,
+        basis=first.basis.value,
+        inception=inception,
+        inception_return=(
+            hedged_return(inception, start=first, end=history.marks[-1])
+            if inception is not None
+            else None
+        ),
+        latest=latest if latest is not None and latest != inception else None,
+        mark_note=mark_note,
+    )
+
+
 @dataclass(frozen=True)
 class ReturnFramingSection:
     """Return-attribution framing.
@@ -217,6 +313,12 @@ class ReturnFramingSection:
             snapshot, not summed across weeks — equal to
             ``ProtectionSection.premium_paid``). ``None`` outside the
             weekly digest.
+        realized: Realized carry and before/after-hedge return from the
+            position history (#313). ``None`` when the report was built
+            without the history (a standalone report); the renderers then
+            keep the theta-only framing above. When present it replaces
+            ``PENDING``, and the theta rows are relabelled as theta so the
+            two carry measures cannot be read as one.
 
     """
 
@@ -226,6 +328,7 @@ class ReturnFramingSection:
     cumulative_carry_cost: float | None = None
     cumulative_since: datetime.date | None = None
     premium_paid_point_in_time: float | None = None
+    realized: RealizedCarrySection | None = None
 
 
 @dataclass(frozen=True)
@@ -891,6 +994,211 @@ def _fmt_pct(value: float | None, decimals: int = 2) -> str:
     return f"{value:.{decimals}f}%"
 
 
+#: How many reasons a period is unreconcilable are listed before the rest
+#: are counted. Every reason since inception stays listed in full by
+#: ``python -m deltadewa.history_cli status``; the digest names the
+#: first few and says how many more there are, rather than growing a page
+#: a week.
+_MAX_LISTED_BREAKS: Final = 5
+
+_REALIZED_VS_THETA_NOTE: Final = (
+    "Realized carry is measured from recorded fills and marks; theta "
+    "carry is a forward model estimate of the current book. They answer "
+    "different questions and will not agree. A positive realized carry is "
+    "a cost; a negative one means the hedge paid."
+)
+
+
+def _signed_pct(value: float) -> str:
+    return f"{value:+.2f}%"
+
+
+def _carry_cell(carry: RealizedCarry, *, net: bool) -> str:
+    amount = carry.net if net else carry.gross
+    annual = carry.net_annual_pct if net else carry.gross_annual_pct
+    if annual is None:
+        return _fmt_money(amount)
+    return f"{_fmt_money(amount)} ({_signed_pct(annual)} annualised)"
+
+
+def _return_cell(result: HedgedReturn | None, *, after: bool) -> str:
+    if result is None:
+        return "—"
+    value = result.after_hedge_pct if after else result.before_hedge_pct
+    return "unavailable" if value is None else _signed_pct(value)
+
+
+def _theta_rows(rf: ReturnFramingSection) -> list[tuple[str, str]]:
+    rows = [
+        (
+            "Theta carry drag (annual, model)",
+            f"\u2212{_fmt_pct(rf.carry_drag_annual_pct)}",
+        ),
+    ]
+    if (
+        rf.weekly_carry_cost is not None
+        and rf.elapsed_days is not None
+        and rf.cumulative_carry_cost is not None
+        and rf.cumulative_since is not None
+    ):
+        rows += [
+            (
+                "Theta carry this period (model)",
+                (
+                    f"{_fmt_money(rf.weekly_carry_cost)} over "
+                    f"{rf.elapsed_days} day(s)"
+                ),
+            ),
+            (
+                f"Theta carry since {rf.cumulative_since} (model)",
+                _fmt_money(rf.cumulative_carry_cost),
+            ),
+        ]
+    if rf.premium_paid_point_in_time is not None:
+        rows.append(
+            (
+                "Point-in-time premium invested",
+                _fmt_money(rf.premium_paid_point_in_time),
+            ),
+        )
+    return rows
+
+
+def _break_notes(carry: RealizedCarry) -> list[str]:
+    if carry.reconcilable:
+        return []
+    listed = carry.breaks[:_MAX_LISTED_BREAKS]
+    notes = [
+        (
+            f"Since {carry.start}, realized carry cannot be reconciled against "
+            f"statements ({len(carry.breaks)} reason(s)):"
+        ),
+        *(f"- {reason}" for reason in listed),
+    ]
+    hidden = len(carry.breaks) - len(listed)
+    if hidden:
+        notes.append(
+            f"- …and {hidden} more; `python -m deltadewa.history_cli "
+            "status` lists them all.",
+        )
+    return notes
+
+
+def _measured_rows(
+    section: RealizedCarrySection,
+) -> tuple[list[tuple[str, str]], list[str]]:
+    inception = section.inception
+    if inception is None:  # pragma: no cover - MEASURED implies inception
+        return [], []
+    start = section.history_start
+    rows = [
+        (
+            f"Realized carry since {start}, gross",
+            _carry_cell(inception, net=False),
+        ),
+        (
+            f"Realized carry since {start}, net of monetization",
+            _carry_cell(inception, net=True),
+        ),
+    ]
+    if section.latest is not None:
+        rows.append(
+            (
+                (
+                    f"Realized carry {section.latest.start} to "
+                    f"{section.latest.end}, gross"
+                ),
+                _carry_cell(section.latest, net=False),
+            ),
+        )
+    rows += [
+        (
+            f"Before-hedge return since {start}",
+            _return_cell(section.inception_return, after=False),
+        ),
+        (
+            f"After-hedge return since {start}",
+            _return_cell(section.inception_return, after=True),
+        ),
+    ]
+    notes = [_REALIZED_VS_THETA_NOTE, *_break_notes(inception)]
+    reason = (
+        section.inception_return.unavailable_reason
+        if section.inception_return is not None
+        else None
+    )
+    if reason:
+        notes.append(f"Before/after-hedge return unavailable: {reason}.")
+    return rows, notes
+
+
+def realized_framing_rows(
+    rf: ReturnFramingSection,
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Build §4's rows and notes once, for both renderers.
+
+    Only called when ``rf.realized`` is set. One builder rather than one
+    per format, so the markdown and HTML digests cannot disagree about
+    what §4 says.
+
+    Returns:
+        ``(rows, notes)``: label/value pairs for the table, then the
+        sentences under it, in order.
+
+    """
+    section = rf.realized
+    rows = _theta_rows(rf)
+    notes: list[str] = []
+    if section is None:  # pragma: no cover - callers check first
+        return rows, notes
+    if section.status is RealizedStatus.UNREADABLE:
+        rows.append(("Realized carry", "unavailable"))
+        notes.append(f"The position history could not be read: {section.error}")
+    elif section.status is RealizedStatus.NOT_STARTED:
+        rows.append(("Realized carry", "not started"))
+        notes.append(
+            "The position history has not started. Run `python -m "
+            "deltadewa.history_cli init`, or it starts with the next "
+            "weekly mark.",
+        )
+    else:
+        notes.append(
+            f"No position history before {section.history_start}. The book "
+            f"held then is carried in at its {section.basis} mark of "
+            f"{_fmt_money(section.opening_value or 0.0)}.",
+        )
+        if section.status is RealizedStatus.ONE_MARK:
+            rows.append(
+                (
+                    "Realized carry",
+                    f"not yet measurable (one mark, {section.history_start})",
+                ),
+            )
+        else:
+            measured_rows, measured_notes = _measured_rows(section)
+            rows += measured_rows
+            notes += measured_notes
+    if section.mark_note:
+        notes.append(f"This week: {section.mark_note}.")
+    return rows, notes
+
+
+def _realized_framing_html(rf: ReturnFramingSection) -> str:
+    """Render §4's realized-carry table and notes as HTML."""
+    rows, notes = realized_framing_rows(rf)
+    row_html = "\n".join(
+        f"<tr><td>{escape(label)}</td><td>{escape(value)}</td></tr>"
+        for label, value in rows
+    )
+    note_html = "\n".join(
+        f'<p class="note">{escape(note)}</p>' for note in notes
+    )
+    return (
+        "<table>\n<tr><th></th><th>Value</th></tr>\n"
+        f"{row_html}\n</table>\n{note_html}"
+    )
+
+
 def _data_quality_cell(mc: MarketContextSection) -> str:
     """Build the Market Context table's "Data quality" value, qualified.
 
@@ -1119,7 +1427,14 @@ def render_markdown(report: ProgramReport) -> str:
     # ── 4. Return Framing ──────────────────────────────────────
     rf = report.return_framing
     lines += ["## 4. Return Framing", ""]
-    if (
+    if rf.realized is not None:
+        rows, notes = realized_framing_rows(rf)
+        lines += ["| | Value |", "|---|-------|"]
+        lines += [f"| {label} | {value} |" for label, value in rows]
+        lines.append("")
+        for note in notes:
+            lines += [note if note.startswith("- ") else f"> {note}", ""]
+    elif (
         rf.weekly_carry_cost is not None
         and rf.elapsed_days is not None
         and rf.cumulative_carry_cost is not None
@@ -1420,7 +1735,9 @@ def render_html_body(report: ProgramReport) -> str:
 {escape(d.entry_recommendation)}</p>
 {note_html}"""
 
-    if (
+    if rf.realized is not None:
+        return_framing_html = _realized_framing_html(rf)
+    elif (
         rf.weekly_carry_cost is not None
         and rf.elapsed_days is not None
         and rf.cumulative_carry_cost is not None
