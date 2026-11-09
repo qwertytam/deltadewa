@@ -70,7 +70,7 @@ class MarketDataProvider(Protocol):
         window every skew percentile the program reports is actually
         computed against. The handbook's own skew-percentile canon
         specifies a **five-year** lookback (`Skew Percentile
-        <https://qwertytam.github.io/deltadewa-handbook/part-6/skew-percentile/>`_),
+        <https://qwertytam.github.io/deltadewa-handbook/part-3/volatility-skew/#the-lookback-window>`_),
         a live contradiction filed as #317. Changing the default would
         change every skew percentile and, through the 30/70 band, every
         ``decision_matrix`` verdict and ``entry_timing_tree`` branch it
