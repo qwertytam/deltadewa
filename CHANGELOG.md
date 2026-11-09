@@ -19,6 +19,23 @@ history for that record instead.
 
 ### Added
 
+- **#262 — `/design` Book changes panel.** A readable log of every change to
+  the book, newest first: trades with their cash (fees shown as "not
+  captured", never zero when unknown), edits that moved no cash, and
+  corrections beside the fills they supersede. The headline counts changes
+  since the latest boundary mark, and the panel names any lot the history
+  cannot explain. It reads the position history (#313) rather than
+  `ProgramState`'s change log, which was never written. New
+  `analysis/book_changes.py`.
+
+- **#313/#70 — the position history, and digest §4 without `PENDING`.**
+  `exports/history/` records fills and boundary marks; digest §4 now reports
+  realized carry (gross and net of monetization), the latest period and
+  before/after-hedge return, and names every reason a period cannot be
+  reconciled. `python -m deltadewa.history_cli init|mark|status`. Run
+  `init` once after deploy (RUNBOOK §5.1). See `docs/part-x-coverage.md`,
+  "The position history (8e.1)".
+
 - **8d.2 (#410) — a ladder, as an object: the `/design` Ladder composer.**
   Compose strikes and weights (35/40/25 across 20/30/40% OTM is the
   handbook's example), size them as one ladder on the sizing workbench's own

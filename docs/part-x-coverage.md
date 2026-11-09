@@ -467,12 +467,13 @@ The chart function and its tests are kept; only the surface is retired.
 *Rationale:* the display was a `ConsoleReporter` print of a per-session,
 kernel-lifetime log — a form that does not survive the move to a persistent,
 shared, server-side `ProgramState`. **The data is not retired.**
-`ProgramState` constructs its own `PortfolioLogger` at `state.py:82` and
-threads it through mutation and import (`state.py:187`, `:213`), backed by
-`reporting/audit.py`'s `PortfolioChangeTracker` — so every edit made through
-`/design` is still being recorded. What is retired is the view of it, and
-rebuilding that view for the persistent model is
-[#262](https://github.com/qwertytam/deltadewa/issues/262).
+`ProgramState` constructs its own `PortfolioLogger` and threads it through
+mutation and import, backed by `reporting/audit.py`'s
+`PortfolioChangeTracker`. **That premise was wrong** (found in #313): no
+mutator ever called `log_portfolio_change`, so the log was always empty.
+The retired view was rebuilt, on the position history instead, in
+[#262](https://github.com/qwertytam/deltadewa/issues/262): see "Book changes
+(#262)" below.
 
 ### Deferred, with an issue
 
@@ -1241,7 +1242,7 @@ quarters-sum-to-the-year and reconciliation.
   counted). The theta rows are relabelled "theta … (model)" whenever realized
   rows sit beside them.
 - `python -m deltadewa.history_cli init|mark|status`.
-- Not yet on `/monitor` or `/design`.
+- `/design`'s Book changes panel (#262, below). Not on `/monitor`.
 
 **Not built (follow-ons to #313).**
 - `/design` close/settle/roll forms with fees and reason. Until then, closing
@@ -1249,3 +1250,49 @@ quarters-sum-to-the-year and reconciliation.
 - An unsettled-expiry prompt.
 - Program cost since inception on `/monitor`.
 - The hedge-success gauge.
+
+## Book changes (#262)
+
+Issue #262 asked for a view of `ProgramState`'s change log, on the premise
+that the data was recorded and only its display was lost. It was not: the
+`PortfolioLogger` `ProgramState` builds had no writer (no mutator called
+`log_portfolio_change`) and reset at every restart, so every export's
+`session_changelog` was empty. The durable record of every change to the book
+is the position history (#313), so the panel reads that and **builds no store
+of its own**: `analysis/book_changes.py` turns `events.jsonl` into rows,
+`planning/book_changes.py` lays them out.
+
+**Where.** A `/design` PLANNING panel beside provenance and liquidity, the
+other book-hygiene panels. It refreshes on `book.BOOK_VERSION_STORE`, which
+every BOOK mutation bumps. Read-only: no control, no BOOK write.
+
+**Decisions.**
+- **Scope is a window, with the total always stated.** The notebook version
+  was per-session; this is a long-lived program. The most recent 25 are
+  listed (a display constant in the panel, not policy) and the headline says
+  "N changes recorded; showing the latest 25". The full record is the
+  history file and `history_cli status`.
+- **The two forms the issue asked about are one list.** The working log is
+  the table; "since I last looked" is the headline's count of changes
+  recorded after the latest boundary mark, with an "After last mark" column.
+- **Nothing is hidden.** A superseded fill stays in the list, dimmed and
+  labelled, beside its correction.
+- **Unknown is said.** A trade entered without fees shows "fees not captured"
+  and cash "not captured", never `$0.00`. An edit shows "—" for cash: no cash
+  moved, so none was recorded.
+- **It reports lots the history cannot explain**, using the existing
+  `reconcile_book`, and says plainly when every lot is explained. A change
+  that reached the book without going through `ProgramState` shows up here.
+- **A broken history degrades this panel only.** A corrupt file is reported
+  with its line number and "nothing was skipped or repaired"; any other raise
+  is contained by `panel_guard`.
+
+**Not done.** `/monitor`: digest §4 already tells the IC reader when a period
+cannot be reconciled, and a second surface would need its own pin. The dead
+`PortfolioLogger` and the always-empty `session_changelog` key in every
+export are still there. Removing them changes the export format, a separate
+decision from this panel.
+
+**A convention worth knowing.** Negative money renders `$-50,006.50`, sign
+after the dollar sign. That is the app-wide convention (`fmt.currency`,
+pinned by `test_formatters.py`), not a bug in this panel.

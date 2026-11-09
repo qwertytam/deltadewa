@@ -536,7 +536,9 @@ The rules:
 
 The audit that motivated it also found that `ProgramState`'s change log was
 never written: no mutator called `log_portfolio_change`, which corrects #262's
-premise. Follow-ons to #313: the `/design` close/settle/roll forms, an
+premise: **#262 is built** on the history (a `/design` Book changes panel,
+`analysis/book_changes.py`), not on that logger, which is still there and
+still empty. Follow-ons to #313: the `/design` close/settle/roll forms, an
 unsettled-expiry prompt, `/monitor` cost since inception, and the hedge-success
 gauge rebuilt on realized carry. See `docs/part-x-coverage.md`, "The position
 history (8e.1)", and RUNBOOK §5.1 (run `history_cli init` once).
