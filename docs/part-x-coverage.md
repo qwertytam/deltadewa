@@ -1162,7 +1162,7 @@ logic, so harmless), and `formatters/dataframes.py`'s remaining helpers
 (`prepare_dataframe_display`, `apply_format_dict`, `highlight_*`,
 `to_excel_styled`) still have no product caller, as they did before.
 
-**Recorded, not acted on.** With `pnl_charts.py` gone, **nothing reads
+**Recorded, not acted on** (#448). With `pnl_charts.py` gone, **nothing reads
 `OptionPortfolio.monte_carlo_results` back**; `reporting/audit.py` only marks
 it stale. `run_monte_carlo_simulation`'s `persist_cache` contract, and the
 `/design` panel's `persist_cache=False` containment, therefore protect a cache
@@ -1246,10 +1246,10 @@ quarters-sum-to-the-year and reconciliation.
 
 **Not built (follow-ons to #313).**
 - `/design` close/settle/roll forms with fees and reason. Until then, closing
-  a leg in the UI is a `DELETE` edit, honestly unreconcilable.
-- An unsettled-expiry prompt.
-- Program cost since inception on `/monitor`.
-- The hedge-success gauge.
+  a leg in the UI is a `DELETE` edit, honestly unreconcilable. (#446)
+- An unsettled-expiry prompt. (#446)
+- Program cost since inception on `/monitor`. (#447)
+- The hedge-success gauge. (#447)
 
 **Failure isolation, as audited.** A blast-radius audit of the history code
 (a read-only agent over every surface it touches) found three real defects,
@@ -1274,7 +1274,7 @@ fixed before merge, and four gaps left as follow-ons.
   validates the whole set and writes it in one call.
 
 *Left as follow-ons:*
-- **`/health` has no history check**, so a corrupt `events.jsonl` leaves every
+- **`/health` has no history check** (#445), so a corrupt `events.jsonl` leaves every
   health check green. `state.history is not None` would always pass; a real
   check needs to confirm the directory is writable, that `history_start`
   exists, and that the latest mark is recent.
@@ -1283,7 +1283,7 @@ fixed before merge, and four gaps left as follow-ons.
   green. §4 is the only signal, and the headline does not carry it.
 - **With an empty book the digest refuses before sending**, so a mark failure
   that week is only logged.
-- **Nothing exercises the trade methods in production.** `open_position`,
+- **Nothing exercises the trade methods in production** (#446). `open_position`,
   `close_position`, `settle_position` and `roll_position` have no caller
   outside tests (the first follow-on above).
 
