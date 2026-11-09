@@ -65,6 +65,9 @@ from deltadewa.app.compliance import (
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import design
 from deltadewa.app.pages.design.planning import compliance as compliance_panel
+from deltadewa.app.pages.design.planning.market_env import (
+    _forward_variance_row,
+)
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
 from deltadewa.persistence import PortfolioSerializer
@@ -2318,11 +2321,26 @@ class TestMarketEnvironmentPanel:
         assert "88th percentile (trailing 5y)" in text
 
     def test_forward_variance_carries_no_band(self, tmp_path: Path) -> None:
-        """The IPS states no forward-variance band, so none is invented."""
+        """The handbook states no forward-variance cut, so none is invented.
+
+        N11/#417: the row says so, and says exactly what stands in for
+        the band — the term-structure shape — rather than claiming the
+        hedge-cost verdict reads forward variance, which it does not.
+        """
         panel = self._panel(tmp_path, _make_market_env())
         text = _collect_text(panel)
 
-        assert "no IPS band" in text
+        assert "No historical band" in text
+        assert "term-structure shape (contango)" in text
+        assert "feeds the hedge-cost verdict in its place" in text
+        assert "read against the hedge-cost verdict" not in text
+
+    def test_forward_variance_row_has_no_band_component(self) -> None:
+        """No band_bar is attached: the row is a bare level by design."""
+        row = _forward_variance_row(_make_market_env())
+
+        # _env_metric_row appends the bar as a fourth child when given one.
+        assert len(row.children) == 3
 
     def test_renders_the_decision_verdict_and_entry_timing(
         self,

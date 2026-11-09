@@ -192,10 +192,20 @@ def _skew_row(
 def _forward_variance_row(market_env: MarketEnvironment) -> Component:
     """Part X #8 — forward variance, as a level with no band.
 
-    The IPS states no forward-variance band, so this deliberately gets no
-    ``band_bar``: inventing one here would be exactly the presentation-side
-    policy the ``market_environment`` section exists to prevent. It is read
-    alongside the hedge-cost verdict below instead.
+    The handbook reads forward variance cheap/normal/high but gives no
+    cut, and the program ranks no forward-variance history, so this row
+    deliberately gets no ``band_bar`` and no chip: a band here would be
+    invented policy (borrowing skew's 30/70 would misapply bands the
+    handbook says its skew page "owns").
+
+    The text says what substitutes for the band, and says it exactly
+    (N11, #417). The pre-8c wording told the reader to "read against the
+    hedge-cost verdict", but ``_hedge_cost_verdict`` never reads forward
+    variance — it reads the term-structure *shape*, which says whether
+    3-month vol sits above or below the front, not whether either is
+    cheap against its own history. The data for a real percentile exists
+    (Cboe VIX3M history back to 2007, already cached in full); the
+    missing piece is a handbook band to grade it against.
     """
     if market_env.forward_vol_front_3m is None:
         return _env_unavailable_row(
@@ -204,16 +214,20 @@ def _forward_variance_row(market_env: MarketEnvironment) -> Component:
         )
 
     shape_text = (
-        f", term structure {market_env.term_shape.value}"
+        f"The term-structure shape ({market_env.term_shape.value.lower()})"
         if market_env.term_shape is not None
-        else ""
+        else "The term-structure shape"
     )
     return _env_metric_row(
         label="Forward variance",
         headline=f"{market_env.forward_vol_front_3m:.1f} vol points",
         detail=(
-            f"front-to-3M implied forward vol; no IPS band{shape_text} — "
-            "read against the hedge-cost verdict below"
+            "Front-to-3M implied forward vol. No historical band: the "
+            "handbook gives no cheap/normal/high cut, and the program "
+            "ranks no forward-variance history. "
+            f"{shape_text} is what feeds the hedge-cost verdict in its "
+            "place — it says whether 3-month vol sits above or below the "
+            "front, not whether either is cheap against its own history."
         ),
     )
 
