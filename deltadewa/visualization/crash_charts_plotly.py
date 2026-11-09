@@ -1,8 +1,7 @@
 """Plotly scenario-curve chart for the Dash monitor page.
 
-Separate from :mod:`deltadewa.visualization.crash_charts` (matplotlib,
-Jupyter-only) so the Jupyter/Dash split stays obvious — this module never
-imports matplotlib, and the matplotlib module never imports plotly.
+This module never imports matplotlib. The matplotlib generation of these
+charts, which it was once kept separate from, was retired in #312.
 """
 
 from __future__ import annotations

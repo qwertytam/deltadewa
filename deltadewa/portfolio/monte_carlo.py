@@ -266,9 +266,10 @@ class MonteCarloMixin:
                 value makes the results real-world (P-measure), flagged
                 ``"real_world"``.
             persist_cache: When ``True`` (default), caches the result on
-                ``self.monte_carlo_results`` as before — existing callers
-                (``visualization/pnl_charts.py``) read that attribute
-                directly rather than the return value.
+                ``self.monte_carlo_results`` as before. Since #312 nothing
+                reads that cache back (its last reader, the retired
+                matplotlib ``pnl_charts``, went with it); ``reporting.audit``
+                only marks it stale. The contract is unchanged.
                 Pass ``False`` for a scenario-local run (e.g. a what-if
                 horizon or expected-return override) that must not
                 overwrite the shared cache other panels read; the full

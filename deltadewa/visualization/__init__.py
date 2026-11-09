@@ -1,24 +1,17 @@
-"""Visualization module for options portfolio analysis.
+"""Chart builders for the Dash pages.
 
-This module provides comprehensive charting and plotting utilities for options
-portfolio analysis, including P&L diagrams, Greek distributions, heatmaps,
-theta decay analysis, and interactive scenario visualizations.
+Import from the submodules directly; this package re-exports nothing:
 
-Re-exports have been removed — import from submodules directly, for
-example:
-
-    from deltadewa.visualization.base import OptionCharts
     from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
+    from deltadewa.visualization.stress_charts_plotly import STRESS_METRICS
 
-The matplotlib-backed submodules (``base``, ``crash_charts``,
-``convenience``, ``pnl_charts``, ``theta_charts``, ``scenarios``,
-``greeks_charts``) are notebook-only (matplotlib is a `dev`-group
-dependency, not installed in the production/`jobs` image — see the M2.6
-close-out). The ``*_plotly`` submodules are the ones ``deltadewa.app``
-uses and stay import-safe without matplotlib either way. Confirmed
-unused at the package level (every call site already imports a specific
-submodule) before removing.
+- ``crash_charts_plotly``: the crash scenario curve on ``/monitor``.
+- ``distribution_charts_plotly``: the Monte Carlo distribution on ``/design``.
+- ``stress_charts_plotly``: the spot/vol and time/price stress charts.
 
-Author: DeltaDewa Team
-Date: 2026-01-12
+There was a second, matplotlib-backed generation of these builders
+(``OptionCharts`` and its mixins). It was reached only from the retired
+notebooks and was retired in #312, which is also what let ``matplotlib`` and
+``pillow`` leave the dependency set. See ``docs/part-x-coverage.md``,
+"The matplotlib half of visualization/ — retired (#312)".
 """
