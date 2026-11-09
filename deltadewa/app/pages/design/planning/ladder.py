@@ -1,4 +1,10 @@
-"""PLANNING zone: the Strike Ladder panel.
+"""PLANNING zone: the Strike candidates panel (was "Strike ladder").
+
+#410: every row here is a standalone single-strike candidate -- sized to
+meet the IPS crash offset *by itself* -- so this is a candidate browser,
+not a ladder. The sizing columns say "(alone)"; a ladder in the
+handbook's sense (a weighted blend of rungs scored as one unit) is the
+composer's job, not this table's.
 
 ``basis_crash_skew`` is a parameter, not a module constant: every
 PLANNING panel that prices the IPS crash shares this basis chip text,
@@ -10,7 +16,7 @@ over the domain objects, not a ``dash_table.DataTable`` migration — a
 DataTable sorts what it *renders* (``"$1,000" < "$900"`` lexicographically),
 and this panel's cells (the ``verdict-badge``-style budget column, the
 row-level ``Unsolvable`` breakout) aren't data DataTable can hold anyway.
-:func:`_sort_rungs` sorts the underlying ``LadderRung``/``CandidateMetrics``
+:func:`_sort_rungs` sorts the underlying ``GridCell``/``CandidateMetrics``
 values instead. Sort state lives in its own ``dcc.Store``
 (:data:`_SORT_STORE_ID`) rather than as a dial, since it isn't a pricing
 input — clicking a header must not reprice anything, only reorder rows
@@ -24,7 +30,7 @@ from typing import TYPE_CHECKING, Final, TypedDict
 
 from dash import ALL, Input, NoUpdate, Output, State, ctx, dcc, html, no_update
 
-from deltadewa.analysis.strike_ladder import build_strike_ladder
+from deltadewa.analysis.strike_ladder import build_candidate_grid
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import NoticeKind, panel_notice
@@ -40,9 +46,9 @@ if TYPE_CHECKING:
     from dash.development.base_component import Component
 
     from deltadewa.analysis.strike_ladder import (
-        LadderRung,
-        StrikeLadder,
-        StrikeLadderResult,
+        CandidateGrid,
+        CandidateGridResult,
+        GridCell,
         UnsolvableRung,
     )
     from deltadewa.app.factory import ProgramDashApp
@@ -52,23 +58,34 @@ if TYPE_CHECKING:
 # PLANNING zone: dial default. Carried over from the ladder cell of
 # hedge_design.ipynb, which Stage 4.3 deleted — the starting point that
 # notebook hardcoded, kept here as an adjustable dial default. Genuinely
-# presentation, not policy: no IPS strike-selection section exists to read
-# it from, and inventing one is its own decision, not #316's.
+# presentation, not policy: the solver's delta grid. (The IPS's optional
+# strike_ladder: section, 8d, states *%OTM* rungs and weights for the
+# composer; it does not choose which deltas to browse.)
 _DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
 
 # #326: safe_render's BLOCKED remediation pointer for this panel, which
 # raises ValueError on a book with no underlying position
-# (build_strike_ladder). Presentation, on the page that knows where the
+# (build_candidate_grid). Presentation, on the page that knows where the
 # fix lives -- not baked into the analysis-layer exception text.
 _LADDER_BLOCKED_HINT = (
     "Set the underlying spot and quantity in the BOOK zone; the ladder "
     "sizes every rung against them."
 )
 
+# #410: what the "(alone)" columns mean, said once above the table so the
+# headers can stay short. Each row is sized to meet the whole crash offset
+# by itself; none of these figures is a share of a ladder.
+_ALONE_NOTE = (
+    "Each row is a single strike sized to meet the IPS crash offset on "
+    "its own. Contracts, convexity and budget are for that strike bought "
+    "alone — not a share of a blended ladder. Use Add to put a strike into "
+    "the Ladder composer below, which scores a blend as one unit."
+)
+
 #: #357: this panel's TOC entry and heading id, from one source.
 SECTION: Final[SectionSpec] = SectionSpec(
     anchor_id="section-strike-ladder",
-    title="Strike ladder",
+    title="Strike candidates",
 )
 
 # #358: the sort-state Store's id, and the pattern-matching type every
@@ -76,6 +93,12 @@ SECTION: Final[SectionSpec] = SectionSpec(
 # book.py's remove-confirm buttons already use).
 _SORT_STORE_ID: Final[str] = "ladder-sort-state"
 _SORT_HEADER_TYPE: Final[str] = "ladder-sort-header"
+
+#: 8d: the pattern-matching type of each row's "Add" button. Created here
+#: (one per solved row, id ``{type, pct_otm, maturity}``) and read by the
+#: ladder composer's callback, which imports this name rather than writing
+#: the string a second time (#308's cross-module id rule).
+ADD_RUNG_TYPE: Final[str] = "ladder-add-rung"
 
 
 class _SortState(TypedDict):
@@ -103,7 +126,7 @@ class _Column:
 
     key: str
     label: str
-    sort_key: Callable[[LadderRung], float]
+    sort_key: Callable[[GridCell], float]
 
 
 # Order here is the table's column order — also what a sort_state=None
@@ -122,17 +145,17 @@ _COLUMNS: Final[tuple[_Column, ...]] = (
     ),
     _Column(
         "contracts",
-        "Contracts",
+        "Contracts (alone)",
         lambda rung: float(rung.contracts_needed),
     ),
     _Column(
         "achieved_convexity",
-        "Achieved convexity",
+        "Convexity (alone)",
         lambda rung: rung.achieved_convexity_pct,
     ),
     _Column(
         "budget",
-        "Budget",
+        "Budget + band (alone)",
         lambda rung: float(rung.meets_target_within_budget),
     ),
 )
@@ -142,12 +165,12 @@ _COLUMNS_BY_KEY: Final[dict[str, _Column]] = {
 
 
 def _sort_rungs(
-    rungs: StrikeLadder,
+    rungs: CandidateGrid,
     sort_state: _SortState | None,
-) -> StrikeLadder:
+) -> CandidateGrid:
     """Sort solved rungs by *sort_state*'s column, or leave them as-is.
 
-    Sorts the underlying ``LadderRung``/``CandidateMetrics`` values, never
+    Sorts the underlying ``GridCell``/``CandidateMetrics`` values, never
     the rendered strings (see the module docstring). ``sorted`` is stable,
     so rows tied on the sort column keep their original delta-major
     relative order rather than reshuffling on every re-render.
@@ -207,7 +230,9 @@ def _sort_header_row(sort_state: _SortState | None) -> html.Tr:
                 ),
             )
             for column in _COLUMNS
-        ],
+        ]
+        # 8d: not sortable -- a plain label over the per-row Add buttons.
+        + [html.Th("Ladder")],
     )
 
 
@@ -254,7 +279,7 @@ def _unsolvable_rung_line(rung: UnsolvableRung) -> html.P:
     )
 
 
-def _ladder_rung_row(rung: LadderRung) -> html.Tr:
+def _ladder_rung_row(rung: GridCell) -> html.Tr:
     """One solved ladder rung."""
     verdict = "within" if rung.meets_target_within_budget else "over"
     return html.Tr(
@@ -271,12 +296,25 @@ def _ladder_rung_row(rung: LadderRung) -> html.Tr:
             html.Td(f"{rung.contracts_needed:,}"),
             html.Td(fmt.percent(rung.achieved_convexity_pct)),
             html.Td(verdict),
+            html.Td(
+                html.Button(
+                    "Add",
+                    id={
+                        "type": ADD_RUNG_TYPE,
+                        "pct_otm": round(rung.metrics.pct_otm, 2),
+                        "maturity": rung.maturity_years,
+                    },
+                    className="ladder-add-rung",
+                    n_clicks=0,
+                    title="Add this strike to the ladder composer below",
+                ),
+            ),
         ],
     )
 
 
 def _ladder_panel_view(
-    result: StrikeLadderResult,
+    result: CandidateGridResult,
     sort_state: _SortState | None,
 ) -> Component:
     """Render the solved rungs table, then the unsolvable cells.
@@ -292,9 +330,9 @@ def _ladder_panel_view(
     table is always shown in the engine's own delta-major order, since
     there's no column value to sort those rows by.
     """
-    if not result.rungs and not result.unsolvable:
+    if not result.cells and not result.unsolvable:
         # Unreachable by construction: _render_ladder_panel_logic only
-        # calls build_strike_ladder with two non-empty sequences (a
+        # calls build_candidate_grid with two non-empty sequences (a
         # None list already short-circuits to the INPUT notice above
         # it), and itertools.product of two non-empty sequences always
         # yields at least one cell, which lands in rungs or unsolvable.
@@ -302,7 +340,7 @@ def _ladder_panel_view(
         # invariant ever changes.
         return _incomplete("No rungs requested.")
 
-    if not result.rungs:
+    if not result.cells:
         return panel_notice(
             "No rung solves at these inputs.",
             kind=NoticeKind.EMPTY,
@@ -310,9 +348,13 @@ def _ladder_panel_view(
         )
 
     rows = [
-        _ladder_rung_row(rung) for rung in _sort_rungs(result.rungs, sort_state)
+        _ladder_rung_row(rung) for rung in _sort_rungs(result.cells, sort_state)
     ]
     children: list[Component] = [
+        html.P(
+            _ALONE_NOTE,
+            className="plain-language",
+        ),
         html.Table(
             [
                 html.Thead(_sort_header_row(sort_state)),
@@ -356,7 +398,7 @@ def _render_ladder_panel_logic(
         )
 
     def _build() -> Component:
-        result = build_strike_ladder(
+        result = build_candidate_grid(
             portfolio,
             ips_config,
             target_deltas=target_deltas,

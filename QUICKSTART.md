@@ -138,7 +138,7 @@ Workbench mode: load a book and design changes to it.
 
 1. **BOOK**: position editor, underlying quantity, net-delta readout,
    guarded import/export
-2. **PLANNING**: market environment, sizing, strike ladder, roll table,
+2. **PLANNING**: market environment, sizing, strike candidates, ladder composer, roll table,
    hedge rebalance triggers, delta drift, convexity cliff, monetization
 3. **EXPLORATION**: spot x vol and time x price heatmaps, Monte Carlo
    distribution, vega term exposure

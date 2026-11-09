@@ -85,7 +85,7 @@ Three zones:
 - *BOOK* — position editor, underlying quantity with its **net-delta
   readout**, guarded import/export.
 - *PLANNING* — market environment, sizing (with the **vega sufficiency**
-  block), strike ladder, **roll plan** + roll status by tranche,
+  block), strike candidates, **ladder composer** (8d), **roll plan** + roll status by tranche,
   **hedge rebalance triggers**,
   **delta drift** (M2.8), **convexity cliff**, monetization. Most price the
   crash-skew (IPS anchor) basis; those that do not carry their own basis chip
@@ -125,7 +125,7 @@ default is chipped:
 
 | Chip | Panels | What it means |
 | --- | --- | --- |
-| `basis: crash-skew (IPS anchor)` | Sizing, strike ladder, roll plan, roll status by tranche, monetization | Reprices the book at the IPS crash. Agrees with `/monitor` to the cent. |
+| `basis: crash-skew (IPS anchor)` | Sizing, strike candidates, ladder composer, roll plan, roll status by tranche, monetization | Reprices the book at the IPS crash. Agrees with `/monitor` to the cent. |
 | `basis: live market data` | Market environment | Reprices nothing — reads the feed. |
 | `basis: book Greeks at today's market` | Hedge rebalance triggers, position aging (PLANNING); vega term exposure (EXPLORATION) | Reads the book's Greeks unshocked. |
 | `basis: spot -5%, flat vol (not the IPS crash)` | Delta drift | Reprices at the handbook's own fixed §13 shock, distinct from the IPS crash anchor every other PLANNING panel prices. |
@@ -165,7 +165,8 @@ default is chipped:
 | — | Part VII Board/IC report | — | Weekly digest email | `reporting/program_report.py` | **RETIRED** from the dashboard — see [Conscious retirements](#conscious-retirements) |
 | — | Time to Convexity Cliff | — | `/design` PLANNING — **Convexity cliff** | `analysis/health.HealthMixin.calculate_convexity_cliff_days`; lines from `IpsConvexity.cliff_*` | **PRESENT** (notebook-retirement audit) |
 | — | Sizing workbench | — | `/design` PLANNING | `analysis/sizing.size_hedge` | **PRESENT** |
-| — | Strike ladder builder | — | `/design` PLANNING | `analysis/strike_ladder.build_strike_ladder` | **PRESENT** |
+| — | Strike candidates (single-strike browser; was "Strike ladder") | — | `/design` PLANNING — **Strike candidates** | `analysis/strike_ladder.build_candidate_grid` | **PRESENT** as a *candidate browser*. It is **not** the handbook's ladder (a weighted blend of rungs scored as one unit, [Strike Selection](https://qwertytam.github.io/deltadewa-handbook/part-7/strike-selection/)): every row is sized to the whole IPS offset alone (#410) |
+| — | **Ladder composer** (a weighted strike ladder, sized and scored as one unit) | Part VII, [Strike Selection](https://qwertytam.github.io/deltadewa-handbook/part-7/strike-selection/), [Typical Tail Hedge Structure](https://qwertytam.github.io/deltadewa-handbook/part-7/typical-hedge-program-targets/#typical-tail-hedge-structure) | `/design` PLANNING — **Ladder composer** | `analysis/ladder` (`size_ladder`, `materialize_ladder`, `ladder_depth_profile`), `app/compliance.scorecard`; optional IPS `strike_ladder:` | **PRESENT** (8d, #410). See *The ladder, as an object (8d)* below |
 | — | Roll plan (action, target strike, roll-up cost) | — | `/design` PLANNING — **Roll plan** | `analysis/roll_planner.build_roll_plan` | **PRESENT** (#258) |
 | — | Roll status by tranche (per-trigger grades) | — | `/design` PLANNING — **Roll status by tranche** | `analysis/roll_status.evaluate_roll_status` | **PRESENT** |
 | — | Monetization planner | — | `/design` PLANNING + `/monitor` *Decisions* | `analysis/monetization.build_monetization_plan` | **PRESENT** |
@@ -1031,3 +1032,75 @@ pass/fail. `triggers.delta_ratio_deviation_*` is the deliberate borderline:
 classified TRIGGER because it lives under `triggers:`, is surfaced as a
 rebalance trigger, and is remedied by a hedge adjustment rather than by
 resizing the programme.
+
+## The ladder, as an object (8d)
+
+Issue #410 (finding N4): `build_strike_ladder` built a delta x maturity grid in
+which every row was sized to meet the whole crash offset *by itself*. The
+handbook's ladder ([Strike Selection](https://qwertytam.github.io/deltadewa-handbook/part-7/strike-selection/))
+is a weighted blend (35/40/25 across 20/30/40% OTM), judged on how it trades
+convexity against carry and how it covers the crash spectrum. 8d did both
+halves of the issue's choice: the grid was **renamed** to what it is (a
+*candidate browser*, `build_candidate_grid`), and the **joint** step was built
+as its own object.
+
+**What a ladder is.** `analysis/ladder.ProposedLadder`: ordered `RungSpec`s of
+(`pct_otm`, `maturity_years`, `weight`). Weights are **shares of contract
+count** (the basis the worked $20M book uses, 23/26/16 ~ 35/40/25) and are
+relative. The handbook does not say what "allocation" is measured in; premium
+weights would put about 5x the contracts on the deepest rung, contradicting
+"weight toward the middle strike".
+
+**Where the default comes from.** The optional IPS `strike_ladder:` section
+(`rungs: [{pct_otm, weight_pct[, maturity_years]}]`, weights sum to 100),
+with **no code defaults**: the handbook calls 35/40/25 an example. Template
+entries are in both `config/ips.example.yaml` and `examples/ips/ips_default.yaml`.
+Absent, the composer seeds from the live book's own shape. It is not a
+required key, so it is not a breaking change; `ips_config --check` lists it
+under "no code defaults".
+
+**How it is sized.** On the sizing workbench's own target
+(`sizing.sizing_basis`: beta-adjusted crash offset, carry budget on the true
+notional, IPS crash basis), one weighted "ladder unit" through `size_from_unit`,
+then split by weight with each rung rounded **up**. A one-rung ladder is exactly
+`size_hedge`.
+
+**How it is scored.** By the existing graders, on a shadow book
+(`materialize_ladder`): `app/compliance.scorecard` = the compliance strip's rows
+plus `build_scenario`'s hedge efficiency. No convexity formula lives in the
+composer. The scored quantities are carry vs budget, crash convexity at the IPS
+depth vs band, vega sufficiency, and hedge efficiency (convexity per unit of
+carry, the comparison Part VII actually draws), with crash gain by depth
+(-10/-20/-30/-40 plus the IPS depth, the handbook's own depths) per rung and
+combined. **Only the IPS depth is compared with the band**: the handbook states
+the band at one depth, and says a figure at another "cannot be read against" it.
+
+**One convexity (PR 1).** Sizing and the grid used `contracts x gross payoff /
+beta-adjusted notional`; the strip uses `(V_crash - V_today) / book notional`.
+Both were graded against the same band with nothing asserting agreement. Both
+now read the strip's gauge (`crash_convexity_pct(positions=...)`), pinned by
+`tests/test_analysis/test_convexity_agreement.py`.
+
+**Known limitation, not fixed here.** Sizing covers the offset on *gross* crash
+payoff while convexity is *net of premium*, so a ladder sized to the minimum lands
+just under `|crash| - tolerance`. Where that equals the band floor, PASS/FAIL can
+flip on a 0.1-point difference (10.0% vs 9.9% in the field test). The composer
+says convexity "barely differs between ladders" and points to carry, efficiency
+and the depth table; the sizing rule itself is unchanged.
+
+**Comparability, stated on the panel.** "This ladder" is the ladder *in place of*
+the book's option legs: long puts only, every rung priced at the book's
+volatility. "Current book" is the book as held (shorts and calls included, each
+leg at its own entered volatility). The composer prints a note when the two
+differ (legs outside the ladder; custom per-leg volatility) instead of letting
+the columns read as one measuring stick. Residuals left as they are: an **Add**
+from the candidates table carries its strike at 2 decimal places of %OTM (up to
+0.005% of spot off the solver-exact strike); a process that boots before ET
+midnight and serves after it prices the sized carry on the program day and the
+shadow book on its boot-time valuation date (the #182 class, shared with sizing).
+
+**Not built.** An optimiser over the weights (the handbook gives no objective
+beyond "payoff >= target, cost <= budget"); a tenor-ladder template (the
+handbook's "1/3 every quarter" is a process, the roll planner's job); merging the
+sizing workbench into the composer (a one-rung ladder *is* a sized candidate: the
+natural end state, a separate change because it retires a panel).

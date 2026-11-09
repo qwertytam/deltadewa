@@ -56,7 +56,7 @@ from deltadewa.analysis.position_aging import (
 from deltadewa.analysis.roll_planner import RollAction, build_roll_plan
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
-from deltadewa.analysis.strike_ladder import LadderRung
+from deltadewa.analysis.strike_ladder import GridCell
 from deltadewa.app import format as fmt
 from deltadewa.app.compliance import (
     compliance_sections_at_ips_anchor,
@@ -806,9 +806,9 @@ class TestBasisChip:
 
         text = str(design.render(app))
 
-        # Zone header + sizing + ladder + roll plan + roll status +
-        # monetization.
-        assert text.count(design._BASIS_CRASH_SKEW) == 6
+        # Zone header + sizing + strike candidates + ladder composer (8d) +
+        # roll plan + roll status + monetization.
+        assert text.count(design._BASIS_CRASH_SKEW) == 7
 
 
 class TestSizingLadderMaturityDefaults:
@@ -1097,7 +1097,75 @@ class TestSizingWorkbenchLegibility:
         assert "%" in _collect_text(wrapper)
 
 
-class TestStrikeLadderPanel:
+class TestCandidateGridPanelContract:
+    """#410: the panel is a candidate browser -- its name and ids are pinned.
+
+    ``ladder-target-deltas``, ``plan-ladder-panel`` and ``ladder-sort-state``
+    had no test naming them (a one-sided rename would only have surfaced in
+    a live app). The anchor id deliberately did *not* follow the title.
+    """
+
+    def test_layout_carries_the_pinned_ids_and_new_title(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from deltadewa.app.pages.design.planning import ladder
+
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        layout = ladder.layout(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            basis_crash_skew="basis: test",
+        )
+
+        for component_id in (
+            "ladder-target-deltas",
+            "ladder-maturities-years",
+            "plan-ladder-panel",
+            "ladder-sort-state",
+            "section-strike-ladder",
+        ):
+            assert _find_component(layout, component_id) is not None, (
+                component_id
+            )
+        heading = _find_component(layout, "section-strike-ladder")
+        assert heading is not None
+        assert "Strike candidates" in _collect_text(heading)
+        assert "Strike ladder" not in _collect_text(heading)
+
+    def test_table_says_its_figures_are_for_the_strike_alone(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.set_underlying_quantity(1_000.0)
+        ips_config = state.ips_config
+        assert ips_config is not None
+
+        panel = design._render_ladder_panel_logic(
+            portfolio=state.portfolio,
+            ips_config=ips_config,
+            target_deltas_raw="0.10",
+            maturities_years_raw="0.5",
+        )
+
+        text = _collect_text(panel)
+        assert "bought alone" in text
+        for label in (
+            "Contracts (alone)",
+            "Convexity (alone)",
+            "Budget + band (alone)",
+        ):
+            assert label in text
+
+
+class TestCandidateGridPanel:
     """Ladder: unsolvable rungs shown explicitly, reacts to input.
 
     Not "Mi5" — that finding ID already belongs to the unrelated
@@ -1199,7 +1267,7 @@ class TestLadderPanelThreeDeadEnds:
         tmp_path: Path,
     ) -> None:
         """A fresh book (underlying_quantity == 0) hits
-        build_strike_ladder's structural ValueError -- BLOCKED, with the
+        build_candidate_grid's structural ValueError -- BLOCKED, with the
         BOOK-zone remediation pointer as the detail line.
         """
         app = _app_with_ips(tmp_path)
@@ -1287,8 +1355,8 @@ def _rung(  # pylint: disable=too-many-arguments
     contracts_needed: int = 10,
     achieved_convexity_pct: float = 4.0,
     meets_target_within_budget: bool = True,
-) -> LadderRung:
-    """Build one ``LadderRung`` directly, bypassing the pricing engine.
+) -> GridCell:
+    """Build one ``GridCell`` directly, bypassing the pricing engine.
 
     #358's sort correctness is a pure function of these field values, not
     of any real crash/candidate pricing — every field the sort touches
@@ -1304,8 +1372,9 @@ def _rung(  # pylint: disable=too-many-arguments
         per_contract_payoff=per_contract_payoff,
         per_contract_intrinsic_floor=0.0,
         per_contract_carry=0.0,
+        per_contract_convexity_pct=0.0,
     )
-    return LadderRung(
+    return GridCell(
         target_delta=target_delta,
         maturity_years=maturity_years,
         metrics=metrics,
@@ -3882,12 +3951,13 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 14 PLANNING panels + 5 EXPLORATION panels share the .panel class
+        # 15 PLANNING panels + 5 EXPLORATION panels share the .panel class
         # (Batch 8a.4 added the compliance panel, #298 on /design for the
-        # first time; 8c the liquidity check (N10) and skew beta (N9)). A
-        # count, not a list, so a panel disappearing fails loudly; update
-        # it when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 19
+        # first time; 8c the liquidity check (N10) and skew beta (N9); 8d
+        # the ladder composer, #410). A count, not a list, so a panel
+        # disappearing fails loudly; update it when a panel is deliberately
+        # added or removed.
+        assert page.locator(".panel").count() == 20
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1
@@ -3898,6 +3968,97 @@ class TestPlanningZoneRendersClientSide:
         assert page.locator("#plan-roll-panel").count() == 1
         assert page.locator("#plan-liquidity-panel").count() == 1
         assert page.locator("#plan-skew-beta-panel").count() == 1
+        assert page.locator("#plan-ladder-composer-panel").count() == 1
+
+
+class TestLadderComposerClientSide:
+    """#410 (8d): the composer's callbacks work in a real browser.
+
+    Dash wiring is where a pattern-matching Add button, a text input two
+    callbacks care about, and a re-rendering table can fail silently: the
+    unit tests call the render logic directly and cannot see any of it.
+    """
+
+    @staticmethod
+    def _open(page: Page, design_app: DesignAppHandle) -> list[str]:
+        design_app.state.set_underlying_quantity(1_000.0)
+        js_errors: list[str] = []
+        page.on("pageerror", lambda exc: js_errors.append(str(exc)))
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "#plan-ladder-composer-panel table",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        return js_errors
+
+    def test_seeds_from_the_ips_and_shows_the_scorecard(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors = self._open(page, design_app)
+
+        assert js_errors == []
+        # config/ips.example.yaml states the handbook's 35/40/25 ladder.
+        rungs = page.locator("#ladder-composer-rungs").input_value()
+        assert [part.split("@")[0] for part in rungs.split(", ")] == [
+            "20",
+            "30",
+            "40",
+        ]
+        panel = page.locator("#plan-ladder-composer-panel").inner_text()
+        for expected in ("Current book", "This ladder", "Hedge efficiency"):
+            assert expected in panel
+        assert "Traceback" not in page.content()
+
+    def test_add_button_appends_a_rung_and_rescores(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors = self._open(page, design_app)
+        before = page.locator("#ladder-composer-rungs").input_value()
+        assert before.count(",") == 2
+
+        page.locator(".ladder-add-rung").first.click()
+
+        page.wait_for_function(
+            "document.getElementById('ladder-composer-rungs')"
+            ".value.split(',').length === 4",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        # Four rung rows plus the ladder total row, re-scored.
+        page.wait_for_function(
+            "document.querySelectorAll('#plan-ladder-composer-panel "
+            "table:first-of-type tbody tr').length === 5",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        assert js_errors == []
+
+    def test_load_current_book_replaces_the_rungs(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors = self._open(page, design_app)
+
+        page.get_by_role("button", name="Load current book").click()
+
+        # The fixture's one starter position: 10 long puts, so one rung
+        # weighted by its 10 contracts.
+        page.wait_for_function(
+            "document.getElementById('ladder-composer-rungs')"
+            ".value.split(',').length === 1",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        assert (
+            page.locator("#ladder-composer-rungs")
+            .input_value()
+            .endswith(
+                ":10",
+            )
+        )
+        assert js_errors == []
 
 
 class TestExplorationZoneRendersClientSide:

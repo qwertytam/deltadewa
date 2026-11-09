@@ -1621,3 +1621,227 @@ class TestLiquidity:
 
         with pytest.raises(IpsConfigError, match=match):
             load_ips_config(_write_yaml(tmp_path, config))
+
+
+_DEFAULT_IPS_YAML = (
+    Path(__file__).parent.parent / "examples" / "ips" / "ips_default.yaml"
+)
+
+
+class TestStrikeLadder:
+    """The optional ``strike_ladder`` policy section (8d, #410).
+
+    No code defaults: the handbook calls 35/40/25 an example, so an absent
+    section means "the composer seeds from the live book", and a present
+    one must state rungs whose weights sum to 100.
+    """
+
+    def test_absent_section_is_none_not_defaults(self, tmp_path: Path) -> None:
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+
+        assert ips.strike_ladder is None
+        assert "strike_ladder" not in ips.defaulted_sections
+
+    @pytest.mark.parametrize(
+        "template",
+        [EXAMPLE_IPS_YAML, _DEFAULT_IPS_YAML],
+        ids=["ips.example.yaml", "ips_default.yaml"],
+    )
+    def test_both_shipped_templates_carry_the_handbook_example(
+        self,
+        template: Path,
+    ) -> None:
+        ladder = load_ips_config(template).strike_ladder
+
+        assert ladder is not None
+        assert [(r.pct_otm, r.weight_pct) for r in ladder.rungs] == [
+            (20.0, 35.0),
+            (30.0, 40.0),
+            (40.0, 25.0),
+        ]
+        assert all(r.maturity_years is None for r in ladder.rungs)
+
+    def test_explicit_maturity_is_kept(self, tmp_path: Path) -> None:
+        config = {
+            **_VALID_CONFIG,
+            "strike_ladder": {
+                "rungs": [
+                    {"pct_otm": 20, "weight_pct": 60, "maturity_years": 1.0},
+                    {"pct_otm": 20, "weight_pct": 40, "maturity_years": 2.0},
+                ],
+            },
+        }
+
+        ladder = load_ips_config(_write_yaml(tmp_path, config)).strike_ladder
+
+        assert ladder is not None
+        assert [r.maturity_years for r in ladder.rungs] == [1.0, 2.0]
+
+    @pytest.mark.parametrize(
+        ("section", "match"),
+        [
+            ("not a mapping", "must be a mapping"),
+            ({}, "rungs"),
+            ({"rungs": []}, "non-empty"),
+            ({"rungs": "20/30/40"}, "non-empty"),
+            ({"rungs": ["20"]}, r"rungs\[0\] must be a mapping"),
+            (
+                {"rungs": [{"pct_otm": 20.0}]},
+                "requires both 'pct_otm' and 'weight_pct'",
+            ),
+            (
+                {"rungs": [{"pct_otm": 20.0, "weight_pct": 90.0}]},
+                "sum to 100",
+            ),
+            (
+                {
+                    "rungs": [
+                        {"pct_otm": 20.0, "weight_pct": 60.0},
+                        {"pct_otm": 30.0, "weight_pct": 60.0},
+                    ],
+                },
+                "sum to 100",
+            ),
+            (
+                {"rungs": [{"pct_otm": 100.0, "weight_pct": 100.0}]},
+                r"pct_otm must be in \[0, 100\)",
+            ),
+            (
+                {"rungs": [{"pct_otm": -5.0, "weight_pct": 100.0}]},
+                r"pct_otm must be in \[0, 100\)",
+            ),
+            (
+                {"rungs": [{"pct_otm": 20.0, "weight_pct": 0.0}]},
+                "weight_pct must be > 0",
+            ),
+            (
+                {"rungs": [{"pct_otm": True, "weight_pct": 100.0}]},
+                "pct_otm must be a number",
+            ),
+            (
+                {
+                    "rungs": [
+                        {
+                            "pct_otm": 20.0,
+                            "weight_pct": 100.0,
+                            "maturity_years": 0.0,
+                        },
+                    ],
+                },
+                "maturity_years must be > 0",
+            ),
+            (
+                {
+                    "rungs": [
+                        {"pct_otm": 20.0, "weight_pct": 50.0},
+                        {"pct_otm": 20.0, "weight_pct": 50.0},
+                    ],
+                },
+                "repeats",
+            ),
+        ],
+    )
+    def test_invalid_section_raises(
+        self,
+        tmp_path: Path,
+        section: object,
+        match: str,
+    ) -> None:
+        config = {**_VALID_CONFIG, "strike_ladder": section}
+
+        with pytest.raises(IpsConfigError, match=match):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_absent_ladder_is_reported_as_unseeded_not_defaulted(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """--check says this section has NO code defaults, not "defaulted"."""
+        path = _write_yaml(tmp_path, deepcopy(_VALID_CONFIG))
+
+        exit_code = main(["--check", str(path)])
+
+        out = capsys.readouterr().out
+        defaults_line = next(
+            line for line in out.splitlines() if "have code defaults" in line
+        )
+        assert exit_code == 0
+        assert "strike_ladder" not in defaults_line
+        assert "NO code defaults" in out
+        assert "strike_ladder" in out
+
+    def test_a_ladder_in_the_file_silences_the_no_default_note(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        config = deepcopy(_VALID_CONFIG)
+        config["strike_ladder"] = {
+            "rungs": [{"pct_otm": 20.0, "weight_pct": 100.0}],
+        }
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", str(path)])
+
+        out = capsys.readouterr().out
+        assert exit_code == 0
+        assert "is not a key this loader" not in out
+        no_default_line = [
+            line for line in out.splitlines() if "NO code defaults" in line
+        ]
+        assert not any("strike_ladder" in line for line in no_default_line)
+
+    def test_omitted_tenor_collides_with_an_explicit_entry_tenor(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """{20} and {20, maturity_years: <entry tenor>} are one rung.
+
+        The ladder object rejects them as a repeat, so a file that loaded
+        here would later raise when the composer built it from the IPS.
+        """
+        config = {
+            **_VALID_CONFIG,
+            "maturity_selection": {
+                "entry_tenor_years": 1.5,
+                "maintain_min_years": 1.0,
+                "maintain_max_years": 2.0,
+            },
+            "strike_ladder": {
+                "rungs": [
+                    {"pct_otm": 20.0, "weight_pct": 50.0},
+                    {
+                        "pct_otm": 20.0,
+                        "weight_pct": 50.0,
+                        "maturity_years": 1.5,
+                    },
+                ],
+            },
+        }
+
+        with pytest.raises(IpsConfigError, match="repeats"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_a_different_explicit_tenor_is_not_a_repeat(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        config = {
+            **_VALID_CONFIG,
+            "strike_ladder": {
+                "rungs": [
+                    {"pct_otm": 20.0, "weight_pct": 50.0},
+                    {
+                        "pct_otm": 20.0,
+                        "weight_pct": 50.0,
+                        "maturity_years": 2.0,
+                    },
+                ],
+            },
+        }
+
+        ladder = load_ips_config(_write_yaml(tmp_path, config)).strike_ladder
+
+        assert ladder is not None
+        assert len(ladder.rungs) == 2

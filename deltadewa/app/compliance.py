@@ -19,6 +19,7 @@ further computation.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from dash import html
@@ -29,17 +30,20 @@ from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.market_environment import DataQuality
 from deltadewa.analysis.maturity import MaturityBuckets
+from deltadewa.analysis.monitor_scenario import build_scenario
 from deltadewa.reporting.program_report import (
     CostSection,
     ProtectionSection,
     VegaSection,
     build_cost_section,
+    build_ips_compliance,
     build_protection_section,
     build_vega_section,
     expired_legs_caveat,
 )
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.hedge_efficiency import HedgeEfficiency
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.reporting.program_report import IpsComplianceSection
@@ -87,6 +91,56 @@ def compliance_sections_at_ips_anchor(
         ips_vega=ips_config.vega,
     )
     return cost_section, protection_section, vega_section
+
+
+@dataclass(frozen=True)
+class Scorecard:
+    """One book's standing against the program, graded once (#410).
+
+    The IPS compliance rows (carry, crash convexity, vega sufficiency) plus
+    the hedge-efficiency reading -- the handbook's convexity-to-carry ratio
+    against the IPS band, which is how Part VII compares one ladder with
+    another. Built for the live book and for a proposed ladder's shadow
+    book by the *same* call, so a baseline and a proposal are graded by one
+    function and cannot be graded differently.
+
+    Attributes:
+        compliance: The strip's rows and overall verdict.
+        efficiency: Crash gain per dollar of annual carry, read against the
+            IPS band.
+
+    """
+
+    compliance: IpsComplianceSection
+    efficiency: HedgeEfficiency
+
+
+def scorecard(
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> Scorecard:
+    """Grade *portfolio* the way the program grades the live book.
+
+    No arithmetic of its own: the compliance rows come from
+    :func:`compliance_sections_at_ips_anchor` (what ``/monitor``'s and
+    ``/design``'s strips render), and the efficiency from
+    :func:`~deltadewa.analysis.monitor_scenario.build_scenario` at the IPS
+    anchor -- the same call ``/monitor``'s cost panel makes. That is what
+    lets a ladder composer show a proposal beside the live book without a
+    second grader.
+    """
+    compliance = build_ips_compliance(
+        *compliance_sections_at_ips_anchor(portfolio, ips_config),
+    )
+    convexity = ips_config.convexity
+    scenario = build_scenario(
+        portfolio,
+        ips_config,
+        spot_pct=convexity.crash_scenario_pct,
+        vol_points=convexity.crash_vol_shock,
+        quantity=portfolio.underlying_quantity,
+    )
+    return Scorecard(compliance=compliance, efficiency=scenario.efficiency)
 
 
 def metric_list(compliance: IpsComplianceSection) -> str:

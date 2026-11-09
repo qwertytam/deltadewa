@@ -57,7 +57,12 @@ if TYPE_CHECKING:
     from deltadewa.portfolio.position import OptionPosition
 
 
-_DEFAULT_SCENARIO_SHOCKS: tuple[float, ...] = (-10.0, -20.0, -30.0, -40.0)
+#: The crash depths the handbook's "How the Payoff Changes" table reads a
+#: strike ladder at (part-7/strike-selection): -10/-20/-30/-40. Public so the
+#: ladder composer's depth profile reads the same depths the scenario table
+#: does (#410). Only the IPS depth is comparable to the convexity band;
+#: the others are shown, not graded.
+STANDARD_SCENARIO_SHOCKS: tuple[float, ...] = (-10.0, -20.0, -30.0, -40.0)
 
 
 def default_crash_shock() -> CrashShock:
@@ -383,7 +388,7 @@ def compute_crash_convexity(
     - exposes the full fine grid as ``result.curve`` for smooth chart
       rendering;
     - samples ``result.scenario_rows`` at the standard shock points
-      (by default ``_DEFAULT_SCENARIO_SHOCKS``) plus the IPS crash
+      (by default ``STANDARD_SCENARIO_SHOCKS``) plus the IPS crash
       scenario, without re-pricing.
 
     Args:
@@ -403,7 +408,7 @@ def compute_crash_convexity(
             separate arguments so policy cannot quietly move the pricing.
         scenario_shocks: Explicit shocks to include in
             ``scenario_rows``.  ``None`` uses
-            ``_DEFAULT_SCENARIO_SHOCKS`` filtered to ``shock_range``.
+            ``STANDARD_SCENARIO_SHOCKS`` filtered to ``shock_range``.
 
     Returns:
         ``CrashConvexityResult`` with curve, scenario_rows,
@@ -432,7 +437,7 @@ def compute_crash_convexity(
     # Resolved scenario shocks (within range or explicit overrides).
     if scenario_shocks is None:
         s_shocks: set[float] = {
-            s for s in _DEFAULT_SCENARIO_SHOCKS if lo <= s <= hi
+            s for s in STANDARD_SCENARIO_SHOCKS if lo <= s <= hi
         }
     else:
         s_shocks = {round(float(s), 6) for s in scenario_shocks}

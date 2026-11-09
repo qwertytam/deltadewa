@@ -703,6 +703,7 @@ def crash_convexity_pct(
     portfolio: OptionPortfolio,
     *,
     shock: CrashShock,
+    positions: Sequence[OptionPosition] | None = None,
 ) -> float:
     """Crash convexity: hedge-only value change as % of the protected book (§1).
 
@@ -716,6 +717,14 @@ def crash_convexity_pct(
         shock: The crash basis (see :func:`crash_hedge_value`). Applies to the
             crash leg only — ``V_today`` is always shock-free, since the
             steepening is a crash-state effect.
+        positions: Legs to measure. Defaults to every position in the
+            portfolio, which is the book's own convexity. Pass a subset to
+            score a candidate or a proposed ladder on **this same formula**
+            (#410): the numerator is that subset's ``V_crash - V_today`` and
+            the denominator is still the portfolio's protected book, so a
+            candidate's figure is directly comparable to the strip's. The
+            sizing workbench and the candidate grid read their "achieved
+            convexity" through this, not through a formula of their own.
 
     Returns:
         Crash convexity as a percentage of the protected book. ``0.0`` when the
@@ -725,8 +734,8 @@ def crash_convexity_pct(
     book = abs(portfolio.underlying_quantity * portfolio.spot_price)
     if book == 0:
         return 0.0
-    v_today = hedge_value(portfolio)
-    v_crash = crash_hedge_value(portfolio, shock=shock)
+    v_today = hedge_value(portfolio, positions=positions)
+    v_crash = crash_hedge_value(portfolio, shock=shock, positions=positions)
     return (v_crash - v_today) / book * 100.0
 
 
