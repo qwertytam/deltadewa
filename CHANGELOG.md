@@ -129,6 +129,23 @@ history for that record instead.
 
 ### Removed
 
+- **#312** — the matplotlib half of `deltadewa/visualization/` is retired:
+  `base.py` (`OptionCharts`), its five mixins (`crash_charts`,
+  `greeks_charts`, `pnl_charts`, `scenarios`, `theta_charts`),
+  `convenience.py` and `_protocols.py`, with the 7 test files that exercised
+  only them (51 tests; the suite goes 2774 → 2723, no surviving test edited).
+  Also removed: the five `Styler.background_gradient` functions in
+  `formatters/dataframes.py` (they imported matplotlib lazily, had no caller
+  and no test) and the matplotlib axis-formatter factories in
+  `formatters/values.py`. `matplotlib`, `pillow` and their five transitives
+  leave `poetry.lock` (78 → 71 packages).
+
+  The two halves had zero import edges between them, verified before
+  anything was deleted. The production image is unchanged: both packages
+  were `dev`-group only. Recorded rather than acted on: nothing reads
+  `OptionPortfolio.monte_carlo_results` back any more. See
+  `docs/part-x-coverage.md`.
+
 - **#279** — the leftover Jupyter layer is retired: `deltadewa/dashboard/`
   (12 modules), `deltadewa/widgets/` (11), `deltadewa/config.py`, their 253
   tests, the symbols they were the last caller of

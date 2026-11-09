@@ -844,7 +844,9 @@ It is a **candidate panel**, not dead code, and is annotated as such.
 **Four sweep candidates were false positives** and are deliberately untouched.
 Recorded so a later pass does not "finish the job" wrongly:
 `formatters.format_currency_for_axis` (five live `visualization/` callers — it
-is passed bare to `FuncFormatter`, so call-syntax searches miss it),
+is passed bare to `FuncFormatter`, so call-syntax searches miss it; **those
+callers were the matplotlib half, retired in #312, so this is now a
+test-only orphan and is annotated as such**),
 `volatility.get_volatility_stats` (live via `build_volatility_profile`),
 `crash_payoff.default_crash_shock` (live internal call), and
 `ProgramState.update_position` / `set_volatility` — where the retired-layer
@@ -1104,3 +1106,70 @@ beyond "payoff >= target, cost <= budget"); a tenor-ladder template (the
 handbook's "1/3 every quarter" is a process, the roll planner's job); merging the
 sizing workbench into the composer (a one-rung ladder *is* a sized candidate: the
 natural end state, a separate change because it retires a panel).
+
+## The matplotlib half of `visualization/` — retired (#312)
+
+#279 deliberately left the older, matplotlib generation of the chart builders
+standing to keep its own PR reviewable. #312 retired it, staged the way #279
+was: unhook first, so the gate was green before anything was deleted.
+
+**Removed:** `base.py` (`OptionCharts`), its five mixins (`crash_charts`,
+`greeks_charts`, `pnl_charts`, `scenarios`, `theta_charts`), `convenience.py`
+and `_protocols.py` — 8 modules — with the 7 test files that exercised only
+them (**51 tests**: 11 + 14 + 5 + 9 + 6 + 2 + 4; the suite went 2774 → 2723
+and no surviving test was edited). `visualization/` is now `__init__.py` and
+three Plotly modules.
+
+**Why it was safe.** Two read-only audits ran before any deletion. A seam map
+found **zero import edges in either direction** between the halves: the three
+`*_plotly` modules import nothing from the matplotlib set, the set imports
+nothing from them, and `__init__.py` has no code and re-exports nothing. So
+`base.py`, `convenience.py` and `_protocols.py`, the suspected straddlers,
+did not straddle. An import-path-qualified consumer trace found no production
+or test importer outside `visualization/` and `tests/test_visualization/`.
+`scenarios.py` and the `_protocols.py` family collide by bare name with live
+modules in `analysis/`, `marketdata/` and `portfolio/`; those were discarded
+as same-name hits, the collision #279's method exists to catch.
+
+**What the import audit missed, and the second one found.** The consumer
+trace grepped for `matplotlib` *imports*. pandas, however, imports
+matplotlib lazily inside `Styler.background_gradient`, so five functions in
+`formatters/dataframes.py` (`apply_gradient_style` and the portfolio, Greeks,
+scenario and pivot-table formatters built on it) depended on it without ever
+naming it. A probe with matplotlib blocked confirmed they raise
+`ImportError`. They had no product caller and no test named them, and since
+matplotlib was `dev`-only they could never have run in the production image,
+so they were retired with the half: the same "Styler colourings for
+`ipywidgets`" class #279 removed from this module. Without that,
+`matplotlib` could not have left `poetry.lock`.
+
+**Symbols that lost their last caller.** Disposed of on #279's reasoning.
+*Deleted* (zero callers anywhere, tests included): the three
+`get_*_axis_formatter` factories and `FUNC_FORMATTER` /
+`MATPLOTLIB_AVAILABLE` in `formatters/values.py`, the module's only
+production-path matplotlib import. *Kept and annotated at the function*
+(tested, and nothing in them depends on matplotlib):
+`format_currency_for_axis`, `format_percentage_for_axis` and
+`format_spot_with_pct`. Candidates for a later sweep, **not** taken here:
+`colours.Palette` fields `positive`, `axis`, `orange_faded`, `yellow`,
+`white` and `black` are now unused outside the retired charts (data, not
+logic, so harmless), and `formatters/dataframes.py`'s remaining helpers
+(`prepare_dataframe_display`, `apply_format_dict`, `highlight_*`,
+`to_excel_styled`) still have no product caller, as they did before.
+
+**Recorded, not acted on.** With `pnl_charts.py` gone, **nothing reads
+`OptionPortfolio.monte_carlo_results` back**; `reporting/audit.py` only marks
+it stale. `run_monte_carlo_simulation`'s `persist_cache` contract, and the
+`/design` panel's `persist_cache=False` containment, therefore protect a cache
+with no reader. Removing it changes the engine's behaviour, which this
+deletion is not allowed to do, so it is left as a decision for its own issue.
+
+**Dependencies.** `matplotlib`, `pillow` and their transitives (`contourpy`,
+`cycler`, `fonttools`, `kiwisolver`, `pyparsing`) left `poetry.lock`: 78 → 71
+packages, nothing added, no other version moved. Verified with the packages
+actually uninstalled (`poetry install --sync`), not just unreferenced. **The
+production image is unchanged**: both packages were in the `dev` group and the
+Dockerfile installs `--only main`, contrary to the premise of #312's
+acceptance criterion and of this file's earlier note. The saving is to the
+dev/CI environment, about 57 MB installed (matplotlib 28, fonttools 14,
+pillow 12, contourpy 1, pyparsing 1).

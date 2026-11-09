@@ -257,14 +257,18 @@ Two follow-ups came out of it, both now resolved:
   `MoneynessDrift`/`drift_pct` — the underlying entry-vs-now %OTM reading —
   also stays, still feeding the "OTM entry / now" column and
   `gamma_theta_delay`'s nearer-the-money check.
-- **A second orphan set: the matplotlib half of `visualization/`.** `base.py`
-  (`OptionCharts`) and its five mixins (`crash_charts`, `greeks_charts`,
-  `pnl_charts`, `scenarios`, `theta_charts`), plus `convenience.py` and
-  `_protocols.py` — 8 modules, ~2,760 lines, 51 tests, **no importer outside
-  `visualization/` and its own tests**. The live chart modules are the three
-  `*_plotly` ones. Retiring this set is what would let `matplotlib` and
-  `pillow` go; it was deliberately kept out of #279 to keep that PR
-  reviewable.
+- ~~**A second orphan set: the matplotlib half of `visualization/`.**~~
+  **Retired in #312.** `base.py` (`OptionCharts`), its five mixins,
+  `convenience.py` and `_protocols.py` (8 modules, 51 tests) are gone, and
+  `matplotlib`, `pillow` and their five transitives left `poetry.lock`
+  (78 → 71 packages). `visualization/` is now the three `*_plotly`
+  modules, independent leaves with no re-exports. **Do not re-add a
+  matplotlib chart or a `Styler.background_gradient` call**: neither
+  dependency is installed any more, and pandas imports matplotlib lazily,
+  so a gradient colouring fails at call time rather than at import. The
+  production image was never affected: both packages were `dev`-group.
+  See `docs/part-x-coverage.md`, "The matplotlib half of `visualization/` —
+  retired (#312)".
 
 Still open: **#12 Liquidity Risk**'s full metric is genuinely data-blocked
 (needs per-strike bid/ask and open interest, which the free CBOE/FRED
@@ -623,7 +627,8 @@ don't fix):
   refuses to propose a `utils`/`helpers` grab-bag for what doesn't cluster.
   Run before splitting a large module, retiring half a package, or
   extracting a layer not yet split out — e.g. #312 (the matplotlib half of
-  `visualization/`), #313 (a position-history layer). #308
+  `visualization/`, now retired: the halves had zero import edges, so the
+  answer was "nothing straddles"), #313 (a position-history layer). #308
   (`pages/design.py` → `pages/design/`) is the precedent: a per-panel
   seam, not the layout/callbacks one, because every id in the file is
   created by layout and referenced by a callback — see its close-out

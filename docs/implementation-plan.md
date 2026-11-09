@@ -1831,7 +1831,7 @@ Two findings were recorded rather than acted on, both now in
   `part-x-coverage.md`. The same work turned up **#384**: the neighbouring
   strike-drift trigger implements a *retired* handbook rule (a 45% OTM level)
   as a 40 pp change since entry, and cannot fire for this program.
-- **A second orphan set**: the matplotlib half of `deltadewa/visualization/` —
+- ~~**A second orphan set**~~ **(retired in #312, below)**: the matplotlib half of `deltadewa/visualization/` —
   `base.py` (`OptionCharts`) and its five mixins, plus `convenience.py` and
   `_protocols.py`. 8 modules, ~2,760 lines, 51 tests, no importer outside
   `visualization/` and its own tests. Retiring it is what would let
@@ -2494,8 +2494,8 @@ listed here — **both now done.** **#279** (Stage 4.4, above) retired
 `dashboard/` + `widgets/` as one batch, 21 modules with zero product
 consumers; the second orphan set it found along the way — the matplotlib
 half of `visualization/` (8 modules, ~2,760 lines, 51 tests) — was
-deliberately kept out of #279 to keep that PR reviewable and is **still
-open, tracked as #312** — filed for exactly this, and the wording here
+deliberately kept out of #279 to keep that PR reviewable and was
+**tracked as #312, since retired** — filed for exactly this, and the wording here
 was corrected on 2026-09-01 after a review found this doc claiming no
 issue existed for it when one already did. **#246** (PRs #289–#291) moved
 the handbook to its own public repo —
