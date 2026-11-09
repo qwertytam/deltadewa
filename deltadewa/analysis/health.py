@@ -407,14 +407,14 @@ class HealthMixin:
         if abs(cumulative_carry_paid) < 0.01:
             return 0.0
 
-        # Get current hedge P&L (options value change from initial)
-        # This is a simplified measure - actual hedge P&L would need
-        # historical tracking
-        # https://github.com/qwertytam/deltadewa/issues/70
-        # For now, use crash protection value as a proxy for hedge value.
-        # NOTE (M1.2/Mo1): only the crash *scenario* is single-sourced here;
-        # the include_underlying basis and carry wiring are unchanged and this
-        # gauge stays a proxy until M2.4 wires it to realized tracking.
+        # A proxy: the crash payoff stands in for hedge P&L. M2.4 did not
+        # wire this to realized tracking; it omitted the gauge from
+        # /monitor instead (#165), since a permanently neutral gauge is
+        # worse than none. The realized history now exists (#313,
+        # analysis/realized_carry.py), and rebuilding the gauge on it is
+        # #313's named follow-on (8e.2). Until then this has no product
+        # consumer. NOTE (M1.2/Mo1): only the crash *scenario* is
+        # single-sourced here; the include_underlying basis is unchanged.
         current_spot = self.portfolio.spot_price
         crash_spot = current_spot * (1 + crash_scenario_pct / 100)
         hedge_pnl = self.portfolio.calculate_pnl_at_expiry(

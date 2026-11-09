@@ -64,6 +64,11 @@ The package is layered. Put logic in the lower layers; keep the UI dumb.
   destructive ops/import). Not per-session — one hedge program, one instance.
 - `visualization/` — chart builders.
 - `persistence.py` — portfolio load/save (YAML/JSON). Round-trip new fields here.
+- Position history (#313) — `portfolio/history.py` (records: `Fill`,
+  `BookEdit`, `BookMark`; pure), `history_store.py` (append-only
+  `exports/history/*.jsonl`), `analysis/realized_carry.py` (the identity),
+  `history_cli.py` (`init`/`mark`/`status`). Every `ProgramState` mutator
+  journals to it; **a new mutator must too**.
 - `reporting/` — console/text output.
 
 Rule of thumb: if it has a number in it, it belongs in `analysis/` or `portfolio/`
@@ -510,6 +515,31 @@ entry-timing verdict still renders now that data quality reads `CACHED`
 — is confirmed fine on inspection of a real built digest:
 `decision_matrix`/`entry_timing_tree` gate on `market_env.data_quality`
 directly, never on `combined_quality`, so this bug never reached them.
+
+**8e.1 has shipped** (#313, absorbing #70, closed as its duplicate): the
+position history, and digest §4 without `PENDING`. The handbook's
+[Realized Carry Methodology](https://qwertytam.github.io/deltadewa-handbook/part-7/realized-carry-methodology/)
+dictated the record shape. There are **fills** (OPEN/CLOSE/SETTLE, price and
+fees, a roll as two linked fills, CLOSE carrying a ROUTINE/MONETIZATION
+reason) and **boundary marks** (one per program date, weekly, taken by the
+digest job before it builds and isolated from it both ways). Nothing a period
+figure could be derived from is stored.
+
+The rules:
+- **Unknown is not zero.** An uncaptured fee is `None` and a named break.
+- **Edits without a fill are journaled as `BookEdit`, not forbidden.** That is
+  what `/design`'s delete and edit write until 8e.2's trade forms.
+- **The history starts at an opening mark.** Legs already held enter at V0,
+  never as synthetic opens, and every surface says "No position history
+  before <date>".
+- **Mutate, then journal, then save.**
+
+The audit that motivated it also found that `ProgramState`'s change log was
+never written: no mutator called `log_portfolio_change`, which corrects #262's
+premise. Follow-ons for 8e.2: the `/design` close/settle/roll forms, an
+unsettled-expiry prompt, `/monitor` cost since inception, and the hedge-success
+gauge rebuilt on realized carry. See `docs/part-x-coverage.md`, "The position
+history (8e.1)", and RUNBOOK §5.1 (run `history_cli init` once).
 
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public

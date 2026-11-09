@@ -2474,15 +2474,23 @@ Opened during Phase 4 and deliberately not taken there:
   backtesting).** The blocker behind **#12** above; the free CBOE/FRED
   provider returns index-level series only. Everything data-blocked in this
   plan is waiting on this one issue.
-- **#70 — track hedge historical P&L.** The position-history layer. Also the
+- ~~**#70 — track hedge historical P&L.** The position-history layer. Also the
   blocker behind the **hedge-success gauge**, which M2.4 (finding M2)
   deliberately omitted and M4.1's gauge audit re-confirmed as omitted: it
   cannot compute a real value without this. The one Jupyter-era gauge with no
-  Dash home for a reason.
+  Dash home for a reason.~~ **Closed as a duplicate of #313** (2026-11-09),
+  whose 8e.1 built the history layer: `exports/history/`, fills and
+  boundary marks, realized carry in digest §4. The hedge-success gauge is
+  #313's named follow-on (8e.2). See `docs/part-x-coverage.md`, "The
+  position history (8e.1)".
 - **#262 — surface the session change log in the Dash app.** From M4.4's
-  parity pass: `ProgramState` still *records* the change log
-  (`state.py:82`); only the notebook's *display* of it went. The fifth of the
-  five parity items, and the only one M4.8 did not take.
+  parity pass. **Correction (8e.1):** the premise that `ProgramState` "still
+  *records* the change log" was wrong. It constructs a `PortfolioLogger`,
+  but no mutator ever called `log_portfolio_change`, so every export's
+  `session_changelog` has been empty, and it reset at each process start
+  anyway. The durable record of book changes is now the position history's
+  `events.jsonl` (#313); #262 is better served by rendering that than by
+  reviving the logger.
 - **#264 — make the currency symbol configurable.** Raised out of #182 and
   explicitly not taken there: the hardcoded `$` is a design constraint rather
   than a defect, already centralized behind `formatters.values`, and for a
@@ -2548,8 +2556,8 @@ a future audit should not treat a closed index as coverage.
 | #182    | M4.5 (PR #265)                         | #274    | M4.7 (PR #278)                               |
 | #185    | M4.6 (PR #268); items 4/7 → issue only | #279    | Stage 4.4 (DONE)                             |
 
-Deferred, not closed: **#156**, **#70**, **#262**, **#264** — all in the
-backlog section above. (**#279** and **#246**, both listed just above
+Deferred, not closed: **#156**, **#262**, **#264** — all in the
+backlog section above (**#70** was closed as a duplicate of #313 in 8e.1). (**#279** and **#246**, both listed just above
 this table as "tracked in their own issues," are now done — see the
 paragraph there.)
 

@@ -278,8 +278,12 @@ descends from the same code path.
 **The hedge-success gauge — omitted, per M2.4 finding M2.** A permanently
 neutral gauge is worse than no gauge. *Rationale:* it needs realized-carry
 tracking, which needs the position-history layer
-[#70](https://github.com/qwertytam/deltadewa/issues/70) owns; until then any
+[#70](https://github.com/qwertytam/deltadewa/issues/70) owned; until then any
 value it shows is a proxy. `analysis/health.py` records this at the function.
+**8e.1 built that layer** (#313, which absorbed #70; see "The position
+history (8e.1)" below), so this retirement is now lifted *in principle*.
+The gauge is #313's named follow-on (8e.2), rebuilt on realized carry. Do
+not re-add the old crash-payoff proxy.
 
 **`/monitor` is not a gauge wall.** The principle behind every
 `/design`-first placement in M2.7: `/monitor` answers three questions (what
@@ -1173,3 +1177,75 @@ Dockerfile installs `--only main`, contrary to the premise of #312's
 acceptance criterion and of this file's earlier note. The saving is to the
 dev/CI environment, about 57 MB installed (matplotlib 28, fonttools 14,
 pillow 12, contourpy 1, pyparsing 1).
+
+## The position history (8e.1)
+
+Issue #313 (absorbing #70): digest §4 rendered `PENDING` since M2.6 because
+nothing recorded what the hedge actually cost. The handbook now specifies the
+method ([Realized Carry Methodology](https://qwertytam.github.io/deltadewa-handbook/part-7/realized-carry-methodology/)):
+`V0 + P - R - V1`, gross against the carry budget, net of monetization, with
+fills recorded as events (a roll is two) and boundary marks computed once and
+shared by the two periods that meet at them.
+
+**What existed was not enough, and why a third store.**
+- `program_state.json` is overwritten in place, and `remove_position` dropped a
+  leg with no proceeds.
+- `session_changelog` was always empty: no mutator ever called
+  `log_portfolio_change`.
+- `WeeklySnapshot.cumulative_carry_cost` is theta integrated over time, the
+  handbook's *forward* measure, not realized carry.
+- The offsite backup is nightly encrypted copies of those, so it cannot
+  recover what they never recorded.
+
+The new layer holds exactly the two things that existed nowhere: **fills**
+(P, R) and **marks** (V0, V1).
+
+**Where, and what bounds it.** `exports/history/events.jsonl` and
+`marks.jsonl` are inside the bind-mounted, nightly-backed-up `exports/`, with no
+backup-script change. Events are written only when a person changes the book;
+marks are at most one per program date, taken weekly. That comes to roughly
+200 KB a year, and it is **never pruned**, because pruning would break
+quarters-sum-to-the-year and reconciliation.
+
+**Decisions, so they are not re-litigated.**
+- **Unknown is not zero.** An uncaptured fee or price is `None`. The figure is
+  still computed from what was recorded, and the gap is a named *break* that
+  makes the period not reconcilable.
+- **Edits without a fill are recorded, not forbidden.** `update_position`
+  (contract or quantity), `remove_position`, `clear_positions` and
+  `import_portfolio` write a `BookEdit`, so `/design`'s correction workflow
+  keeps working and the period says it cannot tie to a statement.
+- **The history starts at an opening mark.** Legs held before it enter at V0,
+  never as synthetic opens from `entry_premium` (that would charge years of
+  premium to week one). Every surface says "No position history before
+  <date>". One mark reads "not yet measurable", never 0.
+- **Periods are spans between marks.** A quarter uses the nearest marks and
+  states their dates; there is no interpolation.
+- **One basis at both ends.** Only `MODEL` exists today (the analytic engine at
+  the hand-entered IVs). A future mid-market basis would be a new enum value,
+  and mixed-basis periods are refused.
+- **After-hedge return uses net carry.** Monetization proceeds are cash the
+  hedged portfolio received. Before-hedge return is a price return, ex-dividends
+  (the program records a yield assumption, not dividends received). Both are
+  unavailable, with the reason stated, when the underlying holding changed
+  between the marks.
+- **Mutate, then journal, then save.** Journaling first would record edits that
+  validation then refused. A failed append reverts to the last save when the
+  file on disk provably is that save.
+- **No new IPS keys.** With one legal basis, a basis key would have nothing to
+  choose. Spot age at each mark is carried as a fact, not graded here.
+
+**Surfaces.**
+- Digest §4: realized carry since inception (gross and net), the latest
+  period, before/after-hedge return, and breaks (five listed, the rest
+  counted). The theta rows are relabelled "theta … (model)" whenever realized
+  rows sit beside them.
+- `python -m deltadewa.history_cli init|mark|status`.
+- Not yet on `/monitor` or `/design`.
+
+**Not built (8e.2).**
+- `/design` close/settle/roll forms with fees and reason. Until then, closing
+  a leg in the UI is a `DELETE` edit, honestly unreconcilable.
+- An unsettled-expiry prompt.
+- Program cost since inception on `/monitor`.
+- The hedge-success gauge.

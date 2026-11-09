@@ -1336,6 +1336,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         (``DIGEST_HEARTBEAT_URL``) is pinged on **outcome 0 only**; ``1``,
         ``2``, and ``3`` all leave it un-pinged.
 
+        Every outcome after a successful state load, ``1`` and a build
+        failure ``3`` included, has already written the week's boundary
+        mark to the position history (#313): see :func:`_take_weekly_mark`.
+
     """
     logging.basicConfig(level=logging.INFO)
     args = _parse_args(argv)

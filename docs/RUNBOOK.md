@@ -354,6 +354,35 @@ Reload `http://<tailscale-ip>:8050/monitor` and confirm:
   freshness, with no STALE/SYNTHETIC/UNAVAILABLE banner unless that's
   genuinely the feed's current state
 
+### 5.1. Start the position history — once, after the first load (#313)
+
+Realized carry (digest §4) is measured from the position history under
+`exports/history/`, and **the history knows nothing before the day it
+starts**. Start it as soon as the real book is loaded:
+
+```bash
+docker compose run --rm --no-deps jobs python -m deltadewa.history_cli init
+# history_cli: marked N lots on <date> at <value> — the position history starts here
+```
+
+That writes the **opening mark**: the book as it stands, priced once. Legs
+already held enter the history at their value in it; their earlier
+premiums are deliberately not reconstructed, and every surface says "No
+position history before <date>". `init` refuses a second time (exit 1).
+If it is never run, Sunday's weekly digest starts the history itself,
+so a missed step costs a few days of history, not all of it.
+
+From then on, record trades so realized carry can tie to the statements.
+Until `/design` has close/settle/roll forms (8e.2), closing or rolling a
+leg there by deleting or editing it is journaled as a **book edit with no
+fill**, and §4 lists that period as not reconcilable. That is correct,
+not a bug. To see every recorded break and any lot the history does not
+explain:
+
+```bash
+docker compose run --rm --no-deps jobs python -m deltadewa.history_cli status
+```
+
 ## 6. Adding a position via `/design`
 
 Bookmark `http://<tailscale-ip>:8050/design`. This is the operator's editor
@@ -478,6 +507,17 @@ curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 # boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
 # degraded, by design, so 200 alone doesn't confirm the restored
 # config/ips.yaml actually loaded.
+
+# 5. Confirm the position history came back with exports/ (#313). It
+#    should report the SAME start date as before the outage. Do NOT run
+#    `history_cli init` here: the history already exists (init would
+#    refuse anyway), and starting it again would discard everything
+#    measured so far.
+docker compose run --rm --no-deps jobs python -m deltadewa.history_cli status
+# "No position history before <original start date>." — and any break it
+# lists is a real gap in the record, not a restore artefact. A
+# HistoryCorruptError naming a line means the restored file is damaged:
+# take that file from an earlier backup commit rather than editing it.
 ```
 
 **Email will fail until the SMTP relay's IP allowlist is updated.** A new
@@ -743,7 +783,18 @@ one problem per run; work through it rather than guessing:
   see `docs/market-data.md` for which readings live in it and which
   pricing inputs are hand-entered and never refresh),
   `exports/reports/weekly/` (digest + snapshot history),
-  `exports/config-backup/` (see below), and any autosaves.
+  `exports/history/` (see below), `exports/config-backup/` (see below),
+  and any autosaves.
+- **`exports/history/`** — the position history (#313), the record
+  realized carry is measured from: `events.jsonl` (every fill — open,
+  close, settle, each with its price and fees — and every book edit that
+  had no fill) and `marks.jsonl` (one mark of the whole book per date it
+  was marked, weekly). Append-only and never pruned: about 200 KB a year.
+  It is **the one file in `exports/` that cannot be rebuilt**, since a
+  past fill or mark cannot be recovered after the fact. It rides the
+  nightly encrypted backup with everything else. Never edit a line in
+  place; a mistyped fill is corrected by a new record (see
+  `deltadewa/history_store.py`).
 - **`exports/config-backup/`** — a nightly copy of `config/ips.yaml` and
   a small manifest (`ips.yaml`, `MANIFEST.json`: `sha256`, `app_version`,
   `policy_changed_at`), staged by `ops/backup-exports.sh` on every run
@@ -1009,6 +1060,12 @@ docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_repo
 
 # Offsite backup push (root; needs the SSH key from §10)
 sudo /home/deploy/deltadewa/ops/backup-exports.sh
+
+# Position history (#313): start it (once), take a mark by hand (e.g. a
+# quarter-end boundary; at most one per date), or list what's recorded
+docker compose run --rm --no-deps jobs python -m deltadewa.history_cli init
+docker compose run --rm --no-deps jobs python -m deltadewa.history_cli mark
+docker compose run --rm --no-deps jobs python -m deltadewa.history_cli status
 ```
 
 **Market-data refresh exit codes** — a manual `echo $?` after the refresh
@@ -1029,10 +1086,17 @@ is a documented diagnosis, not a guess:
 
 |Exit|Meaning|Files written?|Heartbeat pinged?|
 |---|---|---|---|
-|`0`|Sent (or, without `--send-email`, built and written)|md/html/snapshot|Yes — the *only* outcome that pings `DIGEST_HEARTBEAT_URL`|
-|`1`|Refused — no IPS policy, or an empty book|No|No|
-|`2`|Built and written, but `--send-email` delivery failed (missing/invalid env var, or the SMTP relay rejected it)|md/html/snapshot|No|
-|`3`|Build itself failed (#364) — an input this module does not control raised partway through (provider outage, a repricing edge case)|**No — not even a partial one**, so next week's digest still compares against last week's real snapshot|No. With `--send-email`, a best-effort plain-language failure alert is sent instead (subject `Weekly Hedge Digest — FAILED to build (<date>)`)|
+|`0`|Sent (or, without `--send-email`, built and written)|md/html/snapshot, + the week's mark|Yes — the *only* outcome that pings `DIGEST_HEARTBEAT_URL`|
+|`1`|Refused — no IPS policy, or an empty book|Only the week's mark|No|
+|`2`|Built and written, but `--send-email` delivery failed (missing/invalid env var, or the SMTP relay rejected it)|md/html/snapshot, + the week's mark|No|
+|`3`|Build itself failed (#364) — an input this module does not control raised partway through (provider outage, a repricing edge case)|**No digest file — not even a partial one**, so next week's digest still compares against last week's real snapshot. The week's mark is still written|No. With `--send-email`, a best-effort plain-language failure alert is sent instead (subject `Weekly Hedge Digest — FAILED to build (<date>)`)|
+
+"The week's mark" is one line in `exports/history/marks.jsonl` (#313),
+taken before the digest is built and isolated from it both ways: a failed
+digest still leaves the week's boundary, and a failed mark is reported in
+§4 rather than stopping the digest. A run with `--as-of` set to any day
+but today takes no mark, because the book is priced today. A state that
+fails to load (exit 3 before the mark step) writes no mark either.
 
 See `deltadewa/reporting/weekly_report.py`'s `main()` docstring for the
 authoritative version of this table.
