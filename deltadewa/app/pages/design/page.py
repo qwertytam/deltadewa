@@ -69,6 +69,7 @@ from .planning import (
     roll_plan,
     roll_status,
     sizing,
+    skew_beta,
 )
 from .planning import market_env as market_env_panel
 
@@ -125,6 +126,7 @@ _PLANNING_SECTIONS: Final = (
     position_aging.SECTION,
     hedge_triggers.SECTION,
     delta_drift.SECTION,
+    skew_beta.SECTION,
     convexity_cliff.SECTION,
     monetization.SECTION,
 )
@@ -245,6 +247,7 @@ def render(app: ProgramDashApp) -> html.Div:
                 basis_book_greeks=_BASIS_BOOK_GREEKS,
             ),
             delta_drift.layout(portfolio=portfolio),
+            skew_beta.layout(portfolio=portfolio, ips_config=ips_config),
             convexity_cliff.layout(
                 portfolio=portfolio,
                 ips_config=ips_config,
@@ -394,6 +397,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
     position_aging.register(app, ips_config=ips_config)
     hedge_triggers.register(app, ips_config=ips_config)
     delta_drift.register(app)
+    skew_beta.register(app, ips_config=ips_config)
     sizing.register(app, ips_config=ips_config)
     ladder.register(app, ips_config=ips_config)
     roll_plan.register(app, ips_config=ips_config)
