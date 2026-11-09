@@ -30,6 +30,14 @@ if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig, IpsVega
     from deltadewa.portfolio.core import OptionPortfolio
 
+# One unbroken literal, deliberately: the "Handbook links" workflow greps
+# the tree for handbook URLs, and a `\` line continuation inside the URL
+# made it extract `.../part-6/\` and report a 404 for a link that renders
+# fine.
+_RATIO_DISAMBIGUATION_URL: Final[str] = (
+    "https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/ratio-disambiguation/"
+)
+
 # Cites #70 ("Track hedge historical P&L"), the issue realized-gains
 # tracking is actually gated on — not the stale "(C4)" label this used to
 # carry, which (per docs/implementation-plan.md's current finding index)
@@ -1492,8 +1500,7 @@ over {rf.elapsed_days} day(s)</td></tr>
 Payoff-vs-Premium Multiple (payoff per dollar of premium paid) &#8212; \
 distinct from the Offset Ratio (payoff per dollar of underlying loss \
 offset) shown on <code>/monitor</code>. See the handbook's \
-<a href="https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/\
-ratio-disambiguation/">Ratio Disambiguation</a> page.</p>
+<a href="{_RATIO_DISAMBIGUATION_URL}">Ratio Disambiguation</a> page.</p>
 {expired_caveat_html}
 
 <h2>3. Market Context</h2>
