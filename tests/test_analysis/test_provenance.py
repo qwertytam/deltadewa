@@ -33,7 +33,7 @@ def _make_environment(
 ) -> MarketEnvironment:
     return MarketEnvironment(
         vix=18.0,
-        regime_percentile=50.0,
+        regime_band_position_pct=50.0,
         regime_label=None,
         skew_index=120.0,
         skew_percentile=0.5,

@@ -108,8 +108,15 @@ class MarketEnvironment:
 
     Attributes:
         vix: Current VIX level, in vol points (e.g. 18.0 for 18%).
-        regime_percentile: VIX regime percentile (0-100), from
-            ``classify_vix_regime``.
+        regime_band_position_pct: Where VIX sits inside the IPS
+            ``vol_regime_low``-``vol_regime_high`` band, 0-100 and clamped
+            at both ends, from ``classify_vix_regime``. **Not a
+            percentile** — no history is ranked; it is ``0`` for every VIX
+            at or below the band floor. Renamed from ``regime_percentile``
+            (8c, N5): the old name, rendered on ``/design`` as "regime
+            percentile 53" on a day VIX ranked 95th over the trailing
+            year, was #175's mislabel on a path #175's fix never reached
+            (``health.compute_vol_regime`` is the true-rank figure).
         regime_label: VIX regime label, from ``classify_vix_regime``.
         skew_index: Current CBOE SKEW index level.
         skew_percentile: SKEW index's percentile rank, as a 0-1 fraction
@@ -154,7 +161,7 @@ class MarketEnvironment:
     """
 
     vix: float | None
-    regime_percentile: float | None
+    regime_band_position_pct: float | None
     regime_label: RegimeLabel | None
     skew_index: float | None
     skew_percentile: float | None
@@ -237,8 +244,11 @@ def describe_skew_percentile(
     return f"{format_ordinal_percentile(fraction)} percentile ({window})"
 
 
-def _interpolate_percentile(value: float, low: float, high: float) -> float:
+def _interpolate_band_position(value: float, low: float, high: float) -> float:
     """Linear-interpolate *value* between *low* and *high* into 0-100.
+
+    A position inside the band, not a percentile — see
+    ``classify_vix_regime``.
 
     Same approach as ``HealthMixin.calculate_vol_regime_percentile``:
     0 = at/below low, 100 = at/above high, linear in between.
@@ -264,15 +274,16 @@ def classify_vix_regime(
     low: float = DEFAULT_VOL_REGIME_LOW,
     high: float = DEFAULT_VOL_REGIME_HIGH,
 ) -> tuple[float, RegimeLabel]:
-    """Classify a VIX level into a regime percentile and label.
+    """Classify a VIX level by its position inside the IPS band, plus a label.
 
-    Uses the same linear-interpolation approach as
-    ``HealthMixin.calculate_vol_regime_percentile``, applied to VIX
-    instead of portfolio volatility. *vix* is in vol points (e.g. 18.0
-    for 18%) and is converted to decimal before comparing against the
-    decimal *low*/*high* band.
+    Linear interpolation of VIX between the IPS *low*/*high* band, clamped
+    to 0-100 — a **band position**, not a percentile: nothing is ranked
+    against history (8c, N5; the same mislabel #175 fixed for
+    ``health.compute_vol_regime``, which does rank against VIX history).
+    *vix* is in vol points (e.g. 18.0 for 18%) and is converted to
+    decimal before comparing against the decimal *low*/*high* band.
 
-    The label cuts at percentile 25/75 -- the breakpoints the retired
+    The label cuts the band position at 25/75 -- the breakpoints the retired
     ``config/dashboard.yaml`` ``vol_regime`` gauge used (``min_val: 25``
     green/cheap, ``max_val: 75`` red/expensive), carried forward so the
     label keeps the meaning that gauge established (#279).
@@ -285,16 +296,16 @@ def classify_vix_regime(
             :data:`~deltadewa.ips_config.DEFAULT_VOL_REGIME_HIGH`.
 
     Returns:
-        Tuple of (regime_percentile, regime_label).
+        Tuple of (regime_band_position_pct, regime_label).
 
     """
-    percentile = _interpolate_percentile(vix / 100, low, high)
+    band_position = _interpolate_band_position(vix / 100, low, high)
     label = _classify_band(
-        percentile,
+        band_position,
         _VIX_LABEL_LOW_PCT,
         _VIX_LABEL_HIGH_PCT,
     )
-    return percentile, label
+    return band_position, label
 
 
 def term_structure_shape(
@@ -445,7 +456,7 @@ def assess_market_environment(
     except MarketDataError:
         return MarketEnvironment(
             vix=None,
-            regime_percentile=None,
+            regime_band_position_pct=None,
             regime_label=None,
             skew_index=None,
             skew_percentile=None,
@@ -461,7 +472,9 @@ def assess_market_environment(
     term = term_obs.value
     skew_percentile = skew_pctile_obs.value
 
-    regime_percentile, regime_label = classify_vix_regime(vix, *regime_bands)
+    regime_band_position_pct, regime_label = classify_vix_regime(
+        vix, *regime_bands
+    )
     skew_label = _classify_band(skew_percentile, *skew_bands)
     term_shape = term_structure_shape(term, term_tolerance)
 
@@ -503,7 +516,7 @@ def assess_market_environment(
 
     return MarketEnvironment(
         vix=vix,
-        regime_percentile=regime_percentile,
+        regime_band_position_pct=regime_band_position_pct,
         regime_label=regime_label,
         skew_index=skew_index_obs.value,
         skew_percentile=skew_percentile,

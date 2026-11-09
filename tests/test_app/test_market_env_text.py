@@ -21,11 +21,14 @@ from deltadewa.analysis.market_environment import (
     MarketEnvironment,
     RegimeLabel,
     TermShape,
+    classify_vix_regime,
 )
 from deltadewa.app.pages.design.planning.market_env import (
     TIMING_STEP_FORMATS,
+    _vol_regime_row,
     format_timing_step,
 )
+from deltadewa.ips_config import IpsMarketEnvironment
 
 _VIX_THRESHOLDS = {"vix_very_high": 40.0, "vix_caution": 25.0, "vix_low": 15.0}
 
@@ -36,7 +39,7 @@ _IDENTIFIER = re.compile(r"\b[a-z]+_[a-z_]+\b|\b[A-Z][A-Za-z]+\.[a-z_]+\b")
 def _env(**overrides: Any) -> MarketEnvironment:
     defaults: dict[str, Any] = {
         "vix": 18.0,
-        "regime_percentile": 15.0,
+        "regime_band_position_pct": 15.0,
         "regime_label": RegimeLabel.NORMAL,
         "skew_index": 140.0,
         "skew_percentile": 0.5,
@@ -120,3 +123,44 @@ def test_missing_reading_reads_as_unavailable() -> None:
     assert format_timing_step(timing.steps[0], env).startswith(
         "1. VIX: unavailable — ",
     )
+
+
+class TestVolRegimeBandPosition:
+    """The vol-regime figure is a band position, never a "percentile" (N5).
+
+    ``regime_band_position_pct`` is a clamped interpolation inside the IPS
+    15-35 band — #175's mislabel on a parallel path. On 2026-10-09 (VIX
+    14.84) it rendered "regime percentile 0" while VIX's true trailing-year
+    rank was 7.5; on 2026-11-06 (VIX 25.64) it rendered "53" against a true
+    rank of 95.2.
+    """
+
+    @staticmethod
+    def _detail(vix: float) -> str:
+        position, label = classify_vix_regime(vix)
+        row = _vol_regime_row(
+            _env(
+                vix=vix, regime_band_position_pct=position, regime_label=label
+            ),
+            IpsMarketEnvironment(),
+        )
+        return " ".join(
+            str(child.children)
+            for child in row.children
+            if isinstance(getattr(child, "children", None), str)
+        )
+
+    def test_below_the_band_says_so_rather_than_zero(self) -> None:
+        text = self._detail(14.84)
+        assert "at or below the band's low end" in text
+        assert "percentile" not in text
+
+    def test_above_the_band_says_so_rather_than_100(self) -> None:
+        text = self._detail(40.0)
+        assert "at or above the band's high end" in text
+        assert "percentile" not in text
+
+    def test_inside_the_band_is_a_position(self) -> None:
+        text = self._detail(25.64)
+        assert "53% of the way up the band" in text
+        assert "percentile" not in text

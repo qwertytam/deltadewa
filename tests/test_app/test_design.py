@@ -2236,7 +2236,7 @@ def _make_market_env(**overrides: Any) -> MarketEnvironment:
     """
     defaults: dict[str, Any] = {
         "vix": 14.0,
-        "regime_percentile": 12.0,
+        "regime_band_position_pct": 12.0,
         "regime_label": RegimeLabel.LOW,
         "skew_index": 128.0,
         "skew_percentile": 0.22,
@@ -2368,7 +2368,7 @@ class TestMarketEnvironmentPanel:
         env = _make_market_env(
             vix=None,
             regime_label=None,
-            regime_percentile=None,
+            regime_band_position_pct=None,
             skew_percentile=None,
             skew_index=None,
             forward_vol_front_3m=None,

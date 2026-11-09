@@ -97,6 +97,25 @@ def _env_unavailable_row(label: str, why: str) -> Component:
     )
 
 
+def _band_position_text(position: float | None) -> str:
+    """Say where VIX sits in the IPS band — never as a "percentile".
+
+    ``MarketEnvironment.regime_band_position_pct`` is a clamped band
+    position, not a rank against history (8c, N5). Rendered as "regime
+    percentile 0" it read as "the cheapest VIX of the year" on days VIX
+    merely sat below 15, and "regime percentile 53" on a day VIX ranked
+    95th over the trailing year. At the clamps the honest statement is
+    which edge it is past, not a 0 or 100.
+    """
+    if position is None:
+        return ""
+    if position <= 0.0:
+        return " — at or below the band's low end"
+    if position >= 100.0:  # the clamp's own upper bound, not policy
+        return " — at or above the band's high end"
+    return f" — {position:.0f}% of the way up the band"
+
+
 def _vol_regime_row(
     market_env: MarketEnvironment,
     policy: IpsMarketEnvironment,
@@ -108,21 +127,17 @@ def _vol_regime_row(
             "no VIX reading in this snapshot",
         )
 
-    percentile = (
-        f", regime percentile {market_env.regime_percentile:.0f}"
-        if market_env.regime_percentile is not None
-        else ""
-    )
+    position = _band_position_text(market_env.regime_band_position_pct)
     # The IPS band is decimal implied vol compared against VIX/100
     # (market_environment.classify_vix_regime), so the bar is drawn on the
     # VIX level in vol points — the units the reading is actually in —
-    # rather than on the derived percentile.
+    # rather than on the derived band position.
     return _env_metric_row(
         label="Vol regime",
         headline=f"{market_env.regime_label.value} — VIX {market_env.vix:.1f}",
         detail=(
             f"IPS band {policy.vol_regime_low * 100:.0f}-"
-            f"{policy.vol_regime_high * 100:.0f} VIX points{percentile}"
+            f"{policy.vol_regime_high * 100:.0f} VIX points{position}"
         ),
         bar=band_bar(
             value=market_env.vix,

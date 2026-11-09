@@ -35,7 +35,7 @@ def _make_env(**kwargs: Any) -> MarketEnvironment:
     """Return a fully-populated LIVE MarketEnvironment with overrides."""
     defaults: dict[str, Any] = {
         "vix": 18.0,
-        "regime_percentile": 30.0,
+        "regime_band_position_pct": 30.0,
         "regime_label": RegimeLabel.NORMAL,
         "skew_index": 130.0,
         "skew_percentile": 0.35,

@@ -37,7 +37,7 @@ def _environment(
     """Build a MarketEnvironment with only data_quality/as_of populated."""
     return MarketEnvironment(
         vix=None,
-        regime_percentile=None,
+        regime_band_position_pct=None,
         regime_label=None,
         skew_index=None,
         skew_percentile=None,
@@ -267,7 +267,7 @@ class TestStampNamesTheLaggingSeries:
         refreshed_at = datetime(2026, 8, 25, 6, 30, tzinfo=UTC)
         environment = MarketEnvironment(
             vix=None,
-            regime_percentile=None,
+            regime_band_position_pct=None,
             regime_label=None,
             skew_index=None,
             skew_percentile=None,

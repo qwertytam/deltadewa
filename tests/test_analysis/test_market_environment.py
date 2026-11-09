@@ -262,7 +262,7 @@ class TestAssessMarketEnvironment:
 
         assert env.data_quality == DataQuality.UNAVAILABLE
         assert env.vix is None
-        assert env.regime_percentile is None
+        assert env.regime_band_position_pct is None
         assert env.regime_label is None
         assert env.skew_index is None
         assert env.skew_percentile is None
