@@ -254,7 +254,7 @@ def _age_days(as_of: date, stamp: datetime) -> int:
     return max((as_of - stamp.date()).days, 0)
 
 
-def _grade_hand_entered(
+def grade_hand_entered(
     *,
     key: str,
     label: str,
@@ -263,6 +263,11 @@ def _grade_hand_entered(
     as_of: date,
 ) -> InputProvenance:
     """Grade one hand-entered input against its policy max age.
+
+    Public since 8c (N10): ``analysis.liquidity`` ages a recorded quote by
+    this same rule rather than inventing a second staleness rule for one
+    metric. A liquidity quote is graded *here* but deliberately never
+    added to a ``ProvenanceLedger`` — see ``analysis.liquidity``.
 
     ``stamp is None`` — never explicitly confirmed, including every
     position and book that predates #367 — grades ``UNKNOWN``, never
@@ -358,7 +363,7 @@ def build_provenance_ledger(
 
     entries: list[InputProvenance] = [market_data_entry]
     entries.append(
-        _grade_hand_entered(
+        grade_hand_entered(
             key="book.spot",
             label="Spot price",
             stamp=portfolio.stamps.spot_as_of,
@@ -367,7 +372,7 @@ def build_provenance_ledger(
         ),
     )
     entries.append(
-        _grade_hand_entered(
+        grade_hand_entered(
             key="book.risk_free_rate",
             label="Risk-free rate",
             stamp=portfolio.stamps.risk_free_rate_as_of,
@@ -376,7 +381,7 @@ def build_provenance_ledger(
         ),
     )
     entries.append(
-        _grade_hand_entered(
+        grade_hand_entered(
             key="book.dividend_yield",
             label="Dividend yield",
             stamp=portfolio.stamps.dividend_yield_as_of,
@@ -385,7 +390,7 @@ def build_provenance_ledger(
         ),
     )
     entries.extend(
-        _grade_hand_entered(
+        grade_hand_entered(
             key=f"leg.{position.position_id}.iv",
             label=_leg_label(position),
             stamp=position.volatility_as_of,

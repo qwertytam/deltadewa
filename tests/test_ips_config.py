@@ -1511,3 +1511,89 @@ class TestCheckCli:
         captured = capsys.readouterr()
         assert exit_code == 0
         assert "warnings:" not in captured.out
+
+
+class TestLiquidity:
+    """The optional ``liquidity`` policy section (8c, N10).
+
+    No code defaults: the handbook gives no number for either warning
+    sign, so an absent section means "ungraded", and a present one must
+    say both grading keys.
+    """
+
+    def test_absent_section_is_none_not_defaults(self, tmp_path: Path) -> None:
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+
+        assert ips.liquidity is None
+        # "Running on code defaults" would be false — there are none.
+        assert "liquidity" not in ips.defaulted_sections
+
+    def test_example_template_carries_the_section(self) -> None:
+        liquidity = load_ips_config(EXAMPLE_IPS_YAML).liquidity
+
+        assert liquidity is not None
+        assert liquidity.spread_warn_pct == pytest.approx(10.0)
+        assert liquidity.observation_max_age_days == 30
+        assert liquidity.open_interest_min is None
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        config = {
+            **_VALID_CONFIG,
+            "liquidity": {
+                "spread_warn_pct": 7.5,
+                "observation_max_age_days": 14,
+                "open_interest_min": 250,
+            },
+        }
+        liquidity = load_ips_config(_write_yaml(tmp_path, config)).liquidity
+
+        assert liquidity is not None
+        assert liquidity.spread_warn_pct == pytest.approx(7.5)
+        assert liquidity.observation_max_age_days == 14
+        assert liquidity.open_interest_min == 250
+
+    @pytest.mark.parametrize(
+        ("section", "match"),
+        [
+            ({"observation_max_age_days": 30}, "spread_warn_pct"),
+            ({"spread_warn_pct": 10.0}, "observation_max_age_days"),
+            (
+                {"spread_warn_pct": 0, "observation_max_age_days": 30},
+                "spread_warn_pct",
+            ),
+            (
+                {"spread_warn_pct": 10.0, "observation_max_age_days": 0},
+                "observation_max_age_days",
+            ),
+            (
+                {"spread_warn_pct": 10.0, "observation_max_age_days": 1.5},
+                "observation_max_age_days",
+            ),
+            (
+                {
+                    "spread_warn_pct": 10.0,
+                    "observation_max_age_days": 30,
+                    "open_interest_min": -1,
+                },
+                "open_interest_min",
+            ),
+            (
+                {
+                    "spread_warn_pct": 10.0,
+                    "observation_max_age_days": 30,
+                    "open_interest_min": True,
+                },
+                "open_interest_min",
+            ),
+        ],
+    )
+    def test_invalid_section_raises(
+        self,
+        tmp_path: Path,
+        section: dict[str, object],
+        match: str,
+    ) -> None:
+        config = {**_VALID_CONFIG, "liquidity": section}
+
+        with pytest.raises(IpsConfigError, match=match):
+            load_ips_config(_write_yaml(tmp_path, config))

@@ -236,3 +236,29 @@ maturity_selection:
   maintain_min_years: 1.0   # shortest tenor this program holds before a
                              # leg is due to roll
   maintain_max_years: 2.0   # longest tenor this program ladders out to
+
+# Hand-entered liquidity checks (Part X #12, 8c). The real metric needs a
+# per-strike options-chain feed (#156); until then the operator records the
+# bid/ask (and open interest, if available) for each leg at the moments the
+# handbook says liquidity matters — rolling, monetizing, scaling — on
+# /design's "Liquidity check" panel. These keys grade those quotes.
+# POLICY, and the handbook gives NO number for either warning sign, so there
+# are no code defaults: omit the whole section and recorded quotes are shown
+# ungraded. If the section is present, the first two keys are required.
+liquidity:
+  spread_warn_pct: 10.0          # EXAMPLE VALUE — % of mid, (ask-bid)/mid.
+                                 # Wider than this grades WIDE. 10 is the top
+                                 # of the handbook's only stated range: 30-40%
+                                 # OTM, ~18-month SPX puts "can trade with
+                                 # spreads of 5-10% of the mid-price or wider
+                                 # in quiet markets" (part-7/volatility-roll-
+                                 # yield, Roll Friction). It describes a
+                                 # quiet market; it is not a handbook limit.
+  observation_max_age_days: 30   # EXAMPLE VALUE — review cadence for a
+                                 # recorded quote, graded like the other
+                                 # hand-entered inputs (pricing_inputs). A
+                                 # leg in a roll window wants a fresh quote
+                                 # regardless.
+  # open_interest_min: 100       # contracts. No handbook figure — set from
+                                 # your own execution experience, or leave
+                                 # unset to record open interest ungraded.

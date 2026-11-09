@@ -551,6 +551,34 @@ class IpsPricingInputs:
 
 
 @dataclass(frozen=True)
+class IpsLiquidity:
+    """Policy for grading hand-entered liquidity quotes (8c, N10).
+
+    Optional, and deliberately **without code defaults**: the handbook
+    names "wide bid-ask spreads" and "low open interest" as warning signs
+    (Part X §12) but gives no number for either, so a built-in default
+    would be invented policy. When the ``liquidity:`` section is absent,
+    ``IpsConfig.liquidity`` is ``None`` and recorded quotes render
+    ungraded. When it is present, ``spread_warn_pct`` and
+    ``observation_max_age_days`` are required.
+
+    Units:
+        ``spread_warn_pct`` is a percent of mid (``10.0`` = 10%) — the
+        handbook's ``Spread % = (Ask - Bid) / Mid``; a recorded spread
+        above it grades WIDE.
+        ``observation_max_age_days`` is the review cadence for a recorded
+        quote, graded by the same rule as every other hand-entered input
+        (``analysis.provenance.grade_hand_entered``, #367).
+        ``open_interest_min`` is contracts; ``None`` records open interest
+        without grading it.
+    """
+
+    spread_warn_pct: float
+    observation_max_age_days: int
+    open_interest_min: int | None = None
+
+
+@dataclass(frozen=True)
 class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
@@ -675,6 +703,10 @@ class IpsConfig:
     maturity_selection: IpsMaturitySelection = dataclass_field(
         default_factory=IpsMaturitySelection,
     )
+    # 8c / N10: None when ips.yaml has no `liquidity:` section — recorded
+    # quotes then render ungraded. Not in defaulted_sections below: that
+    # set means "running on code defaults", and this section has none.
+    liquidity: IpsLiquidity | None = None
     # #309: which of the optional sections above (market_environment,
     # sizing, vega, pricing_inputs, maturity_selection) were absent from
     # the loaded ips.yaml and are running on their DEFAULT_* module
@@ -1264,6 +1296,57 @@ def _parse_pricing_inputs(config: dict[str, Any]) -> IpsPricingInputs:
     return IpsPricingInputs(**resolved)
 
 
+def _is_int(value: object) -> bool:
+    """Return whether *value* is an int and not a bool (YAML ``true``)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _parse_liquidity(config: dict[str, Any]) -> IpsLiquidity | None:
+    """Parse the optional ``liquidity`` policy section (8c, N10).
+
+    Absent → ``None`` (recorded quotes render ungraded). Present → its
+    two grading keys are required: there is no handbook number to fall
+    back to, so a partial section is an error rather than a silent
+    default.
+    """
+    if "liquidity" not in config:
+        return None
+    section = config["liquidity"]
+    if not isinstance(section, dict):
+        raise IpsConfigError("ips.yaml 'liquidity' section must be a mapping")
+
+    spread_warn_pct = _require_field(section, "liquidity", "spread_warn_pct")
+    if (
+        isinstance(spread_warn_pct, bool)
+        or not isinstance(spread_warn_pct, (int, float))
+        or spread_warn_pct <= 0
+    ):
+        raise IpsConfigError(
+            "liquidity.spread_warn_pct must be a number > 0 (percent of "
+            f"mid), got {spread_warn_pct!r}",
+        )
+    max_age = _require_field(section, "liquidity", "observation_max_age_days")
+    if not _is_int(max_age) or max_age <= 0:
+        raise IpsConfigError(
+            "liquidity.observation_max_age_days must be an integer > 0, "
+            f"got {max_age!r}",
+        )
+    open_interest_min = section.get("open_interest_min")
+    if open_interest_min is not None and (
+        not _is_int(open_interest_min) or open_interest_min < 0
+    ):
+        raise IpsConfigError(
+            "liquidity.open_interest_min must be an integer >= 0 or "
+            f"absent, got {open_interest_min!r}",
+        )
+
+    return IpsLiquidity(
+        spread_warn_pct=float(spread_warn_pct),
+        observation_max_age_days=max_age,
+        open_interest_min=open_interest_min,
+    )
+
+
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     section = _require_section(config, "monetization")
     raw_schedule = _require_field(section, "monetization", "schedule")
@@ -1371,6 +1454,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         maturity_buckets=_parse_maturity_buckets(config),
         pricing_inputs=_parse_pricing_inputs(config),
         maturity_selection=_parse_maturity_selection(config),
+        liquidity=_parse_liquidity(config),
         defaulted_sections=defaulted_sections,
     )
 
