@@ -53,7 +53,7 @@ from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.health import HealthMixin
 from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
-from deltadewa.analysis.strike_ladder import build_strike_ladder
+from deltadewa.analysis.strike_ladder import build_candidate_grid
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
@@ -1671,7 +1671,7 @@ class TestNoLegacyBasisInConvexityPaths:
         M1.7 gave both sides one skew *function*; this pins one *construction
         path* as well, so neither can assemble a basis the other would not.
         """
-        for fn in (size_hedge, build_strike_ladder):
+        for fn in (size_hedge, build_candidate_grid):
             source = inspect.getsource(fn)
             assert "CrashShock.from_ips(ips_config.convexity)" in source, (
                 fn.__qualname__

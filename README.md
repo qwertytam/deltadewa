@@ -11,7 +11,7 @@ shared server-side `ProgramState`, each targeting a different audience:
 - **`/monitor` — Monitor & Report**: read-mostly view of the current book for routine
   checks and IC/board reporting, led by the crash scenario.
 - **`/design` — Hedge Design**: the analyst's workbench — position editor, roll table,
-  sizing workbench, strike ladder builder, monetization planner, and decision matrix.
+  sizing workbench, strike candidate browser, monetization planner, and decision matrix.
 
 The program policy lives in `config/ips.yaml` (carry budget, convexity targets, drawdown
 tolerance, roll and monetization triggers). Methodology is drawn from the
@@ -32,7 +32,7 @@ optional live CBOE/FRED pull that falls back gracefully on network failure.
 - **Roll Status** — per-position moneyness drift, time decay, and roll-up cost ladder
 - **Vega sufficiency, delta drift, convexity cliff** — banded against IPS policy on
   `/design`
-- **Sizing workbench, strike ladder builder, monetization planner** — drive the
+- **Sizing workbench, strike candidate browser, monetization planner** — drive the
   `/design` page's PLANNING zone
 - **Decision matrix** — structured roll / monetization / re-risk checklist
 - **Program report** — IC/board format, delivered as the emailed weekly digest

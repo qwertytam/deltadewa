@@ -10,7 +10,7 @@ as three composable pieces:
 
 * :func:`strike_for_delta` — solves for the strike whose put-delta magnitude
   equals a given target, using :func:`scipy.optimize.brentq`.
-* :func:`build_strike_ladder` — evaluates every (delta, maturity) combination
+* :func:`build_candidate_grid` — evaluates every (delta, maturity) combination
   and sizes each rung against the IPS risk budget, reusing
   :func:`~deltadewa.analysis.candidate.evaluate_candidate` and the pure-math
   helpers from :mod:`~deltadewa.analysis.sizing`.
@@ -50,7 +50,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class LadderRung:
+class GridCell:
     """One cell of the strike ladder — a (target_delta, maturity) combination.
 
     Attributes:
@@ -63,8 +63,9 @@ class LadderRung:
             (``IpsSizing.portfolio_beta``); a user input, not estimated. Same
             for all rungs.
         beta_adjusted_notional: SPX-equivalent exposure
-            (``book_notional * portfolio_beta``); the notional the offset and
-            convexity are measured against. Equals ``book_notional`` at beta
+            (``book_notional * portfolio_beta``); the notional the crash offset
+            is measured against (the convexity reading is on the book
+            notional, #410). Equals ``book_notional`` at beta
             1.0. Same for all rungs.
         required_crash_offset: Dollars of crash loss beyond the drawdown
             tolerance that the hedge must offset, measured on the
@@ -80,8 +81,10 @@ class LadderRung:
             over budget.
         max_affordable_contracts: Most contracts the carry budget supports
             (floor division).
-        achieved_convexity_pct: ``(contracts_needed * per_contract_payoff)
-            / beta_adjusted_notional * 100``.
+        achieved_convexity_pct: ``contracts_needed *
+            metrics.per_contract_convexity_pct`` -- crash gain over the
+            unadjusted book notional, read through the compliance strip's
+            own gauge (#410), **for this cell bought alone**.
         meets_convexity: ``True`` when ``achieved_convexity_pct`` lies within
             the IPS convexity band ``[target_min_pct, target_max_pct]``.
         meets_target_within_budget: ``True`` when both ``within_budget`` and
@@ -108,8 +111,8 @@ class LadderRung:
     meets_target_within_budget: bool
 
 
-StrikeLadder = list[LadderRung]
-"""List of :class:`LadderRung`, one per solved (delta, maturity) cell."""
+CandidateGrid = list[GridCell]
+"""List of :class:`GridCell`, one per solved (delta, maturity) cell."""
 
 
 @dataclass(frozen=True)
@@ -135,21 +138,21 @@ class UnsolvableRung:
 
 
 @dataclass(frozen=True)
-class StrikeLadderResult:
-    """The outcome of :func:`build_strike_ladder`.
+class CandidateGridResult:
+    """The outcome of :func:`build_candidate_grid`.
 
-    Separates the solved rungs from the cells that could not be solved so the
+    Separates the solved cells from the cells that could not be solved so the
     latter are surfaced explicitly instead of being dropped without a trace.
 
     Attributes:
-        rungs: Solved rungs, one per (delta, maturity) cell whose strike was
+        cells: Solved cells, one per (delta, maturity) cell whose strike was
             found, in delta-major order.
         unsolvable: Cells whose strike could not be solved, in the same
             delta-major order. Empty when every requested cell solved.
 
     """
 
-    rungs: StrikeLadder
+    cells: CandidateGrid
     unsolvable: list[UnsolvableRung]
 
 
@@ -242,14 +245,14 @@ def strike_for_delta(
 # ---------------------------------------------------------------------------
 
 
-def build_strike_ladder(
+def build_candidate_grid(
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
     *,
     target_deltas: Sequence[float],
     maturities_years: Sequence[float],
     vol: float | None = None,
-) -> StrikeLadderResult:
+) -> CandidateGridResult:
     """Build a full strike/maturity ladder sized against the IPS risk budget.
 
     For every ``(delta, maturity)`` pair (outer loop: *target_deltas*; inner
@@ -276,8 +279,8 @@ def build_strike_ladder(
             ``portfolio.volatility`` when ``None``.
 
     Returns:
-        :class:`StrikeLadderResult` — ``rungs`` is a flat list of
-        :class:`LadderRung` in delta-major order (all maturities for the first
+        :class:`CandidateGridResult` — ``cells`` is a flat list of
+        :class:`GridCell` in delta-major order (all maturities for the first
         delta, then all for the second, etc.) for every cell whose strike
         solved; ``unsolvable`` lists the cells whose strike could not be solved
         (surfaced explicitly, never silently dropped).
@@ -315,7 +318,7 @@ def build_strike_ladder(
     # them against the band (M1.5 — the two never travel as one object).
     conv = ips_config.convexity
 
-    rungs: StrikeLadder = []
+    cells: CandidateGrid = []
     unsolvable: list[UnsolvableRung] = []
     for delta, maturity in itertools.product(target_deltas, maturities_years):
         strike = strike_for_delta(
@@ -352,18 +355,13 @@ def build_strike_ladder(
             carry_budget,
         )
         achieved_convexity_pct = (
-            sizing.contracts_needed
-            * metrics.per_contract_payoff
-            / beta_adj_notional
-            * 100.0
-            if beta_adj_notional > 0.0
-            else 0.0
+            sizing.contracts_needed * metrics.per_contract_convexity_pct
         )
         meets_convexity = (
             conv.target_min_pct <= achieved_convexity_pct <= conv.target_max_pct
         )
-        rungs.append(
-            LadderRung(
+        cells.append(
+            GridCell(
                 target_delta=delta,
                 maturity_years=maturity,
                 metrics=metrics,
@@ -383,4 +381,4 @@ def build_strike_ladder(
                 ),
             ),
         )
-    return StrikeLadderResult(rungs=rungs, unsolvable=unsolvable)
+    return CandidateGridResult(cells=cells, unsolvable=unsolvable)

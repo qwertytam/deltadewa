@@ -160,7 +160,7 @@ def safe_render(
     component construction — see the module docstring on why sharing
     already-computed state with another panel would make the isolation
     fake. A structural ``ValueError`` (e.g. ``size_hedge`` /
-    ``build_strike_ladder`` raising on a book with no underlying position,
+    ``build_candidate_grid`` raising on a book with no underlying position,
     rather than fabricating a zero result) renders as a
     :attr:`NoticeKind.BLOCKED` notice: the exception's own message as
     the headline, plus *blocked_hint* as the detail line when the

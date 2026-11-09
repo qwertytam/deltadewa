@@ -62,6 +62,28 @@ history for that record instead.
 
 ### Changed
 
+- **#410 (8d.1) — one convexity, honest names.** The sizing workbench's
+  and the candidate grid's "achieved convexity" is now the compliance
+  strip's figure: crash **gain** (`V_crash - V_today`) over the
+  *unadjusted* book notional, via `crash_convexity_pct` (which gains a
+  `positions=` argument) and a new `CandidateMetrics.per_contract_convexity_pct`.
+  It was `contracts x gross payoff / beta-adjusted notional`, graded
+  against the same IPS band as the strip with nothing asserting the two
+  matched. **Readings move**: lower by about premium / notional on every
+  book, and no longer divided by beta when beta is not 1.0. Contracts
+  sized, carry and the offset are unchanged. Pinned by
+  `tests/test_analysis/test_convexity_agreement.py`.
+- **#410 — `/design`'s "Strike ladder" panel is now "Strike candidates".**
+  Each row was always a standalone single-strike candidate, sized to meet
+  the whole crash offset alone, not a share of a ladder; its sizing
+  columns now read "(alone)". `build_strike_ladder` / `LadderRung` /
+  `StrikeLadderResult` / `StrikeLadder` are now `build_candidate_grid` /
+  `GridCell` / `CandidateGridResult` / `CandidateGrid`, and the result's
+  `.rungs` is `.cells`. The panel's anchor id (`section-strike-ladder`)
+  is unchanged. The handbook's weighted ladder is the next piece (8d).
+- **#410 — the sizing panel names which side of the band it is on.** A
+  below-band convexity reading used to render "over target"; it now reads
+  "below target" (or "above target").
 - **#317 (8c) — the skew percentile is ranked over the handbook's trailing
   five years (1260 sessions), not an unsourced 252.** The window is now IPS
   policy, `market_environment.skew_lookback_days`, and is stated beside

@@ -4,7 +4,7 @@ A *candidate* is a hypothetical put at a given (strike, maturity) pair.
 :func:`evaluate_candidate` prices it once via
 :class:`~deltadewa.valuation.OptionValuation` and returns the metrics that
 both :func:`~deltadewa.analysis.sizing.size_hedge` and
-:func:`~deltadewa.analysis.strike_ladder.build_strike_ladder` need,
+:func:`~deltadewa.analysis.strike_ladder.build_candidate_grid` need,
 eliminating any duplicated pricing or payoff logic between the two callers.
 
 The crash payoff is the candidate **repriced** at the crash state (crash spot
@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 from deltadewa import constants as const
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
+    crash_convexity_pct,
     crash_hedge_value,
     crash_intrinsic_floor,
 )
@@ -62,6 +63,15 @@ class CandidateMetrics:
             ``<= per_contract_payoff``; never the headline (§3).
         per_contract_carry: Annualised theta cost per contract as a positive
             dollar amount: ``|theta/day| * 365 * contract_size``.
+        per_contract_convexity_pct: One contract's crash convexity as a
+            percent of the protected book, from
+            :func:`~deltadewa.analysis.crash_repricing.crash_convexity_pct` —
+            the same gauge the compliance strip reads, so it is **gain**
+            (``V_crash - V_today``, premium already netted) over the
+            unadjusted book notional. ``n`` contracts contribute exactly
+            ``n`` times this (position value is linear in quantity), which is
+            how sizing and the candidate grid read their achieved convexity
+            (#410). ``0.0`` when the portfolio has no underlying position.
 
     """
 
@@ -72,6 +82,7 @@ class CandidateMetrics:
     per_contract_payoff: float
     per_contract_intrinsic_floor: float
     per_contract_carry: float
+    per_contract_convexity_pct: float
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +223,12 @@ def evaluate_candidate(
         positions=[candidate_leg],
     )
 
+    per_contract_convexity_pct = crash_convexity_pct(
+        portfolio,
+        shock=shock,
+        positions=[candidate_leg],
+    )
+
     put_delta = valuation.delta()
     premium = valuation.price() * portfolio.contract_size
     # theta() is $/day per unit, negative for a long put; annualise on the
@@ -228,4 +245,5 @@ def evaluate_candidate(
         per_contract_payoff=per_contract_payoff,
         per_contract_intrinsic_floor=per_contract_intrinsic_floor,
         per_contract_carry=per_contract_carry,
+        per_contract_convexity_pct=per_contract_convexity_pct,
     )

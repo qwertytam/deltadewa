@@ -165,7 +165,7 @@ default is chipped:
 | — | Part VII Board/IC report | — | Weekly digest email | `reporting/program_report.py` | **RETIRED** from the dashboard — see [Conscious retirements](#conscious-retirements) |
 | — | Time to Convexity Cliff | — | `/design` PLANNING — **Convexity cliff** | `analysis/health.HealthMixin.calculate_convexity_cliff_days`; lines from `IpsConvexity.cliff_*` | **PRESENT** (notebook-retirement audit) |
 | — | Sizing workbench | — | `/design` PLANNING | `analysis/sizing.size_hedge` | **PRESENT** |
-| — | Strike ladder builder | — | `/design` PLANNING | `analysis/strike_ladder.build_strike_ladder` | **PRESENT** |
+| — | Strike candidates (single-strike browser; was "Strike ladder") | — | `/design` PLANNING — **Strike candidates** | `analysis/strike_ladder.build_candidate_grid` | **PRESENT** as a *candidate browser*. It is **not** the handbook's ladder (a weighted blend of rungs scored as one unit, [Strike Selection](https://qwertytam.github.io/deltadewa-handbook/part-7/strike-selection/)): every row is sized to the whole IPS offset alone (#410). The composed ladder is **PENDING** (8d) |
 | — | Roll plan (action, target strike, roll-up cost) | — | `/design` PLANNING — **Roll plan** | `analysis/roll_planner.build_roll_plan` | **PRESENT** (#258) |
 | — | Roll status by tranche (per-trigger grades) | — | `/design` PLANNING — **Roll status by tranche** | `analysis/roll_status.evaluate_roll_status` | **PRESENT** |
 | — | Monetization planner | — | `/design` PLANNING + `/monitor` *Decisions* | `analysis/monetization.build_monetization_plan` | **PRESENT** |

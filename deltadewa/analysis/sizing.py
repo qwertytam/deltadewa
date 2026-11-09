@@ -5,8 +5,9 @@ Implements the 5-step IPS-driven sizing framework:
 0. ``beta_adjusted_notional`` — the book's SPX-equivalent exposure
    (``book_notional * portfolio_beta``, handbook `Beta-Adjusted Hedge Sizing
    <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_).
-   The offset and convexity are measured against it, so beta ≠ 1 sizes the
-   hedge up/down.
+   The offset is measured against it, so beta ≠ 1 sizes the hedge up/down.
+   The achieved convexity is reported on the compliance strip's basis
+   instead (#410), so beta does not move the yardstick.
 1. ``required_crash_offset`` — dollars the hedge must recover beyond the
    acceptable drawdown.
 2. Per-contract payoff: the candidate **repriced** at the IPS crash state
@@ -57,7 +58,8 @@ class HedgeSizingResult:
             (``IpsSizing.portfolio_beta``); a user input, not estimated.
         beta_adjusted_notional: SPX-equivalent exposure
             (``book_notional * portfolio_beta``); the notional the crash offset
-            and convexity are measured against. Equals ``book_notional`` at
+            is measured against (the convexity reading is on the book
+            notional, #410). Equals ``book_notional`` at
             beta 1.0.
         carry_budget: Annual premium budget in dollars
             (``annual_carry_pct / 100 * book_notional`` — on the true book
@@ -84,8 +86,15 @@ class HedgeSizingResult:
         max_affordable_contracts: Most contracts the carry budget can support
             (floor division); ``sys.maxsize`` when ``per_contract_carry`` is
             zero (practically unlimited).
-        achieved_convexity_pct: ``(contracts_needed * per_contract_payoff)
-            / beta_adjusted_notional * 100``; 0.0 when the notional is zero.
+        achieved_convexity_pct: ``contracts_needed *
+            per_contract_convexity_pct`` — the crash **gain**
+            (``V_crash - V_today``) of the sized contracts as a percent of
+            the unadjusted book notional, read through
+            :func:`~deltadewa.analysis.crash_repricing.crash_convexity_pct`,
+            the same gauge the compliance strip uses (#410). Not the gross
+            payoff, and not divided by the beta-adjusted notional: both
+            made this figure disagree with the strip on the same legs.
+            0.0 when the portfolio has no underlying position.
         meets_convexity_target: True when ``achieved_convexity_pct`` lies
             within the IPS band ``[target_min_pct, target_max_pct]``.
 
@@ -282,9 +291,11 @@ def size_hedge(
     ``book_notional * ips_config.sizing.portfolio_beta`` (handbook
     `Beta-Adjusted Hedge Sizing
     <https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/>`_):
-    the crash offset and achieved convexity are measured against it, so a
-    book beta
-    below/above 1.0 sizes the hedge down/up proportionally. ``portfolio_beta``
+    the crash offset is measured against it, so a book beta
+    below/above 1.0 sizes the hedge down/up proportionally. The achieved
+    convexity is *reported* on the strip's basis (gain over the unadjusted
+    book notional, #410), so beta changes the contracts bought but not the
+    yardstick the result is read against. ``portfolio_beta``
     is a **user input, not estimated** (set in the IPS); SPX puts hedge only the
     systematic component and therefore **under-protect idiosyncratic risk**. The
     carry budget stays on the true ``book_notional`` — the premium budget is a
@@ -347,11 +358,11 @@ def size_hedge(
         carry_budget,
     )
 
-    achieved_payoff = sizing.contracts_needed * metrics.per_contract_payoff
+    # The strip's own gauge, scaled by the contracts sized -- never a
+    # second formula (#410). Sizing still *sizes* on gross payoff vs the
+    # beta-adjusted offset above; only the achieved-convexity reading moved.
     achieved_convexity_pct = (
-        achieved_payoff / beta_adj_notional * 100.0
-        if beta_adj_notional > 0.0
-        else 0.0
+        sizing.contracts_needed * metrics.per_contract_convexity_pct
     )
     conv = ips_config.convexity
     meets_convexity_target = (

@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
     from deltadewa.analysis.sizing import HedgeSizingResult
     from deltadewa.app.factory import ProgramDashApp
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
 
 # PLANNING zone: dial default. Carried over from the sizing cell of
@@ -135,6 +135,26 @@ def _vega_sufficiency_block(
     )
 
 
+def _convexity_verdict(
+    result: HedgeSizingResult,
+    conv: IpsConvexity,
+) -> str:
+    """Name which side of the IPS band the achieved convexity sits on.
+
+    The old two-way ``within``/``over`` read a reading *below* the band as
+    "over target" (the auditor's #410 finding): sizing buys the offset, so
+    the achieved figure sits near ``|crash| - drawdown tolerance`` and is
+    below the band whenever the tolerance is generous. Saying "below" is
+    the difference between a hedge that is too small and one that is
+    too big.
+    """
+    if result.meets_convexity_target:
+        return "within"
+    if result.achieved_convexity_pct < conv.target_min_pct:
+        return "below"
+    return "above"
+
+
 def _sizing_panel_view(
     result: HedgeSizingResult,
     ips_config: IpsConfig,
@@ -150,7 +170,7 @@ def _sizing_panel_view(
     """
     conv = ips_config.convexity
     carry_verdict = "within" if result.within_budget else "over"
-    convexity_verdict = "within" if result.meets_convexity_target else "over"
+    convexity_verdict = _convexity_verdict(result, conv)
     intrinsic_floor_text = (
         " (intrinsic floor "
         + fmt.currency(result.per_contract_intrinsic_floor, decimals=2)

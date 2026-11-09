@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-# Every PLANNING panel prices this basis — size_hedge, build_strike_ladder,
+# Every PLANNING panel prices this basis — size_hedge, build_candidate_grid,
 # and evaluate_roll_status each build CrashShock.from_ips(...) internally,
 # the same construction /monitor's build_scenario uses at the IPS crash
 # point. One literal, so the zone header and every panel's chip say the
