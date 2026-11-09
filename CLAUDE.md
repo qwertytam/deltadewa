@@ -528,7 +528,7 @@ figure could be derived from is stored.
 The rules:
 - **Unknown is not zero.** An uncaptured fee is `None` and a named break.
 - **Edits without a fill are journaled as `BookEdit`, not forbidden.** That is
-  what `/design`'s delete and edit write until 8e.2's trade forms.
+  what `/design`'s delete and edit write until #313's trade forms (a follow-on).
 - **The history starts at an opening mark.** Legs already held enter at V0,
   never as synthetic opens, and every surface says "No position history
   before <date>".
@@ -536,7 +536,7 @@ The rules:
 
 The audit that motivated it also found that `ProgramState`'s change log was
 never written: no mutator called `log_portfolio_change`, which corrects #262's
-premise. Follow-ons for 8e.2: the `/design` close/settle/roll forms, an
+premise. Follow-ons to #313: the `/design` close/settle/roll forms, an
 unsettled-expiry prompt, `/monitor` cost since inception, and the hedge-success
 gauge rebuilt on realized carry. See `docs/part-x-coverage.md`, "The position
 history (8e.1)", and RUNBOOK §5.1 (run `history_cli init` once).

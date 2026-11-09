@@ -2481,7 +2481,7 @@ Opened during Phase 4 and deliberately not taken there:
   Dash home for a reason.~~ **Closed as a duplicate of #313** (2026-11-09),
   whose 8e.1 built the history layer: `exports/history/`, fills and
   boundary marks, realized carry in digest §4. The hedge-success gauge is
-  #313's named follow-on (8e.2). See `docs/part-x-coverage.md`, "The
+  #313's named follow-on. See `docs/part-x-coverage.md`, "The
   position history (8e.1)".
 - **#262 — surface the session change log in the Dash app.** From M4.4's
   parity pass. **Correction (8e.1):** the premise that `ProgramState` "still

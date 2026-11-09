@@ -373,7 +373,7 @@ If it is never run, Sunday's weekly digest starts the history itself,
 so a missed step costs a few days of history, not all of it.
 
 From then on, record trades so realized carry can tie to the statements.
-Until `/design` has close/settle/roll forms (8e.2), closing or rolling a
+Until `/design` has close/settle/roll forms (a #313 follow-on), closing or rolling a
 leg there by deleting or editing it is journaled as a **book edit with no
 fill**, and §4 lists that period as not reconcilable. That is correct,
 not a bug. To see every recorded break and any lot the history does not

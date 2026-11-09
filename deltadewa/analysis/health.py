@@ -412,7 +412,7 @@ class HealthMixin:
         # /monitor instead (#165), since a permanently neutral gauge is
         # worse than none. The realized history now exists (#313,
         # analysis/realized_carry.py), and rebuilding the gauge on it is
-        # #313's named follow-on (8e.2). Until then this has no product
+        # #313's named follow-on. Until then this has no product
         # consumer. NOTE (M1.2/Mo1): only the crash *scenario* is
         # single-sourced here; the include_underlying basis is unchanged.
         current_spot = self.portfolio.spot_price

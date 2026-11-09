@@ -282,7 +282,7 @@ tracking, which needs the position-history layer
 value it shows is a proxy. `analysis/health.py` records this at the function.
 **8e.1 built that layer** (#313, which absorbed #70; see "The position
 history (8e.1)" below), so this retirement is now lifted *in principle*.
-The gauge is #313's named follow-on (8e.2), rebuilt on realized carry. Do
+The gauge is #313's named follow-on, rebuilt on realized carry. Do
 not re-add the old crash-payoff proxy.
 
 **`/monitor` is not a gauge wall.** The principle behind every
@@ -1243,7 +1243,7 @@ quarters-sum-to-the-year and reconciliation.
 - `python -m deltadewa.history_cli init|mark|status`.
 - Not yet on `/monitor` or `/design`.
 
-**Not built (8e.2).**
+**Not built (follow-ons to #313).**
 - `/design` close/settle/roll forms with fees and reason. Until then, closing
   a leg in the UI is a `DELETE` edit, honestly unreconcilable.
 - An unsettled-expiry prompt.
