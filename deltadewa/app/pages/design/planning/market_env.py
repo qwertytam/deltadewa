@@ -409,6 +409,10 @@ def _render_market_env_panel_logic(
                 vix_very_high=ips_config.market_environment.vix_very_high,
                 vix_caution=ips_config.market_environment.vix_caution,
                 vix_low=ips_config.market_environment.vix_low,
+                skew_high=(
+                    ips_config.market_environment.skew_high_pctile / 100.0
+                ),
+                skew_low=ips_config.market_environment.skew_low_pctile / 100.0,
             ),
             ips_config.market_environment,
         )

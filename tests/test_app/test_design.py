@@ -2320,6 +2320,46 @@ class TestMarketEnvironmentPanel:
 
         assert "88th percentile (trailing 5y)" in text
 
+    def test_entry_timing_grades_skew_on_the_ips_band_it_displays(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Step 2 cuts skew where the row says the IPS band is (8c).
+
+        entry_timing_tree used to default its skew cuts to 30/70 and no
+        caller passed the IPS values, so an operator band of 30-85 was
+        displayed on the skew row while step 2 still deferred at 70.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=_MATURITY,
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        assert state.ips_config is not None
+        wide_band = replace(
+            state.ips_config,
+            market_environment=replace(
+                state.ips_config.market_environment,
+                skew_high_pctile=85.0,
+            ),
+        )
+        env = _make_market_env(skew_percentile=0.80, skew_lookback_days=1260)
+
+        text = _collect_text(
+            design._render_market_env_panel_logic(
+                portfolio=state.portfolio,
+                ips_config=wide_band,
+                market_env=env,
+            ),
+        )
+
+        assert "IPS band 30-85" in text
+        assert "2. Skew: 80th percentile (trailing 5y) — Normal" in text
+        assert "defer" not in text
+
     def test_forward_variance_carries_no_band(self, tmp_path: Path) -> None:
         """The handbook states no forward-variance cut, so none is invented.
 

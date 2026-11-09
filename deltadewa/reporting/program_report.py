@@ -513,6 +513,8 @@ def _build_decision(
         vix_very_high=me.vix_very_high,
         vix_caution=me.vix_caution,
         vix_low=me.vix_low,
+        skew_high=me.skew_high_pctile / 100.0,
+        skew_low=me.skew_low_pctile / 100.0,
     )
 
     if protection.convexity_pct is None:

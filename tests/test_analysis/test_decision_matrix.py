@@ -90,6 +90,8 @@ def _entry_timing(env: MarketEnvironment, **overrides: float) -> Any:
         "vix_very_high": _VIX_VERY_HIGH,
         "vix_caution": _VIX_CAUTION,
         "vix_low": _VIX_LOW,
+        "skew_high": 0.70,
+        "skew_low": 0.30,
         **overrides,
     }
     return entry_timing_tree(env, **kwargs)

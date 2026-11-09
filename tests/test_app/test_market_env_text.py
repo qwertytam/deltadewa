@@ -30,7 +30,13 @@ from deltadewa.app.pages.design.planning.market_env import (
 )
 from deltadewa.ips_config import IpsMarketEnvironment
 
-_VIX_THRESHOLDS = {"vix_very_high": 40.0, "vix_caution": 25.0, "vix_low": 15.0}
+_VIX_THRESHOLDS = {
+    "vix_very_high": 40.0,
+    "vix_caution": 25.0,
+    "vix_low": 15.0,
+    "skew_high": 0.70,
+    "skew_low": 0.30,
+}
 
 # A lower_snake identifier, or a dotted Class.attribute — what N5 found.
 _IDENTIFIER = re.compile(r"\b[a-z]+_[a-z_]+\b|\b[A-Z][A-Za-z]+\.[a-z_]+\b")
