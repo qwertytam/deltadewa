@@ -112,7 +112,11 @@ dev = [
 	# Kept for transitive-pin hygiene, but NOT Jupyter residue — both are
 	# required by packages that survive: pillow by matplotlib, pygments by
 	# pytest (a main dependency).
-	"pillow (>=12.2,<13.0)",
+	#
+	# pillow is floored at 13.0: every open Pillow advisory is fixed only
+	# in 13.0.0, and the old <13.0 cap left Dependabot no in-range fix.
+	# Nothing imports PIL directly; matplotlib needs only pillow>=9.
+	"pillow (>=13.0,<14.0)",
 	"pygments (>=2.20,<3.0)",
 ]
 # Test-only: the Playwright browser driver behind tests/test_app's Dash
