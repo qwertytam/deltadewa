@@ -149,7 +149,7 @@ def _make_market_env(
     if data_quality is DataQuality.UNAVAILABLE:
         return MarketEnvironment(
             vix=None,
-            regime_percentile=None,
+            regime_band_position_pct=None,
             regime_label=None,
             skew_index=None,
             skew_percentile=None,
@@ -162,7 +162,7 @@ def _make_market_env(
         )
     return MarketEnvironment(
         vix=18.0,
-        regime_percentile=30.0,
+        regime_band_position_pct=30.0,
         regime_label=RegimeLabel.NORMAL,
         skew_index=130.0,
         skew_percentile=0.45,

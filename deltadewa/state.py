@@ -757,6 +757,32 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             self._portfolio.confirm_current_inputs(as_of=as_of)
             self._mutate_and_save()
 
+    def record_liquidity(  # pylint: disable=too-many-arguments
+        self,
+        position_id: str,
+        *,
+        bid: float,
+        ask: float,
+        open_interest: int | None,
+        observed_at: datetime | None = None,
+    ) -> None:
+        """Record the operator's quote for one leg (8c, N10).
+
+        See ``OptionPortfolio.record_liquidity``. Not confirm-gated,
+        unlike :meth:`mark_inputs_reviewed`: this records new data the
+        operator just read; it erases no staleness signal it has not
+        replaced with a real observation.
+        """
+        with self._lock:
+            self._portfolio.record_liquidity(
+                position_id,
+                bid=bid,
+                ask=ask,
+                open_interest=open_interest,
+                observed_at=observed_at,
+            )
+            self._mutate_and_save()
+
     def remove_position(self, index: int, *, confirm: bool = False) -> None:
         """Remove a position by index. Destructive — requires confirm=True."""
         if not confirm:

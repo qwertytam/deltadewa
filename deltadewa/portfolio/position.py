@@ -5,6 +5,7 @@ from datetime import datetime as dt
 from typing import Any
 
 from deltadewa.constants import ExerciseStyle
+from deltadewa.portfolio.liquidity import LiquidityObservation
 from deltadewa.valuation import OptionValuation
 
 
@@ -76,6 +77,12 @@ class OptionPosition:
         self.position_id = position_id if position_id else str(uuid.uuid4())
         self.structure_id = structure_id
         self.volatility_as_of = volatility_as_of
+        # 8c / N10: the operator's last-read quote for this contract, or
+        # None if never recorded. Not a constructor argument: like
+        # volatility_as_of on import, it is restored directly onto a
+        # freshly-built position, and only record_liquidity sets it live.
+        # See deltadewa.portfolio.liquidity.
+        self.liquidity: LiquidityObservation | None = None
 
     def position_value(self) -> float:
         """Calculate the total value of the position.

@@ -56,6 +56,39 @@ Notes on the table:
   and a failed series' previous cache entry is left untouched, because
   the disk cache only writes on success.
 
+### The skew percentile's window (#317)
+
+The SKEW percentile is the inclusive rank of the latest SKEW close over a
+trailing window of `market_environment.skew_lookback_days` sessions —
+**1260 (≈ five years)** by default, the handbook's own window
+([The Lookback Window](https://qwertytam.github.io/deltadewa-handbook/part-3/volatility-skew/#the-lookback-window)).
+Before 8c it was an unsourced 252 that no caller overrode. The handbook
+lets a program choose another window "provided it states the window every
+time it quotes a percentile", so every surface does: `/design` reads
+"88th percentile (trailing 5y)", and so do both program-report renderers.
+
+- **Coverage.** Cboe publishes SKEW from 1990-01-02 and the provider
+  caches the whole file, so any window up to decades costs no extra
+  download. A series shorter than the window raises `MarketDataError`
+  rather than silently ranking a truncated sample; the refresh job
+  fetches at the IPS window, so that failure is logged where an operator
+  reads it.
+- **What changing it does.** On 2026-11-06 (SKEW 153.55) the reading was
+  90.5 on 252 sessions and 87.6 on 1260 — both above the 70 cut, so that
+  day's verdict did not move. Over the preceding year the two windows
+  labelled 84 of 252 sessions differently, always toward "more expensive"
+  on five years: SKEW has drifted upward since 2021, so the five-year
+  distribution's cuts sit lower (30th/70th: 134.8/147.0 vs 142.2/148.3
+  on one year). The five-year window read LOW — "accumulate
+  aggressively" — on 5 of those sessions, where the one-year window read
+  LOW on 70.
+- **Week over week.** `WeeklySnapshot` persists the window; a snapshot
+  written before 8c reads back as 252 (the window every earlier
+  percentile was in fact ranked over), and the digest reports a window
+  change instead of a percentile move.
+- `get_vix_history`'s 252-session window is a **different metric** (the
+  vol-regime true percentile in `analysis/health.py`) and is unchanged.
+
 ## Hand-entered inputs, which never refresh
 
 These come from the loaded portfolio (or `/design`'s position editor) and
@@ -255,14 +288,71 @@ every input #367 added made the banner louder, operators would stop
 reading a banner that never turns off; see `analysis/provenance.py`'s
 module docstring and `app/chrome.py` for the full reasoning.
 
+## Liquidity: hand-entered quotes, not a feed
+
+Part X #12 Liquidity Risk needs per-strike bid/ask and open interest,
+which no connected source provides (see below). Since 8c (N10) the
+operator can record what they *can* see — the quote on their own broker
+for a leg they hold — and `/design`'s **Liquidity check (hand-entered)**
+panel grades it. This turns a feed-blocked metric into a checklist item;
+it does not make it a liquidity feed.
+
+- **What is captured.** Per leg, a `LiquidityObservation`
+  (`portfolio/liquidity.py`): bid, ask, optional open interest, and when
+  it was read. Spread is the handbook's `(Ask − Bid) / Mid`. It is
+  persisted with the book (JSON and YAML), restored verbatim on import,
+  and discarded if the leg's strike, maturity or type is edited — it
+  described a different contract.
+- **When, and by whom.** By the operator, by hand, at the moments the
+  handbook says liquidity matters: rolling, monetizing, and scaling a
+  position (Tier 4 §12). The panel flags a leg as needing a fresh quote
+  when it has never been checked, when its last quote is older than the
+  review cadence, or when the leg's roll status is `ROLL`/`REVIEW` — the
+  exit side of a roll. A newly added leg starts as "never checked", which
+  covers the entry side and any scaling.
+- **What grades it.** `ips.yaml`'s optional `liquidity:` section:
+  `spread_warn_pct` (a recorded spread wider than this grades WIDE),
+  `open_interest_min` (optional; unset records OI ungraded), and
+  `observation_max_age_days`. The handbook names "wide bid-ask spreads"
+  and "low open interest" as warning signs but gives **no number for
+  either**, so there are no code defaults: with no `liquidity:` section
+  every quote is shown ungraded and the panel says why. The shipped
+  templates use `spread_warn_pct: 10.0` — the top of the handbook's only
+  stated range, "5–10% of the mid-price or wider in quiet markets" for
+  30–40% OTM ~18-month puts (`part-7/volatility-roll-yield`) — which
+  describes a quiet market, not a handbook limit.
+- **How it ages.** By the same rule as every other hand-entered input —
+  `analysis.provenance.grade_hand_entered` (#367) against
+  `observation_max_age_days`. A grade on an overdue quote is shown as of
+  the day it was read, never as the current market.
+- **Why it is not in the provenance ledger or its alarm.** A leg with no
+  quote would grade `UNKNOWN` there, and `assess_freshness` alarms on
+  `UNKNOWN`: every never-checked leg would put "STALE DATA" on the digest
+  and a permanent banner on both pages — #398's alarm fatigue again. The
+  ledger is also "every *pricing* input", and a spread prices nothing. So
+  liquidity lives on `/design` only: not the banner, the digest,
+  `/health` or `/monitor`.
+- **What it does not claim** — and what #156's chain feed would add that
+  this cannot:
+  - quotes for **every strike**, including strike-ladder candidates the
+    book does not hold yet;
+  - **depth** behind the top of book, and traded **volume**;
+  - **intraday and stress-time widening** — a quote read on a calm
+    Tuesday says nothing about the bid in a crash, which is when the
+    handbook says liquidity matters most;
+  - **automatic refresh**, so "how old is this quote" stops being a
+    question.
+
 ## What is not connected
 
 There is **no options-chain feed**. The app has no per-strike implied
-volatility, no bid/ask, and no open interest. Consequences:
+volatility, no fetched bid/ask, and no fetched open interest.
+Consequences:
 
 - Every leg is priced on its hand-entered volatility.
-- Part X **#12 Liquidity Risk** cannot be built — it needs per-strike
-  bid/ask and open interest. See `part-x-coverage.md`.
+- Part X **#12 Liquidity Risk** can only be built as the hand-entered
+  checklist above — the real metric needs per-strike bid/ask and open
+  interest from a feed. See `part-x-coverage.md`.
 
 Connecting a real chain feed is tracked in #156, and is the blocker on
 both of the above.

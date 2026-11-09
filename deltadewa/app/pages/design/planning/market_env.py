@@ -17,7 +17,7 @@ to share.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, NamedTuple
 
 from dash import Input, Output, html
 
@@ -27,7 +27,10 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
-from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.market_environment import (
+    assess_market_environment,
+    describe_skew_percentile,
+)
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
@@ -37,11 +40,14 @@ from deltadewa.app.section_nav import SectionSpec
 from ..book import BOOK_VERSION_STORE
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from dash.development.base_component import Component
 
     from deltadewa.analysis.decision_matrix import (
         DecisionResult,
         EntryTimingResult,
+        EntryTimingStep,
     )
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.app.factory import ProgramDashApp
@@ -91,6 +97,25 @@ def _env_unavailable_row(label: str, why: str) -> Component:
     )
 
 
+def _band_position_text(position: float | None) -> str:
+    """Say where VIX sits in the IPS band — never as a "percentile".
+
+    ``MarketEnvironment.regime_band_position_pct`` is a clamped band
+    position, not a rank against history (8c, N5). Rendered as "regime
+    percentile 0" it read as "the cheapest VIX of the year" on days VIX
+    merely sat below 15, and "regime percentile 53" on a day VIX ranked
+    95th over the trailing year. At the clamps the honest statement is
+    which edge it is past, not a 0 or 100.
+    """
+    if position is None:
+        return ""
+    if position <= 0.0:
+        return " — at or below the band's low end"
+    if position >= 100.0:  # the clamp's own upper bound, not policy
+        return " — at or above the band's high end"
+    return f" — {position:.0f}% of the way up the band"
+
+
 def _vol_regime_row(
     market_env: MarketEnvironment,
     policy: IpsMarketEnvironment,
@@ -102,21 +127,17 @@ def _vol_regime_row(
             "no VIX reading in this snapshot",
         )
 
-    percentile = (
-        f", regime percentile {market_env.regime_percentile:.0f}"
-        if market_env.regime_percentile is not None
-        else ""
-    )
+    position = _band_position_text(market_env.regime_band_position_pct)
     # The IPS band is decimal implied vol compared against VIX/100
     # (market_environment.classify_vix_regime), so the bar is drawn on the
     # VIX level in vol points — the units the reading is actually in —
-    # rather than on the derived percentile.
+    # rather than on the derived band position.
     return _env_metric_row(
         label="Vol regime",
         headline=f"{market_env.regime_label.value} — VIX {market_env.vix:.1f}",
         detail=(
             f"IPS band {policy.vol_regime_low * 100:.0f}-"
-            f"{policy.vol_regime_high * 100:.0f} VIX points{percentile}"
+            f"{policy.vol_regime_high * 100:.0f} VIX points{position}"
         ),
         bar=band_bar(
             value=market_env.vix,
@@ -149,7 +170,12 @@ def _skew_row(
     )
     return _env_metric_row(
         label="Skew percentile",
-        headline=f"{percentile_pct:.0f}th percentile",
+        # The window is stated every time (#317) — the handbook's condition
+        # for ranking skew over any window at all.
+        headline=describe_skew_percentile(
+            market_env.skew_percentile,
+            market_env.skew_lookback_days,
+        ),
         detail=(
             f"IPS band {policy.skew_low_pctile:.0f}-"
             f"{policy.skew_high_pctile:.0f}{index_text}"
@@ -166,10 +192,20 @@ def _skew_row(
 def _forward_variance_row(market_env: MarketEnvironment) -> Component:
     """Part X #8 — forward variance, as a level with no band.
 
-    The IPS states no forward-variance band, so this deliberately gets no
-    ``band_bar``: inventing one here would be exactly the presentation-side
-    policy the ``market_environment`` section exists to prevent. It is read
-    alongside the hedge-cost verdict below instead.
+    The handbook reads forward variance cheap/normal/high but gives no
+    cut, and the program ranks no forward-variance history, so this row
+    deliberately gets no ``band_bar`` and no chip: a band here would be
+    invented policy (borrowing skew's 30/70 would misapply bands the
+    handbook says its skew page "owns").
+
+    The text says what substitutes for the band, and says it exactly
+    (N11, #417). The pre-8c wording told the reader to "read against the
+    hedge-cost verdict", but ``_hedge_cost_verdict`` never reads forward
+    variance — it reads the term-structure *shape*, which says whether
+    3-month vol sits above or below the front, not whether either is
+    cheap against its own history. The data for a real percentile exists
+    (Cboe VIX3M history back to 2007, already cached in full); the
+    missing piece is a handbook band to grade it against.
     """
     if market_env.forward_vol_front_3m is None:
         return _env_unavailable_row(
@@ -178,25 +214,92 @@ def _forward_variance_row(market_env: MarketEnvironment) -> Component:
         )
 
     shape_text = (
-        f", term structure {market_env.term_shape.value}"
+        f"The term-structure shape ({market_env.term_shape.value.lower()})"
         if market_env.term_shape is not None
-        else ""
+        else "The term-structure shape"
     )
     return _env_metric_row(
         label="Forward variance",
         headline=f"{market_env.forward_vol_front_3m:.1f} vol points",
         detail=(
-            f"front-to-3M implied forward vol; no IPS band{shape_text} — "
-            "read against the hedge-cost verdict below"
+            "Front-to-3M implied forward vol. No historical band: the "
+            "handbook gives no cheap/normal/high cut, and the program "
+            "ranks no forward-variance history. "
+            f"{shape_text} is what feeds the hedge-cost verdict in its "
+            "place — it says whether 3-month vol sits above or below the "
+            "front, not whether either is cheap against its own history."
         ),
     )
 
 
-def _entry_timing_rows(timing: EntryTimingResult) -> list[Component]:
+def _verdict_word(token: str) -> str:
+    """Render an analysis verdict token for a reader.
+
+    ``INSUFFICIENT_DATA`` is an enum value, not a word; the panel shows it
+    as ``INSUFFICIENT DATA`` (N5). Single-word verdicts (``BUY``,
+    ``CHEAP``) pass through unchanged.
+    """
+    return token.replace("_", " ")
+
+
+def _vix_step_value(value: float | str, _env: MarketEnvironment) -> str:
+    return f"{float(value):.1f}"
+
+
+def _skew_step_value(value: float | str, env: MarketEnvironment) -> str:
+    # The same formatter as the skew row above, so step 2 and the row
+    # cannot disagree on rounding or omit the window (#317).
+    return describe_skew_percentile(float(value), env.skew_lookback_days)
+
+
+def _term_step_value(value: float | str, _env: MarketEnvironment) -> str:
+    return str(value).lower()
+
+
+class _StepFormat(NamedTuple):
+    """How one entry-timing step's factor reads on the page."""
+
+    name: str
+    value: Callable[[float | str, MarketEnvironment], str]
+
+
+#: N5: every factor label ``entry_timing_tree`` emits, mapped to the words a
+#: reader sees. Before this the panel rendered the label and value raw —
+#: ``skew_percentile: 0.876984126984127``. A test drives the tree through
+#: every branch and fails if a label is missing from this table.
+TIMING_STEP_FORMATS: Final[dict[str, _StepFormat]] = {
+    "VIX": _StepFormat("VIX", _vix_step_value),
+    "skew_percentile": _StepFormat("Skew", _skew_step_value),
+    "term_shape": _StepFormat("Term structure", _term_step_value),
+}
+
+
+def format_timing_step(
+    step: EntryTimingStep,
+    market_env: MarketEnvironment,
+) -> str:
+    """Render one entry-timing step as a sentence a reader can use."""
+    fmt = TIMING_STEP_FORMATS.get(step.label)
+    # Unreachable for any label the tree emits today (pinned by test); a
+    # new label still reads as words rather than a Python identifier.
+    name = fmt.name if fmt is not None else step.label.replace("_", " ")
+    if step.value is None:
+        value_text = "unavailable"
+    elif fmt is not None:
+        value_text = fmt.value(step.value, market_env)
+    else:
+        value_text = str(step.value)
+    return f"{step.step}. {name}: {value_text} — {step.recommendation}"
+
+
+def _entry_timing_rows(
+    timing: EntryTimingResult,
+    market_env: MarketEnvironment,
+) -> list[Component]:
     """Render the entry-timing tree's path, step by step."""
     rows: list[Component] = [
         html.P(
-            f"Entry timing: {timing.recommendation}",
+            f"Entry timing: {_verdict_word(timing.recommendation)}",
             className="env-verdict",
         ),
     ]
@@ -206,7 +309,7 @@ def _entry_timing_rows(timing: EntryTimingResult) -> list[Component]:
         )
     rows.extend(
         html.P(
-            f"{step.step}. {step.label}: {step.value} — {step.recommendation}",
+            format_timing_step(step, market_env),
             className="env-timing-step",
         )
         for step in timing.steps
@@ -254,7 +357,8 @@ def _market_env_panel_view(
                 className="env-verdict",
             ),
             html.P(
-                f"Decision: {decision.verdict.value} — {decision.rationale}",
+                f"Decision: {_verdict_word(decision.verdict.value)} — "
+                f"{decision.rationale}",
                 className="env-verdict",
             ),
             *(
@@ -267,7 +371,7 @@ def _market_env_panel_view(
                 if decision.data_quality_note is not None
                 else []
             ),
-            *_entry_timing_rows(timing),
+            *_entry_timing_rows(timing, market_env),
         ],
     )
 
@@ -305,6 +409,10 @@ def _render_market_env_panel_logic(
                 vix_very_high=ips_config.market_environment.vix_very_high,
                 vix_caution=ips_config.market_environment.vix_caution,
                 vix_low=ips_config.market_environment.vix_low,
+                skew_high=(
+                    ips_config.market_environment.skew_high_pctile / 100.0
+                ),
+                skew_low=ips_config.market_environment.skew_low_pctile / 100.0,
             ),
             ips_config.market_environment,
         )

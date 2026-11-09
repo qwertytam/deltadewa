@@ -16,6 +16,7 @@ import pandas as pd
 from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.liquidity import LiquidityObservation
 from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.reporting import PortfolioLogger
 
@@ -86,6 +87,49 @@ def _stamps_from_market_params(
             if (raw := market_params.get("dividend_yield_as_of"))
             else None
         ),
+    )
+
+
+def _liquidity_to_dict(
+    observation: LiquidityObservation | None,
+) -> dict[str, Any] | None:
+    """Serialize a leg's liquidity observation (8c, N10), or ``None``."""
+    if observation is None:
+        return None
+    return {
+        "bid": observation.bid,
+        "ask": observation.ask,
+        "open_interest": observation.open_interest,
+        "observed_at": observation.observed_at.isoformat(),
+    }
+
+
+def _liquidity_from_dict(raw: Any) -> LiquidityObservation | None:  # ruff: ignore[any-type]  # parsed JSON/YAML
+    """Restore a leg's liquidity observation verbatim, or ``None``.
+
+    A file predating 8c has no ``liquidity`` key: that leg was never
+    checked, and ``None`` says so. Restored as written — never re-stamped
+    — so a re-import cannot make an old quote look freshly read (the same
+    rule ``deltadewa.portfolio.stamps`` sets for confirmation stamps).
+
+    Raises:
+        ValueError: If the stored quote is malformed — the same checks
+            :class:`~deltadewa.portfolio.liquidity.LiquidityObservation`
+            applies when the quote is first recorded.
+
+    """
+    if not raw:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"position 'liquidity' must be a mapping, got {type(raw).__name__}",
+        )
+    open_interest = raw.get("open_interest")
+    return LiquidityObservation(
+        bid=float(raw["bid"]),
+        ask=float(raw["ask"]),
+        open_interest=int(open_interest) if open_interest is not None else None,
+        observed_at=dt.fromisoformat(str(raw["observed_at"])),
     )
 
 
@@ -249,6 +293,7 @@ class PortfolioSerializer:
                     if pos.volatility_as_of
                     else None
                 ),
+                "liquidity": _liquidity_to_dict(pos.liquidity),
                 "greeks": {
                     "delta": pos.option.delta(),
                     "gamma": pos.option.gamma(),
@@ -589,6 +634,9 @@ class PortfolioSerializer:
                 if raw_volatility_as_of
                 else None
             )
+            new_position.liquidity = _liquidity_from_dict(
+                pos_data.get("liquidity"),
+            )
 
         return {
             "portfolio": imported_portfolio,
@@ -726,6 +774,9 @@ class PortfolioSerializer:
                 dt.fromisoformat(raw_volatility_as_of)
                 if raw_volatility_as_of
                 else None
+            )
+            new_position.liquidity = _liquidity_from_dict(
+                pos_config.get("liquidity"),
             )
 
         return {

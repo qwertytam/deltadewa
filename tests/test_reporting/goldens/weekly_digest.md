@@ -67,7 +67,7 @@ Where each leg stands right now. The crossing above reports what *changed*; this
 |--------|-------|
 | VIX | 22.0 |
 | VIX regime | NORMAL |
-| SKEW percentile | 45.0% |
+| SKEW percentile | 45th percentile (trailing 1y) |
 | Hedge-cost verdict | FAIR |
 | Data quality | CACHED |
 

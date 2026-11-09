@@ -140,6 +140,7 @@ def _make_report(
             hedge_cost_verdict="FAIR",
             data_quality=data_quality,
             needs_alarm=needs_alarm,
+            skew_lookback_days=252,
         ),
         return_framing=ReturnFramingSection(carry_drag_annual_pct=1.15),
         monetization=MonetizationSection(

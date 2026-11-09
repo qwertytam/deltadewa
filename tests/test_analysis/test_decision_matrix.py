@@ -35,7 +35,7 @@ def _make_env(**kwargs: Any) -> MarketEnvironment:
     """Return a fully-populated LIVE MarketEnvironment with overrides."""
     defaults: dict[str, Any] = {
         "vix": 18.0,
-        "regime_percentile": 30.0,
+        "regime_band_position_pct": 30.0,
         "regime_label": RegimeLabel.NORMAL,
         "skew_index": 130.0,
         "skew_percentile": 0.35,
@@ -90,6 +90,8 @@ def _entry_timing(env: MarketEnvironment, **overrides: float) -> Any:
         "vix_very_high": _VIX_VERY_HIGH,
         "vix_caution": _VIX_CAUTION,
         "vix_low": _VIX_LOW,
+        "skew_high": 0.70,
+        "skew_low": 0.30,
         **overrides,
     }
     return entry_timing_tree(env, **kwargs)

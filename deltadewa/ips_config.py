@@ -39,6 +39,14 @@ _EXAMPLE_IPS_PATH: Final[Path] = (
     Path(__file__).resolve().parent.parent / "config" / "ips.example.yaml"
 )
 
+# Optional sections whose absence means "this grading is off", not "this
+# runs on built-in defaults" — the handbook gives no number to default to
+# (8c / N10). --check reports them on their own line rather than under the
+# "these have code defaults" message, which would be false for them.
+_SECTIONS_WITHOUT_CODE_DEFAULTS: Final[frozenset[str]] = frozenset(
+    {"liquidity"},
+)
+
 # CLI-only default (see main() below) — matches the cwd-relative default
 # every other entry point (weekly_report.py, refresh.py,
 # import_portfolio.py) uses for the live file, since --check with no
@@ -167,6 +175,22 @@ DEFAULT_VOL_REGIME_HIGH: Final[float] = 0.35
 DEFAULT_SKEW_LOW_PCTILE: Final[float] = 30.0
 DEFAULT_SKEW_HIGH_PCTILE: Final[float] = 70.0
 DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
+# The trailing window, in trading sessions, the SKEW index is ranked over
+# to produce the skew percentile (#317). The handbook ranks over a
+# trailing five years "by editorial convention" and permits any other
+# window "provided it states the window every time it quotes a percentile"
+# (part-3/volatility-skew/#the-lookback-window) — which is why every
+# surface quoting a skew percentile renders this window beside it.
+# 1260 sessions ~= five years — the handbook's own window. Before #317 this
+# was an unsourced 252 (~one year) spread across four call sites; the
+# 2026-11-06 reading was 90.5 on 252 sessions and 87.6 on 1260 (both above
+# the 70 cut, so that day's verdict did not move — but over the prior year
+# the two windows labelled a third of sessions differently, the five-year
+# window always the more expensive; see docs/market-data.md).
+DEFAULT_SKEW_LOOKBACK_DAYS: Final[int] = 1260
+# A percentile needs a distribution: fewer than two observations ranks the
+# current reading only against itself (always the 100th percentile).
+_MIN_SKEW_LOOKBACK_DAYS: Final[int] = 2
 
 # Defaults for the entry-timing VIX thresholds (M2.8). Seeded from the
 # values ``decision_matrix.entry_timing_tree`` used to hardcode as Python
@@ -266,6 +290,10 @@ class IpsMarketEnvironment:
         ``vix_very_high``/``vix_caution``/``vix_low`` are VIX levels (vol
         points, e.g. ``40.0``), the entry-timing tree's three stops (M2.8) —
         see :func:`~deltadewa.analysis.decision_matrix.entry_timing_tree`.
+        ``skew_lookback_days`` is the SKEW-percentile rank window in trading
+        sessions (``252`` ≈ one year, ``1260`` ≈ five) — the denominator of
+        the skew percentile the 30/70 band above is applied to, so it is
+        policy, not a provider detail (#317).
         ``spot_divergence_warn_pct`` is a percent (e.g. ``2.0`` for 2%): how
         far the observed market spot may diverge from the book's
         hand-entered spot before ``/monitor``'s cross-check flags it — see
@@ -283,6 +311,7 @@ class IpsMarketEnvironment:
     vix_caution: float = _DEFAULT_VIX_CAUTION
     vix_low: float = _DEFAULT_VIX_LOW
     spot_divergence_warn_pct: float = DEFAULT_SPOT_DIVERGENCE_WARN_PCT
+    skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS
 
 
 @dataclass(frozen=True)
@@ -530,6 +559,34 @@ class IpsPricingInputs:
 
 
 @dataclass(frozen=True)
+class IpsLiquidity:
+    """Policy for grading hand-entered liquidity quotes (8c, N10).
+
+    Optional, and deliberately **without code defaults**: the handbook
+    names "wide bid-ask spreads" and "low open interest" as warning signs
+    (Part X §12) but gives no number for either, so a built-in default
+    would be invented policy. When the ``liquidity:`` section is absent,
+    ``IpsConfig.liquidity`` is ``None`` and recorded quotes render
+    ungraded. When it is present, ``spread_warn_pct`` and
+    ``observation_max_age_days`` are required.
+
+    Units:
+        ``spread_warn_pct`` is a percent of mid (``10.0`` = 10%) — the
+        handbook's ``Spread % = (Ask - Bid) / Mid``; a recorded spread
+        above it grades WIDE.
+        ``observation_max_age_days`` is the review cadence for a recorded
+        quote, graded by the same rule as every other hand-entered input
+        (``analysis.provenance.grade_hand_entered``, #367).
+        ``open_interest_min`` is contracts; ``None`` records open interest
+        without grading it.
+    """
+
+    spread_warn_pct: float
+    observation_max_age_days: int
+    open_interest_min: int | None = None
+
+
+@dataclass(frozen=True)
 class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
@@ -654,6 +711,10 @@ class IpsConfig:
     maturity_selection: IpsMaturitySelection = dataclass_field(
         default_factory=IpsMaturitySelection,
     )
+    # 8c / N10: None when ips.yaml has no `liquidity:` section — recorded
+    # quotes then render ungraded. Not in defaulted_sections below: that
+    # set means "running on code defaults", and this section has none.
+    liquidity: IpsLiquidity | None = None
     # #309: which of the optional sections above (market_environment,
     # sizing, vega, pricing_inputs, maturity_selection) were absent from
     # the loaded ips.yaml and are running on their DEFAULT_* module
@@ -983,6 +1044,10 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         "spot_divergence_warn_pct",
         DEFAULT_SPOT_DIVERGENCE_WARN_PCT,
     )
+    skew_lookback_days = section.get(
+        "skew_lookback_days",
+        DEFAULT_SKEW_LOOKBACK_DAYS,
+    )
 
     if vol_low >= vol_high:
         raise IpsConfigError(
@@ -1014,6 +1079,17 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         spot_divergence_warn_pct,
         "market_environment.spot_divergence_warn_pct",
     )
+    # bool is an int subclass; a YAML `true` is not a window.
+    if (
+        isinstance(skew_lookback_days, bool)
+        or not isinstance(skew_lookback_days, int)
+        or skew_lookback_days < _MIN_SKEW_LOOKBACK_DAYS
+    ):
+        raise IpsConfigError(
+            "market_environment.skew_lookback_days must be an integer >= "
+            f"{_MIN_SKEW_LOOKBACK_DAYS} (trading sessions), got "
+            f"{skew_lookback_days!r}",
+        )
 
     return IpsMarketEnvironment(
         vol_regime_low=vol_low,
@@ -1026,6 +1102,7 @@ def _parse_market_environment(config: dict[str, Any]) -> IpsMarketEnvironment:
         vix_caution=vix_caution,
         vix_low=vix_low,
         spot_divergence_warn_pct=spot_divergence_warn_pct,
+        skew_lookback_days=skew_lookback_days,
     )
 
 
@@ -1227,6 +1304,57 @@ def _parse_pricing_inputs(config: dict[str, Any]) -> IpsPricingInputs:
     return IpsPricingInputs(**resolved)
 
 
+def _is_int(value: object) -> bool:
+    """Return whether *value* is an int and not a bool (YAML ``true``)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _parse_liquidity(config: dict[str, Any]) -> IpsLiquidity | None:
+    """Parse the optional ``liquidity`` policy section (8c, N10).
+
+    Absent → ``None`` (recorded quotes render ungraded). Present → its
+    two grading keys are required: there is no handbook number to fall
+    back to, so a partial section is an error rather than a silent
+    default.
+    """
+    if "liquidity" not in config:
+        return None
+    section = config["liquidity"]
+    if not isinstance(section, dict):
+        raise IpsConfigError("ips.yaml 'liquidity' section must be a mapping")
+
+    spread_warn_pct = _require_field(section, "liquidity", "spread_warn_pct")
+    if (
+        isinstance(spread_warn_pct, bool)
+        or not isinstance(spread_warn_pct, (int, float))
+        or spread_warn_pct <= 0
+    ):
+        raise IpsConfigError(
+            "liquidity.spread_warn_pct must be a number > 0 (percent of "
+            f"mid), got {spread_warn_pct!r}",
+        )
+    max_age = _require_field(section, "liquidity", "observation_max_age_days")
+    if not _is_int(max_age) or max_age <= 0:
+        raise IpsConfigError(
+            "liquidity.observation_max_age_days must be an integer > 0, "
+            f"got {max_age!r}",
+        )
+    open_interest_min = section.get("open_interest_min")
+    if open_interest_min is not None and (
+        not _is_int(open_interest_min) or open_interest_min < 0
+    ):
+        raise IpsConfigError(
+            "liquidity.open_interest_min must be an integer >= 0 or "
+            f"absent, got {open_interest_min!r}",
+        )
+
+    return IpsLiquidity(
+        spread_warn_pct=float(spread_warn_pct),
+        observation_max_age_days=max_age,
+        open_interest_min=open_interest_min,
+    )
+
+
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     section = _require_section(config, "monetization")
     raw_schedule = _require_field(section, "monetization", "schedule")
@@ -1334,6 +1462,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         maturity_buckets=_parse_maturity_buckets(config),
         pricing_inputs=_parse_pricing_inputs(config),
         maturity_selection=_parse_maturity_selection(config),
+        liquidity=_parse_liquidity(config),
         defaulted_sections=defaulted_sections,
     )
 
@@ -1474,11 +1603,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             "policy in the file and does nothing"
             for key in unrecognised
         )
+        # 8c: a section with no code defaults is not "defaulted" when it
+        # is absent — it is off. Saying "these have code defaults" about
+        # `liquidity` would be false, so it gets its own line.
+        absent_no_default = sorted(
+            {key.split(".")[0] for key in missing_optional}
+            & _SECTIONS_WITHOUT_CODE_DEFAULTS,
+        )
+        missing_optional = [
+            key
+            for key in missing_optional
+            if key.split(".")[0] not in _SECTIONS_WITHOUT_CODE_DEFAULTS
+        ]
         if missing_optional:
             print(
                 f"ips_config --check: present in {_EXAMPLE_IPS_PATH.name} "
                 "but not in this file (fine if intentionally omitted — "
                 f"these have code defaults): {', '.join(missing_optional)}",
+            )
+        if absent_no_default:
+            print(
+                "ips_config --check: optional sections absent from this "
+                "file that have NO code defaults — the feature they grade "
+                "runs ungraded until you add them: "
+                f"{', '.join(absent_no_default)}",
             )
     else:
         print(

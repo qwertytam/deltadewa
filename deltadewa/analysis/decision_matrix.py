@@ -25,10 +25,6 @@ from deltadewa.analysis.market_environment import (
     HedgeCostVerdict,
     TermShape,
 )
-from deltadewa.ips_config import (
-    DEFAULT_SKEW_HIGH_PCTILE,
-    DEFAULT_SKEW_LOW_PCTILE,
-)
 
 if TYPE_CHECKING:
     from deltadewa.analysis.market_environment import MarketEnvironment
@@ -44,6 +40,43 @@ if TYPE_CHECKING:
 _VERDICT_QUALITIES: Final[frozenset[DataQuality]] = frozenset(
     {DataQuality.LIVE, DataQuality.CACHED},
 )
+
+# What each withheld grade means to the operator reading /design or the
+# digest (#411 / N5). These notes are rendered verbatim on both surfaces,
+# so they say what happened and what it costs — never a class or
+# attribute name. LIVE/CACHED are absent: they never withhold a verdict.
+_WITHHELD_QUALITY_MEANING: Final[dict[DataQuality, str]] = {
+    # Not "the refresh failed": the deployed app is read-only, so STALE
+    # there means only that the cached readings are past their trust
+    # window (ips.yaml data_ttl_minutes) — the refresh job may simply not
+    # have run yet, or may have failed; this layer cannot tell which.
+    DataQuality.STALE: (
+        "these cached readings are older than the IPS trusts them for "
+        "(data_ttl_minutes) — the market-data refresh has not renewed them"
+    ),
+    DataQuality.STATIC: (
+        "these are fixed reference values, not market readings"
+    ),
+    DataQuality.UNAVAILABLE: "the market-data provider returned nothing",
+}
+
+
+def _withheld_quality_note(quality: DataQuality, what: str) -> str:
+    """Explain, in operator terms, why *what* was withheld for *quality*."""
+    meaning = _WITHHELD_QUALITY_MEANING.get(quality, "it is not usable")
+    return (
+        f"Market data is {quality.value}: {meaning}. {what} needs live or "
+        "recently cached data."
+    )
+
+
+def _missing_reading_note(reading: str, step: str) -> str:
+    """Explain a reading absent from an otherwise usable snapshot."""
+    return (
+        f"The {reading} reading is missing from an otherwise usable "
+        f"market-data snapshot, so the entry-timing check stops at its "
+        f"{step} step. Check the market-data refresh."
+    )
 
 
 class DecisionVerdict(StrEnum):
@@ -258,9 +291,9 @@ def decision_matrix(
     )
 
     if market_env.data_quality not in _VERDICT_QUALITIES:
-        note = (
-            f"data_quality is {market_env.data_quality}"
-            " — enable live data for an environment verdict"
+        note = _withheld_quality_note(
+            market_env.data_quality,
+            "An environment verdict",
         )
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
@@ -279,12 +312,15 @@ def decision_matrix(
     if cost is None:
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
+            # MarketEnvironment.hedge_cost_verdict is None although
+            # data_quality is in _VERDICT_QUALITIES.
             rationale=(
-                "hedge_cost_verdict is None despite usable data quality"
+                "The hedge-cost read could not be formed from this snapshot"
             ),
             data_quality_note=(
-                "MarketEnvironment.hedge_cost_verdict is None"
-                " — provider may be missing skew or term-structure data"
+                "The hedge-cost read is missing although the market data is"
+                " usable — the skew or term-structure reading is probably"
+                " absent from this snapshot. Check the market-data refresh."
             ),
             hedge_adequacy=adequacy,
             cost_verdict=None,
@@ -308,8 +344,8 @@ def entry_timing_tree(
     vix_very_high: float,
     vix_caution: float,
     vix_low: float,
-    skew_high: float = DEFAULT_SKEW_HIGH_PCTILE / 100.0,
-    skew_low: float = DEFAULT_SKEW_LOW_PCTILE / 100.0,
+    skew_high: float,
+    skew_low: float,
 ) -> EntryTimingResult:
     """Walk the three-step entry-timing tree for new hedge purchases.
 
@@ -351,11 +387,14 @@ def entry_timing_tree(
         vix_low: VIX level at or below which accumulation urgency
             increases. **Required** — see ``IpsMarketEnvironment.vix_low``.
         skew_high: Skew percentile (0-1) above which protection is
-            expensive vs history. Defaults to the IPS single source
-            ``DEFAULT_SKEW_HIGH_PCTILE`` (as a 0-1 fraction).
-        skew_low: Skew percentile (0-1) below which protection is
-            cheap vs history. Defaults to ``DEFAULT_SKEW_LOW_PCTILE``
-            (as a 0-1 fraction).
+            expensive vs history — ``market_environment.skew_high_pctile
+            / 100``. **Required, no default** (8c): the default used to
+            pin step 2 at 30/70 while the same /design panel displayed
+            the operator's own IPS band, so a non-default band showed one
+            cut and graded on another.
+        skew_low: Skew percentile (0-1) below which protection is cheap
+            vs history — ``market_environment.skew_low_pctile / 100``.
+            **Required, no default**, as ``skew_high``.
 
     Returns:
         An :class:`EntryTimingResult` with the terminal recommendation,
@@ -363,9 +402,9 @@ def entry_timing_tree(
 
     """
     if market_env.data_quality not in _VERDICT_QUALITIES:
-        note = (
-            f"data_quality is {market_env.data_quality}"
-            " — enable live data for an entry-timing recommendation"
+        note = _withheld_quality_note(
+            market_env.data_quality,
+            "An entry-timing recommendation",
         )
         return EntryTimingResult(
             recommendation="INSUFFICIENT_DATA",
@@ -384,7 +423,7 @@ def entry_timing_tree(
                 step=1,
                 label="VIX",
                 value=None,
-                recommendation=("VIX unavailable despite LIVE data quality"),
+                recommendation="VIX reading missing from this snapshot",
                 proceed=False,
             ),
         )
@@ -392,9 +431,8 @@ def entry_timing_tree(
             recommendation="INSUFFICIENT_DATA",
             should_enter=False,
             steps=steps,
-            data_quality_note=(
-                "MarketEnvironment.vix is None with LIVE data_quality"
-            ),
+            # MarketEnvironment.vix is None with a usable data_quality.
+            data_quality_note=_missing_reading_note("VIX", "first"),
         )
 
     if vix > vix_very_high:
@@ -459,9 +497,7 @@ def entry_timing_tree(
                 step=2,
                 label="skew_percentile",
                 value=None,
-                recommendation=(
-                    "Skew percentile unavailable despite LIVE data quality"
-                ),
+                recommendation="Skew percentile missing from this snapshot",
                 proceed=False,
             ),
         )
@@ -469,9 +505,11 @@ def entry_timing_tree(
             recommendation="INSUFFICIENT_DATA",
             should_enter=False,
             steps=steps,
-            data_quality_note=(
-                "MarketEnvironment.skew_percentile is None"
-                " with LIVE data_quality"
+            # MarketEnvironment.skew_percentile is None with a usable
+            # data_quality.
+            data_quality_note=_missing_reading_note(
+                "skew percentile",
+                "second",
             ),
         )
 
@@ -516,9 +554,7 @@ def entry_timing_tree(
                 step=3,
                 label="term_shape",
                 value=None,
-                recommendation=(
-                    "Term structure unavailable despite LIVE data quality"
-                ),
+                recommendation="Term structure missing from this snapshot",
                 proceed=False,
             ),
         )
@@ -526,8 +562,11 @@ def entry_timing_tree(
             recommendation="INSUFFICIENT_DATA",
             should_enter=False,
             steps=steps,
-            data_quality_note=(
-                "MarketEnvironment.term_shape is None with LIVE data_quality"
+            # MarketEnvironment.term_shape is None with a usable
+            # data_quality.
+            data_quality_note=_missing_reading_note(
+                "term-structure",
+                "third",
             ),
         )
 

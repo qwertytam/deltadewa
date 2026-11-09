@@ -101,7 +101,7 @@ def _make_market_env(regime: RegimeLabel) -> MarketEnvironment:
     """Return a minimal MarketEnvironment with the given regime label."""
     return MarketEnvironment(
         vix=None,
-        regime_percentile=None,
+        regime_band_position_pct=None,
         regime_label=regime,
         skew_index=None,
         skew_percentile=None,

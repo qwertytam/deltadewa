@@ -23,7 +23,7 @@ def _environment(
 ) -> MarketEnvironment:
     return MarketEnvironment(
         vix=None,
-        regime_percentile=None,
+        regime_band_position_pct=None,
         regime_label=None,
         skew_index=None,
         skew_percentile=None,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -55,9 +55,17 @@ class _IncrementingClock:
 # module's single-row default.
 _SPX_CSV = "DATE,SPX\n06/15/2026,5000.0\n"
 _VIX_CSV = "DATE,OPEN,HIGH,LOW,CLOSE\n06/15/2026,16.0,16.5,15.5,16.5\n"
+# Long enough to cover any IPS skew window the refresh job may pass
+# (#317: the job fetches the percentile at the IPS window, and the
+# provider refuses to rank a series shorter than it). One row per calendar
+# day; the dates only need to be distinct and sortable.
+_SKEW_SESSIONS = 1300
 _SKEW_CSV = (
     "DATE,SKEW\n"
-    + "\n".join(f"{(i % 12) + 1:02d}/01/2026,{120.0 + i}" for i in range(10))
+    + "\n".join(
+        f"{date(2021, 1, 1) + timedelta(days=i):%m/%d/%Y},{120.0 + (i % 40)}"
+        for i in range(_SKEW_SESSIONS)
+    )
     + "\n"
 )
 _VIXCLS_CSV = (
@@ -138,6 +146,35 @@ class TestRefreshAll:
         assert reader.get_spot("SPX").source is Source.CACHED
         assert reader.get_vix().source is Source.CACHED
         assert reader.get_skew_index().source is Source.CACHED
+
+    def test_skew_history_shorter_than_ips_window_is_a_logged_failure(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A SKEW series shorter than the IPS window fails in this job (#317).
+
+        The write-side counterpart of the provider's truncation guard: the
+        operator reading the refresh log learns the percentile cannot be
+        ranked over the policy window, instead of only seeing an
+        UNAVAILABLE environment on the read-only app.
+        """
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+
+        with caplog.at_level(logging.WARNING):
+            live, total = refresh_all(
+                writer,
+                "SPX",
+                skew_lookback_days=_SKEW_SESSIONS + 1,
+            )
+
+        assert total == 6
+        assert "skew_percentile" not in live
+        assert "skew_percentile: FAILED" in caplog.text
 
     def test_total_failure_returns_zero_succeeded(self, tmp_path: Path) -> None:
         """Every series failing is reported, not raised."""

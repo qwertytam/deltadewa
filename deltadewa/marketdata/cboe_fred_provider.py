@@ -300,15 +300,28 @@ class CboeFredProvider:
 
     def get_skew_percentile(
         self,
-        lookback_days: int = 252,
+        lookback_days: int,
     ) -> Observation[float]:
         """Return the SKEW index's percentile rank over *lookback_days*.
 
-        See ``MarketDataProvider.get_skew_percentile`` for why the
-        ``252`` default is unsourced against the handbook's five-year
-        canon (#317).
+        See ``MarketDataProvider.get_skew_percentile``. Cboe publishes SKEW
+        history back to 1990-01-02 and the whole series is cached, so any
+        policy window up to decades is servable without another download.
+
+        Raises:
+            MarketDataError: If the cached/fetched series holds fewer than
+                *lookback_days* sessions (#317) — ranking whatever rows
+                happen to exist would label a short-sample percentile with
+                a window it was never computed over.
+
         """
         fetched = self._request_skew()
+        if len(fetched.series) < lookback_days:
+            raise MarketDataError(
+                f"SKEW history holds {len(fetched.series)} sessions, fewer "
+                f"than the {lookback_days}-session percentile window; "
+                "refusing to rank a truncated sample",
+            )
         rows = fetched.series[-lookback_days:]
         values = [value for _, value in rows]
         latest = values[-1]

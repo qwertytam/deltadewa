@@ -15,10 +15,14 @@ from deltadewa.analysis.market_environment import (
     TermShape,
     assess_market_environment,
     classify_vix_regime,
+    describe_lookback,
     forward_vol,
     term_structure_shape,
 )
-from deltadewa.ips_config import IpsMarketEnvironment
+from deltadewa.ips_config import (
+    DEFAULT_SKEW_LOOKBACK_DAYS,
+    IpsMarketEnvironment,
+)
 from deltadewa.marketdata import Observation, Source
 from deltadewa.marketdata._errors import MarketDataError
 
@@ -101,7 +105,7 @@ class _StubProvider:
 
     def get_skew_percentile(
         self,
-        lookback_days: int = 252,
+        lookback_days: int,
     ) -> Observation[float]:
         self.received_lookback_days = lookback_days
         return _obs(self.skew_percentile, self.source)
@@ -124,7 +128,7 @@ class _FailingProvider:
 
     def get_skew_percentile(
         self,
-        lookback_days: int = 252,
+        lookback_days: int,
     ) -> Observation[float]:
         _ = lookback_days
         raise MarketDataError("skew percentile unavailable")
@@ -258,7 +262,7 @@ class TestAssessMarketEnvironment:
 
         assert env.data_quality == DataQuality.UNAVAILABLE
         assert env.vix is None
-        assert env.regime_percentile is None
+        assert env.regime_band_position_pct is None
         assert env.regime_label is None
         assert env.skew_index is None
         assert env.skew_percentile is None
@@ -327,13 +331,50 @@ class TestAssessMarketEnvironment:
             == TermShape.CONTANGO
         )
 
-    def test_skew_lookback_days_passed_through(self) -> None:
-        """skew_lookback_days reaches get_skew_percentile unchanged."""
+    def test_skew_lookback_days_read_from_policy(self) -> None:
+        """The IPS window reaches get_skew_percentile unchanged (#317)."""
         provider = _StubProvider()
 
-        assess_market_environment(provider, skew_lookback_days=504)
+        env = assess_market_environment(
+            provider,
+            IpsMarketEnvironment(skew_lookback_days=504),
+        )
 
         assert provider.received_lookback_days == 504
+        assert env.skew_lookback_days == 504
+
+    def test_default_policy_window_is_the_ips_default(self) -> None:
+        """No policy passed ranks over the IPS single-source default."""
+        provider = _StubProvider()
+
+        env = assess_market_environment(provider)
+
+        assert provider.received_lookback_days == DEFAULT_SKEW_LOOKBACK_DAYS
+        assert env.skew_lookback_days == DEFAULT_SKEW_LOOKBACK_DAYS
+
+    def test_unavailable_snapshot_carries_no_window(self) -> None:
+        """A failed provider reports no window rather than a fabricated one."""
+        env = assess_market_environment(_FailingProvider())
+
+        assert env.skew_lookback_days is None
+
+
+class TestDescribeLookback:
+    """describe_lookback names the window every percentile must state."""
+
+    @pytest.mark.parametrize(
+        ("sessions", "expected"),
+        [
+            (252, "trailing 1y"),
+            (504, "trailing 2y"),
+            (1260, "trailing 5y"),
+            (100, "trailing 100 sessions"),
+            (1254, "trailing 1254 sessions"),
+        ],
+    )
+    def test_describe_lookback(self, sessions: int, expected: str) -> None:
+        """Whole 252-session years read as years; anything else as sessions."""
+        assert describe_lookback(sessions) == expected
 
 
 class TestDataQualityStatic:

@@ -54,6 +54,7 @@ from deltadewa.ips_config import (
     IpsConfig,
     IpsConvexity,
     IpsDrawdown,
+    IpsLiquidity,
     IpsMarketEnvironment,
     IpsMaturityBuckets,
     IpsMaturitySelection,
@@ -162,6 +163,16 @@ _CLASSIFICATION: Final[dict[str, BandKind]] = {
     "sizing.portfolio_beta": BandKind.NOT_A_BAND,
     "maturity_buckets.edges_days": BandKind.NOT_A_BAND,
     "market_environment.data_ttl_minutes": BandKind.NOT_A_BAND,
+    # The window the skew percentile is ranked over (#317) — it sets what
+    # the 30/70 band is applied *to*, but is not itself a threshold.
+    "market_environment.skew_lookback_days": BandKind.NOT_A_BAND,
+    # ── Hand-entered liquidity checks (8c, N10) ───────────────────────
+    # Each grades one operator-recorded quote on /design's liquidity
+    # checklist; none is a standing constraint on the book's shape.
+    "liquidity.spread_warn_pct": BandKind.INTERPRETATION,
+    "liquidity.open_interest_min": BandKind.INTERPRETATION,
+    # A review cadence, graded by the same rule as pricing_inputs.*.
+    "liquidity.observation_max_age_days": BandKind.TRIGGER,
 }
 
 #: IPS sections that define no thresholds at all — names, an exercise
@@ -205,6 +216,7 @@ def _ips_section_types() -> dict[str, type]:
         "maturity_buckets": IpsMaturityBuckets,
         "pricing_inputs": IpsPricingInputs,
         "maturity_selection": IpsMaturitySelection,
+        "liquidity": IpsLiquidity,
     }
     for field in dataclasses.fields(IpsConfig):
         if field.name in bookkeeping:

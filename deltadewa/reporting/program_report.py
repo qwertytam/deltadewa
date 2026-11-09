@@ -20,6 +20,7 @@ from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
 )
+from deltadewa.analysis.market_environment import describe_skew_percentile
 from deltadewa.analysis.provenance import assess_freshness
 
 if TYPE_CHECKING:
@@ -149,6 +150,10 @@ class MarketContextSection:
             when data quality is UNAVAILABLE.
         skew_percentile: SKEW percentile rank as a 0-1 fraction, or
             ``None``.
+        skew_lookback_days: The session window ``skew_percentile`` was
+            ranked over (#317) — rendered beside it every time, the
+            handbook's condition for quoting a percentile on any window.
+            ``None`` when the environment was unavailable.
         hedge_cost_verdict: ``"CHEAP"``, ``"FAIR"``, or ``"EXPENSIVE"``;
             ``None`` when unavailable.
         data_quality: ``provenance_ledger.combined_quality.value`` —
@@ -174,6 +179,7 @@ class MarketContextSection:
     hedge_cost_verdict: str | None
     data_quality: str
     needs_alarm: bool
+    skew_lookback_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -507,6 +513,8 @@ def _build_decision(
         vix_very_high=me.vix_very_high,
         vix_caution=me.vix_caution,
         vix_low=me.vix_low,
+        skew_high=me.skew_high_pctile / 100.0,
+        skew_low=me.skew_low_pctile / 100.0,
     )
 
     if protection.convexity_pct is None:
@@ -518,9 +526,11 @@ def _build_decision(
             ),
             entry_recommendation=entry.recommendation,
             should_enter=entry.should_enter,
+            # ProtectionSection.convexity_pct is None: no IPS convexity
+            # policy was loaded.
             data_quality_note=(
-                "ProtectionSection.convexity_pct is None — no IPS "
-                "convexity policy loaded"
+                "No convexity target is loaded from ips.yaml, so the hedge"
+                " cannot be graded against one."
             ),
         )
 
@@ -688,6 +698,7 @@ def _build_market_context(
         ),
         data_quality=provenance_ledger.combined_quality.value,
         needs_alarm=assess_freshness(provenance_ledger) is not None,
+        skew_lookback_days=market_env.skew_lookback_days,
     )
 
 
@@ -1090,7 +1101,7 @@ def render_markdown(report: ProgramReport) -> str:
         ]
     vix_str = f"{mc.vix:.1f}" if mc.vix is not None else "—"
     skew_str = (
-        f"{mc.skew_percentile * 100:.1f}%"
+        describe_skew_percentile(mc.skew_percentile, mc.skew_lookback_days)
         if mc.skew_percentile is not None
         else "—"
     )
@@ -1367,7 +1378,12 @@ def render_html_body(report: ProgramReport) -> str:
     )
     vix_str = f"{mc.vix:.1f}" if mc.vix is not None else "&mdash;"
     skew_str = (
-        f"{mc.skew_percentile * 100:.1f}%"
+        escape(
+            describe_skew_percentile(
+                mc.skew_percentile,
+                mc.skew_lookback_days,
+            ),
+        )
         if mc.skew_percentile is not None
         else "&mdash;"
     )

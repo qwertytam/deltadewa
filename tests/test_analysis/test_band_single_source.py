@@ -10,8 +10,6 @@ from __future__ import annotations
 import importlib
 import inspect
 
-import pytest
-
 from deltadewa.ips_config import (
     DEFAULT_SKEW_HIGH_PCTILE,
     DEFAULT_SKEW_LOW_PCTILE,
@@ -71,15 +69,17 @@ def test_classify_vix_regime_defaults_from_ips_source() -> None:
     assert sig.parameters["high"].default == DEFAULT_VOL_REGIME_HIGH
 
 
-def test_entry_timing_skew_defaults_from_ips_source() -> None:
-    """entry_timing_tree skew defaults are the IPS percentiles, as fractions."""
+def test_entry_timing_skew_bands_are_required() -> None:
+    """entry_timing_tree takes its skew band from the caller, never a default.
+
+    8c: the old default (the IPS *defaults*, as fractions) was a second
+    source — no caller passed the operator's own band, so step 2 graded on
+    30/70 while /design's skew row displayed the IPS band. Required now,
+    like the vix_* thresholds.
+    """
     sig = inspect.signature(decision_matrix.entry_timing_tree)
-    assert sig.parameters["skew_low"].default == pytest.approx(
-        DEFAULT_SKEW_LOW_PCTILE / 100.0, rel=1e-4
-    )
-    assert sig.parameters["skew_high"].default == pytest.approx(
-        DEFAULT_SKEW_HIGH_PCTILE / 100.0, rel=1e-4
-    )
+    assert sig.parameters["skew_low"].default is inspect.Parameter.empty
+    assert sig.parameters["skew_high"].default is inspect.Parameter.empty
 
 
 def test_ips_market_environment_defaults_match_source() -> None:

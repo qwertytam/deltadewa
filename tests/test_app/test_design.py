@@ -65,6 +65,9 @@ from deltadewa.app.compliance import (
 from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import design
 from deltadewa.app.pages.design.planning import compliance as compliance_panel
+from deltadewa.app.pages.design.planning.market_env import (
+    _forward_variance_row,
+)
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.marketdata import StaticProvider
 from deltadewa.persistence import PortfolioSerializer
@@ -2236,7 +2239,7 @@ def _make_market_env(**overrides: Any) -> MarketEnvironment:
     """
     defaults: dict[str, Any] = {
         "vix": 14.0,
-        "regime_percentile": 12.0,
+        "regime_band_position_pct": 12.0,
         "regime_label": RegimeLabel.LOW,
         "skew_index": 128.0,
         "skew_percentile": 0.22,
@@ -2301,15 +2304,83 @@ class TestMarketEnvironmentPanel:
 
         text = _collect_text(self._panel(tmp_path, env))
 
-        assert "22th percentile" in text
-        assert "0th percentile" not in text.replace("22th percentile", "")
+        # "22nd", not the pre-8c "22th" (format_ordinal_percentile).
+        assert "22nd percentile" in text
+        assert "0th percentile" not in text
+
+    def test_skew_percentile_states_its_window(self, tmp_path: Path) -> None:
+        """The skew row names the window it was ranked over (#317).
+
+        The handbook permits any rank window only "provided it states the
+        window every time it quotes a percentile".
+        """
+        env = _make_market_env(skew_percentile=0.88, skew_lookback_days=1260)
+
+        text = _collect_text(self._panel(tmp_path, env))
+
+        assert "88th percentile (trailing 5y)" in text
+
+    def test_entry_timing_grades_skew_on_the_ips_band_it_displays(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Step 2 cuts skew where the row says the IPS band is (8c).
+
+        entry_timing_tree used to default its skew cuts to 30/70 and no
+        caller passed the IPS values, so an operator band of 30-85 was
+        displayed on the skew row while step 2 still deferred at 70.
+        """
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+        state.add_position(
+            strike_price=4500.0,
+            maturity_date=_MATURITY,
+            quantity=10,
+            option_type=OptionType.PUT,
+        )
+        assert state.ips_config is not None
+        wide_band = replace(
+            state.ips_config,
+            market_environment=replace(
+                state.ips_config.market_environment,
+                skew_high_pctile=85.0,
+            ),
+        )
+        env = _make_market_env(skew_percentile=0.80, skew_lookback_days=1260)
+
+        text = _collect_text(
+            design._render_market_env_panel_logic(
+                portfolio=state.portfolio,
+                ips_config=wide_band,
+                market_env=env,
+            ),
+        )
+
+        assert "IPS band 30-85" in text
+        assert "2. Skew: 80th percentile (trailing 5y) — Normal" in text
+        assert "defer" not in text
 
     def test_forward_variance_carries_no_band(self, tmp_path: Path) -> None:
-        """The IPS states no forward-variance band, so none is invented."""
+        """The handbook states no forward-variance cut, so none is invented.
+
+        N11/#417: the row says so, and says exactly what stands in for
+        the band — the term-structure shape — rather than claiming the
+        hedge-cost verdict reads forward variance, which it does not.
+        """
         panel = self._panel(tmp_path, _make_market_env())
         text = _collect_text(panel)
 
-        assert "no IPS band" in text
+        assert "No historical band" in text
+        assert "term-structure shape (contango)" in text
+        assert "feeds the hedge-cost verdict in its place" in text
+        assert "read against the hedge-cost verdict" not in text
+
+    def test_forward_variance_row_has_no_band_component(self) -> None:
+        """No band_bar is attached: the row is a bare level by design."""
+        row = _forward_variance_row(_make_market_env())
+
+        # _env_metric_row appends the bar as a fourth child when given one.
+        assert len(row.children) == 3
 
     def test_renders_the_decision_verdict_and_entry_timing(
         self,
@@ -2336,8 +2407,12 @@ class TestMarketEnvironmentPanel:
 
         text = _collect_text(self._panel(tmp_path, env))
 
-        assert "INSUFFICIENT_DATA" in text
-        assert "data_quality" in text
+        # N5: the reason is stated in operator words, not as the internal
+        # token and attribute name it used to render verbatim.
+        assert "INSUFFICIENT DATA" in text
+        assert "Market data is STATIC" in text
+        assert "INSUFFICIENT_DATA" not in text
+        assert "data_quality" not in text
 
     def test_unavailable_readings_are_stated_not_zeroed(
         self,
@@ -2351,7 +2426,7 @@ class TestMarketEnvironmentPanel:
         env = _make_market_env(
             vix=None,
             regime_label=None,
-            regime_percentile=None,
+            regime_band_position_pct=None,
             skew_percentile=None,
             skew_index=None,
             forward_vol_front_3m=None,
@@ -3807,11 +3882,12 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 12 PLANNING panels + 5 EXPLORATION panels share the .panel class
+        # 14 PLANNING panels + 5 EXPLORATION panels share the .panel class
         # (Batch 8a.4 added the compliance panel, #298 on /design for the
-        # first time). A count, not a list, so a panel disappearing fails
-        # loudly; update it when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 17
+        # first time; 8c the liquidity check (N10) and skew beta (N9)). A
+        # count, not a list, so a panel disappearing fails loudly; update
+        # it when a panel is deliberately added or removed.
+        assert page.locator(".panel").count() == 19
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1
@@ -3820,6 +3896,8 @@ class TestPlanningZoneRendersClientSide:
         # count alone would be satisfied by either one twice.
         assert page.locator("#plan-roll-plan-panel").count() == 1
         assert page.locator("#plan-roll-panel").count() == 1
+        assert page.locator("#plan-liquidity-panel").count() == 1
+        assert page.locator("#plan-skew-beta-panel").count() == 1
 
 
 class TestExplorationZoneRendersClientSide:

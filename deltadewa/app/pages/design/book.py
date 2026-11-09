@@ -375,6 +375,56 @@ def _mark_inputs_reviewed_logic(
     )
 
 
+def _record_liquidity_logic(  # pylint: disable=too-many-arguments
+    *,
+    position_id: str | None,
+    bid: float | None,
+    ask: float | None,
+    open_interest: float | None,
+    version: int,
+    state: ProgramState,
+) -> tuple[Any, Component]:
+    """Record a hand-entered quote for one leg (8c, N10).
+
+    The control lives in ``planning/liquidity.py``; the mutation lives here
+    with the other BOOK mutators, the same split as
+    :func:`_mark_inputs_reviewed_logic`.
+    """
+    if position_id is None or bid is None or ask is None:
+        return no_update, _status(
+            "Pick a leg and enter both bid and ask.",
+            error=True,
+        )
+    if not any(
+        position.position_id == position_id
+        for position in state.positions_snapshot()
+    ):
+        return no_update, _status(
+            "That leg is no longer in the book — pick it again.",
+            error=True,
+        )
+    if open_interest is not None and (
+        open_interest < 0 or not float(open_interest).is_integer()
+    ):
+        return no_update, _status(
+            "Open interest must be a whole number of contracts.",
+            error=True,
+        )
+    error = _guarded_mutation(
+        lambda: state.record_liquidity(
+            position_id,
+            bid=float(bid),
+            ask=float(ask),
+            open_interest=(
+                int(open_interest) if open_interest is not None else None
+            ),
+        ),
+    )
+    if error is not None:
+        return no_update, _status(error, error=True)
+    return version + 1, _status("Liquidity quote recorded.", error=False)
+
+
 def _set_underlying_quantity_logic(
     *,
     value: float | None,

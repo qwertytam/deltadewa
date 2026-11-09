@@ -93,7 +93,7 @@ _ACCESSORS: list[tuple[str, tuple[object, ...]]] = [
     ("get_vix_history", ()),
     ("get_vix_term_structure", ()),
     ("get_skew_index", ()),
-    ("get_skew_percentile", ()),
+    ("get_skew_percentile", (1,)),
 ]
 
 

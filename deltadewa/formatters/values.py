@@ -14,6 +14,7 @@ on other formatter submodules.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -134,6 +135,37 @@ def format_percentage(
     pct_value = value * 100 if from_decimal else value
     sign = "+" if show_sign and pct_value > 0 else ""
     return f"{sign}{pct_value:.{decimals}f}%"
+
+
+def format_ordinal_percentile(fraction: float) -> str:
+    """Render a 0-1 percentile rank as an English ordinal, e.g. ``"88th"``.
+
+    Rounds half up to a whole percentile, then picks the suffix by the
+    English rule — ``1st``/``2nd``/``3rd``, but ``11th``/``12th``/``13th``
+    and ``21st``/``22nd`` — rather than a bare ``"th"``, which read
+    ``"1th"``/``"2th"``/``"21th"`` before this helper existed (8c, N5).
+
+    Args:
+        fraction: Percentile rank as a 0-1 fraction (e.g. ``0.877``).
+
+    Returns:
+        The ordinal, without the word "percentile".
+
+    Examples:
+        >>> format_ordinal_percentile(0.877)
+        '88th'
+        >>> format_ordinal_percentile(0.21)
+        '21st'
+        >>> format_ordinal_percentile(0.12)
+        '12th'
+
+    """
+    rank = math.floor(fraction * 100 + 0.5)
+    if rank % 100 in {11, 12, 13}:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th")
+    return f"{rank}{suffix}"
 
 
 def format_percentage_for_axis(x: float, pos: int | None = None) -> str:

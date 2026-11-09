@@ -61,20 +61,25 @@ class MarketDataProvider(Protocol):
 
     def get_skew_percentile(
         self,
-        lookback_days: int = 252,
+        lookback_days: int,
     ) -> Observation[float]:
         """Return the SKEW index's percentile rank over *lookback_days*.
 
-        The ``252`` default is this repo's legacy window (one trading
-        year) and is **unsourced** — no caller overrides it, so it is the
-        window every skew percentile the program reports is actually
-        computed against. The handbook's own skew-percentile canon
-        specifies a **five-year** lookback (`Skew Percentile
-        <https://qwertytam.github.io/deltadewa-handbook/part-3/volatility-skew/#the-lookback-window>`_),
-        a live contradiction filed as #317. Changing the default would
-        change every skew percentile and, through the 30/70 band, every
-        ``decision_matrix`` verdict and ``entry_timing_tree`` branch it
-        feeds — evaluate that blast radius (including whether CBOE's SKEW
-        history actually covers five years without silent truncation)
-        before moving this number; do not just swap the literal.
+        Inclusive rank (the fraction of the window at or below the latest
+        close), as a 0-1 fraction. *lookback_days* is required, with no
+        default: the window is policy
+        (``IpsMarketEnvironment.skew_lookback_days``, #317), and the
+        handbook permits any window only "provided it states the window
+        every time it quotes a percentile" (`Skew Percentile
+        <https://qwertytam.github.io/deltadewa-handbook/part-3/volatility-skew/#the-lookback-window>`_)
+        — a default here would let a caller rank against a window no
+        surface states.
+
+        Raises:
+            MarketDataError: If no SKEW history is available, or (for a
+                provider that ranks a real series) if the series is
+                shorter than *lookback_days* — a percentile ranked over
+                fewer sessions than the window it is labelled with would
+                be a silent truncation.
+
         """

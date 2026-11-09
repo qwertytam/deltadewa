@@ -17,6 +17,77 @@ history for that record instead.
 
 ## [Unreleased]
 
+### Added
+
+- **N9 (8c, #415) — skew beta, Part X #9.** `analysis/skew_beta.py`
+  measures the book's ∂V/∂Skew by repricing with one vol point of extra
+  downside skew at the IPS wing anchor (the crash machinery's
+  `crash_skew_vol`, no spot move, no flat bump) against today's value.
+  `/design` gains a **Skew exposure (skew beta)** panel: one number, one
+  chip. Ungraded — the handbook gives no band, and the panel says so.
+- **N10 (8c, #416) — a hand-entered liquidity checklist, Part X #12.** The
+  operator can record a bid/ask (and open interest) per held leg on
+  `/design`'s new **Liquidity check (hand-entered)** panel. Spreads are
+  graded against an optional `liquidity:` section in `ips.yaml`; each
+  quote's age by the same rule as other hand-entered inputs; legs in a
+  roll window are flagged for a fresh quote. Not a liquidity feed, and the
+  panel says what #156's chain would add. Kept off the banner, the digest
+  and `/health` deliberately.
+
+  **Operator action (optional):** add a `liquidity:` section to the live
+  `config/ips.yaml` to grade quotes — see `config/ips.example.yaml`. The
+  handbook gives no number for a wide spread or low open interest, so
+  there are no code defaults; without the section, quotes are recorded and
+  shown ungraded.
+
+### Fixed
+
+- **N5 (8c, #411) — `/design`'s market-environment panel leaked
+  internals.** Entry-timing step 2 read `skew_percentile:
+  0.876984126984127`; it now reads "2. Skew: 88th percentile (trailing
+  5y) — …". Data-quality notes are operator prose ("Market data is STATIC:
+  these are fixed reference values…") instead of
+  `MarketEnvironment.vix is None with LIVE data_quality`; verdicts read
+  "INSUFFICIENT DATA"; the skew row's "22th" is "22nd".
+- **N5 (8c) — the "regime percentile" was not a percentile.** It is VIX's
+  clamped position inside the IPS 15–35 band, not a rank against history
+  — #175's mislabel on a path #175's fix never reached. It read "0" on
+  days VIX ranked 7.5th over the trailing year and "53" on a day it ranked
+  95th. Renamed `regime_band_position_pct`; the panel says "53% of the way
+  up the band" or names the band edge it is past. No verdict changes.
+- **N11 (8c, #417) — forward variance said "read against the hedge-cost
+  verdict", which never reads it.** The row now states that the handbook
+  gives no band and that the term-structure shape — what the verdict
+  actually uses — stands in for one.
+
+### Changed
+
+- **#317 (8c) — the skew percentile is ranked over the handbook's trailing
+  five years (1260 sessions), not an unsourced 252.** The window is now IPS
+  policy, `market_environment.skew_lookback_days`, and is stated beside
+  every skew percentile the program quotes ("88th percentile (trailing
+  5y)") — the handbook's condition for ranking over any window at all.
+  **This moves every reported skew percentile.** On 2026-11-06 the reading
+  was 90.5 on 252 sessions and 87.6 on 1260: both above the 70 cut, so that
+  day's "defer — skew expensive" verdict did not move. But over the
+  preceding year the two windows labelled 84 of 252 sessions differently,
+  and always in the same direction — the five-year window read LOW
+  (accumulate) on 5 sessions where the one-year window read LOW on 70, a
+  consequence of SKEW's upward drift since 2021. Expect fewer "accumulate
+  aggressively" readings. Cboe's SKEW history runs back to 1990, so the
+  window is fully covered; a series shorter than the window now raises
+  rather than silently ranking a truncated sample, and the refresh job
+  logs it.
+
+  **Operator action:** the live, gitignored `config/ips.yaml` inherits the
+  new 1260 default unless it says otherwise. Add
+  `skew_lookback_days: 1260` under `market_environment:` to take the
+  handbook window deliberately, or `252` to keep the old one (the handbook
+  permits it, provided the window is stated — which every surface now
+  does). `python -m deltadewa.ips_config --check` lists the key as missing
+  until then. The first weekly digest after the switch reports the window
+  change instead of a SKEW-percentile move.
+
 ### Removed
 
 - **#279** — the leftover Jupyter layer is retired: `deltadewa/dashboard/`

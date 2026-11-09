@@ -13,6 +13,7 @@ from deltadewa.constants import ExerciseStyle
 from deltadewa.ips_config import (
     DEFAULT_DATA_TTL_MINUTES,
     DEFAULT_SKEW_HIGH_PCTILE,
+    DEFAULT_SKEW_LOOKBACK_DAYS,
     DEFAULT_SKEW_LOW_PCTILE,
     DEFAULT_SPOT_DIVERGENCE_WARN_PCT,
     DEFAULT_TERM_CONTANGO_TOLERANCE,
@@ -622,6 +623,7 @@ class TestMarketEnvironment:
         assert env.vix_caution == pytest.approx(25.0)
         assert env.vix_low == pytest.approx(15.0)
         assert env.spot_divergence_warn_pct == DEFAULT_SPOT_DIVERGENCE_WARN_PCT
+        assert env.skew_lookback_days == DEFAULT_SKEW_LOOKBACK_DAYS
 
     def test_example_ips_yaml_market_environment(self) -> None:
         """The tracked config/ips.example.yaml carries the policy bands."""
@@ -637,6 +639,17 @@ class TestMarketEnvironment:
         assert env.vix_caution == pytest.approx(25.0)
         assert env.vix_low == pytest.approx(15.0)
         assert env.spot_divergence_warn_pct == pytest.approx(2.0)
+        # The handbook's trailing five years (#317), stated explicitly in
+        # the template rather than inherited from the code default.
+        assert env.skew_lookback_days == 1260
+
+    def test_default_skew_window_is_the_handbook_five_years(self) -> None:
+        """Pins the window every reported skew percentile is ranked over.
+
+        #317's acceptance criterion: "a test pins the window". 1260
+        sessions is the handbook's trailing five years.
+        """
+        assert DEFAULT_SKEW_LOOKBACK_DAYS == 1260
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Section values round-trip through the loader unchanged."""
@@ -653,6 +666,7 @@ class TestMarketEnvironment:
                 "vix_caution": 22.0,
                 "vix_low": 13.0,
                 "spot_divergence_warn_pct": 3.5,
+                "skew_lookback_days": 504,
             },
         }
         env = load_ips_config(_write_yaml(tmp_path, config)).market_environment
@@ -667,6 +681,7 @@ class TestMarketEnvironment:
         assert env.vix_caution == pytest.approx(22.0)
         assert env.vix_low == pytest.approx(13.0)
         assert env.spot_divergence_warn_pct == pytest.approx(3.5)
+        assert env.skew_lookback_days == 504
 
     def test_vol_low_not_below_high_raises(self, tmp_path: Path) -> None:
         """vol_regime_low >= vol_regime_high raises IpsConfigError."""
@@ -776,6 +791,25 @@ class TestMarketEnvironment:
             IpsConfigError,
             match="spot_divergence_warn_pct",
         ):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    @pytest.mark.parametrize("window", [0, 1, -252, 252.5, "1260", True])
+    def test_invalid_skew_lookback_days_raises(
+        self,
+        tmp_path: Path,
+        window: object,
+    ) -> None:
+        """The skew window must be an integer session count >= 2 (#317).
+
+        Fewer than two sessions ranks the reading only against itself; a
+        float or string is not a session count; YAML ``true`` is an int
+        subclass in Python and must not slip through as ``1``.
+        """
+        config = {
+            **_VALID_CONFIG,
+            "market_environment": {"skew_lookback_days": window},
+        }
+        with pytest.raises(IpsConfigError, match="skew_lookback_days"):
             load_ips_config(_write_yaml(tmp_path, config))
 
 
@@ -1410,6 +1444,30 @@ class TestCheckCli:
         assert "maturity_buckets" in captured.out
         assert "built-in defaults" in captured.out
 
+    def test_absent_liquidity_is_reported_as_ungraded_not_defaulted(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """8c: `liquidity` has no code defaults, so "these have code
+        defaults" would be false about it — it gets its own line saying
+        the feature runs ungraded.
+        """
+        config = deepcopy(_VALID_CONFIG)
+        assert "liquidity" not in config
+        path = _write_yaml(tmp_path, config)
+
+        exit_code = main(["--check", str(path)])
+
+        out = capsys.readouterr().out
+        defaults_line = next(
+            line for line in out.splitlines() if "have code defaults" in line
+        )
+        assert exit_code == 0
+        assert "liquidity" not in defaults_line
+        assert "NO code defaults" in out
+        assert "ungraded" in out
+
     def test_a_defaulted_section_fails_under_strict(
         self,
         tmp_path: Path,
@@ -1477,3 +1535,89 @@ class TestCheckCli:
         captured = capsys.readouterr()
         assert exit_code == 0
         assert "warnings:" not in captured.out
+
+
+class TestLiquidity:
+    """The optional ``liquidity`` policy section (8c, N10).
+
+    No code defaults: the handbook gives no number for either warning
+    sign, so an absent section means "ungraded", and a present one must
+    say both grading keys.
+    """
+
+    def test_absent_section_is_none_not_defaults(self, tmp_path: Path) -> None:
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+
+        assert ips.liquidity is None
+        # "Running on code defaults" would be false — there are none.
+        assert "liquidity" not in ips.defaulted_sections
+
+    def test_example_template_carries_the_section(self) -> None:
+        liquidity = load_ips_config(EXAMPLE_IPS_YAML).liquidity
+
+        assert liquidity is not None
+        assert liquidity.spread_warn_pct == pytest.approx(10.0)
+        assert liquidity.observation_max_age_days == 30
+        assert liquidity.open_interest_min is None
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        config = {
+            **_VALID_CONFIG,
+            "liquidity": {
+                "spread_warn_pct": 7.5,
+                "observation_max_age_days": 14,
+                "open_interest_min": 250,
+            },
+        }
+        liquidity = load_ips_config(_write_yaml(tmp_path, config)).liquidity
+
+        assert liquidity is not None
+        assert liquidity.spread_warn_pct == pytest.approx(7.5)
+        assert liquidity.observation_max_age_days == 14
+        assert liquidity.open_interest_min == 250
+
+    @pytest.mark.parametrize(
+        ("section", "match"),
+        [
+            ({"observation_max_age_days": 30}, "spread_warn_pct"),
+            ({"spread_warn_pct": 10.0}, "observation_max_age_days"),
+            (
+                {"spread_warn_pct": 0, "observation_max_age_days": 30},
+                "spread_warn_pct",
+            ),
+            (
+                {"spread_warn_pct": 10.0, "observation_max_age_days": 0},
+                "observation_max_age_days",
+            ),
+            (
+                {"spread_warn_pct": 10.0, "observation_max_age_days": 1.5},
+                "observation_max_age_days",
+            ),
+            (
+                {
+                    "spread_warn_pct": 10.0,
+                    "observation_max_age_days": 30,
+                    "open_interest_min": -1,
+                },
+                "open_interest_min",
+            ),
+            (
+                {
+                    "spread_warn_pct": 10.0,
+                    "observation_max_age_days": 30,
+                    "open_interest_min": True,
+                },
+                "open_interest_min",
+            ),
+        ],
+    )
+    def test_invalid_section_raises(
+        self,
+        tmp_path: Path,
+        section: dict[str, object],
+        match: str,
+    ) -> None:
+        config = {**_VALID_CONFIG, "liquidity": section}
+
+        with pytest.raises(IpsConfigError, match=match):
+            load_ips_config(_write_yaml(tmp_path, config))

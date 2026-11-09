@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
+from deltadewa.formatters.values import format_ordinal_percentile
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
@@ -107,8 +108,15 @@ class MarketEnvironment:
 
     Attributes:
         vix: Current VIX level, in vol points (e.g. 18.0 for 18%).
-        regime_percentile: VIX regime percentile (0-100), from
-            ``classify_vix_regime``.
+        regime_band_position_pct: Where VIX sits inside the IPS
+            ``vol_regime_low``-``vol_regime_high`` band, 0-100 and clamped
+            at both ends, from ``classify_vix_regime``. **Not a
+            percentile** — no history is ranked; it is ``0`` for every VIX
+            at or below the band floor. Renamed from ``regime_percentile``
+            (8c, N5): the old name, rendered on ``/design`` as "regime
+            percentile 53" on a day VIX ranked 95th over the trailing
+            year, was #175's mislabel on a path #175's fix never reached
+            (``health.compute_vol_regime`` is the true-rank figure).
         regime_label: VIX regime label, from ``classify_vix_regime``.
         skew_index: Current CBOE SKEW index level.
         skew_percentile: SKEW index's percentile rank, as a 0-1 fraction
@@ -143,11 +151,17 @@ class MarketEnvironment:
             ``series``' names), or ``None`` when ``data_quality`` is
             ``STATIC`` or ``UNAVAILABLE`` (neither has a meaningful
             "oldest" among synthetic/absent timestamps).
+        skew_lookback_days: The trading-session window ``skew_percentile``
+            was ranked over (``IpsMarketEnvironment.skew_lookback_days``,
+            #317), carried so every surface quoting the percentile can
+            state its window — the handbook's condition for any window
+            (see :func:`describe_lookback`). ``None`` when
+            ``data_quality`` is ``UNAVAILABLE``.
 
     """
 
     vix: float | None
-    regime_percentile: float | None
+    regime_band_position_pct: float | None
     regime_label: RegimeLabel | None
     skew_index: float | None
     skew_percentile: float | None
@@ -163,16 +177,78 @@ class MarketEnvironment:
     series: tuple[SeriesProvenance, ...] = ()
     fetched_at: datetime | None = None
     oldest_series: str | None = None
+    skew_lookback_days: int | None = None
 
 
 _VIX_LABEL_LOW_PCT: Final[float] = 25.0
 _VIX_LABEL_HIGH_PCT: Final[float] = 75.0
 _VIX_TENOR_YEARS: Final[float] = 1 / 12
 _VIX3M_TENOR_YEARS: Final[float] = 3 / 12
+# A calendar convention (the count every 252-session "year" in this codebase
+# already assumes), not policy: it only turns a session count into words.
+_SESSIONS_PER_YEAR: Final[int] = 252
 
 
-def _interpolate_percentile(value: float, low: float, high: float) -> float:
+def describe_lookback(sessions: int) -> str:
+    """Name a percentile rank window for a reader, e.g. ``"trailing 5y"``.
+
+    The handbook lets a program rank skew over any window "provided it
+    states the window every time it quotes a percentile"
+    (`The Lookback Window
+    <https://qwertytam.github.io/deltadewa-handbook/part-3/volatility-skew/#the-lookback-window>`_),
+    so every surface rendering ``MarketEnvironment.skew_percentile``
+    renders this beside it. Whole years read as years; anything else
+    reads as a session count rather than a rounded, misleading year.
+
+    Args:
+        sessions: The window in trading sessions.
+
+    Returns:
+        ``"trailing Ny"`` for a whole number of 252-session years,
+        otherwise ``"trailing N sessions"``.
+
+    """
+    years, remainder = divmod(sessions, _SESSIONS_PER_YEAR)
+    if remainder == 0 and years > 0:
+        return f"trailing {years}y"
+    return f"trailing {sessions} sessions"
+
+
+def describe_skew_percentile(
+    fraction: float,
+    lookback_days: int | None,
+) -> str:
+    """Render a skew percentile with the window it was ranked over.
+
+    E.g. ``"88th percentile (trailing 5y)"``. The one formatter every
+    surface quoting a skew percentile uses — the ``/design`` skew row,
+    the entry-timing step, and the program report —
+    so the handbook's "state the window every time" condition (#317) is
+    met by construction and the surfaces cannot disagree on rounding.
+
+    Args:
+        fraction: The percentile as a 0-1 fraction.
+        lookback_days: The window it was ranked over, in sessions.
+            ``None`` only for a reading whose window was never recorded,
+            which is then said rather than guessed.
+
+    Returns:
+        The ordinal percentile with its window in parentheses.
+
+    """
+    window = (
+        describe_lookback(lookback_days)
+        if lookback_days is not None
+        else "window not recorded"
+    )
+    return f"{format_ordinal_percentile(fraction)} percentile ({window})"
+
+
+def _interpolate_band_position(value: float, low: float, high: float) -> float:
     """Linear-interpolate *value* between *low* and *high* into 0-100.
+
+    A position inside the band, not a percentile — see
+    ``classify_vix_regime``.
 
     Same approach as ``HealthMixin.calculate_vol_regime_percentile``:
     0 = at/below low, 100 = at/above high, linear in between.
@@ -198,15 +274,16 @@ def classify_vix_regime(
     low: float = DEFAULT_VOL_REGIME_LOW,
     high: float = DEFAULT_VOL_REGIME_HIGH,
 ) -> tuple[float, RegimeLabel]:
-    """Classify a VIX level into a regime percentile and label.
+    """Classify a VIX level by its position inside the IPS band, plus a label.
 
-    Uses the same linear-interpolation approach as
-    ``HealthMixin.calculate_vol_regime_percentile``, applied to VIX
-    instead of portfolio volatility. *vix* is in vol points (e.g. 18.0
-    for 18%) and is converted to decimal before comparing against the
-    decimal *low*/*high* band.
+    Linear interpolation of VIX between the IPS *low*/*high* band, clamped
+    to 0-100 — a **band position**, not a percentile: nothing is ranked
+    against history (8c, N5; the same mislabel #175 fixed for
+    ``health.compute_vol_regime``, which does rank against VIX history).
+    *vix* is in vol points (e.g. 18.0 for 18%) and is converted to
+    decimal before comparing against the decimal *low*/*high* band.
 
-    The label cuts at percentile 25/75 -- the breakpoints the retired
+    The label cuts the band position at 25/75 -- the breakpoints the retired
     ``config/dashboard.yaml`` ``vol_regime`` gauge used (``min_val: 25``
     green/cheap, ``max_val: 75`` red/expensive), carried forward so the
     label keeps the meaning that gauge established (#279).
@@ -219,16 +296,16 @@ def classify_vix_regime(
             :data:`~deltadewa.ips_config.DEFAULT_VOL_REGIME_HIGH`.
 
     Returns:
-        Tuple of (regime_percentile, regime_label).
+        Tuple of (regime_band_position_pct, regime_label).
 
     """
-    percentile = _interpolate_percentile(vix / 100, low, high)
+    band_position = _interpolate_band_position(vix / 100, low, high)
     label = _classify_band(
-        percentile,
+        band_position,
         _VIX_LABEL_LOW_PCT,
         _VIX_LABEL_HIGH_PCT,
     )
-    return percentile, label
+    return band_position, label
 
 
 def term_structure_shape(
@@ -334,8 +411,6 @@ def _oldest_series_name(
 def assess_market_environment(
     provider: MarketDataProvider,
     env_policy: IpsMarketEnvironment | None = None,
-    *,
-    skew_lookback_days: int = 252,
 ) -> MarketEnvironment:
     """Assess current market conditions from a ``MarketDataProvider``.
 
@@ -352,15 +427,11 @@ def assess_market_environment(
             (``ips_config.market_environment``). ``None`` uses the
             ``IpsMarketEnvironment`` defaults (the ``DEFAULT_*`` single source).
             The skew percentile band is converted to the 0-1 fraction
-            ``get_skew_percentile`` returns once, here at the edge.
-        skew_lookback_days: Lookback window passed to
-            ``get_skew_percentile`` (default 252). No caller overrides
-            this, so 252 (one trading year) is the window every skew
-            percentile the program reports is actually computed against.
-            It is unsourced against the handbook's own five-year canon
-            (see ``MarketDataProvider.get_skew_percentile``, #317) — a
-            live contradiction, not yet resolved here because changing it
-            changes every skew percentile the program reports.
+            ``get_skew_percentile`` returns once, here at the edge. The
+            skew percentile is ranked over its ``skew_lookback_days``
+            (#317) — policy, read here and nowhere else, and recorded on
+            the returned snapshot so every surface can state the window
+            it quotes.
 
     Returns:
         A fully classified ``MarketEnvironment``, or a degraded one with
@@ -376,6 +447,7 @@ def assess_market_environment(
         policy.skew_high_pctile / 100.0,
     )
     term_tolerance = policy.term_contango_tolerance
+    skew_lookback_days = policy.skew_lookback_days
     try:
         vix_obs = provider.get_vix()
         term_obs = provider.get_vix_term_structure()
@@ -384,7 +456,7 @@ def assess_market_environment(
     except MarketDataError:
         return MarketEnvironment(
             vix=None,
-            regime_percentile=None,
+            regime_band_position_pct=None,
             regime_label=None,
             skew_index=None,
             skew_percentile=None,
@@ -400,7 +472,9 @@ def assess_market_environment(
     term = term_obs.value
     skew_percentile = skew_pctile_obs.value
 
-    regime_percentile, regime_label = classify_vix_regime(vix, *regime_bands)
+    regime_band_position_pct, regime_label = classify_vix_regime(
+        vix, *regime_bands
+    )
     skew_label = _classify_band(skew_percentile, *skew_bands)
     term_shape = term_structure_shape(term, term_tolerance)
 
@@ -442,7 +516,7 @@ def assess_market_environment(
 
     return MarketEnvironment(
         vix=vix,
-        regime_percentile=regime_percentile,
+        regime_band_position_pct=regime_band_position_pct,
         regime_label=regime_label,
         skew_index=skew_index_obs.value,
         skew_percentile=skew_percentile,
@@ -459,4 +533,5 @@ def assess_market_environment(
         series=series,
         fetched_at=provenance.fetched_at,
         oldest_series=oldest_series,
+        skew_lookback_days=skew_lookback_days,
     )
