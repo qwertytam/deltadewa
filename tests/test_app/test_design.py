@@ -3842,11 +3842,12 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 12 PLANNING panels + 5 EXPLORATION panels share the .panel class
+        # 13 PLANNING panels + 5 EXPLORATION panels share the .panel class
         # (Batch 8a.4 added the compliance panel, #298 on /design for the
-        # first time). A count, not a list, so a panel disappearing fails
-        # loudly; update it when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 17
+        # first time; 8c / N10 the liquidity check). A count, not a list,
+        # so a panel disappearing fails loudly; update it when a panel is
+        # deliberately added or removed.
+        assert page.locator(".panel").count() == 18
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1
@@ -3855,6 +3856,7 @@ class TestPlanningZoneRendersClientSide:
         # count alone would be satisfied by either one twice.
         assert page.locator("#plan-roll-plan-panel").count() == 1
         assert page.locator("#plan-roll-panel").count() == 1
+        assert page.locator("#plan-liquidity-panel").count() == 1
 
 
 class TestExplorationZoneRendersClientSide:

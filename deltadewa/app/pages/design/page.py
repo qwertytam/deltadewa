@@ -62,6 +62,7 @@ from .planning import (
     delta_drift,
     hedge_triggers,
     ladder,
+    liquidity,
     monetization,
     position_aging,
     provenance,
@@ -120,6 +121,7 @@ _PLANNING_SECTIONS: Final = (
     roll_plan.SECTION,
     roll_status.SECTION,
     provenance.SECTION,
+    liquidity.SECTION,
     position_aging.SECTION,
     hedge_triggers.SECTION,
     delta_drift.SECTION,
@@ -231,6 +233,7 @@ def render(app: ProgramDashApp) -> html.Div:
                 portfolio=portfolio,
                 ips_config=ips_config,
             ),
+            liquidity.layout(portfolio=portfolio, ips_config=ips_config),
             position_aging.layout(
                 portfolio=portfolio,
                 ips_config=ips_config,
@@ -396,6 +399,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
     roll_plan.register(app, ips_config=ips_config)
     roll_status.register(app, ips_config=ips_config)
     provenance.register(app, ips_config=ips_config)
+    liquidity.register(app, ips_config=ips_config)
     monetization.register(app, ips_config=ips_config)
     market_env_panel.register(app, ips_config=ips_config)
     volatility_profile.register(app)
