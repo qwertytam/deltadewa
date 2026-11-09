@@ -639,6 +639,17 @@ class TestMarketEnvironment:
         assert env.vix_caution == pytest.approx(25.0)
         assert env.vix_low == pytest.approx(15.0)
         assert env.spot_divergence_warn_pct == pytest.approx(2.0)
+        # The handbook's trailing five years (#317), stated explicitly in
+        # the template rather than inherited from the code default.
+        assert env.skew_lookback_days == 1260
+
+    def test_default_skew_window_is_the_handbook_five_years(self) -> None:
+        """Pins the window every reported skew percentile is ranked over.
+
+        #317's acceptance criterion: "a test pins the window". 1260
+        sessions is the handbook's trailing five years.
+        """
+        assert DEFAULT_SKEW_LOOKBACK_DAYS == 1260
 
     def test_round_trips_custom_values(self, tmp_path: Path) -> None:
         """Section values round-trip through the loader unchanged."""

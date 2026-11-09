@@ -117,6 +117,17 @@ market_environment:
   vol_regime_high: 0.35        # decimal IV; VIX/100 at/above = high-vol regime
   skew_low_pctile: 30          # SKEW percentile (0-100); below = benign skew
   skew_high_pctile: 70         # SKEW percentile (0-100); above = stressed skew
+  skew_lookback_days: 1260     # trading sessions the SKEW index is ranked
+                                # over to make that percentile (1260 ~= 5y).
+                                # The handbook ranks over a trailing five
+                                # years and allows any other window
+                                # "provided it states the window every time
+                                # it quotes a percentile" (part-3/
+                                # volatility-skew, The Lookback Window); 252
+                                # (~1y) was this program's window before #317.
+                                # The 30/70 band above is applied to a
+                                # percentile on THIS window — changing it
+                                # changes every skew verdict.
   term_contango_tolerance: 0.5 # VIX points; smaller diffs read FLAT
   data_ttl_minutes: 1440       # EXAMPLE VALUE — how long a fetched value
                                 # stays trustworthy; past this a cache hit

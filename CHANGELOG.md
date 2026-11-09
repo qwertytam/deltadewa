@@ -17,6 +17,34 @@ history for that record instead.
 
 ## [Unreleased]
 
+### Changed
+
+- **#317 (8c) — the skew percentile is ranked over the handbook's trailing
+  five years (1260 sessions), not an unsourced 252.** The window is now IPS
+  policy, `market_environment.skew_lookback_days`, and is stated beside
+  every skew percentile the program quotes ("88th percentile (trailing
+  5y)") — the handbook's condition for ranking over any window at all.
+  **This moves every reported skew percentile.** On 2026-11-06 the reading
+  was 90.5 on 252 sessions and 87.6 on 1260: both above the 70 cut, so that
+  day's "defer — skew expensive" verdict did not move. But over the
+  preceding year the two windows labelled 84 of 252 sessions differently,
+  and always in the same direction — the five-year window read LOW
+  (accumulate) on 5 sessions where the one-year window read LOW on 70, a
+  consequence of SKEW's upward drift since 2021. Expect fewer "accumulate
+  aggressively" readings. Cboe's SKEW history runs back to 1990, so the
+  window is fully covered; a series shorter than the window now raises
+  rather than silently ranking a truncated sample, and the refresh job
+  logs it.
+
+  **Operator action:** the live, gitignored `config/ips.yaml` inherits the
+  new 1260 default unless it says otherwise. Add
+  `skew_lookback_days: 1260` under `market_environment:` to take the
+  handbook window deliberately, or `252` to keep the old one (the handbook
+  permits it, provided the window is stated — which every surface now
+  does). `python -m deltadewa.ips_config --check` lists the key as missing
+  until then. The first weekly digest after the switch reports the window
+  change instead of a SKEW-percentile move.
+
 ### Removed
 
 - **#279** — the leftover Jupyter layer is retired: `deltadewa/dashboard/`

@@ -173,7 +173,13 @@ DEFAULT_TERM_CONTANGO_TOLERANCE: Final[float] = 0.5
 # window "provided it states the window every time it quotes a percentile"
 # (part-3/volatility-skew/#the-lookback-window) — which is why every
 # surface quoting a skew percentile renders this window beside it.
-DEFAULT_SKEW_LOOKBACK_DAYS: Final[int] = 252
+# 1260 sessions ~= five years — the handbook's own window. Before #317 this
+# was an unsourced 252 (~one year) spread across four call sites; the
+# 2026-11-06 reading was 90.5 on 252 sessions and 87.6 on 1260 (both above
+# the 70 cut, so that day's verdict did not move — but over the prior year
+# the two windows labelled a third of sessions differently, the five-year
+# window always the more expensive; see docs/market-data.md).
+DEFAULT_SKEW_LOOKBACK_DAYS: Final[int] = 1260
 # A percentile needs a distribution: fewer than two observations ranks the
 # current reading only against itself (always the 100th percentile).
 _MIN_SKEW_LOOKBACK_DAYS: Final[int] = 2
