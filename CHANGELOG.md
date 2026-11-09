@@ -19,6 +19,23 @@ history for that record instead.
 
 ### Added
 
+- **8d.2 (#410) — a ladder, as an object: the `/design` Ladder composer.**
+  Compose strikes and weights (35/40/25 across 20/30/40% OTM is the
+  handbook's example), size them as one ladder on the sizing workbench's own
+  target, and score the blend beside the live book: carry vs budget, crash
+  convexity at the IPS depth vs band, vega sufficiency, hedge efficiency, and
+  crash gain by depth per rung and combined (-10/-20/-30/-40 plus the IPS
+  depth; only the IPS depth is compared with the band). Seeds from the IPS
+  ladder, else the book's own shape; "Add" buttons on the Strike candidates
+  table feed it. New `analysis/ladder.py`; grading is
+  `app/compliance.scorecard` (the strip's rows plus hedge efficiency), on a
+  shadow book, so there is no second grader.
+  **Operator note: new optional IPS section `strike_ladder:`** (`rungs:` of
+  `{pct_otm, weight_pct[, maturity_years]}`, weights sum to 100, no code
+  defaults, **not** a breaking change). Template entries with the handbook's
+  example are in `config/ips.example.yaml` and `examples/ips/ips_default.yaml`;
+  the live, gitignored `config/ips.yaml` needs an edit only to opt in. Run
+  `python -m deltadewa.ips_config --check` to see it listed as unset.
 - **N9 (8c, #415) — skew beta, Part X #9.** `analysis/skew_beta.py`
   measures the book's ∂V/∂Skew by repricing with one vol point of extra
   downside skew at the IPS wing anchor (the crash machinery's

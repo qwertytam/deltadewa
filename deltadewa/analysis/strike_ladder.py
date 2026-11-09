@@ -32,12 +32,7 @@ from deltadewa.analysis.candidate import (
     build_put_valuation,
     evaluate_candidate,
 )
-from deltadewa.analysis.crash_repricing import CrashShock
-from deltadewa.analysis.sizing import (
-    beta_adjusted_notional,
-    required_crash_offset,
-    size_from_unit,
-)
+from deltadewa.analysis.sizing import size_from_unit, sizing_basis
 
 if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
@@ -290,32 +285,12 @@ def build_candidate_grid(
             the ladder's sizing is undefined and never fabricates a zero result.
 
     """
-    book_notional = abs(portfolio.underlying_quantity) * portfolio.spot_price
-    if book_notional <= 0.0:
-        msg = (
-            "strike-ladder sizing requires an underlying position; "
-            "underlying_quantity is unset (book notional is 0)"
-        )
-        raise ValueError(msg)
-    # Beta-adjusted (SPX-equivalent) notional the hedge is sized against
-    # (handbook Beta-Adjusted Hedge Sizing —
-    # https://qwertytam.github.io/deltadewa-handbook/part-7/beta-adjusted-hedge-sizing/);
-    # equals book_notional at beta 1.0. Carry budget stays on the true book
-    # value — the premium budget is a fraction of actual wealth.
-    portfolio_beta = ips_config.sizing.portfolio_beta
-    beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
-    carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
-    # One crash basis for every rung, built the same way the book surfaces
-    # build theirs; the depth is read back off it so the drawdown maths and
-    # the repricing cannot drift apart.
-    shock = CrashShock.from_ips(ips_config.convexity)
-    offset = required_crash_offset(
-        beta_adj_notional,
-        shock.crash_scenario_pct,
-        ips_config.drawdown.max_tolerance_pct,
-    )
-    # Policy, on its own path: `shock` prices the rungs, `conv` only judges
-    # them against the band (M1.5 — the two never travel as one object).
+    # The same target the sizing workbench sizes to (beta-adjusted offset,
+    # carry budget on the true notional, IPS crash basis) -- one builder,
+    # so a grid cell and a sized candidate cannot disagree about it.
+    basis = sizing_basis(portfolio, ips_config, purpose="strike-ladder sizing")
+    # Policy, on its own path: `basis.shock` prices the cells, `conv` only
+    # judges them against the band (M1.5 — the two never travel as one object).
     conv = ips_config.convexity
 
     cells: CandidateGrid = []
@@ -345,14 +320,14 @@ def build_candidate_grid(
             portfolio,
             strike=strike,
             maturity_years=maturity,
-            shock=shock,
+            shock=basis.shock,
             vol=vol,
         )
         sizing = size_from_unit(
-            offset,
+            basis.required_crash_offset,
             metrics.per_contract_payoff,
             metrics.per_contract_carry,
-            carry_budget,
+            basis.carry_budget,
         )
         achieved_convexity_pct = (
             sizing.contracts_needed * metrics.per_contract_convexity_pct
@@ -365,12 +340,12 @@ def build_candidate_grid(
                 target_delta=delta,
                 maturity_years=maturity,
                 metrics=metrics,
-                portfolio_beta=portfolio_beta,
-                beta_adjusted_notional=beta_adj_notional,
-                required_crash_offset=offset,
+                portfolio_beta=basis.portfolio_beta,
+                beta_adjusted_notional=basis.beta_adjusted_notional,
+                required_crash_offset=basis.required_crash_offset,
                 contracts_needed=sizing.contracts_needed,
                 implied_annual_carry=sizing.implied_annual_carry,
-                carry_budget=carry_budget,
+                carry_budget=basis.carry_budget,
                 within_budget=sizing.within_budget,
                 carry_headroom=sizing.carry_headroom,
                 max_affordable_contracts=sizing.max_affordable_contracts,

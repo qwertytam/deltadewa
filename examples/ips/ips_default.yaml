@@ -250,3 +250,18 @@ liquidity:
   # open_interest_min: 100       # contracts. No handbook figure — set from
                                  # your own execution experience, or leave
                                  # unset to record open interest ungraded.
+
+# The strike ladder this program intends to hold (Part VII, Strike Selection;
+# 8d / #410). The handbook's worked ladder is 35/40/25 across 20/30/40% OTM at
+# 18 months; the implementation checklist lists "strikes, allocation weights,
+# maturities" as a decision the program makes, so it is POLICY. The handbook
+# calls its figures an EXAMPLE, so there are no code defaults: omit the whole
+# section and /design's ladder composer seeds from the live book instead.
+# weight_pct is a share of CONTRACT COUNT (the basis the worked 20M book uses,
+# 23/26/16 ~ 35/40/25) and the rungs must sum to 100. maturity_years is
+# optional per rung; omitted means maturity_selection.entry_tenor_years.
+strike_ladder:
+  rungs:
+    - {pct_otm: 20.0, weight_pct: 35.0}   # EXAMPLE VALUES -- the handbook's
+    - {pct_otm: 30.0, weight_pct: 40.0}   # example allocation, not a handbook
+    - {pct_otm: 40.0, weight_pct: 25.0}   # limit. Set your own.

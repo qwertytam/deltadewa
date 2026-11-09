@@ -138,8 +138,8 @@ without it and are tested for it (`formatters/dataframes.py`'s
 
 The foundation is done and the handbook's Part X panels are built: a
 `marketdata/` provider interface (free CBOE/FRED backend), an `ips.yaml` program
-config, and a Roll Status panel. The **sizing workbench, strike-ladder builder,
-and monetization planner are also done, tested, and wired** — each is its own
+config, and a Roll Status panel. The **sizing workbench, strike-candidate
+browser, and monetization planner are also done, tested, and wired** — each is its own
 `analysis/`-layer module (`sizing.py`, `strike_ladder.py`, `monetization.py`)
 driving a panel in the Dash `/design` page's PLANNING zone since M2.5.
 `roll_planner.py` was the exception until #258 wired it: `/design` now has a
@@ -441,6 +441,32 @@ change, per that file's own "Void if `age` lands" clause. `.env` still
 never rides this channel, encrypted or not — that exclusion was always
 architectural (host-only, never through a container's `env_file`), not a
 plaintext-vs-encrypted trade this batch could relax.
+
+**8d (#410, N4) has shipped**: a ladder, as an object. The old "Strike
+ladder" panel was always a grid of standalone single-strike candidates, each
+sized to meet the whole crash offset alone; it is now **Strike candidates**
+(`build_candidate_grid`, `GridCell`, columns marked "(alone)"), and a new
+`/design` **Ladder composer** (`analysis/ladder.py`, `planning/ladder_composer.py`)
+composes rungs and weights, sizes them as one ladder, and scores the blend beside
+the live book. The decisions, so they are not re-litigated: weights are shares of
+**contract count** (the §4 golden book's basis; the handbook is silent); sizing
+reuses the sizing workbench's own target via `sizing.sizing_basis` (one-rung
+ladder == `size_hedge`); grading is `app/compliance.scorecard` (the strip's rows
+plus `build_scenario`'s hedge efficiency) on a **shadow book**
+(`materialize_ladder`), so there is no second grader and no convexity formula in
+the composer; only the IPS depth is compared with the band (the handbook states it
+at one depth). New optional IPS section **`strike_ladder:`** (rungs of
+`{pct_otm, weight_pct[, maturity_years]}`, weights sum to 100, **no code
+defaults**, not breaking); templates in both shipped IPS files, listed by
+`ips_config --check` under "no code defaults". PR 1 of 8d made sizing's and the
+grid's "achieved convexity" the strip's own gauge (`crash_convexity_pct(positions=)`,
+gain over unadjusted book notional): **readings moved** by about premium/notional.
+Known, deliberately unfixed: sizing covers the offset on *gross* payoff while
+convexity is *net of premium*, so an offset-sized ladder lands just under
+`|crash| - tolerance` and PASS/FAIL can flip on 0.1pp at the band floor; "Current
+book" and "This ladder" are not like-for-like when the book holds shorts/calls or
+per-leg vols (the panel says so). Filed from the same audits: #431-#435. See
+`docs/part-x-coverage.md`, "The ladder, as an object (8d)".
 
 **Batch 8b has shipped**, closing #398 and confirming #399 and an N8e
 review finding. #398: the digest's `"STALE DATA — "` headline (and the

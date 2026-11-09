@@ -806,9 +806,9 @@ class TestBasisChip:
 
         text = str(design.render(app))
 
-        # Zone header + sizing + ladder + roll plan + roll status +
-        # monetization.
-        assert text.count(design._BASIS_CRASH_SKEW) == 6
+        # Zone header + sizing + strike candidates + ladder composer (8d) +
+        # roll plan + roll status + monetization.
+        assert text.count(design._BASIS_CRASH_SKEW) == 7
 
 
 class TestSizingLadderMaturityDefaults:
@@ -1160,7 +1160,7 @@ class TestCandidateGridPanelContract:
         for label in (
             "Contracts (alone)",
             "Convexity (alone)",
-            "Budget (alone)",
+            "Budget + band (alone)",
         ):
             assert label in text
 
@@ -3951,12 +3951,13 @@ class TestPlanningZoneRendersClientSide:
 
         assert js_errors == []
         assert "Traceback" not in page.content()
-        # 14 PLANNING panels + 5 EXPLORATION panels share the .panel class
+        # 15 PLANNING panels + 5 EXPLORATION panels share the .panel class
         # (Batch 8a.4 added the compliance panel, #298 on /design for the
-        # first time; 8c the liquidity check (N10) and skew beta (N9)). A
-        # count, not a list, so a panel disappearing fails loudly; update
-        # it when a panel is deliberately added or removed.
-        assert page.locator(".panel").count() == 19
+        # first time; 8c the liquidity check (N10) and skew beta (N9); 8d
+        # the ladder composer, #410). A count, not a list, so a panel
+        # disappearing fails loudly; update it when a panel is deliberately
+        # added or removed.
+        assert page.locator(".panel").count() == 20
         # Named explicitly because the count alone can't tell a lost panel
         # from a renamed one, and this panel closed a real regression.
         assert page.locator("#plan-convexity-cliff-panel").count() == 1
@@ -3967,6 +3968,97 @@ class TestPlanningZoneRendersClientSide:
         assert page.locator("#plan-roll-panel").count() == 1
         assert page.locator("#plan-liquidity-panel").count() == 1
         assert page.locator("#plan-skew-beta-panel").count() == 1
+        assert page.locator("#plan-ladder-composer-panel").count() == 1
+
+
+class TestLadderComposerClientSide:
+    """#410 (8d): the composer's callbacks work in a real browser.
+
+    Dash wiring is where a pattern-matching Add button, a text input two
+    callbacks care about, and a re-rendering table can fail silently: the
+    unit tests call the render logic directly and cannot see any of it.
+    """
+
+    @staticmethod
+    def _open(page: Page, design_app: DesignAppHandle) -> list[str]:
+        design_app.state.set_underlying_quantity(1_000.0)
+        js_errors: list[str] = []
+        page.on("pageerror", lambda exc: js_errors.append(str(exc)))
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector(
+            "#plan-ladder-composer-panel table",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        return js_errors
+
+    def test_seeds_from_the_ips_and_shows_the_scorecard(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors = self._open(page, design_app)
+
+        assert js_errors == []
+        # config/ips.example.yaml states the handbook's 35/40/25 ladder.
+        rungs = page.locator("#ladder-composer-rungs").input_value()
+        assert [part.split("@")[0] for part in rungs.split(", ")] == [
+            "20",
+            "30",
+            "40",
+        ]
+        panel = page.locator("#plan-ladder-composer-panel").inner_text()
+        for expected in ("Current book", "This ladder", "Hedge efficiency"):
+            assert expected in panel
+        assert "Traceback" not in page.content()
+
+    def test_add_button_appends_a_rung_and_rescores(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors = self._open(page, design_app)
+        before = page.locator("#ladder-composer-rungs").input_value()
+        assert before.count(",") == 2
+
+        page.locator(".ladder-add-rung").first.click()
+
+        page.wait_for_function(
+            "document.getElementById('ladder-composer-rungs')"
+            ".value.split(',').length === 4",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        # Four rung rows plus the ladder total row, re-scored.
+        page.wait_for_function(
+            "document.querySelectorAll('#plan-ladder-composer-panel "
+            "table:first-of-type tbody tr').length === 5",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        assert js_errors == []
+
+    def test_load_current_book_replaces_the_rungs(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        js_errors = self._open(page, design_app)
+
+        page.get_by_role("button", name="Load current book").click()
+
+        # The fixture's one starter position: 10 long puts, so one rung
+        # weighted by its 10 contracts.
+        page.wait_for_function(
+            "document.getElementById('ladder-composer-rungs')"
+            ".value.split(',').length === 1",
+            timeout=_PAGE_LOAD_TIMEOUT_MS,
+        )
+        assert (
+            page.locator("#ladder-composer-rungs")
+            .input_value()
+            .endswith(
+                ":10",
+            )
+        )
+        assert js_errors == []
 
 
 class TestExplorationZoneRendersClientSide:

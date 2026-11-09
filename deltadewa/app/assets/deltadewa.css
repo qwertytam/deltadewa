@@ -1170,3 +1170,58 @@ fieldset.editor-form {
     color: #595959;
   }
 }
+
+/* 8d (#410): the strike-candidates table's per-row "Add to ladder" button,
+ * and the ladder composer's scorecard. Both reuse .planning-table; these
+ * rules only style what it does not cover. */
+.ladder-add-rung {
+  padding: 2px 10px;
+  border: 1px solid #4a7fb5;
+  border-radius: 4px;
+  background: #fff;
+  color: #4a7fb5;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ladder-add-rung:hover {
+  background: #4a7fb5;
+  color: #fff;
+}
+
+.ladder-composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.ladder-composer-actions button {
+  padding: 4px 12px;
+  border: 1px solid #888;
+  border-radius: 4px;
+  background: #f6f6f6;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ladder-composer-actions button:disabled {
+  color: #999;
+  cursor: not-allowed;
+}
+
+.planning-table td.num,
+.planning-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.planning-table tr.depth-row--ips td {
+  background: #fff8e6;
+  font-weight: 600;
+}
+
+.planning-table td.scorecard-cell .verdict-badge {
+  margin-left: 8px;
+}

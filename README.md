@@ -11,7 +11,7 @@ shared server-side `ProgramState`, each targeting a different audience:
 - **`/monitor` — Monitor & Report**: read-mostly view of the current book for routine
   checks and IC/board reporting, led by the crash scenario.
 - **`/design` — Hedge Design**: the analyst's workbench — position editor, roll table,
-  sizing workbench, strike candidate browser, monetization planner, and decision matrix.
+  sizing workbench, strike candidate browser, ladder composer, monetization planner, and decision matrix.
 
 The program policy lives in `config/ips.yaml` (carry budget, convexity targets, drawdown
 tolerance, roll and monetization triggers). Methodology is drawn from the

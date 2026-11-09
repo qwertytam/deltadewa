@@ -51,8 +51,9 @@ from deltadewa.analysis.crash_payoff import (
 )
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.health import HealthMixin
+from deltadewa.analysis.ladder import size_ladder
 from deltadewa.analysis.roll_status import evaluate_roll_status
-from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.sizing import size_hedge, sizing_basis
 from deltadewa.analysis.strike_ladder import build_candidate_grid
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
@@ -1666,16 +1667,21 @@ class TestNoLegacyBasisInConvexityPaths:
             assert param.default is inspect.Parameter.empty, fn.__qualname__
 
     def test_candidate_surfaces_source_whole_basis_from_ips(self) -> None:
-        """Sizing and the ladder build the basis the way the book does.
+        """Sizing and the grid build the basis the way the book does.
 
         M1.7 gave both sides one skew *function*; this pins one *construction
         path* as well, so neither can assemble a basis the other would not.
+        Since #410 that path is ``sizing_basis`` -- the one place that calls
+        ``CrashShock.from_ips`` for a candidate surface -- and every surface
+        takes its shock from it rather than building one.
         """
-        for fn in (size_hedge, build_candidate_grid):
+        basis_source = inspect.getsource(sizing_basis)
+        assert "CrashShock.from_ips(ips_config.convexity)" in basis_source
+
+        for fn in (size_hedge, build_candidate_grid, size_ladder):
             source = inspect.getsource(fn)
-            assert "CrashShock.from_ips(ips_config.convexity)" in source, (
-                fn.__qualname__
-            )
+            assert "sizing_basis(" in source, fn.__qualname__
+            assert "CrashShock" not in source, fn.__qualname__
 
 
 class TestCanonicalExampleInvariants:

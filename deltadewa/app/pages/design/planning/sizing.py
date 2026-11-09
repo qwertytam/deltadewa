@@ -300,6 +300,12 @@ def layout(
                 [SECTION.title, basis_chip(basis_crash_skew)],
                 id=SECTION.anchor_id,
             ),
+            html.P(
+                "Sizes one strike bought alone. To size and score a blend "
+                "of strikes as a single ladder, use the Ladder composer "
+                "below.",
+                className="plain-language",
+            ),
             html.Div(
                 [
                     html.Div(

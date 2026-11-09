@@ -131,6 +131,38 @@ class HedgeSizingResult:
 
 
 @dataclass(frozen=True)
+class SizingBasis:
+    """What every sizing surface sizes *against*, built once (#410).
+
+    The workbench (:func:`size_hedge`), the candidate grid and the ladder
+    composer all size a hedge to the same target: cover the crash loss
+    beyond the drawdown tolerance, on the beta-adjusted notional, inside
+    the carry budget on the true notional, priced at the IPS crash basis.
+    Each used to assemble these five values inline; one builder means they
+    cannot disagree about the target, which is what makes a ladder
+    comparable with a single candidate.
+
+    Attributes:
+        book_notional: ``abs(underlying_quantity) * spot_price``.
+        portfolio_beta: ``IpsSizing.portfolio_beta``.
+        beta_adjusted_notional: ``book_notional * portfolio_beta``.
+        carry_budget: Annual premium budget in dollars, on the true
+            ``book_notional`` (not beta-adjusted).
+        required_crash_offset: Dollars of crash loss beyond tolerance, on
+            the beta-adjusted notional.
+        shock: The IPS crash basis candidates are repriced at.
+
+    """
+
+    book_notional: float
+    portfolio_beta: float
+    beta_adjusted_notional: float
+    carry_budget: float
+    required_crash_offset: float
+    shock: CrashShock
+
+
+@dataclass(frozen=True)
 class UnitSizingResult:
     """Return value of :func:`size_from_unit`.
 
@@ -262,6 +294,56 @@ def size_from_unit(
     )
 
 
+def sizing_basis(
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+    *,
+    purpose: str,
+) -> SizingBasis:
+    """Build the :class:`SizingBasis` every sizing surface shares.
+
+    Args:
+        portfolio: Live portfolio supplying the underlying position.
+        ips_config: Policy (carry budget, drawdown tolerance, crash basis,
+            beta).
+        purpose: Names the caller in the error ("hedge sizing",
+            "strike-ladder sizing", ...).
+
+    Returns:
+        The shared sizing target.
+
+    Raises:
+        ValueError: When the book notional is 0 (no underlying position);
+            sizing is undefined and never returns a fabricated zero result.
+
+    """
+    book_notional = abs(portfolio.underlying_quantity) * portfolio.spot_price
+    if book_notional <= 0.0:
+        msg = (
+            f"{purpose} requires an underlying position; "
+            "underlying_quantity is unset (book notional is 0)"
+        )
+        raise ValueError(msg)
+    portfolio_beta = ips_config.sizing.portfolio_beta
+    beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
+    # One crash basis, built the same way the book surfaces build theirs --
+    # the depth is read back off it so the drawdown maths and the repricing
+    # cannot drift apart.
+    shock = CrashShock.from_ips(ips_config.convexity)
+    return SizingBasis(
+        book_notional=book_notional,
+        portfolio_beta=portfolio_beta,
+        beta_adjusted_notional=beta_adj_notional,
+        carry_budget=ips_config.budget.annual_carry_pct / 100.0 * book_notional,
+        required_crash_offset=required_crash_offset(
+            beta_adj_notional,
+            shock.crash_scenario_pct,
+            ips_config.drawdown.max_tolerance_pct,
+        ),
+        shock=shock,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Pricing wrapper
 # ---------------------------------------------------------------------------
@@ -321,41 +403,22 @@ def size_hedge(
             sizing is undefined and never returns a fabricated zero result.
 
     """
-    book_notional = abs(portfolio.underlying_quantity) * portfolio.spot_price
-    if book_notional <= 0.0:
-        msg = (
-            "hedge sizing requires an underlying position; "
-            "underlying_quantity is unset (book notional is 0)"
-        )
-        raise ValueError(msg)
-    portfolio_beta = ips_config.sizing.portfolio_beta
-    beta_adj_notional = beta_adjusted_notional(book_notional, portfolio_beta)
-    carry_budget = ips_config.budget.annual_carry_pct / 100.0 * book_notional
-
-    # One crash basis for the whole function, built the same way the book
-    # surfaces build theirs — the depth below is read back off it so the
-    # drawdown maths and the repricing cannot drift apart.
-    shock = CrashShock.from_ips(ips_config.convexity)
-    offset = required_crash_offset(
-        beta_adj_notional,
-        shock.crash_scenario_pct,  # negative
-        ips_config.drawdown.max_tolerance_pct,
-    )
+    basis = sizing_basis(portfolio, ips_config, purpose="hedge sizing")
 
     strike = portfolio.spot_price * (1.0 - candidate_pct_otm / 100.0)
     metrics = evaluate_candidate(
         portfolio,
         strike=strike,
         maturity_years=candidate_maturity_years,
-        shock=shock,
+        shock=basis.shock,
         vol=vol,
     )
 
     sizing = size_from_unit(
-        offset,
+        basis.required_crash_offset,
         metrics.per_contract_payoff,
         metrics.per_contract_carry,
-        carry_budget,
+        basis.carry_budget,
     )
 
     # The strip's own gauge, scaled by the contracts sized -- never a
@@ -372,11 +435,11 @@ def size_hedge(
     return HedgeSizingResult(
         candidate_pct_otm=candidate_pct_otm,
         candidate_maturity_years=candidate_maturity_years,
-        book_notional=book_notional,
-        portfolio_beta=portfolio_beta,
-        beta_adjusted_notional=beta_adj_notional,
-        carry_budget=carry_budget,
-        required_crash_offset=offset,
+        book_notional=basis.book_notional,
+        portfolio_beta=basis.portfolio_beta,
+        beta_adjusted_notional=basis.beta_adjusted_notional,
+        carry_budget=basis.carry_budget,
+        required_crash_offset=basis.required_crash_offset,
         per_contract_payoff=metrics.per_contract_payoff,
         per_contract_intrinsic_floor=metrics.per_contract_intrinsic_floor,
         per_contract_carry=metrics.per_contract_carry,

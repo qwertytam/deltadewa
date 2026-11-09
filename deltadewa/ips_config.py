@@ -44,7 +44,7 @@ _EXAMPLE_IPS_PATH: Final[Path] = (
 # (8c / N10). --check reports them on their own line rather than under the
 # "these have code defaults" message, which would be false for them.
 _SECTIONS_WITHOUT_CODE_DEFAULTS: Final[frozenset[str]] = frozenset(
-    {"liquidity"},
+    {"liquidity", "strike_ladder"},
 )
 
 # CLI-only default (see main() below) — matches the cwd-relative default
@@ -587,6 +587,55 @@ class IpsLiquidity:
 
 
 @dataclass(frozen=True)
+class IpsLadderRung:
+    """One rung of the program's intended strike ladder (8d, #410).
+
+    Attributes:
+        pct_otm: Strike distance below spot, percent (``20.0`` = 20% OTM).
+            Stored as moneyness, not delta: the handbook allocates in %OTM
+            and warns the delta-to-moneyness mapping shifts with the vol
+            regime.
+        weight_pct: This rung's share of the ladder's contract count,
+            percent. The rungs' weights sum to 100.
+        maturity_years: This rung's tenor; ``None`` means the program's
+            ``maturity_selection.entry_tenor_years``.
+
+    """
+
+    pct_otm: float
+    weight_pct: float
+    maturity_years: float | None = None
+
+
+@dataclass(frozen=True)
+class IpsStrikeLadder:
+    """The strike ladder this program intends to hold (8d, #410).
+
+    Handbook `Strike Selection
+    <https://qwertytam.github.io/deltadewa-handbook/part-7/strike-selection/>`_
+    gives 35/40/25 across 20/30/40% OTM as an *example* allocation, and the
+    implementation checklist lists "strike ladder selected (strikes,
+    allocation weights, maturities)" as a decision the program makes. It is
+    therefore policy -- and, like :class:`IpsLiquidity`, **without code
+    defaults**: a built-in 35/40/25 would be invented policy. Absent,
+    ``IpsConfig.strike_ladder`` is ``None`` and the composer seeds from the
+    live book instead.
+
+    Weights are shares of **contract count**, the basis the worked §4 book
+    uses (23/26/16 contracts ~ 35/40/25). The handbook does not say what
+    "allocation" is measured in; premium weights would put ~5x the contracts
+    on the deepest rung and contradict "weight toward the middle strike".
+
+    Attributes:
+        rungs: At least one rung; weights sum to 100; no two rungs share a
+            (``pct_otm``, tenor) pair.
+
+    """
+
+    rungs: tuple[IpsLadderRung, ...]
+
+
+@dataclass(frozen=True)
 class IpsTriggers:
     """Thresholds that trigger a hedge review or rebalance.
 
@@ -715,6 +764,10 @@ class IpsConfig:
     # quotes then render ungraded. Not in defaulted_sections below: that
     # set means "running on code defaults", and this section has none.
     liquidity: IpsLiquidity | None = None
+    # 8d / #410: None when ips.yaml has no `strike_ladder:` section -- the
+    # ladder composer then seeds from the live book. Like `liquidity`, not
+    # in defaulted_sections: there is no code default to be running on.
+    strike_ladder: IpsStrikeLadder | None = None
     # #309: which of the optional sections above (market_environment,
     # sizing, vega, pricing_inputs, maturity_selection) were absent from
     # the loaded ips.yaml and are running on their DEFAULT_* module
@@ -1355,6 +1408,115 @@ def _parse_liquidity(config: dict[str, Any]) -> IpsLiquidity | None:
     )
 
 
+_LADDER_WEIGHT_SUM_TOLERANCE: Final[float] = 1e-6
+
+
+def _ladder_number(
+    rung: dict[str, Any],
+    index: int,
+    key: str,
+) -> float | None:
+    """Return ``rung[key]`` as a float (``None`` if absent)."""
+    if key not in rung:
+        return None
+    value = rung[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise IpsConfigError(
+            f"strike_ladder.rungs[{index}].{key} must be a number, "
+            f"got {value!r}",
+        )
+    return float(value)
+
+
+def _parse_ladder_rung(raw: object, index: int) -> IpsLadderRung:
+    """Validate one ``strike_ladder.rungs`` entry."""
+    if not isinstance(raw, dict):
+        raise IpsConfigError(
+            f"strike_ladder.rungs[{index}] must be a mapping, got {raw!r}",
+        )
+    pct_otm = _ladder_number(raw, index, "pct_otm")
+    weight_pct = _ladder_number(raw, index, "weight_pct")
+    maturity_years = _ladder_number(raw, index, "maturity_years")
+    if pct_otm is None or weight_pct is None:
+        raise IpsConfigError(
+            f"strike_ladder.rungs[{index}] requires both 'pct_otm' and "
+            "'weight_pct'",
+        )
+    if not 0.0 <= pct_otm < 100.0:
+        raise IpsConfigError(
+            f"strike_ladder.rungs[{index}].pct_otm must be in [0, 100), "
+            f"got {pct_otm!r}",
+        )
+    if weight_pct <= 0.0:
+        raise IpsConfigError(
+            f"strike_ladder.rungs[{index}].weight_pct must be > 0, "
+            f"got {weight_pct!r}",
+        )
+    if maturity_years is not None and maturity_years <= 0.0:
+        raise IpsConfigError(
+            f"strike_ladder.rungs[{index}].maturity_years must be > 0 or "
+            f"absent, got {maturity_years!r}",
+        )
+    return IpsLadderRung(
+        pct_otm=pct_otm,
+        weight_pct=weight_pct,
+        maturity_years=maturity_years,
+    )
+
+
+def _parse_strike_ladder(
+    config: dict[str, Any],
+    entry_tenor_years: float,
+) -> IpsStrikeLadder | None:
+    """Parse the optional ``strike_ladder`` policy section (8d, #410).
+
+    Absent -> ``None`` (the composer seeds from the live book). Present ->
+    ``rungs`` is required, non-empty, weights sum to 100 and no two rungs
+    repeat a (strike, tenor) pair, **after** an omitted tenor is resolved to
+    *entry_tenor_years* -- ``{20}`` and ``{20, maturity_years: 1.5}`` are the
+    same rung when the entry tenor is 1.5, and the ladder object rejects
+    them as one, so the loader must too. A partial or mis-weighted ladder
+    is an error rather than a silent renormalisation: the weights *are* the
+    policy being stated.
+    """
+    if "strike_ladder" not in config:
+        return None
+    section = config["strike_ladder"]
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'strike_ladder' section must be a mapping",
+        )
+    raw_rungs = _require_field(section, "strike_ladder", "rungs")
+    if not isinstance(raw_rungs, list) or not raw_rungs:
+        raise IpsConfigError(
+            "strike_ladder.rungs must be a non-empty list of "
+            "{pct_otm, weight_pct[, maturity_years]} mappings",
+        )
+    rungs = tuple(
+        _parse_ladder_rung(raw, index) for index, raw in enumerate(raw_rungs)
+    )
+    total = sum(rung.weight_pct for rung in rungs)
+    if abs(total - 100.0) > _LADDER_WEIGHT_SUM_TOLERANCE:
+        raise IpsConfigError(
+            f"strike_ladder.rungs weight_pct must sum to 100, got {total!r}",
+        )
+    keys = [
+        (
+            rung.pct_otm,
+            rung.maturity_years
+            if rung.maturity_years is not None
+            else entry_tenor_years,
+        )
+        for rung in rungs
+    ]
+    if len(set(keys)) != len(keys):
+        raise IpsConfigError(
+            "strike_ladder.rungs repeats a (pct_otm, maturity_years) pair; "
+            "merge the weights into one rung",
+        )
+    return IpsStrikeLadder(rungs=rungs)
+
+
 def _parse_monetization(config: dict[str, Any]) -> IpsMonetization:
     section = _require_section(config, "monetization")
     raw_schedule = _require_field(section, "monetization", "schedule")
@@ -1447,6 +1609,9 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         )
         if name not in config
     )
+    # Parsed ahead of the IpsConfig(...) call: the strike ladder resolves an
+    # omitted rung tenor against it.
+    maturity_selection = _parse_maturity_selection(config)
 
     return IpsConfig(
         program=_parse_program(config),
@@ -1461,8 +1626,12 @@ def load_ips_config(path: str | Path) -> IpsConfig:
         vega=_parse_vega(config),
         maturity_buckets=_parse_maturity_buckets(config),
         pricing_inputs=_parse_pricing_inputs(config),
-        maturity_selection=_parse_maturity_selection(config),
+        maturity_selection=maturity_selection,
         liquidity=_parse_liquidity(config),
+        strike_ladder=_parse_strike_ladder(
+            config,
+            maturity_selection.entry_tenor_years,
+        ),
         defaulted_sections=defaulted_sections,
     )
 
@@ -1624,8 +1793,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if absent_no_default:
             print(
                 "ips_config --check: optional sections absent from this "
-                "file that have NO code defaults — the feature they grade "
-                "runs ungraded until you add them: "
+                "file that have NO code defaults — the feature they drive "
+                "runs ungraded (or unseeded) until you add them: "
                 f"{', '.join(absent_no_default)}",
             )
     else:

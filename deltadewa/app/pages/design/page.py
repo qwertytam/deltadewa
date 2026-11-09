@@ -62,6 +62,7 @@ from .planning import (
     delta_drift,
     hedge_triggers,
     ladder,
+    ladder_composer,
     liquidity,
     monetization,
     position_aging,
@@ -119,6 +120,7 @@ _PLANNING_SECTIONS: Final = (
     market_env_panel.SECTION,
     sizing.SECTION,
     ladder.SECTION,
+    ladder_composer.SECTION,
     roll_plan.SECTION,
     roll_status.SECTION,
     provenance.SECTION,
@@ -216,6 +218,11 @@ def render(app: ProgramDashApp) -> html.Div:
                 basis_crash_skew=_BASIS_CRASH_SKEW,
             ),
             ladder.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                basis_crash_skew=_BASIS_CRASH_SKEW,
+            ),
+            ladder_composer.layout(
                 portfolio=portfolio,
                 ips_config=ips_config,
                 basis_crash_skew=_BASIS_CRASH_SKEW,
@@ -400,6 +407,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
     skew_beta.register(app, ips_config=ips_config)
     sizing.register(app, ips_config=ips_config)
     ladder.register(app, ips_config=ips_config)
+    ladder_composer.register(app, ips_config=ips_config)
     roll_plan.register(app, ips_config=ips_config)
     roll_status.register(app, ips_config=ips_config)
     provenance.register(app, ips_config=ips_config)

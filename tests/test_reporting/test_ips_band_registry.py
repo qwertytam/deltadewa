@@ -63,6 +63,7 @@ from deltadewa.ips_config import (
     IpsPricingInputs,
     IpsProgram,
     IpsSizing,
+    IpsStrikeLadder,
     IpsTriggers,
     IpsVega,
 )
@@ -173,6 +174,12 @@ _CLASSIFICATION: Final[dict[str, BandKind]] = {
     "liquidity.open_interest_min": BandKind.INTERPRETATION,
     # A review cadence, graded by the same rule as pricing_inputs.*.
     "liquidity.observation_max_age_days": BandKind.TRIGGER,
+    # ── The intended strike ladder (8d, #410) ─────────────────────────
+    # Strikes and contract-count weights the program means to hold: a
+    # design the composer sizes and scores, not a threshold anything is
+    # graded against. The bands the ladder is scored on are the existing
+    # budget/convexity/efficiency ones above.
+    "strike_ladder.rungs": BandKind.NOT_A_BAND,
 }
 
 #: IPS sections that define no thresholds at all — names, an exercise
@@ -217,6 +224,7 @@ def _ips_section_types() -> dict[str, type]:
         "pricing_inputs": IpsPricingInputs,
         "maturity_selection": IpsMaturitySelection,
         "liquidity": IpsLiquidity,
+        "strike_ladder": IpsStrikeLadder,
     }
     for field in dataclasses.fields(IpsConfig):
         if field.name in bookkeeping:

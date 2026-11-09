@@ -58,8 +58,9 @@ if TYPE_CHECKING:
 # PLANNING zone: dial default. Carried over from the ladder cell of
 # hedge_design.ipynb, which Stage 4.3 deleted — the starting point that
 # notebook hardcoded, kept here as an adjustable dial default. Genuinely
-# presentation, not policy: no IPS strike-selection section exists to read
-# it from, and inventing one is its own decision, not #316's.
+# presentation, not policy: the solver's delta grid. (The IPS's optional
+# strike_ladder: section, 8d, states *%OTM* rungs and weights for the
+# composer; it does not choose which deltas to browse.)
 _DEFAULT_LADDER_TARGET_DELTAS = "0.05, 0.10, 0.15"
 
 # #326: safe_render's BLOCKED remediation pointer for this panel, which
@@ -77,7 +78,8 @@ _LADDER_BLOCKED_HINT = (
 _ALONE_NOTE = (
     "Each row is a single strike sized to meet the IPS crash offset on "
     "its own. Contracts, convexity and budget are for that strike bought "
-    "alone -- not a share of a blended ladder."
+    "alone — not a share of a blended ladder. Use Add to put a strike into "
+    "the Ladder composer below, which scores a blend as one unit."
 )
 
 #: #357: this panel's TOC entry and heading id, from one source.
@@ -91,6 +93,12 @@ SECTION: Final[SectionSpec] = SectionSpec(
 # book.py's remove-confirm buttons already use).
 _SORT_STORE_ID: Final[str] = "ladder-sort-state"
 _SORT_HEADER_TYPE: Final[str] = "ladder-sort-header"
+
+#: 8d: the pattern-matching type of each row's "Add" button. Created here
+#: (one per solved row, id ``{type, pct_otm, maturity}``) and read by the
+#: ladder composer's callback, which imports this name rather than writing
+#: the string a second time (#308's cross-module id rule).
+ADD_RUNG_TYPE: Final[str] = "ladder-add-rung"
 
 
 class _SortState(TypedDict):
@@ -147,7 +155,7 @@ _COLUMNS: Final[tuple[_Column, ...]] = (
     ),
     _Column(
         "budget",
-        "Budget (alone)",
+        "Budget + band (alone)",
         lambda rung: float(rung.meets_target_within_budget),
     ),
 )
@@ -222,7 +230,9 @@ def _sort_header_row(sort_state: _SortState | None) -> html.Tr:
                 ),
             )
             for column in _COLUMNS
-        ],
+        ]
+        # 8d: not sortable -- a plain label over the per-row Add buttons.
+        + [html.Th("Ladder")],
     )
 
 
@@ -286,6 +296,19 @@ def _ladder_rung_row(rung: GridCell) -> html.Tr:
             html.Td(f"{rung.contracts_needed:,}"),
             html.Td(fmt.percent(rung.achieved_convexity_pct)),
             html.Td(verdict),
+            html.Td(
+                html.Button(
+                    "Add",
+                    id={
+                        "type": ADD_RUNG_TYPE,
+                        "pct_otm": round(rung.metrics.pct_otm, 2),
+                        "maturity": rung.maturity_years,
+                    },
+                    className="ladder-add-rung",
+                    n_clicks=0,
+                    title="Add this strike to the ladder composer below",
+                ),
+            ),
         ],
     )
 
