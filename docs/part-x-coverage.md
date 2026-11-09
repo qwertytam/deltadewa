@@ -1251,6 +1251,42 @@ quarters-sum-to-the-year and reconciliation.
 - Program cost since inception on `/monitor`.
 - The hedge-success gauge.
 
+**Failure isolation, as audited.** A blast-radius audit of the history code
+(a read-only agent over every surface it touches) found three real defects,
+fixed before merge, and four gaps left as follow-ons.
+
+*Fixed:*
+- **A non-UTF-8 or unreadable history file escaped as exit 3.** The store's
+  read raised `UnicodeDecodeError` / `OSError`, which the digest's
+  `HistoryCorruptError` handler did not catch, so a section-four problem
+  replaced the whole week's digest with a failure alert and skipped the
+  heartbeat. Every read failure now raises `HistoryCorruptError`, and the
+  digest's §4 builder is guarded broadly, the way `_take_weekly_mark` already
+  was.
+- **The revert after a failed journal write could skip the `dirty` flag.**
+  `_revert_unjournaled_change` runs inside an `except`; if its own reload
+  raised, `dirty` was never set, so `/health` read "no unsaved changes" over
+  a book holding an unjournaled change, and the original error was masked.
+  It now never raises: a failed revert falls through to keep-and-flag.
+- **A multi-record change was journaled one record at a time.** A failure
+  after the first record of a roll, or of clearing the book, left the
+  history holding half of a change that was then reverted. `append_events`
+  validates the whole set and writes it in one call.
+
+*Left as follow-ons:*
+- **`/health` has no history check**, so a corrupt `events.jsonl` leaves every
+  health check green. `state.history is not None` would always pass; a real
+  check needs to confirm the directory is writable, that `history_start`
+  exists, and that the latest mark is recent.
+- **The digest heartbeat cannot see history health.** An unreadable history
+  gives an UNREADABLE §4 on an otherwise good digest; it sends and pings
+  green. §4 is the only signal, and the headline does not carry it.
+- **With an empty book the digest refuses before sending**, so a mark failure
+  that week is only logged.
+- **Nothing exercises the trade methods in production.** `open_position`,
+  `close_position`, `settle_position` and `roll_position` have no caller
+  outside tests (the first follow-on above).
+
 ## Book changes (#262)
 
 Issue #262 asked for a view of `ProgramState`'s change log, on the premise

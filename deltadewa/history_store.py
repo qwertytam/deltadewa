@@ -56,6 +56,7 @@ from deltadewa.portfolio.history import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from datetime import date
     from pathlib import Path
 
@@ -152,13 +153,7 @@ class HistoryStore:
             HistoryCorruptError: If the existing history is unreadable.
 
         """
-        current = self.load()
-        PositionHistory(
-            recorded_fills=(*current.recorded_fills, fill),
-            edits=current.edits,
-            marks=current.marks,
-        )
-        _append_line(self.events_path, fill)
+        self.append_events([fill])
 
     def append_edit(self, edit: BookEdit) -> None:
         """Append one book edit.
@@ -168,7 +163,34 @@ class HistoryStore:
 
         """
         self.load()
-        _append_line(self.events_path, edit)
+        _append_lines(self.events_path, [edit])
+
+    def append_events(self, records: Sequence[Fill | BookEdit]) -> None:
+        """Append several fills and edits as one change, all or none.
+
+        One book change can be several records (a roll is a close and an
+        open; clearing the book is a delete per lot). Written one at a time,
+        a failure part-way would leave the history holding some records of a
+        change that the caller then reverts. Here every record is validated
+        against the history as it would stand with all of them, then the
+        lines go down in a single write, so a failure leaves none (or, if
+        the write itself is cut short, a torn final line that the next read
+        reports rather than skips).
+
+        Raises:
+            ValueError: If the history would not read back with the records,
+                e.g. a correction of an event that was never recorded.
+            HistoryCorruptError: If the existing history is unreadable.
+
+        """
+        current = self.load()
+        fills = [r for r in records if isinstance(r, Fill)]
+        PositionHistory(
+            recorded_fills=(*current.recorded_fills, *fills),
+            edits=current.edits,
+            marks=current.marks,
+        )
+        _append_lines(self.events_path, records)
 
     def append_mark(self, mark: BookMark) -> bool:
         """Append a mark unless its date is already marked.
@@ -202,16 +224,21 @@ class HistoryStore:
                 f"mark for {mark.mark_date} is earlier than the latest mark "
                 f"({current.marks[-1].mark_date}); marks only move forward",
             )
-        _append_line(self.marks_path, mark)
+        _append_lines(self.marks_path, [mark])
         return True
 
 
-def _append_line(path: Path, record: HistoryRecord) -> None:
-    """Append *record* as one line in one write, then ``fsync`` it."""
+def _append_lines(path: Path, records: Sequence[HistoryRecord]) -> None:
+    """Append *records*, one line each, in one write, then ``fsync`` it."""
+    if not records:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(record.to_json(), separators=(",", ":")) + "\n"
+    text = "".join(
+        json.dumps(record.to_json(), separators=(",", ":")) + "\n"
+        for record in records
+    )
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(line)
+        handle.write(text)
         handle.flush()
         os.fsync(handle.fileno())
 
@@ -220,7 +247,20 @@ def _read_records(path: Path) -> list[HistoryRecord]:
     """Decode every line of *path*; a missing file is an empty history."""
     if not path.exists():
         return []
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        # Not "corrupt" in the sense of a bad line, but the same thing to
+        # every caller: the history cannot be read, and nothing may be
+        # guessed. Raising the one type they already handle keeps a
+        # permissions fault or a non-UTF-8 byte from escaping as something
+        # nobody catches (the digest would otherwise fail outright over a
+        # section-four problem).
+        raise HistoryCorruptError(
+            f"{path}: cannot be read ({type(exc).__name__}: {exc}). "
+            "Nothing was skipped; check the file's permissions and "
+            "encoding, or restore it from the offsite backup",
+        ) from exc
     lines = text.split("\n")
     # A complete file ends with "\n", leaving one empty trailing element.
     torn_tail = lines[-1] != ""

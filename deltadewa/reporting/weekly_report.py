@@ -114,7 +114,6 @@ from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
 from deltadewa.history_cli import MarkOutcome, take_mark
-from deltadewa.history_store import HistoryCorruptError
 from deltadewa.marketdata import (
     CboeFredProvider,
     default_cache_dir,
@@ -1016,15 +1015,23 @@ def _realized_section(
             mark_note=mark_note,
         )
     try:
-        history = store.load()
-    except HistoryCorruptError as exc:
+        return build_realized_carry_section(
+            store.load(),
+            mark_note=mark_note,
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Broad on purpose, and not just HistoryCorruptError (which the
+        # store raises for every read failure): section four is the
+        # newest, least essential part of the digest, and a raise here
+        # would reach main()'s outer handler and replace the whole week's
+        # digest with a failure alert and skip the heartbeat. The same
+        # reasoning as _take_weekly_mark, one step over.
         _logger.exception("weekly_report: position history unreadable")
         return RealizedCarrySection(
             status=RealizedStatus.UNREADABLE,
             error=str(exc),
             mark_note=mark_note,
         )
-    return build_realized_carry_section(history, mark_note=mark_note)
 
 
 # ── Guarded body build (#364) ───────────────────────────────────────────

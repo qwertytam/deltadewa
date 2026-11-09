@@ -701,11 +701,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         """
         if self._history is not None:
             try:
-                for record in records:
-                    if isinstance(record, Fill):
-                        self._history.append_fill(record)
-                    else:
-                        self._history.append_edit(record)
+                self._history.append_events(records)
             except Exception:
                 self._revert_unjournaled_change()
                 raise
@@ -720,27 +716,41 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         the change cleanly. Otherwise reloading would lose something, so
         the change is kept, marked unsaved, and left for
         ``reconcile_book`` to report.
+
+        **Never raises.** This runs inside the caller's ``except``, so a
+        raise here would replace the journal error the operator needs to see
+        with a reload error, and — worse — skip the ``dirty`` flag below,
+        leaving ``/health`` reporting "no unsaved changes" over a book that
+        holds one. Any failure to revert falls through to the same
+        keep-and-flag path as a revert that was never safe.
         """
         try:
-            on_disk = self._state_path.stat().st_mtime
-        except FileNotFoundError:
+            on_disk: float | None = self._state_path.stat().st_mtime
+        except OSError:
             on_disk = None
         if (
             not self._dirty
             and on_disk is not None
             and on_disk == self._own_mtime
         ):
-            result = self._serializer.import_from_json(
-                self._state_path,
-                default_exercise_style=self._default_exercise_style,
-                valuation_date=self._portfolio.valuation_date,
-            )
-            self._portfolio = result["portfolio"]
-            _logger.error(
-                "Position history write failed; the book was reverted to "
-                "its last save so the two still agree",
-            )
-            return
+            try:
+                result = self._serializer.import_from_json(
+                    self._state_path,
+                    default_exercise_style=self._default_exercise_style,
+                    valuation_date=self._portfolio.valuation_date,
+                )
+            except Exception:  # pylint: disable=broad-exception-caught
+                _logger.exception(
+                    "Reloading the last save to undo an unjournaled change "
+                    "failed",
+                )
+            else:
+                self._portfolio = result["portfolio"]
+                _logger.error(
+                    "Position history write failed; the book was reverted "
+                    "to its last save so the two still agree",
+                )
+                return
         self._dirty = True
         _logger.error(
             "Position history write failed and the book could not be "
@@ -862,7 +872,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                         price_per_share=entry_premium,
                         fees=None,
                         trade_date=self._program_date(entry_date),
-                        note="entered through add_position; fees not captured",
+                        note="entered through add_position",
                     ),
                 ],
             )

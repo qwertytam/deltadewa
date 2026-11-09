@@ -170,3 +170,58 @@ class TestNothingIsSkipped:
         store.events_path.write_text("{broken\n")
         with pytest.raises(HistoryCorruptError):
             store.append_fill(fill(FillKind.OPEN, "a", 1, 1.0, day=D3))
+
+    def test_non_utf8_bytes_are_a_corruption_not_a_crash(
+        self,
+        store: HistoryStore,
+    ) -> None:
+        """A byte that is not UTF-8 raises the one type callers handle."""
+        store.root.mkdir(parents=True)
+        store.events_path.write_bytes(b"\xff\xfe not text\n")
+        with pytest.raises(HistoryCorruptError, match="cannot be read"):
+            store.load()
+
+    def test_an_unreadable_path_is_a_corruption_not_a_crash(
+        self,
+        store: HistoryStore,
+    ) -> None:
+        """A directory where the file should be (EISDIR) is the same."""
+        store.events_path.mkdir(parents=True)
+        with pytest.raises(HistoryCorruptError, match="cannot be read"):
+            store.load()
+
+
+class TestAppendEvents:
+    """Several records for one change are written all or none."""
+
+    def test_records_land_in_order_in_one_write(
+        self,
+        store: HistoryStore,
+    ) -> None:
+        first = fill(FillKind.OPEN, "a", 1, 1.0, day=D1)
+        second = fill(FillKind.OPEN, "b", 1, 1.0, day=D1)
+        gone = edit(EditKind.DELETE, "a", day=D2, quantity_before=1)
+        store.append_events([first, second, gone])
+        history = store.load()
+        assert history.recorded_fills == (first, second)
+        assert history.edits == (gone,)
+        assert store.events_path.read_text().count("\n") == 3
+
+    def test_one_bad_record_writes_none_of_them(
+        self,
+        store: HistoryStore,
+    ) -> None:
+        """A good fill followed by a correction of nothing: neither lands."""
+        good = fill(FillKind.OPEN, "a", 1, 1.0, day=D1)
+        bad = fill(FillKind.OPEN, "b", 1, 1.0, day=D1, supersedes="missing")
+        with pytest.raises(ValueError, match="never recorded"):
+            store.append_events([good, bad])
+        assert not store.events_path.exists()
+
+    def test_nothing_to_append_creates_nothing(
+        self,
+        store: HistoryStore,
+    ) -> None:
+        """An empty change is not a write."""
+        store.append_events([])
+        assert not store.root.exists()

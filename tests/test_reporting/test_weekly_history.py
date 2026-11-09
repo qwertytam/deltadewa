@@ -144,3 +144,37 @@ def test_empty_book_is_refused_but_still_marked(
     marks = HistoryStore(tmp_path / "history").load().marks
     assert len(marks) == 1
     assert marks[0].hedge_value == pytest.approx(0.0)
+
+
+def test_non_utf8_history_degrades_section_four_not_the_digest(
+    export_dir: Path,
+) -> None:
+    """An unreadable file once escaped as exit 3 and cost the whole digest."""
+    history = export_dir / "history"
+    history.mkdir(exist_ok=True)
+    (history / "events.jsonl").write_bytes(b"\xff\xfe not utf-8\n")
+    assert _run(export_dir) == _EXIT_OK
+    text = _digest_text(export_dir)
+    assert "The position history could not be read:" in text
+    assert "cannot be read" in text
+
+
+def test_a_raise_building_section_four_does_not_cost_the_digest(
+    export_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whatever §4's builder raises, the rest of the digest still sends."""
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("simulated §4 failure")
+
+    monkeypatch.setattr(
+        weekly_report_module,
+        "build_realized_carry_section",
+        _boom,
+    )
+    assert _run(export_dir) == _EXIT_OK
+    text = _digest_text(export_dir)
+    assert "The position history could not be read: simulated §4 failure" in (
+        text
+    )

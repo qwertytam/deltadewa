@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from deltadewa import history_store
 from deltadewa.analysis.realized_carry import reconcile_book
 from deltadewa.clock import program_now
 from deltadewa.constants import ExerciseStyle, OptionType
@@ -398,7 +399,7 @@ class TestJournalFailure:
         def _disk_full(*_args: object, **_kwargs: object) -> None:
             raise OSError("No space left on device")
 
-        monkeypatch.setattr(HistoryStore, "append_fill", _disk_full)
+        monkeypatch.setattr(history_store, "_append_lines", _disk_full)
         with pytest.raises(OSError, match="No space"):
             state.open_position(_order(2, strike_price=4000.0))
         assert [p.position_id for p in state.portfolio.positions] == [
@@ -416,11 +417,68 @@ class TestJournalFailure:
         def _disk_full(*_args: object, **_kwargs: object) -> None:
             raise OSError("No space left on device")
 
-        monkeypatch.setattr(HistoryStore, "append_fill", _disk_full)
+        monkeypatch.setattr(history_store, "_append_lines", _disk_full)
         with pytest.raises(OSError, match="No space"):
             state.open_position(_order())
         assert state.dirty
         assert len(state.portfolio.positions) == 1
+
+    def test_a_failed_revert_cannot_mask_the_error_or_skip_the_flag(
+        self,
+        state: ProgramState,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """If reloading the last save fails, the book is flagged, not trusted.
+
+        The journal error is what the operator must see, and ``dirty`` is
+        what /health reads: a raise from the revert would replace the first
+        and skip the second.
+        """
+        state.open_position(_order(1))
+
+        def _disk_full(*_args: object, **_kwargs: object) -> None:
+            raise OSError("No space left on device")
+
+        def _unreadable(*_args: object, **_kwargs: object) -> None:
+            raise ValueError("state file is unreadable")
+
+        monkeypatch.setattr(history_store, "_append_lines", _disk_full)
+        monkeypatch.setattr(
+            state._serializer,
+            "import_from_json",
+            _unreadable,
+        )
+        with pytest.raises(OSError, match="No space"):
+            state.open_position(_order(2, strike_price=4000.0))
+        assert state.dirty
+        # The unjournaled change is still in memory, and flagged as unsaved.
+        assert len(state.portfolio.positions) == 2
+
+    def test_a_multi_record_change_is_all_or_nothing(
+        self,
+        state: ProgramState,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A roll that cannot be journaled leaves no half of it behind."""
+        old = state.open_position(_order(10))
+        before = _history(state).events_path.read_text()
+
+        def _disk_full(*_args: object, **_kwargs: object) -> None:
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(history_store, "_append_lines", _disk_full)
+        with pytest.raises(OSError, match="No space"):
+            state.roll_position(
+                old.position_id,
+                close_price_per_share=20.0,
+                close_fees=0.0,
+                into=_order(10, strike_price=4400.0),
+                confirm=True,
+            )
+        assert _history(state).events_path.read_text() == before
+        assert [p.position_id for p in state.portfolio.positions] == [
+            old.position_id,
+        ]
 
 
 def test_trades_alone_reconcile_against_the_book(
