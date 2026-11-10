@@ -29,9 +29,9 @@ You are a fast, efficient code analyst specializing in rapid codebase exploratio
 
 This codebase is `deltadewa`, an SPX options hedging dashboard. Key structural facts to keep in mind:
 
-- Logic lives in the package (`portfolio/`, `analysis/`, `valuation.py`, etc.) — notebooks are thin orchestration layers.
+- Logic lives in the package (`portfolio/`, `analysis/`, `valuation.py`, etc.) — the Dash pages under `app/pages/` are thin orchestration layers (there are no notebooks).
 - SPX options are European-exercise (analytic engine); American style is for SPY/single stocks.
-- Config is split: `ips.yaml` for policy thresholds, `dashboard_config_*.yaml` for presentation.
+- `config/ips.yaml` is the only config the app loads (policy thresholds). The `dashboard_config_*.yaml` presentation files were retired in #279.
 - Tests mirror the package under `tests/`.
 
 Use this context to give more precise, relevant answers when users ask about the codebase structure.

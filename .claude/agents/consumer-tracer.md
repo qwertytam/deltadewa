@@ -20,8 +20,10 @@ inventory. You never edit.
    config path, quoted string form).
 2. Classify each hit: SOURCE (live read) / TEST / DOC / EXAMPLE-CONFIG / COMMENT.
 3. For SOURCE hits, read enough surrounding context to say _which file the value
-   is read from_ — this repo has near-duplicate keys across `config/ips.yaml`
-   and `config/dashboard.yaml`, and the distinction is the whole point.
+   is read from_. A policy key appears in the loader and validator
+   (`deltadewa/ips_config.py`), in both shipped templates, and in a live
+   `config/ips.yaml` that a clone does not have. Say which of those a hit
+   is, and whether anything reads the key at runtime or only validates it.
 4. Note any consumer with no test coverage. Flag it explicitly.
 5. **Qualify by import path before counting a hit.** A bare name can collide
    with a live module elsewhere (`scenarios.py`, `stress.py` and the
@@ -58,5 +60,16 @@ inventory. You never edit.
 ## Project Context
 
 - Python >=3.11, Poetry. Package under `deltadewa/`, tests mirror under `tests/`.
-- `config/ips.yaml` = policy. `config/dashboard.yaml` = presentation.
-- `examples/dashboard/*.yaml` are profile variants that also carry config keys.
+- `config/ips.yaml` is the **only** config the app loads (policy: carry
+  budget, convexity band, triggers, thresholds). It is gitignored and baked
+  into the image at build time, so it is absent from a clone and from CI.
+  Its tracked templates are `config/ips.example.yaml` and
+  `examples/ips/ips_default.yaml`; a key change must touch both, plus
+  `ips_config.py`. `python -m deltadewa.ips_config --check <file>` lists keys
+  that have no code default.
+- The `dashboard.yaml` / `dashboard_config_*.yaml` presentation surface and
+  `examples/dashboard/` were **retired in #279**. A hit on those names is
+  history (CHANGELOG, `docs/`), not a live reader; do not report it as a
+  consumer.
+- `examples/portfolios/*.yaml` are portfolio files (positions and market
+  inputs), not config: they carry no policy keys.
