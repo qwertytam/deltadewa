@@ -471,20 +471,32 @@ sudo rm -f /tmp/exports.tar   # root-owned (age -d ran via sudo above)
 #    which just landed with step 2a above. Read its manifest FIRST:
 cat ~/deltadewa/exports/config-backup/MANIFEST.json
 #   {"written_by": "backup-exports.sh", "source": "config/ips.yaml",
-#    "sha256": "<64 hex chars>", "app_version": "0.9.2",
+#    "sha256": "<64 hex chars>", "app_version": "0.9.3",
+#    "git_commit": "<40 hex chars, or unknown>",
 #    "policy_changed_at": "<UTC timestamp>"}
 #
-#   `app_version` is the last app version this exact policy file is KNOWN
-#   to load on. This matters because it will usually NOT be whatever tag
-#   step 1's plain `git clone` left you on: check out that exact version
-#   now — a policy file always loads on the version it was captured
-#   under — get the program running as it was, THEN upgrade forward
-#   through §4's normal deploy path, where the release notes carry each
-#   schema change. Do not skip straight to the latest tag here; that is
-#   what §7.2 below is for, when this version is unavailable.
+#   `git_commit` is the exact commit the app checkout was on when this
+#   policy file was captured, and `app_version` is the version string
+#   in that commit's pyproject.toml. This matters because it will
+#   usually NOT be whatever tag step 1's plain `git clone` left you on:
+#   check out that exact commit now — a policy file always loads on the
+#   version it was captured under — get the program running as it was,
+#   THEN upgrade forward through §4's normal deploy path, where the
+#   release notes carry each schema change. Do not skip straight to the
+#   latest tag here; that is what §7.2 below is for, when this version
+#   is unavailable.
+#
+#   Prefer `git_commit`: a version string need not be a tag (0.9.2 was
+#   deployed from main and never tagged, #450), and one version spans
+#   every commit between two tags. Use the tag only when `git_commit`
+#   is "unknown" (a backup from before this field existed, or a
+#   checkout the script could not read), and if that tag does not exist
+#   either, say so in the drill record and go to §7.2.
 cd ~/deltadewa
 git fetch --tags
-git checkout v<app_version from the manifest above>   # e.g. v0.9.2
+git checkout <git_commit from the manifest above>
+#   ...or, only if git_commit is "unknown" and the tag exists:
+#   git checkout v<app_version from the manifest above>
 cp ~/deltadewa/exports/config-backup/ips.yaml ~/deltadewa/config/ips.yaml
 
 # 3. Bring it up — build both, name both (§1, #293), then start
@@ -692,7 +704,7 @@ routine. See §14 for how often.
    real recovery does.
 
 6. **Record the run** in the private ops doc: date, the backup commit
-   sha from step 1, the `app_version` from step 2, and the outcome of
+   sha from step 1, the `app_version` and `git_commit` from step 2, and the outcome of
    steps 4 and 5. Then discard the scratch clone and every step-5
    temp file (all root-owned — `age -d`/`tar` above ran via `sudo`):
 
@@ -709,9 +721,10 @@ This is the actual recovery scenario for anything but the newest backup
 — not a fallback path, the expected one. `--check`'s error names exactly
 one problem per run; work through it rather than guessing:
 
-1. **Prefer time-travel over hand-repair.** Check out the tag
-   `MANIFEST.json`'s `app_version` names (`git checkout v<version>`, per
-   step 2b above) rather than the latest tag. A policy file always loads
+1. **Prefer time-travel over hand-repair.** Check out the commit
+   `MANIFEST.json`'s `git_commit` names (or, if that is `unknown`, the
+   tag `app_version` names: `git checkout v<version>`, per step 2b
+   above) rather than the latest tag. A policy file always loads
    on the version it was captured under — this gets the program running
    exactly as it was. Only fall back to the steps below if that tag is
    genuinely unavailable (a corrupted/incomplete checkout, or a version
@@ -797,7 +810,7 @@ one problem per run; work through it rather than guessing:
   `deltadewa/history_store.py`).
 - **`exports/config-backup/`** — a nightly copy of `config/ips.yaml` and
   a small manifest (`ips.yaml`, `MANIFEST.json`: `sha256`, `app_version`,
-  `policy_changed_at`), staged by `ops/backup-exports.sh` on every run
+  `git_commit`, `policy_changed_at`), staged by `ops/backup-exports.sh` on every run
   (#301). This is a **copy for recovery, not a live source** — the app
   never reads it; it only exists so the offsite push carries the
   program's real policy, not just its portfolio state. `config/ips.yaml`
@@ -1313,11 +1326,15 @@ About five minutes, quarterly:
    IPS key**, not only on the quarterly cadence. That is the moment an
    old backup actually goes stale; waiting for the next quarter to find
    out means carrying an unverified backup for as long as three months.
-4. **`MANIFEST.json`'s `app_version` matches what's actually running.**
-   A mismatch here (without a version bump in between) would mean
-   `stage_policy_snapshot()` stopped reading `pyproject.toml` correctly
-   — worth a one-line sanity check, not a full investigation, since step
-   2 already exercises the same manifest.
+4. **`MANIFEST.json`'s `app_version` and `git_commit` match what's
+   actually running.** A mismatch here (without a deploy in between)
+   would mean `stage_policy_snapshot()` stopped reading `pyproject.toml`
+   or `.git` correctly — worth a one-line sanity check, not a full
+   investigation, since step 2 already exercises the same manifest. A
+   `git_commit` of `unknown` on a live deploy is itself a finding: the
+   restore then falls back to a tag that may not exist (#450). Also
+   confirm `app_version` names a tag that exists (`git tag -l`); if it
+   does not, the commit is the only way back.
 5. **The escrow key holder still has their copy, and still knows what
    it's for** (#320). Step 2's drill already proves the escrowed
    *public* key on this droplet decrypts real backups — it cannot prove

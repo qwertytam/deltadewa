@@ -694,8 +694,107 @@ class TestPolicySnapshot:
             "source",
             "sha256",
             "app_version",
+            "git_commit",
             "policy_changed_at",
         }
+
+    @staticmethod
+    def _manifest_commit(repo_dir: Path) -> str:
+        path = repo_dir / "exports" / "config-backup" / "MANIFEST.json"
+        return str(json.loads(path.read_text())["git_commit"])
+
+    @staticmethod
+    def _init_app_checkout(repo_dir: Path) -> str:
+        """Make ``repo_dir`` a real one-commit repo; return its HEAD sha."""
+        _git("init", "-q", "-b", "main", cwd=repo_dir)
+        (repo_dir / "pyproject.toml").write_text(
+            '[tool.poetry]\nversion = "1.2.3"\n',
+        )
+        _git("add", "pyproject.toml", cwd=repo_dir)
+        _git(
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-q",
+            "-m",
+            "seed",
+            cwd=repo_dir,
+        )
+        return _git("rev-parse", "HEAD", cwd=repo_dir).stdout.strip()
+
+    def test_manifest_records_the_checkout_commit(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#450: ``app_version`` need not be a tag (0.9.2 never was), so
+        the manifest also names the commit the checkout is on. Resolved
+        from ``.git`` as plain files, never by running git there.
+        """
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir)
+        head = self._init_app_checkout(repo_dir)
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        assert self._manifest_commit(repo_dir) == head
+
+    def test_commit_resolves_through_packed_refs(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir)
+        head = self._init_app_checkout(repo_dir)
+        _git("pack-refs", "--all", cwd=repo_dir)
+        assert not (repo_dir / ".git" / "refs" / "heads" / "main").exists()
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        assert self._manifest_commit(repo_dir) == head
+
+    def test_commit_resolves_for_a_detached_head(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A tag checkout (the restore path itself) leaves a bare sha."""
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir)
+        head = self._init_app_checkout(repo_dir)
+        _git("checkout", "-q", "--detach", head, cwd=repo_dir)
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        assert self._manifest_commit(repo_dir) == head
+
+    @pytest.mark.parametrize(
+        "head_text",
+        [None, "ref: refs/heads/gone\n", "not-a-sha\n"],
+        ids=["no-git-dir", "dangling-ref", "malformed"],
+    )
+    def test_unreadable_commit_is_unknown_not_guessed(
+        self,
+        tmp_path: Path,
+        head_text: str | None,
+    ) -> None:
+        """An unresolvable HEAD must not fail the backup or invent a sha."""
+        repo_dir, remote = _seeded_exports(tmp_path)
+        _write_policy(repo_dir)
+        if head_text is not None:
+            git_dir = repo_dir / ".git"
+            git_dir.mkdir()
+            (git_dir / "HEAD").write_text(head_text)
+
+        result = _run(repo_dir, remote)
+
+        assert result.returncode == 0, result.stderr
+        assert self._manifest_commit(repo_dir) == "unknown"
 
     def test_unchanged_policy_across_runs_stays_a_clean_noop(
         self,

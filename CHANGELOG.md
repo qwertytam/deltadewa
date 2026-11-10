@@ -17,6 +17,29 @@ history for that record instead.
 
 ## [Unreleased]
 
+### Fixed
+
+- **#450 — the restore drill could name a version that was never tagged.**
+  `config-backup/MANIFEST.json` recorded only `pyproject.toml`'s version,
+  and RUNBOOK §7 does `git checkout v<app_version>`; `0.9.2` was deployed
+  from `main` and never tagged, so that checkout had nothing to resolve.
+  The manifest now also records `git_commit`, read out of the app
+  checkout's `.git` as plain files (never by running git there, per #237),
+  and `unknown` when it cannot be resolved. RUNBOOK §7 / §7.1 / §7.2
+  prefer the commit and fall back to the tag. Manifests written before
+  this change have no `git_commit` and use the tag path as before.
+
+## [0.9.3] - 2026-11-10
+
+> **One block, not one release.** This section is everything since `v0.7.0`.
+> Versioned headings stopped at 0.7.0, so the tags `v0.8.0`–`v0.8.6`,
+> `v0.9.0` and `v0.9.1` never got entries and `0.9.2` was never tagged.
+> Entries were grouped by kind (Added/Changed/Removed/Fixed), not by
+> release, and are not split back out here: use the PR numbers and the
+> `v*` tags to place an entry. From this point each release gets its own
+> heading. This heading assumes `v0.9.3` is tagged from `main` once it
+> carries the 0.9.3 version bump.
+
 ### Added
 
 - **#262 — `/design` Book changes panel.** A readable log of every change to
@@ -519,7 +542,8 @@ Phase 1 close-out and the start of Phase 2, tagged together:
 - **M2.2 — Dash skeleton + shared layer** (#212) — the two-page app
   scaffold and `state.ProgramState`. Observation provenance (#213).
 
-[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/qwertytam/deltadewa/compare/v0.7.0...v0.9.3
 [0.7.0]: https://github.com/qwertytam/deltadewa/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/qwertytam/deltadewa/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/qwertytam/deltadewa/compare/v0.4.2...v0.5.0
