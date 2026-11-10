@@ -260,6 +260,37 @@ POLICY_DEST="${POLICY_BACKUP_DIR}/ips.yaml"
 POLICY_MANIFEST="${POLICY_BACKUP_DIR}/MANIFEST.json"
 POLICY_MISSING_MARKER="${POLICY_BACKUP_DIR}/POLICY-MISSING.txt"
 
+# Print the commit sha a checkout's `.git` directory points at, or
+# "unknown". Plain file reads only — see the note in stage_policy_snapshot.
+read_checkout_commit() {
+    local git_dir="$1" head ref sha
+    if [ ! -f "${git_dir}/HEAD" ]; then
+        echo "unknown"
+        return 0
+    fi
+    head="$(head -1 "${git_dir}/HEAD" 2>/dev/null)"
+    case "${head}" in
+        "ref: "*)
+            ref="${head#ref: }"
+            sha=""
+            if [ -f "${git_dir}/${ref}" ]; then
+                sha="$(head -1 "${git_dir}/${ref}" 2>/dev/null)"
+            elif [ -f "${git_dir}/packed-refs" ]; then
+                sha="$(
+                    awk -v r="${ref}" '$2 == r { print $1; exit }' \
+                        "${git_dir}/packed-refs"
+                )"
+            fi
+            ;;
+        *) sha="${head}" ;;
+    esac
+    if printf '%s' "${sha}" | grep -Eq '^([0-9a-f]{40}|[0-9a-f]{64})$'; then
+        echo "${sha}"
+    else
+        echo "unknown"
+    fi
+}
+
 stage_policy_snapshot() {
     mkdir -p "${POLICY_BACKUP_DIR}"
 
@@ -298,6 +329,18 @@ stage_policy_snapshot() {
         [ -n "${app_version}" ] || app_version="unknown"
     fi
 
+    # The commit that checkout is on (#450). `app_version` alone cannot
+    # promise a tag exists (0.9.2 was deployed from main and never tagged),
+    # and one version string spans many commits between tags, so the
+    # restore in RUNBOOK §7 prefers this. Read straight out of `.git` as
+    # plain files, for the same no-git-against-REPO_DIR reason as above:
+    # HEAD is either a bare sha (detached, e.g. a tag checkout) or a
+    # `ref: refs/heads/X` line, resolved through the loose ref and then
+    # packed-refs. Anything else (a worktree's `.git` file, a missing or
+    # malformed ref) is "unknown" — recorded as unknown, never guessed.
+    local git_commit
+    git_commit="$(read_checkout_commit "${REPO_DIR}/.git")"
+
     # policy_changed_at tracks the last run whose sha256 actually
     # differed from the previous manifest — not "last run", which would
     # just repeat today's date every night regardless of whether the
@@ -323,8 +366,9 @@ stage_policy_snapshot() {
     # manifest — see the no-churn note above the function.
     local tmp_manifest
     tmp_manifest="$(mktemp)"
-    printf '{\n  "written_by": "backup-exports.sh",\n  "source": "config/ips.yaml",\n  "sha256": "%s",\n  "app_version": "%s",\n  "policy_changed_at": "%s"\n}\n' \
-        "${policy_sha256}" "${app_version}" "${policy_changed_at}" \
+    printf '{\n  "written_by": "backup-exports.sh",\n  "source": "config/ips.yaml",\n  "sha256": "%s",\n  "app_version": "%s",\n  "git_commit": "%s",\n  "policy_changed_at": "%s"\n}\n' \
+        "${policy_sha256}" "${app_version}" "${git_commit}" \
+        "${policy_changed_at}" \
         > "${tmp_manifest}"
     if ! cmp -s "${tmp_manifest}" "${POLICY_MANIFEST}" 2>/dev/null; then
         mv "${tmp_manifest}" "${POLICY_MANIFEST}"

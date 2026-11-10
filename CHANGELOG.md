@@ -17,7 +17,17 @@ history for that record instead.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **#450 — the restore drill could name a version that was never tagged.**
+  `config-backup/MANIFEST.json` recorded only `pyproject.toml`'s version,
+  and RUNBOOK §7 does `git checkout v<app_version>`; `0.9.2` was deployed
+  from `main` and never tagged, so that checkout had nothing to resolve.
+  The manifest now also records `git_commit`, read out of the app
+  checkout's `.git` as plain files (never by running git there, per #237),
+  and `unknown` when it cannot be resolved. RUNBOOK §7 / §7.1 / §7.2
+  prefer the commit and fall back to the tag. Manifests written before
+  this change have no `git_commit` and use the tag path as before.
 
 ## [0.9.3] - 2026-11-10
 
