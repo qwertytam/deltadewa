@@ -242,6 +242,7 @@ deltadewa/
 ├── docs/
 │   ├── market-data.md     # what is observed vs hand-entered; read before trusting a number
 │   ├── part-x-coverage.md # handbook-item → surface map; read before moving a panel
+│   ├── RELEASING.md       # how a version is cut and tagged; keeps CHANGELOG.md current
 │   └── yaml-config-guide.md
 ├── pyproject.toml
 └── tests/

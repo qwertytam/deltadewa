@@ -31,6 +31,12 @@ ruff format .              # line length 80
 pylint deltadewa          # must score 10.00/10, not just "no errors"
 ```
 
+A change with a user-visible or operator-visible effect also adds an entry
+under `## [Unreleased]` in `CHANGELOG.md`, in the same PR; a PR with none
+says "no changelog entry: <why>". Versions are cut in their own release
+PR and tagged from `main` before any deploy: see `docs/RELEASING.md`. Do
+not bump `pyproject.toml`'s version in an ordinary PR.
+
 `pylint`'s bar is the full score, not just a non-error exit — a 9.8x with
 warnings still fails the gate. If your change touches config, ops
 scripts, or anything that could sit next to real operational values, scan

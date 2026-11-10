@@ -556,6 +556,15 @@ records what must *not* be re-added.
 - Make small, reviewable commits with conventional-commit messages.
 - Read the relevant existing module before adding a sibling — match its style.
 - Always create/checkout a feature branch before making changes; never commit directly to `main`
+- **Keep `CHANGELOG.md` current**: a PR with a user- or operator-visible effect adds
+  its entry under `## [Unreleased]` in the same PR, or says "no changelog entry: <why>"
+  in the PR body. Never bump `pyproject.toml`'s version in an ordinary PR. A release is
+  its own PR (rename `[Unreleased]`, bump the version, fix the links) followed by an
+  annotated tag from `main` *before* any deploy — `docs/RELEASING.md` has the steps and
+  `tests/test_changelog.py` fails if the newest heading and `pyproject.toml` disagree.
+- Never push to a PR branch after it has merged: a squash-merge does not include late
+  commits and the push recreates the branch on the remote (hit twice, #444 and #449).
+  Check `gh pr view <n> --json state` immediately before pushing.
 
 ## Model & sub-agent usage
 

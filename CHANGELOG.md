@@ -17,17 +17,16 @@ history for that record instead.
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- **#450 — the restore drill could name a version that was never tagged.**
-  `config-backup/MANIFEST.json` recorded only `pyproject.toml`'s version,
-  and RUNBOOK §7 does `git checkout v<app_version>`; `0.9.2` was deployed
-  from `main` and never tagged, so that checkout had nothing to resolve.
-  The manifest now also records `git_commit`, read out of the app
-  checkout's `.git` as plain files (never by running git there, per #237),
-  and `unknown` when it cannot be resolved. RUNBOOK §7 / §7.1 / §7.2
-  prefer the commit and fall back to the tag. Manifests written before
-  this change have no `git_commit` and use the tag path as before.
+- **#451 — a written release procedure, and a test that holds it.**
+  `docs/RELEASING.md` says when a version is bumped, how a release PR cuts
+  `[Unreleased]` into a dated heading, that the annotated tag is pushed from
+  `main` before any deploy, and that an ordinary PR adds its own entry under
+  `[Unreleased]`. `tests/test_changelog.py` fails if the newest versioned
+  heading and `pyproject.toml`'s version disagree, if `[Unreleased]` is not
+  first, or if a heading has no link reference. A PR template carries the
+  changelog and no-version-bump checklist lines.
 
 ## [0.9.3] - 2026-11-10
 
@@ -37,8 +36,8 @@ history for that record instead.
 > Entries were grouped by kind (Added/Changed/Removed/Fixed), not by
 > release, and are not split back out here: use the PR numbers and the
 > `v*` tags to place an entry. From this point each release gets its own
-> heading. This heading assumes `v0.9.3` is tagged from `main` once it
-> carries the 0.9.3 version bump.
+> heading, cut as `docs/RELEASING.md` describes. `v0.9.3` is tagged on `main`
+> at the commit that merged #452.
 
 ### Added
 
@@ -98,6 +97,16 @@ history for that record instead.
   shown ungraded.
 
 ### Fixed
+
+- **#450 — the restore drill could name a version that was never tagged.**
+  `config-backup/MANIFEST.json` recorded only `pyproject.toml`'s version,
+  and RUNBOOK §7 does `git checkout v<app_version>`; `0.9.2` was deployed
+  from `main` and never tagged, so that checkout had nothing to resolve.
+  The manifest now also records `git_commit`, read out of the app
+  checkout's `.git` as plain files (never by running git there, per #237),
+  and `unknown` when it cannot be resolved. RUNBOOK §7 / §7.1 / §7.2
+  prefer the commit and fall back to the tag. Manifests written before
+  this change have no `git_commit` and use the tag path as before.
 
 - **N5 (8c, #411) — `/design`'s market-environment panel leaked
   internals.** Entry-timing step 2 read `skew_percentile:

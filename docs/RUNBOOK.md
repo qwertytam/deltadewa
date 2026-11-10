@@ -201,7 +201,11 @@ docker compose up -d
 
 ```bash
 # Deploy an update — pull a TAG, not main, so what's running is
-# always a known, reviewed point, not whatever HEAD happens to be
+# always a known, reviewed point, not whatever HEAD happens to be.
+# The tag must already exist: cutting and pushing it is the release
+# step in docs/RELEASING.md, done before this one (#450, #451). A
+# version that was deployed untagged is recorded in the backup manifest
+# by version string only, which names nothing `git checkout` can find.
 cd deltadewa
 git fetch --tags
 git checkout <tag>

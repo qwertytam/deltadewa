@@ -48,6 +48,9 @@ finding-index numbers fall behind merged work. This agent catches that early.
    (the durable fix is a live command in the doc, not a fresher number).
 2. **Version** — `__version__` (importlib.metadata) vs `pyproject.toml` version vs any
    version quoted in README/plan. Flag disagreement.
+   Also flag a `CHANGELOG.md` whose newest versioned heading is not that version, a
+   `[Unreleased]` section that is missing, and a `pyproject.toml` version with no
+   matching `git tag -l v<version>` (the release steps are in `docs/RELEASING.md`).
 3. **Milestone status** — `docs/implementation-plan.md` "Status:" lines vs merge
    history (`git log --oneline`, PR titles). Flag a milestone marked done with no
    matching merge, or a merged milestone still marked open.
