@@ -96,6 +96,48 @@ than taken on faith.
   — the drill covers the encryption too, decrypting once with each key
   and confirming both give identical output.
 
+## The weekly review: CONFIRM is not RE-MARK (N7)
+
+The provenance ledger grades a hand-entered input by **when a person last
+confirmed it**, not by whether it is right (see `docs/market-data.md`,
+"Confirmation stamps"). *Mark pricing inputs reviewed* on `/design`
+stamps every hand-entered input — spot, rate, dividend yield and **every
+leg's IV** — as confirmed today, unconditionally. Two different acts hide
+behind that one button, and only one of them should ever be done by
+clicking it:
+
+| | What you did | What the button means |
+|---|---|---|
+| **CONFIRM** | Compared each number with its source this week and found it still correct. | Honest — it records exactly that. |
+| **RE-MARK** | Read the numbers off the option chain again and typed in the ones that moved. | Not needed for the changed values — editing a value already stamps it; use the button only for the ones you checked and left alone. |
+
+The failure this exists to prevent: a book whose per-leg IVs have gone
+flat (every leg at one number, e.g. all five at 19.00%, "range 0.00%
+wide" on the volatility profile) goes **green** the moment the button is
+pressed, because a flat IV is a value, not a staleness. Crash pricing
+still steepens through the skew model, so scenario numbers look
+plausible and nothing else on the page protests — while today's marks,
+carry and the roll planner's economics are priced off a surface that is
+not the market's.
+
+Weekly, in this order:
+
+1. Read the provenance panel's top line. If it shows the **"really?"
+   flat-IV note**, do not confirm — RE-MARK first: read each leg's IV
+   from the chain and enter it. Real puts at different strikes and
+   maturities do not share an IV. (The note appears only when legs sit
+   at two or more distinct strike/maturity points *and* every IV
+   matches to the displayed 0.01%; two lots of the same contract
+   sharing an IV is normal and never triggers it.)
+2. Check spot, the risk-free rate and the dividend yield against their
+   sources.
+3. Only then press *Mark pricing inputs reviewed* — for the inputs you
+   verified and left unchanged.
+
+The note is a prompt to look, not a grade: it never moves the banner,
+`/health` or the digest, and it changes no value. Pressing the button
+does not clear it; only differing IVs do.
+
 ## What this cannot do — read these limits as seriously as the list above
 
 - **It cannot tell you the book still matches reality at the broker.**

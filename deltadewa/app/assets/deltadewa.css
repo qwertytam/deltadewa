@@ -599,6 +599,13 @@ body {
   font-weight: 600;
 }
 
+.provenance-nudge {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-left: 3px solid #b7791f;
+  background: #fffbea;
+}
+
 .provenance-detail {
   margin-top: 12px;
 }

@@ -169,6 +169,14 @@ class ProvenanceLedger:
     market_data_fetched_at: datetime | None
     market_data_quality: DataQuality
     oldest_series: str | None
+    flat_iv_note: str | None = None
+    """A nudge, not a grade: set when every leg carries one IV (N7).
+
+    Deliberately outside ``entries``/``worst``/``needs_banner`` — it says
+    nothing about how *old* an input is, so it must not move the banner,
+    ``/health`` or the digest's alarm. Rendered by the provenance panel
+    only. See ``flat_iv_nudge``.
+    """
 
     @property
     def worst(self) -> InputProvenance | None:
@@ -312,6 +320,55 @@ def _leg_label(position: OptionPosition) -> str:
     )
 
 
+#: Two IVs closer than this render identically at the 2-decimal percent
+#: precision the volatility profile shows ("range 0.00% wide"), so they
+#: are the same number to a reader. A display tolerance, not policy.
+_FLAT_IV_TOLERANCE: Final[float] = 5e-5
+
+
+def flat_iv_nudge(portfolio: OptionPortfolio) -> str | None:
+    """Return a "really?" note when every leg is marked at one IV, else None.
+
+    N7 (8f): a book whose legs sit at different strikes or maturities and
+    all carry the same implied volatility is almost never the market's
+    surface — a real chain has skew and term structure — and it prices
+    today's marks, carry and the roll planner's economics off that flat
+    surface. Crash pricing still steepens via kappa, so scenario numbers
+    survive and nothing else on the page looks wrong, which is why this
+    needs saying.
+
+    This is a process nudge, never a correction: it changes no value and
+    grades nothing. The distinction it points the operator at is
+    CONFIRM (the numbers were checked and are right) versus RE-MARK
+    (re-read from the chain); see ``docs/continuity-annex.md``.
+
+    Legs sharing one strike *and* maturity legitimately share an IV, so
+    the check needs at least two distinct strike/maturity points.
+
+    Args:
+        portfolio: The live book.
+
+    Returns:
+        The note, or ``None`` when the book has fewer than two distinct
+        strike/maturity points or any IV differs.
+
+    """
+    options = [position.option for position in portfolio.positions]
+    points = {(o.strike_price, o.maturity_date) for o in options}
+    if len(points) < 2:
+        return None
+    vols = [o.volatility for o in options]
+    if max(vols) - min(vols) >= _FLAT_IV_TOLERANCE:
+        return None
+    return (
+        f"All {len(options)} legs ({len(points)} distinct strike/maturity "
+        f"points) are marked at one IV, {vols[0]:.2%} (range 0.00% wide) "
+        "— really? A real chain carries skew and term structure, so a "
+        "flat surface misprices today's marks, carry and roll economics. "
+        "Re-mark from the chain; confirm only if each leg was checked."
+    )
+
+
 def build_provenance_ledger(
     environment: MarketEnvironment,
     portfolio: OptionPortfolio,
@@ -406,6 +463,7 @@ def build_provenance_ledger(
         market_data_fetched_at=environment.fetched_at,
         market_data_quality=environment.data_quality,
         oldest_series=environment.oldest_series,
+        flat_iv_note=flat_iv_nudge(portfolio),
     )
 
 

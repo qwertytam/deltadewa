@@ -416,3 +416,88 @@ class TestWorstOf:
         )
 
         assert ledger.worst_of(InputKind.HAND_ENTERED) is None
+
+
+def _add_put(
+    portfolio: OptionPortfolio,
+    *,
+    strike: float,
+    volatility: float,
+    maturity_days: int = 365,
+) -> None:
+    portfolio.add_position(
+        strike_price=strike,
+        maturity_date=days_from_today(maturity_days),
+        quantity=10,
+        option_type=OptionType.PUT,
+        volatility=volatility,
+    )
+
+
+class TestFlatIvNudge:
+    """N7 (8f): all legs at one IV is a "really?", never a grade or a fix."""
+
+    def _ledger(self, portfolio: OptionPortfolio) -> ProvenanceLedger:
+        return build_provenance_ledger(
+            _make_environment(),
+            portfolio,
+            _POLICY,
+            as_of=_AS_OF_DATE,
+        )
+
+    def test_flat_surface_across_strikes_is_flagged(self) -> None:
+        portfolio = _make_portfolio()
+        for strike in (4500.0, 4300.0, 4100.0):
+            _add_put(portfolio, strike=strike, volatility=0.19)
+
+        note = self._ledger(portfolio).flat_iv_note
+
+        assert note is not None
+        assert "19.00%" in note
+        assert "range 0.00% wide" in note
+        assert "really?" in note
+        assert "Re-mark" in note
+
+    def test_skewed_surface_is_not_flagged(self) -> None:
+        portfolio = _make_portfolio()
+        _add_put(portfolio, strike=4500.0, volatility=0.19)
+        _add_put(portfolio, strike=4100.0, volatility=0.23)
+
+        assert self._ledger(portfolio).flat_iv_note is None
+
+    def test_same_strike_and_maturity_may_share_an_iv(self) -> None:
+        """Two lots of one contract are one market point — not suspicious."""
+        portfolio = _make_portfolio()
+        maturity = days_from_today(365)
+        for _ in range(2):
+            portfolio.add_position(
+                strike_price=4500.0,
+                maturity_date=maturity,
+                quantity=5,
+                option_type=OptionType.PUT,
+                volatility=0.19,
+            )
+
+        assert self._ledger(portfolio).flat_iv_note is None
+
+    def test_empty_and_single_leg_books_are_not_flagged(self) -> None:
+        portfolio = _make_portfolio()
+        assert self._ledger(portfolio).flat_iv_note is None
+        _add_put(portfolio, strike=4500.0, volatility=0.19)
+        assert self._ledger(portfolio).flat_iv_note is None
+
+    def test_nudge_never_moves_the_grade_or_the_values(self) -> None:
+        flat = _make_portfolio()
+        for strike in (4500.0, 4100.0):
+            _add_put(flat, strike=strike, volatility=0.19)
+        skewed = _make_portfolio()
+        _add_put(skewed, strike=4500.0, volatility=0.19)
+        _add_put(skewed, strike=4100.0, volatility=0.23)
+
+        flat_ledger = self._ledger(flat)
+        skewed_ledger = self._ledger(skewed)
+
+        assert flat_ledger.flat_iv_note is not None
+        assert flat_ledger.worst == skewed_ledger.worst
+        assert flat_ledger.needs_banner == skewed_ledger.needs_banner
+        assert [p.option.volatility for p in flat.positions] == [0.19, 0.19]

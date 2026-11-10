@@ -107,11 +107,9 @@ cp config/ips.example.yaml config/ips.yaml
 ```
 
 <!-- markdownlint-disable-next-line -->
-5. Activate the virtual environment:
-
-```bash
-poetry shell
-```
+5. Run everything through `poetry run` (for example
+   `poetry run python -m deltadewa.app` or `poetry run pytest`); it needs no
+   activation step. (Poetry 2 removed `poetry shell`.)
 
 ## Dashboard Organization
 

@@ -130,3 +130,33 @@ class TestDesignTocAgreesWithTheRenderedPage:
         rendered_ids = _ids_in_document_order(layout, only=set(toc_ids))
 
         assert rendered_ids == toc_ids
+
+
+def _title_like_texts(node: object, needle: str) -> list[str]:
+    """Every H2/H3/Summary string under *node* that contains *needle*."""
+    found: list[str] = []
+    if isinstance(node, Component):
+        children = getattr(node, "children", None)
+        if (
+            type(node).__name__ in {"H2", "H3", "Summary"}
+            and isinstance(children, str)
+            and needle in children
+        ):
+            found.append(children)
+        found.extend(_title_like_texts(children, needle))
+    elif isinstance(node, (list, tuple)):
+        for child in node:
+            found.extend(_title_like_texts(child, needle))
+    return found
+
+
+class TestProvenanceTitleAppearsOnce:
+    """N8a: one heading and one TOC entry for the provenance panel."""
+
+    def test_single_heading_and_single_toc_entry(self, tmp_path: Path) -> None:
+        layout = design.render(_app_with_ips(tmp_path))
+
+        assert _title_like_texts(layout, "Pricing input provenance") == [
+            "Pricing input provenance",
+        ]
+        assert _toc_href_ids(layout).count("section-provenance") == 1

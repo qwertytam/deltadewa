@@ -85,7 +85,8 @@ def build_provenance_panel(ledger: ProvenanceLedger) -> html.Div:
             ``analysis.provenance.build_provenance_ledger``.
 
     Returns:
-        A ``Div`` containing a summary line and a collapsed detail table.
+        A ``Div`` containing a summary line, the flat-IV nudge when one
+        applies, and a collapsed detail table.
 
     """
     header = html.Tr(
@@ -100,12 +101,21 @@ def build_provenance_panel(ledger: ProvenanceLedger) -> html.Div:
         ],
     )
     rows = [_entry_row(entry) for entry in ledger.entries]
+    nudge = (
+        [html.Div(ledger.flat_iv_note, className="provenance-nudge")]
+        if ledger.flat_iv_note is not None
+        else []
+    )
     return html.Div(
         [
             html.Div(_summary_text(ledger), className="provenance-summary"),
+            *nudge,
             html.Details(
                 [
-                    html.Summary("Pricing input provenance"),
+                    # Not the section title: the page owns the heading
+                    # (and its anchor), so repeating it here rendered a
+                    # duplicated heading pair (N8a).
+                    html.Summary(f"Show all {len(ledger.entries)} inputs"),
                     html.Table(
                         [html.Thead(header), html.Tbody(rows)],
                         className="provenance-table",
