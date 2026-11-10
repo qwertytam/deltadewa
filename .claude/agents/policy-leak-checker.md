@@ -44,6 +44,10 @@ paste code blocks.
 
 ## Project Context
 
-- `config/ips.yaml` = policy. `config/dashboard.yaml` = presentation.
+- `config/ips.yaml` = policy, and the only config the app loads. There is no
+  presentation config: `dashboard.yaml` / `dashboard_config_*.yaml` were
+  retired in #279, so a presentation constant in view code is a literal in
+  that code, not a missing config key. Judge it on whether it is a
+  decision boundary, not on where it "should" live.
 - Handbook-derived constants (e.g. `efficiency_min_ratio: 3.0`, the 3/6
   reading) are legitimate if sourced from the IPS, not if inlined.
