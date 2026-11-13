@@ -24,11 +24,11 @@ prefer several small, reviewable commits over one large one.
 The gate a change must pass, all via `poetry run`:
 
 ```bash
-pytest                # every test green
-mypy deltadewa          # strict mode — pyproject.toml's [tool.mypy]
-ruff check .              # lint
-ruff format .              # line length 80
-pylint deltadewa          # must score 10.00/10, not just "no errors"
+poetry run pytest                # every test green
+poetry run mypy deltadewa        # strict mode — pyproject.toml's [tool.mypy]
+poetry run ruff check .          # lint
+poetry run ruff format .         # line length 80
+poetry run pylint deltadewa      # must score 10.00/10, not just "no errors"
 ```
 
 A change with a user-visible or operator-visible effect also adds an entry
@@ -68,9 +68,10 @@ Two are easy to get wrong by habit:
 ## Sub-agent workflow (optional, but reproducible if you use it)
 
 This project's own development uses a small set of read-only Haiku
-sub-agents (`.claude/agents/`, gitignored — the roster below is the
-versioned record) to keep verification cheap and out of the main
-conversation's context. Not required to contribute, but if you're using
+sub-agents (`.claude/agents/`, tracked since #349; the table below is a
+starter subset — CLAUDE.md's "Model & sub-agent usage" has the full
+roster) to keep verification cheap and out of the main conversation's
+context. Not required to contribute, but if you're using
 Claude Code against this repo, using the same roster keeps results
 reproducible and comparable to what past PRs report:
 

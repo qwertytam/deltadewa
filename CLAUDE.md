@@ -182,9 +182,8 @@ parity record and the six items it disposed of are in
 `docs/part-x-coverage.md`, "Stage 4.3". Jupyter/notebook and Playwright moved out of the main
 Poetry dependency group into `dev`/`test`, shrinking the production image
 from 1.32 GB to 758 MB (**#279 has since deleted the Jupyter half of that
-`dev` group outright** — see below). The droplet deploy of this milestone is pending on
-this PR merging and a release tag being cut — see `docs/implementation-plan.md`'s
-M2.6 section for what's left to verify live. **Phase 3 (docs/handbook) and
+`dev` group outright** — see below). The droplet deploy of this milestone was verified live
+on 2026-08-09 — see `docs/implementation-plan.md`'s M2.6 section. **Phase 3 (docs/handbook) and
 Phase 4 (exposure, ops correctness, the notebook retirement) have both since
 shipped** — see those sections of `docs/implementation-plan.md`, which stays
 the source of truth for what to build next.
@@ -640,9 +639,12 @@ don't fix):
   why. Run before changing a table, a bucket scheme, a headline reduction,
   or any panel that shows one number standing for many.
 - **runbook-auditor** — checks that the ops docs (`docs/RUNBOOK.md`, and the
-  deploy/recovery steps in `README.md`/`QUICKSTART.md`) still describe the
-  system that exists: every command, path, service name, env var and file
-  reference resolved against the repo, the Dockerfile and `compose.yaml`,
+  deploy, recovery, **install and setup** blocks in `README.md`/`QUICKSTART.md`/
+  `CONTRIBUTING.md`) still describe the system that exists: every command,
+  path, service name, env var and file reference resolved against the repo,
+  the Dockerfile, `compose.yaml`, `pyproject.toml` and what CI runs (8f/W2:
+  `poetry shell` and `--with dev` sat in the install blocks after Poetry 2,
+  outside the old "deploy and recovery" brief),
   reported EXECUTABLE / STALE / NO-OP / MISSING-STEP / VERIFICATION-BLIND /
   UNVERIFIABLE — e.g. #386's `git pull` on a gitignored `config/ips.yaml`
   (a no-op) and a bare `curl .../health` that can't catch a config that

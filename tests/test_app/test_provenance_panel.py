@@ -7,10 +7,11 @@ from datetime import UTC, date, datetime
 from deltadewa.analysis.market_environment import DataQuality, MarketEnvironment
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.app.provenance_panel import build_provenance_panel
-from deltadewa.constants import ExerciseStyle
+from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsPricingInputs
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.stamps import MarketParameterStamps
+from tests.clock_helpers import days_from_today
 
 _AS_OF = datetime(2026, 8, 26, tzinfo=UTC)
 _TODAY = date(2026, 8, 26)
@@ -115,3 +116,64 @@ class TestBuildProvenancePanel:
         details = panel.children[1]
         assert details.__class__.__name__ == "Details"
         assert not getattr(details, "open", False)
+
+
+def _flat_iv_portfolio() -> OptionPortfolio:
+    portfolio = OptionPortfolio(default_exercise_style=ExerciseStyle.EUROPEAN)
+    for strike in (4500.0, 4100.0):
+        portfolio.add_position(
+            strike_price=strike,
+            maturity_date=days_from_today(365),
+            quantity=10,
+            option_type=OptionType.PUT,
+            volatility=0.19,
+        )
+    return portfolio
+
+
+class TestPanelHeadingAndNudge:
+    def test_summary_does_not_repeat_the_section_title(self) -> None:
+        """N8a: the page owns the heading; the <summary> is a toggle."""
+        ledger = build_provenance_ledger(
+            _environment(),
+            OptionPortfolio(default_exercise_style=ExerciseStyle.EUROPEAN),
+            _POLICY,
+            as_of=_TODAY,
+        )
+
+        panel = build_provenance_panel(ledger)
+
+        summary = panel.children[1].children[0]
+        assert summary.__class__.__name__ == "Summary"
+        assert summary.children != "Pricing input provenance"
+        assert str(len(ledger.entries)) in summary.children
+
+    def test_flat_iv_note_is_rendered_when_set(self) -> None:
+        ledger = build_provenance_ledger(
+            _environment(),
+            _flat_iv_portfolio(),
+            _POLICY,
+            as_of=_TODAY,
+        )
+
+        panel = build_provenance_panel(ledger)
+
+        nudge = panel.children[1]
+        assert nudge.className == "provenance-nudge"
+        assert "really?" in nudge.children
+        assert panel.children[2].__class__.__name__ == "Details"
+
+    def test_no_nudge_element_when_not_flat(self) -> None:
+        ledger = build_provenance_ledger(
+            _environment(),
+            OptionPortfolio(default_exercise_style=ExerciseStyle.EUROPEAN),
+            _POLICY,
+            as_of=_TODAY,
+        )
+
+        panel = build_provenance_panel(ledger)
+
+        assert all(
+            getattr(c, "className", None) != "provenance-nudge"
+            for c in panel.children
+        )

@@ -654,6 +654,32 @@ class TestProvenancePanel:
 
         assert _find_component(layout, "provenance-panel") is not None
 
+    def test_provenance_title_renders_once_and_toc_links_it_once(
+        self,
+        monitor_app: MonitorAppHandle,
+    ) -> None:
+        """N8a: one heading (the page's), not a heading + a <summary>."""
+        layout = monitor.render(monitor_app.app)
+
+        def titles(node: object) -> list[str]:
+            found: list[str] = []
+            if isinstance(node, Component):
+                children = getattr(node, "children", None)
+                if (
+                    type(node).__name__ in {"H2", "H3", "Summary"}
+                    and children == "Pricing input provenance"
+                ):
+                    found.append(children)
+                found.extend(titles(children))
+            elif isinstance(node, (list, tuple)):
+                for child in node:
+                    found.extend(titles(child))
+            return found
+
+        assert titles(layout) == ["Pricing input provenance"]
+        toc = _find_by_class(layout, "section-nav")
+        assert _hrefs(toc).count("#section-provenance") == 1
+
 
 class TestComplianceStrip:
     """#298: /monitor's one-line IPS compliance strip.

@@ -6,15 +6,16 @@
 # Install Poetry
 curl -sSL https://install.python-poetry.org | python3 -
 
-# Install dependencies
-poetry install --with dev
-
-# Activate environment
-poetry shell
+# Install dependencies (includes the dev tools; no extra flags needed)
+poetry install
 
 # Copy the config templates and fill in your own policy
 cp config/ips.example.yaml config/ips.yaml
 ```
+
+Run everything through `poetry run` — for example
+`poetry run python -m deltadewa.app` or `poetry run pytest` — it needs no
+activation step. (Poetry 2 removed `poetry shell`.)
 
 ## Quick Examples
 

@@ -1135,7 +1135,15 @@ def render(app: ProgramDashApp) -> html.Div:
             ),
             section_wrapper(
                 _SECTION_PROVENANCE,
-                _build_provenance_panel(app, ips_config, portfolio),
+                # The heading sits outside the panel's safe_render so a
+                # degraded panel keeps its title; the panel's own
+                # <summary> no longer repeats it (N8a).
+                html.Div(
+                    [
+                        html.H2(_SECTION_PROVENANCE.title),
+                        _build_provenance_panel(app, ips_config, portfolio),
+                    ],
+                ),
             ),
             _page_footer(),
         ],
