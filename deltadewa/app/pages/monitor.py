@@ -47,6 +47,7 @@ from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.monitor_scenario import (
     build_scenario,
     build_scenario_curve,
+    ips_anchor_dials,
 )
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
@@ -879,9 +880,7 @@ def _build_scenario_explorer_panel(
 
     def _build() -> Component:
         convexity = ips_config.convexity
-        spot_pct = convexity.crash_scenario_pct
-        vol_points = convexity.crash_vol_shock
-        quantity = portfolio.underlying_quantity
+        spot_pct, vol_points, quantity = ips_anchor_dials(portfolio, ips_config)
 
         result = build_scenario(
             portfolio,
@@ -1245,8 +1244,5 @@ def register_callbacks(app: ProgramDashApp) -> None:
         prevent_initial_call=True,
     )
     def _reset_dials(_n_clicks: int) -> tuple[float, float, float]:
-        return (
-            ips_config.convexity.crash_scenario_pct,
-            ips_config.convexity.crash_vol_shock,
-            app.program_state.portfolio.underlying_quantity,
-        )
+        dials = ips_anchor_dials(app.program_state.portfolio, ips_config)
+        return dials.spot_pct, dials.vol_points, dials.quantity

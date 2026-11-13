@@ -30,7 +30,10 @@ from deltadewa.analysis.convexity_band import (
     ConvexityGrade,
     grade_convexity,
 )
-from deltadewa.analysis.crash_payoff import compute_crash_convexity
+from deltadewa.analysis.crash_payoff import (
+    book_convexity_grading,
+    compute_crash_convexity,
+)
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_convexity_pct,
@@ -42,6 +45,10 @@ from deltadewa.analysis.market_environment import (
     MarketEnvironment,
     RegimeLabel,
     TermShape,
+)
+from deltadewa.analysis.monitor_scenario import (
+    build_scenario,
+    ips_anchor_dials,
 )
 from deltadewa.analysis.roll_planner import (
     RollAction,
@@ -632,3 +639,41 @@ class TestGrossSizingIsDisclosedBesideEveryCoversTheOffset:
         assert "No contracts are needed" in text
         assert "below target" not in text
         assert GROSS_SIZING_NOTE not in text
+
+
+class TestTheMonitorDialPathAgreesWithTheStrip:
+    """#442: the cheap single-shock path and the strip's ladder row agree."""
+
+    def test_book_convexity_grading_equals_the_strips_grading(self) -> None:
+        ips = _ips()
+        book = _book()
+        _cost, protection, _vega = compliance_sections_at_ips_anchor(book, ips)
+
+        assert book_convexity_grading(book, ips.convexity) == (
+            protection.convexity
+        )
+
+    def test_a_zero_book_is_unmeasured_on_both_paths(self) -> None:
+        ips = _ips()
+        book = _zero_underlying_book()
+        _cost, protection, _vega = compliance_sections_at_ips_anchor(book, ips)
+
+        cheap = book_convexity_grading(book, ips.convexity)
+
+        assert cheap.grade is ConvexityGrade.UNMEASURED
+        assert cheap == protection.convexity
+
+    def test_the_anchor_dials_reproduce_the_scorecards_efficiency(self) -> None:
+        ips = _ips()
+        book = _book()
+        dials = ips_anchor_dials(book, ips)
+
+        scenario = build_scenario(
+            book,
+            ips,
+            spot_pct=dials.spot_pct,
+            vol_points=dials.vol_points,
+            quantity=dials.quantity,
+        )
+
+        assert scenario.efficiency == scorecard(book, ips).efficiency

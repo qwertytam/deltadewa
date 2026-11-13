@@ -30,7 +30,10 @@ from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.market_environment import DataQuality
 from deltadewa.analysis.maturity import MaturityBuckets
-from deltadewa.analysis.monitor_scenario import build_scenario
+from deltadewa.analysis.monitor_scenario import (
+    build_scenario,
+    ips_anchor_dials,
+)
 from deltadewa.reporting.program_report import (
     ComplianceStanding,
     CostSection,
@@ -133,13 +136,13 @@ def scorecard(
     compliance = build_ips_compliance(
         *compliance_sections_at_ips_anchor(portfolio, ips_config),
     )
-    convexity = ips_config.convexity
+    dials = ips_anchor_dials(portfolio, ips_config)
     scenario = build_scenario(
         portfolio,
         ips_config,
-        spot_pct=convexity.crash_scenario_pct,
-        vol_points=convexity.crash_vol_shock,
-        quantity=portfolio.underlying_quantity,
+        spot_pct=dials.spot_pct,
+        vol_points=dials.vol_points,
+        quantity=dials.quantity,
     )
     return Scorecard(compliance=compliance, efficiency=scenario.efficiency)
 

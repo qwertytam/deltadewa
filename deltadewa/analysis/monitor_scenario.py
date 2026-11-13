@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.carry import CarryBudgetStatus, carry_vs_budget
@@ -87,6 +87,39 @@ class ScenarioResult:
     book_notional: float
     carry: CarryBudgetStatus
     efficiency: HedgeEfficiency
+
+
+class AnchorDials(NamedTuple):
+    """The scenario dials at the IPS anchor: where every surface starts (#442).
+
+    ``/monitor``'s opening render, its Reset button, and the scorecard the
+    ladder composer grades with all begin here, so their efficiency figures
+    are the same number at defaults. Before this the three each read
+    ``ips_config.convexity`` for themselves and nothing asserted they agreed.
+
+    Attributes:
+        spot_pct: The IPS crash depth, signed percent.
+        vol_points: The IPS crash vol shock, in vol points.
+        quantity: The book's own underlying quantity.
+
+    """
+
+    spot_pct: float
+    vol_points: float
+    quantity: float
+
+
+def ips_anchor_dials(
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+) -> AnchorDials:
+    """Return the dials that put :func:`build_scenario` at the IPS anchor."""
+    convexity = ips_config.convexity
+    return AnchorDials(
+        spot_pct=convexity.crash_scenario_pct,
+        vol_points=convexity.crash_vol_shock,
+        quantity=portfolio.underlying_quantity,
+    )
 
 
 def build_scenario(
