@@ -559,3 +559,53 @@ class TestDataQualityGate:
         """No default: a caller cannot silently fall back to old literals."""
         with pytest.raises(TypeError):
             entry_timing_tree(_make_env())  # type: ignore[call-arg]
+
+
+# ── decision_matrix: an unmeasured convexity (#433) ──────────────────
+
+
+class TestUnmeasuredConvexity:
+    """No reading is not an under-hedged book."""
+
+    def test_none_is_insufficient_data_not_a_buy(self) -> None:
+        result = decision_matrix(
+            _make_env(),
+            convexity_now_pct=None,
+            ips_convexity=_IPS,
+        )
+
+        assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
+        assert result.hedge_adequacy is None
+
+    def test_the_note_says_unmeasured_not_breaching(self) -> None:
+        result = decision_matrix(
+            _make_env(),
+            convexity_now_pct=None,
+            ips_convexity=_IPS,
+        )
+
+        assert result.data_quality_note is not None
+        assert "could not be measured" in result.data_quality_note
+        assert "not breaching" in result.data_quality_note
+
+    @pytest.mark.parametrize(
+        ("reading", "adequacy"),
+        [
+            (_IPS.target_min_pct, HedgeAdequacy.ADEQUATE),
+            (_IPS.target_max_pct, HedgeAdequacy.ADEQUATE),
+            (_IPS.target_min_pct - 1e-9, HedgeAdequacy.UNDER),
+            (_IPS.target_max_pct + 1e-9, HedgeAdequacy.OVER),
+        ],
+    )
+    def test_the_band_is_inclusive_at_both_ends(
+        self,
+        reading: float,
+        adequacy: HedgeAdequacy,
+    ) -> None:
+        result = decision_matrix(
+            _make_env(),
+            convexity_now_pct=reading,
+            ips_convexity=_IPS,
+        )
+
+        assert result.hedge_adequacy is adequacy

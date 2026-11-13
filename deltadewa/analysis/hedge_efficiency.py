@@ -106,7 +106,7 @@ def _classify(
 
     Exactly at ``band_min_ratio`` or ``band_max_ratio`` is ``ACCEPTABLE`` —
     the same inclusive-boundary convention
-    :func:`~deltadewa.analysis.decision_matrix._classify_adequacy` uses for
+    :func:`~deltadewa.analysis.convexity_band.grade_convexity` uses for
     the convexity band.
     """
     if ratio < band_min_ratio:

@@ -93,7 +93,6 @@ _PENDING_NONE: frozenset[str] = frozenset(
         "protection_section",
         "compliance_row",
         "scorecard_row",
-        "decision_matrix",
     },
 )
 
