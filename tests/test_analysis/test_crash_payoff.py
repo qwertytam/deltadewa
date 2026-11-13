@@ -5,7 +5,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import ConvexityGrade
 from deltadewa.analysis.crash_payoff import (
+    CrashScenarioRow,
     PremiumBasis,
     _long_puts,
     _net_protective_premium,
@@ -627,12 +629,16 @@ class TestCrashScenarioTable:
             assert row.payoff_vs_premium == pytest.approx(0.0, rel=1e-8)
 
     def test_no_ips_convexity_means_no_target_met(self) -> None:
-        """Without an ips_convexity band, every row's meets_target is False."""
+        """With no ips_convexity band, no row is graded: None, not False.
+
+        There is nothing to miss, so "no band" must not read as a breach
+        (#433). Was ``False`` before the convexity referee (#434).
+        """
         portfolio = _make_long_put_portfolio()
 
         rows = crash_scenario_table(portfolio, shocks=[-10.0, -25.0])
 
-        assert all(row.meets_target is False for row in rows)
+        assert all(row.meets_target is None for row in rows)
 
     def test_ips_shock_already_in_ladder_is_not_duplicated(self) -> None:
         """ips_convexity.crash_scenario_pct already in shocks -> no dup row."""
@@ -721,4 +727,70 @@ class TestCrashScenarioTable:
         by_shock = {row.shock_pct: row for row in rows}
 
         assert by_shock[-25.0].meets_target is True
-        assert by_shock[-10.0].meets_target is False
+        # The band is stated at the IPS depth only (#431): the -10% row is
+        # not a miss, it is not graded. Was ``False`` before the referee.
+        assert by_shock[-10.0].meets_target is None
+        assert by_shock[-10.0].convexity is not None
+        assert by_shock[-10.0].convexity.grade is ConvexityGrade.UNMEASURED
+
+
+class TestOnlyTheIpsDepthIsGraded:
+    """#431: a convexity figure at another depth "cannot be read against" it."""
+
+    def _rows(
+        self,
+        *,
+        target_min_pct: float,
+        target_max_pct: float,
+    ) -> dict[float, CrashScenarioRow]:
+        portfolio = _make_long_put_portfolio(
+            underlying_quantity=5000.0,
+            strike_price=95.0,
+            quantity=20,
+        )
+        ips_convexity = IpsConvexity(
+            crash_scenario_pct=-25.0,
+            target_min_pct=target_min_pct,
+            target_max_pct=target_max_pct,
+        )
+        rows = crash_scenario_table(
+            portfolio,
+            shocks=[-10.0, -20.0, -30.0, -40.0],
+            ips_convexity=ips_convexity,
+        )
+        return {row.shock_pct: row for row in rows}
+
+    @staticmethod
+    def _others(
+        by_shock: dict[float, CrashScenarioRow],
+    ) -> list[CrashScenarioRow]:
+        """Every row that is not at the IPS (-25%) depth."""
+        return [r for d, r in by_shock.items() if abs(d + 25.0) > 1e-9]
+
+    def test_every_other_depth_is_ungraded_even_when_in_band(self) -> None:
+        by_shock = self._rows(target_min_pct=-1e6, target_max_pct=1e6)
+
+        assert by_shock[-25.0].meets_target is True
+        others = [
+            row for depth, row in by_shock.items() if abs(depth + 25.0) > 1e-9
+        ]
+        assert len(others) == 4
+        assert all(row.meets_target is None for row in others)
+
+    def test_every_other_depth_is_ungraded_even_when_out_of_band(self) -> None:
+        by_shock = self._rows(target_min_pct=1e6, target_max_pct=2e6)
+
+        assert by_shock[-25.0].meets_target is False
+        others = [
+            row for depth, row in by_shock.items() if abs(depth + 25.0) > 1e-9
+        ]
+        assert len(others) == 4
+        assert all(row.meets_target is None for row in others)
+
+    def test_a_graded_row_carries_the_referee_grading(self) -> None:
+        by_shock = self._rows(target_min_pct=-1e6, target_max_pct=1e6)
+
+        grading = by_shock[-25.0].convexity
+        assert grading is not None
+        assert grading.grade is ConvexityGrade.WITHIN
+        assert grading.value_pct == pytest.approx(by_shock[-25.0].convexity_pct)

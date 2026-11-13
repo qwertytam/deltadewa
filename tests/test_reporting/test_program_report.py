@@ -5,6 +5,7 @@ import datetime
 
 import pytest
 
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.crash_payoff import (
     CrashConvexityResult,
     CrashScenarioRow,
@@ -113,7 +114,6 @@ def _make_crash_result(
     ips_convexity: IpsConvexity | None = _IPS_CONVEXITY,
     payoff_vs_premium: float | None = 8.5,
     convexity_pct: float = 15.0,
-    meets_target: bool = True,
     premium_paid: float = 10_000.0,
     excluded_expired: tuple = (),
 ) -> CrashConvexityResult:
@@ -125,7 +125,14 @@ def _make_crash_result(
                 hedge_pnl=premium_paid * (payoff_vs_premium or 0),
                 payoff_vs_premium=payoff_vs_premium or 0.0,
                 convexity_pct=convexity_pct,
-                meets_target=meets_target,
+                # The grade is the referee's, derived from the number: a
+                # fixture can no longer assert "meets" beside a figure that
+                # is out of band (#434).
+                convexity=grade_convexity(
+                    convexity_pct,
+                    ips_convexity,
+                    at_shock_pct=ips_convexity.crash_scenario_pct,
+                ),
                 intrinsic_floor=premium_paid * (payoff_vs_premium or 0) * 0.2,
             ),
         )
@@ -257,7 +264,6 @@ def _build(
     ips_convexity: IpsConvexity | None = _IPS_CONVEXITY,
     payoff_vs_premium: float | None = 8.5,
     convexity_pct: float = 15.0,
-    meets_target: bool = True,
     data_quality: DataQuality = DataQuality.LIVE,
     schedule_steps: int = 2,
     monetization_plan: MonetizationPlan | None = None,
@@ -278,7 +284,6 @@ def _build(
             ips_convexity=ips_convexity,
             payoff_vs_premium=payoff_vs_premium,
             convexity_pct=convexity_pct,
-            meets_target=meets_target,
         ),
         carry_metrics=_make_carry_metrics(theta_annual),
         vega_sufficiency_pct=vega_sufficiency_pct,
@@ -400,7 +405,7 @@ class TestBuildProgramReport:
 
     def test_protection_row_matched(self) -> None:
         """IPS crash_pct matches a scenario_row → fields populated."""
-        report = _build(convexity_pct=18.0, meets_target=True)
+        report = _build(convexity_pct=18.0)
         p = report.protection
         assert p.ips_crash_pct == pytest.approx(-25.0)
         assert p.convexity_pct == pytest.approx(18.0)
@@ -411,7 +416,7 @@ class TestBuildProgramReport:
 
     def test_protection_row_not_meeting_target(self) -> None:
         """meets_target False when convexity below band."""
-        report = _build(convexity_pct=5.0, meets_target=False)
+        report = _build(convexity_pct=5.0)
         assert report.protection.meets_target is False
 
     def test_protection_no_ips_convexity(self) -> None:
@@ -611,7 +616,6 @@ class TestBuildProgramReport:
             theta_annual=-8_000.0,
             budget_pct=2.0,
             convexity_pct=15.0,
-            meets_target=True,
         )
         assert report.ips_compliance.all_pass is True
 
@@ -620,7 +624,6 @@ class TestBuildProgramReport:
         report = _build(
             theta_annual=-20_000.0,
             budget_pct=2.0,
-            meets_target=True,
         )
         assert report.ips_compliance.all_pass is False
 
@@ -629,7 +632,7 @@ class TestBuildProgramReport:
         report = _build(
             theta_annual=-8_000.0,
             budget_pct=2.0,
-            meets_target=False,
+            convexity_pct=5.0,
         )
         assert report.ips_compliance.all_pass is False
 
@@ -644,17 +647,13 @@ class TestBuildProgramReport:
 
     def test_passing_rows_have_no_action(self) -> None:
         """action is None exactly when passes is True (#307)."""
-        report = _build(
-            theta_annual=-8_000.0, budget_pct=2.0, meets_target=True
-        )
+        report = _build(theta_annual=-8_000.0, budget_pct=2.0)
         for row in report.ips_compliance.rows:
             assert row.passes is True
             assert row.action is None
 
     def test_carry_over_budget_has_an_action(self) -> None:
-        report = _build(
-            theta_annual=-20_000.0, budget_pct=2.0, meets_target=True
-        )
+        report = _build(theta_annual=-20_000.0, budget_pct=2.0)
         row = next(
             r
             for r in report.ips_compliance.rows
@@ -666,7 +665,7 @@ class TestBuildProgramReport:
 
     def test_convexity_below_band_action_says_under_hedged(self) -> None:
         # target_min_pct=10.0 on _IPS_CONVEXITY — 5.0 is below it.
-        report = _build(convexity_pct=5.0, meets_target=False)
+        report = _build(convexity_pct=5.0)
         row = next(
             r
             for r in report.ips_compliance.rows
@@ -678,7 +677,7 @@ class TestBuildProgramReport:
 
     def test_convexity_above_band_action_says_over_hedged(self) -> None:
         # target_max_pct=30.0 on _IPS_CONVEXITY — 35.0 is above it.
-        report = _build(convexity_pct=35.0, meets_target=False)
+        report = _build(convexity_pct=35.0)
         row = next(
             r
             for r in report.ips_compliance.rows
@@ -766,12 +765,12 @@ class TestRenderMarkdown:
     def test_pass_symbols_present(self) -> None:
         """✓ PASS and ✗ appear somewhere in the output."""
         md_pass = render_markdown(
-            _build(theta_annual=-8_000.0, meets_target=True),
+            _build(theta_annual=-8_000.0),
         )
         assert "✓ PASS" in md_pass
 
         md_fail = render_markdown(
-            _build(theta_annual=-20_000.0, meets_target=False),
+            _build(theta_annual=-20_000.0, convexity_pct=5.0),
         )
         assert "✗ FAIL" in md_fail
 
@@ -880,16 +879,12 @@ class TestRenderMarkdown:
         assert "Decision & entry timing" not in md
 
     def test_recommended_action_line_for_failing_row(self) -> None:
-        report = _build(
-            theta_annual=-20_000.0, budget_pct=2.0, meets_target=True
-        )
+        report = _build(theta_annual=-20_000.0, budget_pct=2.0)
         md = render_markdown(report)
         assert "**Recommended action — Annual carry cost:**" in md
 
     def test_no_recommended_action_line_when_all_pass(self) -> None:
-        report = _build(
-            theta_annual=-8_000.0, budget_pct=2.0, meets_target=True
-        )
+        report = _build(theta_annual=-8_000.0, budget_pct=2.0)
         md = render_markdown(report)
         assert "Recommended action" not in md
 
@@ -1028,14 +1023,14 @@ class TestRenderHtml:
     def test_pass_class_present(self) -> None:
         """HTML class 'pass' appears for passing metrics."""
         html = render_html(
-            _build(theta_annual=-8_000.0, meets_target=True),
+            _build(theta_annual=-8_000.0),
         )
         assert 'class="pass"' in html
 
     def test_fail_class_present(self) -> None:
         """HTML class 'fail' appears for failing metrics."""
         html = render_html(
-            _build(theta_annual=-20_000.0, meets_target=False),
+            _build(theta_annual=-20_000.0, convexity_pct=5.0),
         )
         assert 'class="fail"' in html
 
@@ -1063,16 +1058,12 @@ class TestRenderHtml:
         assert "Decision &amp; entry timing" not in html
 
     def test_recommended_action_line_for_failing_row(self) -> None:
-        report = _build(
-            theta_annual=-20_000.0, budget_pct=2.0, meets_target=True
-        )
+        report = _build(theta_annual=-20_000.0, budget_pct=2.0)
         html = render_html(report)
         assert "Recommended action &mdash; Annual carry cost:" in html
 
     def test_no_recommended_action_line_when_all_pass(self) -> None:
-        report = _build(
-            theta_annual=-8_000.0, budget_pct=2.0, meets_target=True
-        )
+        report = _build(theta_annual=-8_000.0, budget_pct=2.0)
         html = render_html(report)
         assert "Recommended action" not in html
 

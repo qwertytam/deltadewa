@@ -37,6 +37,7 @@ import numpy as np
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
@@ -52,6 +53,7 @@ from deltadewa.ips_config import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.ips_config import IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
@@ -154,8 +156,15 @@ class CrashScenarioRow:
         payoff_vs_premium: hedge_pnl as a multiple of premium paid.
         convexity_pct: Hedge-only repriced crash convexity as % of the
             protected book (``HealthMixin.calculate_crash_convexity_pct``).
-        meets_target: Whether convexity_pct falls within the IPS
-            convexity target band, if one was supplied.
+        convexity: The referee's grading of *convexity_pct* against the IPS
+            band (:func:`~deltadewa.analysis.convexity_band.grade_convexity`),
+            or ``None`` when no IPS band was supplied. **Only the row at the
+            IPS crash depth is graded** (#431): the handbook states the band
+            at one depth, so every other row is ``UNMEASURED`` against it —
+            not "outside band".
+        meets_target: Derived from *convexity*: ``True``/``False`` at the IPS
+            depth, ``None`` at any other depth and when no band was
+            supplied. Never ``False`` for "no band" (#433).
         intrinsic_floor: Intrinsic value of the long put legs at the shocked
             spot — a conservative lower bound on ``hedge_pnl``, surfaced as a
             separate labelled floor (never the headline).
@@ -166,8 +175,13 @@ class CrashScenarioRow:
     hedge_pnl: float
     payoff_vs_premium: float
     convexity_pct: float
-    meets_target: bool
+    convexity: ConvexityGrading | None
     intrinsic_floor: float
+
+    @property
+    def meets_target(self) -> bool | None:
+        """Derived from the grading; ``None`` when ungraded or unmeasured."""
+        return None if self.convexity is None else self.convexity.meets
 
 
 def _long_puts(portfolio: OptionPortfolio) -> list[OptionPosition]:
@@ -351,12 +365,14 @@ def _build_scenario_rows(
         convexity_pct = analyzer.calculate_crash_convexity_pct(
             shock.at_pct(shock_pct),
         )
-        meets_target = (
-            ips_convexity.target_min_pct
-            <= convexity_pct
-            <= ips_convexity.target_max_pct
+        grading = (
+            grade_convexity(
+                convexity_pct,
+                ips_convexity,
+                at_shock_pct=shock_pct,
+            )
             if ips_convexity is not None
-            else False
+            else None
         )
         rows.append(
             CrashScenarioRow(
@@ -364,7 +380,7 @@ def _build_scenario_rows(
                 hedge_pnl=hedge_pnl,
                 payoff_vs_premium=ratio,
                 convexity_pct=convexity_pct,
-                meets_target=meets_target,
+                convexity=grading,
                 intrinsic_floor=floor[shock_pct],
             ),
         )
@@ -403,7 +419,7 @@ def compute_crash_convexity(
         ips_convexity: IPS convexity target (policy, not pricing).  When
             supplied the IPS crash scenario is guaranteed to appear in both
             the grid and ``scenario_rows``, and ``payoff_vs_premium`` is
-            populated.  Used only for ``meets_target`` band comparison,
+            populated.  Used only for the band grading,
             never for repricing — that is *shock*'s job, and the two stay
             separate arguments so policy cannot quietly move the pricing.
         scenario_shocks: Explicit shocks to include in

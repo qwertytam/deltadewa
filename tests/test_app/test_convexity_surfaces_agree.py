@@ -89,8 +89,6 @@ _READINGS: tuple[float | None, ...] = (
 # the grid goes green caller by caller and cannot silently skip one.
 _PENDING_NONE: frozenset[str] = frozenset(
     {
-        "crash_payoff_row",
-        "protection_section",
         "compliance_row",
         "scorecard_row",
     },
