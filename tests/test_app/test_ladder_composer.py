@@ -8,6 +8,7 @@ from datetime import timedelta
 import pytest
 from dash.development.base_component import Component
 
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.ladder import (
     LadderSource,
     ProposedLadder,
@@ -530,7 +531,6 @@ class TestDepthTableAgreesWithTheScorecard:
             ladder_depth_profile,
             profile_depths,
         )
-        from deltadewa.app import format as fmt
 
         ips = _ips()
         portfolio = _portfolio(_BIG_QTY)
@@ -560,6 +560,13 @@ class TestDepthTableAgreesWithTheScorecard:
             rungs_raw="20@1.5:35, 30@1.5:40, 40@1.5:25",
         )
 
-        rendered = fmt.percent(ips_row.combined_pct_of_book)
-        assert convexity_row.actual.startswith(rendered)
+        # The same figure, printed by the referee's rule (#434): a reading
+        # just under the floor reads "4.99%" beside its FAIL, where
+        # ``fmt.percent`` said "5.0%" next to a badge that said below.
+        rendered = grade_convexity(
+            ips_row.combined_pct_of_book,
+            ips.convexity,
+            at_shock_pct=ips_row.shock_pct,
+        ).display()
+        assert convexity_row.actual == rendered
         assert rendered in _text(panel)

@@ -15,6 +15,10 @@ from html import escape
 from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.carry import carry_vs_budget
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    grade_convexity,
+)
 from deltadewa.analysis.crash_repricing import describe_expired_legs
 from deltadewa.analysis.decision_matrix import (
     DecisionVerdict,
@@ -32,6 +36,7 @@ from deltadewa.analysis.realized_carry import (
 )
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.analysis.crash_payoff import CrashConvexityResult
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import MonetizationPlan
@@ -109,8 +114,11 @@ class CostSection:
 class ProtectionSection:
     """Crash payoff and IPS convexity-band compliance.
 
-    All fields except ``premium_paid`` and ``premium_basis`` are ``None``
-    when no ``IpsConvexity`` target was supplied to the crash analysis.
+    Every convexity figure is ``None`` when no ``IpsConvexity`` target was
+    supplied to the crash analysis. They are all read off one stored
+    :class:`~deltadewa.analysis.convexity_band.ConvexityGrading` (#434), so
+    the reading, the band, the depth and the verdict cannot disagree: the
+    grade is the referee's, and ``meets_target`` is derived from it.
 
     Attributes:
         payoff_vs_premium: Gross payoff / premium at the IPS crash point.
@@ -120,12 +128,18 @@ class ProtectionSection:
             name for this figure — "Payoff-vs-Premium Multiple" — which is
             distinct from the handbook's "Crash Payoff Ratio" (this repo's
             ``offset_ratio``).
-        ips_crash_pct: The signed crash shock used (e.g. -25.0).
-        convexity_pct: Net-of-underlying crash P&L as % of book notional
-            at the IPS shock, from the matching ``CrashScenarioRow``.
-        target_min_pct: IPS lower bound for convexity_pct.
-        target_max_pct: IPS upper bound for convexity_pct.
-        meets_target: True when convexity_pct is within the target band.
+        convexity: The referee's grading of the crash convexity at the IPS
+            shock, from the matching ``CrashScenarioRow``; ``None`` when no
+            IPS convexity policy was loaded. Its value is ``None`` when the
+            reading could not be taken ("unmeasured, not breaching",
+            #433).
+        ips_crash_pct: Derived: the signed crash shock used (e.g. -25.0).
+        convexity_pct: Derived: crash convexity as % of the protected book
+            at the IPS shock (hedge-only; see #432 for the label).
+        target_min_pct: Derived: IPS lower bound for convexity_pct.
+        target_max_pct: Derived: IPS upper bound for convexity_pct.
+        meets_target: Derived from the grade: True/False in band, ``None``
+            when unmeasured or when no policy was loaded.
         premium_paid: Total put premium used as the payoff denominator.
         premium_basis: ``"paid"`` or ``"mark (approx)"``.
         excluded_expired_legs: One human-readable label per long-put leg
@@ -139,14 +153,35 @@ class ProtectionSection:
     """
 
     payoff_vs_premium: float | None
-    ips_crash_pct: float | None
-    convexity_pct: float | None
-    target_min_pct: float | None
-    target_max_pct: float | None
-    meets_target: bool | None
+    convexity: ConvexityGrading | None
     premium_paid: float
     premium_basis: str
     excluded_expired_legs: tuple[str, ...] = ()
+
+    @property
+    def ips_crash_pct(self) -> float | None:
+        """The IPS crash depth the convexity was graded at."""
+        return None if self.convexity is None else self.convexity.shock_pct
+
+    @property
+    def convexity_pct(self) -> float | None:
+        """The raw convexity reading, or ``None`` when unmeasured."""
+        return None if self.convexity is None else self.convexity.value_pct
+
+    @property
+    def target_min_pct(self) -> float | None:
+        """The IPS band floor, or ``None`` when no policy was loaded."""
+        return None if self.convexity is None else self.convexity.min_pct
+
+    @property
+    def target_max_pct(self) -> float | None:
+        """The IPS band ceiling, or ``None`` when no policy was loaded."""
+        return None if self.convexity is None else self.convexity.max_pct
+
+    @property
+    def meets_target(self) -> bool | None:
+        """Derived from the grade; ``None`` when unmeasured or ungraded."""
+        return None if self.convexity is None else self.convexity.meets
 
 
 @dataclass(frozen=True)
@@ -620,7 +655,7 @@ def _build_decision(
         skew_low=me.skew_low_pctile / 100.0,
     )
 
-    if protection.convexity_pct is None:
+    if protection.convexity is None:
         return DecisionSection(
             verdict=DecisionVerdict.INSUFFICIENT_DATA.value,
             rationale=(
@@ -629,8 +664,9 @@ def _build_decision(
             ),
             entry_recommendation=entry.recommendation,
             should_enter=entry.should_enter,
-            # ProtectionSection.convexity_pct is None: no IPS convexity
-            # policy was loaded.
+            # ProtectionSection.convexity is None: no IPS convexity policy
+            # was loaded. (A policy with an *unmeasured* reading goes to
+            # ``decision_matrix``, which says so itself, #433.)
             data_quality_note=(
                 "No convexity target is loaded from ips.yaml, so the hedge"
                 " cannot be graded against one."
@@ -694,11 +730,7 @@ def build_protection_section(
     if crash_result.ips_convexity is None:
         return ProtectionSection(
             payoff_vs_premium=crash_result.payoff_vs_premium,
-            ips_crash_pct=None,
-            convexity_pct=None,
-            target_min_pct=None,
-            target_max_pct=None,
-            meets_target=None,
+            convexity=None,
             premium_paid=crash_result.premium_paid,
             premium_basis=crash_result.premium_basis.value,
             excluded_expired_legs=excluded_expired_legs,
@@ -714,13 +746,16 @@ def build_protection_section(
         ),
         None,
     )
+    # The matching row was graded at the IPS depth by the referee; reuse that
+    # grading rather than grading again. No matching row means no reading.
+    grading = (
+        matching.convexity
+        if matching is not None and matching.convexity is not None
+        else grade_convexity(None, ips_conv, at_shock_pct=ips_shock)
+    )
     return ProtectionSection(
         payoff_vs_premium=crash_result.payoff_vs_premium,
-        ips_crash_pct=ips_shock,
-        convexity_pct=matching.convexity_pct if matching else None,
-        target_min_pct=ips_conv.target_min_pct,
-        target_max_pct=ips_conv.target_max_pct,
-        meets_target=matching.meets_target if matching else None,
+        convexity=grading,
         premium_paid=crash_result.premium_paid,
         premium_basis=crash_result.premium_basis.value,
         excluded_expired_legs=excluded_expired_legs,
@@ -862,27 +897,24 @@ def build_ips_compliance(
     ]
 
     p = protection
-    if (
-        p.ips_crash_pct is not None
-        and p.target_min_pct is not None
-        and p.target_max_pct is not None
-    ):
+    grading = p.convexity
+    if grading is not None:
         target_str = (
-            f"{p.target_min_pct:.1f}%\u2013{p.target_max_pct:.1f}% of book"
+            f"{grading.min_pct:.1f}%\u2013{grading.max_pct:.1f}% of book"
         )
-        actual_str = (
-            f"{p.convexity_pct:.1f}%" if p.convexity_pct is not None else "—"
-        )
-        passes = bool(p.meets_target)
+        # The referee's display rule: one decimal, more only when rounding
+        # would put the figure on the wrong side of the band from its grade.
+        actual_str = grading.display()
+        passes = bool(grading.meets)
         action: str | None = None
         if not passes:
-            if p.convexity_pct is None:
+            if grading.grade is ConvexityGrade.UNMEASURED:
                 action = (
                     "Crash convexity could not be measured at the IPS"
                     " shock — check that the crash scenario has a"
                     " matching repriced row."
                 )
-            elif p.convexity_pct < p.target_min_pct:
+            elif grading.grade is ConvexityGrade.BELOW:
                 action = (
                     "Convexity is below target — the book is"
                     " under-hedged; increase hedge size, or roll to a"
@@ -896,7 +928,7 @@ def build_ips_compliance(
                 )
         rows.append(
             IpsComplianceRow(
-                metric=(f"Crash convexity ({p.ips_crash_pct:.0f}% shock)"),
+                metric=(f"Crash convexity ({grading.shock_pct:.0f}% shock)"),
                 target=target_str,
                 actual=actual_str,
                 passes=passes,
@@ -985,6 +1017,17 @@ def _fmt_money(value: float) -> str:
     """Format a dollar amount with sign and comma separators."""
     sign = "-" if value < 0 else ""
     return f"{sign}${abs(value):,.0f}"
+
+
+def _convexity_text(protection: ProtectionSection) -> str:
+    """Return the convexity reading as the referee says to print it (#434).
+
+    Never rounds a figure onto the wrong side of the band from the PASS/FAIL
+    beside it; an em dash when there is no reading.
+    """
+    if protection.convexity is None:
+        return "—"
+    return protection.convexity.display()
 
 
 def _fmt_pct(value: float | None, decimals: int = 2) -> str:
@@ -1375,7 +1418,7 @@ def render_markdown(report: ProgramReport) -> str:
         ),
         f"| IPS crash scenario | {crash_label} |",
         f"| Payoff ratio at crash | {ratio_str} |",
-        (f"| Convexity (net P&L % of book) | {_fmt_pct(p.convexity_pct, 1)} |"),
+        f"| Convexity (net P&L % of book) | {_convexity_text(p)} |",
         f"| IPS convexity target | {target_band} |",
         f"| Status | {_pass_fail_md(p.meets_target)} |",
         "",
@@ -1825,7 +1868,7 @@ over {rf.elapsed_days} day(s)</td></tr>
 <tr><td>IPS crash scenario</td><td>{escape(crash_label_html)}</td></tr>
 <tr><td>Payoff ratio at crash</td><td>{ratio_str}</td></tr>
 <tr><td>Convexity (net P&amp;L % of book)</td>\
-<td>{escape(_fmt_pct(p.convexity_pct, 1))}</td></tr>
+<td>{escape(_convexity_text(p))}</td></tr>
 <tr><td>IPS convexity target</td><td>{target_band_html}</td></tr>
 <tr><td>Status</td><td>{_pass_fail_html(p.meets_target)}</td></tr>
 </table>

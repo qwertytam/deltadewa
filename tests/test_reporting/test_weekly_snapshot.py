@@ -7,6 +7,10 @@ from datetime import date
 
 import pytest
 
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    ConvexityGrading,
+)
 from deltadewa.reporting.program_report import (
     CostSection,
     IpsComplianceRow,
@@ -36,6 +40,12 @@ _AS_OF = date(2026, 8, 5)
 # TestDiffSnapshotsCrossings' explicit-needs_alarm tests for the case
 # this default can't represent (data_quality and needs_alarm diverging).
 _DEFAULT_STALE_OR_WORSE = frozenset({"STALE", "STATIC", "UNAVAILABLE"})
+
+_GRADE_FOR_MEETS = {
+    True: ConvexityGrade.WITHIN,
+    False: ConvexityGrade.BELOW,
+    None: ConvexityGrade.UNMEASURED,
+}
 
 
 def _make_report(
@@ -74,11 +84,15 @@ def _make_report(
         ),
         protection=ProtectionSection(
             payoff_vs_premium=payoff_vs_premium,
-            ips_crash_pct=-25.0,
-            convexity_pct=convexity_pct,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-            meets_target=meets_target,
+            # The snapshot tests drive the grade directly: they are about
+            # diffing two snapshots, not about grading a reading.
+            convexity=ConvexityGrading(
+                value_pct=convexity_pct,
+                min_pct=15.0,
+                max_pct=25.0,
+                shock_pct=-25.0,
+                grade=_GRADE_FOR_MEETS[meets_target],
+            ),
             premium_paid=300_000.0,
             premium_basis="paid",
         ),

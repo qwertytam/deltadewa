@@ -572,8 +572,13 @@ def _depth_table(
     rows = []
     for row, base_pct in zip(profile, baseline_pct, strict=True):
         graded: list[Component] = [html.Td("")]
+        combined_pct = fmt.percent(row.combined_pct_of_book)
         if row.is_ips_depth and conv_row is not None:
             graded = [html.Td(_badge(conv_row.passes))]
+            # The graded cell is the strip's own text, which follows the
+            # referee's display rule (#434): "4.99%" beside a FAIL, never
+            # "5.0%" beside it. The other depths are shown, not graded.
+            combined_pct = conv_row.actual
         rows.append(
             html.Tr(
                 [
@@ -583,10 +588,7 @@ def _depth_table(
                         for g in row.rung_gains
                     ),
                     html.Td(fmt.currency(row.combined_gain), className="num"),
-                    html.Td(
-                        fmt.percent(row.combined_pct_of_book),
-                        className="num",
-                    ),
+                    html.Td(combined_pct, className="num"),
                     html.Td(fmt.percent(base_pct), className="num"),
                     *graded,
                 ],

@@ -44,6 +44,7 @@ from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.reporting.program_report import (
     HTML_STYLE,
+    IpsComplianceRow,
     ProgramReport,
     build_program_report,
     build_protection_section,
@@ -1178,3 +1179,51 @@ class TestMonetizationSectionWithoutPlan:
         """Without a plan, the advisory table header is absent."""
         html = render_html(_build())
         assert "Recommended advisory (not realized)" not in html
+
+
+class TestConvexityDisplayNeverContradictsItsGrade:
+    """The referee's display rule, on the program report's two surfaces (#434).
+
+    A reading of 9.96% against a 10% floor is a FAIL, and must not be
+    printed "10.0%" beside it.
+    """
+
+    def _row(self, convexity_pct: float) -> IpsComplianceRow:
+        report = _build(convexity_pct=convexity_pct)
+        return next(
+            r
+            for r in report.ips_compliance.rows
+            if r.metric.startswith("Crash convexity")
+        )
+
+    def test_just_under_the_floor_shows_a_second_place(self) -> None:
+        row = self._row(9.96)
+
+        assert row.passes is False
+        assert row.actual == "9.96%"
+
+    def test_touching_the_floor_at_two_places_shows_a_strict_edge(self) -> None:
+        row = self._row(9.999)
+
+        assert row.passes is False
+        assert row.actual == "<10.00%"
+
+    def test_just_over_the_ceiling_shows_a_second_place(self) -> None:
+        row = self._row(30.04)
+
+        assert row.passes is False
+        assert row.actual == "30.04%"
+
+    def test_a_clear_reading_keeps_one_place(self) -> None:
+        assert self._row(15.0).actual == "15.0%"
+        assert self._row(10.0).actual == "10.0%"
+        assert self._row(10.0).passes is True
+
+    def test_the_protection_table_prints_the_same_figure(self) -> None:
+        report = _build(convexity_pct=9.96)
+
+        markdown = render_markdown(report)
+        html = render_html_body(report)
+
+        assert "| Convexity (net P&L % of book) | 9.96% |" in markdown
+        assert "<td>9.96%</td>" in html

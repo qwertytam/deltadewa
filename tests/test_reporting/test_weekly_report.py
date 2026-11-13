@@ -123,11 +123,13 @@ def _make_report(
         ),
         protection=ProtectionSection(
             payoff_vs_premium=8.5,
-            ips_crash_pct=-25.0,
-            convexity_pct=19.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-            meets_target=True,
+            convexity=ConvexityGrading(
+                value_pct=19.0,
+                min_pct=15.0,
+                max_pct=25.0,
+                shock_pct=-25.0,
+                grade=ConvexityGrade.WITHIN,
+            ),
             premium_paid=300_000.0,
             premium_basis="paid",
         ),
