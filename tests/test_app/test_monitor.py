@@ -27,6 +27,7 @@ from werkzeug.serving import make_server
 
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
@@ -41,6 +42,7 @@ from deltadewa.app.factory import ProgramDashApp, create_app
 from deltadewa.app.pages import monitor
 from deltadewa.clock import days_between
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.ips_config import IpsConvexity
 from deltadewa.marketdata import StaticProvider
 from deltadewa.reporting.program_report import build_ips_compliance
 from deltadewa.state import ProgramState
@@ -1445,11 +1447,25 @@ class TestHedgeEfficiencySentence:
         single paragraph (the caveat is appended into the same sentence,
         never a second ``<p>`` — see that function's docstring).
         """
+        # The sentence reads the referee's grading, so the fixture builds one
+        # from the (reading, floor) pair these tests are written in terms of.
+        convexity = (
+            None
+            if convexity_pct is None or convexity_target_min_pct is None
+            else grade_convexity(
+                convexity_pct,
+                IpsConvexity(
+                    crash_scenario_pct=-25.0,
+                    target_min_pct=convexity_target_min_pct,
+                    target_max_pct=1_000.0,
+                ),
+                at_shock_pct=-25.0,
+            )
+        )
         return str(
             monitor._efficiency_sentence(
                 result,
-                convexity_pct=convexity_pct,
-                convexity_target_min_pct=convexity_target_min_pct,
+                convexity=convexity,
                 vega_sufficiency_pct=vega_sufficiency_pct,
                 vega_sufficiency_min_pct=vega_sufficiency_min_pct,
             ).children,

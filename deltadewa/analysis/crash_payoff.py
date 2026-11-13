@@ -387,6 +387,36 @@ def _build_scenario_rows(
     return rows
 
 
+def book_convexity_grading(
+    portfolio: OptionPortfolio,
+    ips_convexity: IpsConvexity,
+) -> ConvexityGrading:
+    """Grade the book's crash convexity at the IPS anchor, one shock only.
+
+    The cheap path: one repricing at the IPS crash state, not the full
+    scenario ladder :func:`compute_crash_convexity` builds. ``/monitor``'s
+    dial callback re-reads this on every keystroke, and nothing it grades
+    depends on the dials. It is the same figure and the same grade the
+    ladder's IPS row carries (:class:`CrashScenarioRow`), and a test pins
+    that they agree (#442).
+
+    Args:
+        portfolio: Live portfolio.
+        ips_convexity: IPS convexity policy: the crash basis and the band.
+
+    Returns:
+        The referee's grading; unmeasured when the book has no protected
+        notional.
+
+    """
+    shock = CrashShock.from_ips(ips_convexity)
+    return grade_convexity(
+        PortfolioAnalyzer(portfolio).calculate_crash_convexity_pct(shock),
+        ips_convexity,
+        at_shock_pct=shock.crash_scenario_pct,
+    )
+
+
 def compute_crash_convexity(
     portfolio: OptionPortfolio,
     *,

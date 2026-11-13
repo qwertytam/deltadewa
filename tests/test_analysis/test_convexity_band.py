@@ -222,7 +222,6 @@ class TestOneComparisonSite:
         {"ips_config.py", "convexity_band.py"},
     )
 
-    @pytest.mark.xfail(strict=True, reason="9a.3: callers still migrating")
     def test_no_caller_keeps_an_inline_band_comparison(self) -> None:
         root = Path(__file__).resolve().parents[2] / "deltadewa"
         offenders = [

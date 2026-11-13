@@ -220,7 +220,7 @@ def _sizing_panel_view(
             ),
             html.P(
                 "Achieved convexity "
-                f"{fmt.percent(result.achieved_convexity_pct)} vs "
+                f"{result.achieved_convexity.display()} vs "
                 f"{fmt.percent(conv.target_min_pct)}-"
                 f"{fmt.percent(conv.target_max_pct)} target "
                 f"({convexity_verdict} target).",
@@ -231,6 +231,8 @@ def _sizing_panel_view(
                 low=conv.target_min_pct,
                 high=conv.target_max_pct,
                 fmt=fmt.percent,
+                within=result.meets_convexity_target,
+                value_text=result.achieved_convexity.display(),
             ),
         ],
     )
