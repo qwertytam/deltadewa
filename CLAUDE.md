@@ -688,6 +688,29 @@ don't fix):
   answers" — e.g. Batch 8a.1's N1, where `/design`'s today-marks path and
   `/monitor`'s position detail priced the same June tranche to `$0` and
   `+$8.29K` respectively, with nothing comparing them.
+- **pr-preflight** — checks a branch against the PR *process* rules this file
+  and `docs/RELEASING.md` state, reporting PASS / FIX per line: not on `main`,
+  PR not already merged (#444/#449), changelog entry or `no changelog entry:
+  <why>`, `Closes #n` for every in-scope issue, version untouched outside
+  `release/*`, tests added versus pinned tests edited. Separate from
+  `doc-sync-checker`: that audits whether the *docs* still describe the repo;
+  this audits whether the *branch* followed the rules. Run before opening a PR
+  and before any push to a branch that has had one.
+- **release-checker** — given `X.Y.Z`, walks `docs/RELEASING.md` "Cutting a
+  release" and reports DONE / TODO / BLOCKED per step: changelog heading and
+  links, version bump, `test_changelog`, the digest golden's `Running v…` line,
+  merge, CI on the merge commit, annotated tag. Separate from
+  `runbook-auditor`: that checks the ops docs are executable as written; this
+  checks one release has actually been carried out, step by step. Run when
+  cutting a release and before any deploy.
+- **golden-diff-reporter** — runs a given pytest selection and reports each
+  failing expectation as test · quantity · expected -> actual, no tracebacks,
+  flagging separately any diff on a canonical book's *position* (strike,
+  quantity, maturity, legs) as opposed to a sizing *output*. Separate from
+  `gate-runner`: that runs the whole gate and reports pass/fail with the failing
+  output; this runs a chosen selection and turns the failures into a diff. Run
+  when a sizing, pricing or policy change is expected to move golden values
+  (#436 is the live example).
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`
