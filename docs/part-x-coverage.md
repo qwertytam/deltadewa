@@ -1088,12 +1088,16 @@ Both were graded against the same band with nothing asserting agreement. Both
 now read the strip's gauge (`crash_convexity_pct(positions=...)`), pinned by
 `tests/test_analysis/test_convexity_agreement.py`.
 
-**Known limitation, not fixed here.** Sizing covers the offset on *gross* crash
-payoff while convexity is *net of premium*, so a ladder sized to the minimum lands
-just under `|crash| - tolerance`. Where that equals the band floor, PASS/FAIL can
-flip on a 0.1-point difference (10.0% vs 9.9% in the field test). The composer
-says convexity "barely differs between ladders" and points to carry, efficiency
-and the depth table; the sizing rule itself is unchanged.
+**Decided: gross sizing is kept (#436, 2026-11-13).** Sizing covers the offset on
+*gross* crash payoff while convexity is *net of premium*, so a ladder sized to the
+minimum lands just under `|crash| - tolerance`. Where that equals the band floor,
+PASS/FAIL can flip on a 0.1-point difference (10.0% vs 9.9% in the field test).
+That is accepted: premium is sunk, but the offset is what must be recovered in
+the crash, and netting it would change contract counts everywhere. It is said
+wherever a surface says "covers the offset" beside a convexity verdict
+(`sizing.GROSS_SIZING_NOTE`: the sizing panel, the strike-candidate table and the
+composer) and pinned by `test_ladder.py::test_covering_the_offset_reads_below_it_net_of_premium`.
+Changing the basis reopens #436; it is not a routine re-base.
 
 **Comparability, stated on the panel.** "This ladder" is the ladder *in place of*
 the book's option legs: long puts only, every rung priced at the book's

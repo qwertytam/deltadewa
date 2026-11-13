@@ -50,6 +50,7 @@ from deltadewa.analysis.ladder import (
     profile_depths,
     size_ladder,
 )
+from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.compliance import Scorecard, scorecard
@@ -693,9 +694,8 @@ def _composer_view(
             "rung rounds up to whole contracts, so the share held can "
             "differ a little from the weight asked for. Rungs are priced "
             "at the book's volatility "
-            f"({fmt.percent(portfolio.volatility * 100.0)}); the "
-            "convexity row below is the gain net of premium, so it reads a "
-            "little under that target.",
+            f"({fmt.percent(portfolio.volatility * 100.0)}). "
+            + GROSS_SIZING_NOTE,
             className="plain-language",
         ),
         html.H4("Rungs"),

@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Final, TypedDict
 
 from dash import ALL, Input, NoUpdate, Output, State, ctx, dcc, html, no_update
 
+from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.analysis.strike_ladder import build_candidate_grid
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
@@ -79,7 +80,8 @@ _ALONE_NOTE = (
     "Each row is a single strike sized to meet the IPS crash offset on "
     "its own. Contracts, convexity and budget are for that strike bought "
     "alone — not a share of a blended ladder. Use Add to put a strike into "
-    "the Ladder composer below, which scores a blend as one unit."
+    "the Ladder composer below, which scores a blend as one unit. "
+    + GROSS_SIZING_NOTE
 )
 
 #: #357: this panel's TOC entry and heading id, from one source.

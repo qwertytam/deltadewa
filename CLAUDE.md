@@ -469,9 +469,10 @@ defaults**, not breaking); templates in both shipped IPS files, listed by
 `ips_config --check` under "no code defaults". PR 1 of 8d made sizing's and the
 grid's "achieved convexity" the strip's own gauge (`crash_convexity_pct(positions=)`,
 gain over unadjusted book notional): **readings moved** by about premium/notional.
-Known, deliberately unfixed: sizing covers the offset on *gross* payoff while
+Decided GROSS (#436, 2026-11-13): sizing covers the offset on *gross* payoff while
 convexity is *net of premium*, so an offset-sized ladder lands just under
-`|crash| - tolerance` and PASS/FAIL can flip on 0.1pp at the band floor; "Current
+`|crash| - tolerance` and PASS/FAIL can flip on 0.1pp at the band floor (said
+beside every "covers the offset" by `sizing.GROSS_SIZING_NOTE`); "Current
 book" and "This ladder" are not like-for-like when the book holds shorts/calls or
 per-leg vols (the panel says so). Filed from the same audits: #431-#435. See
 `docs/part-x-coverage.md`, "The ladder, as an object (8d)".

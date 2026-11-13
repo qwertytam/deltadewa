@@ -539,13 +539,14 @@ class TestSizedFiguresAgreeWithTheShadowBook:
         )
 
     def test_covering_the_offset_reads_below_it_net_of_premium(self) -> None:
-        """Pins the documented gross-vs-net gap (#410, known limitation).
+        """Pins the gross-sizing decision (#436, decided 2026-11-13).
 
         Sizing covers the offset on *gross* crash value; the convexity row
         is the gain *net of premium*. A ladder that covers the offset
-        therefore reads below ``offset / book`` by the premium it paid. If
-        this ever fails the sizing rule or the gauge changed, and the
-        composer's caveat text needs revisiting.
+        therefore reads below ``offset / book`` by the premium it paid, and
+        ``GROSS_SIZING_NOTE`` says so beside every "covers the offset". If
+        this ever fails the sizing basis changed, which reopens #436 and
+        is not a routine re-base.
         """
         ips = _ips()
         shock = CrashShock.from_ips(ips.convexity)

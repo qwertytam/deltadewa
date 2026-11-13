@@ -22,7 +22,7 @@ from dash import Input, Output, dcc, html
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.convexity_band import ConvexityGrade
-from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.sizing import GROSS_SIZING_NOTE, size_hedge
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
     from deltadewa.analysis.sizing import HedgeSizingResult
     from deltadewa.app.factory import ProgramDashApp
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsConvexity
     from deltadewa.portfolio.core import OptionPortfolio
 
 # PLANNING zone: dial default. Carried over from the sizing cell of
@@ -218,24 +218,55 @@ def _sizing_panel_view(
                 high=result.carry_budget,
                 fmt=fmt.currency,
             ),
-            html.P(
-                "Achieved convexity "
-                f"{result.achieved_convexity.display()} vs "
-                f"{fmt.percent(conv.target_min_pct)}-"
-                f"{fmt.percent(conv.target_max_pct)} target "
-                f"({convexity_verdict} target).",
-                className="plain-language",
-            ),
-            band_bar(
-                value=result.achieved_convexity_pct,
-                low=conv.target_min_pct,
-                high=conv.target_max_pct,
-                fmt=fmt.percent,
-                within=result.meets_convexity_target,
-                value_text=result.achieved_convexity.display(),
-            ),
+            *_convexity_children(result, conv, convexity_verdict),
         ],
     )
+
+
+def _convexity_children(
+    result: HedgeSizingResult,
+    conv: IpsConvexity,
+    convexity_verdict: str,
+) -> list[Component]:
+    """Build the achieved-convexity line, its bar, and the gross-sizing note.
+
+    A candidate that needs no contracts (the IPS drawdown tolerance already
+    covers the crash) adds no convexity, and "0.0% ... below target" would
+    read as an under-hedge. The ladder composer says the same case plainly
+    (an empty ladder is what sizing asks for); this says it too.
+    """
+    if result.contracts_needed == 0 and result.required_crash_offset <= 0.0:
+        return [
+            html.P(
+                "No contracts are needed: the IPS drawdown tolerance already "
+                "covers the crash depth, so the required offset is $0 and an "
+                "empty hedge is what sizing asks for. There is no achieved "
+                "convexity to compare with the target.",
+                className="plain-language",
+            ),
+        ]
+    return [
+        html.P(
+            "Achieved convexity "
+            f"{result.achieved_convexity.display()} vs "
+            f"{fmt.percent(conv.target_min_pct)}-"
+            f"{fmt.percent(conv.target_max_pct)} target "
+            f"({convexity_verdict} target).",
+            className="plain-language",
+        ),
+        band_bar(
+            value=result.achieved_convexity_pct,
+            low=conv.target_min_pct,
+            high=conv.target_max_pct,
+            fmt=fmt.percent,
+            within=result.meets_convexity_target,
+            value_text=result.achieved_convexity.display(),
+        ),
+        # #436: sizing covers the offset on gross payoff, convexity is graded
+        # net of premium. Said beside the verdict so "below target" is not
+        # read as "the hedge does not cover the offset".
+        html.P(GROSS_SIZING_NOTE, className="plain-language gross-note"),
+    ]
 
 
 def _render_sizing_panel_logic(

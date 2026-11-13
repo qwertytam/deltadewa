@@ -382,6 +382,10 @@ def size_ladder(
     giving the total contract count, which is then split by weight (each
     rung rounded up). A one-rung ladder is exactly ``size_hedge``.
 
+    Sized on **gross** payoff (#436, decided 2026-11-13), like
+    ``size_hedge``: the ladder's repriced crash value covers the offset, and
+    its convexity, graded net of premium, reads a little under it.
+
     Args:
         portfolio: Live portfolio supplying market data and the underlying.
         ips_config: Policy (budget, drawdown tolerance, crash basis, beta).

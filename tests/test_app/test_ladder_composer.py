@@ -16,6 +16,7 @@ from deltadewa.analysis.ladder import (
     materialize_ladder,
     size_ladder,
 )
+from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.app.compliance import scorecard
 from deltadewa.app.pages.design.planning import ladder_composer as composer
 from deltadewa.constants import OptionType
@@ -570,3 +571,18 @@ class TestDepthTableAgreesWithTheScorecard:
         ).display()
         assert convexity_row.actual == rendered
         assert rendered in _text(panel)
+
+
+class TestGrossSizingNote:
+    """#436: the composer says sizing is gross and convexity is net."""
+
+    def test_the_shared_note_sits_beside_covers_the_offset(self) -> None:
+        panel = composer._render_composer_logic(
+            portfolio=_portfolio(_BIG_QTY),
+            ips_config=_ips(),
+            rungs_raw="20@1.5:35, 30@1.5:40, 40@1.5:25",
+        )
+
+        text = _text(panel)
+        assert "covers" in text
+        assert GROSS_SIZING_NOTE in text

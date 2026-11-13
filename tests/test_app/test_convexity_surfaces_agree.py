@@ -49,7 +49,7 @@ from deltadewa.analysis.roll_planner import (
     gamma_theta_delay,
 )
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
-from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.sizing import GROSS_SIZING_NOTE, size_hedge
 from deltadewa.analysis.strike_ladder import GridCell, build_candidate_grid
 from deltadewa.app.compliance import (
     compliance_sections_at_ips_anchor,
@@ -579,3 +579,56 @@ class TestAZeroBookIsUnmeasuredEverywhere:
             "Not measured: Crash convexity (-25% shock).",
         )
         assert "compliance-verdict--fail" in verdict.className
+
+
+def _all_text(component: Any) -> str:
+    """Concatenate every string under a Dash component tree."""
+    children = getattr(component, "children", component)
+    if isinstance(children, str):
+        return children
+    if isinstance(children, list | tuple):
+        return " ".join(_all_text(c) for c in children)
+    return "" if children is None else _all_text(children)
+
+
+class TestGrossSizingIsDisclosedBesideEveryCoversTheOffset:
+    """#436 (decided GROSS): the caveat sits where the claim is made."""
+
+    def test_the_sizing_panel_carries_the_note(self) -> None:
+        from deltadewa.app.pages.design.planning import sizing as sizing_panel
+
+        result = size_hedge(
+            _book(),
+            _ips(),
+            candidate_pct_otm=10.0,
+            candidate_maturity_years=1.0,
+        )
+        panel = sizing_panel._sizing_panel_view(result, _ips())
+
+        assert GROSS_SIZING_NOTE in _all_text(panel)
+
+    def test_the_candidate_table_note_carries_it(self) -> None:
+        from deltadewa.app.pages.design.planning import ladder as ladder_panel
+
+        assert GROSS_SIZING_NOTE in ladder_panel._ALONE_NOTE
+
+    def test_a_zero_offset_candidate_is_not_called_below_target(self) -> None:
+        """No contracts needed is not an under-hedge (false-green audit)."""
+        from deltadewa.app.pages.design.planning import sizing as sizing_panel
+
+        generous = replace(
+            _ips(),
+            drawdown=replace(_ips().drawdown, max_tolerance_pct=90.0),
+        )
+        result = size_hedge(
+            _book(),
+            generous,
+            candidate_pct_otm=10.0,
+            candidate_maturity_years=1.0,
+        )
+        text = _all_text(sizing_panel._sizing_panel_view(result, generous))
+
+        assert result.contracts_needed == 0
+        assert "No contracts are needed" in text
+        assert "below target" not in text
+        assert GROSS_SIZING_NOTE not in text
