@@ -155,25 +155,3 @@ class TestCalculateVolRegimePercentileMethod:
         """Without history, the method returns the normalized figure."""
         value = _analyzer(0.25).calculate_vol_regime_percentile()
         assert value == pytest.approx(50.0)
-
-
-class TestCalculateHealthMetricsSurfacesBasis:
-    """calculate_health_metrics distinguishes percentile from normalized."""
-
-    def test_history_labels_percentile_with_lookback(self) -> None:
-        """Supplied history -> basis 'percentile' and a set lookback window."""
-        metrics = _analyzer(0.16).calculate_health_metrics(
-            vix_history=[10.0, 12.0, 14.0, 16.0, 18.0, 20.0],
-        )
-
-        assert metrics["vol_regime_basis"] == "percentile"
-        assert metrics["vol_regime_lookback_days"] == VOL_REGIME_LOOKBACK_DAYS
-        assert metrics["vol_regime_percentile"] == pytest.approx(4 / 6 * 100)
-
-    def test_no_history_labels_normalized_with_no_lookback(self) -> None:
-        """No history -> basis 'normalized' and no lookback window."""
-        metrics = _analyzer(0.25).calculate_health_metrics()
-
-        assert metrics["vol_regime_basis"] == "normalized"
-        assert metrics["vol_regime_lookback_days"] is None
-        assert metrics["vol_regime_percentile"] == pytest.approx(50.0)

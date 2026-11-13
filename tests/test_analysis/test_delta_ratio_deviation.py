@@ -108,32 +108,20 @@ class TestCalculateNetCarryPct:
         analyzer = _analyzer(0.0, 0.0, underlying_value=0.0)
         assert analyzer.calculate_net_carry_pct() is None
 
-    def test_health_metrics_net_carry_none_when_unset(self) -> None:
-        """calculate_health_metrics surfaces the None through the dict."""
-        metrics = _analyzer(
-            0.0,
-            0.0,
-            underlying_value=0.0,
-        ).calculate_health_metrics()
-        assert metrics["net_carry_pct"] is None
 
+class TestDeltaRatioDeviationReadsItsTarget:
+    """The method form reads the target it is given (#435).
 
-class TestCalculateHealthMetricsThreadsTarget:
-    """calculate_health_metrics threads the target like the crash scenario."""
+    Repointed from ``calculate_health_metrics(target_delta_ratio_pct=...)``,
+    retired in #435, to the method that dict called.
+    """
 
-    def test_threads_target_into_drift(self) -> None:
-        """A supplied target drives delta_ratio_deviation_pct."""
-        metrics = _analyzer(95.0, 100.0).calculate_health_metrics(
-            target_delta_ratio_pct=90.0,
-        )
-        assert metrics["delta_ratio_deviation_pct"] == pytest.approx(
-            5.0, rel=1e-7
+    def test_a_supplied_target_drives_the_deviation(self) -> None:
+        deviation = _analyzer(95.0, 100.0).calculate_delta_ratio_deviation_pct(
+            90.0,
         )
 
-    def test_none_target_reads_unavailable(self) -> None:
-        """Without a target (no IPS), delta_ratio_deviation_pct is None."""
-        metrics = _analyzer(95.0, 100.0).calculate_health_metrics()
-        assert metrics["delta_ratio_deviation_pct"] is None
+        assert deviation == pytest.approx(5.0, rel=1e-7)
 
 
 class TestOverallHealthScoreSkipsUnavailable:

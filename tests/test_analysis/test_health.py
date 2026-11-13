@@ -670,55 +670,6 @@ class TestComputeVolRegimeBoundaries:
         assert result.sample_size == 252  # Not 600
 
 
-class TestCalculateHealthMetricsDisablingContract:
-    """Aggregation + disabling contract on absent IPS fields."""
-
-    def test_crash_none_disables_both_crash_derived_gauges(self) -> None:
-        """crash=None → crash_convexity_pct=0.0, hedge_success_pct=0.0."""
-        analyzer = _analyzer()
-
-        metrics = analyzer.calculate_health_metrics(
-            cumulative_carry_paid=1_000.0,
-            crash=None,
-        )
-
-        # Both crash-derived gauges disabled as a pair.
-        assert metrics["crash_convexity_pct"] == pytest.approx(0.0, rel=1e-8)
-        assert metrics["hedge_success_pct"] == pytest.approx(0.0, rel=1e-8)
-
-    def test_target_delta_ratio_none_makes_delta_drift_unavailable(
-        self,
-    ) -> None:
-        """target_delta_ratio_pct=None → delta_ratio_deviation_pct=None."""
-        analyzer = _analyzer()
-
-        metrics = analyzer.calculate_health_metrics(
-            crash=None,
-            target_delta_ratio_pct=None,
-        )
-
-        assert metrics["delta_ratio_deviation_pct"] is None
-
-    def test_all_metrics_keys_present_in_output(self) -> None:
-        """Aggregated dict contains all documented gauge keys."""
-        analyzer = _analyzer()
-
-        metrics = analyzer.calculate_health_metrics(crash=None)
-
-        expected_keys = {
-            "net_carry_pct",
-            "crash_convexity_pct",
-            "vega_sufficiency_pct",
-            "delta_ratio_deviation_pct",
-            "convexity_cliff_days",
-            "vol_regime_percentile",
-            "vol_regime_basis",
-            "vol_regime_lookback_days",
-            "hedge_success_pct",
-        }
-        assert set(metrics.keys()) == expected_keys
-
-
 def _score_metric(
     actual: float | None,
     min_val: float,

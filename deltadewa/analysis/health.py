@@ -11,7 +11,6 @@ from deltadewa.clock import days_between
 from deltadewa.ips_config import (
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
-    IpsConvexity,
 )
 
 if TYPE_CHECKING:
@@ -197,7 +196,9 @@ class HealthMixin:
 
            **No product consumer since Stage 4.3.** Its last caller was
            ``calculate_health_metrics`` → ``widgets/health_dashboard.py``,
-           the Jupyter gauge wall, deleted with the notebooks. Kept —
+           the Jupyter gauge wall, deleted with the notebooks; that
+           aggregator was itself retired in #435 (it had no caller of its
+           own). Kept —
            deliberately, on the same reasoning as
            ``analysis/crash_payoff.crash_scenario_table`` — because it is a
            real metric with no Dash home, not scaffolding: re-deriving it
@@ -291,6 +292,11 @@ class HealthMixin:
     ) -> float | None:
         """Calculate net delta's deviation from the target hedge ratio.
 
+        No product consumer since #435 retired ``calculate_health_metrics``,
+        its last caller; ``hedge_triggers`` reads the module-level
+        :func:`delta_deviation_from_target` instead, which stays live. Kept
+        and unit-tested as the method form of that figure.
+
         Renamed from ``calculate_delta_drift_pct`` (4.2, #335) — see
         :func:`delta_deviation_from_target` for why "drift" was the wrong
         word here. Deviation is the net-delta-to-equity ratio minus the
@@ -357,6 +363,12 @@ class HealthMixin:
         lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
     ) -> float:
         """Calculate the volatility-regime figure (0-100).
+
+        No product consumer since #435 retired ``calculate_health_metrics``,
+        its last caller; kept, with ``compute_vol_regime`` which it wraps,
+        because the true-rank vol-regime reading is a real metric with no
+        Dash home (``MarketEnvironment.regime_band_position_pct`` is a
+        different, band-position figure).
 
         Returns a **true** percentile (rank of the current implied vol against
         the trailing VIX distribution) when *vix_history* is supplied, and
@@ -439,10 +451,12 @@ class HealthMixin:
         .. note::
 
            **No product consumer since Stage 4.3**, which deleted the
-           Jupyter gauge wall that aggregated into it. The ``metrics``
-           values are duck-typed: only ``actual``, ``min_val``, ``max_val``
-           and ``invert_colors`` are read, so it no longer depends on any
-           gauge class. Kept and tested; see ``docs/part-x-coverage.md``.
+           Jupyter gauge wall that aggregated into it (and #435 then
+           retired ``calculate_health_metrics``, the dict that fed it). The
+           ``metrics`` values are duck-typed: only ``actual``, ``min_val``,
+           ``max_val`` and ``invert_colors`` are read, so it no longer
+           depends on any gauge class. Kept and tested; see
+           ``docs/part-x-coverage.md``.
 
         Args:
             metrics: dictionary containing metric configurations with keys:
@@ -484,126 +498,3 @@ class HealthMixin:
             scores.append(max(0, min(100, raw_score)))
 
         return sum(scores) / len(scores) if scores else 50
-
-    def calculate_health_metrics(  # pylint: disable=too-many-arguments  # one metric-config arg per gauge
-        self,
-        cumulative_carry_paid: float = 0.0,
-        historical_vol_low: float = DEFAULT_VOL_REGIME_LOW,
-        historical_vol_high: float = DEFAULT_VOL_REGIME_HIGH,
-        convexity_cliff_days: int = 180,
-        *,
-        crash: IpsConvexity | None = None,
-        target_delta_ratio_pct: float | None = None,
-        vix_history: Sequence[float] | None = None,
-        vol_regime_lookback_days: int = VOL_REGIME_LOOKBACK_DAYS,
-    ) -> dict[str, Any]:
-        """Calculate all health metrics in one call.
-
-        .. note::
-
-           **This entry point has no consumer at all since Stage 4.3.** It
-           had exactly one — ``widgets/health_dashboard.py``, the Jupyter
-           gauge wall — and that module was deleted with the notebooks.
-           Nothing on a shipping Dash page has ever read it.
-
-           It is kept rather than deleted because it is the only assembled
-           view of the health metrics, and rebuilding the assembly is the
-           expensive part if a Dash health surface is ever wanted. Two of
-           the gauges it collects are now unreachable any other way
-           (``net_carry_pct``, ``hedge_success_pct``); the rest are called
-           directly by their live consumers — crash convexity, vol regime,
-           vega sufficiency (M2.7), convexity cliff and delta ratio
-           deviation (M2.8) — not through this function.
-           ``hedge_success_pct`` additionally
-           stays deliberately unsurfaced (M2.4 finding **M2**: it cannot
-           compute a real value without the position-history layer, #70).
-           See ``docs/part-x-coverage.md``, "Stage 4.3".
-
-        Args:
-            cumulative_carry_paid: Total carry paid for the hedge (default: 0.0)
-            historical_vol_low: Historical low volatility for the vol-regime
-                normalized fallback (default: :data:`DEFAULT_VOL_REGIME_LOW`)
-            historical_vol_high: Historical high volatility for the vol-regime
-                normalized fallback (default: :data:`DEFAULT_VOL_REGIME_HIGH`)
-            convexity_cliff_days: Days threshold for high-gamma region
-            (default: 180)
-            crash: The IPS crash policy (pass ``ips_config.convexity``). The
-                crash *scenario* and its *vol shock* are bundled here so they
-                can never diverge — supplying a scenario always carries the
-                matching shock. When ``None`` (no IPS supplied), the
-                crash-derived gauges (crash convexity, hedge success) are
-                DISABLED and read ``0.0``, rather than silently reprice
-                spot-only against a fabricated scenario or a defaulted zero
-                shock. Both are single-sourced from ``IpsConvexity``.
-            target_delta_ratio_pct: Intended net-delta-to-equity ratio (%),
-                single-sourced from ``IpsTriggers.target_delta_ratio_pct``.
-                When ``None`` (no IPS supplied),
-                ``delta_ratio_deviation_pct`` is ``None`` (unavailable)
-                rather than measured against a hardcoded target.
-            vix_history: Trailing VIX closes in vol points (from
-                ``MarketDataProvider.get_vix_history``). When non-empty the
-                vol-regime figure is a **true** percentile; ``None``/empty
-                yields the min-max normalized figure, labelled as such.
-            vol_regime_lookback_days: Rank window for the vol-regime percentile
-                (default: :data:`VOL_REGIME_LOOKBACK_DAYS`).
-
-        Returns:
-            Dictionary containing all calculated health metrics:
-            - net_carry_pct: Net carry as % of underlying, or ``None`` when
-              ``underlying_quantity`` is unset (unavailable)
-            - crash_convexity_pct: Hedge P&L at the IPS crash scenario
-            - vega_sufficiency_pct: Portfolio % impact per +10 vol
-            - delta_ratio_deviation_pct: Deviation from the target hedge
-              ratio (pp), or ``None`` when unavailable
-            - convexity_cliff_days: Days until high-gamma region
-            - vol_regime_percentile: Vol-regime figure (0-100)
-            - vol_regime_basis: ``"percentile"`` (true rank vs VIX history) or
-              ``"normalized"`` (min-max fallback — not a percentile)
-            - vol_regime_lookback_days: Rank window when the basis is a true
-              percentile, else ``None``
-            - hedge_success_pct: Hedge P&L vs carry paid
-
-        """
-        crash_convexity_value: float | None
-        if crash is None:
-            crash_convexity_value = 0.0
-            hedge_success_pct = 0.0
-        else:
-            crash_convexity_value = self.calculate_crash_convexity_pct(
-                CrashShock.from_ips(crash),
-            )
-            hedge_success_pct = self.calculate_hedge_success_pct(
-                cumulative_carry_paid,
-                crash.crash_scenario_pct,
-            )
-
-        if target_delta_ratio_pct is None:
-            delta_ratio_deviation_value = None
-        else:
-            delta_ratio_deviation_value = (
-                self.calculate_delta_ratio_deviation_pct(
-                    target_delta_ratio_pct,
-                )
-            )
-
-        vol_regime = compute_vol_regime(
-            self.portfolio.volatility,
-            vix_history=vix_history,
-            normalized_low=historical_vol_low,
-            normalized_high=historical_vol_high,
-            lookback_days=vol_regime_lookback_days,
-        )
-
-        return {
-            "net_carry_pct": self.calculate_net_carry_pct(),
-            "crash_convexity_pct": crash_convexity_value,
-            "vega_sufficiency_pct": self.calculate_vega_sufficiency_pct(),
-            "delta_ratio_deviation_pct": delta_ratio_deviation_value,
-            "convexity_cliff_days": self.calculate_convexity_cliff_days(
-                convexity_cliff_days,
-            ),
-            "vol_regime_percentile": vol_regime.value,
-            "vol_regime_basis": vol_regime.basis.value,
-            "vol_regime_lookback_days": vol_regime.lookback_days,
-            "hedge_success_pct": hedge_success_pct,
-        }

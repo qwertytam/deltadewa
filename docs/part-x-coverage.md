@@ -375,9 +375,9 @@ which the app instantiates, so the module is on a shipping path:
 | `calculate_crash_convexity_pct` | `crash_payoff`, `roll_status`, `crash_repricing`, `/design`'s market-environment panel — **live** |
 | `calculate_vol_regime_percentile` | `market_environment` — **live** |
 | `calculate_vega_sufficiency_pct` | `/design` sizing panel — **live since M2.7** |
-| `calculate_health_metrics` | **nothing** — its one caller, `widgets/health_dashboard.py`, was deleted in Stage 4.3 |
+| `calculate_health_metrics` | **retired in #435** — its one caller, `widgets/health_dashboard.py`, was deleted in Stage 4.3, and the aggregator itself went with #435 (no consumer for two stages; its single-source test now reads `calculate_crash_convexity_pct` directly) |
 | `calculate_overall_health_score` | **nothing** — same |
-| `calculate_delta_drift_pct` | `calculate_health_metrics` → nothing; the underlying `delta_drift_from_target` also backs `/design`'s hedge-trigger delta row — **live** |
+| `calculate_delta_drift_pct` | `calculate_health_metrics` (retired, #435) → nothing; the underlying `delta_drift_from_target` also backs `/design`'s hedge-trigger delta row — **live** |
 | `calculate_net_carry_pct` | **nothing** — `calculate_health_metrics` only |
 | `calculate_convexity_cliff_days` | `/design` convexity cliff panel — **live** |
 | `calculate_hedge_success_pct` | **nothing** — `calculate_health_metrics` only (deliberate — M2.4 finding **M2**) |
@@ -738,11 +738,23 @@ gone, so there is nothing left to misrepresent it.
 
 `calculate_net_carry_pct`, `calculate_health_metrics` and
 `calculate_overall_health_score` lost their last consumer with the widget.
-**All three are kept**, annotated as unconsumed at the function, on the same
+**All three were kept** at Stage 4.3, annotated as unconsumed at the function, on the same
 reasoning as `crash_payoff.crash_scenario_table`: net carry is a real metric
 with no Dash home and re-deriving it later is work, the aggregator is the
 expensive part to rebuild if a Dash health surface is ever wanted, and all
 three stay unit-tested meanwhile. This resolves Open question #1.
+
+**`calculate_health_metrics` was retired in #435**, since nothing had read it for
+two stages and an orphan producer is a future second source of truth: it
+compiled, its tests stayed green, and the next person to want "the health
+numbers" would have found it and trusted it (it reported a crash convexity of
+`0.0` for a book with no underlying, the figure #433 retired). The other two
+stay, annotated at the function as having no product consumer; so do the
+methods only it called (`calculate_delta_ratio_deviation_pct`,
+`calculate_vol_regime_percentile`, `calculate_hedge_success_pct`). The tests
+that exercised the dict now call those methods directly; the live convexity
+gauge is `calculate_crash_convexity_pct`, which roll status, `/monitor`,
+`/design` and the digest all call.
 
 `calculate_overall_health_score` no longer depends on any gauge class — it was
 always duck-typed on four attributes (`actual`, `min_val`, `max_val`,

@@ -73,6 +73,17 @@ history for that record instead.
   table and the ladder composer now say it beside "covers the offset", and a
   candidate that needs no contracts no longer reads "below target".
 
+### Removed
+
+- **#435 — `HealthMixin.calculate_health_metrics`.** An aggregator of nine
+  "health" gauges that nothing had called since the Jupyter gauge wall went
+  in Stage 4.3 (#279), kept only by its tests. It reported a crash convexity of
+  `0.0` for a book with no underlying, the figure #433 retired. Nothing an
+  operator sees changes. The individual methods it called stay (the live
+  convexity gauge, `calculate_crash_convexity_pct`, is read by roll status,
+  `/monitor`, `/design` and the digest); the tests that exercised the
+  dictionary now call them directly.
+
 ### Fixed
 
 - **N8a — "Pricing input provenance" no longer renders as a duplicated
