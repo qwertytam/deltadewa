@@ -34,9 +34,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from deltadewa.analysis.candidate import evaluate_candidate
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -95,8 +97,12 @@ class HedgeSizingResult:
             payoff, and not divided by the beta-adjusted notional: both
             made this figure disagree with the strip on the same legs.
             0.0 when the portfolio has no underlying position.
-        meets_convexity_target: True when ``achieved_convexity_pct`` lies
-            within the IPS band ``[target_min_pct, target_max_pct]``.
+        achieved_convexity: The referee's grading of
+            ``achieved_convexity_pct`` against the IPS band
+            (:func:`~deltadewa.analysis.convexity_band.grade_convexity`),
+            inclusive at both ends.
+        meets_convexity_target: Derived from ``achieved_convexity``:
+            True when the figure lies within the band.
 
     """
 
@@ -127,7 +133,12 @@ class HedgeSizingResult:
 
     # Steps 4-5 - convexity check
     achieved_convexity_pct: float
-    meets_convexity_target: bool
+    achieved_convexity: ConvexityGrading
+
+    @property
+    def meets_convexity_target(self) -> bool | None:
+        """Derived from the grading; ``None`` only if it was unmeasured."""
+        return self.achieved_convexity.meets
 
 
 @dataclass(frozen=True)
@@ -427,9 +438,10 @@ def size_hedge(
     achieved_convexity_pct = (
         sizing.contracts_needed * metrics.per_contract_convexity_pct
     )
-    conv = ips_config.convexity
-    meets_convexity_target = (
-        conv.target_min_pct <= achieved_convexity_pct <= conv.target_max_pct
+    achieved_convexity = grade_convexity(
+        achieved_convexity_pct,
+        ips_config.convexity,
+        at_shock_pct=basis.shock.crash_scenario_pct,
     )
 
     return HedgeSizingResult(
@@ -449,5 +461,5 @@ def size_hedge(
         carry_headroom=sizing.carry_headroom,
         max_affordable_contracts=sizing.max_affordable_contracts,
         achieved_convexity_pct=achieved_convexity_pct,
-        meets_convexity_target=meets_convexity_target,
+        achieved_convexity=achieved_convexity,
     )

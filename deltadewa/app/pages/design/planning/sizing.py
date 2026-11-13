@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Final
 from dash import Input, Output, dcc, html
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import ConvexityGrade
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
     from deltadewa.analysis.sizing import HedgeSizingResult
     from deltadewa.app.factory import ProgramDashApp
-    from deltadewa.ips_config import IpsConfig, IpsConvexity
+    from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
 
 # PLANNING zone: dial default. Carried over from the sizing cell of
@@ -135,10 +136,7 @@ def _vega_sufficiency_block(
     )
 
 
-def _convexity_verdict(
-    result: HedgeSizingResult,
-    conv: IpsConvexity,
-) -> str:
+def _convexity_verdict(result: HedgeSizingResult) -> str:
     """Name which side of the IPS band the achieved convexity sits on.
 
     The old two-way ``within``/``over`` read a reading *below* the band as
@@ -146,11 +144,14 @@ def _convexity_verdict(
     the achieved figure sits near ``|crash| - drawdown tolerance`` and is
     below the band whenever the tolerance is generous. Saying "below" is
     the difference between a hedge that is too small and one that is
-    too big.
+    too big. The side is the referee's grade
+    (:func:`~deltadewa.analysis.convexity_band.grade_convexity`), not a
+    comparison made here.
     """
-    if result.meets_convexity_target:
+    grade = result.achieved_convexity.grade
+    if grade is ConvexityGrade.WITHIN:
         return "within"
-    if result.achieved_convexity_pct < conv.target_min_pct:
+    if grade is ConvexityGrade.BELOW:
         return "below"
     return "above"
 
@@ -170,7 +171,7 @@ def _sizing_panel_view(
     """
     conv = ips_config.convexity
     carry_verdict = "within" if result.within_budget else "over"
-    convexity_verdict = _convexity_verdict(result, conv)
+    convexity_verdict = _convexity_verdict(result)
     intrinsic_floor_text = (
         " (intrinsic floor "
         + fmt.currency(result.per_contract_intrinsic_floor, decimals=2)

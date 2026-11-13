@@ -19,7 +19,7 @@ cannot be injected: it places the band's edge exactly on the reading instead.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -42,10 +42,13 @@ from deltadewa.analysis.market_environment import (
 )
 from deltadewa.analysis.roll_planner import gamma_theta_delay
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
+from deltadewa.analysis.sizing import size_hedge
+from deltadewa.analysis.strike_ladder import GridCell, build_candidate_grid
 from deltadewa.app.compliance import (
     compliance_sections_at_ips_anchor,
     scorecard,
 )
+from deltadewa.app.pages.design.planning.sizing import _convexity_verdict
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
     IpsBudget,
@@ -365,3 +368,98 @@ class TestEverySurfaceAgreesWithTheReferee:
             assert got is referee.meets
         else:
             assert got is (referee.grade is ConvexityGrade.WITHIN)
+
+
+class TestComputedSurfacesAgreeWithTheReferee:
+    """Sizing, the candidate grid and the panel's side word (band-relative).
+
+    These surfaces *compute* their reading from a sized candidate, so it
+    cannot be injected. The band's edge is placed exactly on the computed
+    reading instead (the band is policy and does not move the sizing), which
+    exercises the inclusive edges for real.
+    """
+
+    @staticmethod
+    def _with_band(
+        band_min: float,
+        band_max: float,
+    ) -> IpsConfig:
+        ips = _ips()
+        return replace(
+            ips,
+            convexity=replace(
+                ips.convexity,
+                target_min_pct=band_min,
+                target_max_pct=band_max,
+            ),
+        )
+
+    @staticmethod
+    def _reading() -> float:
+        result = size_hedge(
+            _book(),
+            _ips(),
+            candidate_pct_otm=10.0,
+            candidate_maturity_years=1.0,
+        )
+        return result.achieved_convexity_pct
+
+    @pytest.mark.parametrize(
+        ("lo", "hi", "side"),
+        [
+            pytest.param(0.0, 0.0, "at_min", id="reading-on-the-floor"),
+            pytest.param(0.0, 0.0, "at_max", id="reading-on-the-ceiling"),
+            pytest.param(1e-6, 1e6, "below", id="reading-under-the-floor"),
+            pytest.param(-1e6, -1e-6, "above", id="reading-over-the-ceiling"),
+        ],
+    )
+    def test_sizing_grid_and_panel_equal_the_referee(
+        self,
+        lo: float,
+        hi: float,
+        side: str,
+    ) -> None:
+        reading = self._reading()
+        if side == "at_min":
+            band = (reading, reading + 10.0)
+        elif side == "at_max":
+            band = (reading - 10.0, reading)
+        else:
+            band = (reading + lo, reading + hi)
+        ips = self._with_band(*band)
+        referee = grade_convexity(reading, ips.convexity, at_shock_pct=_DEPTH)
+
+        sized = size_hedge(
+            _book(),
+            ips,
+            candidate_pct_otm=10.0,
+            candidate_maturity_years=1.0,
+        )
+        cell = build_candidate_grid(
+            _book(),
+            ips,
+            target_deltas=[0.10],
+            maturities_years=[1.0],
+        ).cells[0]
+
+        assert sized.achieved_convexity_pct == pytest.approx(reading)
+        assert sized.meets_convexity_target is referee.meets
+        assert sized.achieved_convexity.grade is referee.grade
+        assert cell.achieved_convexity.grade is cell_referee(cell, ips)
+        assert (
+            _convexity_verdict(sized)
+            == {
+                ConvexityGrade.WITHIN: "within",
+                ConvexityGrade.BELOW: "below",
+                ConvexityGrade.ABOVE: "above",
+            }[referee.grade]
+        )
+
+
+def cell_referee(cell: GridCell, ips: IpsConfig) -> ConvexityGrade:
+    """The referee's grade for a grid cell's own computed reading."""
+    return grade_convexity(
+        cell.achieved_convexity_pct,
+        ips.convexity,
+        at_shock_pct=_DEPTH,
+    ).grade
