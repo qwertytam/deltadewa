@@ -156,6 +156,8 @@ def _convexity_verdict(result: HedgeSizingResult) -> str:
         return "within"
     if grade is ConvexityGrade.BELOW:
         return "below"
+    if grade is ConvexityGrade.UNMEASURED:
+        return "not graded against"
     return "above"
 
 

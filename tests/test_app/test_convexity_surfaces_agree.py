@@ -29,6 +29,7 @@ from deltadewa.analysis import roll_status as roll_status_module
 from deltadewa.analysis.convexity_band import (
     ConvexityGrade,
     grade_convexity,
+    same_crash_depth,
 )
 from deltadewa.analysis.crash_payoff import (
     book_convexity_grading,
@@ -39,6 +40,7 @@ from deltadewa.analysis.crash_repricing import (
     crash_convexity_pct,
 )
 from deltadewa.analysis.decision_matrix import HedgeAdequacy, decision_matrix
+from deltadewa.analysis.ladder import profile_depths
 from deltadewa.analysis.market_environment import (
     DataQuality,
     HedgeCostVerdict,
@@ -830,3 +832,89 @@ class TestTheCandidateGridNamesWhatFails:
         texts = [str(td.children) for td in row.children if td.children]
 
         assert cell.achieved_convexity.display() in texts
+
+
+class TestTheDesignVerdictReadsTheSameConvexity:
+    """/design's market-environment verdict and the digest's use one figure."""
+
+    @pytest.mark.parametrize("zero_book", [False, True])
+    def test_the_panel_feeds_the_decision_the_protection_reading(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        zero_book: bool,
+    ) -> None:
+        from deltadewa.app.pages.design.planning import market_env as panel
+
+        seen: list[float | None] = []
+        real = panel.decision_matrix
+
+        def _spy(env: Any, **kwargs: Any) -> Any:
+            seen.append(kwargs["convexity_now_pct"])
+            return real(env, **kwargs)
+
+        monkeypatch.setattr(panel, "decision_matrix", _spy)
+        book = _zero_underlying_book() if zero_book else _book()
+        ips = _ips()
+        _cost, protection, _vega = compliance_sections_at_ips_anchor(book, ips)
+
+        panel._render_market_env_panel_logic(
+            portfolio=book,
+            ips_config=ips,
+            market_env=_env(),
+        )
+
+        assert seen == [protection.convexity_pct]
+        assert (seen[0] is None) is zero_book
+
+
+class TestOneIpsRowAtTheIpsDepth:
+    """A standard shock a hair off the IPS depth must not make a second row."""
+
+    def test_the_scenario_table_has_one_graded_row(self) -> None:
+        ips = replace(
+            _ips(),
+            convexity=replace(_ips().convexity, crash_scenario_pct=-20.00004),
+        )
+
+        result = compute_crash_convexity(
+            _book(),
+            shock=CrashShock.from_ips(ips.convexity),
+            ips_convexity=ips.convexity,
+        )
+        at_ips = [
+            r
+            for r in result.scenario_rows
+            if same_crash_depth(r.shock_pct, ips.convexity.crash_scenario_pct)
+        ]
+
+        assert len(at_ips) == 1
+        assert at_ips[0].meets_target is not None
+
+    def test_the_ladder_profile_has_one_ips_depth(self) -> None:
+        shock = CrashShock(
+            crash_scenario_pct=-20.00004,
+            crash_vol_shock=0.15,
+            skew_steepening=0.0,
+            skew_reference_delta=0.10,
+        )
+
+        depths = profile_depths(shock)
+
+        assert sum(same_crash_depth(d, -20.0) for d in depths) == 1
+
+
+class TestAnUnmeasuredRungIsNotCalledWithin:
+    def test_the_grid_column_says_the_band_was_not_measured(self) -> None:
+        from deltadewa.app.pages.design.planning import ladder as grid
+
+        cell = TestTheCandidateGridNamesWhatFails()._cell_for((0.0, 1.0))
+        unmeasured = replace(
+            cell,
+            achieved_convexity=grade_convexity(
+                None,
+                _ips().convexity,
+                at_shock_pct=_DEPTH,
+            ),
+        )
+
+        assert grid._budget_band_verdict(unmeasured) == "band not measured"

@@ -48,7 +48,10 @@ from typing import TYPE_CHECKING
 
 from deltadewa import constants as const
 from deltadewa.analysis.candidate import CandidateMetrics, evaluate_candidate
-from deltadewa.analysis.convexity_band import same_crash_depth
+from deltadewa.analysis.convexity_band import (
+    same_crash_depth,
+    with_ips_depth,
+)
 from deltadewa.analysis.crash_payoff import STANDARD_SCENARIO_SHOCKS
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
@@ -526,7 +529,7 @@ def profile_depths(shock: CrashShock) -> tuple[float, ...]:
 
     Ordered mild to severe, the scenario table's own order.
     """
-    depths = {*STANDARD_SCENARIO_SHOCKS, round(shock.crash_scenario_pct, 6)}
+    depths = with_ips_depth(STANDARD_SCENARIO_SHOCKS, shock.crash_scenario_pct)
     return tuple(sorted(depths, reverse=True))
 
 

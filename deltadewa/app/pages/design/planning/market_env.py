@@ -21,8 +21,7 @@ from typing import TYPE_CHECKING, Final, NamedTuple
 
 from dash import Input, Output, html
 
-from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.analysis.crash_payoff import book_convexity_grading
 from deltadewa.analysis.decision_matrix import (
     decision_matrix,
     entry_timing_tree,
@@ -385,11 +384,12 @@ def _render_market_env_panel_logic(
     """Render the market environment panel for the current book and feed."""
 
     def _build() -> Component:
-        convexity_now_pct = PortfolioAnalyzer(
+        # The same grading /monitor's strip and the digest's §7 verdict read
+        # (#434): one figure for "convexity now", never a second derivation.
+        convexity_now_pct = book_convexity_grading(
             portfolio,
-        ).calculate_crash_convexity_pct(
-            CrashShock.from_ips(ips_config.convexity),
-        )
+            ips_config.convexity,
+        ).value_pct
         plan = build_monetization_plan(
             portfolio,
             ips_config,

@@ -56,6 +56,8 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from deltadewa.ips_config import IpsConvexity
 
 # The depth match is the one ``build_protection_section`` has always used:
@@ -78,6 +80,24 @@ def same_crash_depth(depth_pct: float, other_pct: float) -> bool:
     the band was graded on.
     """
     return round(depth_pct, _DEPTH_PLACES) == round(other_pct, _DEPTH_PLACES)
+
+
+def with_ips_depth(
+    depths: Iterable[float],
+    ips_depth_pct: float,
+) -> set[float]:
+    """Return *depths* with exactly one entry at the IPS crash depth.
+
+    Any depth the :func:`same_crash_depth` rule calls the IPS depth is
+    replaced by the IPS one (rounded to six places, the key the scenario
+    tables use), so a table can never carry two rows that both read as "the
+    IPS depth" and both get graded: the standard -25.0 and an IPS depth of
+    -25.00004 would otherwise be two rows, one of which the referee would
+    grade and the other would be flagged IPS beside it.
+    """
+    kept = {d for d in depths if not same_crash_depth(d, ips_depth_pct)}
+    kept.add(round(ips_depth_pct, 6))
+    return kept
 
 
 def format_band_edge(value: float, *, min_places: int = 0) -> str:

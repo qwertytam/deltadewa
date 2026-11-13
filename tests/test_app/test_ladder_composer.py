@@ -622,3 +622,28 @@ class TestIpsDepthRowIsTheRefereesDepth:
             assert (graded.grade is not ConvexityGrade.UNMEASURED) is (
                 row.is_ips_depth
             )
+
+
+class TestComposerLabelsAndBaseline:
+    def test_a_fractional_depth_is_not_rounded_in_its_label(self) -> None:
+        assert composer._depth_label(-25.0) == "-25%"
+        assert composer._depth_label(-22.5) == "-22.5%"
+        assert composer._depth_label(10.0) == "+10%"
+
+    def test_the_baseline_at_the_graded_depth_is_the_scorecards_text(
+        self,
+    ) -> None:
+        ips = _ips()
+        portfolio = _portfolio(_BIG_QTY)
+
+        panel = composer._render_composer_logic(
+            portfolio=portfolio,
+            ips_config=ips,
+            rungs_raw="20@1.5:35, 30@1.5:40, 40@1.5:25",
+        )
+
+        baseline_row = composer._convexity_row(
+            scorecard(portfolio, ips).compliance,
+        )
+        assert baseline_row is not None
+        assert baseline_row.actual in _text(panel)

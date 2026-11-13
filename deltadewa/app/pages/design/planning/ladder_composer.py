@@ -560,6 +560,11 @@ def _rung_labels(sized: SizedLadder) -> list[str]:
     ]
 
 
+def _depth_label(shock_pct: float) -> str:
+    """Label a crash depth without rounding it: ``-25%``, ``-22.5%``."""
+    return f"{shock_pct:+g}%"
+
+
 def _percent_or_dash(value: float | None) -> str:
     """Format a percent, or an em dash for a reading that was not measured."""
     return "\u2014" if value is None else fmt.percent(value)
@@ -569,6 +574,7 @@ def _depth_table(
     sized: SizedLadder,
     portfolio: OptionPortfolio,
     shadow: OptionPortfolio,
+    baseline: Scorecard,
     proposal: Scorecard,
 ) -> html.Table:
     """Crash gain by depth: per rung, the ladder, and the current book."""
@@ -586,27 +592,34 @@ def _depth_table(
         depths=depths,
     )
     conv_row = _convexity_row(proposal.compliance)
+    base_row = _convexity_row(baseline.compliance)
     rows = []
     for row, base_pct in zip(profile, baseline_pct, strict=True):
         graded: list[Component] = [html.Td("")]
         combined_pct = _percent_or_dash(row.combined_pct_of_book)
+        book_pct = _percent_or_dash(base_pct)
         if row.is_ips_depth and conv_row is not None:
             graded = [html.Td(_badge(conv_row.passes))]
             # The graded cell is the strip's own text, which follows the
             # referee's display rule (#434): "4.99%" beside a FAIL, never
             # "5.0%" beside it. The other depths are shown, not graded.
             combined_pct = conv_row.actual
+            if base_row is not None:
+                # The book's own figure at the graded depth, from the same
+                # scorecard row, so the baseline beside a badge follows the
+                # same display rule as the proposal's.
+                book_pct = base_row.actual
         rows.append(
             html.Tr(
                 [
-                    html.Td(f"{row.shock_pct:+.0f}%"),
+                    html.Td(_depth_label(row.shock_pct)),
                     *(
                         html.Td(fmt.currency(g), className="num")
                         for g in row.rung_gains
                     ),
                     html.Td(fmt.currency(row.combined_gain), className="num"),
                     html.Td(combined_pct, className="num"),
-                    html.Td(_percent_or_dash(base_pct), className="num"),
+                    html.Td(book_pct, className="num"),
                     *graded,
                 ],
                 className="depth-row--ips" if row.is_ips_depth else "",
@@ -704,7 +717,7 @@ def _composer_view(
         _scorecard_table(baseline, proposal, ips_config=ips_config),
         html.P(_CONVEXITY_CAVEAT, className="plain-language"),
         html.H4("Crash gain by depth"),
-        _depth_table(sized, portfolio, shadow, proposal),
+        _depth_table(sized, portfolio, shadow, baseline, proposal),
         html.P(_DEPTH_FOOTNOTE, className="plain-language"),
     ]
     for note in reversed(_comparability_notes(portfolio, ladder)):

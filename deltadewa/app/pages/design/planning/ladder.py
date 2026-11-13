@@ -294,7 +294,9 @@ def _budget_band_verdict(rung: GridCell) -> str:
     if not rung.within_budget:
         failures.append("over budget")
     grade = rung.achieved_convexity.grade
-    if grade is ConvexityGrade.BELOW:
+    if grade is ConvexityGrade.UNMEASURED:
+        failures.append("band not measured")
+    elif grade is ConvexityGrade.BELOW:
         failures.append("below band")
     elif grade is ConvexityGrade.ABOVE:
         failures.append("above band")

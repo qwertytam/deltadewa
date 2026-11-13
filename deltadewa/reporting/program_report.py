@@ -970,7 +970,10 @@ def build_ips_compliance(
                 )
         rows.append(
             IpsComplianceRow(
-                metric=(f"Crash convexity ({grading.shock_pct:.0f}% shock)"),
+                metric=(
+                    "Crash convexity "
+                    f"({format_band_edge(grading.shock_pct)}% shock)"
+                ),
                 target=target_str,
                 actual=actual_str,
                 passes=passes,
@@ -1467,7 +1470,7 @@ def render_markdown(report: ProgramReport) -> str:
         else "—"
     )
     crash_label = (
-        f"{p.ips_crash_pct:.0f}% shock"
+        f"{format_band_edge(p.ips_crash_pct)}% shock"
         if p.ips_crash_pct is not None
         else "n/a (no IPS scenario)"
     )
@@ -1791,7 +1794,7 @@ def render_html_body(report: ProgramReport) -> str:
         else "&mdash;"
     )
     crash_label_html = (
-        f"{p.ips_crash_pct:.0f}% shock"
+        f"{format_band_edge(p.ips_crash_pct)}% shock"
         if p.ips_crash_pct is not None
         else "n/a (no IPS scenario)"
     )

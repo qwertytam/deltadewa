@@ -189,9 +189,11 @@ def build_scenario(
         budget_annual_pct=ips_config.budget.annual_carry_pct,
     )
     # Dollar form of the handbook's convexity/carry ratio. Identical to the
-    # percentage form (crash_convexity_pct / carry_pct_of_notional) whenever
-    # the quantity dial sits at portfolio.underlying_quantity, since both
-    # percentages then normalize by this same book_notional.
+    # percentage form (crash_convexity_pct / carry_pct_of_notional) only at
+    # the IPS anchor dials (``ips_anchor_dials``): the quantity dial must sit
+    # at portfolio.underlying_quantity, so both percentages normalize by this
+    # same book_notional, and the spot and vol dials at the IPS crash, so
+    # hedge_gain is the figure the strip grades. #442 pins it at the anchor.
     efficiency = hedge_efficiency(
         crash_payoff=hedge_gain,
         annual_carry=theta_annual,

@@ -37,7 +37,10 @@ import numpy as np
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.convexity_band import grade_convexity
+from deltadewa.analysis.convexity_band import (
+    grade_convexity,
+    with_ips_depth,
+)
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
@@ -492,7 +495,10 @@ def compute_crash_convexity(
     ips_shock: float | None = None
     if ips_convexity is not None:
         ips_shock = round(ips_convexity.crash_scenario_pct, 6)
-        s_shocks.add(ips_shock)
+        # One row at the IPS depth, by the referee's own depth rule: a
+        # standard shock a hair off the IPS depth is replaced, not kept as a
+        # second row that would also read as "the IPS depth".
+        s_shocks = with_ips_depth(s_shocks, ips_shock)
         fine_grid.add(ips_shock)
 
     # Single pass: reprice every unique shock point once (headline) and take
