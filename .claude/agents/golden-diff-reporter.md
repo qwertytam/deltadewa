@@ -116,9 +116,11 @@ first three per group with a count.
 - The canonical golden is pinned to a valuation date of 2026-07-26; the §4 book
   needs no pin (see the golden-fixture notes in project memory).
 - Sizing covers the crash offset on *gross* payoff while convexity is graded
-  *net of premium* (#436, open): an offset-sized ladder can land just under the
-  band floor, so a PASS/FAIL flip of 0.1pp at the floor is an OUTPUT diff of
-  that known kind. Say so on such a line if the numbers fit.
+  *net of premium*. #436 decided to keep GROSS sizing (2026-11-13), so contract
+  counts stay put and an offset-sized ladder can land just under the band
+  floor: a PASS/FAIL flip of 0.1pp at the floor is an OUTPUT diff of that known,
+  accepted kind. Say so on such a line if the numbers fit. A change to the
+  sizing basis itself would reopen the decision and is not a routine re-base.
 - The clock-shift probe (`make test-clockshift`) is not this agent's; a diff that
   only appears under a shifted clock belongs to `clockshift-runner`.
 

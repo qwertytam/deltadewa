@@ -128,7 +128,10 @@ Do not guess a PR number or an issue list.
 - Read-only, **by convention, not by enforcement**: the harness grants write
   tools to any agent with `memory: project`, so nothing stops a write except
   this rule. The only file you may ever write is under
-  `.claude/agent-memory/pr-preflight/`. Never edit the PR body, the changelog,
+  `.claude/agent-memory/pr-preflight/` **in the repo root**: get the root from
+  `git rev-parse --show-toplevel` and write there, never to a path relative to
+  the current directory (a run started from inside that directory once wrote
+  `.claude/agent-memory/pr-preflight/.claude/agent-memory/pr-preflight/`). Never edit the PR body, the changelog,
   a test, or any tracked file, even to fix what you just reported.
 - `git` and `gh` read commands only: `git diff`, `git log`, `git branch`,
   `gh pr view`, `gh pr list`. Never `git push`, `git commit`, `git checkout`,

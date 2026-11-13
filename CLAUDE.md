@@ -711,7 +711,7 @@ don't fix):
   `gate-runner`: that runs the whole gate and reports pass/fail with the failing
   output; this runs a chosen selection and turns the failures into a diff. Run
   when a sizing, pricing or policy change is expected to move golden values
-  (#436 is the live example).
+  (#436's accepted 0.1pp flip at the band floor is the standing example).
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`
