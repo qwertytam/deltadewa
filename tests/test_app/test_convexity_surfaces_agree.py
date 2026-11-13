@@ -31,7 +31,10 @@ from deltadewa.analysis.convexity_band import (
     grade_convexity,
 )
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
-from deltadewa.analysis.crash_repricing import CrashShock
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    crash_convexity_pct,
+)
 from deltadewa.analysis.decision_matrix import HedgeAdequacy, decision_matrix
 from deltadewa.analysis.market_environment import (
     DataQuality,
@@ -40,12 +43,17 @@ from deltadewa.analysis.market_environment import (
     RegimeLabel,
     TermShape,
 )
-from deltadewa.analysis.roll_planner import gamma_theta_delay
+from deltadewa.analysis.roll_planner import (
+    RollAction,
+    build_roll_plan,
+    gamma_theta_delay,
+)
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.analysis.sizing import size_hedge
 from deltadewa.analysis.strike_ladder import GridCell, build_candidate_grid
 from deltadewa.app.compliance import (
     compliance_sections_at_ips_anchor,
+    compliance_strip,
     scorecard,
 )
 from deltadewa.app.pages.design.planning.sizing import _convexity_verdict
@@ -64,6 +72,8 @@ from deltadewa.ips_config import (
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.reporting.program_report import (
+    IpsComplianceRow,
+    IpsComplianceSection,
     build_ips_compliance,
     build_protection_section,
 )
@@ -84,17 +94,6 @@ _READINGS: tuple[float | None, ...] = (
     20.0,
     0.0,
     None,
-)
-
-# Surfaces whose unmeasured (``None``) path has not been migrated yet. Each
-# migration commit of 9a.3 removes its entry; the strict xfail then turns a
-# surface that starts agreeing into a failure until the marker is deleted, so
-# the grid goes green caller by caller and cannot silently skip one.
-_PENDING_NONE: frozenset[str] = frozenset(
-    {
-        "compliance_row",
-        "scorecard_row",
-    },
 )
 
 _Kind = Literal["grade", "meets", "within_only"]
@@ -320,26 +319,11 @@ _SURFACES = (
 
 
 def _cases() -> list[Any]:
-    cases = []
-    for surface in _SURFACES:
-        for reading in _READINGS:
-            marks = []
-            if reading is None and surface.name in _PENDING_NONE:
-                marks.append(
-                    pytest.mark.xfail(
-                        strict=True,
-                        reason=f"{surface.name}: None path not migrated",
-                    ),
-                )
-            cases.append(
-                pytest.param(
-                    surface,
-                    reading,
-                    id=f"{surface.name}-{reading}",
-                    marks=marks,
-                ),
-            )
-    return cases
+    return [
+        pytest.param(surface, reading, id=f"{surface.name}-{reading}")
+        for surface in _SURFACES
+        for reading in _READINGS
+    ]
 
 
 class TestEverySurfaceAgreesWithTheReferee:
@@ -463,3 +447,135 @@ def cell_referee(cell: GridCell, ips: IpsConfig) -> ConvexityGrade:
         ips.convexity,
         at_shock_pct=_DEPTH,
     ).grade
+
+
+def _zero_underlying_book() -> OptionPortfolio:
+    """A long put with no underlying: no protected notional (#433)."""
+    book = _book()
+    book.underlying_quantity = 0.0
+    return book
+
+
+class TestAZeroBookIsUnmeasuredEverywhere:
+    """#433: an undefined ratio is unmeasured, never a measured 0.0.
+
+    Before the referee a book with no underlying read ``0.0%`` convexity,
+    which every grader then graded as a real below-band miss: roll status
+    marked every leg ROLL, the decision matrix said UNDER, and the strip
+    said FAIL. Nothing is patched here; this is the real zero book through
+    each surface's own builder.
+    """
+
+    def test_the_root_returns_none_not_zero(self) -> None:
+        shock = CrashShock.from_ips(_ips().convexity)
+
+        assert crash_convexity_pct(_zero_underlying_book(), shock=shock) is None
+
+    def test_roll_status_does_not_roll_every_leg_for_a_missing_book(
+        self,
+    ) -> None:
+        (record,) = evaluate_roll_status(_zero_underlying_book(), _ips())
+
+        assert record.crash_convexity_pct is None
+        assert record.convexity.grade is ConvexityGrade.UNMEASURED
+        assert record.convexity_target_met is None
+        assert record.convexity_trigger.verdict is RollVerdict.HOLD
+        assert "not measured" in record.convexity_trigger.reason
+        # 200 days out with no rally: nothing at all fires.
+        assert record.verdict is RollVerdict.HOLD
+
+    def test_the_roll_plan_carries_the_unmeasured_standing(self) -> None:
+        (plan,) = build_roll_plan(_zero_underlying_book(), _ips())
+
+        assert plan.convexity_now_pct is None
+        assert plan.meets_convexity_target is None
+        assert plan.action is RollAction.HOLD
+
+    def test_the_crash_row_and_protection_section_are_unmeasured(self) -> None:
+        ips = _ips()
+        result = compute_crash_convexity(
+            _zero_underlying_book(),
+            shock=CrashShock.from_ips(ips.convexity),
+            ips_convexity=ips.convexity,
+        )
+        protection = build_protection_section(result)
+
+        assert protection.convexity is not None
+        assert protection.convexity.grade is ConvexityGrade.UNMEASURED
+        assert protection.convexity_pct is None
+        assert protection.meets_target is None
+
+    def test_the_compliance_row_is_unmeasured_and_the_section_incomplete(
+        self,
+    ) -> None:
+        sections = compliance_sections_at_ips_anchor(
+            _zero_underlying_book(),
+            _ips(),
+        )
+        compliance = build_ips_compliance(*sections)
+        (row,) = (
+            r for r in compliance.rows if r.metric.startswith("Crash convexity")
+        )
+
+        assert row.passes is None
+        assert row.actual == "—"
+        assert row.action is not None
+        assert "Unmeasured, not breaching" in row.action
+        assert row.metric in compliance.unmeasured_metrics
+        assert row.metric not in compliance.failing_metrics
+        assert compliance.all_pass is False
+
+    def test_a_candidate_on_a_zero_book_raises_rather_than_reading_zero(
+        self,
+    ) -> None:
+        with pytest.raises(ValueError, match="underlying position"):
+            size_hedge(
+                _zero_underlying_book(),
+                _ips(),
+                candidate_pct_otm=10.0,
+                candidate_maturity_years=1.0,
+            )
+
+    def test_the_strip_says_incomplete_when_nothing_else_is_breached(
+        self,
+    ) -> None:
+        rows = (
+            IpsComplianceRow(
+                metric="Annual carry cost",
+                target="\u2264 2.00%",
+                actual="1.00%",
+                passes=True,
+            ),
+            IpsComplianceRow(
+                metric="Crash convexity (-25% shock)",
+                target="15.0%\u201325.0% of book",
+                actual="\u2014",
+                passes=None,
+            ),
+        )
+        compliance = IpsComplianceSection(rows=rows, all_pass=False)
+
+        verdict = compliance_strip(compliance, DataQuality.LIVE).children[0]
+
+        assert verdict.children == (
+            "IPS compliance: INCOMPLETE \u2014 nothing is out of policy, "
+            "but Crash convexity (-25% shock) could not be measured."
+        )
+        assert "compliance-verdict--incomplete" in verdict.className
+
+    def test_a_real_breach_is_still_a_fail_and_names_the_gap(self) -> None:
+        """The zero book's vega is out of band: FAIL, and says what is open."""
+        compliance = build_ips_compliance(
+            *compliance_sections_at_ips_anchor(
+                _zero_underlying_book(),
+                _ips(),
+            ),
+        )
+
+        verdict = compliance_strip(compliance, DataQuality.LIVE).children[0]
+
+        assert verdict.children.startswith("IPS compliance: FAIL")
+        assert verdict.children.endswith(
+            "Not measured: Crash convexity (-25% shock).",
+        )
+        assert "compliance-verdict--fail" in verdict.className

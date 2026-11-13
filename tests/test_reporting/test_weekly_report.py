@@ -747,6 +747,86 @@ class TestHeadlineMechanism:
         assert headline.startswith("STALE DATA — ")
 
 
+class TestHeadlineForAnUnmeasuredMetric:
+    """#433: nothing breached, one metric unmeasured: INCOMPLETE, not BREACH."""
+
+    _CONVEXITY = "Crash convexity (-25% shock)"
+
+    def _compliance(
+        self,
+        *,
+        carry_passes: bool | None,
+        convexity_passes: bool | None,
+    ) -> IpsComplianceSection:
+        rows = (
+            IpsComplianceRow(
+                metric="Annual carry cost",
+                target="\u2264 1.00%",
+                actual="0.50%",
+                passes=carry_passes,
+            ),
+            IpsComplianceRow(
+                metric=self._CONVEXITY,
+                target="15.0%\u201325.0%",
+                actual="\u2014",
+                passes=convexity_passes,
+            ),
+        )
+        return IpsComplianceSection(
+            rows=rows,
+            all_pass=all(r.passes is True for r in rows),
+        )
+
+    def _headline(
+        self,
+        compliance: IpsComplianceSection,
+        *,
+        crossings: tuple[SnapshotChange, ...] = (),
+    ) -> str:
+        snapshot = replace(
+            _prior_snapshot(),
+            as_of=_AS_OF,
+            data_quality_alarm=False,
+            ips_compliance_all_pass=compliance.all_pass,
+            ips_compliance_rows=tuple(
+                (r.metric, r.passes) for r in compliance.rows
+            ),
+        )
+        diff = SnapshotDiff(
+            is_first_run=False,
+            prior_as_of=_PRIOR_AS_OF,
+            crossings=crossings,
+            material_moves=(),
+        )
+        return _headline(diff, snapshot, compliance, ())
+
+    def test_nothing_failing_and_one_unmeasured_is_incomplete(self) -> None:
+        headline = self._headline(
+            self._compliance(carry_passes=True, convexity_passes=None),
+        )
+
+        assert headline == (
+            f"INCOMPLETE: {self._CONVEXITY} could not be measured"
+        )
+
+    def test_incomplete_outranks_a_crossing_and_never_reads_no_action(
+        self,
+    ) -> None:
+        headline = self._headline(
+            self._compliance(carry_passes=True, convexity_passes=None),
+            crossings=(SnapshotChange(label="Decision verdict", detail="A"),),
+        )
+
+        assert headline.startswith("INCOMPLETE")
+
+    def test_a_breach_outranks_an_unmeasured_metric(self) -> None:
+        headline = self._headline(
+            self._compliance(carry_passes=False, convexity_passes=None),
+        )
+
+        assert headline.startswith("BREACH: Annual carry cost out of policy")
+
+
 class TestMonitorUrl:
     """#319: the dashboard bookmark, built from BIND_ADDR (RUNBOOK §10)."""
 

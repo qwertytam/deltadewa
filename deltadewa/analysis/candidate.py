@@ -228,6 +228,16 @@ def evaluate_candidate(
         shock=shock,
         positions=[candidate_leg],
     )
+    if per_contract_convexity_pct is None:
+        # Every sizing surface refuses a book with no underlying before it
+        # gets here (``sizing_basis``); a candidate on one has no protected
+        # notional to be a percentage of, and a fabricated 0.0 would be
+        # graded as a real below-band miss (#433).
+        msg = (
+            "candidate evaluation requires an underlying position "
+            "(book notional is 0)"
+        )
+        raise ValueError(msg)
 
     put_delta = valuation.delta()
     premium = valuation.price() * portfolio.contract_size

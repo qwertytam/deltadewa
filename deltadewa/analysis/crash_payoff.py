@@ -174,7 +174,7 @@ class CrashScenarioRow:
     shock_pct: float
     hedge_pnl: float
     payoff_vs_premium: float
-    convexity_pct: float
+    convexity_pct: float | None
     convexity: ConvexityGrading | None
     intrinsic_floor: float
 

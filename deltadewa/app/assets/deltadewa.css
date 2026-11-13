@@ -348,12 +348,20 @@ body {
   color: #b02a2a;
 }
 
+.compliance-verdict--incomplete {
+  color: #55606b;
+}
+
 .compliance-strip:has(.compliance-verdict--pass) {
   border-left-color: #1b7a1b;
 }
 
 .compliance-strip:has(.compliance-verdict--fail) {
   border-left-color: #b02a2a;
+}
+
+.compliance-strip:has(.compliance-verdict--incomplete) {
+  border-left-color: #55606b;
 }
 
 /* Spot cross-check: book spot vs. the observed market reading (#336) */

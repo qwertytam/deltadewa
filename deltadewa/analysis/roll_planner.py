@@ -146,7 +146,7 @@ class RollPlanRecord:
     target_basis: str
     target_strike: float | None
     roll_up_cost: float | None
-    convexity_now_pct: float
+    convexity_now_pct: float | None
     convexity: ConvexityGrading
     gamma: float
     theta: float

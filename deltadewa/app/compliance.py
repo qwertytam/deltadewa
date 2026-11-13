@@ -32,6 +32,7 @@ from deltadewa.analysis.market_environment import DataQuality
 from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.monitor_scenario import build_scenario
 from deltadewa.reporting.program_report import (
+    ComplianceStanding,
     CostSection,
     ProtectionSection,
     VegaSection,
@@ -202,7 +203,8 @@ def compliance_strip(
         exactly that, rather than pinning a string).
 
     """
-    if compliance.all_pass:
+    standing = compliance.standing
+    if standing is ComplianceStanding.PASS:
         # The metrics are named from the rows themselves, never spelled out
         # here (#409). The old wording enumerated "carry and crash
         # convexity" as a literal, which stayed narrowly true while
@@ -216,13 +218,28 @@ def compliance_strip(
             "within policy."
         )
         modifier = "pass"
+    elif standing is ComplianceStanding.INCOMPLETE:
+        # Nothing is breached, but a banded metric could not be read: not a
+        # PASS (it was not checked) and not a FAIL (nothing breached).
+        text = (
+            "IPS compliance: INCOMPLETE — nothing is out of policy, but "
+            f"{', '.join(compliance.unmeasured_metrics)} could not be "
+            "measured."
+        )
+        modifier = "incomplete"
     else:
         clauses = [
             f"{row.metric} {row.actual} vs. target {row.target}"
             for row in compliance.rows
-            if not row.passes
+            if row.passes is False
         ]
         text = "IPS compliance: FAIL — " + "; ".join(clauses) + "."
+        if compliance.unmeasured_metrics:
+            text += (
+                " Not measured: "
+                + ", ".join(compliance.unmeasured_metrics)
+                + "."
+            )
         modifier = "fail"
 
     children: list[Component] = [

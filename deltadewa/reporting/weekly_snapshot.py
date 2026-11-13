@@ -125,7 +125,8 @@ class WeeklySnapshot:
             ``ROLL -> N/A`` and read as though the problem resolved
             itself. The two lines together tell the truth.
         ips_compliance_all_pass: ``IpsComplianceSection.all_pass``.
-        ips_compliance_rows: ``(metric, passes)`` per compliance row, in
+        ips_compliance_rows: ``(metric, passes)`` per compliance row, where
+            ``passes`` is ``None`` for an unmeasured reading (#433), in
             report order.
         premium_paid_point_in_time: ``ProtectionSection.premium_paid`` —
             the *current* book's cost basis, a stock, not a flow. Shown for
@@ -159,7 +160,7 @@ class WeeklySnapshot:
     rally_status: str
     worst_rally_pct: float | None
     ips_compliance_all_pass: bool
-    ips_compliance_rows: tuple[tuple[str, bool], ...]
+    ips_compliance_rows: tuple[tuple[str, bool | None], ...]
     premium_paid_point_in_time: float
     cumulative_carry_cost: float
     # 8c / #317: defaulted and last so every existing constructor call
@@ -314,8 +315,11 @@ def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argumen
         rally_status=rally_status,
         worst_rally_pct=worst_rally_pct,
         ips_compliance_all_pass=bool(ic.all_pass),
+        # ``bool()`` because a numpy comparison upstream can leave a numpy
+        # bool, which json cannot serialise; ``None`` (unmeasured) is kept.
         ips_compliance_rows=tuple(
-            (row.metric, bool(row.passes)) for row in ic.rows
+            (row.metric, None if row.passes is None else bool(row.passes))
+            for row in ic.rows
         ),
         premium_paid_point_in_time=p.premium_paid,
         cumulative_carry_cost=cumulative_carry_cost,
@@ -351,6 +355,18 @@ class SnapshotDiff:
     prior_as_of: date | None
     crossings: tuple[SnapshotChange, ...]
     material_moves: tuple[SnapshotChange, ...]
+
+
+def _row_word(passes: bool | None) -> str:
+    """Name a compliance row's state: pass, fail, or not measured (#433)."""
+    if passes is None:
+        return "not measured"
+    return "pass" if passes else "fail"
+
+
+def _any_row_failing(snapshot: WeeklySnapshot) -> bool:
+    """Whether any compliance row is breached (unmeasured does not count)."""
+    return any(passed is False for _, passed in snapshot.ips_compliance_rows)
 
 
 def _bool_crossing(
@@ -592,7 +608,13 @@ def diff_snapshots(
             prior.ips_compliance_all_pass,
             current.ips_compliance_all_pass,
             true_word="all pass",
-            false_word="a metric failing",
+            # An unmeasured metric also makes "all pass" false (#433), but
+            # nothing is *failing*: say which it is.
+            false_word=(
+                "a metric failing"
+                if _any_row_failing(current) or not current.ips_compliance_rows
+                else "a metric not measured"
+            ),
         ),
     )
     crossings: list[SnapshotChange] = [
@@ -601,16 +623,15 @@ def diff_snapshots(
 
     prior_rows = dict(prior.ips_compliance_rows)
     for metric, passes in current.ips_compliance_rows:
-        prior_passes = prior_rows.get(metric)
         # A metric absent from the prior snapshot (a newly-added compliance
-        # row) has nothing to compare against — not a crossing.
-        if prior_passes is None or prior_passes == passes:
+        # row) has nothing to compare against — not a crossing. Absent is
+        # not the same as unmeasured (``None``): that one is a state.
+        if metric not in prior_rows or prior_rows[metric] == passes:
             continue
         crossings.append(
             SnapshotChange(
                 label=f"IPS compliance: {metric}",
-                detail=f"{'pass' if prior_passes else 'fail'} → "
-                f"{'pass' if passes else 'fail'}",
+                detail=f"{_row_word(prior_rows[metric])} → {_row_word(passes)}",
             ),
         )
 
@@ -708,8 +729,12 @@ def standing_breaches(
         passes.
 
     """
+    # Only a breach has a run length: an unmeasured row is not breaching, so
+    # it neither starts a standing breach nor extends one.
     failing_metrics = [
-        metric for metric, passed in current.ips_compliance_rows if not passed
+        metric
+        for metric, passed in current.ips_compliance_rows
+        if passed is False
     ]
     if not failing_metrics:
         return ()
@@ -725,8 +750,10 @@ def standing_breaches(
         weeks = 1
         since = current.as_of
         for snap in ordered:
-            row = dict(snap.ips_compliance_rows).get(metric)
-            if row is None or row:
+            rows = dict(snap.ips_compliance_rows)
+            # Absent, passing or unmeasured all end the run; only a recorded
+            # breach extends it.
+            if rows.get(metric) is not False:
                 break
             weeks += 1
             since = snap.as_of

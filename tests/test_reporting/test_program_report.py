@@ -114,7 +114,7 @@ def _make_crash_result(
     *,
     ips_convexity: IpsConvexity | None = _IPS_CONVEXITY,
     payoff_vs_premium: float | None = 8.5,
-    convexity_pct: float = 15.0,
+    convexity_pct: float | None = 15.0,
     premium_paid: float = 10_000.0,
     excluded_expired: tuple = (),
 ) -> CrashConvexityResult:
@@ -264,7 +264,7 @@ def _build(
     spot_price: float = 5_000.0,
     ips_convexity: IpsConvexity | None = _IPS_CONVEXITY,
     payoff_vs_premium: float | None = 8.5,
-    convexity_pct: float = 15.0,
+    convexity_pct: float | None = 15.0,
     data_quality: DataQuality = DataQuality.LIVE,
     schedule_steps: int = 2,
     monetization_plan: MonetizationPlan | None = None,
@@ -1227,3 +1227,57 @@ class TestConvexityDisplayNeverContradictsItsGrade:
 
         assert "| Convexity (net P&L % of book) | 9.96% |" in markdown
         assert "<td>9.96%</td>" in html
+
+
+class TestAnUnmeasuredConvexityRendersAsUnmeasured:
+    """#433: no reading is INCOMPLETE and "—", not a FAIL and not a PASS."""
+
+    def _report(self) -> ProgramReport:
+        return _build(convexity_pct=None)
+
+    def test_the_row_is_unmeasured_and_the_section_incomplete(self) -> None:
+        compliance = self._report().ips_compliance
+        (row,) = (
+            r for r in compliance.rows if r.metric.startswith("Crash convexity")
+        )
+
+        assert row.passes is None
+        assert row.actual == "\u2014"
+        assert compliance.standing.value == "INCOMPLETE"
+        assert compliance.all_pass is False
+        assert compliance.failing_metrics == ()
+
+    def test_markdown_says_incomplete_and_names_the_gap(self) -> None:
+        overall = next(
+            line
+            for line in render_markdown(self._report()).splitlines()
+            if line.startswith("**Overall:")
+        )
+
+        assert overall == (
+            "**Overall: \u2014 INCOMPLETE "
+            "(not measured: Crash convexity (-25% shock))**"
+        )
+
+    def test_html_says_incomplete_and_never_pass_or_fail(self) -> None:
+        html = render_html_body(self._report())
+        overall = html.split("Overall:")[1].split("</p>")[0]
+
+        assert "INCOMPLETE (not measured: Crash convexity" in overall
+        assert "PASS" not in overall
+        assert "FAIL" not in overall
+
+    def test_the_decision_is_withheld_not_buy(self) -> None:
+        decision = self._report().decision
+
+        assert decision is not None
+        assert decision.verdict == "INSUFFICIENT_DATA"
+        assert "could not be measured" in decision.rationale
+        # Not labelled "withheld: data quality": the market data is fine.
+        assert decision.data_quality_note is None
+
+    def test_a_breach_still_outranks_it(self) -> None:
+        report = _build(convexity_pct=None, theta_annual=-20_000.0)
+
+        assert report.ips_compliance.standing.value == "FAIL"
+        assert report.ips_compliance.failing_metrics == ("Annual carry cost",)

@@ -512,7 +512,7 @@ class DepthRow:
     shock_pct: float
     rung_gains: tuple[float, ...]
     combined_gain: float
-    combined_pct_of_book: float
+    combined_pct_of_book: float | None
     is_ips_depth: bool
 
 
@@ -596,7 +596,7 @@ def book_convexity_by_depth(
     *,
     shock: CrashShock,
     depths: Sequence[float],
-) -> tuple[float, ...]:
+) -> tuple[float | None, ...]:
     """Return the live book's convexity at each depth (the baseline column).
 
     The strip's own figure (:func:`crash_convexity_pct`) at each depth, so

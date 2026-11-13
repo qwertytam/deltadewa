@@ -577,16 +577,18 @@ class TestUnmeasuredConvexity:
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
         assert result.hedge_adequacy is None
 
-    def test_the_note_says_unmeasured_not_breaching(self) -> None:
+    def test_the_rationale_says_unmeasured_not_breaching(self) -> None:
         result = decision_matrix(
             _make_env(),
             convexity_now_pct=None,
             ips_convexity=_IPS,
         )
 
-        assert result.data_quality_note is not None
-        assert "could not be measured" in result.data_quality_note
-        assert "not breaching" in result.data_quality_note
+        assert "could not be measured" in result.rationale
+        assert "not breaching" in result.rationale
+        # Not a data-quality problem: the reports label that field
+        # "withheld: data quality".
+        assert result.data_quality_note is None
 
     @pytest.mark.parametrize(
         ("reading", "adequacy"),

@@ -429,13 +429,21 @@ class VegaSection:
     meets_target: bool | None
 
 
+class ComplianceStanding(StrEnum):
+    """The IPS compliance section's overall verdict (#433)."""
+
+    PASS = "PASS"  # ruff: ignore[hardcoded-password-string]  # a verdict word, not a credential
+    FAIL = "FAIL"
+    INCOMPLETE = "INCOMPLETE"
+
+
 @dataclass(frozen=True)
 class IpsComplianceRow:
     """One row in the IPS compliance summary table.
 
     Attributes:
         action: Recommended remediation when this row fails — ``None``
-            exactly when ``passes`` is True. Set by ``build_ips_compliance``
+            exactly when ``passes`` is not True. Set by ``build_ips_compliance``
             from the same ``CostSection``/``ProtectionSection`` fields that
             already decided ``passes``; it explains an already-decided
             failure, it never re-decides one (#307).
@@ -445,7 +453,7 @@ class IpsComplianceRow:
     metric: str
     target: str
     actual: str
-    passes: bool
+    passes: bool | None
     action: str | None = None
 
 
@@ -453,14 +461,47 @@ class IpsComplianceRow:
 class IpsComplianceSection:
     """IPS compliance summary table.
 
+    A row's ``passes`` is ``True`` (in policy), ``False`` (a breach) or
+    ``None`` (**unmeasured**: the reading could not be taken, which is
+    neither; #433). The section's verdict has three states for the same
+    reason: :attr:`standing` is ``FAIL`` if any row is breached, otherwise
+    ``INCOMPLETE`` if any row is unmeasured, otherwise ``PASS``. An
+    unmeasured row never turns a PASS into a FAIL, and never lets the
+    section read PASS either.
+
     Attributes:
         rows: One row per compliance metric.
-        all_pass: True only when every row passes.
+        all_pass: True only when every row passes (so ``False`` for both
+            ``FAIL`` and ``INCOMPLETE``; use :attr:`standing` to tell them
+            apart).
 
     """
 
     rows: tuple[IpsComplianceRow, ...]
     all_pass: bool
+
+    @property
+    def failing_metrics(self) -> tuple[str, ...]:
+        """The metrics that are breached (not the unmeasured ones)."""
+        return tuple(r.metric for r in self.rows if r.passes is False)
+
+    @property
+    def unmeasured_metrics(self) -> tuple[str, ...]:
+        """The metrics whose reading could not be taken."""
+        return tuple(r.metric for r in self.rows if r.passes is None)
+
+    @property
+    def standing(self) -> ComplianceStanding:
+        """The overall verdict: FAIL on a breach, else INCOMPLETE if unmeasured.
+
+        PASS only when every row is in policy: an unmeasured row never
+        reads as a pass.
+        """
+        if self.failing_metrics:
+            return ComplianceStanding.FAIL
+        if self.unmeasured_metrics:
+            return ComplianceStanding.INCOMPLETE
+        return ComplianceStanding.PASS
 
 
 @dataclass(frozen=True)
@@ -905,14 +946,15 @@ def build_ips_compliance(
         # The referee's display rule: one decimal, more only when rounding
         # would put the figure on the wrong side of the band from its grade.
         actual_str = grading.display()
-        passes = bool(grading.meets)
+        passes = grading.meets
         action: str | None = None
-        if not passes:
+        if passes is not True:
             if grading.grade is ConvexityGrade.UNMEASURED:
                 action = (
                     "Crash convexity could not be measured at the IPS"
-                    " shock — check that the crash scenario has a"
-                    " matching repriced row."
+                    " shock — check that the book has an underlying"
+                    " position and that the crash scenario has a matching"
+                    " repriced row. Unmeasured, not breaching."
                 )
             elif grading.grade is ConvexityGrade.BELOW:
                 action = (
@@ -953,7 +995,7 @@ def build_ips_compliance(
 
     return IpsComplianceSection(
         rows=tuple(rows),
-        all_pass=all(r.passes for r in rows),
+        all_pass=all(r.passes is True for r in rows),
     )
 
 
@@ -978,16 +1020,17 @@ def _vega_compliance_row(vega: VegaSection) -> IpsComplianceRow:
             metric="Vega sufficiency",
             target=target,
             actual="—",
-            passes=False,
+            passes=None,
             action=(
                 "Vega sufficiency could not be measured — check that the"
                 " book has a value to measure the vol shock against."
+                " Unmeasured, not breaching."
             ),
         )
 
-    passes = bool(vega.meets_target)
+    passes = vega.meets_target
     action: str | None = None
-    if not passes:
+    if passes is not True:
         if vega.sufficiency_pct < vega.floor_pct:
             action = (
                 "Vega sufficiency is below the IPS floor — the book will"
@@ -1272,6 +1315,25 @@ def _pass_fail_md(value: bool | None) -> str:
     if value is None:
         return "—"
     return "✓ PASS" if value else "✗ FAIL"
+
+
+def _standing_md(ic: IpsComplianceSection) -> str:
+    """Markdown overall verdict: PASS, FAIL, or INCOMPLETE naming the gap."""
+    standing = ic.standing
+    if standing is ComplianceStanding.INCOMPLETE:
+        return (
+            f"— INCOMPLETE (not measured: {', '.join(ic.unmeasured_metrics)})"
+        )
+    return _pass_fail_md(standing is ComplianceStanding.PASS)
+
+
+def _standing_html(ic: IpsComplianceSection) -> str:
+    """HTML overall verdict: PASS, FAIL, or INCOMPLETE naming the gap."""
+    standing = ic.standing
+    if standing is ComplianceStanding.INCOMPLETE:
+        missing = escape(", ".join(ic.unmeasured_metrics))
+        return f"<span>&#8212; INCOMPLETE (not measured: {missing})</span>"
+    return _pass_fail_html(standing is ComplianceStanding.PASS)
 
 
 def _pass_fail_html(value: bool | None) -> str:
@@ -1579,7 +1641,7 @@ def render_markdown(report: ProgramReport) -> str:
         )
     lines += [
         "",
-        f"**Overall: {_pass_fail_md(ic.all_pass)}**",
+        f"**Overall: {_standing_md(ic)}**",
         "",
     ]
     action_rows = [row for row in ic.rows if row.action is not None]
@@ -1908,6 +1970,6 @@ offset) shown on <code>/monitor</code>. See the handbook's \
 <tr><th>Metric</th><th>Target</th><th>Actual</th><th>Status</th></tr>
 {compliance_rows_html}
 </table>
-<p><strong>Overall: {_pass_fail_html(ic.all_pass)}</strong></p>
+<p><strong>Overall: {_standing_html(ic)}</strong></p>
 {action_html}
 {decision_html}"""

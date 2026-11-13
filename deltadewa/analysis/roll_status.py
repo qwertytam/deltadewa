@@ -144,7 +144,7 @@ class RollStatusRecord:
     moneyness: MoneynessDrift
     days_to_maturity: int
     roll_window_days: int
-    crash_convexity_pct: float
+    crash_convexity_pct: float | None
     leg_convexity_contribution_pct: float | None
     convexity_target_min_pct: float
     convexity_target_max_pct: float

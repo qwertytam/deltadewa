@@ -294,15 +294,15 @@ def decision_matrix(
         return DecisionResult(
             verdict=DecisionVerdict.INSUFFICIENT_DATA,
             rationale=(
-                "Crash convexity could not be measured \u2014 hedge adequacy"
-                " cannot be assessed"
-            ),
-            data_quality_note=(
                 "Crash convexity could not be measured (the book has no"
                 " underlying position to measure the crash gain against),"
-                " so the hedge is neither graded adequate nor under-hedged."
-                " Unmeasured, not breaching."
+                " so hedge adequacy cannot be assessed: unmeasured, not"
+                " breaching"
             ),
+            # Not a data-quality note: the reports render this field as
+            # "withheld: data quality", and the market data is not the
+            # problem here. The rationale carries the reason.
+            data_quality_note=None,
             hedge_adequacy=None,
             cost_verdict=None,
             gains_available=gains_available,

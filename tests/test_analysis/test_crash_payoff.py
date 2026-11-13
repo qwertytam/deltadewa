@@ -508,7 +508,10 @@ class TestCrashPayoffRatio:
                 skew_reference_delta=0.10,
             ),
         )
-        assert convexity_no_book == pytest.approx(0.0, rel=1e-8)
+        # A book with no underlying has no protected notional: the ratio is
+        # undefined, which is unmeasured (None), not a measured 0.0 (#433).
+        assert convexity_no_book is None
+        assert convexity_with_book is not None
         assert convexity_with_book != pytest.approx(0.0, rel=1e-8)
 
     def test_explicit_premium_overrides_computed_premium(self) -> None:

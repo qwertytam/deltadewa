@@ -61,7 +61,7 @@ def _make_report(
     hedge_cost_verdict: str | None = "FAIR",
     data_quality: str = "LIVE",
     needs_alarm: bool | None = None,
-    compliance_rows: tuple[tuple[str, bool], ...] = (
+    compliance_rows: tuple[tuple[str, bool | None], ...] = (
         ("Annual carry cost", True),
         ("Crash convexity (-25% shock)", True),
     ),
@@ -473,7 +473,7 @@ class TestDiffSnapshotsMaterialMoves:
 def _snap_at(
     as_of: date,
     *,
-    compliance_rows: tuple[tuple[str, bool], ...],
+    compliance_rows: tuple[tuple[str, bool | None], ...],
 ) -> WeeklySnapshot:
     """A snapshot at a given as_of, varying only its compliance rows."""
     return replace(_snapshot(compliance_rows=compliance_rows), as_of=as_of)
@@ -611,3 +611,85 @@ class TestStandingBreaches:
             "Annual carry cost": 2,
             "Crash convexity (-25% shock)": 1,
         }
+
+
+class TestAnUnmeasuredMetricIsNotABreach:
+    """#433: ``None`` in a compliance row is unmeasured, not failing."""
+
+    _CONVEXITY = "Crash convexity (-25% shock)"
+
+    def test_an_unmeasured_row_starts_no_standing_breach(self) -> None:
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                (self._CONVEXITY, None),
+            ),
+        )
+
+        assert standing_breaches((), current) == ()
+
+    def test_an_unmeasured_week_ends_a_run_of_breaches(self) -> None:
+        """Only a recorded breach extends a run; unmeasured is a gap."""
+        history = (
+            _snap_at(
+                date(2026, 7, 22),
+                compliance_rows=((self._CONVEXITY, False),),
+            ),
+            _snap_at(
+                date(2026, 7, 29),
+                compliance_rows=((self._CONVEXITY, None),),
+            ),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=((self._CONVEXITY, False),),
+        )
+
+        (breach,) = standing_breaches(history, current)
+
+        assert breach.weeks == 1
+
+    def test_pass_to_unmeasured_is_a_crossing_that_says_so(self) -> None:
+        prior = _snap_at(
+            date(2026, 7, 29),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                (self._CONVEXITY, True),
+            ),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                (self._CONVEXITY, None),
+            ),
+        )
+
+        diff = diff_snapshots(prior, current)
+        details = {c.label: c.detail for c in diff.crossings}
+
+        assert details[f"IPS compliance: {self._CONVEXITY}"] == (
+            "pass \u2192 not measured"
+        )
+        assert details["IPS compliance (overall)"] == (
+            "all pass \u2192 a metric not measured"
+        )
+
+    def test_pass_to_fail_still_says_failing(self) -> None:
+        prior = _snap_at(
+            date(2026, 7, 29),
+            compliance_rows=((self._CONVEXITY, True),),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=((self._CONVEXITY, False),),
+        )
+
+        details = {
+            c.label: c.detail for c in diff_snapshots(prior, current).crossings
+        }
+
+        assert details["IPS compliance (overall)"] == (
+            "all pass \u2192 a metric failing"
+        )

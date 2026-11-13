@@ -344,8 +344,19 @@ def _status(note: str | None) -> Component | str:
 # ---------------------------------------------------------------------------
 
 
-def _badge(passes: bool) -> html.Span:
-    """Build a PASS/FAIL badge in the compliance strip's own classes."""
+def _badge(passes: bool | None) -> html.Span:
+    """Build a PASS/FAIL badge in the compliance strip's own classes.
+
+    ``None`` is an unmeasured reading: grey and worded as such, because a
+    metric that could not be measured must not read as one that is fine,
+    nor as one that failed.
+    """
+    if passes is None:
+        return html.Span(
+            "N/A",
+            className="verdict-badge verdict-badge--unavailable",
+            title="Not measured: neither a pass nor a breach.",
+        )
     return html.Span(
         "PASS" if passes else "FAIL",
         className=(
@@ -548,6 +559,11 @@ def _rung_labels(sized: SizedLadder) -> list[str]:
     ]
 
 
+def _percent_or_dash(value: float | None) -> str:
+    """Format a percent, or an em dash for a reading that was not measured."""
+    return "\u2014" if value is None else fmt.percent(value)
+
+
 def _depth_table(
     sized: SizedLadder,
     portfolio: OptionPortfolio,
@@ -572,7 +588,7 @@ def _depth_table(
     rows = []
     for row, base_pct in zip(profile, baseline_pct, strict=True):
         graded: list[Component] = [html.Td("")]
-        combined_pct = fmt.percent(row.combined_pct_of_book)
+        combined_pct = _percent_or_dash(row.combined_pct_of_book)
         if row.is_ips_depth and conv_row is not None:
             graded = [html.Td(_badge(conv_row.passes))]
             # The graded cell is the strip's own text, which follows the
@@ -589,7 +605,7 @@ def _depth_table(
                     ),
                     html.Td(fmt.currency(row.combined_gain), className="num"),
                     html.Td(combined_pct, className="num"),
-                    html.Td(fmt.percent(base_pct), className="num"),
+                    html.Td(_percent_or_dash(base_pct), className="num"),
                     *graded,
                 ],
                 className="depth-row--ips" if row.is_ips_depth else "",

@@ -224,7 +224,10 @@ class HealthMixin:
         annual_theta = daily_theta * const.DAYS_PER_YEAR
         return float((annual_theta / underlying_value) * 100)
 
-    def calculate_crash_convexity_pct(self, shock: CrashShock) -> float:
+    def calculate_crash_convexity_pct(
+        self,
+        shock: CrashShock,
+    ) -> float | None:
         """Calculate crash convexity, hedge-only and repriced (§1-3).
 
         Repriced, hedge-only value change of the option legs at the crash
@@ -246,8 +249,9 @@ class HealthMixin:
 
         Returns:
             Hedge-only crash convexity as a percentage of the protected book
-            (``abs(underlying_quantity * spot)``). ``0.0`` when the book is
-            empty, since the ratio is then undefined.
+            (``abs(underlying_quantity * spot)``), or ``None`` when the book
+            is empty: the ratio is undefined, which is unmeasured, not a
+            measured ``0.0`` (#433).
 
         """
         return crash_convexity_pct(self.portfolio, shock=shock)
@@ -560,6 +564,7 @@ class HealthMixin:
             - hedge_success_pct: Hedge P&L vs carry paid
 
         """
+        crash_convexity_value: float | None
         if crash is None:
             crash_convexity_value = 0.0
             hedge_success_pct = 0.0

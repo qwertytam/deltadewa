@@ -589,13 +589,20 @@ def _decision_row(record: RollStatusRecord) -> html.Div:
     this one explains why a *leg* has no recommendation.
     """
     expired = record.verdict is RollVerdict.EXPIRED
-    trailing: Component = (
-        html.Span(
+    trailing: Component
+    if expired:
+        trailing = html.Span(
             "excluded from convexity",
             className="decision-note",
         )
-        if expired
-        else band_bar(
+    elif record.crash_convexity_pct is None:
+        # No protected book to be a percentage of: unmeasured, not a miss.
+        trailing = html.Span(
+            "convexity not measured \u2014 no underlying position",
+            className="decision-note",
+        )
+    else:
+        trailing = band_bar(
             value=record.crash_convexity_pct,
             low=record.convexity_target_min_pct,
             high=record.convexity_target_max_pct,
@@ -603,7 +610,6 @@ def _decision_row(record: RollStatusRecord) -> html.Div:
             within=record.convexity_target_met,
             value_text=record.convexity.display(),
         )
-    )
     return html.Div(
         [
             _verdict_badge(record),
