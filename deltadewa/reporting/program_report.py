@@ -16,8 +16,10 @@ from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.carry import carry_vs_budget
 from deltadewa.analysis.convexity_band import (
+    UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
     format_band_edge,
+    format_depth,
     grade_convexity,
     same_crash_depth,
 )
@@ -954,7 +956,7 @@ def build_ips_compliance(
                     "Crash convexity could not be measured at the IPS"
                     " shock — check that the book has an underlying"
                     " position and that the crash scenario has a matching"
-                    " repriced row. Unmeasured, not breaching."
+                    f" repriced row. {UNMEASURED_NOT_BREACHING}"
                 )
             elif grading.grade is ConvexityGrade.BELOW:
                 action = (
@@ -972,7 +974,7 @@ def build_ips_compliance(
             IpsComplianceRow(
                 metric=(
                     "Crash convexity "
-                    f"({format_band_edge(grading.shock_pct)}% shock)"
+                    f"({format_depth(grading.shock_pct)}% shock)"
                 ),
                 target=target_str,
                 actual=actual_str,
@@ -1027,7 +1029,7 @@ def _vega_compliance_row(vega: VegaSection) -> IpsComplianceRow:
             action=(
                 "Vega sufficiency could not be measured — check that the"
                 " book has a value to measure the vol shock against."
-                " Unmeasured, not breaching."
+                f" {UNMEASURED_NOT_BREACHING}"
             ),
         )
 
@@ -1470,7 +1472,7 @@ def render_markdown(report: ProgramReport) -> str:
         else "—"
     )
     crash_label = (
-        f"{format_band_edge(p.ips_crash_pct)}% shock"
+        f"{format_depth(p.ips_crash_pct)}% shock"
         if p.ips_crash_pct is not None
         else "n/a (no IPS scenario)"
     )
@@ -1794,7 +1796,7 @@ def render_html_body(report: ProgramReport) -> str:
         else "&mdash;"
     )
     crash_label_html = (
-        f"{format_band_edge(p.ips_crash_pct)}% shock"
+        f"{format_depth(p.ips_crash_pct)}% shock"
         if p.ips_crash_pct is not None
         else "n/a (no IPS scenario)"
     )

@@ -294,3 +294,44 @@ class TestBandEdgesAreNeverRoundedAway:
         ips = _ips(target_min_pct=10.04, target_max_pct=20.5)
 
         assert _grade(15.0, ips=ips).band_display(sep="-") == "10.04-20.5%"
+
+
+class TestEveryConvexityBandBarTakesTheGrade:
+    """No convexity band bar may colour its own marker (#434).
+
+    ``band_bar`` self-compares ``low <= value <= high`` when it is not told
+    the verdict, which is right for carry and vega (no referee) and would be
+    a second convexity comparison the name-based guard above cannot see. So:
+    any ``band_bar(...)`` call in the app whose arguments mention a
+    convexity figure or a convexity band edge must pass ``within=``.
+    """
+
+    _MARKERS = ("convexity", "target_min", "target_max")
+
+    def test_a_convexity_band_bar_passes_within(self) -> None:
+        import ast
+
+        root = Path(__file__).resolve().parents[2] / "deltadewa" / "app"
+        offenders: list[str] = []
+        checked = 0
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if not (
+                    isinstance(node, ast.Call)
+                    and getattr(node.func, "id", None) == "band_bar"
+                ):
+                    continue
+                args = " ".join(
+                    ast.unparse(kw.value)
+                    for kw in node.keywords
+                    if kw.arg in {"value", "low", "high"}
+                ).lower()
+                if not any(m in args for m in self._MARKERS):
+                    continue
+                checked += 1
+                if "within" not in {kw.arg for kw in node.keywords}:
+                    offenders.append(f"{path.name}:{node.lineno}")
+
+        assert checked >= 2, "the guard found no convexity band bars to check"
+        assert not offenders, offenders

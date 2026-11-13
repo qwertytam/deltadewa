@@ -32,7 +32,7 @@ from dash.development.base_component import Component
 
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.convexity_band import ConvexityGrade
+from deltadewa.analysis.convexity_band import NOT_MEASURED, ConvexityGrade
 from deltadewa.analysis.crash_payoff import book_convexity_grading
 from deltadewa.analysis.crash_repricing import (
     gross_quantity,
@@ -599,7 +599,7 @@ def _decision_row(record: RollStatusRecord) -> html.Div:
     elif record.crash_convexity_pct is None:
         # No protected book to be a percentage of: unmeasured, not a miss.
         trailing = html.Span(
-            "convexity not measured \u2014 no underlying position",
+            f"convexity {NOT_MEASURED} \u2014 no underlying position",
             className="decision-note",
         )
     else:

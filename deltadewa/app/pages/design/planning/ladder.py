@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Final, TypedDict
 
 from dash import ALL, Input, NoUpdate, Output, State, ctx, dcc, html, no_update
 
-from deltadewa.analysis.convexity_band import ConvexityGrade
+from deltadewa.analysis.convexity_band import NOT_MEASURED, ConvexityGrade
 from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.analysis.strike_ladder import build_candidate_grid
 from deltadewa.app import format as fmt
@@ -295,7 +295,7 @@ def _budget_band_verdict(rung: GridCell) -> str:
         failures.append("over budget")
     grade = rung.achieved_convexity.grade
     if grade is ConvexityGrade.UNMEASURED:
-        failures.append("band not measured")
+        failures.append(f"band {NOT_MEASURED}")
     elif grade is ConvexityGrade.BELOW:
         failures.append("below band")
     elif grade is ConvexityGrade.ABOVE:

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Final
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.convexity_band import (
+    NOT_MEASURED,
     ConvexityGrade,
     ConvexityGrading,
     grade_convexity,
@@ -256,7 +257,7 @@ def _convexity_trigger_verdict(convexity: ConvexityGrading) -> TriggerReason:
     if convexity.grade is ConvexityGrade.UNMEASURED:
         return TriggerReason(
             RollVerdict.HOLD,
-            reason="crash convexity not measured \u2014 not graded",
+            reason=f"crash convexity {NOT_MEASURED} \u2014 not graded",
         )
     reason = (
         f"{convexity.display()} convexity vs "

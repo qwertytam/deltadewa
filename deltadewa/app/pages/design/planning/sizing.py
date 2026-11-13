@@ -22,6 +22,7 @@ from dash import Input, Output, dcc, html
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.convexity_band import (
+    NOT_MEASURED,
     ConvexityGrade,
     format_band_edge,
 )
@@ -157,7 +158,7 @@ def _convexity_verdict(result: HedgeSizingResult) -> str:
     if grade is ConvexityGrade.BELOW:
         return "below"
     if grade is ConvexityGrade.UNMEASURED:
-        return "not graded against"
+        return f"{NOT_MEASURED} against"
     return "above"
 
 

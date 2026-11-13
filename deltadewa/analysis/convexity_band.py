@@ -69,6 +69,16 @@ _EDGE_MAX_PLACES: Final[int] = 4
 _UNMEASURED_TEXT: Final[str] = "—"
 """What a surface prints for a reading it could not take (an em dash)."""
 
+NOT_MEASURED: Final[str] = "not measured"
+"""The short status phrase every surface uses for an UNMEASURED reading."""
+
+UNMEASURED_NOT_BREACHING: Final[str] = "Unmeasured, not breaching."
+"""The closing sentence of any explanation of an UNMEASURED row (#433).
+
+``build_vega_section``'s own rule, said the same way wherever a reader could
+otherwise take a missing reading for a breach.
+"""
+
 
 def same_crash_depth(depth_pct: float, other_pct: float) -> bool:
     """Say whether two signed crash depths are the same depth.
@@ -98,6 +108,16 @@ def with_ips_depth(
     kept = {d for d in depths if not same_crash_depth(d, ips_depth_pct)}
     kept.add(round(ips_depth_pct, 6))
     return kept
+
+
+def format_depth(depth_pct: float, *, signed: bool = False) -> str:
+    """Format a crash depth for a label: ``-25``, ``-22.5``, ``+10``.
+
+    Six significant figures, so a depth is never rounded to a whole number
+    (``:.0f`` printed -22.5 as "-22"), and the same text in every surface's
+    label so a depth cannot read differently beside the grade it belongs to.
+    """
+    return f"{depth_pct:+g}" if signed else f"{depth_pct:g}"
 
 
 def format_band_edge(value: float, *, min_places: int = 0) -> str:

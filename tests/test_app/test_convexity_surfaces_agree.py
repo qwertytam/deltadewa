@@ -27,6 +27,8 @@ import pytest
 
 from deltadewa.analysis import roll_status as roll_status_module
 from deltadewa.analysis.convexity_band import (
+    NOT_MEASURED,
+    UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
     grade_convexity,
     same_crash_depth,
@@ -918,3 +920,118 @@ class TestAnUnmeasuredRungIsNotCalledWithin:
         )
 
         assert grid._budget_band_verdict(unmeasured) == "band not measured"
+
+
+class TestUnmeasuredIsSaidTheSameWayEverywhere:
+    """One phrase for "not measured", one closing sentence (#433)."""
+
+    def test_roll_status_and_the_monitor_row_use_the_shared_phrase(
+        self,
+    ) -> None:
+        from deltadewa.app.pages import monitor
+
+        (record,) = evaluate_roll_status(_zero_underlying_book(), _ips())
+
+        assert NOT_MEASURED in record.convexity_trigger.reason
+        assert NOT_MEASURED in _all_text(monitor._decision_row(record))
+
+    def test_every_unmeasured_explanation_ends_the_same_way(self) -> None:
+        zero = _zero_underlying_book()
+        compliance = build_ips_compliance(
+            *compliance_sections_at_ips_anchor(zero, _ips()),
+        )
+        (convexity_row,) = (
+            r for r in compliance.rows if r.metric.startswith("Crash convexity")
+        )
+        decision = decision_matrix(
+            _env(),
+            convexity_now_pct=None,
+            ips_convexity=_ips().convexity,
+        )
+
+        assert convexity_row.action is not None
+        assert convexity_row.action.endswith(UNMEASURED_NOT_BREACHING)
+        assert decision.rationale.endswith(UNMEASURED_NOT_BREACHING)
+
+    def test_the_vega_row_ends_the_same_way(self) -> None:
+        from deltadewa.reporting.program_report import (
+            CostSection,
+            VegaSection,
+        )
+        from deltadewa.reporting.program_report import (
+            build_ips_compliance as build,
+        )
+
+        _cost, protection, _vega = compliance_sections_at_ips_anchor(
+            _book(),
+            _ips(),
+        )
+        compliance = build(
+            CostSection(
+                total_theta_annual=-1.0,
+                book_notional=1.0,
+                carry_pct_of_notional=0.0,
+                budget_annual_pct=2.0,
+                within_budget=True,
+            ),
+            protection,
+            VegaSection(
+                sufficiency_pct=None,
+                floor_pct=1.5,
+                ceiling_pct=4.0,
+                meets_target=None,
+            ),
+        )
+        row = next(r for r in compliance.rows if r.metric == "Vega sufficiency")
+
+        assert row.passes is None
+        assert row.action is not None
+        assert row.action.endswith(UNMEASURED_NOT_BREACHING)
+
+    def test_the_sizing_and_grid_words_use_the_shared_phrase(self) -> None:
+        from deltadewa.app.pages.design.planning import ladder as grid
+        from deltadewa.app.pages.design.planning import sizing as panel
+
+        sized = size_hedge(
+            _book(),
+            _ips(),
+            candidate_pct_otm=10.0,
+            candidate_maturity_years=1.0,
+        )
+        unmeasured = grade_convexity(
+            None, _ips().convexity, at_shock_pct=_DEPTH
+        )
+        result = replace(sized, achieved_convexity=unmeasured)
+        cell = replace(
+            TestTheCandidateGridNamesWhatFails()._cell_for((0.0, 1.0)),
+            achieved_convexity=unmeasured,
+        )
+
+        assert NOT_MEASURED in panel._convexity_verdict(result)
+        assert NOT_MEASURED in grid._budget_band_verdict(cell)
+
+
+class TestADepthMoreFinelyThanSixPlacesStillAgrees:
+    """The cheap path and the scenario row differ only by float noise."""
+
+    def test_book_grading_and_protection_row_agree_at_a_seven_place_depth(
+        self,
+    ) -> None:
+        ips = replace(
+            _ips(),
+            convexity=replace(
+                _ips().convexity,
+                crash_scenario_pct=-25.0000001,
+            ),
+        )
+        book = _book()
+        _cost, protection, _vega = compliance_sections_at_ips_anchor(book, ips)
+
+        cheap = book_convexity_grading(book, ips.convexity)
+
+        assert protection.convexity is not None
+        assert cheap.grade is protection.convexity.grade
+        assert cheap.value_pct == pytest.approx(
+            protection.convexity_pct,
+            rel=1e-6,
+        )

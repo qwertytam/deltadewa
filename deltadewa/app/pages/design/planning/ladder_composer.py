@@ -38,6 +38,7 @@ from dash import (
     no_update,
 )
 
+from deltadewa.analysis.convexity_band import format_depth
 from deltadewa.analysis.ladder import (
     LadderSource,
     ProposedLadder,
@@ -562,7 +563,7 @@ def _rung_labels(sized: SizedLadder) -> list[str]:
 
 def _depth_label(shock_pct: float) -> str:
     """Label a crash depth without rounding it: ``-25%``, ``-22.5%``."""
-    return f"{shock_pct:+g}%"
+    return f"{format_depth(shock_pct, signed=True)}%"
 
 
 def _percent_or_dash(value: float | None) -> str:

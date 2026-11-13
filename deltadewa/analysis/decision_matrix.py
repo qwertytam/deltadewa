@@ -21,6 +21,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
 from deltadewa.analysis.convexity_band import (
+    UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
     grade_convexity,
 )
@@ -296,8 +297,8 @@ def decision_matrix(
             rationale=(
                 "Crash convexity could not be measured (the book has no"
                 " underlying position to measure the crash gain against),"
-                " so hedge adequacy cannot be assessed: unmeasured, not"
-                " breaching"
+                " so hedge adequacy cannot be assessed. "
+                + UNMEASURED_NOT_BREACHING
             ),
             # Not a data-quality note: the reports render this field as
             # "withheld: data quality", and the market data is not the
