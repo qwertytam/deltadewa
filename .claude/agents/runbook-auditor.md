@@ -3,9 +3,9 @@ name: runbook-auditor
 description: >-
   Use this agent to check that the ops docs still describe the system that
   exists. It walks every command, path, service name, env var and file
-  reference in RUNBOOK.md and the deploy docs against the repo, the Dockerfile
-  and compose.yaml, and reports EXECUTABLE / STALE / NO-OP / MISSING-STEP /
-  UNVERIFIABLE. Run it before a release, after any change to compose, the
+  reference in RUNBOOK.md and the deploy, recovery, install and setup docs
+  against the repo, the Dockerfile, compose.yaml, pyproject.toml and CI,
+  and reports EXECUTABLE / STALE / NO-OP / MISSING-STEP / UNVERIFIABLE. Run it before a release, after any change to compose, the
   Dockerfile, a required config key, or a cron entry — and after any incident
   where an operator followed the docs and still got a broken system.
   Read-only: it reports, it never edits.
@@ -44,8 +44,15 @@ end up with a working system — and would they know if they hadn't?**
 ## Method
 
 1. Read the ops docs in scope end to end, section by section. `docs/RUNBOOK.md`
-   is the primary; check any deploy or recovery steps in `README.md`,
-   `QUICKSTART.md` and `CONTRIBUTING.md` too when asked.
+   is the primary; check every deploy, recovery, **install and setup** block in
+   `README.md`, `QUICKSTART.md` and `CONTRIBUTING.md` too — an install block a
+   reader copy-pastes is an operator procedure like any other. Resolve those
+   against `pyproject.toml` and what `.github/workflows/` actually runs, not
+   only against the repo tree: CI is the install that is known to work. (8f/W2:
+   `poetry shell` was documented for months after Poetry 2 removed it, and
+   `poetry install --with dev` after the dev tools moved to PEP 735
+   `[dependency-groups]` — both STALE, both outside a brief that said
+   "deploy and recovery".)
 2. For every command, resolve its referents against the repo: does the path
    exist, is the service named in `compose.yaml`, is the env var read anywhere,
    does the flag still exist on that tool, is the file gitignored.

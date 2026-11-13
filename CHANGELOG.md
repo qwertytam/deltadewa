@@ -19,6 +19,14 @@ history for that record instead.
 
 ### Added
 
+- **N7 — a "really?" note when every leg is marked at one IV.** The
+  provenance panel (`/monitor`, `/design`) now says so when a book's legs
+  sit at two or more distinct strike/maturity points but share one IV to
+  the displayed 0.01% — the flat surface that *Mark pricing inputs
+  reviewed* would otherwise confirm green. A nudge only: it changes no
+  value and does not move the banner, `/health` or the digest. The weekly
+  CONFIRM-vs-RE-MARK procedure is in `docs/continuity-annex.md`.
+
 - **#451 — a written release procedure, and a test that holds it.**
   `docs/RELEASING.md` says when a version is bumped, how a release PR cuts
   `[Unreleased]` into a dated heading, that the annotated tag is pushed from
@@ -27,6 +35,18 @@ history for that record instead.
   heading and `pyproject.toml`'s version disagree, if `[Unreleased]` is not
   first, or if a heading has no link reference. A PR template carries the
   changelog and no-version-bump checklist lines.
+
+### Fixed
+
+- **N8a — "Pricing input provenance" no longer renders as a duplicated
+  heading pair.** The panel's collapsible `<summary>` repeated the
+  section title; it now reads "Show all N inputs", and `/monitor` carries
+  the section heading itself (outside the panel's error boundary).
+- **W2/W3 — install docs match Poetry 2.** `QUICKSTART.md` and `README.md`
+  no longer tell readers to run `poetry shell` (removed in Poetry 2.0), and
+  `QUICKSTART.md` uses plain `poetry install` instead of Poetry-1's
+  `--with dev`; both point at `poetry run`.
+
 
 ## [0.9.3] - 2026-11-10
 

@@ -140,6 +140,14 @@ confirmed. The one deliberate exception is
 every number still correct is itself a confirmation, so this stamps
 unconditionally.
 
+That unconditional stamp is also why the button cannot tell CONFIRM from
+RE-MARK: a flat per-leg IV surface confirms just as green as a skewed one.
+The provenance panel therefore carries a separate, ungraded "really?"
+note when every leg sits at one IV across two or more distinct
+strike/maturity points (`analysis.provenance.flat_iv_nudge`, N7). The
+weekly procedure is in `docs/continuity-annex.md`, "CONFIRM is not
+RE-MARK".
+
 A book or position that predates this feature — or one whose inputs have
 simply never been (re-)confirmed — carries `None` stamps. That reads as
 `Freshness.UNKNOWN`, a distinct and *worse* grade than a stamped-but-old
