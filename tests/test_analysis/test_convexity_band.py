@@ -17,7 +17,9 @@ import pytest
 from deltadewa.analysis.convexity_band import (
     ConvexityGrade,
     ConvexityGrading,
+    format_band_edge,
     grade_convexity,
+    same_crash_depth,
 )
 from deltadewa.ips_config import IpsConvexity
 
@@ -232,3 +234,63 @@ class TestOneComparisonSite:
             if self._PATTERN.search(line)
         ]
         assert not offenders, "\n".join(offenders)
+
+
+class TestSameCrashDepth:
+    """One depth-match rule: the referee, the protection row, the ladder."""
+
+    @pytest.mark.parametrize(
+        ("other", "same"),
+        [
+            (-25.0, True),
+            (-25.00001, True),  # 1e-5: float noise from a percent round trip
+            (-25.00004, True),
+            (-25.0002, False),  # 2e-4 is a different depth
+            (-24.9999, False),
+            (-20.0, False),
+        ],
+    )
+    def test_four_decimal_places(self, other: float, same: bool) -> None:
+        assert same_crash_depth(-25.0, other) is same
+
+    def test_the_referee_uses_the_same_rule(self) -> None:
+        """A depth the helper calls the same is graded; otherwise it is not."""
+        for other in (-25.00004, -25.0002):
+            graded = (
+                _grade(15.0, at=other).grade is not ConvexityGrade.UNMEASURED
+            )
+
+            assert graded is same_crash_depth(_DEPTH, other)
+
+
+class TestBandEdgesAreNeverRoundedAway:
+    @pytest.mark.parametrize(
+        ("edge", "places", "text"),
+        [
+            (10.0, 0, "10"),
+            (10.0, 1, "10.0"),
+            (10.5, 0, "10.5"),
+            (10.04, 1, "10.04"),  # ``:.1f`` would say 10.0
+            (10.126, 2, "10.126"),
+            (20.0, 2, "20.00"),
+        ],
+    )
+    def test_format_band_edge(
+        self, edge: float, places: int, text: str
+    ) -> None:
+        assert format_band_edge(edge, min_places=places) == text
+
+    def test_the_strict_edge_shows_the_exact_floor(self) -> None:
+        # 9.9955 rounds to 10.00 at two places, which is above this floor, so
+        # only the strict edge can say BELOW without lying; and the edge it
+        # names is the floor itself, not the floor rounded to two places.
+        ips = _ips(target_min_pct=9.996)
+        grading = _grade(9.9955, ips=ips)
+
+        assert grading.grade is ConvexityGrade.BELOW
+        assert grading.display() == "<9.996%"
+
+    def test_band_display_keeps_a_fractional_edge(self) -> None:
+        ips = _ips(target_min_pct=10.04, target_max_pct=20.5)
+
+        assert _grade(15.0, ips=ips).band_display(sep="-") == "10.04-20.5%"

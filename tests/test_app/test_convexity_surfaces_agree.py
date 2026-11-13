@@ -677,3 +677,156 @@ class TestTheMonitorDialPathAgreesWithTheStrip:
         )
 
         assert scenario.efficiency == scorecard(book, ips).efficiency
+
+
+def _marker_class(component: Any) -> str:
+    """Find the first band-marker className under a Dash component tree."""
+    cls = getattr(component, "className", None) or ""
+    if "band-marker" in cls:
+        return str(cls)
+    children = getattr(component, "children", None)
+    if isinstance(children, list | tuple):
+        for child in children:
+            found = _marker_class(child)
+            if found:
+                return found
+    elif children is not None and not isinstance(children, str):
+        return _marker_class(children)
+    return ""
+
+
+def _all_marker_classes(component: Any) -> list[str]:
+    """Every band-marker className under a Dash component tree, in order."""
+    found: list[str] = []
+    cls = getattr(component, "className", None) or ""
+    if "band-marker" in cls:
+        found.append(str(cls))
+    children = getattr(component, "children", None)
+    if isinstance(children, list | tuple):
+        for child in children:
+            found.extend(_all_marker_classes(child))
+    elif children is not None and not isinstance(children, str):
+        found.extend(_all_marker_classes(children))
+    return found
+
+
+class TestBandMarkersFollowTheGrade:
+    """#434: every convexity band bar's colour is the referee's grade."""
+
+    @pytest.mark.parametrize(
+        ("side", "expected"),
+        [
+            ("at_min", "band-marker--within"),
+            ("at_max", "band-marker--within"),
+            ("below", "band-marker--outside"),
+            ("above", "band-marker--outside"),
+        ],
+    )
+    def test_the_sizing_panel_bar(self, side: str, expected: str) -> None:
+        from deltadewa.app.pages.design.planning import sizing as sizing_panel
+
+        reading = TestComputedSurfacesAgreeWithTheReferee._reading()
+        band = {
+            "at_min": (reading, reading + 10.0),
+            "at_max": (reading - 10.0, reading),
+            "below": (reading + 1e-6, reading + 10.0),
+            "above": (reading - 10.0, reading - 1e-6),
+        }[side]
+        ips = TestComputedSurfacesAgreeWithTheReferee._with_band(*band)
+        result = size_hedge(
+            _book(),
+            ips,
+            candidate_pct_otm=10.0,
+            candidate_maturity_years=1.0,
+        )
+        panel = sizing_panel._sizing_panel_view(result, ips)
+        # The carry bar comes first; the convexity bar is the last band bar.
+        classes = _all_marker_classes(panel)
+
+        assert expected in classes[-1]
+
+    def test_the_monitor_roll_row_bar(self) -> None:
+        from deltadewa.app.pages import monitor
+
+        (probe,) = evaluate_roll_status(_book(), _ips())
+        reading = probe.crash_convexity_pct
+        assert reading is not None
+        # Place the band's floor exactly on the reading, then just past it.
+        for floor, expected in (
+            (reading, "band-marker--within"),
+            (reading + 1e-6, "band-marker--outside"),
+        ):
+            ips = replace(
+                _ips(),
+                convexity=replace(
+                    _ips().convexity,
+                    target_min_pct=floor,
+                    target_max_pct=floor + 10.0,
+                ),
+            )
+            (record,) = evaluate_roll_status(_book(), ips)
+
+            assert expected in _marker_class(monitor._decision_row(record))
+
+
+class TestTheCandidateGridNamesWhatFails:
+    """The strike-candidate table's last column says which test a rung misses.
+
+    It used to say "over" for any rung that missed *either* the carry budget
+    or the convexity band, so a rung inside budget but under the band read
+    "over". The band side is the referee's grade; the figure beside it is the
+    referee's display (never "10.0%" beside "below band").
+    """
+
+    def _cell_for(self, band: tuple[float, float]) -> GridCell:
+        ips = TestComputedSurfacesAgreeWithTheReferee._with_band(*band)
+        return build_candidate_grid(
+            _book(),
+            ips,
+            target_deltas=[0.10],
+            maturities_years=[1.0],
+        ).cells[0]
+
+    def _reading(self) -> float:
+        """Return the cell's own reading; the band does not move it."""
+        return self._cell_for((0.0, 1.0)).achieved_convexity_pct
+
+    def test_below_the_band_is_named_below_not_over(self) -> None:
+        from deltadewa.app.pages.design.planning import ladder as grid
+
+        reading = self._reading()
+        cell = self._cell_for((reading + 1.0, reading + 10.0))
+
+        assert cell.achieved_convexity.grade is ConvexityGrade.BELOW
+        assert cell.within_budget
+        assert grid._budget_band_verdict(cell) == "below band"
+
+    def test_above_the_band_and_within_are_named(self) -> None:
+        from deltadewa.app.pages.design.planning import ladder as grid
+
+        reading = self._reading()
+
+        above = self._cell_for((reading - 10.0, reading - 1.0))
+        within = self._cell_for((reading - 1.0, reading + 1.0))
+
+        assert grid._budget_band_verdict(above) == "above band"
+        assert grid._budget_band_verdict(within) == "within"
+
+    def test_over_budget_is_named_alongside_the_band(self) -> None:
+        from deltadewa.app.pages.design.planning import ladder as grid
+
+        reading = self._reading()
+        cell = self._cell_for((reading + 1.0, reading + 10.0))
+        broke = replace(cell, within_budget=False)
+
+        assert grid._budget_band_verdict(broke) == "over budget, below band"
+
+    def test_the_figure_printed_is_the_referees_display(self) -> None:
+        from deltadewa.app.pages.design.planning import ladder as grid
+
+        reading = self._reading()
+        cell = self._cell_for((reading + 1e-4, reading + 10.0))
+        row = grid._ladder_rung_row(cell)
+        texts = [str(td.children) for td in row.children if td.children]
+
+        assert cell.achieved_convexity.display() in texts

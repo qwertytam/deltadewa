@@ -17,7 +17,9 @@ from typing import TYPE_CHECKING, Any, Final
 from deltadewa.analysis.carry import carry_vs_budget
 from deltadewa.analysis.convexity_band import (
     ConvexityGrade,
+    format_band_edge,
     grade_convexity,
+    same_crash_depth,
 )
 from deltadewa.analysis.crash_repricing import describe_expired_legs
 from deltadewa.analysis.decision_matrix import (
@@ -783,7 +785,7 @@ def build_protection_section(
         (
             r
             for r in crash_result.scenario_rows
-            if round(r.shock_pct, 4) == round(ips_shock, 4)
+            if same_crash_depth(r.shock_pct, ips_shock)
         ),
         None,
     )
@@ -940,9 +942,7 @@ def build_ips_compliance(
     p = protection
     grading = p.convexity
     if grading is not None:
-        target_str = (
-            f"{grading.min_pct:.1f}%\u2013{grading.max_pct:.1f}% of book"
-        )
+        target_str = f"{_band_text(grading)} of book"
         # The referee's display rule: one decimal, more only when rounding
         # would put the figure on the wrong side of the band from its grade.
         actual_str = grading.display()
@@ -1060,6 +1060,14 @@ def _fmt_money(value: float) -> str:
     """Format a dollar amount with sign and comma separators."""
     sign = "-" if value < 0 else ""
     return f"{sign}${abs(value):,.0f}"
+
+
+def _band_text(grading: ConvexityGrading) -> str:
+    """Return the band as the reports print it, edges never rounded away."""
+    return (
+        f"{format_band_edge(grading.min_pct, min_places=1)}%\u2013"
+        f"{format_band_edge(grading.max_pct, min_places=1)}%"
+    )
 
 
 def _convexity_text(protection: ProtectionSection) -> str:
@@ -1464,10 +1472,7 @@ def render_markdown(report: ProgramReport) -> str:
         else "n/a (no IPS scenario)"
     )
     target_band = (
-        f"{_fmt_pct(p.target_min_pct, 1)}"
-        f"\u2013{_fmt_pct(p.target_max_pct, 1)} of book"
-        if p.target_min_pct is not None
-        else "—"
+        f"{_band_text(p.convexity)} of book" if p.convexity is not None else "—"
     )
     lines += [
         "## 2. Protection",
@@ -1791,9 +1796,8 @@ def render_html_body(report: ProgramReport) -> str:
         else "n/a (no IPS scenario)"
     )
     target_band_html = (
-        f"{_fmt_pct(p.target_min_pct, 1)}"
-        f"&ndash;{_fmt_pct(p.target_max_pct, 1)} of book"
-        if p.target_min_pct is not None
+        f"{_band_text(p.convexity).replace(chr(0x2013), '&ndash;')} of book"
+        if p.convexity is not None
         else "&mdash;"
     )
     vix_str = f"{mc.vix:.1f}" if mc.vix is not None else "&mdash;"

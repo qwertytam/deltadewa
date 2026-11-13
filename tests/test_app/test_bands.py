@@ -187,3 +187,45 @@ class TestBandBarLabels:
         assert high_label.children == "$25"
         assert edge_start.children == "$12"
         assert edge_end.children == "$28"
+
+
+class TestMarkerFollowsTheCallersVerdict:
+    """#434: a band with a referee passes its verdict to the bar."""
+
+    def test_within_none_still_compares_the_numbers(self) -> None:
+        """Carry, vega and dollar bars have no referee: unchanged behaviour."""
+        assert (
+            "outside"
+            in _marker(band_bar(value=5.0, low=15.0, high=25.0)).className
+        )
+        assert (
+            "within"
+            in _marker(band_bar(value=20.0, low=15.0, high=25.0)).className
+        )
+
+    def test_a_false_verdict_beats_a_reading_that_looks_in_zone(self) -> None:
+        bar = band_bar(value=20.0, low=15.0, high=25.0, within=False)
+
+        assert "band-marker--outside" in _marker(bar).className
+        assert "band-value-label--outside" in _value_label(bar).className
+
+    def test_a_true_verdict_beats_a_reading_that_looks_out_of_zone(
+        self,
+    ) -> None:
+        bar = band_bar(value=14.96, low=15.0, high=25.0, within=True)
+
+        assert "band-marker--within" in _marker(bar).className
+
+    def test_value_text_replaces_the_marker_label_only(self) -> None:
+        bar = band_bar(
+            value=9.96,
+            low=10.0,
+            high=20.0,
+            within=False,
+            value_text="9.96%",
+        )
+
+        assert _value_label(bar).children == "9.96%"
+        # The scale labels are the band's own, untouched.
+        scale = [label.children for label in _scale_labels(bar).children]
+        assert "9.96%" not in scale

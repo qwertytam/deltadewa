@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Final, TypedDict
 
 from dash import ALL, Input, NoUpdate, Output, State, ctx, dcc, html, no_update
 
+from deltadewa.analysis.convexity_band import ConvexityGrade
 from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.analysis.strike_ladder import build_candidate_grid
 from deltadewa.app import format as fmt
@@ -281,9 +282,28 @@ def _unsolvable_rung_line(rung: UnsolvableRung) -> html.P:
     )
 
 
+def _budget_band_verdict(rung: GridCell) -> str:
+    """Name what a candidate fails, or "within" when it fails nothing.
+
+    The column used to say "over" for any candidate that missed *either* test,
+    so a rung inside its carry budget but under the convexity band read
+    "over". Now it says which: over budget, below the band, above the band.
+    The band side is the referee's grade (#434).
+    """
+    failures = []
+    if not rung.within_budget:
+        failures.append("over budget")
+    grade = rung.achieved_convexity.grade
+    if grade is ConvexityGrade.BELOW:
+        failures.append("below band")
+    elif grade is ConvexityGrade.ABOVE:
+        failures.append("above band")
+    return ", ".join(failures) if failures else "within"
+
+
 def _ladder_rung_row(rung: GridCell) -> html.Tr:
     """One solved ladder rung."""
-    verdict = "within" if rung.meets_target_within_budget else "over"
+    verdict = _budget_band_verdict(rung)
     return html.Tr(
         [
             html.Td(f"{rung.target_delta:.2f}Δ"),
@@ -296,7 +316,8 @@ def _ladder_rung_row(rung: GridCell) -> html.Tr:
                 fmt.currency(rung.metrics.per_contract_payoff, decimals=2),
             ),
             html.Td(f"{rung.contracts_needed:,}"),
-            html.Td(fmt.percent(rung.achieved_convexity_pct)),
+            # The referee's display rule: never "10.0%" beside "below band".
+            html.Td(rung.achieved_convexity.display()),
             html.Td(verdict),
             html.Td(
                 html.Button(

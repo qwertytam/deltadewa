@@ -8,7 +8,7 @@ from datetime import timedelta
 import pytest
 from dash.development.base_component import Component
 
-from deltadewa.analysis.convexity_band import grade_convexity
+from deltadewa.analysis.convexity_band import ConvexityGrade, grade_convexity
 from deltadewa.analysis.ladder import (
     LadderSource,
     ProposedLadder,
@@ -586,3 +586,39 @@ class TestGrossSizingNote:
         text = _text(panel)
         assert "covers" in text
         assert GROSS_SIZING_NOTE in text
+
+
+class TestIpsDepthRowIsTheRefereesDepth:
+    """One depth rule: the composer's graded row is the referee's."""
+
+    def test_a_depth_within_float_noise_is_the_ips_row_and_a_neighbour_is_not(
+        self,
+    ) -> None:
+        from deltadewa.analysis.ladder import ladder_depth_profile
+
+        ips = _ips()
+        portfolio = _portfolio(_BIG_QTY)
+        ladder, _ = _parse("20@1.5:35, 30@1.5:40, 40@1.5:25")
+        assert ladder is not None
+        sized = size_ladder(portfolio, ips, ladder)
+        shadow = materialize_ladder(portfolio, sized)
+        shock = sized.basis.shock
+        ips_pct = shock.crash_scenario_pct
+
+        rows = ladder_depth_profile(
+            shadow,
+            sized,
+            shock=shock,
+            depths=(ips_pct + 4e-5, ips_pct + 2e-4),
+        )
+
+        assert [row.is_ips_depth for row in rows] == [True, False]
+        for row in rows:
+            graded = grade_convexity(
+                row.combined_pct_of_book,
+                ips.convexity,
+                at_shock_pct=row.shock_pct,
+            )
+            assert (graded.grade is not ConvexityGrade.UNMEASURED) is (
+                row.is_ips_depth
+            )

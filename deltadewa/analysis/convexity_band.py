@@ -50,6 +50,7 @@ that rounds a graded convexity for a reader.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
@@ -61,9 +62,46 @@ if TYPE_CHECKING:
 # four decimal places, so 1e-6 float noise from a percent round trip is not a
 # different depth, while -24.9999 is.
 _DEPTH_PLACES: Final[int] = 4
+_EDGE_MAX_PLACES: Final[int] = 4
 
 _UNMEASURED_TEXT: Final[str] = "—"
 """What a surface prints for a reading it could not take (an em dash)."""
+
+
+def same_crash_depth(depth_pct: float, other_pct: float) -> bool:
+    """Say whether two signed crash depths are the same depth.
+
+    The one depth-match rule in the program: equal to four decimal places, so
+    float noise from a percent round trip is not a different depth. The
+    referee, the protection section's row selection and the ladder composer's
+    "IPS depth" row all use it, so none can pick a different row than the one
+    the band was graded on.
+    """
+    return round(depth_pct, _DEPTH_PLACES) == round(other_pct, _DEPTH_PLACES)
+
+
+def format_band_edge(value: float, *, min_places: int = 0) -> str:
+    """Format a band edge without rounding it away.
+
+    Shows at least *min_places* decimals and as many more (up to four) as it
+    takes to represent *value* exactly: a 10.0 floor is "10" (or "10.0" with
+    ``min_places=1``), a 10.5 floor is "10.5", and a 10.04 floor is "10.04",
+    where ``:.1f`` would have printed it as the 10.0 it is not. A band edge
+    printed wrong is the same defect as a reading printed wrong.
+
+    Args:
+        value: The edge, in percent.
+        min_places: The fewest decimals to show.
+
+    Returns:
+        The number as text, with no percent sign.
+
+    """
+    for places in range(min_places, _EDGE_MAX_PLACES + 1):
+        text = f"{value:.{places}f}"
+        if math.isclose(float(text), value, rel_tol=0.0, abs_tol=1e-12):
+            return text
+    return f"{value:.{_EDGE_MAX_PLACES}f}"
 
 
 class ConvexityGrade(StrEnum):
@@ -99,7 +137,8 @@ def _classify(
 ) -> ConvexityGrade:
     """Classify a reading against the band, inclusive at both ends.
 
-    The one band comparison in the program.
+    The one *convexity* band comparison in the program. (Vega sufficiency has
+    its own band and its own section, ``build_vega_section``, #409.)
     """
     if value_pct < min_pct:
         return ConvexityGrade.BELOW
@@ -152,9 +191,9 @@ class ConvexityGrading:
             if _classify(float(text), self.min_pct, self.max_pct) is self.grade:
                 return f"{text}%"
         if self.grade is ConvexityGrade.BELOW:
-            return f"<{self.min_pct:.2f}%"
+            return f"<{format_band_edge(self.min_pct, min_places=2)}%"
         if self.grade is ConvexityGrade.ABOVE:
-            return f">{self.max_pct:.2f}%"
+            return f">{format_band_edge(self.max_pct, min_places=2)}%"
         # WITHIN yet outside the band at two places: only a band edge with
         # more than two decimals can do that. Show the reading in full.
         return f"{value:.4f}%"
@@ -172,7 +211,10 @@ class ConvexityGrading:
             For example ``"10-20%"`` with a hyphen separator.
 
         """
-        return f"{self.min_pct:g}{sep}{self.max_pct:g}%"
+        return (
+            f"{format_band_edge(self.min_pct)}{sep}"
+            f"{format_band_edge(self.max_pct)}%"
+        )
 
 
 def grade_convexity(
@@ -199,9 +241,9 @@ def grade_convexity(
         The grading, carrying the raw value, the band and the depth.
 
     """
-    same_depth = round(at_shock_pct, _DEPTH_PLACES) == round(
+    same_depth = same_crash_depth(
+        at_shock_pct,
         ips_convexity.crash_scenario_pct,
-        _DEPTH_PLACES,
     )
     if value_pct is None or not same_depth:
         grade = ConvexityGrade.UNMEASURED

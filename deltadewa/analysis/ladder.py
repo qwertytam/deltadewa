@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING
 
 from deltadewa import constants as const
 from deltadewa.analysis.candidate import CandidateMetrics, evaluate_candidate
+from deltadewa.analysis.convexity_band import same_crash_depth
 from deltadewa.analysis.crash_payoff import STANDARD_SCENARIO_SHOCKS
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
@@ -565,7 +566,6 @@ def ladder_depth_profile(
         i: hedge_value(shadow, positions=[leg]) for i, leg in legs.items()
     }
     today_all = hedge_value(shadow)
-    ips_depth = round(shock.crash_scenario_pct, 6)
 
     rows: list[DepthRow] = []
     for depth in depths:
@@ -589,7 +589,10 @@ def ladder_depth_profile(
                     shadow,
                     shock=at_depth,
                 ),
-                is_ips_depth=round(depth, 6) == ips_depth,
+                is_ips_depth=same_crash_depth(
+                    depth,
+                    shock.crash_scenario_pct,
+                ),
             ),
         )
     return tuple(rows)

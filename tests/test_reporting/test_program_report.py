@@ -1281,3 +1281,37 @@ class TestAnUnmeasuredConvexityRendersAsUnmeasured:
 
         assert report.ips_compliance.standing.value == "FAIL"
         assert report.ips_compliance.failing_metrics == ("Annual carry cost",)
+
+
+class TestABandEdgeWithMoreThanOneDecimalIsNotRoundedAway:
+    """A 10.04 floor prints as 10.04, not as the 10.0 it is not (#434)."""
+
+    _IPS = IpsConvexity(
+        crash_scenario_pct=-25.0,
+        target_min_pct=10.04,
+        target_max_pct=30.0,
+    )
+
+    def _report(self) -> ProgramReport:
+        return _build(ips_convexity=self._IPS, convexity_pct=10.0)
+
+    def test_the_compliance_target_and_reading_agree(self) -> None:
+        report = self._report()
+        (row,) = (
+            r
+            for r in report.ips_compliance.rows
+            if r.metric.startswith("Crash convexity")
+        )
+
+        assert row.target == "10.04%\u201330.0% of book"
+        assert row.passes is False
+        # 10.0 sits under the 10.04 floor, and is printed as it is.
+        assert row.actual == "10.0%"
+
+    def test_the_protection_table_prints_the_exact_band(self) -> None:
+        report = self._report()
+
+        assert "| IPS convexity target | 10.04%\u201330.0% of book |" in (
+            render_markdown(report)
+        )
+        assert "10.04%&ndash;30.0% of book" in render_html_body(report)

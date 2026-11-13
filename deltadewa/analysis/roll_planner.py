@@ -30,7 +30,10 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
 from deltadewa import constants as const
-from deltadewa.analysis.convexity_band import ConvexityGrade
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    format_band_edge,
+)
 from deltadewa.analysis.roll_status import (
     RollStatusRecord,
     RollVerdict,
@@ -321,10 +324,10 @@ def _roll_now_rationale(record: RollStatusRecord) -> str:
             f" inside {record.roll_window_days}d roll window."
         )
     if record.convexity.grade is ConvexityGrade.BELOW:
+        floor = format_band_edge(record.convexity_target_min_pct, min_places=1)
         return (
             f"Convexity {record.convexity.display()}"
-            f" below target minimum"
-            f" {record.convexity_target_min_pct:.1f}%."
+            f" below target minimum {floor}%."
         )
     if record.rally_trigger.verdict == record.verdict:
         reason = record.rally_trigger.reason

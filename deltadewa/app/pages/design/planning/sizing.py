@@ -21,7 +21,10 @@ from typing import TYPE_CHECKING, Final
 from dash import Input, Output, dcc, html
 
 from deltadewa.analysis.base import PortfolioAnalyzer
-from deltadewa.analysis.convexity_band import ConvexityGrade
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    format_band_edge,
+)
 from deltadewa.analysis.sizing import GROSS_SIZING_NOTE, size_hedge
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
@@ -249,8 +252,8 @@ def _convexity_children(
         html.P(
             "Achieved convexity "
             f"{result.achieved_convexity.display()} vs "
-            f"{fmt.percent(conv.target_min_pct)}-"
-            f"{fmt.percent(conv.target_max_pct)} target "
+            f"{format_band_edge(conv.target_min_pct, min_places=1)}%-"
+            f"{format_band_edge(conv.target_max_pct, min_places=1)}% target "
             f"({convexity_verdict} target).",
             className="plain-language",
         ),
