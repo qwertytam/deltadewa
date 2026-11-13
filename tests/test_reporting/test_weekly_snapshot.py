@@ -693,3 +693,38 @@ class TestAnUnmeasuredMetricIsNotABreach:
         assert details["IPS compliance (overall)"] == (
             "all pass \u2192 a metric failing"
         )
+
+
+class TestUnmeasuredRowsSurviveTheJsonFile:
+    """#433: an unmeasured row is ``null`` on disk and loads back unchanged."""
+
+    def test_a_none_row_round_trips_through_real_json(self) -> None:
+        import json
+
+        snap = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                ("Crash convexity (-25% shock)", None),
+            ),
+        )
+
+        restored = WeeklySnapshot.from_json_dict(
+            json.loads(json.dumps(snap.to_json_dict())),
+        )
+
+        assert restored.ips_compliance_rows == snap.ips_compliance_rows
+        assert restored.ips_compliance_rows[1][1] is None
+
+    def test_a_pre_433_file_with_boolean_rows_still_loads(self) -> None:
+        import json
+
+        snap = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(("Annual carry cost", False),),
+        )
+        on_disk = json.loads(json.dumps(snap.to_json_dict()))
+
+        assert WeeklySnapshot.from_json_dict(on_disk).ips_compliance_rows == (
+            ("Annual carry cost", False),
+        )

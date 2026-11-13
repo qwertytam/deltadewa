@@ -36,6 +36,43 @@ history for that record instead.
   first, or if a heading has no link reference. A PR template carries the
   changelog and no-version-bump checklist lines.
 
+### Changed
+
+- **#434, #431 — one referee for "is crash convexity inside the IPS band?"**
+  The roll status table, the roll plan, the decision matrix, the compliance
+  strip, the digest's protection table and compliance row, `/monitor`'s
+  efficiency sentence and band bars, and `/design`'s sizing panel, candidate
+  table and ladder composer all read one grade
+  (`analysis/convexity_band.grade_convexity`) instead of thirteen separate
+  comparisons. Bounds are inclusive at both ends, as before, so no verdict
+  moves for a measured reading. What an operator will notice: a reading just
+  under a band edge is printed with a second decimal ("9.96%", or "<10.00%")
+  instead of rounding onto the edge beside its FAIL, and the ladder
+  composer's IPS-depth cell now shows the strip's own figure (it printed
+  "5.0%" beside a FAIL for a 4.99% reading). Only the crash depth the band is
+  stated at is graded; the scenario table's other depths are no longer
+  graded, so none can read "outside band".
+- **#433 — a book with no underlying is "unmeasured", not a 0.0% breach.**
+  Crash convexity has no protected notional to be a percentage of on such a
+  book, so it is now unmeasured instead of `0.0`, which every grader read as a
+  below-band miss: the roll status table marked every leg ROLL, the decision
+  matrix said under-hedged, and the strip said FAIL. Now the roll trigger
+  holds with "not measured", the decision is withheld, and the compliance row
+  reads "—" with "Unmeasured, not breaching". The IPS compliance verdict has
+  a third state, **INCOMPLETE** (nothing breached, but a metric could not be
+  measured), in the `/monitor` and `/design` strip, the digest's Overall line
+  and its headline (`INCOMPLETE: <metric> could not be measured`, ranked below
+  a breach and above a crossing). Vega sufficiency's unmeasured row now reads
+  the same way instead of FAIL. A standing-breach count is not started or
+  extended by an unmeasured week. Existing weekly snapshot files load
+  unchanged.
+- **#436 — gross sizing is kept, and said so.** Sizing covers the crash offset
+  on gross payoff while convexity is graded net of premium, so a hedge sized
+  exactly to the offset can land 0.1pp under the band floor. The decision is
+  gross; no contract count changes. The sizing panel, the strike-candidate
+  table and the ladder composer now say it beside "covers the offset", and a
+  candidate that needs no contracts no longer reads "below target".
+
 ### Fixed
 
 - **N8a — "Pricing input provenance" no longer renders as a duplicated
