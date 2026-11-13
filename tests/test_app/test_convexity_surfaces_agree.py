@@ -89,13 +89,11 @@ _READINGS: tuple[float | None, ...] = (
 # the grid goes green caller by caller and cannot silently skip one.
 _PENDING_NONE: frozenset[str] = frozenset(
     {
-        "roll_status",
         "crash_payoff_row",
         "protection_section",
         "compliance_row",
         "scorecard_row",
         "decision_matrix",
-        "gamma_theta_delay",
     },
 )
 
@@ -296,10 +294,9 @@ def _delay(
     ips = _ips()
     return gamma_theta_delay(
         months_to_maturity=ips.triggers.roll_at_months_remaining + 3.0,
-        convexity_now_pct=value,  # type: ignore[arg-type]
+        convexity=grade_convexity(value, ips.convexity, at_shock_pct=_DEPTH),
         drift_pct=-5.0,
         ips_triggers=ips.triggers,
-        ips_convexity=ips.convexity,
     )
 
 

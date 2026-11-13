@@ -1,5 +1,9 @@
 """Tests for deltadewa.app.format — pure formatting helpers."""
 
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    ConvexityGrading,
+)
 from deltadewa.analysis.roll_status import (
     MoneynessDrift,
     RollStatusRecord,
@@ -136,7 +140,13 @@ def _make_record(
         leg_convexity_contribution_pct=None,
         convexity_target_min_pct=15.0,
         convexity_target_max_pct=25.0,
-        convexity_target_met=True,
+        convexity=ConvexityGrading(
+            value_pct=20.0,
+            min_pct=15.0,
+            max_pct=25.0,
+            shock_pct=-25.0,
+            grade=ConvexityGrade.WITHIN,
+        ),
         verdict=verdict,
         estimated_roll_up_cost=None,
         time_trigger=TriggerReason(time_verdict, reason="time reason"),

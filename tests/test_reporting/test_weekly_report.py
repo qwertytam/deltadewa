@@ -10,6 +10,10 @@ from unittest.mock import patch
 
 import pytest
 
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    ConvexityGrading,
+)
 from deltadewa.analysis.roll_status import (
     MoneynessDrift,
     RollStatusRecord,
@@ -265,7 +269,13 @@ def _roll_record(
         leg_convexity_contribution_pct=4.5,
         convexity_target_min_pct=10.0,
         convexity_target_max_pct=20.0,
-        convexity_target_met=True,
+        convexity=ConvexityGrading(
+            value_pct=18.0,
+            min_pct=10.0,
+            max_pct=20.0,
+            shock_pct=-25.0,
+            grade=ConvexityGrade.WITHIN,
+        ),
         verdict=verdict,
         estimated_roll_up_cost=None,
         time_trigger=trigger,

@@ -73,6 +73,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deltadewa.analysis import roll_status as roll_status_module
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.roll_planner import (
@@ -82,7 +83,6 @@ from deltadewa.analysis.roll_planner import (
 from deltadewa.analysis.roll_status import (
     RollVerdict,
     evaluate_roll_status,
-    meets_convexity_target,
 )
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import (
@@ -606,11 +606,12 @@ class TestConvexityStandingIsOneBoolean:
 
         (status,) = evaluate_roll_status(portfolio, ips)
 
-        assert status.convexity_target_met is meets_convexity_target(
+        referee = grade_convexity(
             status.crash_convexity_pct,
-            target_min_pct=status.convexity_target_min_pct,
-            target_max_pct=status.convexity_target_max_pct,
+            ips.convexity,
+            at_shock_pct=ips.convexity.crash_scenario_pct,
         )
+        assert status.convexity_target_met is referee.meets
 
     def test_an_expired_leg_still_carries_the_books_standing(self) -> None:
         """It is a book fact, not a leg fact (#362/#373).
