@@ -691,7 +691,8 @@ don't fix):
 - **pr-preflight** — checks a branch against the PR *process* rules this file
   and `docs/RELEASING.md` state, reporting PASS / FIX per line: not on `main`,
   PR not already merged (#444/#449), changelog entry or `no changelog entry:
-  <why>`, `Closes #n` for every in-scope issue, version untouched outside
+  <why>`, close keywords matching the in-scope issue list exactly (a negated "Closes
+  #n" still closes it), version untouched outside
   `release/*`, tests added versus pinned tests edited. Separate from
   `doc-sync-checker`: that audits whether the *docs* still describe the repo;
   this audits whether the *branch* followed the rules. Run before opening a PR

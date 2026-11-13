@@ -52,7 +52,18 @@ already cost a mistake:
 
 The caller gives you the in-scope issue numbers, and may give a PR number. If
 there is no PR yet, say so on that line and check everything that does not need
-one. Do not guess a PR number or an issue list; ask for it in your output.
+one.
+
+The in-scope list has three distinct states, and check 4 depends on telling them
+apart:
+
+- **Named** — `#461, #462`. Each must be closed by the PR, and nothing else may.
+- **None** — the caller says "none" or "no issues". Valid and common (a PR that
+  files issues, or is tooling only). Nothing may be closed by the PR.
+- **Not given** — the caller said nothing about it. Do not assume "none". Report
+  check 4 as `FIX (in-scope list not given)` and ask for it.
+
+Do not guess a PR number or an issue list.
 
 ## Checks (one line each, in this order)
 
@@ -64,15 +75,40 @@ one. Do not guess a PR number or an issue list; ask for it in your output.
    is a FIX. No PR found is PASS ("no PR yet").
 3. **Changelog handled.** `git diff main...HEAD -- CHANGELOG.md` must add a line
    under `## [Unreleased]`, **or** the PR body (if a PR exists) must contain the
-   phrase `no changelog entry:` followed by a reason. If the diff is tooling,
-   test-only, docs-only or a pure refactor the reason is acceptable; if it
-   touches a config key, an ops script, a RUNBOOK step, or user-visible output,
-   a bare "no changelog entry" is a FIX. Judge from the diff, not the title.
-4. **`Closes #n` for every in-scope issue.** Each issue the caller named must
-   appear as `Closes #n` (or `Fixes`/`Resolves`) in the PR body. List the ones
-   missing. Conversely list any `Closes #m` for an issue the caller did *not*
-   name — that is a FIX too, an unrequested close. With no PR yet, report PASS
-   only if there is nothing to check against, otherwise "no PR body yet".
+   phrase `no changelog entry:` followed by a reason. A reason is only as good
+   as the diff, so check it mechanically against
+   `git diff main...HEAD --name-only` and do not take the reason on trust:
+   - "tooling only" / "agents": every changed path is under `.claude/` or is
+     `CLAUDE.md`.
+   - "docs only": every changed path is `README.md`, `CONTRIBUTING.md`, or under
+     `docs/`, and none is `docs/RUNBOOK.md` (a RUNBOOK step is operator-visible,
+     so it needs an entry).
+   - "tests only": every changed path is under `tests/`.
+   - "refactor": cannot be proven from a diff. Accept only if check 6 finds no
+     edited assertion, and mark the line `PASS (refactor claim not verifiable
+     from the diff)` so a human sees it was not confirmed.
+   - Any changed path outside the category the reason names, or any touch of
+     `ips.example.yaml`, an ops script, `compose.yaml`, the `Dockerfile`, or a
+     config key, is a FIX whatever the reason says.
+4. **Close keywords match the in-scope list exactly.** GitHub's parser does not
+   read sentences: `Closes #n`, `Fixes #n` and `Resolves #n` (and `close`,
+   `closed`, `fix`, `fixed`, `resolve`, `resolved`, any case) close the issue
+   **even inside a negation** ("does not Close #461", "Closes #461 is NOT here").
+   So scan the body for the keywords, not for intent.
+   - **Named list:** every named issue needs a keyword in the body; list any
+     missing. Any keyword issue *not* in the list is a FIX (an unrequested close).
+   - **None:** any close keyword followed by an issue number is a FIX, however
+     it is phrased. The safe forms are `Refs #n` or `Related to #n`.
+   - **Not given:** see Inputs.
+   - **Authority:** `gh pr view <n> --json closingIssuesReferences` is what
+     GitHub will actually close. Report it beside your body scan. If the two
+     disagree, report both: the field can lag a few seconds behind a body edit,
+     so a stale non-empty value just after a rewording is not itself a FIX
+     (say "may be stale — recheck once").
+   - Also note a keyword followed by several numbers (`Closes #1 #2`) only
+     reliably closes the first; each issue needs its own keyword.
+   - With no PR yet, report `PASS (no PR body yet)` and say the line must be
+     rerun once the body exists.
 5. **Version unchanged unless a release branch.**
    `git diff main...HEAD -- pyproject.toml` must not touch `version =` unless
    the branch name starts `release/`. A release branch must instead also move
@@ -89,9 +125,14 @@ one. Do not guess a PR number or an issue list; ask for it in your output.
 
 ## Execution rules
 
-- Read-only. `git` and `gh` read commands only: `git diff`, `git log`,
-  `git branch`, `gh pr view`, `gh pr list`. Never `git push`, `git commit`,
-  `git checkout`, `gh pr create/edit/merge/comment`.
+- Read-only, **by convention, not by enforcement**: the harness grants write
+  tools to any agent with `memory: project`, so nothing stops a write except
+  this rule. The only file you may ever write is under
+  `.claude/agent-memory/pr-preflight/`. Never edit the PR body, the changelog,
+  a test, or any tracked file, even to fix what you just reported.
+- `git` and `gh` read commands only: `git diff`, `git log`, `git branch`,
+  `gh pr view`, `gh pr list`. Never `git push`, `git commit`, `git checkout`,
+  `gh pr create/edit/merge/comment`.
 - Compare against `main` with the three-dot form (`main...HEAD`) so unrelated
   movement on `main` does not appear as the branch's own change.
 - If `gh` is unauthenticated or offline, report the lines that need it as
