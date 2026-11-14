@@ -112,7 +112,11 @@ from deltadewa.analysis.hedge_triggers import (
     worst_rally_from_entry,
 )
 from deltadewa.analysis.maturity import MaturityBuckets
-from deltadewa.analysis.roll_planner import leg_action_label
+from deltadewa.analysis.roll_planner import (
+    leg_action_label,
+    leg_action_rank,
+    leg_reason,
+)
 from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
 from deltadewa.history_cli import MarkOutcome, take_mark
@@ -271,11 +275,25 @@ def _roll_leg_rows(
         RollLegRow(
             verdict=record.verdict.value,
             leg=_leg_label(record),
-            reason=verdict_reason(record),
+            reason=_leg_reason(record, ips_triggers),
             action=_leg_action(record, ips_triggers),
         )
         for record in records
     )
+
+
+def _leg_reason(
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers | None,
+) -> str:
+    """Return the reason beside a leg's verdict and action (#461).
+
+    The action's own trigger where it differs from the verdict's (see
+    ``roll_planner.leg_reason``); the verdict's reason without the IPS.
+    """
+    if ips_triggers is None:
+        return verdict_reason(record)
+    return leg_reason(record, ips_triggers=ips_triggers)
 
 
 def _leg_action(
@@ -301,6 +319,7 @@ def _leg_label(record: RollStatusRecord) -> str:
 
 def _worst_roll_record(
     records: Sequence[RollStatusRecord],
+    ips_triggers: IpsTriggers | None = None,
 ) -> RollStatusRecord | None:
     """Return the record carrying the worst roll verdict, or ``None``.
 
@@ -315,8 +334,16 @@ def _worst_roll_record(
     own right so a book whose only live leg expires cannot read as though
     the trigger resolved itself.
 
-    Ties break on portfolio order — the first record wins. That has to be
-    stable: two legs at ROLL that swapped places week to week would
+    The verdict decides which leg is worst; an action is never ranked
+    *against* a verdict, so a ROLL BY leg cannot outrank a ROLL leg. Legs
+    tied at the worst verdict are separated by how urgent the roll plan's
+    action for each is (#461): two REVIEW legs, one ``CHECKED`` and one
+    ``ROLL BY``, name the dated one, not whichever is listed first. Without
+    ``ips_triggers`` there is no action to compare and the tie is left to
+    portfolio order.
+
+    Ties that remain break on portfolio order — the first record wins. That
+    has to be stable: two legs at ROLL that swapped places week to week would
     manufacture a phantom crossing out of an unchanged book.
     """
     gradable = [
@@ -324,10 +351,16 @@ def _worst_roll_record(
     ]
     if not gradable:
         return None
-    return max(
-        gradable,
-        key=lambda record: _ROLL_SEVERITY[record.verdict.value],
-    )
+
+    def rank(record: RollStatusRecord) -> tuple[int, int]:
+        action = (
+            -1
+            if ips_triggers is None
+            else leg_action_rank(record, ips_triggers=ips_triggers)
+        )
+        return _ROLL_SEVERITY[record.verdict.value], action
+
+    return max(gradable, key=rank)
 
 
 def _worst_roll_verdict(records: Sequence[RollStatusRecord]) -> str:
@@ -461,7 +494,7 @@ def _headline(
     return base
 
 
-def build_weekly_digest(
+def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument is a distinct input the caller supplies; the function is pure assembly
     *,
     report: ProgramReport,
     roll_records: Sequence[RollStatusRecord],
@@ -530,7 +563,7 @@ def build_weekly_digest(
         raise ValueError(msg)
 
     prior_snapshot = history[-1] if history else None
-    worst_roll_record = _worst_roll_record(roll_records)
+    worst_roll_record = _worst_roll_record(roll_records, ips_triggers)
     worst_roll = (
         worst_roll_record.verdict.value
         if worst_roll_record is not None
@@ -573,7 +606,7 @@ def build_weekly_digest(
             else None
         ),
         worst_roll_reason=(
-            verdict_reason(worst_roll_record)
+            _leg_reason(worst_roll_record, ips_triggers)
             if worst_roll_record is not None
             else None
         ),

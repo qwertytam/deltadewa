@@ -15,6 +15,7 @@ window, DELAY, and the verdict scale the digest reduces).
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, time, timedelta
 
 import pytest
@@ -26,6 +27,7 @@ from deltadewa.analysis.roll_planner import (
     action_label,
     build_roll_plan,
     leg_action,
+    leg_reason,
 )
 from deltadewa.analysis.roll_status import (
     TRIGGER_PRECEDENCE,
@@ -34,6 +36,7 @@ from deltadewa.analysis.roll_status import (
     driving_trigger,
     evaluate_roll_status,
     roll_window_opens,
+    trigger_reading,
     verdict_reason,
 )
 from deltadewa.clock import days_between
@@ -228,6 +231,41 @@ class TestABufferZoneReviewIsADatedAction:
             is RollVerdict.REVIEW
         )
 
+    def test_a_fractional_window_opens_on_the_last_whole_day_it_fires(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """6.05 months is a 181.5d window: ROLL at 181 days, REVIEW at 182.
+
+        The record keeps the window as whole days while the trigger compares
+        the float. Day counts are integers, so ``days <= 181.5`` is
+        ``days <= 181`` and the two agree; this pins the date to that edge.
+        """
+        ips = _ips()
+        ips = dataclasses.replace(
+            ips,
+            triggers=dataclasses.replace(
+                ips.triggers,
+                roll_at_months_remaining=6.05,
+            ),
+        )
+        _convexity(monkeypatch, _IN_BAND)
+        (at_edge,) = evaluate_roll_status(_book(_put(days=181)), ips)
+        (past_edge,) = evaluate_roll_status(_book(_put(days=182)), ips)
+        maturity = days_from_today(182)
+
+        assert at_edge.time_trigger.verdict is RollVerdict.ROLL
+        assert past_edge.time_trigger.verdict is RollVerdict.REVIEW
+        assert "opens at 181.5d" in past_edge.time_trigger.reason
+        opens = roll_window_opens(past_edge)
+        assert opens == maturity.date() - timedelta(days=181)
+        assert (
+            days_between(
+                datetime.combine(opens, time.min, tzinfo=UTC), maturity
+            )
+            == 181
+        )
+
     def test_the_verdict_is_still_review(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -376,6 +414,84 @@ class TestTheRationaleNamesTheTriggerThatDecided:
         # Time and rally are both at REVIEW; the table names time.
         assert driving_trigger(status) == "time"
         assert verdict_reason(status) == status.time_trigger.reason
+
+
+class TestAnUnmeasuredBandCannotClearARallyReview:
+    """The REVIEW band's condition has no answer, and the plan says so."""
+
+    def test_the_action_stands_and_the_rationale_says_why(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # 400d is outside the buffer: only Rule 2 has fired, and a measured
+        # in-band convexity would make this CHECKED.
+        (record,) = _plan(monkeypatch, _put(days=400), convexity=None)
+
+        assert record.action is RollAction.ROLL_NOW
+        assert record.driver == "rally"
+        assert "could not be measured" in record.rationale
+        assert "condition cannot clear" in record.rationale
+        assert "the roll stands until it can be read" in record.rationale
+
+
+class TestTheVerdictAndTheActionNameTheSameTrigger:
+    """Two code paths, one precedence: checked over a grid, not assumed.
+
+    ``driving_trigger`` names the trigger behind a *verdict* and
+    ``leg_action`` the one behind an *action*. Both break ties with
+    ``TRIGGER_PRECEDENCE``, so they agree wherever there is an action, with
+    one documented exception: a leg whose time and rally triggers are both at
+    REVIEW is graded REVIEW on the time trigger, but when convexity is not in
+    band the rally's condition fails and the rally decides ROLL NOW. This
+    walks time x convexity x rally and fails if any cell disagrees in any
+    other way, and checks the reason printed beside the action is always the
+    action's own trigger's (``leg_reason``).
+    """
+
+    @pytest.mark.parametrize("days", [150, 219, 400], ids=lambda d: f"{d}d")
+    @pytest.mark.parametrize(
+        "convexity",
+        [_BELOW_BAND, _IN_BAND, 25.0],
+        ids=["below", "in band", "above"],
+    )
+    @pytest.mark.parametrize(
+        "spot",
+        [_ENTRY, _RALLIED, 7_560.0],
+        ids=["no rally", "rally REVIEW", "rally URGENT"],
+    )
+    def test_they_agree(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        days: int,
+        convexity: float,
+        spot: float,
+    ) -> None:
+        ips = _ips()
+        _convexity(monkeypatch, convexity)
+        (status,) = evaluate_roll_status(
+            _book(_put(days=days, spot=spot)),
+            ips,
+        )
+
+        decided = leg_action(status, ips_triggers=ips.triggers)
+
+        assert decided is not None
+        if decided.action is RollAction.HOLD:
+            assert decided.driver is None
+            return
+        assert decided.driver is not None
+        # Whatever the verdict named, the reason beside the action is the
+        # trigger that decided the action.
+        assert leg_reason(status, ips_triggers=ips.triggers) == (
+            trigger_reading(status, decided.driver).reason
+        )
+        if decided.driver != driving_trigger(status):
+            assert status.verdict is RollVerdict.REVIEW
+            assert decided.action is RollAction.ROLL_NOW
+            assert (decided.driver, driving_trigger(status)) == (
+                "rally",
+                "time",
+            )
 
 
 class TestTheActionScale:

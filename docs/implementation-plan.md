@@ -2431,10 +2431,10 @@ Batch 5.
 
 ## Batch 9a — one referee for the convexity band
 
-**Status: in progress** — branch `fix/convexity-referee`, closing #434, #431,
-#433, #436, #442 and #435. Followed by the roll-plan and digest wording PR
-(#461, #463, #462, #432). `#460`'s other missing sections of this doc are
-Batch 10's, not filled here.
+**Status: in progress.** PR A (`fix/convexity-referee`, #466) closed #434,
+#431, #433, #436, #442 and #435. PR B (`fix/verdicts-say-why`) closes #432,
+#461, #462 and #463: see "PR B" below. `#460`'s other missing sections of this
+doc are Batch 10's, not filled here.
 
 Review #4 found that "is crash convexity inside the IPS band?" was answered
 in 13 places (nine that set a verdict, four that re-graded for prose), and
@@ -2470,7 +2470,7 @@ and a grep test fails if an inline comparison reappears.
   reading until this rule found it.
 
 **Decided, not reopened:** #436 keeps **gross** sizing (2026-11-13). Sizing
-covers the offset on gross payoff, convexity is graded net of premium, and an
+covers the offset on gross payoff, convexity is the gain over the hedge's value today, and an
 offset-sized hedge can land 0.1pp under the floor. `sizing.GROSS_SIZING_NOTE`
 says so beside every "covers the offset"; the §4 golden book's positions and
 every contract count are unchanged.
@@ -2485,6 +2485,54 @@ Tests: `tests/test_analysis/test_convexity_band.py` (the referee and the
 no-inline-comparison guard) and `tests/test_app/test_convexity_surfaces_agree.py`
 (every surface's grade equals the referee's over the same boundary grid, a
 zero-underlying book through each builder, and the #436/#442 agreements).
+
+### PR B: each verdict says what drove it
+
+PR A made one number answer one question. PR B makes each verdict say which
+trigger it came from, and says so in one voice.
+
+**The roll plan's rule** (`roll_planner.leg_action`, also its module
+docstring):
+
+- A leg's action is **the most urgent of what each of its three triggers
+  resolves to**, on `HOLD < CHECKED < DELAY < ROLL_BY < ROLL_NOW`
+  (`_ACTION_URGENCY`, the one place the order is written). Time: ROLL is
+  `ROLL_NOW`; REVIEW is `DELAY` where `gamma_theta_delay` applies, otherwise
+  `ROLL_BY`. Convexity below the band is `ROLL_NOW`. Rally: ROLL is
+  `ROLL_NOW`; REVIEW is `CHECKED` while convexity is in band, else
+  `ROLL_NOW`.
+- `ROLL_BY` is a roll that is **due, not overdue**: Rule 1's review buffer
+  (181-270d at the shipped IPS), outside the window. It carries the date the
+  window opens (`roll_status.roll_window_opens`: maturity less the window), and
+  every surface prints it as `ROLL BY 2026-12-22`. Named `ROLL BY`, not the
+  plan's `ROLL_DUE`, because `position_aging` already labels a leg *inside*
+  the window "ROLL DUE".
+- **The rationale names the trigger that produced the action**, never one
+  that merely shares the leg's verdict (#461 was a verdict match). A tie goes
+  to the earlier trigger in `roll_status.TRIGGER_PRECEDENCE` (time,
+  convexity, rally), the order `verdict_reason` uses, so the table and the
+  plan cannot name different triggers. A trigger that fired but lost is added
+  as one sentence.
+- `rally_review_cleared` lost two conditions, "the verdict is REVIEW" and
+  "the time trigger is not also at REVIEW". Both existed because the action
+  came from one worst verdict; each trigger now resolves on its own.
+
+**One statement, five surfaces.** `roll_planner.leg_action_label` is what
+`/design`'s roll plan, the roll status table, `/monitor`'s Decisions, the
+digest's per-leg table and the snapshot's worst leg all print. The digest
+still reduces `RollVerdict`; an action is never ranked there. The
+`worst_roll_action` snapshot field is optional on disk.
+
+**#463**: the time trigger's reason states Rule 1's rule with both edges read
+from the IPS (`roll_status.time_trigger_phrase`). **#432**: the report's
+convexity row is `CONVEXITY_ROW_LABEL`, "Crash convexity (hedge gain % of
+book)", pinned by a test against the figure's definition. **#462**: the
+digest's "Data quality" crossing is worded from the alarm that flipped.
+
+Tests: `tests/test_analysis/test_roll_by.py` (the dated action, attribution
+and what must not move), `tests/test_app/test_roll_action_surfaces_agree.py`
+(five surfaces, one action and date), and additions in `test_roll_status.py`,
+`test_weekly_report.py`, `test_weekly_snapshot.py` and `test_program_report.py`.
 
 ---
 

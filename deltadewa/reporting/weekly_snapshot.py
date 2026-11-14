@@ -528,13 +528,16 @@ def _data_quality_detail(
     ageing). Printing it on both sides, as this used to, read
     ``STALE -> STALE`` and described no change.
 
-    The string appears only when it adds something: as an arrow when it
-    moved, once when it did not, so the line never presents the merged grade
-    as the thing that crossed.
+    The string appears only when it moved, as an arrow. When it did not, it
+    adds nothing the alarm does not say, and can mislead: the alarm may come
+    from a hand-entered input that is ageing (which the merged grade reports
+    as ``STALE``), so printing ``STALE`` beside "alarm raised" reads as a dead
+    feed. The snapshot records no channel to say which it was, so the line
+    claims only what it knows.
     """
     event = "alarm raised" if current.data_quality_alarm else "alarm cleared"
     if prior.data_quality == current.data_quality:
-        return f"{event} (data quality {current.data_quality})"
+        return event
     return (
         f"{event} (data quality {prior.data_quality} → {current.data_quality})"
     )

@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Final, Literal
 
 from deltadewa import constants as const
 from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
     ConvexityGrade,
     format_band_edge,
 )
@@ -46,17 +47,20 @@ from deltadewa.analysis.roll_status import (
     RollStatusRecord,
     RollTriggerName,
     RollVerdict,
+    driving_trigger,
     estimate_roll_up_cost,
     evaluate_roll_status,
     expired_reason,
     new_strike_for_entry_otm,
     roll_window_opens,
+    trigger_reading,
+    verdict_reason,
 )
 from deltadewa.analysis.strike_ladder import strike_for_delta
 from deltadewa.constants import OptionType
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Sequence
     from datetime import date
 
     from deltadewa.analysis.convexity_band import ConvexityGrading
@@ -711,6 +715,48 @@ def _exclusion_reason(
     return None
 
 
+def leg_reason(
+    record: RollStatusRecord,
+    *,
+    ips_triggers: IpsTriggers,
+) -> str:
+    """Return the reason to print beside a leg's verdict and its action.
+
+    Normally the verdict's own reason (:func:`verdict_reason`). The verdict
+    and the action each name a trigger, and they can differ: a leg whose time
+    trigger and rally trigger are both at REVIEW is graded REVIEW on the time
+    trigger (first in precedence), but with convexity above the band the
+    rally trigger's own condition fails and the action is ROLL NOW, decided by
+    the rally. Printing the time trigger's reason beside ROLL NOW would answer
+    "why is it ROLL NOW?" with a sentence about the review buffer, so where
+    the two differ the action's trigger is the one quoted (#461). The roll
+    status table still shows all three readings.
+    """
+    decided = leg_action(record, ips_triggers=ips_triggers)
+    if (
+        decided is not None
+        and decided.driver is not None
+        and decided.driver != driving_trigger(record)
+    ):
+        return trigger_reading(record, decided.driver).reason
+    return verdict_reason(record)
+
+
+def leg_action_rank(
+    record: RollStatusRecord,
+    *,
+    ips_triggers: IpsTriggers,
+) -> int:
+    """Return how urgent a leg's action is on the action scale, ``-1`` if none.
+
+    For a caller that has to choose among legs already tied at one verdict
+    (the digest's worst leg), so it can prefer the leg whose action is most
+    urgent without owning a copy of the scale (#461).
+    """
+    decided = leg_action(record, ips_triggers=ips_triggers)
+    return -1 if decided is None else _ACTION_URGENCY[decided.action]
+
+
 def leg_action_label(
     record: RollStatusRecord,
     *,
@@ -787,10 +833,7 @@ def _resolve_time(
     return RollAction.ROLL_BY, _roll_by_rationale(record)
 
 
-def _resolve_convexity(
-    record: RollStatusRecord,
-    ips_triggers: IpsTriggers,  # ruff: ignore[unused-function-argument]  # one signature for all three resolvers
-) -> _Resolution | None:
+def _resolve_convexity(record: RollStatusRecord) -> _Resolution | None:
     """Below the band is ROLL_NOW; the trigger never grades REVIEW."""
     if record.convexity_trigger.verdict is not RollVerdict.ROLL:
         return None
@@ -802,10 +845,7 @@ def _resolve_convexity(
     )
 
 
-def _resolve_rally(
-    record: RollStatusRecord,
-    ips_triggers: IpsTriggers,  # ruff: ignore[unused-function-argument]  # one signature for all three resolvers
-) -> _Resolution | None:
+def _resolve_rally(record: RollStatusRecord) -> _Resolution | None:
     """Rule 2: ACTION/URGENT roll; REVIEW rolls only if convexity left the band.
 
     The trigger's own reason already carries the resolved conditional
@@ -816,22 +856,37 @@ def _resolve_rally(
         return None
     if rally_review_cleared(record):
         return RollAction.CHECKED, _checked_rationale(record)
-    return (
-        RollAction.ROLL_NOW,
-        f"Rally trigger: {_sentence(record.rally_trigger.reason)}",
-    )
+    rationale = f"Rally trigger: {_sentence(record.rally_trigger.reason)}"
+    if verdict is RollVerdict.REVIEW and (
+        record.convexity.grade is ConvexityGrade.UNMEASURED
+    ):
+        # The band's condition ("if the convexity target is no longer met")
+        # has no answer, so it cannot clear. Said here because the trigger's
+        # own reason ends "unmeasured, not breaching", which would otherwise
+        # sit beside ROLL NOW with nothing reconciling the two.
+        rationale = (
+            f"{rationale} Convexity {COULD_NOT_BE_MEASURED}, so this band's"
+            " condition cannot clear; the roll stands until it can be read."
+        )
+    return RollAction.ROLL_NOW, rationale
 
 
-_RESOLVERS: Final[
-    dict[
-        RollTriggerName,
-        Callable[[RollStatusRecord, IpsTriggers], _Resolution | None],
-    ]
-] = {
-    "time": _resolve_time,
-    "convexity": _resolve_convexity,
-    "rally": _resolve_rally,
-}
+def _resolve(
+    name: RollTriggerName,
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers,
+) -> _Resolution | None:
+    """Resolve one named trigger to the action it asks for, if it fired.
+
+    Only the time trigger reads the IPS (for the deferral); the other two
+    read the record, which already carries the band and the rally bands.
+    """
+    if name == "time":
+        return _resolve_time(record, ips_triggers)
+    if name == "convexity":
+        return _resolve_convexity(record)
+    return _resolve_rally(record)
+
 
 _TRIGGER_TITLE: Final[dict[RollTriggerName, str]] = {
     "time": "Time",
@@ -923,7 +978,7 @@ def leg_action(
 
     fired: list[tuple[RollTriggerName, RollAction, str]] = []
     for name in TRIGGER_PRECEDENCE:
-        resolution = _RESOLVERS[name](record, ips_triggers)
+        resolution = _resolve(name, record, ips_triggers)
         if resolution is not None:
             fired.append((name, *resolution))
     if not fired:

@@ -187,8 +187,11 @@ def _roll_plan_panel_view(records: list[RollPlanRecord]) -> Component:
         "gamma/theta judgement defers one that is warranted (DELAY), and "
         "a trigger whose own action is conditional — the rally REVIEW "
         "band — can have that condition come back false, in which case no "
-        "roll is warranted at all (CHECKED). Both say why in the "
-        "reasoning cell. Legs that get no "
+        "roll is warranted at all (CHECKED). A leg in the review buffer "
+        "before the roll window, approaching it but not yet inside it, is "
+        "due rather than overdue: it reads ROLL BY the date the window "
+        "opens, and ROLL NOW is kept for a trigger that has reached ROLL. "
+        "Each says why in the reasoning cell. Legs that get no "
         "recommendation of their own — short legs of a spread, non-puts, "
         "expired legs — are still listed, greyed, with the reason: a leg "
         "the planner skipped must never just be absent.",

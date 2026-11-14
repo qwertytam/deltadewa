@@ -271,8 +271,9 @@ def build_candidate_grid(
     2. Prices the candidate put via
        :func:`~deltadewa.analysis.candidate.evaluate_candidate`.
     3. Sizes it via :func:`~deltadewa.analysis.sizing.size_from_unit`, on
-       gross payoff (#436: convexity is then graded net of premium, so a cell
-       sized to the offset can read a little under the band floor).
+       gross payoff (#436: convexity is then the gain over the hedge's value
+       today, so a cell sized to the offset can read a little under the band
+       floor).
     4. Checks convexity against the IPS target band.
 
     No pricing or payoff logic is reimplemented here; every number flows

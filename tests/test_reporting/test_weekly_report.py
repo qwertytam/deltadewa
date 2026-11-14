@@ -469,6 +469,59 @@ class TestTheDigestCarriesTheRollPlansAction:
             assert actions["PUT 5,700"] == "ROLL NOW"
             assert str(actions["PUT 5,600"]).startswith("ROLL BY ")
 
+    def test_two_review_legs_name_the_dated_one_whichever_is_listed_first(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A tie at one verdict goes to the more urgent action, not the order.
+
+        A rally-only REVIEW with convexity in band is ``CHECKED`` (nothing to
+        do); a time REVIEW is ``ROLL BY <date>``. Both are REVIEW, and the
+        digest's worst leg used to be whichever came first in the book.
+        """
+        from ..test_analysis import test_roll_by as shapes
+
+        checked = shapes._put(days=400, strike=4_500.0)
+        dated = shapes._put(days=219, strike=5_600.0)
+        prior = replace(_prior_snapshot(), worst_roll_verdict="HOLD")
+
+        for legs in ((checked, dated), (dated, checked)):
+            records = self._real_records(monkeypatch, *legs)
+            assert {r.verdict.value for r in records} == {"REVIEW"}
+            digest = build_weekly_digest(
+                report=_make_report(within_budget=True),
+                roll_records=records,
+                history=(prior,),
+                as_of=_AS_OF,
+                ips_triggers=shapes._ips().triggers,
+            )
+
+            assert digest.snapshot.worst_roll_verdict == "REVIEW"
+            assert digest.snapshot.worst_roll_leg == "PUT 5,600"
+            assert str(digest.snapshot.worst_roll_action).startswith(
+                "ROLL BY ",
+            )
+
+    def test_without_the_ips_a_tie_is_left_to_portfolio_order(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from ..test_analysis import test_roll_by as shapes
+
+        records = self._real_records(
+            monkeypatch,
+            shapes._put(days=400, strike=4_500.0),
+            shapes._put(days=219, strike=5_600.0),
+        )
+
+        digest = build_weekly_digest(
+            report=_make_report(),
+            roll_records=records,
+            as_of=_AS_OF,
+        )
+
+        assert digest.snapshot.worst_roll_leg == "PUT 4,500"
+
     def test_a_digest_built_without_the_ips_carries_no_action(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -568,10 +621,8 @@ class TestTheDigestsDataQualityLineNamesTheAlarm:
         markdown = render_weekly_digest_markdown(digest)
         html = render_weekly_digest_html(digest)
 
-        assert "- **Data quality:** alarm raised (data quality STALE)" in (
-            markdown
-        )
-        assert "alarm raised (data quality STALE)" in html
+        assert "- **Data quality:** alarm raised\n" in markdown
+        assert "alarm raised" in html
         assert "STALE \u2192 STALE" not in markdown
         assert "STALE \u2192 STALE" not in html
 

@@ -465,16 +465,17 @@ class TestTheDataQualityCrossingNamesTheAlarm:
 
         detail = self._detail(prior, current)
 
-        assert detail == "alarm raised (data quality STALE)"
-        assert "STALE \u2192 STALE" not in detail
+        # The merged grade did not move, so it is not printed: it adds
+        # nothing the alarm does not say, and beside "raised" it can read as
+        # a dead feed when the alarm came from an ageing hand-entered input.
+        assert detail == "alarm raised"
+        assert "STALE" not in detail
 
     def test_alarm_cleared_while_the_string_stays_stale(self) -> None:
         prior = _snapshot(data_quality="STALE", needs_alarm=True)
         current = _snapshot(data_quality="STALE", needs_alarm=False)
 
-        assert self._detail(prior, current) == (
-            "alarm cleared (data quality STALE)"
-        )
+        assert self._detail(prior, current) == "alarm cleared"
 
     def test_the_string_is_an_arrow_when_it_actually_moved(self) -> None:
         raised = self._detail(

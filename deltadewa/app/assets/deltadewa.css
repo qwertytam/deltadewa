@@ -502,6 +502,9 @@ body {
 
 .verdict-badge--roll_by {
   background: #e07b00;
+  /* The label carries an ISO date ("ROLL BY 2026-12-22"). Left to wrap in a
+     narrow Action column it split mid-date, onto three lines. */
+  white-space: nowrap;
 }
 
 /* The action line under a verdict (/monitor, the roll status table): the
@@ -522,6 +525,7 @@ body {
   font-weight: 600;
   color: #4a5560;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* CHECKED (#408): a trigger fired, its own stated condition was evaluated,

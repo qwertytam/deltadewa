@@ -50,7 +50,7 @@ from deltadewa.analysis.monitor_scenario import (
     ips_anchor_dials,
 )
 from deltadewa.analysis.provenance import build_provenance_ledger
-from deltadewa.analysis.roll_planner import leg_action_label
+from deltadewa.analysis.roll_planner import leg_action_label, leg_reason
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
@@ -631,7 +631,7 @@ def _decision_row(
             html.Span(
                 f"{record.position.option.option_type.value} "
                 f"{record.position.option.strike_price:,.0f} — "
-                f"{fmt.roll_verdict_reason(record)}",
+                f"{leg_reason(record, ips_triggers=ips_triggers)}",
                 className="decision-reason",
             ),
             trailing,
@@ -688,9 +688,10 @@ def _decisions_section(
                 className="verdict-legend",
             ),
             html.P(
-                "Each position's roll verdict, and any monetization "
-                "already recommended by the IPS schedule at the current "
-                "mark.",
+                "Each position's roll verdict, the roll plan's action beside "
+                "it (ROLL NOW, ROLL BY the date the roll window opens, "
+                "DELAY or CHECKED), and any monetization already "
+                "recommended by the IPS schedule at the current mark.",
                 className="plain-language",
             ),
             html.Div(roll_rows, className="decision-list"),
