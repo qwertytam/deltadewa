@@ -55,7 +55,7 @@ Where each leg stands right now. The crossing above reports what *changed*; this
 | Premium paid | $300,000 (paid) |
 | IPS crash scenario | -25% shock |
 | Payoff ratio at crash | 8.5× |
-| Convexity (net P&L % of book) | 19.0% |
+| Crash convexity (hedge gain % of book) | 19.0% |
 | IPS convexity target | 15.0%–25.0% of book |
 | Status | ✓ PASS |
 

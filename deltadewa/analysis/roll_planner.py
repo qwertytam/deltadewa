@@ -126,8 +126,9 @@ class RollPlanRecord:
             alone is not a trade anyone would place, and pricing it that
             way understated the cost by omitting the short leg's re-sale
             credit (#333). ``None`` when *target_strike* is ``None``.
-        convexity_now_pct: Portfolio crash-convexity at the IPS crash
-            scenario (net P&L as % of book notional).
+        convexity_now_pct: Portfolio crash convexity at the IPS crash
+            scenario: the hedge's gain alone as % of book notional (#432).
+            It excludes the underlying's loss, so it is not a "net" figure.
         convexity: The referee's grading of *convexity_now_pct* against the
             IPS target band (#434) — the one grade the roll status table, the
             compliance strip and this plan all read.

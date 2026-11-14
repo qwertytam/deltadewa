@@ -59,6 +59,15 @@ _RATIO_DISAMBIGUATION_URL: Final[str] = (
     "https://qwertytam.github.io/deltadewa-handbook/0.1/part-6/ratio-disambiguation/"
 )
 
+#: The protection table's convexity row (#432). The figure behind it is
+#: ``crash_repricing.crash_convexity_pct``: ``(V_crash - V_today) / book``,
+#: the **hedge's** gain alone. It leaves out the underlying's loss, so it is
+#: not a "net" figure: everywhere else in the program (``monitor_scenario``,
+#: ``crash_charts_plotly``) "net" means ``hedge_gain + underlying_loss``. The
+#: Ratio Disambiguation page exists to keep those two apart. Both renderers
+#: read this one constant, and a test pins it against the figure's definition.
+CONVEXITY_ROW_LABEL: Final[str] = "Crash convexity (hedge gain % of book)"
+
 # Cites #70 ("Track hedge historical P&L"), the issue realized-gains
 # tracking is actually gated on — not the stale "(C4)" label this used to
 # carry, which (per docs/implementation-plan.md's current finding index)
@@ -1491,7 +1500,7 @@ def render_markdown(report: ProgramReport) -> str:
         ),
         f"| IPS crash scenario | {crash_label} |",
         f"| Payoff ratio at crash | {ratio_str} |",
-        f"| Convexity (net P&L % of book) | {_convexity_text(p)} |",
+        f"| {CONVEXITY_ROW_LABEL} | {_convexity_text(p)} |",
         f"| IPS convexity target | {target_band} |",
         f"| Status | {_pass_fail_md(p.meets_target)} |",
         "",
@@ -1939,7 +1948,7 @@ over {rf.elapsed_days} day(s)</td></tr>
 <td>{escape(_fmt_money(p.premium_paid))} ({escape(p.premium_basis)})</td></tr>
 <tr><td>IPS crash scenario</td><td>{escape(crash_label_html)}</td></tr>
 <tr><td>Payoff ratio at crash</td><td>{ratio_str}</td></tr>
-<tr><td>Convexity (net P&amp;L % of book)</td>\
+<tr><td>{escape(CONVEXITY_ROW_LABEL)}</td>\
 <td>{escape(_convexity_text(p))}</td></tr>
 <tr><td>IPS convexity target</td><td>{target_band_html}</td></tr>
 <tr><td>Status</td><td>{_pass_fail_html(p.meets_target)}</td></tr>
