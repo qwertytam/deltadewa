@@ -68,9 +68,9 @@ def _roll_plan_row(record: RollPlanRecord, *, grouped: bool = False) -> html.Tr:
         else "n/a"
     )
     excluded = record.action is None
-    action_text = (
-        "—" if record.action is None else record.action.value.replace("_", " ")
-    )
+    # The label carries the date for a dated action (#461), from the one
+    # function every surface uses.
+    action_text = record.action_label or "—"
     action_class = (
         "verdict-badge verdict-badge--excluded"
         if record.action is None

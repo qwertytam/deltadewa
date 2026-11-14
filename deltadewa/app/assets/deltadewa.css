@@ -495,6 +495,35 @@ body {
   background: #7a5ea8;
 }
 
+/* ROLL_BY (#461): a roll that is due but not overdue, dated to the day the
+   roll window opens. It is the roll status table's REVIEW, as an action,
+   so it takes REVIEW's orange: the same call in the same colour, one rung
+   below ROLL NOW's red. Not DELAY's purple, because nothing is deferred. */
+
+.verdict-badge--roll_by {
+  background: #e07b00;
+}
+
+/* The action line under a verdict (/monitor, the roll status table): the
+   plan's own words, so the verdict and the action it leads to read as one
+   statement. Recessive: the badge is the verdict, this is what follows. */
+
+.roll-action {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #4a5560;
+  white-space: nowrap;
+}
+
+.decision-action {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #4a5560;
+  flex-shrink: 0;
+}
+
 /* CHECKED (#408): a trigger fired, its own stated condition was evaluated,
    and it does not call for a roll. Deliberately not HOLD's blue — something
    did fire and was resolved, which is not the same as a quiet leg — and not
