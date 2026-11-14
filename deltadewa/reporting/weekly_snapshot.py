@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING, Any, Final
 
+from deltadewa.analysis.convexity_band import NOT_MEASURED
 from deltadewa.analysis.market_environment import describe_lookback
 
 if TYPE_CHECKING:
@@ -360,7 +361,7 @@ class SnapshotDiff:
 def _row_word(passes: bool | None) -> str:
     """Name a compliance row's state: pass, fail, or not measured (#433)."""
     if passes is None:
-        return "not measured"
+        return NOT_MEASURED
     return "pass" if passes else "fail"
 
 
@@ -613,7 +614,7 @@ def diff_snapshots(
             false_word=(
                 "a metric failing"
                 if _any_row_failing(current) or not current.ips_compliance_rows
-                else "a metric not measured"
+                else f"a metric {NOT_MEASURED}"
             ),
         ),
     )

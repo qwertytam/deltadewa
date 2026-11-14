@@ -21,12 +21,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any, Literal
 
 import pytest
 
 from deltadewa.analysis import roll_status as roll_status_module
 from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
     NOT_MEASURED,
     UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
@@ -85,6 +87,8 @@ from deltadewa.portfolio.position import OptionPosition
 from deltadewa.reporting.program_report import (
     IpsComplianceRow,
     IpsComplianceSection,
+    _standing_html,
+    _standing_md,
     build_ips_compliance,
     build_protection_section,
 )
@@ -1035,3 +1039,81 @@ class TestADepthMoreFinelyThanSixPlacesStillAgrees:
             protection.convexity_pct,
             rel=1e-6,
         )
+
+
+class TestEveryUnmeasuredSurfaceUsesTheSharedWords:
+    """Each place that says "unmeasured" says it with the shared phrases.
+
+    The status phrase is ``NOT_MEASURED`` and the clause is
+    ``COULD_NOT_BE_MEASURED``; any *explanation* closes with
+    ``UNMEASURED_NOT_BREACHING``. Driven from the real builders on a real
+    zero-underlying book, one surface per line.
+    """
+
+    @staticmethod
+    def _says_it(text: str) -> bool:
+        low = text.lower()
+        return NOT_MEASURED in low or COULD_NOT_BE_MEASURED in low
+
+    def test_the_rally_review_recheck(self) -> None:
+        """The REVIEW band's "if the target is no longer met" has no answer."""
+        # entry_spot is 100 here: 112 is a +12% rally, the REVIEW band.
+        (record,) = evaluate_roll_status(
+            _zero_underlying_book(),
+            _ips(),
+            current_spot=112.0,
+        )
+        reason = record.rally_trigger.reason
+
+        assert record.rally_trigger.verdict is RollVerdict.REVIEW
+        assert COULD_NOT_BE_MEASURED in reason
+        assert reason.endswith(UNMEASURED_NOT_BREACHING)
+
+    def test_the_digest_headline_and_the_snapshot_words(self) -> None:
+        from deltadewa.reporting.program_report import IpsComplianceRow
+        from deltadewa.reporting.weekly_report import _headline
+        from deltadewa.reporting.weekly_snapshot import (
+            SnapshotDiff,
+            _row_word,
+        )
+
+        assert _row_word(None) == NOT_MEASURED
+        rows = (
+            IpsComplianceRow(
+                metric="Crash convexity (-25% shock)",
+                target="15.0 to 25.0% of book",
+                actual="—",
+                passes=None,
+            ),
+        )
+        compliance = IpsComplianceSection(rows=rows, all_pass=False)
+        snapshot = SimpleNamespace(
+            ips_compliance_all_pass=False,
+            data_quality_alarm=False,
+        )
+        diff = SnapshotDiff(
+            is_first_run=False,
+            prior_as_of=None,
+            crossings=(),
+            material_moves=(),
+        )
+
+        headline = _headline(diff, snapshot, compliance, ())  # type: ignore[arg-type]
+
+        assert headline.endswith(COULD_NOT_BE_MEASURED)
+
+    def test_the_overall_lines_and_the_strip(self) -> None:
+        rows = (
+            IpsComplianceRow(
+                metric="Crash convexity (-25% shock)",
+                target="15.0 to 25.0% of book",
+                actual="—",
+                passes=None,
+            ),
+        )
+        compliance = IpsComplianceSection(rows=rows, all_pass=False)
+
+        assert NOT_MEASURED in _standing_md(compliance)
+        assert NOT_MEASURED in _standing_html(compliance)
+        strip = compliance_strip(compliance, DataQuality.LIVE).children[0]
+        assert COULD_NOT_BE_MEASURED in strip.children

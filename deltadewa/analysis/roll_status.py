@@ -15,7 +15,9 @@ from typing import TYPE_CHECKING, Final
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
     NOT_MEASURED,
+    UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
     ConvexityGrading,
     grade_convexity,
@@ -324,8 +326,9 @@ def _convexity_recheck(convexity: ConvexityGrading) -> str:
     band = f"{convexity.band_display(sep='-')} IPS target band"
     if convexity.grade is ConvexityGrade.UNMEASURED:
         return (
-            "Recomputed: crash convexity could not be measured, so the"
+            f"Recomputed: crash convexity {COULD_NOT_BE_MEASURED}, so the"
             " target cannot be said to be met or not met."
+            f" {UNMEASURED_NOT_BREACHING}"
         )
     if convexity.grade is ConvexityGrade.WITHIN:
         return (

@@ -319,7 +319,10 @@ class TestEveryConvexityBandBarTakesTheGrade:
             for node in ast.walk(tree):
                 if not (
                     isinstance(node, ast.Call)
-                    and getattr(node.func, "id", None) == "band_bar"
+                    and (
+                        getattr(node.func, "id", None) == "band_bar"
+                        or getattr(node.func, "attr", None) == "band_bar"
+                    )
                 ):
                     continue
                 args = " ".join(
@@ -330,7 +333,15 @@ class TestEveryConvexityBandBarTakesTheGrade:
                 if not any(m in args for m in self._MARKERS):
                     continue
                 checked += 1
-                if "within" not in {kw.arg for kw in node.keywords}:
+                within = next(
+                    (kw.value for kw in node.keywords if kw.arg == "within"),
+                    None,
+                )
+                # Present, and not the literal ``within=None`` (which is the
+                # self-comparing default spelled out).
+                if within is None or (
+                    isinstance(within, ast.Constant) and within.value is None
+                ):
                     offenders.append(f"{path.name}:{node.lineno}")
 
         assert checked >= 2, "the guard found no convexity band bars to check"

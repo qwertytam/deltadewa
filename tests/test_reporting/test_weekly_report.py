@@ -1913,3 +1913,45 @@ class TestMainStateLoadFailure:
         message = mock_send.call_args.args[0]
         assert "FAILED to build" in message.subject
         mock_ping.assert_not_called()
+
+
+class TestTheDigestGradesWhatTheStripGrades:
+    """§6 of the digest and the /monitor strip are one verdict on one book.
+
+    The digest assembles its own crash, carry and vega inputs in
+    ``build_and_render`` (``reporting/`` may not import ``app/``), while the
+    strip builds them in ``app/compliance.compliance_sections_at_ips_anchor``.
+    ``compliance.py`` warns that a second copy of that glue is the drift it
+    exists to prevent, and nothing compared them. This does, on the §4 golden
+    book and with the real IPS, through the digest's real build path.
+    """
+
+    def test_the_digests_compliance_rows_equal_the_strips(
+        self,
+        seeded_export_dir: _MainFixture,
+    ) -> None:
+        from deltadewa.app.compliance import compliance_sections_at_ips_anchor
+        from deltadewa.reporting.program_report import build_ips_compliance
+        from deltadewa.reporting.weekly_report import build_and_render
+        from deltadewa.state import ProgramState
+
+        export_dir = seeded_export_dir.export_dir
+        state = ProgramState.load(export_dir, ips_path=_EXAMPLE_IPS_YAML)
+        ips = state.ips_config
+        assert ips is not None
+
+        rendered = build_and_render(
+            state=state,
+            ips_config=ips,
+            as_of=_AS_OF,
+            period_label="Week of 2026-08-05",
+            export_dir=export_dir,
+        )
+        strip = build_ips_compliance(
+            *compliance_sections_at_ips_anchor(state.portfolio, ips),
+        )
+
+        digest_compliance = rendered.digest.report.ips_compliance
+        assert digest_compliance.rows == strip.rows
+        assert digest_compliance.standing is strip.standing
+        assert digest_compliance.all_pass is strip.all_pass

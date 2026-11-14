@@ -72,6 +72,9 @@ _UNMEASURED_TEXT: Final[str] = "—"
 NOT_MEASURED: Final[str] = "not measured"
 """The short status phrase every surface uses for an UNMEASURED reading."""
 
+COULD_NOT_BE_MEASURED: Final[str] = "could not be measured"
+"""The same fact as a clause in a sentence ("X could not be measured")."""
+
 UNMEASURED_NOT_BREACHING: Final[str] = "Unmeasured, not breaching."
 """The closing sentence of any explanation of an UNMEASURED row (#433).
 

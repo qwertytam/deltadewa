@@ -26,6 +26,10 @@ from dash import html
 from dash.development.base_component import Component
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
+    NOT_MEASURED,
+)
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.market_environment import DataQuality
@@ -226,8 +230,8 @@ def compliance_strip(
         # PASS (it was not checked) and not a FAIL (nothing breached).
         text = (
             "IPS compliance: INCOMPLETE — nothing is out of policy, but "
-            f"{', '.join(compliance.unmeasured_metrics)} could not be "
-            "measured."
+            f"{', '.join(compliance.unmeasured_metrics)} "
+            f"{COULD_NOT_BE_MEASURED}."
         )
         modifier = "incomplete"
     else:
@@ -239,7 +243,7 @@ def compliance_strip(
         text = "IPS compliance: FAIL — " + "; ".join(clauses) + "."
         if compliance.unmeasured_metrics:
             text += (
-                " Not measured: "
+                f" {NOT_MEASURED.capitalize()}: "
                 + ", ".join(compliance.unmeasured_metrics)
                 + "."
             )

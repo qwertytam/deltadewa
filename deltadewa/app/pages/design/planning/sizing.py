@@ -22,6 +22,7 @@ from dash import Input, Output, dcc, html
 
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
     NOT_MEASURED,
     ConvexityGrade,
     format_band_edge,
@@ -109,7 +110,7 @@ def _vega_sufficiency_block(
             [
                 html.H4("Vega sufficiency"),
                 html.P(
-                    "Vega sufficiency could not be measured for this book.",
+                    f"Vega sufficiency {COULD_NOT_BE_MEASURED} for this book.",
                     className="plain-language",
                 ),
             ],

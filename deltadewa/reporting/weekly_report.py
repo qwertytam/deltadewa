@@ -103,6 +103,7 @@ from deltadewa.analysis import (
     evaluate_roll_status,
     verdict_reason,
 )
+from deltadewa.analysis.convexity_band import COULD_NOT_BE_MEASURED
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerReason,
     HedgeTriggerThresholds,
@@ -405,11 +406,11 @@ def _headline(
         # clean week, and not a breach either (#433). Unmeasured is not
         # breaching, so it never inherits BREACH's "Nth week" counter.
         if len(unmeasured) == 1:
-            base = f"INCOMPLETE: {unmeasured[0]} could not be measured"
+            base = f"INCOMPLETE: {unmeasured[0]} {COULD_NOT_BE_MEASURED}"
         else:
             base = (
-                f"INCOMPLETE: {len(unmeasured)} IPS metrics could not be "
-                "measured"
+                f"INCOMPLETE: {len(unmeasured)} IPS metrics "
+                f"{COULD_NOT_BE_MEASURED}"
             )
     elif not snapshot.ips_compliance_all_pass:
         weeks_by_metric = {b.metric: b.weeks for b in breaches}

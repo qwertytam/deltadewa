@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.carry import carry_vs_budget
 from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
+    NOT_MEASURED,
     UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
     format_band_edge,
@@ -953,7 +955,7 @@ def build_ips_compliance(
         if passes is not True:
             if grading.grade is ConvexityGrade.UNMEASURED:
                 action = (
-                    "Crash convexity could not be measured at the IPS"
+                    f"Crash convexity {COULD_NOT_BE_MEASURED} at the IPS"
                     " shock — check that the book has an underlying"
                     " position and that the crash scenario has a matching"
                     f" repriced row. {UNMEASURED_NOT_BREACHING}"
@@ -1027,7 +1029,7 @@ def _vega_compliance_row(vega: VegaSection) -> IpsComplianceRow:
             actual="—",
             passes=None,
             action=(
-                "Vega sufficiency could not be measured — check that the"
+                f"Vega sufficiency {COULD_NOT_BE_MEASURED} — check that the"
                 " book has a value to measure the vol shock against."
                 f" {UNMEASURED_NOT_BREACHING}"
             ),
@@ -1345,7 +1347,7 @@ def _standing_html(ic: IpsComplianceSection) -> str:
     standing = ic.standing
     if standing is ComplianceStanding.INCOMPLETE:
         missing = escape(", ".join(ic.unmeasured_metrics))
-        return f"<span>&#8212; INCOMPLETE (not measured: {missing})</span>"
+        return f"<span>&#8212; INCOMPLETE ({NOT_MEASURED}: {missing})</span>"
     return _pass_fail_html(standing is ComplianceStanding.PASS)
 
 
