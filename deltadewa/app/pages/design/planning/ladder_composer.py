@@ -38,7 +38,11 @@ from dash import (
     no_update,
 )
 
-from deltadewa.analysis.convexity_band import format_depth
+from deltadewa.analysis.convexity_band import (
+    NOT_MEASURED,
+    UNMEASURED_NOT_BREACHING,
+    format_depth,
+)
 from deltadewa.analysis.ladder import (
     LadderSource,
     ProposedLadder,
@@ -357,7 +361,7 @@ def _badge(passes: bool | None) -> html.Span:
         return html.Span(
             "N/A",
             className="verdict-badge verdict-badge--unavailable",
-            title="Not measured: neither a pass nor a breach.",
+            title=f"{NOT_MEASURED.capitalize()}. {UNMEASURED_NOT_BREACHING}",
         )
     return html.Span(
         "PASS" if passes else "FAIL",

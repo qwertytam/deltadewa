@@ -1923,12 +1923,39 @@ class TestTheDigestGradesWhatTheStripGrades:
     strip builds them in ``app/compliance.compliance_sections_at_ips_anchor``.
     ``compliance.py`` warns that a second copy of that glue is the drift it
     exists to prevent, and nothing compared them. This does, on the §4 golden
-    book and with the real IPS, through the digest's real build path.
+    book and on variants that change what each path has to handle (no
+    underlying, a short leg, a doubled underlying), with the real IPS,
+    through the digest's real build path.
     """
 
+    @staticmethod
+    def _flatten_underlying(state: object) -> None:
+        state.portfolio.underlying_quantity = 0.0  # type: ignore[attr-defined]
+
+    @staticmethod
+    def _short_the_first_leg(state: object) -> None:
+        leg = state.portfolio.positions[0]  # type: ignore[attr-defined]
+        leg.quantity = -abs(leg.quantity)
+
+    @staticmethod
+    def _double_the_underlying(state: object) -> None:
+        portfolio = state.portfolio  # type: ignore[attr-defined]
+        portfolio.underlying_quantity = portfolio.underlying_quantity * 2.0
+
+    @pytest.mark.parametrize(
+        "variant",
+        [
+            None,
+            "_flatten_underlying",
+            "_short_the_first_leg",
+            "_double_the_underlying",
+        ],
+        ids=["golden", "no-underlying", "short-leg", "double-underlying"],
+    )
     def test_the_digests_compliance_rows_equal_the_strips(
         self,
         seeded_export_dir: _MainFixture,
+        variant: str | None,
     ) -> None:
         from deltadewa.app.compliance import compliance_sections_at_ips_anchor
         from deltadewa.reporting.program_report import build_ips_compliance
@@ -1939,6 +1966,8 @@ class TestTheDigestGradesWhatTheStripGrades:
         state = ProgramState.load(export_dir, ips_path=_EXAMPLE_IPS_YAML)
         ips = state.ips_config
         assert ips is not None
+        if variant is not None:
+            getattr(self, variant)(state)
 
         rendered = build_and_render(
             state=state,

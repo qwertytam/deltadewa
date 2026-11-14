@@ -1042,18 +1042,17 @@ class TestADepthMoreFinelyThanSixPlacesStillAgrees:
 
 
 class TestEveryUnmeasuredSurfaceUsesTheSharedWords:
-    """Each place that says "unmeasured" says it with the shared phrases.
+    """The unmeasured surfaces use the shared phrases (spot checks).
+
+    The *guarantee* that nothing hand-writes the phrase is the source scan in
+    ``test_convexity_band.py::TestNoHandWrittenUnmeasuredPhrase``; these
+    check the built text of the surfaces that matter most, end to end.
 
     The status phrase is ``NOT_MEASURED`` and the clause is
     ``COULD_NOT_BE_MEASURED``; any *explanation* closes with
     ``UNMEASURED_NOT_BREACHING``. Driven from the real builders on a real
     zero-underlying book, one surface per line.
     """
-
-    @staticmethod
-    def _says_it(text: str) -> bool:
-        low = text.lower()
-        return NOT_MEASURED in low or COULD_NOT_BE_MEASURED in low
 
     def test_the_rally_review_recheck(self) -> None:
         """The REVIEW band's "if the target is no longer met" has no answer."""

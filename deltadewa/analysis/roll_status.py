@@ -259,7 +259,9 @@ def _convexity_trigger_verdict(convexity: ConvexityGrading) -> TriggerReason:
     if convexity.grade is ConvexityGrade.UNMEASURED:
         return TriggerReason(
             RollVerdict.HOLD,
-            reason=f"crash convexity {NOT_MEASURED} \u2014 not graded",
+            reason=(
+                f"crash convexity {NOT_MEASURED}. {UNMEASURED_NOT_BREACHING}"
+            ),
         )
     reason = (
         f"{convexity.display()} convexity vs "

@@ -24,6 +24,7 @@ from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.convexity_band import (
     COULD_NOT_BE_MEASURED,
     NOT_MEASURED,
+    UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
     format_band_edge,
 )
@@ -110,7 +111,8 @@ def _vega_sufficiency_block(
             [
                 html.H4("Vega sufficiency"),
                 html.P(
-                    f"Vega sufficiency {COULD_NOT_BE_MEASURED} for this book.",
+                    f"Vega sufficiency {COULD_NOT_BE_MEASURED} for this book. "
+                    + UNMEASURED_NOT_BREACHING,
                     className="plain-language",
                 ),
             ],

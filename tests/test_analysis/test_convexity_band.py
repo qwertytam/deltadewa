@@ -346,3 +346,59 @@ class TestEveryConvexityBandBarTakesTheGrade:
 
         assert checked >= 2, "the guard found no convexity band bars to check"
         assert not offenders, offenders
+
+
+class TestNoHandWrittenUnmeasuredPhrase:
+    """Nothing writes "not measured" for a convexity reading by hand (#433).
+
+    The phrases live in ``convexity_band`` (``NOT_MEASURED``,
+    ``COULD_NOT_BE_MEASURED``, ``UNMEASURED_NOT_BREACHING``) and every surface
+    builds its text from them. This scans every non-docstring string literal
+    in the package, so a new surface that types the phrase itself fails here
+    instead of drifting from the others unseen. The one allowed exception is
+    a different metric that happens to use the same words.
+    """
+
+    _PHRASES: ClassVar[tuple[str, ...]] = (
+        "not measured",
+        "could not be measured",
+        "unmeasured, not",
+    )
+    _OTHER_METRICS: ClassVar[dict[str, str]] = {
+        "book_changes.py": "realized carry, not convexity",
+    }
+
+    def test_every_unmeasured_text_comes_from_the_shared_constants(
+        self,
+    ) -> None:
+        import ast
+
+        root = Path(__file__).resolve().parents[2] / "deltadewa"
+        offenders: list[str] = []
+        for path in sorted(root.rglob("*.py")):
+            if path.name == "convexity_band.py" or (
+                path.name in self._OTHER_METRICS
+            ):
+                continue
+            tree = ast.parse(path.read_text())
+            docstrings = {
+                id(node.body[0].value)
+                for node in ast.walk(tree)
+                if isinstance(
+                    node,
+                    ast.Module | ast.ClassDef | ast.FunctionDef,
+                )
+                and node.body
+                and isinstance(node.body[0], ast.Expr)
+                and isinstance(node.body[0].value, ast.Constant)
+            }
+            offenders.extend(
+                f"{path.relative_to(root.parent)}:{node.lineno}"
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in docstrings
+                and any(p in node.value.lower() for p in self._PHRASES)
+            )
+
+        assert not offenders, offenders

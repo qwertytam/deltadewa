@@ -1336,9 +1336,8 @@ def _standing_md(ic: IpsComplianceSection) -> str:
     """Markdown overall verdict: PASS, FAIL, or INCOMPLETE naming the gap."""
     standing = ic.standing
     if standing is ComplianceStanding.INCOMPLETE:
-        return (
-            f"— INCOMPLETE (not measured: {', '.join(ic.unmeasured_metrics)})"
-        )
+        missing = ", ".join(ic.unmeasured_metrics)
+        return f"— INCOMPLETE ({NOT_MEASURED}: {missing})"
     return _pass_fail_md(standing is ComplianceStanding.PASS)
 
 
