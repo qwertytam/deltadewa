@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Final
 
 from dash import Input, Output, html
 
+from deltadewa.analysis.roll_planner import leg_action_label
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
 
     from deltadewa.analysis.roll_status import MoneynessDrift, RollStatusRecord
     from deltadewa.app.factory import ProgramDashApp
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
 
 #: #357: this panel's TOC entry and heading id, from one source.
@@ -78,9 +79,18 @@ def _leg_convexity_text(record: RollStatusRecord) -> str:
     return f"{contribution:+.2f} pp"
 
 
-def _roll_record_row(record: RollStatusRecord) -> html.Tr:
-    """One position's roll status, with all three trigger reasons (G3)."""
+def _roll_record_row(
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers,
+) -> html.Tr:
+    """One position's roll status, with all three trigger reasons (G3).
+
+    The verdict cell carries the plan's action under the badge (#461), from
+    the same call the roll plan above makes, so a REVIEW leg reads
+    ``ROLL BY <date>`` here exactly as it does there.
+    """
     position = record.position
+    action = leg_action_label(record, ips_triggers=ips_triggers)
     cost_text = (
         fmt.currency(record.estimated_roll_up_cost, decimals=2)
         if record.estimated_roll_up_cost is not None
@@ -89,13 +99,20 @@ def _roll_record_row(record: RollStatusRecord) -> html.Tr:
     return html.Tr(
         [
             html.Td(
-                html.Span(
-                    record.verdict.value,
-                    className=(
-                        "verdict-badge verdict-badge--"
-                        f"{record.verdict.value.lower()}"
+                [
+                    html.Span(
+                        record.verdict.value,
+                        className=(
+                            "verdict-badge verdict-badge--"
+                            f"{record.verdict.value.lower()}"
+                        ),
                     ),
-                ),
+                    *(
+                        [html.Span(action, className="roll-action")]
+                        if action is not None
+                        else []
+                    ),
+                ],
             ),
             html.Td(
                 f"{position.option.option_type.value} "
@@ -121,7 +138,10 @@ def _roll_record_row(record: RollStatusRecord) -> html.Tr:
     )
 
 
-def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
+def _roll_panel_view(
+    records: list[RollStatusRecord],
+    ips_triggers: IpsTriggers,
+) -> Component:
     """Render the per-position roll table.
 
     The evidence layer under the roll plan above: every position (not
@@ -164,7 +184,7 @@ def _roll_panel_view(records: list[RollStatusRecord]) -> Component:
             html.Th("Rally trigger (this leg)"),
         ],
     )
-    rows = [_roll_record_row(record) for record in records]
+    rows = [_roll_record_row(record, ips_triggers) for record in records]
     return html.Div(
         [
             intro,
@@ -183,7 +203,10 @@ def _render_roll_panel_logic(
 ) -> Component:
     """Render the roll status table for every position in the book."""
     return _safe_render(
-        lambda: _roll_panel_view(evaluate_roll_status(portfolio, ips_config)),
+        lambda: _roll_panel_view(
+            evaluate_roll_status(portfolio, ips_config),
+            ips_config.triggers,
+        ),
     )
 
 

@@ -105,8 +105,14 @@ class WeeklySnapshot:
             ``"PUT 4200"`` — ``None`` when there is none (#374).
         worst_roll_reason: That leg's plain-language trigger reason.
             ``None`` when there is no worst leg (#374).
+        worst_roll_action: The roll plan's action for that leg, in the
+            plan's own words (``"ROLL BY 2026-12-22"``, ``"ROLL NOW"``), or
+            ``None`` when there is no worst leg or the plan makes no
+            recommendation for it (#461). Added after snapshots were being
+            persisted, so it is defaulted and a file without it loads as
+            ``None``.
 
-            Both are carried for *rendering* and deliberately **not**
+            These three are carried for *rendering* and deliberately **not**
             diffed. ``worst_roll_reason`` embeds a live day count, so
             diffing it would fire a threshold crossing every single week as
             the clock ticks — a phantom change on a book that had not
@@ -167,6 +173,8 @@ class WeeklySnapshot:
     # 8c / #317: defaulted and last so every existing constructor call
     # stays valid. See the class docstring.
     skew_lookback_days: int | None = None
+    # #461: defaulted and last, like the field above, for the same reason.
+    worst_roll_action: str | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-safe dict (dates as ISO strings).
@@ -206,6 +214,7 @@ class WeeklySnapshot:
             "premium_paid_point_in_time": self.premium_paid_point_in_time,
             "cumulative_carry_cost": self.cumulative_carry_cost,
             "skew_lookback_days": self.skew_lookback_days,
+            "worst_roll_action": self.worst_roll_action,
         }
 
     @classmethod
@@ -257,6 +266,8 @@ class WeeklySnapshot:
                 "skew_lookback_days",
                 _LEGACY_SKEW_LOOKBACK_DAYS,
             ),
+            # .get(): #461 added this after snapshots were persisted.
+            worst_roll_action=data.get("worst_roll_action"),
         )
 
 
@@ -272,6 +283,7 @@ def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argumen
     worst_rally_pct: float | None,
     first_as_of: date,
     cumulative_carry_cost: float,
+    worst_roll_action: str | None = None,
 ) -> WeeklySnapshot:
     """Build a ``WeeklySnapshot`` from a ``ProgramReport`` plus verdicts.
 
@@ -324,6 +336,7 @@ def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argumen
         ),
         premium_paid_point_in_time=p.premium_paid,
         cumulative_carry_cost=cumulative_carry_cost,
+        worst_roll_action=worst_roll_action,
     )
 
 
@@ -501,6 +514,32 @@ def _skew_percentile_move(
     )
 
 
+def _data_quality_detail(
+    prior: WeeklySnapshot,
+    current: WeeklySnapshot,
+) -> str:
+    """Word the data-quality crossing from what actually crossed (#462).
+
+    The crossing is gated on ``data_quality_alarm``, so the alarm flipping
+    is the event: it was raised or it was cleared. The merged
+    ``data_quality`` string is context, and it can stay put while the alarm
+    flips (the two-channel rule turns the alarm on for a stale feed whose
+    merged grade was already ``STALE`` because a hand-entered input was
+    ageing). Printing it on both sides, as this used to, read
+    ``STALE -> STALE`` and described no change.
+
+    The string appears only when it adds something: as an arrow when it
+    moved, once when it did not, so the line never presents the merged grade
+    as the thing that crossed.
+    """
+    event = "alarm raised" if current.data_quality_alarm else "alarm cleared"
+    if prior.data_quality == current.data_quality:
+        return f"{event} (data quality {current.data_quality})"
+    return (
+        f"{event} (data quality {prior.data_quality} → {current.data_quality})"
+    )
+
+
 def _worst_roll_crossing(
     prior: WeeklySnapshot,
     current: WeeklySnapshot,
@@ -527,6 +566,8 @@ def _worst_roll_crossing(
     if current.worst_roll_leg is None:
         return change
     attribution = current.worst_roll_leg
+    if current.worst_roll_action:
+        attribution = f"{attribution}, {current.worst_roll_action}"
     if current.worst_roll_reason:
         attribution = f"{attribution}, {current.worst_roll_reason}"
     return SnapshotChange(
@@ -645,7 +686,7 @@ def diff_snapshots(
         crossings.append(
             SnapshotChange(
                 label="Data quality",
-                detail=f"{prior.data_quality} → {current.data_quality}",
+                detail=_data_quality_detail(prior, current),
             ),
         )
 

@@ -8,7 +8,7 @@ Compared against the snapshot from 2026-07-29.
 
 **Threshold crossings:**
 
-- **Worst roll verdict:** MONITOR → ROLL (PUT 4,200, 28d to maturity, 180d roll window)
+- **Worst roll verdict:** MONITOR → ROLL (PUT 4,200, ROLL NOW, 28d to maturity — inside the 180d roll window)
 - **Expired legs:** 0 → 1 leg past maturity
 - **Carry budget:** within budget → over budget
 - **IPS compliance (overall):** all pass → a metric failing
@@ -24,10 +24,10 @@ Compared against the snapshot from 2026-07-29.
 
 Where each leg stands right now. The crossing above reports what *changed*; this is the standing state behind it.
 
-| Verdict | Leg | Reason |
-| --- | --- | --- |
-| ROLL | PUT 4,200 | 28d to maturity, 180d roll window |
-| EXPIRED | PUT 234 | expired 2026-07-28 (30d ago) — no roll recommendation |
+| Verdict | Action | Leg | Reason |
+| --- | --- | --- | --- |
+| ROLL | ROLL NOW | PUT 4,200 | 28d to maturity — inside the 180d roll window |
+| EXPIRED | — | PUT 234 | expired 2026-07-28 (30d ago) — no roll recommendation |
 
 ---
 

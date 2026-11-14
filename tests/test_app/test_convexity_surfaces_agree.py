@@ -774,7 +774,9 @@ class TestBandMarkersFollowTheGrade:
             )
             (record,) = evaluate_roll_status(_book(), ips)
 
-            assert expected in _marker_class(monitor._decision_row(record))
+            assert expected in _marker_class(
+                monitor._decision_row(record, _ips().triggers)
+            )
 
 
 class TestTheCandidateGridNamesWhatFails:
@@ -937,7 +939,9 @@ class TestUnmeasuredIsSaidTheSameWayEverywhere:
         (record,) = evaluate_roll_status(_zero_underlying_book(), _ips())
 
         assert NOT_MEASURED in record.convexity_trigger.reason
-        assert NOT_MEASURED in _all_text(monitor._decision_row(record))
+        assert NOT_MEASURED in _all_text(
+            monitor._decision_row(record, _ips().triggers)
+        )
 
     def test_every_unmeasured_explanation_ends_the_same_way(self) -> None:
         zero = _zero_underlying_book()
