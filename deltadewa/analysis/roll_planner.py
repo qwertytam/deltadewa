@@ -2,10 +2,17 @@
 
 Converts the HOLD/MONITOR/REVIEW/ROLL verdict produced by
 :func:`~deltadewa.analysis.roll_status.evaluate_roll_status` into a
-concrete :class:`RollAction` (ROLL_NOW, DELAY, CHECKED, or HOLD) for each
-long protective put.
+concrete :class:`RollAction` (ROLL_NOW, ROLL_BY, DELAY, CHECKED, or HOLD)
+for each long protective put.
 
-Two things can stop a fired trigger from becoming a roll, and they are
+A leg's action is **the most urgent of what each of its three triggers
+resolves to** (:func:`leg_action`), and the rationale names the trigger that
+produced it, never one that merely shares the leg's verdict (#461). Before
+that, a buffer-zone time REVIEW, with a rally REVIEW beside it, was handed to
+the rally trigger's "no roll" sentence beside a ROLL NOW, because the two
+REVIEWs compared equal.
+
+Two things can stop a fired trigger from becoming a roll now, and they are
 different judgements:
 
 - :func:`gamma_theta_delay` — the `handbook
@@ -27,26 +34,34 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from deltadewa import constants as const
 from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
     ConvexityGrade,
     format_band_edge,
 )
 from deltadewa.analysis.roll_status import (
+    TRIGGER_PRECEDENCE,
     RollStatusRecord,
+    RollTriggerName,
     RollVerdict,
+    driving_trigger,
     estimate_roll_up_cost,
     evaluate_roll_status,
     expired_reason,
     new_strike_for_entry_otm,
+    roll_window_opens,
+    trigger_reading,
+    verdict_reason,
 )
 from deltadewa.analysis.strike_ladder import strike_for_delta
 from deltadewa.constants import OptionType
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import date
 
     from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.ips_config import IpsConfig, IpsTriggers
@@ -57,19 +72,35 @@ if TYPE_CHECKING:
 class RollAction(StrEnum):
     """Recommended action for a long put position.
 
-    Actions in increasing order of urgency are HOLD, CHECKED, DELAY,
-    ROLL_NOW.
+    Actions in increasing order of urgency are HOLD, CHECKED, DELAY, ROLL_BY,
+    ROLL_NOW. :data:`_ACTION_URGENCY` is the one place that order is
+    written, because a leg's action is the most urgent of what each of its
+    triggers resolves to (:func:`leg_action`).
 
-    Unlike :class:`~deltadewa.analysis.roll_status.RollVerdict`, this scale
-    is not reduced anywhere — ``/design``'s roll-plan panel is its only
-    consumer, and the digest's worst-verdict line reduces ``RollVerdict``
-    instead. So the order below lives in this docstring rather than in a
-    ``_SEVERITY`` map, and adding a member here costs a badge rule, not a
-    reduction audit (#408).
+    This scale is reduced once, per leg, there. The digest's worst-verdict
+    line and its crossing reduce
+    :class:`~deltadewa.analysis.roll_status.RollVerdict` instead and never
+    see an action as a rank, so a ROLL_BY leg beside a ROLL leg reports the
+    ROLL (#461).
     """
 
     ROLL_NOW = "ROLL_NOW"
     """A trigger has fired and immediate action is warranted."""
+
+    ROLL_BY = "ROLL_BY"
+    """A roll is due, but not yet: the leg is in Rule 1's review buffer.
+
+    The roll window is not open (it opens at ``roll_at_months_remaining``),
+    so nothing is overdue; the action is to roll **before** that date, which
+    it carries (:attr:`RollPlanRecord.window_opens`) and every surface
+    prints as ``ROLL BY <date>``. It replaces the ``ROLL_NOW`` this leg got
+    before #461, which told an operator to act today on a leg that had
+    months left and no trigger at ROLL.
+
+    Named ``ROLL_BY``, not ``ROLL_DUE``, on purpose: ``position_aging`` already
+    labels a leg *inside* the window ``ROLL DUE``, so a second ``ROLL DUE``
+    for a leg outside it would put two meanings on one page.
+    """
 
     DELAY = "DELAY"
     """A trigger fired but the gamma/theta nuance says defer the roll.
@@ -91,6 +122,56 @@ class RollAction(StrEnum):
 
     HOLD = "HOLD"
     """No trigger is active; no action needed."""
+
+
+_ACTION_URGENCY: Final[dict[RollAction, int]] = {
+    RollAction.HOLD: 0,
+    RollAction.CHECKED: 1,
+    RollAction.DELAY: 2,
+    RollAction.ROLL_BY: 3,
+    RollAction.ROLL_NOW: 4,
+}
+
+
+def action_label(action: RollAction, window_opens: date | None = None) -> str:
+    """Return the words every surface prints for an action (#461).
+
+    ``ROLL BY 2026-12-22`` for a dated action, the plain upper-case name
+    otherwise. One function, so the roll plan, ``/monitor``, the roll status
+    table and the digest cannot word the same action, or its date,
+    differently.
+    """
+    if action is RollAction.ROLL_BY and window_opens is not None:
+        return f"ROLL BY {window_opens.isoformat()}"
+    return action.value.replace("_", " ")
+
+
+@dataclass(frozen=True)
+class LegAction:
+    """One leg's decided action (#461), before a target strike or cost.
+
+    Pure in the leg's roll status and the IPS triggers, so a surface that
+    shows a leg's verdict (``/monitor``, the roll status table, the digest)
+    can show the plan's action and date by asking here, not by building the
+    whole roll plan, and cannot word them differently.
+
+    Attributes:
+        action: What to do.
+        rationale: Why, naming the trigger that decided it.
+        driver: That trigger, or ``None`` for ``HOLD``.
+        window_opens: For ``ROLL_BY`` only: the date to roll before.
+
+    """
+
+    action: RollAction
+    rationale: str
+    driver: RollTriggerName | None
+    window_opens: date | None
+
+    @property
+    def label(self) -> str:
+        """The action as every surface prints it."""
+        return action_label(self.action, self.window_opens)
 
 
 @dataclass(frozen=True)
@@ -126,8 +207,9 @@ class RollPlanRecord:
             alone is not a trade anyone would place, and pricing it that
             way understated the cost by omitting the short leg's re-sale
             credit (#333). ``None`` when *target_strike* is ``None``.
-        convexity_now_pct: Portfolio crash-convexity at the IPS crash
-            scenario (net P&L as % of book notional).
+        convexity_now_pct: Portfolio crash convexity at the IPS crash
+            scenario: the hedge's gain alone as % of book notional (#432).
+            It excludes the underlying's loss, so it is not a "net" figure.
         convexity: The referee's grading of *convexity_now_pct* against the
             IPS target band (#434) — the one grade the roll status table, the
             compliance strip and this plan all read.
@@ -138,6 +220,10 @@ class RollPlanRecord:
         theta: Per-contract theta of the current position in $/day
             (negative for a long put).
         rationale: One-sentence summary of the recommendation.
+        driver: The trigger that produced *action* (#461), or ``None`` for
+            HOLD and for a leg with no recommendation.
+        window_opens: For ``ROLL_BY`` only: the date the roll window opens,
+            which is the date to roll before.
 
     """
 
@@ -154,11 +240,20 @@ class RollPlanRecord:
     gamma: float
     theta: float
     rationale: str
+    driver: RollTriggerName | None = None
+    window_opens: date | None = None
 
     @property
     def meets_convexity_target(self) -> bool | None:
         """Derived from the grading; ``None`` when unmeasured."""
         return self.convexity.meets
+
+    @property
+    def action_label(self) -> str | None:
+        """The action as every surface prints it; ``None`` if excluded."""
+        if self.action is None:
+            return None
+        return action_label(self.action, self.window_opens)
 
 
 def gamma_theta_delay(
@@ -254,38 +349,38 @@ def rally_review_cleared(record: RollStatusRecord) -> bool:
     it never evaluated, while the roll-status table beside it still said
     REVIEW.
 
-    All four conditions are required:
+    Both conditions are about the **rally trigger**, and only it:
 
-    1. ``record.verdict is REVIEW`` — ROLL is unconditional in every band
-       that produces it (ACTION and URGENT both grade ROLL), and must keep
-       escalating.
-    2. the rally trigger is what earned that REVIEW — otherwise this is
-       some other rule's REVIEW and Rule 2's condition does not govern it.
-    3. the **time** trigger is not also at REVIEW. Rule 1's review buffer
-       is a separate rule with no convexity condition attached; a leg
-       approaching its roll window is due a look regardless of how the
-       book's convexity reads, so a Rule 1 REVIEW still reaches
-       ``DELAY``/``ROLL_NOW`` as before.
-    4. ``record.convexity`` is ``WITHIN`` — the condition itself, read off
+    1. the rally trigger is at REVIEW — ACTION and URGENT both grade ROLL,
+       are unconditional in every band that produces them, and keep
+       escalating;
+    2. ``record.convexity`` is ``WITHIN`` — the condition itself, read off
        the one grading the referee
        (:func:`~deltadewa.analysis.convexity_band.grade_convexity`) resolved
        for the whole book, never recomputed here.
+
+    It used to carry two more: that the leg's *verdict* was REVIEW, and that
+    the **time** trigger was not also at REVIEW. Both existed because a leg's
+    action was decided from its single worst verdict, so one trigger's
+    answer could swallow another's. Since #461 each trigger resolves on its
+    own and :func:`leg_action` takes the most urgent, so a time REVIEW is
+    answered by Rule 1 (``ROLL_BY``) and cannot be hidden behind this
+    function, nor does it need to hold this one off.
 
     Args:
         record: One leg's roll status, from
             :func:`~deltadewa.analysis.roll_status.evaluate_roll_status`.
 
     Returns:
-        ``True`` when the leg's REVIEW came from Rule 2 alone and the
-        convexity target is still met, so no roll is warranted —
-        :attr:`RollAction.CHECKED`. ``False`` otherwise, including every
-        case where the rally is at or past the ACTION band.
+        ``True`` when the rally trigger is at REVIEW and the convexity
+        target is still met, so Rule 2 asks for no roll —
+        :attr:`RollAction.CHECKED` for that trigger. ``False`` otherwise,
+        including every case where the rally is at or past the ACTION band
+        and every case where convexity is not in band or was not measured.
 
     """
     return (
-        record.verdict is RollVerdict.REVIEW
-        and record.rally_trigger.verdict is RollVerdict.REVIEW
-        and record.time_trigger.verdict is not RollVerdict.REVIEW
+        record.rally_trigger.verdict is RollVerdict.REVIEW
         and record.convexity.grade is ConvexityGrade.WITHIN
     )
 
@@ -307,37 +402,6 @@ def _checked_rationale(record: RollStatusRecord) -> str:
     )
 
 
-def _roll_now_rationale(record: RollStatusRecord) -> str:
-    """One-sentence rationale identifying the primary ROLL_NOW trigger.
-
-    Since #408 a *rally*-sourced ROLL_NOW can only arrive here from the
-    ACTION/URGENT bands (which grade ROLL outright) or from a REVIEW band
-    whose condition was evaluated and found true — a rally REVIEW with
-    convexity still in band is :attr:`RollAction.CHECKED` and never reaches
-    this function. Either way the rally trigger's own reason now names the
-    band's action or states the recomputation, so quoting it is a complete
-    justification rather than a conditional passed through unevaluated.
-    """
-    if record.days_to_maturity <= record.roll_window_days:
-        return (
-            f"Time trigger: {record.days_to_maturity}d to expiry"
-            f" inside {record.roll_window_days}d roll window."
-        )
-    if record.convexity.grade is ConvexityGrade.BELOW:
-        floor = format_band_edge(record.convexity_target_min_pct, min_places=1)
-        return (
-            f"Convexity {record.convexity.display()}"
-            f" below target minimum {floor}%."
-        )
-    if record.rally_trigger.verdict == record.verdict:
-        reason = record.rally_trigger.reason
-        # The REVIEW band's reason already ends in a full stop, having
-        # resolved its own conditional; the other three bands do not.
-        stop = "" if reason.endswith(".") else "."
-        return f"Rally trigger: {reason}{stop}"
-    return f"Roll recommended ({record.verdict})."
-
-
 def _delay_rationale(
     record: RollStatusRecord,
     *,
@@ -355,7 +419,7 @@ def _delay_rationale(
     drift = record.moneyness.drift_pct
     nearer_pct = abs(drift) if drift is not None else 0.0
     return (
-        f"Roll warranted ({record.verdict}) but deferring:"
+        f"Roll warranted ({record.time_trigger.verdict}) but deferring:"
         f" the put has moved {nearer_pct:.1f}% nearer the money since"
         " entry, so it is gaining gamma;"
         f" {months_to_maturity:.1f} mo to expiry is still outside the"
@@ -403,7 +467,7 @@ class RollStructure:
         and yields no recommendation.
         """
         for leg in self.legs:
-            if leg.option.option_type == OptionType.PUT and leg.quantity > 0:
+            if _is_long_put(leg):
                 return leg
         return None
 
@@ -528,9 +592,11 @@ def build_roll_plan(
     1. Selects a target strike via *target_basis*.
     2. Prices the roll via
        :func:`~deltadewa.analysis.roll_status.estimate_roll_up_cost`.
-    3. Maps the verdict to a :class:`RollAction`, applying
-       :func:`rally_review_cleared` (the Rule 2 REVIEW band's own
-       condition) and :func:`gamma_theta_delay` (the gamma/theta nuance).
+    3. Decides the leg's :class:`RollAction` with :func:`leg_action`: each
+       trigger resolves on its own (Rule 2's REVIEW band through
+       :func:`rally_review_cleared`, Rule 1's buffer through
+       :func:`gamma_theta_delay`) and the most urgent wins, named in the
+       rationale. A buffer-zone REVIEW is ``ROLL_BY`` its window-open date.
 
     A spread rolls as a unit: the anchor long put's target sets the
     structure's new geometry, every leg moves by the same ratio so a 5%-wide
@@ -649,42 +715,110 @@ def _exclusion_reason(
     return None
 
 
-def _decide_action(
+def leg_reason(
     record: RollStatusRecord,
     *,
     ips_triggers: IpsTriggers,
-) -> tuple[RollAction, str]:
-    """Map one leg's roll verdict to an action, and say why.
+) -> str:
+    """Return the reason to print beside a leg's verdict and its action.
 
-    The whole of #408's decision, in one place: a fired trigger becomes a
-    roll unless something says otherwise, and there are exactly two things
-    that can — :func:`rally_review_cleared` (the Rule 2 REVIEW band's own
-    condition came back false, so no roll is warranted) and
-    :func:`gamma_theta_delay` (the roll is warranted but deferred).
-
-    CHECKED is tested before DELAY only for readability — a trigger's own
-    condition is resolved before the gamma/theta nuance is applied to it.
-    The two are mutually exclusive by construction: a rally moves a put
-    *further* OTM, so a rally REVIEW always has ``drift_pct > 0`` and can
-    never satisfy ``gamma_theta_delay``'s nearer-the-money condition. A
-    test pins that rather than leaving it resting on this ordering.
-
-    Args:
-        record: One leg's roll status.
-        ips_triggers: IPS trigger policy (the roll window).
-
-    Returns:
-        The action and its rationale. Every rationale states its grounds:
-        a recommendation to *not* act on a live trigger reads as the tool
-        losing the signal unless it arrives with its justification.
-
+    Normally the verdict's own reason (:func:`verdict_reason`). The verdict
+    and the action each name a trigger, and they can differ: a leg whose time
+    trigger and rally trigger are both at REVIEW is graded REVIEW on the time
+    trigger (first in precedence), but with convexity above the band the
+    rally trigger's own condition fails and the action is ROLL NOW, decided by
+    the rally. Printing the time trigger's reason beside ROLL NOW would answer
+    "why is it ROLL NOW?" with a sentence about the review buffer, so where
+    the two differ the action's trigger is the one quoted (#461). The roll
+    status table still shows all three readings.
     """
-    months_to_maturity = record.days_to_maturity / const.CALENDAR_DAYS_PER_MONTH
+    decided = leg_action(record, ips_triggers=ips_triggers)
+    if (
+        decided is not None
+        and decided.driver is not None
+        and decided.driver != driving_trigger(record)
+    ):
+        return trigger_reading(record, decided.driver).reason
+    return verdict_reason(record)
 
-    if record.verdict not in (RollVerdict.ROLL, RollVerdict.REVIEW):
-        return RollAction.HOLD, "No trigger active; holding."
-    if rally_review_cleared(record):
-        return RollAction.CHECKED, _checked_rationale(record)
+
+def leg_action_rank(
+    record: RollStatusRecord,
+    *,
+    ips_triggers: IpsTriggers,
+) -> int:
+    """Return how urgent a leg's action is on the action scale, ``-1`` if none.
+
+    For a caller that has to choose among legs already tied at one verdict
+    (the digest's worst leg), so it can prefer the leg whose action is most
+    urgent without owning a copy of the scale (#461).
+    """
+    decided = leg_action(record, ips_triggers=ips_triggers)
+    return -1 if decided is None else _ACTION_URGENCY[decided.action]
+
+
+def leg_action_label(
+    record: RollStatusRecord,
+    *,
+    ips_triggers: IpsTriggers,
+) -> str | None:
+    """Return the action to print beside a leg's verdict, or ``None`` (#461).
+
+    What ``/monitor``, the roll status table and the digest call, so each
+    shows the plan's own words and date for a leg without building the plan.
+    ``None`` for a leg the planner makes no recommendation for, and for
+    ``HOLD``: a leg with no active trigger already reads HOLD or MONITOR in
+    its verdict, and "HOLD" beside it would say the same thing twice.
+    """
+    decided = leg_action(record, ips_triggers=ips_triggers)
+    if decided is None or decided.action is RollAction.HOLD:
+        return None
+    return decided.label
+
+
+def _is_long_put(position: OptionPosition) -> bool:
+    """Whether the planner makes a recommendation for this leg at all."""
+    return (
+        position.option.option_type == OptionType.PUT and position.quantity > 0
+    )
+
+
+def _sentence(reason: str) -> str:
+    """End *reason* with a full stop unless it already has one."""
+    return reason if reason.endswith(".") else f"{reason}."
+
+
+def _roll_by_rationale(record: RollStatusRecord) -> str:
+    """State the rule and the date for a leg in Rule 1's review buffer."""
+    opens = roll_window_opens(record).isoformat()
+    return (
+        f"Time trigger: {_sentence(record.time_trigger.reason)}"
+        f" Roll by {opens}, when the window opens."
+    )
+
+
+# One resolution per trigger: the action that trigger asks for, and why.
+_Resolution = tuple[RollAction, str]
+
+
+def _resolve_time(
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers,
+) -> _Resolution | None:
+    """Rule 1: inside the window is ROLL_NOW; in the buffer it is a date.
+
+    A buffer-zone REVIEW is a roll that is *due*, not *overdue*: ROLL_BY with
+    the date the window opens, unless :func:`gamma_theta_delay` defers it.
+    """
+    verdict = record.time_trigger.verdict
+    if verdict is RollVerdict.ROLL:
+        return (
+            RollAction.ROLL_NOW,
+            f"Time trigger: {_sentence(record.time_trigger.reason)}",
+        )
+    if verdict is not RollVerdict.REVIEW:
+        return None
+    months_to_maturity = record.days_to_maturity / const.CALENDAR_DAYS_PER_MONTH
     if gamma_theta_delay(
         months_to_maturity=months_to_maturity,
         convexity=record.convexity,
@@ -696,7 +830,181 @@ def _decide_action(
             months_to_maturity=months_to_maturity,
             ips_triggers=ips_triggers,
         )
-    return RollAction.ROLL_NOW, _roll_now_rationale(record)
+    return RollAction.ROLL_BY, _roll_by_rationale(record)
+
+
+def _resolve_convexity(record: RollStatusRecord) -> _Resolution | None:
+    """Below the band is ROLL_NOW; the trigger never grades REVIEW."""
+    if record.convexity_trigger.verdict is not RollVerdict.ROLL:
+        return None
+    floor = format_band_edge(record.convexity_target_min_pct, min_places=1)
+    shown = record.convexity.display()
+    return (
+        RollAction.ROLL_NOW,
+        f"Convexity {shown} below target minimum {floor}%.",
+    )
+
+
+def _resolve_rally(record: RollStatusRecord) -> _Resolution | None:
+    """Rule 2: ACTION/URGENT roll; REVIEW rolls only if convexity left the band.
+
+    The trigger's own reason already carries the resolved conditional
+    (``roll_status._convexity_recheck``), so it is quoted, not reworded.
+    """
+    verdict = record.rally_trigger.verdict
+    if verdict not in (RollVerdict.ROLL, RollVerdict.REVIEW):
+        return None
+    if rally_review_cleared(record):
+        return RollAction.CHECKED, _checked_rationale(record)
+    rationale = f"Rally trigger: {_sentence(record.rally_trigger.reason)}"
+    if verdict is RollVerdict.REVIEW and (
+        record.convexity.grade is ConvexityGrade.UNMEASURED
+    ):
+        # The band's condition ("if the convexity target is no longer met")
+        # has no answer, so it cannot clear. Said here because the trigger's
+        # own reason ends "unmeasured, not breaching", which would otherwise
+        # sit beside ROLL NOW with nothing reconciling the two.
+        rationale = (
+            f"{rationale} Convexity {COULD_NOT_BE_MEASURED}, so this band's"
+            " condition cannot clear; the roll stands until it can be read."
+        )
+    return RollAction.ROLL_NOW, rationale
+
+
+def _resolve(
+    name: RollTriggerName,
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers,
+) -> _Resolution | None:
+    """Resolve one named trigger to the action it asks for, if it fired.
+
+    Only the time trigger reads the IPS (for the deferral); the other two
+    read the record, which already carries the band and the rally bands.
+    """
+    if name == "time":
+        return _resolve_time(record, ips_triggers)
+    if name == "convexity":
+        return _resolve_convexity(record)
+    return _resolve_rally(record)
+
+
+_TRIGGER_TITLE: Final[dict[RollTriggerName, str]] = {
+    "time": "Time",
+    "convexity": "Convexity",
+    "rally": "Rally",
+}
+
+
+def _also_note(
+    record: RollStatusRecord,
+    name: RollTriggerName,
+    action: RollAction,
+) -> str:
+    """One sentence for a trigger that fired but did not decide the action.
+
+    Said so the reader is not left wondering whether the second trigger was
+    seen. None of these says "no roll" beside the action that won: a trigger
+    that adds nothing is described as adding nothing, in its own words.
+    """
+    if action is RollAction.CHECKED:
+        return (
+            "The rally trigger is also at REVIEW; convexity is in band, so it"
+            " is not a reason to roll sooner."
+        )
+    if name == "time" and action is RollAction.ROLL_BY:
+        opens = roll_window_opens(record).isoformat()
+        return (
+            f"The time trigger is also in its review band; the window opens"
+            f" {opens}."
+        )
+    if name == "time" and action is RollAction.DELAY:
+        return (
+            "The time trigger is also in its review band, where a roll would"
+            " be deferred."
+        )
+    verdict = record.time_trigger.verdict if name == "time" else None
+    if verdict is None:
+        verdict = (
+            record.convexity_trigger.verdict
+            if name == "convexity"
+            else record.rally_trigger.verdict
+        )
+    return f"{_TRIGGER_TITLE[name]} trigger also at {verdict.value}."
+
+
+def leg_action(
+    record: RollStatusRecord,
+    *,
+    ips_triggers: IpsTriggers,
+) -> LegAction | None:
+    """Decide one leg's action from what each trigger asks for, and say why.
+
+    Each of the three triggers resolves on its own (:func:`_resolve_time`,
+    :func:`_resolve_convexity`, :func:`_resolve_rally`), and the leg's action
+    is the most urgent of them (:data:`_ACTION_URGENCY`). Ties go to the
+    earlier trigger in
+    :data:`~deltadewa.analysis.roll_status.TRIGGER_PRECEDENCE`, the order
+    ``verdict_reason`` uses. The rationale is the winning trigger's own, so
+    it names the trigger that produced the action; a trigger that fired but
+    lost is added as one sentence.
+
+    That replaces #408's ``_decide_action``, which mapped the leg's single
+    worst *verdict* to an action. Two triggers at REVIEW compared equal there
+    and the rationale quoted whichever was tested first: a buffer-zone time
+    REVIEW was shown as ``ROLL_NOW`` beside the rally trigger's "no roll"
+    sentence (#461). CHECKED and DELAY stay mutually exclusive by
+    construction: a rally moves a put *further* OTM, so a rally REVIEW has
+    ``drift_pct > 0`` and can never satisfy
+    :func:`gamma_theta_delay`'s nearer-the-money condition. A test pins
+    that rather than leaving it resting on this ordering.
+
+    Args:
+        record: One leg's roll status.
+        ips_triggers: IPS trigger policy (the roll window).
+
+    Returns:
+        The action, its rationale, the trigger behind it and, for
+        ``ROLL_BY``, the date the window opens. ``None`` for a leg the
+        planner makes no recommendation for: expired, not a put, or short.
+        Every rationale states its grounds: a recommendation to *not* act
+        on a live trigger reads as the tool losing the signal unless it
+        arrives with its justification.
+
+    """
+    if record.verdict is RollVerdict.EXPIRED or not _is_long_put(
+        record.position,
+    ):
+        return None
+
+    fired: list[tuple[RollTriggerName, RollAction, str]] = []
+    for name in TRIGGER_PRECEDENCE:
+        resolution = _resolve(name, record, ips_triggers)
+        if resolution is not None:
+            fired.append((name, *resolution))
+    if not fired:
+        return LegAction(
+            action=RollAction.HOLD,
+            rationale="No trigger active; holding.",
+            driver=None,
+            window_opens=None,
+        )
+
+    # ``max`` keeps the first of equals, and ``fired`` is in precedence order.
+    winner = max(fired, key=lambda item: _ACTION_URGENCY[item[1]])
+    driver, action, rationale = winner
+    notes = [
+        _also_note(record, name, other_action)
+        for name, other_action, _ in fired
+        if name != driver
+    ]
+    return LegAction(
+        action=action,
+        rationale=" ".join([rationale, *notes]),
+        driver=driver,
+        window_opens=(
+            roll_window_opens(record) if action is RollAction.ROLL_BY else None
+        ),
+    )
 
 
 def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # one structure's full roll context; every argument is a distinct input
@@ -748,7 +1056,17 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
         if record is None:  # pragma: no cover - every leg has a record
             continue
         reason = _exclusion_reason(leg, record, structure)
-        if reason is not None or anchor is None or anchor_record is None:
+        decision = (
+            leg_action(record, ips_triggers=ips_triggers)
+            if reason is None
+            else None
+        )
+        if (
+            reason is not None
+            or decision is None
+            or anchor is None
+            or anchor_record is None
+        ):
             out[leg.position_id] = _excluded(
                 record,
                 structure,
@@ -761,10 +1079,7 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
         # table's convexity trigger, the rally REVIEW band's condition and
         # this plan now read one grading, so they cannot disagree about
         # whether the target is met for a book they are both describing.
-        action, rationale = _decide_action(
-            record,
-            ips_triggers=ips_triggers,
-        )
+        rationale = decision.rationale
         if structure.is_spread:
             rationale = (
                 f"{rationale} Rolls as one structure with "
@@ -774,7 +1089,7 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
         out[leg.position_id] = RollPlanRecord(
             position=leg,
             verdict=record.verdict,
-            action=action,
+            action=decision.action,
             excluded_reason=None,
             structure_id=structure.structure_id,
             target_basis=target_basis,
@@ -785,6 +1100,8 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
             gamma=leg.option.gamma() * leg.contract_size,
             theta=leg.option.theta() * leg.contract_size,
             rationale=rationale,
+            driver=decision.driver,
+            window_opens=decision.window_opens,
         )
 
     return out

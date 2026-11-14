@@ -9,8 +9,9 @@ HOLD/MONITOR/REVIEW/ROLL verdict for every position in a portfolio, or
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
@@ -33,6 +34,8 @@ from deltadewa.constants import OptionType
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from deltadewa.ips_config import IpsConfig, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
@@ -83,6 +86,25 @@ _EXPIRED_TRIGGER_REASON: Final[str] = "not evaluated - leg expired"
 An expired leg short-circuits before any trigger is evaluated, so the
 per-trigger cells have nothing real to report. Saying so beats rendering
 three readings computed from a negative day count.
+"""
+
+RollTriggerName = Literal["time", "convexity", "rally"]
+"""The three roll triggers a verdict is the worst of."""
+
+TRIGGER_PRECEDENCE: Final[tuple[RollTriggerName, ...]] = (
+    "time",
+    "convexity",
+    "rally",
+)
+"""Which trigger is named when more than one is at the leg's worst grade.
+
+Time first because Rule 1 is the rule with a calendar behind it, convexity
+second because it is the book's own outcome, rally last because it is an
+input to the other two (a rally only matters through what it did to
+convexity). One order for every surface that says what drove a verdict: the
+roll status table's reason (:func:`verdict_reason`) and the roll plan's
+rationale (``roll_planner``) both read it, so a leg's verdict and its action
+cannot name different triggers for the same tie (#461).
 """
 
 
@@ -233,19 +255,75 @@ def estimate_roll_up_cost(
     return (new_option.price() - position.option.price()) * multiplier
 
 
+def time_trigger_phrase(
+    days_to_maturity: int,
+    roll_window_days: float,
+    review_buffer: float,
+    verdict: RollVerdict,
+) -> str:
+    """State Rule 1's rule, worded for the verdict it produced (#463).
+
+    The old reason, "216d to maturity, 180d roll window", was one string for
+    all three verdicts, and read as though a leg at 216d were already past
+    the window. It was graded REVIEW because it sits in the review buffer.
+    This says which side of the window the leg is on and where both edges
+    are:
+
+    - ROLL: ``inside the 180d roll window``
+    - REVIEW: ``approaching the roll window (opens at 180d; review starts
+      at 270d)``
+    - HOLD: ``not near the roll window (opens at 180d; review starts at
+      270d)``
+
+    Both numbers are read from the IPS (``roll_at_months_remaining`` x the
+    calendar month, and x ``roll_review_buffer``), never written here. They
+    print with ``:g`` so a non-integral edge shows as it is (``283.5d``)
+    rather than rounding to a day the trigger does not fire on.
+
+    Args:
+        days_to_maturity: Calendar days to expiry.
+        roll_window_days: The roll window, in days (the ROLL edge).
+        review_buffer: ``triggers.roll_review_buffer``; the REVIEW edge is
+            the window times this.
+        verdict: The time trigger's own verdict for the leg.
+
+    Returns:
+        The reason sentence, leading with the leg's own day count.
+
+    """
+    review_days = roll_window_days * review_buffer
+    edges = (
+        f"(opens at {roll_window_days:g}d; review starts at {review_days:g}d)"
+    )
+    if verdict is RollVerdict.ROLL:
+        rule = f"inside the {roll_window_days:g}d roll window"
+    elif verdict is RollVerdict.REVIEW:
+        rule = f"approaching the roll window {edges}"
+    else:
+        rule = f"not near the roll window {edges}"
+    return f"{days_to_maturity}d to maturity \u2014 {rule}"
+
+
 def _time_trigger_verdict(
     days_to_maturity: int,
     roll_window_days: float,
     review_buffer: float,
 ) -> TriggerReason:
-    reason = (
-        f"{days_to_maturity}d to maturity, {roll_window_days:.0f}d roll window"
-    )
     if days_to_maturity <= roll_window_days:
-        return TriggerReason(RollVerdict.ROLL, reason=reason)
-    if days_to_maturity <= roll_window_days * review_buffer:
-        return TriggerReason(RollVerdict.REVIEW, reason=reason)
-    return TriggerReason(RollVerdict.HOLD, reason=reason)
+        verdict = RollVerdict.ROLL
+    elif days_to_maturity <= roll_window_days * review_buffer:
+        verdict = RollVerdict.REVIEW
+    else:
+        verdict = RollVerdict.HOLD
+    return TriggerReason(
+        verdict,
+        reason=time_trigger_phrase(
+            days_to_maturity,
+            roll_window_days,
+            review_buffer,
+            verdict,
+        ),
+    )
 
 
 def _convexity_trigger_verdict(convexity: ConvexityGrading) -> TriggerReason:
@@ -548,6 +626,52 @@ def expired_reason(position: OptionPosition, days_to_maturity: int) -> str:
     )
 
 
+def trigger_reading(
+    record: RollStatusRecord,
+    name: RollTriggerName,
+) -> TriggerReason:
+    """Return one of the record's three trigger readings by name."""
+    if name == "time":
+        return record.time_trigger
+    if name == "convexity":
+        return record.convexity_trigger
+    return record.rally_trigger
+
+
+def driving_trigger(record: RollStatusRecord) -> RollTriggerName | None:
+    """Name the trigger that earned the record's verdict (#461).
+
+    The first trigger, in :data:`TRIGGER_PRECEDENCE`, graded at the verdict:
+    the verdict is the worst of the three, so at least one always matches.
+    ``None`` for an ``EXPIRED`` leg, whose triggers were never run.
+
+    This names the cause of a *verdict*. The roll plan asks a different
+    question, which trigger produced the *action*, and answers it from its
+    own per-trigger resolution, because an action is not a verdict: two
+    triggers at the same verdict can resolve to different actions. Both use
+    :data:`TRIGGER_PRECEDENCE` to break a tie.
+    """
+    if record.verdict is RollVerdict.EXPIRED:
+        return None
+    for name in TRIGGER_PRECEDENCE:
+        if trigger_reading(record, name).verdict == record.verdict:
+            return name
+    return None  # pragma: no cover - the verdict is the max of the three
+
+
+def roll_window_opens(record: RollStatusRecord) -> date:
+    """Return the first calendar date the time trigger reads ROLL (#461).
+
+    Maturity less the roll window. Read off the leg's fixed expiry rather
+    than counted forward from today, so it is the same date on every
+    surface and does not move as the valuation date does. With an integral
+    day count the trigger fires when ``days_to_maturity <= window``, so the
+    window opens on the date ``days_between(date, maturity) == window``.
+    """
+    maturity = record.position.option.maturity_date.date()
+    return maturity - timedelta(days=record.roll_window_days)
+
+
 def verdict_reason(record: RollStatusRecord) -> str:
     """Return the plain-language reason driving ``record.verdict``.
 
@@ -557,10 +681,10 @@ def verdict_reason(record: RollStatusRecord) -> str:
 
     ``EXPIRED`` is answered first — its three triggers were never evaluated,
     so matching against them would return a stand-in string. Otherwise the
-    verdict is matched against the three per-trigger verdicts (time,
-    convexity, rally) and that trigger's ``.reason`` is returned — the
-    verdict is defined as their max, so one of them always matches; the
-    fallback below is defensive only.
+    trigger named by :func:`driving_trigger` (precedence time, convexity,
+    rally) supplies its ``.reason`` — the verdict is defined as the max of
+    the three, so one of them always matches; the fallback below is
+    defensive only.
 
     Args:
         record: One position's roll status record.
@@ -572,13 +696,9 @@ def verdict_reason(record: RollStatusRecord) -> str:
     if record.verdict is RollVerdict.EXPIRED:
         return expired_reason(record.position, record.days_to_maturity)
 
-    for trigger in (
-        record.time_trigger,
-        record.convexity_trigger,
-        record.rally_trigger,
-    ):
-        if trigger.verdict == record.verdict:
-            return trigger.reason
+    driver = driving_trigger(record)
+    if driver is not None:
+        return trigger_reading(record, driver).reason
 
     return f"Held at {record.verdict.value}."  # pragma: no cover - defensive
 

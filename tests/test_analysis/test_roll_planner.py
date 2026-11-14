@@ -392,11 +392,16 @@ class TestBuildRollPlan:
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """No entry_spot → no gamma story → ROLL_NOW, not DELAY.
+        """No entry_spot → no gamma story → the roll stands, not DELAY.
 
         Time trigger sits in the REVIEW buffer (40d vs a 30d window,
         1.5x buffer), so the verdict is actionable while the position is
         still outside the mandatory window — isolating the drift leg.
+
+        Since #461 "the roll stands" reads ROLL_BY the date the window
+        opens, where it used to read ROLL_NOW: no trigger is at ROLL, so
+        nothing is overdue. What this test pins is unchanged: an unknown
+        drift is never deferred.
         """
         _patch_convexity(monkeypatch, 20.0)
         pos = _make_put(days_to_maturity=40, entry_spot=None)
@@ -411,7 +416,7 @@ class TestBuildRollPlan:
         records = build_roll_plan(portfolio, ips)
 
         assert records[0].verdict == RollVerdict.REVIEW
-        assert records[0].action == RollAction.ROLL_NOW
+        assert records[0].action == RollAction.ROLL_BY
 
     def test_inside_roll_window_yields_roll_now(
         self,

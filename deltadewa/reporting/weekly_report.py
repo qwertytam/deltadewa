@@ -112,6 +112,11 @@ from deltadewa.analysis.hedge_triggers import (
     worst_rally_from_entry,
 )
 from deltadewa.analysis.maturity import MaturityBuckets
+from deltadewa.analysis.roll_planner import (
+    leg_action_label,
+    leg_action_rank,
+    leg_reason,
+)
 from deltadewa.clock import program_trading_date
 from deltadewa.heartbeat import ping
 from deltadewa.history_cli import MarkOutcome, take_mark
@@ -152,7 +157,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from deltadewa.analysis.roll_status import RollStatusRecord
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsTriggers
 
 _logger = logging.getLogger(__name__)
 
@@ -172,6 +177,10 @@ _ROLL_SEVERITY: Final[dict[str, int]] = {
     "ROLL": 3,
 }
 _NO_POSITIONS_ROLL_VERDICT: Final[str] = "N/A"
+
+#: The per-leg table's Action cell for a leg the plan makes no
+#: recommendation for, or that has no active trigger (#461).
+_NO_ACTION: Final[str] = "\u2014"
 
 _EXIT_OK: Final[int] = 0
 _EXIT_REFUSED: Final[int] = 1
@@ -238,16 +247,22 @@ class RollLegRow:
         leg: ``"PUT 4200"`` — the same label ``/monitor`` uses.
         reason: The plain-language reason from
             ``roll_status.verdict_reason``.
+        action: The roll plan's action for the leg in the plan's own words
+            (``"ROLL BY 2026-12-22"``), from ``roll_planner.
+            leg_action_label``; ``None`` for a leg with no recommendation
+            or no active trigger (#461).
 
     """
 
     verdict: str
     leg: str
     reason: str
+    action: str | None = None
 
 
 def _roll_leg_rows(
     records: Sequence[RollStatusRecord],
+    ips_triggers: IpsTriggers | None = None,
 ) -> tuple[RollLegRow, ...]:
     """Build one row per leg, in portfolio order.
 
@@ -260,10 +275,40 @@ def _roll_leg_rows(
         RollLegRow(
             verdict=record.verdict.value,
             leg=_leg_label(record),
-            reason=verdict_reason(record),
+            reason=_leg_reason(record, ips_triggers),
+            action=_leg_action(record, ips_triggers),
         )
         for record in records
     )
+
+
+def _leg_reason(
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers | None,
+) -> str:
+    """Return the reason beside a leg's verdict and action (#461).
+
+    The action's own trigger where it differs from the verdict's (see
+    ``roll_planner.leg_reason``); the verdict's reason without the IPS.
+    """
+    if ips_triggers is None:
+        return verdict_reason(record)
+    return leg_reason(record, ips_triggers=ips_triggers)
+
+
+def _leg_action(
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers | None,
+) -> str | None:
+    """Return the plan's action for one leg, or ``None`` without the IPS.
+
+    ``ips_triggers`` is ``None`` only for a caller assembling a digest from
+    records alone (the golden test); ``build_and_render`` always passes it,
+    and a test pins that.
+    """
+    if ips_triggers is None:
+        return None
+    return leg_action_label(record, ips_triggers=ips_triggers)
 
 
 def _leg_label(record: RollStatusRecord) -> str:
@@ -274,6 +319,7 @@ def _leg_label(record: RollStatusRecord) -> str:
 
 def _worst_roll_record(
     records: Sequence[RollStatusRecord],
+    ips_triggers: IpsTriggers | None = None,
 ) -> RollStatusRecord | None:
     """Return the record carrying the worst roll verdict, or ``None``.
 
@@ -288,8 +334,16 @@ def _worst_roll_record(
     own right so a book whose only live leg expires cannot read as though
     the trigger resolved itself.
 
-    Ties break on portfolio order — the first record wins. That has to be
-    stable: two legs at ROLL that swapped places week to week would
+    The verdict decides which leg is worst; an action is never ranked
+    *against* a verdict, so a ROLL BY leg cannot outrank a ROLL leg. Legs
+    tied at the worst verdict are separated by how urgent the roll plan's
+    action for each is (#461): two REVIEW legs, one ``CHECKED`` and one
+    ``ROLL BY``, name the dated one, not whichever is listed first. Without
+    ``ips_triggers`` there is no action to compare and the tie is left to
+    portfolio order.
+
+    Ties that remain break on portfolio order — the first record wins. That
+    has to be stable: two legs at ROLL that swapped places week to week would
     manufacture a phantom crossing out of an unchanged book.
     """
     gradable = [
@@ -297,10 +351,16 @@ def _worst_roll_record(
     ]
     if not gradable:
         return None
-    return max(
-        gradable,
-        key=lambda record: _ROLL_SEVERITY[record.verdict.value],
-    )
+
+    def rank(record: RollStatusRecord) -> tuple[int, int]:
+        action = (
+            -1
+            if ips_triggers is None
+            else leg_action_rank(record, ips_triggers=ips_triggers)
+        )
+        return _ROLL_SEVERITY[record.verdict.value], action
+
+    return max(gradable, key=rank)
 
 
 def _worst_roll_verdict(records: Sequence[RollStatusRecord]) -> str:
@@ -434,7 +494,7 @@ def _headline(
     return base
 
 
-def build_weekly_digest(
+def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument is a distinct input the caller supplies; the function is pure assembly
     *,
     report: ProgramReport,
     roll_records: Sequence[RollStatusRecord],
@@ -444,6 +504,7 @@ def build_weekly_digest(
     worst_rally_pct: float | None = None,
     backup_heartbeat_warning: str | None = None,
     realized: RealizedCarrySection | None = None,
+    ips_triggers: IpsTriggers | None = None,
 ) -> WeeklyDigest:
     """Pure assembly: report + roll records + history -> a WeeklyDigest.
 
@@ -483,6 +544,11 @@ def build_weekly_digest(
     Populating the report's own fields instead makes it the single place
     those numbers render; the lede no longer repeats them.
 
+    ``ips_triggers`` is what lets each leg's row (and the snapshot's worst
+    leg) carry the roll plan's action and date (#461). Without it the rows
+    carry none, which is honest: the action is a decision under the IPS, and
+    a digest assembled without the IPS has not made it.
+
     ``realized`` is §4's realized-carry section from the position history
     (#313), assembled by the caller (``build_and_render`` reads the
     history; this function still does no I/O). ``None``, the default,
@@ -497,7 +563,7 @@ def build_weekly_digest(
         raise ValueError(msg)
 
     prior_snapshot = history[-1] if history else None
-    worst_roll_record = _worst_roll_record(roll_records)
+    worst_roll_record = _worst_roll_record(roll_records, ips_triggers)
     worst_roll = (
         worst_roll_record.verdict.value
         if worst_roll_record is not None
@@ -540,7 +606,12 @@ def build_weekly_digest(
             else None
         ),
         worst_roll_reason=(
-            verdict_reason(worst_roll_record)
+            _leg_reason(worst_roll_record, ips_triggers)
+            if worst_roll_record is not None
+            else None
+        ),
+        worst_roll_action=(
+            _leg_action(worst_roll_record, ips_triggers)
             if worst_roll_record is not None
             else None
         ),
@@ -567,7 +638,7 @@ def build_weekly_digest(
             enriched_report.ips_compliance,
             breaches,
         ),
-        roll_legs=_roll_leg_rows(roll_records),
+        roll_legs=_roll_leg_rows(roll_records, ips_triggers),
         weekly_carry_cost=weekly_carry_cost,
         elapsed_days=elapsed_days,
         backup_heartbeat_warning=backup_heartbeat_warning,
@@ -685,10 +756,13 @@ def _roll_legs_markdown(rows: tuple[RollLegRow, ...]) -> list[str]:
             "what *changed*; this is the standing state behind it."
         ),
         "",
-        "| Verdict | Leg | Reason |",
-        "| --- | --- | --- |",
+        "| Verdict | Action | Leg | Reason |",
+        "| --- | --- | --- | --- |",
     ]
-    lines += [f"| {r.verdict} | {r.leg} | {r.reason} |" for r in rows]
+    lines += [
+        f"| {r.verdict} | {r.action or _NO_ACTION} | {r.leg} | {r.reason} |"
+        for r in rows
+    ]
     lines.append("")
     return lines
 
@@ -703,7 +777,9 @@ def _roll_legs_html(rows: tuple[RollLegRow, ...]) -> str:
     if not rows:
         return ""
     body = "\n".join(
-        f"<tr><td>{escape(r.verdict)}</td><td>{escape(r.leg)}</td>"
+        f"<tr><td>{escape(r.verdict)}</td>"
+        f"<td>{escape(r.action or _NO_ACTION)}</td>"
+        f"<td>{escape(r.leg)}</td>"
         f"<td>{escape(r.reason)}</td></tr>"
         for r in rows
     )
@@ -712,7 +788,8 @@ def _roll_legs_html(rows: tuple[RollLegRow, ...]) -> str:
         "<p>Where each leg stands right now. The crossing above reports "
         "what <em>changed</em>; this is the standing state behind it.</p>\n"
         "<table>\n"
-        "<tr><th>Verdict</th><th>Leg</th><th>Reason</th></tr>\n"
+        "<tr><th>Verdict</th><th>Action</th><th>Leg</th>"
+        "<th>Reason</th></tr>\n"
         f"{body}\n"
         "</table>"
     )
@@ -1173,6 +1250,7 @@ def build_and_render(
         as_of=as_of,
         backup_heartbeat_warning=_read_backup_heartbeat_warning(export_dir),
         realized=_realized_section(state, mark_outcome),
+        ips_triggers=ips_config.triggers,
     )
 
     return _RenderedDigest(

@@ -148,7 +148,7 @@ browser, and monetization planner are also done, tested, and wired** — each is
 `analysis/`-layer module (`sizing.py`, `strike_ladder.py`, `monetization.py`)
 driving a panel in the Dash `/design` page's PLANNING zone since M2.5.
 `roll_planner.py` was the exception until #258 wired it: `/design` now has a
-**Roll plan** panel (the `ROLL_NOW`/`DELAY`/`HOLD` action, target strike and
+**Roll plan** panel (the `ROLL_NOW`/`ROLL_BY`/`DELAY`/`CHECKED`/`HOLD` action, target strike and
 roll-up cost, from `roll_planner.build_roll_plan`) *and* a **Roll status by
 tranche** panel (the per-trigger table, from `roll_status.evaluate_roll_status`)
 — the old "Roll planner" title named the table, which is what made the coverage

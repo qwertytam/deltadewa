@@ -634,8 +634,9 @@ rename that removes the title/module collision for good.
 ### The roll plan is restored (#258)
 
 `analysis/roll_planner.build_roll_plan` now drives a **Roll plan** panel in
-`/design`'s PLANNING zone, one row per long put: the `ROLL_NOW`/`DELAY`/`HOLD`
-action, the proposed `target_strike`, the `roll_up_cost` to reach it, the
+`/design`'s PLANNING zone, one row per long put: the `ROLL_NOW`/`ROLL_BY`/
+`DELAY`/`CHECKED`/`HOLD` action (`CHECKED` and `ROLL_BY` came later, #408 and
+#461), the proposed `target_strike`, the `roll_up_cost` to reach it, the
 position's gamma and theta, and the rationale. Two rows in the coverage table
 now, not one, because there are two panels and two questions.
 
@@ -998,9 +999,9 @@ Two changes, at two layers:
   `CHECKED` is distinct from `HOLD` (nothing fired) and from `DELAY` (a
   warranted roll, deferred): a trigger fired, its own stated condition was
   evaluated, and it does not call for a roll. Unlike `RollVerdict`,
-  `RollAction` is reduced nowhere — `/design`'s roll-plan panel is its only
-  consumer — so a new member costs a badge rule, not the reduction audit
-  #373's `EXPIRED` needed.
+  `RollAction` was reduced nowhere at the time, so a new member cost a badge
+  rule, not the reduction audit #373's `EXPIRED` needed. (#461, below,
+  reduces it once per leg.)
 
 `ROLL_NOW` on a rally is therefore legitimate on two distinct grounds, and
 they were always separate paths: at or past the ACTION band (≥15%) the
@@ -1009,6 +1010,27 @@ handbook prescribes outright and `_rally_trigger_verdict` already grades
 genuinely unmet. `tests/test_analysis/test_roll_and_compliance_agree.py`
 pins that as a property over a grid of rally × convexity × maturity, stated
 against the raw trigger facts rather than against `rally_review_cleared`.
+
+### The roll plan's dated action, and who decided it (#461, #463, Batch 9a PR B)
+
+PUT 5,600 sat at 219 days: outside the 180d roll window, inside the 270d
+review buffer. The time trigger read REVIEW and so did the rally trigger,
+with convexity in band. The plan showed `ROLL NOW` beside the rally trigger's
+"calls for no roll": `rally_review_cleared` refused (the time trigger was
+also at REVIEW), so the leg fell through to `ROLL_NOW`, and the rationale
+picked the rally trigger because its verdict equalled the leg's.
+
+Two changes. A leg's action is now the most urgent of what **each trigger**
+resolves to (`roll_planner.leg_action`), and the rationale names the trigger
+that produced it. A time REVIEW with no deferral is the new
+`RollAction.ROLL_BY`: a roll that is due, not overdue, dated to the day the
+window opens. It is named `ROLL_BY` rather than `ROLL_DUE` because
+`position_aging.ExpiryBucketLabel.ROLL_DUE` is the label for a leg *inside*
+the window, and two meanings of "ROLL DUE" on `/design` would be the
+same-thing-two-answers defect this program keeps removing. The action and date
+now reach every surface that shows the leg's verdict (`leg_action_label`), and
+the time trigger's own reason states the rule (#463): "approaching the roll
+window (opens at 180d; review starts at 270d)", both numbers from the IPS.
 
 ### "Compliant" now includes vega sufficiency (#409, Batch 8a.2)
 

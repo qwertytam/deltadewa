@@ -388,7 +388,8 @@ def size_ladder(
 
     Sized on **gross** payoff (#436, decided 2026-11-13), like
     ``size_hedge``: the ladder's repriced crash value covers the offset, and
-    its convexity, graded net of premium, reads a little under it.
+    its convexity, the gain over the ladder's value today, reads a little
+    under it.
 
     Args:
         portfolio: Live portfolio supplying market data and the underlying.

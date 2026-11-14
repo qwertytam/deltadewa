@@ -19,9 +19,11 @@ from deltadewa.analysis.roll_status import (
     RollStatusRecord,
     RollVerdict,
     TriggerReason,
+    evaluate_roll_status,
 )
 from deltadewa.app.import_portfolio import main as import_portfolio_main
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.ips_config import load_ips_config
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.reporting import weekly_report as weekly_report_module
 from deltadewa.reporting.email_smtp import EmailDeliveryError
@@ -58,6 +60,7 @@ from deltadewa.reporting.weekly_snapshot import (
     SnapshotChange,
     SnapshotDiff,
     WeeklySnapshot,
+    _worst_roll_crossing,
 )
 from deltadewa.valuation import OptionValuation
 from tests.clock_helpers import days_from_today
@@ -207,7 +210,7 @@ def _prior_snapshot() -> WeeklySnapshot:
         decision_verdict="MAINTAIN",
         worst_roll_verdict="MONITOR",
         worst_roll_leg="PUT 4200",
-        worst_roll_reason="30d to maturity, 180d roll window",
+        worst_roll_reason="30d to maturity — inside the 180d roll window",
         expired_leg_count=0,
         # A digest assembled without a rally reading reports
         # UNAVAILABLE, so the prior baseline says the same — otherwise
@@ -229,7 +232,7 @@ def _roll_record(
     verdict: RollVerdict,
     *,
     strike: float = 4200.0,
-    reason: str = "30d to maturity, 180d roll window",
+    reason: str = "30d to maturity — inside the 180d roll window",
     days_to_maturity: int = 30,
     maturity: datetime | None = None,
 ) -> RollStatusRecord:
@@ -373,6 +376,257 @@ class TestWorstRollRecordExcludesExpired:
         assert worst.position.option.strike_price == pytest.approx(4200.0)
 
 
+class TestTheDigestCarriesTheRollPlansAction:
+    """#461: a REVIEW leg reads ROLL BY <date> here as it does on /design.
+
+    The per-leg table and the worst leg's crossing carry the plan's own
+    words, asked of ``roll_planner.leg_action_label`` so the digest cannot
+    word an action, or its date, differently from the roll plan. The digest
+    still *reduces* ``RollVerdict`` and never ranks an action: a dated leg
+    beside a ROLL leg reports the ROLL.
+    """
+
+    _TRIGGERS = load_ips_config(_EXAMPLE_IPS_YAML).triggers
+
+    @staticmethod
+    def _real_records(
+        monkeypatch: pytest.MonkeyPatch,
+        *legs: OptionPosition,
+    ) -> list[RollStatusRecord]:
+        """Real roll status for real legs, at the example IPS's windows.
+
+        ``tests.test_analysis.test_roll_by`` pins the same leg shapes
+        against the planner; here they only need to be real records.
+        """
+        from ..test_analysis import test_roll_by as shapes
+
+        shapes._convexity(monkeypatch, shapes._IN_BAND)
+        return evaluate_roll_status(shapes._book(*legs), shapes._ips())
+
+    def test_the_review_leg_reads_roll_by_its_window_date(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from ..test_analysis import test_roll_by as shapes
+
+        records = self._real_records(monkeypatch, shapes._put(days=219))
+        opens = days_from_today(219).date() - timedelta(days=180)
+
+        digest = build_weekly_digest(
+            report=_make_report(),
+            roll_records=records,
+            as_of=_AS_OF,
+            ips_triggers=shapes._ips().triggers,
+        )
+
+        (row,) = digest.roll_legs
+        assert row.verdict == "REVIEW"
+        assert row.action == f"ROLL BY {opens.isoformat()}"
+        assert (
+            "approaching the roll window (opens at 180d; review starts at 270d)"
+        ) in row.reason
+        markdown = render_weekly_digest_markdown(digest)
+        html = render_weekly_digest_html(digest)
+        assert f"| REVIEW | ROLL BY {opens.isoformat()} |" in markdown
+        assert f"<td>ROLL BY {opens.isoformat()}</td>" in html
+        assert digest.snapshot.worst_roll_action == row.action
+
+    def test_a_dated_leg_beside_a_roll_leg_reports_the_roll(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The digest reduces verdicts; an action never outranks one."""
+        from ..test_analysis import test_roll_by as shapes
+
+        dated = shapes._put(days=219, strike=5_600.0)
+        rolling = shapes._put(days=150, strike=5_700.0)
+        prior = replace(_prior_snapshot(), worst_roll_verdict="HOLD")
+
+        for legs in ((dated, rolling), (rolling, dated)):
+            records = self._real_records(monkeypatch, *legs)
+            digest = build_weekly_digest(
+                report=_make_report(within_budget=True),
+                roll_records=records,
+                history=(prior,),
+                as_of=_AS_OF,
+                ips_triggers=shapes._ips().triggers,
+            )
+
+            crossing = _worst_roll_crossing(prior, digest.snapshot)
+            assert digest.snapshot.worst_roll_verdict == "ROLL"
+            assert digest.snapshot.worst_roll_leg == "PUT 5,700"
+            assert digest.snapshot.worst_roll_action == "ROLL NOW"
+            assert crossing is not None
+            assert crossing.detail.startswith("HOLD \u2192 ROLL (PUT 5,700")
+            assert "ROLL BY" not in crossing.detail
+            # The headline names the crossing that outranks the rest, and
+            # it is the roll.
+            assert digest.headline.startswith("ACTION: ")
+            assert "Worst roll verdict" in digest.headline
+            assert "ROLL BY" not in digest.headline
+            # Both legs are still listed, each with its own action.
+            actions = {row.leg: row.action for row in digest.roll_legs}
+            assert actions["PUT 5,700"] == "ROLL NOW"
+            assert str(actions["PUT 5,600"]).startswith("ROLL BY ")
+
+    def test_two_review_legs_name_the_dated_one_whichever_is_listed_first(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A tie at one verdict goes to the more urgent action, not the order.
+
+        A rally-only REVIEW with convexity in band is ``CHECKED`` (nothing to
+        do); a time REVIEW is ``ROLL BY <date>``. Both are REVIEW, and the
+        digest's worst leg used to be whichever came first in the book.
+        """
+        from ..test_analysis import test_roll_by as shapes
+
+        checked = shapes._put(days=400, strike=4_500.0)
+        dated = shapes._put(days=219, strike=5_600.0)
+        prior = replace(_prior_snapshot(), worst_roll_verdict="HOLD")
+
+        for legs in ((checked, dated), (dated, checked)):
+            records = self._real_records(monkeypatch, *legs)
+            assert {r.verdict.value for r in records} == {"REVIEW"}
+            digest = build_weekly_digest(
+                report=_make_report(within_budget=True),
+                roll_records=records,
+                history=(prior,),
+                as_of=_AS_OF,
+                ips_triggers=shapes._ips().triggers,
+            )
+
+            assert digest.snapshot.worst_roll_verdict == "REVIEW"
+            assert digest.snapshot.worst_roll_leg == "PUT 5,600"
+            assert str(digest.snapshot.worst_roll_action).startswith(
+                "ROLL BY ",
+            )
+
+    def test_without_the_ips_a_tie_is_left_to_portfolio_order(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from ..test_analysis import test_roll_by as shapes
+
+        records = self._real_records(
+            monkeypatch,
+            shapes._put(days=400, strike=4_500.0),
+            shapes._put(days=219, strike=5_600.0),
+        )
+
+        digest = build_weekly_digest(
+            report=_make_report(),
+            roll_records=records,
+            as_of=_AS_OF,
+        )
+
+        assert digest.snapshot.worst_roll_leg == "PUT 4,500"
+
+    def test_a_digest_built_without_the_ips_carries_no_action(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from ..test_analysis import test_roll_by as shapes
+
+        records = self._real_records(monkeypatch, shapes._put(days=219))
+
+        digest = build_weekly_digest(
+            report=_make_report(),
+            roll_records=records,
+            as_of=_AS_OF,
+        )
+
+        assert digest.roll_legs[0].action is None
+        assert digest.snapshot.worst_roll_action is None
+        assert "| REVIEW | \u2014 |" in render_weekly_digest_markdown(digest)
+
+    def test_a_hold_leg_and_an_expired_leg_carry_no_action(self) -> None:
+        records = [
+            _roll_record(RollVerdict.HOLD, strike=4200.0),
+            _roll_record(RollVerdict.EXPIRED, strike=234.0),
+        ]
+
+        digest = build_weekly_digest(
+            report=_make_report(),
+            roll_records=records,
+            as_of=_AS_OF,
+            ips_triggers=self._TRIGGERS,
+        )
+
+        assert [row.action for row in digest.roll_legs] == [None, None]
+
+    def test_the_production_path_passes_the_ips_to_the_builder(
+        self,
+        seeded_export_dir: _MainFixture,
+    ) -> None:
+        """build_and_render hands the builder the IPS triggers (#461).
+
+        The seeded book has no leg in a REVIEW or ROLL state, so the rows
+        cannot show it carrying an action; what must not regress is that the
+        production caller asks at all. Without the argument every real digest
+        would print "\u2014" in the Action column and nothing else would fail.
+        """
+        from deltadewa.analysis.roll_planner import leg_action_label
+        from deltadewa.reporting.weekly_report import build_and_render
+        from deltadewa.state import ProgramState
+
+        state = ProgramState.load(
+            seeded_export_dir.export_dir,
+            ips_path=_EXAMPLE_IPS_YAML,
+        )
+        ips = state.ips_config
+        assert ips is not None
+
+        with patch.object(
+            weekly_report_module,
+            "build_weekly_digest",
+            wraps=weekly_report_module.build_weekly_digest,
+        ) as spy:
+            rendered = build_and_render(
+                state=state,
+                ips_config=ips,
+                as_of=_AS_OF,
+                period_label="Week of 2026-08-05",
+                export_dir=seeded_export_dir.export_dir,
+            )
+
+        assert spy.call_args.kwargs["ips_triggers"] == ips.triggers
+        assert [row.action for row in rendered.digest.roll_legs] == [
+            leg_action_label(record, ips_triggers=ips.triggers)
+            for record in evaluate_roll_status(state.portfolio, ips)
+        ]
+
+
+class TestTheDigestsDataQualityLineNamesTheAlarm:
+    """#462, rendered: a prior STALE with the alarm off, STALE with it on."""
+
+    def test_the_rendered_line_does_not_read_stale_to_stale(self) -> None:
+        prior = replace(
+            _prior_snapshot(),
+            data_quality="STALE",
+            data_quality_alarm=False,
+        )
+        report = _make_report(
+            data_quality="STALE",
+            needs_alarm=True,
+            within_budget=True,
+        )
+
+        digest = build_weekly_digest(
+            report=report,
+            roll_records=(),
+            history=(prior,),
+            as_of=_AS_OF,
+        )
+        markdown = render_weekly_digest_markdown(digest)
+        html = render_weekly_digest_html(digest)
+
+        assert "- **Data quality:** alarm raised\n" in markdown
+        assert "alarm raised" in html
+        assert "STALE \u2192 STALE" not in markdown
+        assert "STALE \u2192 STALE" not in html
+
+
 class TestDigestNamesTheLegAndReason:
     """#374: the digest is the surface a partner reads — it must explain."""
 
@@ -382,7 +636,7 @@ class TestDigestNamesTheLegAndReason:
             _roll_record(
                 RollVerdict.ROLL,
                 strike=4200.0,
-                reason="28d to maturity, 180d roll window",
+                reason="28d to maturity — inside the 180d roll window",
             ),
         ]
         prior = replace(_prior_snapshot(), worst_roll_verdict="HOLD")
@@ -1006,7 +1260,7 @@ class TestGoldenMarkdown:
                 _roll_record(
                     RollVerdict.ROLL,
                     strike=4200.0,
-                    reason="28d to maturity, 180d roll window",
+                    reason="28d to maturity — inside the 180d roll window",
                 ),
                 _roll_record(
                     RollVerdict.EXPIRED,
@@ -1017,6 +1271,10 @@ class TestGoldenMarkdown:
             ),
             history=(_prior_snapshot(),),
             as_of=_AS_OF,
+            # The shipped example's triggers: the golden shows the plan's
+            # action for the ROLL leg (#461), where the roll window is the
+            # same 180 days the fixture's reason says.
+            ips_triggers=load_ips_config(_EXAMPLE_IPS_YAML).triggers,
         )
 
         rendered = render_weekly_digest_markdown(digest)

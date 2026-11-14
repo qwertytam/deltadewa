@@ -50,6 +50,7 @@ from deltadewa.analysis.monitor_scenario import (
     ips_anchor_dials,
 )
 from deltadewa.analysis.provenance import build_provenance_ledger
+from deltadewa.analysis.roll_planner import leg_action_label, leg_reason
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
 from deltadewa.analysis.spot_reading import observe_spot
 from deltadewa.app import format as fmt
@@ -81,7 +82,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.roll_status import RollStatusRecord
     from deltadewa.analysis.spot_reading import SpotReading
     from deltadewa.app.factory import ProgramDashApp
-    from deltadewa.ips_config import IpsConfig
+    from deltadewa.ips_config import IpsConfig, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.state import ProgramState
 
@@ -578,8 +579,15 @@ def _verdict_badge(record: RollStatusRecord) -> html.Span:
     )
 
 
-def _decision_row(record: RollStatusRecord) -> html.Div:
+def _decision_row(
+    record: RollStatusRecord,
+    ips_triggers: IpsTriggers,
+) -> html.Div:
     """Build one row of the DECISIONS list: badge, reason, convexity band.
+
+    The plan's action follows the badge (#461): ``ROLL BY 2026-12-22`` for a
+    leg in Rule 1's review buffer, from the same call ``/design``'s roll
+    plan makes, so the verdict here and the action there are one statement.
 
     An expired leg (#373) gets no band bar. It was excluded from the
     convexity figure before pricing (#362), so rendering the book's band
@@ -611,13 +619,19 @@ def _decision_row(record: RollStatusRecord) -> html.Div:
             within=record.convexity_target_met,
             value_text=record.convexity.display(),
         )
+    action = leg_action_label(record, ips_triggers=ips_triggers)
     return html.Div(
         [
             _verdict_badge(record),
+            *(
+                [html.Span(action, className="decision-action")]
+                if action is not None
+                else []
+            ),
             html.Span(
                 f"{record.position.option.option_type.value} "
                 f"{record.position.option.strike_price:,.0f} — "
-                f"{fmt.roll_verdict_reason(record)}",
+                f"{leg_reason(record, ips_triggers=ips_triggers)}",
                 className="decision-reason",
             ),
             trailing,
@@ -629,9 +643,10 @@ def _decision_row(record: RollStatusRecord) -> html.Div:
 def _decisions_section(
     records: list[RollStatusRecord],
     plan: MonetizationPlan,
+    ips_triggers: IpsTriggers,
 ) -> html.Div:
     """Build the DECISIONS section: roll verdicts plus monetization."""
-    roll_rows = [_decision_row(record) for record in records]
+    roll_rows = [_decision_row(record, ips_triggers) for record in records]
 
     if plan.gain_basis == "unknown":
         monetization_children: list[Component] = [
@@ -673,9 +688,10 @@ def _decisions_section(
                 className="verdict-legend",
             ),
             html.P(
-                "Each position's roll verdict, and any monetization "
-                "already recommended by the IPS schedule at the current "
-                "mark.",
+                "Each position's roll verdict, the roll plan's action beside "
+                "it (ROLL NOW, ROLL BY the date the roll window opens, "
+                "DELAY or CHECKED), and any monetization already "
+                "recommended by the IPS schedule at the current mark.",
                 className="plain-language",
             ),
             html.Div(roll_rows, className="decision-list"),
@@ -1044,7 +1060,7 @@ def _build_decisions_panel(
             ips_config,
             market_env=market_env,
         )
-        return _decisions_section(records, plan)
+        return _decisions_section(records, plan, ips_config.triggers)
 
     return safe_render(_build)
 

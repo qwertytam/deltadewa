@@ -445,6 +445,100 @@ def _hedged_portfolio(*positions: OptionPosition) -> OptionPortfolio:
     return portfolio
 
 
+class TestTheTimeTriggerStatesItsRule:
+    """#463: the reason says which side of the window, and where both edges are.
+
+    The old reason, "216d to maturity, 180d roll window", was one string for
+    all three verdicts, so a leg in the review buffer read as though it were
+    already past the window. Now the wording depends on the verdict, and
+    both numbers come from the IPS.
+    """
+
+    def test_each_verdict_states_the_rule_it_was_graded_by(self) -> None:
+        def reason(days: int, verdict: RollVerdict) -> str:
+            return roll_status.time_trigger_phrase(days, 180.0, 1.5, verdict)
+
+        assert reason(150, RollVerdict.ROLL) == (
+            "150d to maturity \u2014 inside the 180d roll window"
+        )
+        assert reason(219, RollVerdict.REVIEW) == (
+            "219d to maturity \u2014 approaching the roll window "
+            "(opens at 180d; review starts at 270d)"
+        )
+        assert reason(300, RollVerdict.HOLD) == (
+            "300d to maturity \u2014 not near the roll window "
+            "(opens at 180d; review starts at 270d)"
+        )
+
+    def test_the_review_phrase_is_the_reviews_own_words(self) -> None:
+        trigger = roll_status._time_trigger_verdict(219, 180.0, 1.5)
+
+        assert trigger.verdict is RollVerdict.REVIEW
+        assert (
+            "approaching the roll window (opens at 180d; review starts at 270d)"
+            in trigger.reason
+        )
+
+    @pytest.mark.parametrize("days", [150, 219, 300])
+    def test_the_old_wording_is_gone(self, days: int) -> None:
+        trigger = roll_status._time_trigger_verdict(days, 180.0, 1.5)
+
+        assert ", 180d roll window" not in trigger.reason
+
+    def test_both_edges_come_from_the_ips_not_the_string(self) -> None:
+        """4 months x 1.25 is 120d / 150d: neither number is in the source."""
+        ips = _make_ips_config(
+            roll_at_months_remaining=4.0,
+            roll_review_buffer=1.25,
+        )
+        position = _make_position(days_to_maturity=135)
+        portfolio = _hedged_portfolio(position)
+
+        (record,) = roll_status.evaluate_roll_status(portfolio, ips)
+
+        assert record.time_trigger.verdict is RollVerdict.REVIEW
+        assert "(opens at 120d; review starts at 150d)" in (
+            record.time_trigger.reason
+        )
+        assert "180d" not in record.time_trigger.reason
+        assert "270d" not in record.time_trigger.reason
+
+    def test_a_non_integral_edge_prints_as_it_is(self) -> None:
+        """283.5d is where the trigger really stops: never rounded to 284d."""
+        phrase = roll_status.time_trigger_phrase(
+            260,
+            189.0,
+            1.5,
+            RollVerdict.REVIEW,
+        )
+
+        assert "review starts at 283.5d" in phrase
+        assert roll_status._time_trigger_verdict(283, 189.0, 1.5).verdict is (
+            RollVerdict.REVIEW
+        )
+        assert roll_status._time_trigger_verdict(284, 189.0, 1.5).verdict is (
+            RollVerdict.HOLD
+        )
+
+    @pytest.mark.parametrize(
+        ("days", "expected"),
+        [
+            (180, RollVerdict.ROLL),
+            (181, RollVerdict.REVIEW),
+            (270, RollVerdict.REVIEW),
+            (271, RollVerdict.HOLD),
+        ],
+    )
+    def test_the_verdict_edges_did_not_move(
+        self,
+        days: int,
+        expected: RollVerdict,
+    ) -> None:
+        trigger = roll_status._time_trigger_verdict(days, 180.0, 1.5)
+
+        assert trigger.verdict is expected
+
+
 class TestExpiredLegVerdict:
     """#373: an expired leg is gone, not urgent."""
 

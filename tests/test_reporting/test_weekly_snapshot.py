@@ -218,6 +218,88 @@ class TestSnapshotJsonRoundTrip:
         ).data_quality_alarm
 
 
+class TestTheWorstLegsActionIsCarriedNotDiffed:
+    """#461: the plan's action rides with the worst leg, for rendering only.
+
+    ``worst_roll_action`` is the roll plan's own words for the worst leg
+    (``ROLL BY 2026-12-22``). Like ``worst_roll_reason`` it explains a
+    crossing and is never one: the verdict word is what crosses, and an
+    action that carries a date would otherwise fire every time the date text
+    changed.
+    """
+
+    def test_a_file_written_before_the_field_existed_still_loads(self) -> None:
+        import json
+
+        on_disk = json.loads(json.dumps(_snapshot().to_json_dict()))
+        del on_disk["worst_roll_action"]
+
+        restored = WeeklySnapshot.from_json_dict(on_disk)
+
+        assert restored.worst_roll_action is None
+        assert restored.worst_roll_verdict == "HOLD"
+
+    def test_the_action_survives_the_json_file(self) -> None:
+        import json
+
+        snap = replace(_snapshot(), worst_roll_action="ROLL BY 2026-12-22")
+
+        restored = WeeklySnapshot.from_json_dict(
+            json.loads(json.dumps(snap.to_json_dict())),
+        )
+
+        assert restored.worst_roll_action == "ROLL BY 2026-12-22"
+        assert restored == snap
+
+    def test_snapshot_from_report_carries_it(self) -> None:
+        snap = snapshot_from_report(
+            _make_report(),
+            decision_verdict="MAINTAIN",
+            worst_roll_verdict="REVIEW",
+            worst_roll_leg="PUT 5,600",
+            worst_roll_reason="219d to maturity",
+            worst_roll_action="ROLL BY 2026-12-22",
+            expired_leg_count=0,
+            rally_status="OK",
+            worst_rally_pct=3.0,
+            first_as_of=_AS_OF,
+            cumulative_carry_cost=1_000.0,
+        )
+
+        assert snap.worst_roll_action == "ROLL BY 2026-12-22"
+
+    def test_a_crossing_names_the_action_beside_the_leg(self) -> None:
+        prior = _snapshot()
+        current = replace(
+            prior,
+            worst_roll_verdict="REVIEW",
+            worst_roll_leg="PUT 5,600",
+            worst_roll_reason="219d to maturity",
+            worst_roll_action="ROLL BY 2026-12-22",
+        )
+
+        (change,) = [
+            c
+            for c in diff_snapshots(prior, current).crossings
+            if c.label == "Worst roll verdict"
+        ]
+
+        assert change.detail == (
+            "HOLD \u2192 REVIEW "
+            "(PUT 5,600, ROLL BY 2026-12-22, 219d to maturity)"
+        )
+
+    def test_a_changed_action_on_an_unchanged_verdict_is_not_a_crossing(
+        self,
+    ) -> None:
+        prior = replace(_snapshot(), worst_roll_action="ROLL BY 2026-12-22")
+        current = replace(prior, worst_roll_action="ROLL BY 2027-01-05")
+
+        diff = diff_snapshots(prior, current)
+
+        assert all(c.label != "Worst roll verdict" for c in diff.crossings)
+
+
 class TestDiffSnapshotsFirstRun:
     """diff_snapshots(None, current) — no baseline yet."""
 
@@ -358,6 +440,74 @@ class TestDiffSnapshotsCrossings:
         diff = diff_snapshots(prior, current)
 
         assert any(c.label == "Data quality" for c in diff.crossings)
+
+
+class TestTheDataQualityCrossingNamesTheAlarm:
+    """#462: the line says what crossed, which is the alarm, not the string.
+
+    ``data_quality`` is the worst-of merged grade. It can sit at ``STALE``
+    for weeks while the alarm flips, and the line used to print it on both
+    sides: ``STALE -> STALE``, a change that describes nothing.
+    """
+
+    @staticmethod
+    def _detail(prior: WeeklySnapshot, current: WeeklySnapshot) -> str:
+        (change,) = [
+            c
+            for c in diff_snapshots(prior, current).crossings
+            if c.label == "Data quality"
+        ]
+        return change.detail
+
+    def test_alarm_raised_while_the_string_stays_stale(self) -> None:
+        prior = _snapshot(data_quality="STALE", needs_alarm=False)
+        current = _snapshot(data_quality="STALE", needs_alarm=True)
+
+        detail = self._detail(prior, current)
+
+        # The merged grade did not move, so it is not printed: it adds
+        # nothing the alarm does not say, and beside "raised" it can read as
+        # a dead feed when the alarm came from an ageing hand-entered input.
+        assert detail == "alarm raised"
+        assert "STALE" not in detail
+
+    def test_alarm_cleared_while_the_string_stays_stale(self) -> None:
+        prior = _snapshot(data_quality="STALE", needs_alarm=True)
+        current = _snapshot(data_quality="STALE", needs_alarm=False)
+
+        assert self._detail(prior, current) == "alarm cleared"
+
+    def test_the_string_is_an_arrow_when_it_actually_moved(self) -> None:
+        raised = self._detail(
+            _snapshot(data_quality="CACHED", needs_alarm=False),
+            _snapshot(data_quality="STALE", needs_alarm=True),
+        )
+        cleared = self._detail(
+            _snapshot(data_quality="STALE", needs_alarm=True),
+            _snapshot(data_quality="LIVE", needs_alarm=False),
+        )
+
+        assert raised == "alarm raised (data quality CACHED \u2192 STALE)"
+        assert cleared == "alarm cleared (data quality STALE \u2192 LIVE)"
+
+    @pytest.mark.parametrize(
+        "quality",
+        ["LIVE", "CACHED", "STALE", "STATIC", "UNAVAILABLE"],
+    )
+    @pytest.mark.parametrize("raised", [True, False])
+    def test_no_line_ever_repeats_one_grade_on_both_sides(
+        self,
+        quality: str,
+        raised: bool,
+    ) -> None:
+        import re
+
+        prior = _snapshot(data_quality=quality, needs_alarm=not raised)
+        current = _snapshot(data_quality=quality, needs_alarm=raised)
+
+        detail = self._detail(prior, current)
+
+        assert re.search(r"(\w+) \u2192 \1", detail) is None
 
 
 class TestSkewWindow:

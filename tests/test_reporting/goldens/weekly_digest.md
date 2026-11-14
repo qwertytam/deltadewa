@@ -8,7 +8,7 @@ Compared against the snapshot from 2026-07-29.
 
 **Threshold crossings:**
 
-- **Worst roll verdict:** MONITOR → ROLL (PUT 4,200, 28d to maturity, 180d roll window)
+- **Worst roll verdict:** MONITOR → ROLL (PUT 4,200, ROLL NOW, 28d to maturity — inside the 180d roll window)
 - **Expired legs:** 0 → 1 leg past maturity
 - **Carry budget:** within budget → over budget
 - **IPS compliance (overall):** all pass → a metric failing
@@ -24,10 +24,10 @@ Compared against the snapshot from 2026-07-29.
 
 Where each leg stands right now. The crossing above reports what *changed*; this is the standing state behind it.
 
-| Verdict | Leg | Reason |
-| --- | --- | --- |
-| ROLL | PUT 4,200 | 28d to maturity, 180d roll window |
-| EXPIRED | PUT 234 | expired 2026-07-28 (30d ago) — no roll recommendation |
+| Verdict | Action | Leg | Reason |
+| --- | --- | --- | --- |
+| ROLL | ROLL NOW | PUT 4,200 | 28d to maturity — inside the 180d roll window |
+| EXPIRED | — | PUT 234 | expired 2026-07-28 (30d ago) — no roll recommendation |
 
 ---
 
@@ -55,7 +55,7 @@ Where each leg stands right now. The crossing above reports what *changed*; this
 | Premium paid | $300,000 (paid) |
 | IPS crash scenario | -25% shock |
 | Payoff ratio at crash | 8.5× |
-| Convexity (net P&L % of book) | 19.0% |
+| Crash convexity (hedge gain % of book) | 19.0% |
 | IPS convexity target | 15.0%–25.0% of book |
 | Status | ✓ PASS |
 

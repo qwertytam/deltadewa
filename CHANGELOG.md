@@ -19,6 +19,20 @@ history for that record instead.
 
 ### Added
 
+- **#461 — a dated roll action: `ROLL BY <date>`.** A leg in Rule 1's review
+  buffer (outside the roll window, inside the 1.5x review band) is due, not
+  overdue, so the roll plan no longer tells you to act today: it reads
+  `ROLL BY` the date the window opens, and says why. `ROLL NOW` is kept for a
+  trigger that has reached ROLL. `CHECKED`, `DELAY` and the in-window
+  `ROLL NOW` are unchanged. The action and its date now appear wherever a
+  leg's verdict does, from one function so they cannot differ:
+  `/design`'s roll plan, the roll status table (under the verdict badge),
+  `/monitor`'s Decisions rows, the digest's per-leg table (a new Action
+  column) and its worst-roll crossing. The digest still reduces the verdict,
+  so a `ROLL BY` leg beside a ROLL leg reports the ROLL. Existing weekly
+  snapshot files load unchanged. Named `ROLL BY`, not `ROLL DUE`, because the
+  position-aging panel already labels a leg inside the window `ROLL DUE`.
+
 - **N7 — a "really?" note when every leg is marked at one IV.** The
   provenance panel (`/monitor`, `/design`) now says so when a book's legs
   sit at two or more distinct strike/maturity points but share one IV to
@@ -38,6 +52,14 @@ history for that record instead.
 
 ### Changed
 
+- **#463 — the time trigger's reason states the rule.** "216d to maturity,
+  180d roll window" read as though a leg at 216d were already past the
+  window; it was graded REVIEW for being in the buffer. The reason now says
+  which side of the window the leg is on and where both edges are:
+  "approaching the roll window (opens at 180d; review starts at 270d)",
+  "inside the 180d roll window", or "not near the roll window (...)". Both
+  numbers are read from the IPS. It shows in the roll status table,
+  `/monitor`, the digest and the roll plan's reasoning.
 - **#434, #431 — one referee for "is crash convexity inside the IPS band?"**
   The roll status table, the roll plan, the decision matrix, the compliance
   strip, the digest's protection table and compliance row, `/monitor`'s
@@ -67,7 +89,8 @@ history for that record instead.
   extended by an unmeasured week. Existing weekly snapshot files load
   unchanged.
 - **#436 — gross sizing is kept, and said so.** Sizing covers the crash offset
-  on gross payoff while convexity is graded net of premium, so a hedge sized
+  on gross payoff while convexity is the gain over the hedge's value today,
+  so a hedge sized
   exactly to the offset can land 0.1pp under the band floor. The decision is
   gross; no contract count changes. The sizing panel, the strike-candidate
   table and the ladder composer now say it beside "covers the offset", and a
@@ -86,6 +109,22 @@ history for that record instead.
 
 ### Fixed
 
+- **#461 — the roll plan no longer shows `ROLL NOW` beside "no roll".** PUT
+  5,600 (219d: time REVIEW, rally REVIEW, convexity in band) showed `ROLL NOW`
+  with the rally trigger's "calls for no roll" as its reason, because two
+  REVIEWs compared equal and the rationale quoted whichever it tested first.
+  A leg's action is now the most urgent of what each trigger resolves to, and
+  the reasoning names the trigger that produced it (ties: time, then
+  convexity, then rally, the order the roll status table's reason uses).
+- **#432 — the report's convexity row is labelled for what it measures.** The
+  protection table, and so the weekly digest that embeds it, read "Convexity
+  (net P&L % of book)". The figure is the hedge's own gain, which leaves out
+  the underlying's loss; "net" means hedge plus underlying everywhere else.
+  It now reads "Crash convexity (hedge gain % of book)".
+- **#462 — the digest's data-quality line names the alarm.** It could read
+  "STALE -> STALE", printing the merged grade on both sides of an alarm that
+  flipped. It now says what crossed, "alarm raised (data quality STALE)", and
+  shows the grade as an arrow only when it moved.
 - **N8a — "Pricing input provenance" no longer renders as a duplicated
   heading pair.** The panel's collapsible `<summary>` repeated the
   section title; it now reads "Show all N inputs", and `/monitor` carries

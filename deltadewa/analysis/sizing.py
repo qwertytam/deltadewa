@@ -156,8 +156,9 @@ class HedgeSizingResult:
 
 GROSS_SIZING_NOTE: Final[str] = (
     "Sized so the hedge's gross crash value covers the offset; convexity is "
-    "graded net of premium, so a hedge sized exactly to the offset reads a "
-    "little under it (gross sizing kept, #436)."
+    "graded on the hedge's gain over what it is worth today (its cost, for a "
+    "new hedge), so a hedge sized exactly to the offset reads a little under "
+    "it (gross sizing kept, #436)."
 )
 """The one sentence every surface shows beside "covers the offset" (#436)."""
 

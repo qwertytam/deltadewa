@@ -10,8 +10,13 @@ from deltadewa.analysis.crash_payoff import (
     CrashConvexityResult,
     CrashScenarioRow,
     PremiumBasis,
+    compute_crash_convexity,
 )
-from deltadewa.analysis.crash_repricing import describe_expired_legs
+from deltadewa.analysis.crash_repricing import (
+    CrashShock,
+    crash_convexity_pct,
+    describe_expired_legs,
+)
 from deltadewa.analysis.market_environment import (
     DataQuality,
     HedgeCostVerdict,
@@ -43,6 +48,7 @@ from deltadewa.ips_config import (
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.reporting.program_report import (
+    CONVEXITY_ROW_LABEL,
     HTML_STYLE,
     IpsComplianceRow,
     ProgramReport,
@@ -1225,8 +1231,94 @@ class TestConvexityDisplayNeverContradictsItsGrade:
         markdown = render_markdown(report)
         html = render_html_body(report)
 
-        assert "| Convexity (net P&L % of book) | 9.96% |" in markdown
+        assert f"| {CONVEXITY_ROW_LABEL} | 9.96% |" in markdown
         assert "<td>9.96%</td>" in html
+
+
+class TestConvexityRowLabelMatchesItsFigure:
+    """The row is labelled for the figure behind it (#432).
+
+    The protection table's convexity row used to read "Convexity (net P&L %
+    of book)". The figure is ``crash_convexity_pct``, the hedge's own gain
+    over book notional, which leaves the underlying's loss out. "Net" means
+    ``hedge_gain + underlying_loss`` everywhere else in the program, so a
+    reader taking the row for a net figure would be off by the whole equity
+    loss. These pin the label to the figure's definition: they build a real
+    book with an underlying, compute both candidates, and require the row to
+    carry the hedge-only one under a label that says so.
+    """
+
+    @staticmethod
+    def _real_book_report() -> tuple[ProgramReport, float, float]:
+        """A report for a book holding an underlying and a long put.
+
+        Returns the report, the hedge-only convexity and what a *net* figure
+        would read for the same book at the IPS crash.
+        """
+        ips = _make_ips_config()
+        book = _make_portfolio(underlying_quantity=100.0, spot_price=5_000.0)
+        book.add_position(
+            strike_price=4_000.0,
+            maturity_date=book.valuation_date + datetime.timedelta(days=548),
+            quantity=10,
+            option_type=OptionType.PUT,
+            exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        shock = CrashShock.from_ips(ips.convexity)
+        hedge_only = crash_convexity_pct(book, shock=shock)
+        assert hedge_only is not None
+        # The underlying loses exactly the crash depth, as a share of its
+        # own notional, and the book notional *is* that underlying.
+        net = hedge_only + ips.convexity.crash_scenario_pct
+        market_env = _make_market_env(DataQuality.LIVE)
+        report = build_program_report(
+            portfolio=book,
+            ips_config=ips,
+            crash_result=compute_crash_convexity(
+                book,
+                shock=shock,
+                ips_convexity=ips.convexity,
+            ),
+            carry_metrics=_make_carry_metrics(),
+            vega_sufficiency_pct=2.5,
+            market_env=market_env,
+            provenance_ledger=_make_provenance_ledger(book, market_env),
+            period_label="Q2 2026",
+            as_of=_AS_OF,
+        )
+        return report, hedge_only, net
+
+    def test_the_label_names_the_hedge_not_a_net_figure(self) -> None:
+        assert CONVEXITY_ROW_LABEL == "Crash convexity (hedge gain % of book)"
+        assert "net" not in CONVEXITY_ROW_LABEL.lower()
+
+    def test_both_renderers_print_the_hedge_only_figure_under_it(self) -> None:
+        report, hedge_only, net = self._real_book_report()
+        convexity = _make_ips_config().convexity
+        at = convexity.crash_scenario_pct
+        hedge_text = grade_convexity(
+            hedge_only,
+            convexity,
+            at_shock_pct=at,
+        ).display()
+        net_text = grade_convexity(net, convexity, at_shock_pct=at).display()
+        # The two candidates are a whole equity loss apart, so a test that
+        # matched either by accident could not pass for the other.
+        assert hedge_text != net_text
+        assert abs(hedge_only - net) == pytest.approx(25.0)
+
+        markdown = render_markdown(report)
+        html = render_html_body(report)
+
+        assert f"| {CONVEXITY_ROW_LABEL} | {hedge_text} |" in markdown
+        assert f"<td>{CONVEXITY_ROW_LABEL}</td><td>{hedge_text}</td>" in html
+        assert f"| {CONVEXITY_ROW_LABEL} | {net_text} |" not in markdown
+
+    def test_no_surface_calls_the_row_net(self) -> None:
+        report, _, _ = self._real_book_report()
+
+        assert "Convexity (net" not in render_markdown(report)
+        assert "Convexity (net" not in render_html_body(report)
 
 
 class TestAnUnmeasuredConvexityRendersAsUnmeasured:
