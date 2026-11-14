@@ -430,8 +430,8 @@ being gone rather than the droplet — a different scenario, with no
 # 2a. Restore exports/ from the offsite backup remote (see §8) — clone
 #    it directly into the repo's exports/ directory (the bind-mount
 #    source). `sudo` is required, not optional: the SSH deploy key this
-#    needs (§10) is root-owned 0600 at /root/.ssh/backup_deploy_key, so
-#    only a root-privileged clone can authenticate at all. This is also
+#    needs (§10) is root-owned 0600 (its path is in the private ops
+#    doc), so only a root-privileged clone can authenticate at all. This is also
 #    what lands the restored exports/ and exports/.git root-owned,
 #    matching the ownership invariant docker-entrypoint.sh now preserves
 #    (§10's Ownership note, #237) — `~` still resolves to /home/deploy
@@ -925,8 +925,8 @@ needed here.
   verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
   `REPORT_EMAIL_FROM`) in the SES console rather than requesting
   production access. `REPORT_EMAIL_FROM_NAME` (#319, optional) sets a
-  friendlier display name on the digest's From header — e.g. "Example
-  Hedge Program" instead of a raw relay-assigned address — without
+  friendlier display name on the digest's From header — e.g. "The Smith
+  Family Hedge" instead of a raw relay-assigned address — without
   changing `REPORT_EMAIL_FROM`'s actual sending address, which still
   must stay a verified sender at the relay. Defaults to "Weekly Hedge
   Digest" if left unset.
@@ -973,8 +973,8 @@ needed here.
      reachable *without* the operator — see
      `docs/continuity-annex.md` for what it's for and the handbook's
      Continuity Planning page for where a real program actually stores
-     it (printed and filed with the accountant, in a safe, etc. — an
-     operational detail for the private ops doc, not this public repo).
+     it. Where *this* program keeps it is an operational detail for the
+     private ops doc, not this public repo.
 
   Add both **public** keys to this file, one per line, before the first
   encrypted backup can run — `ops/backup-exports.sh` fails loudly at
@@ -983,8 +983,9 @@ needed here.
   emergency: it only drives future encryptions, and can be rebuilt from
   either party's own public key (`age-keygen -y <private-key-file>`
   reprints it) at any time.
-- **The offsite backup SSH deploy key** — `/root/.ssh/backup_deploy_key`
-  (mode `0600`, root-owned), referenced by a `~/.ssh/config` alias so
+- **The offsite backup SSH deploy key** — a root-owned file, mode `0600`,
+  at `<deploy-key-path>` (the real path is in the private ops doc),
+  referenced by a `~/.ssh/config` alias so
   `ops/backup-exports.sh` never hardcodes the key path, and by
   `BACKUP_REMOTE` (§9) so it never hardcodes the remote either (#243):
 
@@ -993,12 +994,12 @@ needed here.
   Host backup-remote
       HostName <see private ops doc>
       User git
-      IdentityFile /root/.ssh/backup_deploy_key
+      IdentityFile <deploy-key-path>
       IdentitiesOnly yes
   ```
 
   Provisioning (once, manual, same spirit as §1's droplet click-through):
-  generate the key (`ssh-keygen -t ed25519 -f /root/.ssh/backup_deploy_key
+  generate the key (`ssh-keygen -t ed25519 -f <deploy-key-path>
   -N ""`), create a **private** repo on your chosen git host — see private
   ops doc for which provider and the exact repo name — add the key's
   public half as a deploy key with **write** access.
@@ -1308,7 +1309,7 @@ successful ping) — the weekly digest reads it and shows a caveat banner
 see that banner but the `sudo tail .../deltadewa-backup.log` history
 shows real pushes/no-ops landing, the backup itself is fine — only
 `BACKUP_HEARTBEAT_URL` needs attention (dead URL, expired healthchecks.io
-check, DNS).
+(or equivalent) check, DNS).
 
 ## 14. Quarterly review — keeping recovery possible
 
