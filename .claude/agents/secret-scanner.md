@@ -25,15 +25,18 @@ flag it. If no, it is allowed — do not flag it.
 1. Capability URLs — any URL with a long opaque path segment (heartbeat / ping
    endpoints). Highest severity: possession alone grants the capability.
 2. Host and account identifiers — droplet names, the backup remote's account
-   and repo names, real SSH aliases and hostnames, a deploy user name other than
-   the conventional one the RUNBOOK tells the operator to create. (This public
-   project's own GitHub account and repo are public by design — not a hit.)
+   and repo names, real SSH aliases and hostnames, key file paths, a deploy user
+   name other than the conventional one the RUNBOOK tells the operator to
+   create. (This public project's own GitHub account and repo are public by
+   design — not a hit.)
 3. Mail and backup specifics of this deployment — which mail provider, backup
    host, SMTP port or sending-IP allowlist behaviour this deployment uses (also
    as a passing aside in a dev log); SMTP hosts, sender addresses, allowlisted
    IPs.
 4. Droplet sizing — the plan, CPU or disk this deployment runs on.
-5. Real policy numbers in files that are meant to be templates
+5. Key custody — where a recovery or escrow key is kept, by place or by role.
+   That the key exists and how it works is documented; where it sits is not.
+6. Real policy numbers in files that are meant to be templates
    (`*.example.yaml`).
 
 ## Allowed — do NOT flag
@@ -54,20 +57,30 @@ flag it. If no, it is allowed — do not flag it.
   `<see private ops doc>` HostName).
 - A conditional tip for one provider inside a generic list ("if using X, ...")
   that does not say X is in use; and an obviously illustrative example name.
-- The conventional `deploy` user, and a path a documented command itself
-  creates (the `ssh-keygen -f` target).
+- The conventional `deploy` user.
+- The private access network the app is reached over, and a dead-man's-switch
+  heartbeat service named only as a reference integration ("or equivalent",
+  "-compatible", "-style"). Both are documented architecture, allowed the way
+  the hosting platform is. A heartbeat service named as the one this deployment
+  uses is not.
 
-Anything outside the two lists in SECURITY.md — a monitoring/heartbeat service,
-the private access network, an example of where a continuity key could be kept
-— is **not covered by the rule today**. Report it as BORDERLINE for the owner
-(widening the rule is an edit to SECURITY.md first, then here); do not flag it.
-Likewise report as BORDERLINE a hit you cannot classify with confidence (a vendor
-named in a superseded design record, say), with the reason, rather than choosing
-silently. BLOCK only on a FLAG.
+Anything else outside the two lists in SECURITY.md is **not covered by the rule
+today**. Report it as BORDERLINE for the owner (widening the rule is an edit to
+SECURITY.md first, then here); do not flag it. Likewise report as BORDERLINE a
+hit you cannot classify with confidence (a vendor named in a superseded design
+record, say), with the reason, rather than choosing silently. BLOCK only on a
+FLAG.
 
 ## Execution Rules
 
-- Scan the working tree (tracked + staged). `git log` only if explicitly asked.
+- Scan the working tree (tracked + staged). Also read the branch's commit
+  messages (`git log main..HEAD --format=%B`) and, if a path is given, the draft
+  PR body: commit messages and PR and issue text are as public as the files.
+  Wider `git log` history only if explicitly asked.
+- `tests/test_public_repo_hygiene.py` already fails the gate on key paths,
+  sizing tokens and provider names outside the generic-list files. You are the
+  half it cannot be: what depends on *which* provider, port or arrangement this
+  deployment uses, and custody. Do not re-derive what the test covers.
 - **Never print a full secret value.** Print `file:line`, category, and a
   redacted fragment (first 4 chars + `…`). The rule covers provider, host and
   port names as well as credentials: for those, print the category only, not

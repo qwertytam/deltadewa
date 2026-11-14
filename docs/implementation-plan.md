@@ -1895,8 +1895,11 @@ deployment uses were scrubbed to "see private ops doc", with the technical
 lessons kept and the vendors dropped, and the superseded mail-vendor design
 record in M2.6 was de-vendored with it. Generic provider lists and the hosting
 platform's public policies stay; `SECURITY.md`'s standing rule now draws
-that line explicitly. The old text remains in git history — accepted risk on
-the #351 pattern, no rewrite.
+that line explicitly. The backup deploy key's file path, which had crept back
+into the RUNBOOK after the #250 scrub above, is out again, and
+`tests/test_public_repo_hygiene.py` now fails the gate if it (or a sizing
+figure, or a provider name outside the generic lists) returns. The old text
+remains in git history — accepted risk on the #351 pattern, no rewrite.
 
 ### M4.1 — #241: `ips.yaml` as sole owner of the vega and cliff bands (PR #247)
 

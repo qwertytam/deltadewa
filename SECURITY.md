@@ -55,23 +55,44 @@ repo.
 - Droplet sizing: the plan, CPU or disk this deployment runs on. (A minimum
   the *software* needs, such as the RAM floor above, is a requirement and is
   fine.)
+- Where a recovery or escrow key is kept, by place or by role. (That a
+  second key exists, and how it works, is documented; where it sits is not.)
 - Credentials, tokens and capability URLs such as heartbeat URLs;
-  addresses, hostnames, SSH aliases, and backup repo names or accounts.
+  addresses, hostnames, SSH aliases, key file paths, and backup repo names
+  or accounts.
 
 Anything in the second list is written as "see private ops doc."
 
 **Applying it.** Some text is an instruction to the operator, not a fact
 about this deployment, and is not a hit: a placeholder label in a config
 block (an SSH config `Host` beside a `<see private ops doc>` HostName), the
-conventional `deploy` user the RUNBOOK tells the operator to create, the
-`ssh-keygen` target path, a conditional tip for one provider inside a
-generic list ("if using X, ..."), and an obviously illustrative example
-name. This public project's own GitHub account and repo are public by
-design. Anything outside the two lists above (a monitoring or heartbeat
-service, the private access network, an example of where a continuity key
-could be kept) is **not covered by the rule today**: the scanner reports it
-as BORDERLINE for the owner rather than flagging it, and widening the rule
-is an edit to this section first.
+conventional `deploy` user the RUNBOOK tells the operator to create, a
+conditional tip for one provider inside a generic list ("if using X,
+..."), and an obviously illustrative example name. This public project's
+own GitHub account and repo are public by design. Two things the
+documented architecture is built around are allowed the way the hosting
+platform is: the private access network the app is reached over, and a
+dead-man's-switch heartbeat service, which is named only as a reference
+integration ("or equivalent"), never as the service this deployment uses.
+Anything else outside the two lists above is **not covered by the rule
+today**: the scanner reports it as BORDERLINE for the owner rather than
+flagging it, and widening the rule is an edit to this section first.
+
+**Other public surfaces.** The rule covers more than tracked files.
+Commit messages, and issue and pull-request descriptions and comments, are
+as public as the repo. A commit cannot change without a history rewrite
+(the accepted-risk position below). Issue and PR text can be edited, but
+GitHub keeps the edit history visible, so editing mitigates rather than
+removes: write them right the first time, referring to a deployment
+specific by category and `file:line`, never by its value. The scanner reads
+the branch's commit messages and the draft PR body before a PR is opened.
+
+**What is enforced mechanically.** `tests/test_public_repo_hygiene.py` fails
+the gate on the patterns that can be checked without writing a deployment
+value down: a key file path, droplet sizing figures, and a mail or backup
+provider name anywhere but the three generic lists above. Which provider,
+port or arrangement this deployment uses cannot be pattern-checked, and
+stays with the scanner and review.
 
 The `secret-scanner` brief (`.claude/agents/secret-scanner.md`) carries
 these same two lists and this paragraph, plus its own check for real policy
@@ -195,9 +216,12 @@ rotation.** Same pattern as #351 above, and for the same reasons.
 **What was accepted.** Revisions of `docs/implementation-plan.md` before
 this change name which mail provider, backup host, SMTP port and
 allowlist behaviour this deployment uses, and the earlier revisions of
-`docs/RUNBOOK.md` §1 state the droplet plan it runs on. Those lines are
-scrubbed going forward and the rule above now says exactly what is and is
-not allowed, but the history keeps them. In substance this exposes **which
+`docs/RUNBOOK.md` §1 state the droplet plan it runs on; earlier revisions of
+the RUNBOOK, `docs/continuity-annex.md` and `ops/backup-exports.sh` also
+carry the backup deploy key's file path, and an example of where a
+continuity key might be kept. Those lines are scrubbed going forward and
+the rule above now says exactly what is and is not allowed, but the history
+keeps them. In substance this exposes **which
 vendors host this program's operating plumbing**, not what runs on them.
 
 **Why nothing needs rotating.** None of the scrubbed text is a credential
