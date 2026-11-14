@@ -11,15 +11,20 @@ down:
   standard ``config`` / ``known_hosts`` / ``authorized_keys``),
 * droplet sizing figures (vCPU and SSD tokens; a RAM floor is a software
   requirement and is allowed),
-* a mail or backup provider name anywhere except the three files that carry
-  a generic list of supported providers.
+* a mail provider name anywhere except the three files that carry a generic
+  list of supported providers.
 
 A failure prints ``path:line`` and the rule name, never the matched text:
 CI logs are public too.
 
-Known limit: inside the three generic-list files a provider name is not
+Known limits. Inside the three generic-list files a provider name is not
 checked, so a deployment-specific aside added there is for the scanner and
-review to catch, not this test.
+review to catch. A backup host is not guarded at all: no generic list of
+hosts exists to hide its name in, and listing one here would put the name
+back into the tree, so it stays with the scanner and review.
+
+The test cases below use made-up figures on purpose. The real deployment's
+numbers must not be written down anywhere, tests included.
 """
 
 from __future__ import annotations
@@ -45,9 +50,9 @@ GENERIC_LIST_FILES = frozenset(
     },
 )
 
-# Deliberately a broad list of peers, not just the providers a deployment
-# might use, so the list itself says nothing about which one is in use.
-# "Resend" is not listed: it is also an ordinary English word.
+# Deliberately a broad list of peers, so the list itself says nothing about
+# which one is in use (SECURITY.md counts it as a generic list). "Resend" is
+# not listed: it is also an ordinary English word.
 MAIL_PROVIDERS = (
     "brevo",
     "sendgrid",
@@ -59,21 +64,13 @@ MAIL_PROVIDERS = (
     "mailjet",
     "smtp2go",
 )
-GIT_HOSTS = (
-    "codeberg",
-    "gitlab",
-    "bitbucket",
-    "sourcehut",
-)
 
 KEY_PATH = re.compile(
     r"(?:/root|~)/\.ssh/(?!(?:config|known_hosts|authorized_keys)\b)[\w.<>-]+",
 )
 SIZING = re.compile(r"\bvcpus?\b|\dvcpu|\bssd\b", re.IGNORECASE)
 PROVIDER_NAME = re.compile(
-    r"\b(?:"
-    + "|".join(re.escape(n) for n in (*MAIL_PROVIDERS, *GIT_HOSTS))
-    + r")\b",
+    r"\b(?:" + "|".join(re.escape(n) for n in MAIL_PROVIDERS) + r")\b",
     re.IGNORECASE,
 )
 
@@ -138,9 +135,9 @@ def test_no_droplet_sizing_figures_in_tracked_files() -> None:
 
 
 def test_provider_names_only_in_generic_list_files() -> None:
-    """A provider name outside the generic lists says which one is in use."""
+    """A mail provider name outside the generic lists says which is in use."""
     hits = _violations(PROVIDER_NAME, skip_files=GENERIC_LIST_FILES)
-    assert not hits, _fail_message("mail or backup provider name", hits)
+    assert not hits, _fail_message("mail provider name", hits)
 
 
 # --- the patterns themselves, so a guard cannot quietly stop guarding -------
@@ -175,7 +172,7 @@ def test_key_path_pattern_ignores_standard_files_and_placeholders(
 
 @pytest.mark.parametrize(
     "line",
-    ["2 vCPU / 4 GB", "slug s-2vcpu-4gb", "80 GB SSD", "two vCPUs"],
+    ["8 vCPU / 32 GB", "slug s-8vcpu-16gb", "500 GB SSD", "two vCPUs"],
 )
 def test_sizing_pattern_matches_cpu_and_disk_figures(line: str) -> None:
     assert SIZING.search(line)
@@ -183,7 +180,7 @@ def test_sizing_pattern_matches_cpu_and_disk_figures(line: str) -> None:
 
 @pytest.mark.parametrize(
     "line",
-    ["at least 4 GB RAM", "Ubuntu 24.04 LTS", "program data is small"],
+    ["at least 16 GB RAM", "an Ubuntu LTS release", "program data is small"],
 )
 def test_sizing_pattern_allows_a_ram_floor(line: str) -> None:
     assert not SIZING.search(line)
@@ -191,6 +188,6 @@ def test_sizing_pattern_allows_a_ram_floor(line: str) -> None:
 
 def test_provider_pattern_matches_whole_names_only() -> None:
     assert PROVIDER_NAME.search("delivered via Mailgun")
-    assert PROVIDER_NAME.search("pushed to a Codeberg repo")
+    assert PROVIDER_NAME.search("a Postmark account")
     assert not PROVIDER_NAME.search("resend the email")
     assert not PROVIDER_NAME.search("a postmarked envelope")

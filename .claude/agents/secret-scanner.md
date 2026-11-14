@@ -25,7 +25,9 @@ flag it. If no, it is allowed — do not flag it.
 1. Capability URLs — any URL with a long opaque path segment (heartbeat / ping
    endpoints). Highest severity: possession alone grants the capability.
 2. Host and account identifiers — droplet names, the backup remote's account
-   and repo names, real SSH aliases and hostnames, key file paths, a deploy user
+   and repo names, real SSH aliases and hostnames, key file paths (where a key
+   sits on this deployment's host; a bare example filename in a documented
+   command, like the one `age-keygen -o` writes, is not one), a deploy user
    name other than the conventional one the RUNBOOK tells the operator to
    create. (This public project's own GitHub account and repo are public by
    design — not a hit.)
@@ -78,7 +80,8 @@ FLAG.
   PR body: commit messages and PR and issue text are as public as the files.
   Wider `git log` history only if explicitly asked.
 - `tests/test_public_repo_hygiene.py` already fails the gate on key paths,
-  sizing tokens and provider names outside the generic-list files. You are the
+  sizing tokens and mail provider names outside the generic-list files (a
+  backup host is not covered by it; that is yours). You are the
   half it cannot be: what depends on *which* provider, port or arrangement this
   deployment uses, and custody. Do not re-derive what the test covers.
 - **Never print a full secret value.** Print `file:line`, category, and a
