@@ -19,14 +19,63 @@ rule that now governs everything that goes into it:
 > **No real operational values in the repo.** Config is templated via
 > `*.example.yaml` (or `.env.example`); the live files they template are
 > gitignored and live only on the deploy host. Secrets, credentials, and
-> deployment specifics (backup remotes, SMTP provider/allowlist, droplet
-> sizing) never appear in tracked files, commit messages, or docs — only
-> in host-side env vars / `/etc/deltadewa/backup.env`, or referenced as
-> "see private ops doc."
+> deployment specifics (which mail provider, backup host, SMTP port or
+> sending-IP allowlist **this deployment** uses; droplet sizing) never
+> appear in tracked files, commit messages, or docs — only in host-side
+> env vars / `/etc/deltadewa/backup.env`, or referenced as "see private
+> ops doc."
 
 `secret-scanner` runs before any commit that touches config, ops scripts,
 or RUNBOOK/docs for exactly this reason — treat a bypass or gap in that
 coverage as itself worth reporting.
+
+### What the rule allows, and what it does not (#475)
+
+The rule is about **this deployment**, not about vendor names as such. The
+test: *would a reader learn something about what this deployment runs on
+that they could not learn from what the software supports or from the
+platform's own public documentation?* If so, it does not belong in the
+repo.
+
+**Allowed** — it describes the software or a public platform:
+
+- A generic list of the providers a feature supports: the one in
+  `.env.example`, the one in `deltadewa/reporting/email_smtp.py`'s module
+  docstring, and the one in the RUNBOOK's secrets section (§10).
+- Naming the hosting platform and its public policies — for example, that
+  it blocks certain outbound mail ports by default.
+- A technical lesson stated without the vendor: a host platform may block
+  outbound mail ports; a rebuilt host's address may need re-allowlisting at
+  the mail relay; a minimum RAM below which the image build fails.
+
+**Not allowed** — it describes this deployment:
+
+- Which mail provider, backup host, SMTP port or sending-IP allowlist
+  behaviour this deployment uses, including as a passing aside in a dev log.
+- Droplet sizing: the plan, CPU or disk this deployment runs on. (A minimum
+  the *software* needs, such as the RAM floor above, is a requirement and is
+  fine.)
+- Credentials, tokens and capability URLs such as heartbeat URLs;
+  addresses, hostnames, SSH aliases, and backup repo names or accounts.
+
+Anything in the second list is written as "see private ops doc."
+
+**Applying it.** Some text is an instruction to the operator, not a fact
+about this deployment, and is not a hit: a placeholder label in a config
+block (an SSH config `Host` beside a `<see private ops doc>` HostName), the
+conventional `deploy` user the RUNBOOK tells the operator to create, the
+`ssh-keygen` target path, a conditional tip for one provider inside a
+generic list ("if using X, ..."), and an obviously illustrative example
+name. This public project's own GitHub account and repo are public by
+design. Anything outside the two lists above (a monitoring or heartbeat
+service, the private access network, an example of where a continuity key
+could be kept) is **not covered by the rule today**: the scanner reports it
+as BORDERLINE for the owner rather than flagging it, and widening the rule
+is an edit to this section first.
+
+The `secret-scanner` brief (`.claude/agents/secret-scanner.md`) carries
+these same two lists and this paragraph, plus its own check for real policy
+numbers in `*.example.yaml`, so a change to one is a change to the other.
 
 ### The three incidents behind the rule
 
@@ -137,6 +186,33 @@ the harm does not depend on the value still being current. Re-run the
 full-history audit by class (not by file list) after any change to what
 the tracked configs carry; an audit scoped to named files cannot tell you
 what it missed.
+
+### Accepted risk: deployment specifics in the plan's history (#475)
+
+**Decision (2026-11-14): the old text stays in git history. No rewrite, no
+rotation.** Same pattern as #351 above, and for the same reasons.
+
+**What was accepted.** Revisions of `docs/implementation-plan.md` before
+this change name which mail provider, backup host, SMTP port and
+allowlist behaviour this deployment uses, and the earlier revisions of
+`docs/RUNBOOK.md` §1 state the droplet plan it runs on. Those lines are
+scrubbed going forward and the rule above now says exactly what is and is
+not allowed, but the history keeps them. In substance this exposes **which
+vendors host this program's operating plumbing**, not what runs on them.
+
+**Why nothing needs rotating.** None of the scrubbed text is a credential
+or an address: no key, token, heartbeat URL, hostname, SSH alias, repo
+name, account name or email. There is nothing to invalidate, so no
+rotation step is being skipped.
+
+**Why a rewrite was rejected.** The repository is cloned at scale by
+unknown parties (see the #245 clone figures above), so a force-push reaches
+none of the copies that matter and would buy the appearance of remediation
+only. For a low-sensitivity class that is not worth the cost.
+
+**When to revisit.** This covers the class of value above and only that
+class. If a credential, an address or an account name is ever found in
+those revisions, this decision is void and is retaken from scratch.
 
 ### Why the offsite backup carries policy but not secrets
 

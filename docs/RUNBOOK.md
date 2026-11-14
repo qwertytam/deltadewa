@@ -30,8 +30,9 @@ broker, accountant, or credentials; that stays in the private ops doc.
 
 **Size:** one Dash app + QuantLib is CPU-light (analytic pricing, no
 lattice/PDE) but the Poetry/Jupyter dependency set is heavy on disk and the
-image build wants headroom. Basic Droplet, regular (shared CPU), **2 vCPU /
-4 GB RAM / 80 GB SSD**, Ubuntu 24.04 LTS. Undersized (1 GB) has failed
+image build wants headroom. Provision a droplet with **at least 4 GB RAM**,
+running Ubuntu 24.04 LTS; the exact plan this deployment runs on is in the
+private ops doc. Undersized (1 GB) has failed
 `docker compose build` from OOM during the QuantLib wheel install in
 testing elsewhere; go straight to 4 GB.
 
@@ -924,8 +925,8 @@ needed here.
   verify the two fixed recipient addresses (`REPORT_EMAIL_TO` and
   `REPORT_EMAIL_FROM`) in the SES console rather than requesting
   production access. `REPORT_EMAIL_FROM_NAME` (#319, optional) sets a
-  friendlier display name on the digest's From header — e.g. "The Smith
-  Family Hedge" instead of a raw relay-assigned address — without
+  friendlier display name on the digest's From header — e.g. "Example
+  Hedge Program" instead of a raw relay-assigned address — without
   changing `REPORT_EMAIL_FROM`'s actual sending address, which still
   must stay a verified sender at the relay. Defaults to "Weekly Hedge
   Digest" if left unset.
