@@ -7,9 +7,9 @@
 # operational value, not something this public repo should carry; it
 # lives in the private ops doc and on the droplet only.
 #
-# The push credential is host-side only — an SSH deploy key at
-# /root/.ssh/backup_deploy_key (0600), referenced via a ~/.ssh/config Host
-# alias — and never enters a container. compose.yaml's `env_file: .env`
+# The push credential is host-side only — a root-owned SSH deploy key
+# (0600; its path is in the private ops doc), referenced via a
+# ~/.ssh/config Host alias — and never enters a container. compose.yaml's `env_file: .env`
 # is read by the `jobs` container; a credential placed in .env would be
 # exposed to every job command run through it. This script and its key
 # live entirely outside that boundary, on the host, run by root.

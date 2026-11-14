@@ -979,8 +979,9 @@ $ git ls-files .mypy_cache | wc -l
   stale, staleness impossible to miss** — never silently skips, never silently
   prices on old data.
 - **Backup.** Cheap version: nightly `git commit && push` of `exports/` to a private
-  **offsite** repo (Codeberg — free/private/EU, and *not* DigitalOcean, so a VPS loss
-  can't take the backup with it). Optional `age` encryption if desired.
+  **offsite** repo on a git host other than the VPS's own, so a VPS loss can't take
+  the backup with it (which host: see private ops doc). Optional `age` encryption
+  if desired.
 - **Model & sub-agent usage.** See CLAUDE.md's "Model & sub-agent usage" section: tier
   by step (Haiku for orient/verify/sweep, Opus for M2.1 compute-API design and M2.4 the
   monitor, Sonnet for implementation), and delegate to the read-only agents —
@@ -1456,10 +1457,12 @@ deterministic HTML/PDF, with **M8** content: return framing from tracked start/e
 book values, realized monetization, and an as-of stamp. Golden-file regression test.
 **Stale-data policy: send stamped-stale, impossible to miss.** Host cron drives three
 jobs: market-data refresh, the weekly report email, and the `exports/` backup
-push. Backup goes to a private **offsite** repo (Codeberg; optional `age`
-encryption, deliberately deferred — a backup you can't decrypt is worse than one
-you can). The **email-delivery mechanism** is SendGrid's v3 REST API, called
-directly via `requests` rather than adding its SDK as a dependency. The
+push. Backup goes to a private **offsite** repo (host: see private ops doc;
+optional `age` encryption, deliberately deferred — a backup you can't decrypt is
+worse than one you can). The **email-delivery mechanism** was a mail vendor's v3 REST API,
+called directly via `requests` rather than adding its SDK as a dependency —
+superseded the same day by the provider-agnostic SMTP transport (#229), before
+the live verification below. The
 notebook-execution CI steps are retired now that app + report tests cover both
 surfaces.
 
@@ -1515,7 +1518,7 @@ close-out, 2026-08-06) against
 the full (`dev`+`test` groups) install; `dash-smoke-runner` green (129/129
 app-level tests). `poetry install --only main` in a scratch venv, then
 importing `deltadewa.app.wsgi`, `marketdata.refresh`, `reporting.weekly_report`,
-`reporting.email_sendgrid`, and `heartbeat` all succeed with matplotlib,
+the email-transport module, and `heartbeat` all succeed with matplotlib,
 seaborn, ipywidgets, ipyfilechooser, the whole Jupyter/notebook stack,
 Playwright, and IPython genuinely absent — confirming the `dev`/`test` group
 split (image-slimming work below) didn't silently break the production import
@@ -1529,20 +1532,25 @@ provisioned box — the Phase 2 checkpoint above is met, not aspirational.
 Refresh cron running (6/6 series fetched); `/health` reads `CACHED` with a
 real `as_of` — the state M2.2's banner logic was built for but the M2.3
 close-out could only ever show `UNAVAILABLE` (no cron had run yet); weekly
-digest delivering via Brevo; Codeberg offsite backup pushing; both
+digest delivering and the offsite backup pushing (which mail provider and
+backup host: see private ops doc); both
 `REFRESH_HEARTBEAT_URL`/`DIGEST_HEARTBEAT_URL` heartbeats green.
 
 Three deploy findings surfaced during this verification, undocumented
-anywhere until now (full detail in RUNBOOK):
+anywhere until now (full detail in RUNBOOK; the provider, port and backup
+host this deployment actually uses are in the private ops doc):
 
-- DigitalOcean blocks outbound SMTP on 25/465/587; port 2525 is open and
-  is what this deployment's `SMTP_PORT` uses (RUNBOOK §10).
-- Brevo requires the sending IP allowlisted — a rebuilt droplet silently
-  fails to send until its new IP is added there (RUNBOOK §7).
-- `ops/backup-exports.sh` only sets the git remote on first init; an
+- A host platform may block outbound mail ports, so the relay/port
+  combination must be one the platform leaves open; a digest job that hangs
+  on connect points at the port before the credentials (RUNBOOK §10).
+- A mail relay may require the sending IP allowlisted — a rebuilt host
+  silently fails to send until its new IP is added on the relay's side
+  (RUNBOOK §7).
+- `ops/backup-exports.sh` only set the git remote on first init; an
   `exports/.git` restored with an HTTPS remote instead of the SSH alias
   makes the cron push hang on a credential prompt with no TTY to answer
-  it (RUNBOOK §10).
+  it (RUNBOOK §10). Since fixed: the script reconciles the remote on
+  every run (#250).
 
 ---
 
@@ -1880,6 +1888,18 @@ naming the three incidents that established it.
 dev log, not a live procedure, and rewriting history in the same PR that
 changes procedure makes both harder to review. That is Stage 5's call, and
 this milestone's record deliberately keeps it that way.
+
+**Since decided (#475, 2026-11-14):** the lines in this document that named
+which mail provider, backup host, port and allowlist behaviour this
+deployment uses were scrubbed to "see private ops doc", with the technical
+lessons kept and the vendors dropped, and the superseded mail-vendor design
+record in M2.6 was de-vendored with it. Generic provider lists and the hosting
+platform's public policies stay; `SECURITY.md`'s standing rule now draws
+that line explicitly. The backup deploy key's file path, which had crept back
+into the RUNBOOK after the #250 scrub above, is out again, and
+`tests/test_public_repo_hygiene.py` now fails the gate if it (or a sizing
+figure, or a provider name outside the generic lists) returns. The old text
+remains in git history — accepted risk on the #351 pattern, no rewrite.
 
 ### M4.1 — #241: `ips.yaml` as sole owner of the vega and cliff bands (PR #247)
 

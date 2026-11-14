@@ -30,8 +30,9 @@ broker, accountant, or credentials; that stays in the private ops doc.
 
 **Size:** one Dash app + QuantLib is CPU-light (analytic pricing, no
 lattice/PDE) but the Poetry/Jupyter dependency set is heavy on disk and the
-image build wants headroom. Basic Droplet, regular (shared CPU), **2 vCPU /
-4 GB RAM / 80 GB SSD**, Ubuntu 24.04 LTS. Undersized (1 GB) has failed
+image build wants headroom. Provision a droplet with **at least 4 GB RAM**,
+running Ubuntu 24.04 LTS; the exact plan this deployment runs on is in the
+private ops doc. Undersized (1 GB) has failed
 `docker compose build` from OOM during the QuantLib wheel install in
 testing elsewhere; go straight to 4 GB.
 
@@ -429,8 +430,8 @@ being gone rather than the droplet — a different scenario, with no
 # 2a. Restore exports/ from the offsite backup remote (see §8) — clone
 #    it directly into the repo's exports/ directory (the bind-mount
 #    source). `sudo` is required, not optional: the SSH deploy key this
-#    needs (§10) is root-owned 0600 at /root/.ssh/backup_deploy_key, so
-#    only a root-privileged clone can authenticate at all. This is also
+#    needs (§10) is root-owned 0600 (its path is in the private ops
+#    doc), so only a root-privileged clone can authenticate at all. This is also
 #    what lands the restored exports/ and exports/.git root-owned,
 #    matching the ownership invariant docker-entrypoint.sh now preserves
 #    (§10's Ownership note, #237) — `~` still resolves to /home/deploy
@@ -449,7 +450,7 @@ sudo git clone <BACKUP_REMOTE — see private ops doc> \
 #    it's meant to be reachable, and §10 below for the mechanism. Only
 #    `age` and the private key matter here; the key never lives on this
 #    droplet by design, so it comes from wherever you (or the escrow
-#    holder) keep it -- a password manager, a printed sheet, etc.
+#    holder) keep it.
 # Replace AGE_KEY_FILE below with the path to WHICHEVER private key
 # you have to hand -- deliberately either one, since both are valid
 # recipients: the operator's own (§10 names it operator-key.txt) or
@@ -964,16 +965,15 @@ needed here.
   1. **The operator's own key.** Generate on any machine, never the
      droplet itself (`age-keygen -o operator-key.txt`; the public key is
      printed to stderr and also the second line of the file), keep the
-     private half wherever you keep other durable secrets (a password
-     manager, an encrypted volume) — never in this repo, public or
-     private-ops.
+     private half wherever you keep other durable secrets — never in
+     this repo, public or private-ops.
   2. **The escrowed key** (`age-keygen -o escrow-key.txt`, same as
      above), whose private half is deliberately kept somewhere
      reachable *without* the operator — see
      `docs/continuity-annex.md` for what it's for and the handbook's
      Continuity Planning page for where a real program actually stores
-     it (printed and filed with the accountant, in a safe, etc. — an
-     operational detail for the private ops doc, not this public repo).
+     it. Where *this* program keeps it is an operational detail for the
+     private ops doc, not this public repo.
 
   Add both **public** keys to this file, one per line, before the first
   encrypted backup can run — `ops/backup-exports.sh` fails loudly at
@@ -982,8 +982,9 @@ needed here.
   emergency: it only drives future encryptions, and can be rebuilt from
   either party's own public key (`age-keygen -y <private-key-file>`
   reprints it) at any time.
-- **The offsite backup SSH deploy key** — `/root/.ssh/backup_deploy_key`
-  (mode `0600`, root-owned), referenced by a `~/.ssh/config` alias so
+- **The offsite backup SSH deploy key** — a root-owned file, mode `0600`,
+  at `<deploy-key-path>` (the real path is in the private ops doc),
+  referenced by a `~/.ssh/config` alias so
   `ops/backup-exports.sh` never hardcodes the key path, and by
   `BACKUP_REMOTE` (§9) so it never hardcodes the remote either (#243):
 
@@ -992,12 +993,12 @@ needed here.
   Host backup-remote
       HostName <see private ops doc>
       User git
-      IdentityFile /root/.ssh/backup_deploy_key
+      IdentityFile <deploy-key-path>
       IdentitiesOnly yes
   ```
 
   Provisioning (once, manual, same spirit as §1's droplet click-through):
-  generate the key (`ssh-keygen -t ed25519 -f /root/.ssh/backup_deploy_key
+  generate the key (`ssh-keygen -t ed25519 -f <deploy-key-path>
   -N ""`), create a **private** repo on your chosen git host — see private
   ops doc for which provider and the exact repo name — add the key's
   public half as a deploy key with **write** access.
@@ -1307,7 +1308,7 @@ successful ping) — the weekly digest reads it and shows a caveat banner
 see that banner but the `sudo tail .../deltadewa-backup.log` history
 shows real pushes/no-ops landing, the backup itself is fine — only
 `BACKUP_HEARTBEAT_URL` needs attention (dead URL, expired healthchecks.io
-check, DNS).
+(or equivalent) check, DNS).
 
 ## 14. Quarterly review — keeping recovery possible
 
