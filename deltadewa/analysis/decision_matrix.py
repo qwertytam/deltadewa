@@ -20,6 +20,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
+from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
+    UNMEASURED_NOT_BREACHING,
+    ConvexityGrade,
+    grade_convexity,
+)
 from deltadewa.analysis.market_environment import (
     DataQuality,
     HedgeCostVerdict,
@@ -107,9 +113,13 @@ class DecisionResult:
         data_quality_note: Set when ``verdict`` is
             ``INSUFFICIENT_DATA`` to explain why a full verdict could
             not be produced.
-        hedge_adequacy: Convexity classification vs the IPS band;
-            always computed, even when the environment verdict is
-            ``INSUFFICIENT_DATA``.
+        hedge_adequacy: Convexity classification vs the IPS band, taken
+            from the convexity referee's grade
+            (:func:`~deltadewa.analysis.convexity_band.grade_convexity`).
+            Computed even when the environment verdict is
+            ``INSUFFICIENT_DATA``; ``None`` only when the convexity itself
+            could not be measured, which is not the same as ``UNDER``
+            (#433).
         cost_verdict: Mirrors ``market_env.hedge_cost_verdict``.
         gains_available: ``True`` when the monetization plan reports a
             positive ``value_to_harvest``.
@@ -164,28 +174,13 @@ class EntryTimingResult:
     data_quality_note: str | None
 
 
-def _classify_adequacy(
-    convexity_now_pct: float,
-    ips_convexity: IpsConvexity,
-) -> HedgeAdequacy:
-    """Classify current convexity against the IPS target band.
-
-    Inclusive boundaries: exactly at ``target_min_pct`` or
-    ``target_max_pct`` is ``ADEQUATE``.
-
-    Args:
-        convexity_now_pct: Current convexity, in percent.
-        ips_convexity: IPS convexity band configuration.
-
-    Returns:
-        ``UNDER``, ``ADEQUATE``, or ``OVER``.
-
-    """
-    if convexity_now_pct < ips_convexity.target_min_pct:
-        return HedgeAdequacy.UNDER
-    if convexity_now_pct > ips_convexity.target_max_pct:
-        return HedgeAdequacy.OVER
-    return HedgeAdequacy.ADEQUATE
+# The decision matrix's vocabulary for the referee's grades. ``UNMEASURED``
+# has no entry on purpose: an unmeasured book is not under-hedged (#433).
+_ADEQUACY: Final[dict[ConvexityGrade, HedgeAdequacy]] = {
+    ConvexityGrade.BELOW: HedgeAdequacy.UNDER,
+    ConvexityGrade.WITHIN: HedgeAdequacy.ADEQUATE,
+    ConvexityGrade.ABOVE: HedgeAdequacy.OVER,
+}
 
 
 def _environment_verdict(
@@ -237,7 +232,7 @@ def _verdict_rationale(
 def decision_matrix(
     market_env: MarketEnvironment,
     *,
-    convexity_now_pct: float,
+    convexity_now_pct: float | None,
     ips_convexity: IpsConvexity,
     monetization_plan: MonetizationPlan | None = None,
 ) -> DecisionResult:
@@ -274,7 +269,10 @@ def decision_matrix(
         market_env: Market environment snapshot from
             :func:`assess_market_environment`.
         convexity_now_pct: Current convexity at the IPS crash scenario,
-            as a percentage (e.g. 18.0 for 18%).
+            as a percentage (e.g. 18.0 for 18%), or ``None`` when it could
+            not be measured. Graded by the convexity referee, inclusive at
+            both ends of the band: exactly at ``target_min_pct`` or
+            ``target_max_pct`` is ``ADEQUATE``.
         ips_convexity: IPS convexity band configuration.
         monetization_plan: Optional plan from
             :func:`build_monetization_plan`; ``value_to_harvest > 0``
@@ -285,10 +283,30 @@ def decision_matrix(
         contributing factors.
 
     """
-    adequacy = _classify_adequacy(convexity_now_pct, ips_convexity)
+    grading = grade_convexity(
+        convexity_now_pct,
+        ips_convexity,
+        at_shock_pct=ips_convexity.crash_scenario_pct,
+    )
     gains_available = (
         monetization_plan is not None and monetization_plan.value_to_harvest > 0
     )
+    adequacy = _ADEQUACY.get(grading.grade)
+    if adequacy is None:
+        return DecisionResult(
+            verdict=DecisionVerdict.INSUFFICIENT_DATA,
+            rationale=(
+                f"Crash convexity {COULD_NOT_BE_MEASURED}, so hedge adequacy"
+                " cannot be assessed. " + UNMEASURED_NOT_BREACHING
+            ),
+            # Not a data-quality note: the reports render this field as
+            # "withheld: data quality", and the market data is not the
+            # problem here. The rationale carries the reason.
+            data_quality_note=None,
+            hedge_adequacy=None,
+            cost_verdict=None,
+            gains_available=gains_available,
+        )
 
     if market_env.data_quality not in _VERDICT_QUALITIES:
         note = _withheld_quality_note(

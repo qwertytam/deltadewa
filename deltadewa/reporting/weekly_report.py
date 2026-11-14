@@ -103,6 +103,7 @@ from deltadewa.analysis import (
     evaluate_roll_status,
     verdict_reason,
 )
+from deltadewa.analysis.convexity_band import COULD_NOT_BE_MEASURED
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerReason,
     HedgeTriggerThresholds,
@@ -384,8 +385,9 @@ def _headline(
 ) -> str:
     """Derive the one-line triage verdict for this digest.
 
-    Precedence: an IPS compliance breach outranks a threshold crossing,
-    which outranks a quiet week. Branching on
+    Precedence: an IPS compliance breach outranks an unmeasured metric
+    (INCOMPLETE, #433), which outranks a threshold crossing, which outranks
+    a quiet week. Branching on
     ``snapshot.ips_compliance_all_pass`` (the authoritative flag) rather
     than on ``breaches`` being non-empty is what makes "NO ACTION requires
     overall PASS" true by construction (#296). The ``"STALE DATA — "``
@@ -397,8 +399,20 @@ def _headline(
     even though it can read ``data_quality == "STALE"`` through
     ``combined_quality``'s channel merge.
     """
-    if not snapshot.ips_compliance_all_pass:
-        failing = [row.metric for row in compliance.rows if not row.passes]
+    failing = list(compliance.failing_metrics)
+    unmeasured = compliance.unmeasured_metrics
+    if not snapshot.ips_compliance_all_pass and not failing and unmeasured:
+        # Nothing is breached, but a banded metric could not be read: not a
+        # clean week, and not a breach either (#433). Unmeasured is not
+        # breaching, so it never inherits BREACH's "Nth week" counter.
+        if len(unmeasured) == 1:
+            base = f"INCOMPLETE: {unmeasured[0]} {COULD_NOT_BE_MEASURED}"
+        else:
+            base = (
+                f"INCOMPLETE: {len(unmeasured)} IPS metrics "
+                f"{COULD_NOT_BE_MEASURED}"
+            )
+    elif not snapshot.ips_compliance_all_pass:
         weeks_by_metric = {b.metric: b.weeks for b in breaches}
         if len(failing) == 1:
             weeks = weeks_by_metric.get(failing[0], 1)

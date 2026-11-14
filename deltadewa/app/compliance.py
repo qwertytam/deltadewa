@@ -26,12 +26,20 @@ from dash import html
 from dash.development.base_component import Component
 
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
+    NOT_MEASURED,
+)
 from deltadewa.analysis.crash_payoff import compute_crash_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.market_environment import DataQuality
 from deltadewa.analysis.maturity import MaturityBuckets
-from deltadewa.analysis.monitor_scenario import build_scenario
+from deltadewa.analysis.monitor_scenario import (
+    build_scenario,
+    ips_anchor_dials,
+)
 from deltadewa.reporting.program_report import (
+    ComplianceStanding,
     CostSection,
     ProtectionSection,
     VegaSection,
@@ -132,13 +140,13 @@ def scorecard(
     compliance = build_ips_compliance(
         *compliance_sections_at_ips_anchor(portfolio, ips_config),
     )
-    convexity = ips_config.convexity
+    dials = ips_anchor_dials(portfolio, ips_config)
     scenario = build_scenario(
         portfolio,
         ips_config,
-        spot_pct=convexity.crash_scenario_pct,
-        vol_points=convexity.crash_vol_shock,
-        quantity=portfolio.underlying_quantity,
+        spot_pct=dials.spot_pct,
+        vol_points=dials.vol_points,
+        quantity=dials.quantity,
     )
     return Scorecard(compliance=compliance, efficiency=scenario.efficiency)
 
@@ -202,7 +210,8 @@ def compliance_strip(
         exactly that, rather than pinning a string).
 
     """
-    if compliance.all_pass:
+    standing = compliance.standing
+    if standing is ComplianceStanding.PASS:
         # The metrics are named from the rows themselves, never spelled out
         # here (#409). The old wording enumerated "carry and crash
         # convexity" as a literal, which stayed narrowly true while
@@ -216,13 +225,28 @@ def compliance_strip(
             "within policy."
         )
         modifier = "pass"
+    elif standing is ComplianceStanding.INCOMPLETE:
+        # Nothing is breached, but a banded metric could not be read: not a
+        # PASS (it was not checked) and not a FAIL (nothing breached).
+        text = (
+            "IPS compliance: INCOMPLETE — nothing is out of policy, but "
+            f"{', '.join(compliance.unmeasured_metrics)} "
+            f"{COULD_NOT_BE_MEASURED}."
+        )
+        modifier = "incomplete"
     else:
         clauses = [
             f"{row.metric} {row.actual} vs. target {row.target}"
             for row in compliance.rows
-            if not row.passes
+            if row.passes is False
         ]
         text = "IPS compliance: FAIL — " + "; ".join(clauses) + "."
+        if compliance.unmeasured_metrics:
+            text += (
+                f" {NOT_MEASURED.capitalize()}: "
+                + ", ".join(compliance.unmeasured_metrics)
+                + "."
+            )
         modifier = "fail"
 
     children: list[Component] = [

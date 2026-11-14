@@ -20,6 +20,19 @@ Implements the 5-step IPS-driven sizing framework:
    max affordable.
 5. Achieved convexity vs IPS target band.
 
+**Sizing basis (#436, decided 2026-11-13): gross.** Contracts are the
+minimum whose *gross* repriced crash value covers the offset; the convexity
+the strip grades (``crash_repricing.crash_convexity_pct``) is the *net*
+gain, after premium already paid. So a hedge sized exactly to the offset
+reads a little under ``offset / book`` and an offset-sized ladder
+can land just under the band floor (0.1pp at the margin flips PASS/FAIL).
+That is accepted, not a defect: premium is sunk but the offset is what must
+be recovered in the crash, and netting it would change contract counts
+everywhere. :data:`GROSS_SIZING_NOTE` states it wherever a sizing surface
+says "covers the offset" beside a convexity verdict, and
+``test_ladder.py::test_covering_the_offset_reads_below_it_net_of_premium``
+pins it. Changing the basis reopens #436.
+
 ``required_crash_offset`` and ``size_from_unit`` work on plain scalars
 and are independently unit-testable without any pricing dependency.
 ``size_hedge`` wraps them via
@@ -31,12 +44,14 @@ from __future__ import annotations
 import math
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from deltadewa.analysis.candidate import evaluate_candidate
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -95,8 +110,12 @@ class HedgeSizingResult:
             payoff, and not divided by the beta-adjusted notional: both
             made this figure disagree with the strip on the same legs.
             0.0 when the portfolio has no underlying position.
-        meets_convexity_target: True when ``achieved_convexity_pct`` lies
-            within the IPS band ``[target_min_pct, target_max_pct]``.
+        achieved_convexity: The referee's grading of
+            ``achieved_convexity_pct`` against the IPS band
+            (:func:`~deltadewa.analysis.convexity_band.grade_convexity`),
+            inclusive at both ends.
+        meets_convexity_target: Derived from ``achieved_convexity``:
+            True when the figure lies within the band.
 
     """
 
@@ -127,7 +146,20 @@ class HedgeSizingResult:
 
     # Steps 4-5 - convexity check
     achieved_convexity_pct: float
-    meets_convexity_target: bool
+    achieved_convexity: ConvexityGrading
+
+    @property
+    def meets_convexity_target(self) -> bool | None:
+        """Derived from the grading; ``None`` only if it was unmeasured."""
+        return self.achieved_convexity.meets
+
+
+GROSS_SIZING_NOTE: Final[str] = (
+    "Sized so the hedge's gross crash value covers the offset; convexity is "
+    "graded net of premium, so a hedge sized exactly to the offset reads a "
+    "little under it (gross sizing kept, #436)."
+)
+"""The one sentence every surface shows beside "covers the offset" (#436)."""
 
 
 @dataclass(frozen=True)
@@ -256,6 +288,10 @@ def size_from_unit(
 ) -> UnitSizingResult:
     """Pure scalar sizing math — no pricing, no portfolio.
 
+    Sizes on the **gross** payoff (#436): the minimum contracts whose
+    ``per_contract_payoff`` covers *required_offset*, with no premium netted
+    off. See the module docstring.
+
     Args:
         required_offset: Dollar crash loss the hedge must cover.
         per_contract_payoff: Intrinsic payoff of one contract at the crash
@@ -301,6 +337,9 @@ def sizing_basis(
     purpose: str,
 ) -> SizingBasis:
     """Build the :class:`SizingBasis` every sizing surface shares.
+
+    The offset it carries is covered on **gross** payoff (#436, decided
+    2026-11-13); see the module docstring.
 
     Args:
         portfolio: Live portfolio supplying the underlying position.
@@ -427,9 +466,10 @@ def size_hedge(
     achieved_convexity_pct = (
         sizing.contracts_needed * metrics.per_contract_convexity_pct
     )
-    conv = ips_config.convexity
-    meets_convexity_target = (
-        conv.target_min_pct <= achieved_convexity_pct <= conv.target_max_pct
+    achieved_convexity = grade_convexity(
+        achieved_convexity_pct,
+        ips_config.convexity,
+        at_shock_pct=basis.shock.crash_scenario_pct,
     )
 
     return HedgeSizingResult(
@@ -449,5 +489,5 @@ def size_hedge(
         carry_headroom=sizing.carry_headroom,
         max_affordable_contracts=sizing.max_affordable_contracts,
         achieved_convexity_pct=achieved_convexity_pct,
-        meets_convexity_target=meets_convexity_target,
+        achieved_convexity=achieved_convexity,
     )

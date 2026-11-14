@@ -8,6 +8,7 @@ from datetime import timedelta
 import pytest
 from dash.development.base_component import Component
 
+from deltadewa.analysis.convexity_band import ConvexityGrade, grade_convexity
 from deltadewa.analysis.ladder import (
     LadderSource,
     ProposedLadder,
@@ -15,6 +16,7 @@ from deltadewa.analysis.ladder import (
     materialize_ladder,
     size_ladder,
 )
+from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.app.compliance import scorecard
 from deltadewa.app.pages.design.planning import ladder_composer as composer
 from deltadewa.constants import OptionType
@@ -530,7 +532,6 @@ class TestDepthTableAgreesWithTheScorecard:
             ladder_depth_profile,
             profile_depths,
         )
-        from deltadewa.app import format as fmt
 
         ips = _ips()
         portfolio = _portfolio(_BIG_QTY)
@@ -560,6 +561,89 @@ class TestDepthTableAgreesWithTheScorecard:
             rungs_raw="20@1.5:35, 30@1.5:40, 40@1.5:25",
         )
 
-        rendered = fmt.percent(ips_row.combined_pct_of_book)
-        assert convexity_row.actual.startswith(rendered)
+        # The same figure, printed by the referee's rule (#434): a reading
+        # just under the floor reads "4.99%" beside its FAIL, where
+        # ``fmt.percent`` said "5.0%" next to a badge that said below.
+        rendered = grade_convexity(
+            ips_row.combined_pct_of_book,
+            ips.convexity,
+            at_shock_pct=ips_row.shock_pct,
+        ).display()
+        assert convexity_row.actual == rendered
         assert rendered in _text(panel)
+
+
+class TestGrossSizingNote:
+    """#436: the composer says sizing is gross and convexity is net."""
+
+    def test_the_shared_note_sits_beside_covers_the_offset(self) -> None:
+        panel = composer._render_composer_logic(
+            portfolio=_portfolio(_BIG_QTY),
+            ips_config=_ips(),
+            rungs_raw="20@1.5:35, 30@1.5:40, 40@1.5:25",
+        )
+
+        text = _text(panel)
+        assert "covers" in text
+        assert GROSS_SIZING_NOTE in text
+
+
+class TestIpsDepthRowIsTheRefereesDepth:
+    """One depth rule: the composer's graded row is the referee's."""
+
+    def test_a_depth_within_float_noise_is_the_ips_row_and_a_neighbour_is_not(
+        self,
+    ) -> None:
+        from deltadewa.analysis.ladder import ladder_depth_profile
+
+        ips = _ips()
+        portfolio = _portfolio(_BIG_QTY)
+        ladder, _ = _parse("20@1.5:35, 30@1.5:40, 40@1.5:25")
+        assert ladder is not None
+        sized = size_ladder(portfolio, ips, ladder)
+        shadow = materialize_ladder(portfolio, sized)
+        shock = sized.basis.shock
+        ips_pct = shock.crash_scenario_pct
+
+        rows = ladder_depth_profile(
+            shadow,
+            sized,
+            shock=shock,
+            depths=(ips_pct + 4e-5, ips_pct + 2e-4),
+        )
+
+        assert [row.is_ips_depth for row in rows] == [True, False]
+        for row in rows:
+            graded = grade_convexity(
+                row.combined_pct_of_book,
+                ips.convexity,
+                at_shock_pct=row.shock_pct,
+            )
+            assert (graded.grade is not ConvexityGrade.UNMEASURED) is (
+                row.is_ips_depth
+            )
+
+
+class TestComposerLabelsAndBaseline:
+    def test_a_fractional_depth_is_not_rounded_in_its_label(self) -> None:
+        assert composer._depth_label(-25.0) == "-25%"
+        assert composer._depth_label(-22.5) == "-22.5%"
+        assert composer._depth_label(10.0) == "+10%"
+
+    def test_the_baseline_at_the_graded_depth_is_the_scorecards_text(
+        self,
+    ) -> None:
+        ips = _ips()
+        portfolio = _portfolio(_BIG_QTY)
+
+        panel = composer._render_composer_logic(
+            portfolio=portfolio,
+            ips_config=ips,
+            rungs_raw="20@1.5:35, 30@1.5:40, 40@1.5:25",
+        )
+
+        baseline_row = composer._convexity_row(
+            scorecard(portfolio, ips).compliance,
+        )
+        assert baseline_row is not None
+        assert baseline_row.actual in _text(panel)

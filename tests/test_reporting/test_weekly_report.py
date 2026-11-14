@@ -10,6 +10,10 @@ from unittest.mock import patch
 
 import pytest
 
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    ConvexityGrading,
+)
 from deltadewa.analysis.roll_status import (
     MoneynessDrift,
     RollStatusRecord,
@@ -119,11 +123,13 @@ def _make_report(
         ),
         protection=ProtectionSection(
             payoff_vs_premium=8.5,
-            ips_crash_pct=-25.0,
-            convexity_pct=19.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-            meets_target=True,
+            convexity=ConvexityGrading(
+                value_pct=19.0,
+                min_pct=15.0,
+                max_pct=25.0,
+                shock_pct=-25.0,
+                grade=ConvexityGrade.WITHIN,
+            ),
             premium_paid=300_000.0,
             premium_basis="paid",
         ),
@@ -265,7 +271,13 @@ def _roll_record(
         leg_convexity_contribution_pct=4.5,
         convexity_target_min_pct=10.0,
         convexity_target_max_pct=20.0,
-        convexity_target_met=True,
+        convexity=ConvexityGrading(
+            value_pct=18.0,
+            min_pct=10.0,
+            max_pct=20.0,
+            shock_pct=-25.0,
+            grade=ConvexityGrade.WITHIN,
+        ),
         verdict=verdict,
         estimated_roll_up_cost=None,
         time_trigger=trigger,
@@ -733,6 +745,86 @@ class TestHeadlineMechanism:
         headline = _headline(diff, snapshot, compliance, ())
 
         assert headline.startswith("STALE DATA — ")
+
+
+class TestHeadlineForAnUnmeasuredMetric:
+    """#433: nothing breached, one metric unmeasured: INCOMPLETE, not BREACH."""
+
+    _CONVEXITY = "Crash convexity (-25% shock)"
+
+    def _compliance(
+        self,
+        *,
+        carry_passes: bool | None,
+        convexity_passes: bool | None,
+    ) -> IpsComplianceSection:
+        rows = (
+            IpsComplianceRow(
+                metric="Annual carry cost",
+                target="\u2264 1.00%",
+                actual="0.50%",
+                passes=carry_passes,
+            ),
+            IpsComplianceRow(
+                metric=self._CONVEXITY,
+                target="15.0%\u201325.0%",
+                actual="\u2014",
+                passes=convexity_passes,
+            ),
+        )
+        return IpsComplianceSection(
+            rows=rows,
+            all_pass=all(r.passes is True for r in rows),
+        )
+
+    def _headline(
+        self,
+        compliance: IpsComplianceSection,
+        *,
+        crossings: tuple[SnapshotChange, ...] = (),
+    ) -> str:
+        snapshot = replace(
+            _prior_snapshot(),
+            as_of=_AS_OF,
+            data_quality_alarm=False,
+            ips_compliance_all_pass=compliance.all_pass,
+            ips_compliance_rows=tuple(
+                (r.metric, r.passes) for r in compliance.rows
+            ),
+        )
+        diff = SnapshotDiff(
+            is_first_run=False,
+            prior_as_of=_PRIOR_AS_OF,
+            crossings=crossings,
+            material_moves=(),
+        )
+        return _headline(diff, snapshot, compliance, ())
+
+    def test_nothing_failing_and_one_unmeasured_is_incomplete(self) -> None:
+        headline = self._headline(
+            self._compliance(carry_passes=True, convexity_passes=None),
+        )
+
+        assert headline == (
+            f"INCOMPLETE: {self._CONVEXITY} could not be measured"
+        )
+
+    def test_incomplete_outranks_a_crossing_and_never_reads_no_action(
+        self,
+    ) -> None:
+        headline = self._headline(
+            self._compliance(carry_passes=True, convexity_passes=None),
+            crossings=(SnapshotChange(label="Decision verdict", detail="A"),),
+        )
+
+        assert headline.startswith("INCOMPLETE")
+
+    def test_a_breach_outranks_an_unmeasured_metric(self) -> None:
+        headline = self._headline(
+            self._compliance(carry_passes=False, convexity_passes=None),
+        )
+
+        assert headline.startswith("BREACH: Annual carry cost out of policy")
 
 
 class TestMonitorUrl:
@@ -1821,3 +1913,74 @@ class TestMainStateLoadFailure:
         message = mock_send.call_args.args[0]
         assert "FAILED to build" in message.subject
         mock_ping.assert_not_called()
+
+
+class TestTheDigestGradesWhatTheStripGrades:
+    """§6 of the digest and the /monitor strip are one verdict on one book.
+
+    The digest assembles its own crash, carry and vega inputs in
+    ``build_and_render`` (``reporting/`` may not import ``app/``), while the
+    strip builds them in ``app/compliance.compliance_sections_at_ips_anchor``.
+    ``compliance.py`` warns that a second copy of that glue is the drift it
+    exists to prevent, and nothing compared them. This does, on the §4 golden
+    book and on variants that change what each path has to handle (no
+    underlying, a short leg, a doubled underlying), with the real IPS,
+    through the digest's real build path.
+    """
+
+    @staticmethod
+    def _flatten_underlying(state: object) -> None:
+        state.portfolio.underlying_quantity = 0.0  # type: ignore[attr-defined]
+
+    @staticmethod
+    def _short_the_first_leg(state: object) -> None:
+        leg = state.portfolio.positions[0]  # type: ignore[attr-defined]
+        leg.quantity = -abs(leg.quantity)
+
+    @staticmethod
+    def _double_the_underlying(state: object) -> None:
+        portfolio = state.portfolio  # type: ignore[attr-defined]
+        portfolio.underlying_quantity = portfolio.underlying_quantity * 2.0
+
+    @pytest.mark.parametrize(
+        "variant",
+        [
+            None,
+            "_flatten_underlying",
+            "_short_the_first_leg",
+            "_double_the_underlying",
+        ],
+        ids=["golden", "no-underlying", "short-leg", "double-underlying"],
+    )
+    def test_the_digests_compliance_rows_equal_the_strips(
+        self,
+        seeded_export_dir: _MainFixture,
+        variant: str | None,
+    ) -> None:
+        from deltadewa.app.compliance import compliance_sections_at_ips_anchor
+        from deltadewa.reporting.program_report import build_ips_compliance
+        from deltadewa.reporting.weekly_report import build_and_render
+        from deltadewa.state import ProgramState
+
+        export_dir = seeded_export_dir.export_dir
+        state = ProgramState.load(export_dir, ips_path=_EXAMPLE_IPS_YAML)
+        ips = state.ips_config
+        assert ips is not None
+        if variant is not None:
+            getattr(self, variant)(state)
+
+        rendered = build_and_render(
+            state=state,
+            ips_config=ips,
+            as_of=_AS_OF,
+            period_label="Week of 2026-08-05",
+            export_dir=export_dir,
+        )
+        strip = build_ips_compliance(
+            *compliance_sections_at_ips_anchor(state.portfolio, ips),
+        )
+
+        digest_compliance = rendered.digest.report.ips_compliance
+        assert digest_compliance.rows == strip.rows
+        assert digest_compliance.standing is strip.standing
+        assert digest_compliance.all_pass is strip.all_pass

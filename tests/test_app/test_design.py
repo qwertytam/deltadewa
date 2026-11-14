@@ -32,6 +32,7 @@ from werkzeug.serving import make_server
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.candidate import CandidateMetrics
+from deltadewa.analysis.convexity_band import ConvexityGrade, ConvexityGrading
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
@@ -1384,12 +1385,20 @@ def _rung(  # pylint: disable=too-many-arguments
         contracts_needed=contracts_needed,
         implied_annual_carry=1_000.0,
         carry_budget=2_000.0,
-        within_budget=True,
+        # The cell's "meets target within budget" is derived (#434): it is
+        # the carry budget and the convexity band both holding, and the
+        # band holds here, so the flag is carried by ``within_budget``.
+        within_budget=meets_target_within_budget,
         carry_headroom=1_000.0,
         max_affordable_contracts=20,
         achieved_convexity_pct=achieved_convexity_pct,
-        meets_convexity=True,
-        meets_target_within_budget=meets_target_within_budget,
+        achieved_convexity=ConvexityGrading(
+            value_pct=achieved_convexity_pct,
+            min_pct=0.0,
+            max_pct=100.0,
+            shock_pct=-25.0,
+            grade=ConvexityGrade.WITHIN,
+        ),
     )
 
 

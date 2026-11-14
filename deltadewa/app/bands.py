@@ -26,6 +26,8 @@ def band_bar(
     low: float,
     high: float,
     fmt: Callable[[float], str] = _default_fmt,
+    within: bool | None = None,
+    value_text: str | None = None,
 ) -> html.Div:
     """Build a horizontal "is this in range" bar, labelled at five points.
 
@@ -50,6 +52,14 @@ def band_bar(
             :func:`deltadewa.app.format.percent`, a dollar panel
             :func:`deltadewa.app.format.currency`. Defaults to one
             decimal place, unitless.
+        within: The caller's own verdict on whether *value* is in the zone.
+            ``None`` (carry, vega, dollar bars) means the bar compares the
+            numbers itself, inclusive at both ends. A band with a referee
+            (crash convexity, #434) passes the referee's answer instead so
+            the marker's colour is its grade, never a second comparison.
+        value_text: Overrides the marker's own label. Convexity passes the
+            referee's display text so the figure never prints on the wrong
+            side of the band from the colour beside it.
 
     Returns:
         An ``html.Div`` (class ``band-bar``) containing a ``.band-track``
@@ -74,8 +84,8 @@ def band_bar(
     def _pct(point: float) -> float:
         return (point - domain_low) / domain_span * 100
 
-    within = low <= value <= high
-    marker_modifier = "within" if within else "outside"
+    in_zone = low <= value <= high if within is None else within
+    marker_modifier = "within" if in_zone else "outside"
 
     return html.Div(
         [
@@ -95,7 +105,7 @@ def band_bar(
                         style={"left": f"{_pct(value)}%"},
                     ),
                     html.Span(
-                        fmt(value),
+                        fmt(value) if value_text is None else value_text,
                         className=(
                             "band-value-label "
                             f"band-value-label--{marker_modifier}"

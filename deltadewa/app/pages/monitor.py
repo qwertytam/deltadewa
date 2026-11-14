@@ -32,8 +32,9 @@ from dash.development.base_component import Component
 
 from deltadewa import __version__
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import NOT_MEASURED, ConvexityGrade
+from deltadewa.analysis.crash_payoff import book_convexity_grading
 from deltadewa.analysis.crash_repricing import (
-    CrashShock,
     gross_quantity,
     hedge_value,
 )
@@ -46,6 +47,7 @@ from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.analysis.monitor_scenario import (
     build_scenario,
     build_scenario_curve,
+    ips_anchor_dials,
 )
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
@@ -73,6 +75,7 @@ from deltadewa.reporting.program_report import build_ips_compliance
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.analysis.monetization import MonetizationPlan
     from deltadewa.analysis.monitor_scenario import ScenarioResult
     from deltadewa.analysis.roll_status import RollStatusRecord
@@ -360,8 +363,7 @@ def _scenario_numbers(result: ScenarioResult) -> list[Component]:
 def _efficiency_sentence(
     result: ScenarioResult,
     *,
-    convexity_pct: float | None,
-    convexity_target_min_pct: float | None,
+    convexity: ConvexityGrading | None,
     vega_sufficiency_pct: float | None,
     vega_sufficiency_min_pct: float,
 ) -> html.P:
@@ -392,18 +394,19 @@ def _efficiency_sentence(
     **The "cheap but too small" combination (#304):** an ``ATTRACTIVE``
     reading paired with convexity below its target band, or vega
     sufficiency below its floor, is not a good deal — it is a small book
-    whose tiny carry makes the ratio look extreme. ``convexity_pct``/
-    ``convexity_target_min_pct`` and ``vega_sufficiency_pct``/
+    whose tiny carry makes the ratio look extreme. ``convexity`` (the
+    referee's grading, so "below its band" is the same word the strip and
+    the digest use, #434) and ``vega_sufficiency_pct``/
     ``vega_sufficiency_min_pct`` are book-level facts (not scenario-local
     like ``result``), passed in by the caller so this function never reads
     ``ips_config``/``portfolio`` itself.
 
     Args:
         result: This scenario's numbers.
-        convexity_pct: Book convexity at the IPS crash anchor, or ``None``
-            when no IPS convexity policy is loaded.
-        convexity_target_min_pct: IPS convexity band floor, or ``None``
-            alongside ``convexity_pct``.
+        convexity: The referee's grading of the book's convexity at the IPS
+            crash anchor, or ``None`` when no IPS convexity policy is
+            loaded. Only a ``BELOW`` grade is "too small"; an unmeasured
+            book is not.
         vega_sufficiency_pct: Book vega sufficiency, portfolio % impact
             per +10 vol points.
         vega_sufficiency_min_pct: IPS vega sufficiency band floor.
@@ -453,9 +456,7 @@ def _efficiency_sentence(
     )
 
     convexity_short = (
-        convexity_pct is not None
-        and convexity_target_min_pct is not None
-        and convexity_pct < convexity_target_min_pct
+        convexity is not None and convexity.grade is ConvexityGrade.BELOW
     )
     vega_short = (
         vega_sufficiency_pct is not None
@@ -485,12 +486,12 @@ def _cost_panel(
     result: ScenarioResult,
     ips_config: IpsConfig,
     *,
-    convexity_pct: float | None,
+    convexity: ConvexityGrading | None,
     vega_sufficiency_pct: float | None,
 ) -> list[Component]:
     """Build the cost-panel children: carry % of notional vs. IPS budget.
 
-    ``convexity_pct``/``vega_sufficiency_pct`` are book-level facts
+    ``convexity``/``vega_sufficiency_pct`` are book-level facts
     (unaffected by the scenario dials) threaded through to
     :func:`_efficiency_sentence` for the "cheap but too small" combination
     check (#304) — see that function's docstring.
@@ -547,8 +548,7 @@ def _cost_panel(
         ),
         _efficiency_sentence(
             result,
-            convexity_pct=convexity_pct,
-            convexity_target_min_pct=ips_config.convexity.target_min_pct,
+            convexity=convexity,
             vega_sufficiency_pct=vega_sufficiency_pct,
             vega_sufficiency_min_pct=ips_config.vega.sufficiency_min_pct,
         ),
@@ -590,19 +590,27 @@ def _decision_row(record: RollStatusRecord) -> html.Div:
     this one explains why a *leg* has no recommendation.
     """
     expired = record.verdict is RollVerdict.EXPIRED
-    trailing: Component = (
-        html.Span(
+    trailing: Component
+    if expired:
+        trailing = html.Span(
             "excluded from convexity",
             className="decision-note",
         )
-        if expired
-        else band_bar(
+    elif record.crash_convexity_pct is None:
+        # No protected book to be a percentage of: unmeasured, not a miss.
+        trailing = html.Span(
+            f"convexity {NOT_MEASURED} \u2014 no underlying position",
+            className="decision-note",
+        )
+    else:
+        trailing = band_bar(
             value=record.crash_convexity_pct,
             low=record.convexity_target_min_pct,
             high=record.convexity_target_max_pct,
             fmt=fmt.percent,
+            within=record.convexity_target_met,
+            value_text=record.convexity.display(),
         )
-    )
     return html.Div(
         [
             _verdict_badge(record),
@@ -872,9 +880,7 @@ def _build_scenario_explorer_panel(
 
     def _build() -> Component:
         convexity = ips_config.convexity
-        spot_pct = convexity.crash_scenario_pct
-        vol_points = convexity.crash_vol_shock
-        quantity = portfolio.underlying_quantity
+        spot_pct, vol_points, quantity = ips_anchor_dials(portfolio, ips_config)
 
         result = build_scenario(
             portfolio,
@@ -1000,7 +1006,7 @@ def _build_scenario_explorer_panel(
                     _cost_panel(
                         result,
                         ips_config,
-                        convexity_pct=protection_section.convexity_pct,
+                        convexity=protection_section.convexity,
                         vega_sufficiency_pct=vega_sufficiency_pct,
                     ),
                     id="cost-panel",
@@ -1211,11 +1217,7 @@ def register_callbacks(app: ProgramDashApp) -> None:
         # via the single-shock convexity call (not #298's full 51-point
         # compute_crash_convexity): unaffected by any of the three dials,
         # so it would be identical work repeated on every keystroke.
-        convexity_pct = PortfolioAnalyzer(
-            portfolio,
-        ).calculate_crash_convexity_pct(
-            CrashShock.from_ips(ips_config.convexity)
-        )
+        convexity = book_convexity_grading(portfolio, ips_config.convexity)
         vega_sufficiency_pct = PortfolioAnalyzer(
             portfolio,
         ).calculate_vega_sufficiency_pct()
@@ -1229,7 +1231,7 @@ def register_callbacks(app: ProgramDashApp) -> None:
             _cost_panel(
                 result,
                 ips_config,
-                convexity_pct=convexity_pct,
+                convexity=convexity,
                 vega_sufficiency_pct=vega_sufficiency_pct,
             ),
         )
@@ -1242,8 +1244,5 @@ def register_callbacks(app: ProgramDashApp) -> None:
         prevent_initial_call=True,
     )
     def _reset_dials(_n_clicks: int) -> tuple[float, float, float]:
-        return (
-            ips_config.convexity.crash_scenario_pct,
-            ips_config.convexity.crash_vol_shock,
-            app.program_state.portfolio.underlying_quantity,
-        )
+        dials = ips_anchor_dials(app.program_state.portfolio, ips_config)
+        return dials.spot_pct, dials.vol_points, dials.quantity

@@ -5,6 +5,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deltadewa.analysis import roll_status
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrading,
+    grade_convexity,
+)
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.roll_status import (
     RollVerdict,
@@ -179,6 +183,23 @@ class TestEstimateRollUpCost:
         assert cost > 0
 
 
+def _grading(
+    value_pct: float,
+    target_min_pct: float,
+    target_max_pct: float,
+) -> ConvexityGrading:
+    """The referee's grading of *value_pct* at the IPS depth."""
+    return grade_convexity(
+        value_pct,
+        IpsConvexity(
+            crash_scenario_pct=-25.0,
+            target_min_pct=target_min_pct,
+            target_max_pct=target_max_pct,
+        ),
+        at_shock_pct=-25.0,
+    )
+
+
 class TestTriggerHelpers:
     """Direct tests of the private trigger-verdict helpers."""
 
@@ -221,9 +242,7 @@ class TestTriggerHelpers:
     def test_convexity_trigger_roll_below_min(self) -> None:
         """Test ROLL when crash convexity is below the target band."""
         trigger = roll_status._convexity_trigger_verdict(
-            crash_convexity_pct=5.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            _grading(5.0, 15.0, 25.0),
         )
 
         assert trigger.verdict == RollVerdict.ROLL
@@ -233,9 +252,7 @@ class TestTriggerHelpers:
     def test_convexity_trigger_monitor_above_max(self) -> None:
         """Test MONITOR when crash convexity exceeds the target band."""
         trigger = roll_status._convexity_trigger_verdict(
-            crash_convexity_pct=40.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            _grading(40.0, 15.0, 25.0),
         )
 
         assert trigger.verdict == RollVerdict.MONITOR
@@ -245,9 +262,7 @@ class TestTriggerHelpers:
     def test_convexity_trigger_hold_within_band(self) -> None:
         """Test HOLD when crash convexity is within the target band."""
         trigger = roll_status._convexity_trigger_verdict(
-            crash_convexity_pct=20.0,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
+            _grading(20.0, 15.0, 25.0),
         )
 
         assert trigger.verdict == RollVerdict.HOLD

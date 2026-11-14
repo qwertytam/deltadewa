@@ -35,6 +35,7 @@ from deltadewa.ips_config import (
     IpsTriggers,
 )
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.reporting.program_report import build_protection_section
 
 # Two clearly-distinct crash moves used throughout: a shallow -10% and a deep
 # -30%. For a 90-strike put on a spot-100 book these bracket the strike, so
@@ -122,23 +123,34 @@ class TestCrashScenarioSingleSource:
 
         assert shallow != deep
 
-    def test_health_metrics_and_hedge_success_move_together(self) -> None:
-        """crash_convexity_pct AND hedge_success_pct track the scenario."""
+    def test_gauge_and_hedge_success_move_together(self) -> None:
+        """crash_convexity_pct AND hedge_success_pct track the scenario.
+
+        Repointed (#435) from the retired ``calculate_health_metrics`` dict
+        to the two methods it called, which are the live ones: the gauge is
+        what roll status, ``/monitor`` and the digest read.
+        """
         analyzer = PortfolioAnalyzer(_make_hedged_book())
 
-        shallow = analyzer.calculate_health_metrics(
-            cumulative_carry_paid=1_000.0,
-            crash=_make_ips(_SHALLOW_PCT).convexity,
-        )
-        deep = analyzer.calculate_health_metrics(
-            cumulative_carry_paid=1_000.0,
-            crash=_make_ips(_DEEP_PCT).convexity,
-        )
+        def _read(crash_scenario_pct: float) -> tuple[float | None, float]:
+            ips = _make_ips(crash_scenario_pct).convexity
+            return (
+                analyzer.calculate_crash_convexity_pct(
+                    CrashShock.from_ips(ips)
+                ),
+                analyzer.calculate_hedge_success_pct(
+                    1_000.0,
+                    ips.crash_scenario_pct,
+                ),
+            )
 
-        assert shallow["crash_convexity_pct"] != deep["crash_convexity_pct"]
-        assert shallow["hedge_success_pct"] != deep["hedge_success_pct"]
+        shallow_gauge, shallow_success = _read(_SHALLOW_PCT)
+        deep_gauge, deep_success = _read(_DEEP_PCT)
 
-    def test_health_metrics_apply_the_bundled_vol_shock(self) -> None:
+        assert shallow_gauge != deep_gauge
+        assert shallow_success != deep_success
+
+    def test_gauge_applies_the_bundled_vol_shock(self) -> None:
         """The bundled crash vol shock reaches the gauge (never zeroed).
 
         Regression for the diverging-knobs trap: before the fix a caller could
@@ -149,16 +161,18 @@ class TestCrashScenarioSingleSource:
         """
         analyzer = PortfolioAnalyzer(_make_hedged_book())
 
-        spot_only = analyzer.calculate_health_metrics(
-            crash=_make_ips(_DEEP_PCT, crash_vol_shock=0.0).convexity,
+        spot_only = analyzer.calculate_crash_convexity_pct(
+            CrashShock.from_ips(
+                _make_ips(_DEEP_PCT, crash_vol_shock=0.0).convexity,
+            ),
         )
-        shocked = analyzer.calculate_health_metrics(
-            crash=_make_ips(_DEEP_PCT, crash_vol_shock=0.30).convexity,
+        shocked = analyzer.calculate_crash_convexity_pct(
+            CrashShock.from_ips(
+                _make_ips(_DEEP_PCT, crash_vol_shock=0.30).convexity,
+            ),
         )
 
-        assert (
-            spot_only["crash_convexity_pct"] != shocked["crash_convexity_pct"]
-        )
+        assert spot_only != shocked
 
     def test_scenario_table_moves_with_scenario(self) -> None:
         """The scenario table's IPS-anchored payoff ratio tracks the move."""
@@ -196,17 +210,24 @@ class TestCrashScenarioSingleSource:
 
         assert shallow[0].crash_convexity_pct != deep[0].crash_convexity_pct
 
-    def test_missing_scenario_degrades_to_zero_not_a_literal(self) -> None:
-        """With no IPS the crash gauges are disabled (0.0, never hardcoded)."""
-        analyzer = PortfolioAnalyzer(_make_hedged_book())
+    def test_missing_policy_is_ungraded_not_a_literal_zero(self) -> None:
+        """With no IPS convexity policy nothing is graded (not a 0.0).
 
-        metrics = analyzer.calculate_health_metrics(
-            cumulative_carry_paid=1_000.0,
-            crash=None,
+        Was "the crash gauges read 0.0" on ``calculate_health_metrics(
+        crash=None)``; that dict is retired (#435). The live path that has
+        no policy is ``build_protection_section`` with no ``IpsConvexity``,
+        which carries no grading at all.
+        """
+        result = compute_crash_convexity(
+            _make_hedged_book(),
+            shock=CrashShock.from_ips(_make_ips(_DEEP_PCT).convexity),
         )
 
-        assert metrics["crash_convexity_pct"] == pytest.approx(0.0, rel=1e-8)
-        assert metrics["hedge_success_pct"] == pytest.approx(0.0, rel=1e-8)
+        protection = build_protection_section(result)
+
+        assert protection.convexity is None
+        assert protection.convexity_pct is None
+        assert protection.meets_target is None
 
     def test_no_crash_scenario_literal_in_health_source(self) -> None:
         """grep guard: no hardcoded crash move survives in health.py."""

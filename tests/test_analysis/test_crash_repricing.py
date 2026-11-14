@@ -1113,19 +1113,26 @@ class TestHedgeOnlyInvariant:
 
         assert conv_doubled == pytest.approx(conv_base / 2.0)
 
-    def test_empty_book_convexity_is_zero(self) -> None:
-        """No equity leg -> undefined book -> convexity reads 0.0."""
+    def test_empty_book_convexity_is_unmeasured(self) -> None:
+        """No equity leg -> undefined ratio -> ``None``, not a measured 0.0.
+
+        Was ``0.0`` before #433: every grader then read the zero as a real
+        below-band miss. The referee turns ``None`` into ``UNMEASURED``.
+        """
         portfolio = _make_appendix_book(underlying_quantity=0.0)
 
-        assert cr.crash_convexity_pct(
-            portfolio,
-            shock=CrashShock(
-                crash_scenario_pct=_APPENDIX_PCT,
-                crash_vol_shock=_APPENDIX_VOL_SHOCK,
-                skew_steepening=0.0,
-                skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
-            ),
-        ) == pytest.approx(0.0, rel=1e-8)
+        assert (
+            cr.crash_convexity_pct(
+                portfolio,
+                shock=CrashShock(
+                    crash_scenario_pct=_APPENDIX_PCT,
+                    crash_vol_shock=_APPENDIX_VOL_SHOCK,
+                    skew_steepening=0.0,
+                    skew_reference_delta=_APPENDIX_SKEW_ANCHOR,
+                ),
+            )
+            is None
+        )
 
 
 class TestRepricedInvariant:

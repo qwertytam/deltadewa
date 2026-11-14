@@ -704,7 +704,7 @@ def crash_convexity_pct(
     *,
     shock: CrashShock,
     positions: Sequence[OptionPosition] | None = None,
-) -> float:
+) -> float | None:
     """Crash convexity: hedge-only value change as % of the protected book (§1).
 
     ``(V_crash - V_today) / P_today * 100`` where ``V`` is the hedge-only option
@@ -727,13 +727,18 @@ def crash_convexity_pct(
             convexity" through this, not through a formula of their own.
 
     Returns:
-        Crash convexity as a percentage of the protected book. ``0.0`` when the
-        book is empty (no underlying), since the ratio is then undefined.
+        Crash convexity as a percentage of the protected book, or ``None``
+        when the book is empty (no underlying): the ratio is then undefined,
+        and an undefined ratio is *unmeasured*, not a measured ``0.0`` that
+        every downstream grader would then read as a below-band miss (#433).
+        The convexity referee
+        (:func:`~deltadewa.analysis.convexity_band.grade_convexity`) turns
+        ``None`` into ``UNMEASURED``.
 
     """
     book = abs(portfolio.underlying_quantity * portfolio.spot_price)
     if book == 0:
-        return 0.0
+        return None
     v_today = hedge_value(portfolio, positions=positions)
     v_crash = crash_hedge_value(portfolio, shock=shock, positions=positions)
     return (v_crash - v_today) / book * 100.0

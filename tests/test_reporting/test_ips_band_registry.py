@@ -49,6 +49,10 @@ from typing import Final
 
 import pytest
 
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    ConvexityGrading,
+)
 from deltadewa.ips_config import (
     IpsBudget,
     IpsConfig,
@@ -306,11 +310,13 @@ def _passing_cost() -> CostSection:
 def _passing_protection() -> ProtectionSection:
     return ProtectionSection(
         payoff_vs_premium=8.5,
-        ips_crash_pct=-25.0,
-        convexity_pct=15.0,
-        target_min_pct=10.0,
-        target_max_pct=20.0,
-        meets_target=True,
+        convexity=ConvexityGrading(
+            value_pct=15.0,
+            min_pct=10.0,
+            max_pct=20.0,
+            shock_pct=-25.0,
+            grade=ConvexityGrade.WITHIN,
+        ),
         premium_paid=300_000.0,
         premium_basis="paid",
     )

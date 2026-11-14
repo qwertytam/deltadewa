@@ -30,6 +30,10 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
 from deltadewa import constants as const
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    format_band_edge,
+)
 from deltadewa.analysis.roll_status import (
     RollStatusRecord,
     RollVerdict,
@@ -44,7 +48,8 @@ from deltadewa.constants import OptionType
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from deltadewa.ips_config import IpsConfig, IpsConvexity, IpsTriggers
+    from deltadewa.analysis.convexity_band import ConvexityGrading
+    from deltadewa.ips_config import IpsConfig, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
 
@@ -123,8 +128,11 @@ class RollPlanRecord:
             credit (#333). ``None`` when *target_strike* is ``None``.
         convexity_now_pct: Portfolio crash-convexity at the IPS crash
             scenario (net P&L as % of book notional).
-        meets_convexity_target: ``True`` when *convexity_now_pct* lies
-            within the IPS target band.
+        convexity: The referee's grading of *convexity_now_pct* against the
+            IPS target band (#434) — the one grade the roll status table, the
+            compliance strip and this plan all read.
+        meets_convexity_target: Derived from *convexity*: ``True`` when the
+            reading lies within the band, ``None`` when it was unmeasured.
         gamma: Per-contract gamma of the current position
             (option gamma x contract_size).
         theta: Per-contract theta of the current position in $/day
@@ -141,20 +149,24 @@ class RollPlanRecord:
     target_basis: str
     target_strike: float | None
     roll_up_cost: float | None
-    convexity_now_pct: float
-    meets_convexity_target: bool
+    convexity_now_pct: float | None
+    convexity: ConvexityGrading
     gamma: float
     theta: float
     rationale: str
+
+    @property
+    def meets_convexity_target(self) -> bool | None:
+        """Derived from the grading; ``None`` when unmeasured."""
+        return self.convexity.meets
 
 
 def gamma_theta_delay(
     *,
     months_to_maturity: float,
-    convexity_now_pct: float,
+    convexity: ConvexityGrading,
     drift_pct: float | None,
     ips_triggers: IpsTriggers,
-    ips_convexity: IpsConvexity,
 ) -> bool:
     """Return True when the gamma/theta nuance says to defer the roll.
 
@@ -171,7 +183,8 @@ def gamma_theta_delay(
        because a put drifting toward the strike is accumulating
        favourable gamma that a mechanical roll would throw away;
     3. the key check — crash convexity at current spot still meets the
-       IPS target band.
+       IPS target band (the referee's ``WITHIN``, inclusive at both edges;
+       an unmeasured reading is not "still met").
 
     Condition 2 is not optional garnish. Without it the deferral also
     catches the *opposite* case: a put pushed further OTM by a market
@@ -197,7 +210,8 @@ def gamma_theta_delay(
 
     Args:
         months_to_maturity: Calendar months remaining to expiry.
-        convexity_now_pct: Current portfolio crash-convexity percent.
+        convexity: The referee's grading of the book's crash convexity
+            (:func:`~deltadewa.analysis.convexity_band.grade_convexity`).
         drift_pct: Signed change in %OTM since entry (see
             :class:`~deltadewa.analysis.roll_status.MoneynessDrift`) —
             negative means the option has moved nearer the money.
@@ -206,8 +220,6 @@ def gamma_theta_delay(
             unverifiable, so the roll stands.
         ips_triggers: IPS trigger thresholds (supplies
             ``roll_at_months_remaining``).
-        ips_convexity: IPS convexity target band (supplies
-            ``target_min_pct`` / ``target_max_pct``).
 
     Returns:
         ``True`` only when all three conditions hold and the roll should
@@ -219,11 +231,7 @@ def gamma_theta_delay(
     not_in_roll_window = (
         months_to_maturity > ips_triggers.roll_at_months_remaining
     )
-    in_target_band = (
-        ips_convexity.target_min_pct
-        <= convexity_now_pct
-        <= ips_convexity.target_max_pct
-    )
+    in_target_band = convexity.grade is ConvexityGrade.WITHIN
     nearer_the_money = drift_pct is not None and drift_pct < 0
     return not_in_roll_window and in_target_band and nearer_the_money
 
@@ -258,10 +266,10 @@ def rally_review_cleared(record: RollStatusRecord) -> bool:
        approaching its roll window is due a look regardless of how the
        book's convexity reads, so a Rule 1 REVIEW still reaches
        ``DELAY``/``ROLL_NOW`` as before.
-    4. ``record.convexity_target_met`` — the condition itself, read off the
-       one boolean
-       :func:`~deltadewa.analysis.roll_status.meets_convexity_target`
-       resolved for the whole book, never recomputed here.
+    4. ``record.convexity`` is ``WITHIN`` — the condition itself, read off
+       the one grading the referee
+       (:func:`~deltadewa.analysis.convexity_band.grade_convexity`) resolved
+       for the whole book, never recomputed here.
 
     Args:
         record: One leg's roll status, from
@@ -278,7 +286,7 @@ def rally_review_cleared(record: RollStatusRecord) -> bool:
         record.verdict is RollVerdict.REVIEW
         and record.rally_trigger.verdict is RollVerdict.REVIEW
         and record.time_trigger.verdict is not RollVerdict.REVIEW
-        and record.convexity_target_met
+        and record.convexity.grade is ConvexityGrade.WITHIN
     )
 
 
@@ -315,11 +323,11 @@ def _roll_now_rationale(record: RollStatusRecord) -> str:
             f"Time trigger: {record.days_to_maturity}d to expiry"
             f" inside {record.roll_window_days}d roll window."
         )
-    if record.crash_convexity_pct < record.convexity_target_min_pct:
+    if record.convexity.grade is ConvexityGrade.BELOW:
+        floor = format_band_edge(record.convexity_target_min_pct, min_places=1)
         return (
-            f"Convexity {record.crash_convexity_pct:.1f}%"
-            f" below target minimum"
-            f" {record.convexity_target_min_pct:.1f}%."
+            f"Convexity {record.convexity.display()}"
+            f" below target minimum {floor}%."
         )
     if record.rally_trigger.verdict == record.verdict:
         reason = record.rally_trigger.reason
@@ -334,16 +342,15 @@ def _delay_rationale(
     record: RollStatusRecord,
     *,
     months_to_maturity: float,
-    convexity_now_pct: float,
     ips_triggers: IpsTriggers,
-    ips_convexity: IpsConvexity,
 ) -> str:
     """Spell out all three conditions that earned a DELAY.
 
     A bare "DELAY" on a fired trigger reads as the tool ignoring a live
     signal, so name each leg of :func:`gamma_theta_delay`'s test against
     the IPS value it was measured on. Every threshold quoted here comes
-    from *ips_triggers* / *ips_convexity* — none is a literal.
+    from *ips_triggers* and the record's convexity grading — none is a
+    literal.
     """
     drift = record.moneyness.drift_pct
     nearer_pct = abs(drift) if drift is not None else 0.0
@@ -353,9 +360,8 @@ def _delay_rationale(
         " entry, so it is gaining gamma;"
         f" {months_to_maturity:.1f} mo to expiry is still outside the"
         f" {ips_triggers.roll_at_months_remaining:.0f} mo roll window;"
-        f" and crash convexity {convexity_now_pct:.1f}% is inside the"
-        f" {ips_convexity.target_min_pct:.0f}-"
-        f"{ips_convexity.target_max_pct:.0f}% IPS target band."
+        f" and crash convexity {record.convexity.display()} is inside the"
+        f" {record.convexity.band_display(sep='-')} IPS target band."
         " Revisit when any of the three stops holding."
     )
 
@@ -559,7 +565,6 @@ def build_roll_plan(
     by_position = {r.position.position_id: r for r in status_records}
     structures = group_into_structures(portfolio.positions)
     spot = portfolio.spot_price
-    ips_convexity = ips_config.convexity
     ips_triggers = ips_config.triggers
 
     plans: dict[str, RollPlanRecord] = {}
@@ -570,7 +575,6 @@ def build_roll_plan(
                 by_position=by_position,
                 portfolio=portfolio,
                 spot=spot,
-                ips_convexity=ips_convexity,
                 ips_triggers=ips_triggers,
                 target_basis=target_basis,
                 target_delta=target_delta,
@@ -593,8 +597,8 @@ def _excluded(
 ) -> RollPlanRecord:
     """Build a record for a leg this planner declines to recommend on.
 
-    ``meets_convexity_target`` is still read off the record rather than
-    hardcoded ``False`` (#408). It is a **book**-level fact, like the
+    ``convexity`` is still read off the record rather than hardcoded
+    "not met" (#408). It is a **book**-level fact, like the
     ``convexity_now_pct`` beside it — a leg getting no roll recommendation
     does not make the book's convexity target unmet, and a field saying
     otherwise is a wrong number waiting for its first reader.
@@ -609,7 +613,7 @@ def _excluded(
         target_strike=None,
         roll_up_cost=None,
         convexity_now_pct=record.crash_convexity_pct,
-        meets_convexity_target=record.convexity_target_met,
+        convexity=record.convexity,
         gamma=record.position.option.gamma() * record.position.contract_size,
         theta=record.position.option.theta() * record.position.contract_size,
         rationale=reason,
@@ -649,7 +653,6 @@ def _decide_action(
     record: RollStatusRecord,
     *,
     ips_triggers: IpsTriggers,
-    ips_convexity: IpsConvexity,
 ) -> tuple[RollAction, str]:
     """Map one leg's roll verdict to an action, and say why.
 
@@ -669,7 +672,6 @@ def _decide_action(
     Args:
         record: One leg's roll status.
         ips_triggers: IPS trigger policy (the roll window).
-        ips_convexity: IPS convexity policy (the target band).
 
     Returns:
         The action and its rationale. Every rationale states its grounds:
@@ -678,7 +680,6 @@ def _decide_action(
 
     """
     months_to_maturity = record.days_to_maturity / const.CALENDAR_DAYS_PER_MONTH
-    convexity_now_pct = record.crash_convexity_pct
 
     if record.verdict not in (RollVerdict.ROLL, RollVerdict.REVIEW):
         return RollAction.HOLD, "No trigger active; holding."
@@ -686,17 +687,14 @@ def _decide_action(
         return RollAction.CHECKED, _checked_rationale(record)
     if gamma_theta_delay(
         months_to_maturity=months_to_maturity,
-        convexity_now_pct=convexity_now_pct,
+        convexity=record.convexity,
         drift_pct=record.moneyness.drift_pct,
         ips_triggers=ips_triggers,
-        ips_convexity=ips_convexity,
     ):
         return RollAction.DELAY, _delay_rationale(
             record,
             months_to_maturity=months_to_maturity,
-            convexity_now_pct=convexity_now_pct,
             ips_triggers=ips_triggers,
-            ips_convexity=ips_convexity,
         )
     return RollAction.ROLL_NOW, _roll_now_rationale(record)
 
@@ -707,7 +705,6 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
     by_position: dict[str, RollStatusRecord],
     portfolio: OptionPortfolio,
     spot: float,
-    ips_convexity: IpsConvexity,
     ips_triggers: IpsTriggers,
     target_basis: Literal["entry_otm", "delta"],
     target_delta: float | None,
@@ -762,13 +759,11 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
         convexity_now_pct = record.crash_convexity_pct
         # Read off the record, not recomputed (#408): the roll-status
         # table's convexity trigger, the rally REVIEW band's condition and
-        # this plan now grade on one boolean, so they cannot disagree about
+        # this plan now read one grading, so they cannot disagree about
         # whether the target is met for a book they are both describing.
-        meets_convexity_target = record.convexity_target_met
         action, rationale = _decide_action(
             record,
             ips_triggers=ips_triggers,
-            ips_convexity=ips_convexity,
         )
         if structure.is_spread:
             rationale = (
@@ -786,7 +781,7 @@ def _plan_structure(  # pylint: disable=too-many-arguments,too-many-locals  # on
             target_strike=anchor_target,
             roll_up_cost=roll_up_cost,
             convexity_now_pct=convexity_now_pct,
-            meets_convexity_target=meets_convexity_target,
+            convexity=record.convexity,
             gamma=leg.option.gamma() * leg.contract_size,
             theta=leg.option.theta() * leg.contract_size,
             rationale=rationale,

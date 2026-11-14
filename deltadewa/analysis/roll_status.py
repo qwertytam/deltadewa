@@ -14,6 +14,14 @@ from typing import TYPE_CHECKING, Final
 
 from deltadewa import constants as const
 from deltadewa.analysis.base import PortfolioAnalyzer
+from deltadewa.analysis.convexity_band import (
+    COULD_NOT_BE_MEASURED,
+    NOT_MEASURED,
+    UNMEASURED_NOT_BREACHING,
+    ConvexityGrade,
+    ConvexityGrading,
+    grade_convexity,
+)
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
     crash_hedge_value,
@@ -25,7 +33,7 @@ from deltadewa.constants import OptionType
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
-    from deltadewa.ips_config import IpsConfig, IpsConvexity, IpsTriggers
+    from deltadewa.ips_config import IpsConfig, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
 
@@ -125,29 +133,35 @@ class RollStatusRecord:
     from pricing entirely (#362). Zero would read as "this leg is worthless";
     ``None`` reads as "this leg was not priced", which is what happened.
 
-    ``convexity_target_met`` is :func:`meets_convexity_target` applied to
-    ``crash_convexity_pct`` and the band beside it, resolved once here so
-    every consumer grades on the same boolean rather than repeating the
-    comparison (#408). Like ``crash_convexity_pct`` itself it is a
-    **book-level** fact, so it is populated for an expired leg too — the
-    book has a convexity standing whether or not this particular leg
-    contributed to it.
+    ``convexity`` is the referee's grading
+    (:func:`~deltadewa.analysis.convexity_band.grade_convexity`) of
+    ``crash_convexity_pct`` against the band beside it, resolved once here so
+    every consumer reads one grade rather than repeating the comparison
+    (#408, #434). ``convexity_target_met`` is derived from it, never stored.
+    Like ``crash_convexity_pct`` itself it is a **book-level** fact, so it is
+    populated for an expired leg too — the book has a convexity standing
+    whether or not this particular leg contributed to it.
     """
 
     position: OptionPosition
     moneyness: MoneynessDrift
     days_to_maturity: int
     roll_window_days: int
-    crash_convexity_pct: float
+    crash_convexity_pct: float | None
     leg_convexity_contribution_pct: float | None
     convexity_target_min_pct: float
     convexity_target_max_pct: float
-    convexity_target_met: bool
+    convexity: ConvexityGrading
     verdict: RollVerdict
     estimated_roll_up_cost: float | None
     time_trigger: TriggerReason
     convexity_trigger: TriggerReason
     rally_trigger: TriggerReason
+
+    @property
+    def convexity_target_met(self) -> bool | None:
+        """Whether the book's convexity is in band; ``None`` if unmeasured."""
+        return self.convexity.meets
 
 
 def _otm_pct(option_type: OptionType, spot: float, strike: float) -> float:
@@ -234,60 +248,28 @@ def _time_trigger_verdict(
     return TriggerReason(RollVerdict.HOLD, reason=reason)
 
 
-def meets_convexity_target(
-    crash_convexity_pct: float,
-    *,
-    target_min_pct: float,
-    target_max_pct: float,
-) -> bool:
-    """Whether book crash convexity lies inside the IPS target band.
+def _convexity_trigger_verdict(convexity: ConvexityGrading) -> TriggerReason:
+    """Grade the convexity trigger from the referee's grading.
 
-    The program's one band-membership test (#408). Three callers used to
-    write this comparison out for themselves — the convexity trigger below,
-    the handbook's Rule 2 REVIEW-band condition, and ``roll_planner``'s
-    ``RollPlanRecord.meets_convexity_target`` — which is three chances for
-    "is the target met" to answer differently on two panels showing the
-    same book. The answer is now computed once and carried on
-    :attr:`RollStatusRecord.convexity_target_met`.
-
-    Band membership only: it does not say *which* side an out-of-band
-    reading fell on. :func:`_convexity_trigger_verdict` still needs that
-    (below the floor is under-hedged and grades ``ROLL``; above the ceiling
-    is over-hedged and grades ``MONITOR``), so it asks that question
-    separately.
-
-    Args:
-        crash_convexity_pct: The book's crash convexity, as a percent of
-            book notional.
-        target_min_pct: IPS band floor.
-        target_max_pct: IPS band ceiling.
-
-    Returns:
-        ``True`` when the reading is inside the band, inclusive of both
-        edges — the same convention
-        :attr:`~deltadewa.reporting.program_report.ProtectionSection.meets_target`
-        uses, and pinned against it by test.
-
+    Below the floor is under-hedged and grades ``ROLL``; above the ceiling is
+    over-hedged and grades ``MONITOR``; inside the band (inclusive) is
+    ``HOLD``. An unmeasured reading is ``HOLD`` with a reason saying so: it
+    is neither a breach nor a pass (#433).
     """
-    return target_min_pct <= crash_convexity_pct <= target_max_pct
-
-
-def _convexity_trigger_verdict(
-    crash_convexity_pct: float,
-    target_min_pct: float,
-    target_max_pct: float,
-) -> TriggerReason:
+    if convexity.grade is ConvexityGrade.UNMEASURED:
+        return TriggerReason(
+            RollVerdict.HOLD,
+            reason=(
+                f"crash convexity {NOT_MEASURED}. {UNMEASURED_NOT_BREACHING}"
+            ),
+        )
     reason = (
-        f"{crash_convexity_pct:.1f}% convexity vs "
-        f"{target_min_pct:.0f}-{target_max_pct:.0f}% band"
+        f"{convexity.display()} convexity vs "
+        f"{convexity.band_display(sep='-')} band"
     )
-    if crash_convexity_pct < target_min_pct:
+    if convexity.grade is ConvexityGrade.BELOW:
         return TriggerReason(RollVerdict.ROLL, reason=reason)
-    if not meets_convexity_target(
-        crash_convexity_pct,
-        target_min_pct=target_min_pct,
-        target_max_pct=target_max_pct,
-    ):
+    if convexity.grade is ConvexityGrade.ABOVE:
         return TriggerReason(RollVerdict.MONITOR, reason=reason)
     return TriggerReason(RollVerdict.HOLD, reason=reason)
 
@@ -334,34 +316,30 @@ def rally_from_entry_pct(
     return (current_spot - entry_spot) / entry_spot * 100.0
 
 
-def _convexity_recheck(
-    crash_convexity_pct: float,
-    convexity: IpsConvexity,
-) -> str:
+def _convexity_recheck(convexity: ConvexityGrading) -> str:
     """Resolve the REVIEW band's "if the convexity target is no longer met".
 
     One sentence, stating the recomputation and its answer, so the
     conditional never reaches a reader unevaluated (#408). Both branches
     quote the reading and the band they were measured against — the same
     never-a-bare-verdict convention every other reason in this module
-    follows.
+    follows. The answer is the referee's grade, not a second comparison.
     """
-    band = (
-        f"{convexity.target_min_pct:.0f}-{convexity.target_max_pct:.0f}%"
-        " IPS target band"
-    )
-    if meets_convexity_target(
-        crash_convexity_pct,
-        target_min_pct=convexity.target_min_pct,
-        target_max_pct=convexity.target_max_pct,
-    ):
+    band = f"{convexity.band_display(sep='-')} IPS target band"
+    if convexity.grade is ConvexityGrade.UNMEASURED:
         return (
-            f"Recomputed: crash convexity {crash_convexity_pct:.1f}% is"
+            f"Recomputed: crash convexity {COULD_NOT_BE_MEASURED}, so the"
+            " target cannot be said to be met or not met."
+            f" {UNMEASURED_NOT_BREACHING}"
+        )
+    if convexity.grade is ConvexityGrade.WITHIN:
+        return (
+            f"Recomputed: crash convexity {convexity.display()} is"
             f" still inside the {band}, so the target IS met and this"
             " band calls for no roll."
         )
     return (
-        f"Recomputed: crash convexity {crash_convexity_pct:.1f}% is"
+        f"Recomputed: crash convexity {convexity.display()} is"
         f" outside the {band}, so the target is no longer met — roll"
         " strikes up."
     )
@@ -371,8 +349,7 @@ def _rally_trigger_verdict(
     rally_pct: float | None,
     triggers: IpsTriggers,
     *,
-    crash_convexity_pct: float,
-    convexity: IpsConvexity,
+    convexity: ConvexityGrading,
 ) -> TriggerReason:
     """Band a rally-since-entry reading against the handbook's four bands.
 
@@ -391,7 +368,7 @@ def _rally_trigger_verdict(
     evaluating the "if" left three surfaces (``/design``'s roll plan and
     roll status table, ``/monitor``'s Decisions) each handing the reader an
     open conditional, and the roll planner completing it in the wrong
-    direction. So *crash_convexity_pct* / *convexity* come in here, where
+    direction. So the book's convexity grading comes in here, where
     the conditional is written, and the answer is appended to the reason —
     which every one of those surfaces already renders. Resolving it once at
     the source is what makes them agree by construction rather than by
@@ -407,9 +384,8 @@ def _rally_trigger_verdict(
         rally_pct: Percent rally since this tranche's own entry spot, or
             ``None`` when it has none recorded.
         triggers: IPS trigger policy, supplying the four band edges.
-        crash_convexity_pct: The book's crash convexity — the reading the
-            REVIEW band's condition is stated against.
-        convexity: IPS convexity policy, supplying the target band.
+        convexity: The referee's grading of the book's crash convexity —
+            the reading the REVIEW band's condition is stated against.
 
     Returns:
         The band's verdict and a reason naming the reading, the band, the
@@ -457,7 +433,7 @@ def _rally_trigger_verdict(
                 f"{reading} — REVIEW band ({triggers.rally_review_pct:.0f}-"
                 f"{triggers.rally_action_pct:.0f}%): roll strikes up if the"
                 " convexity target is no longer met."
-                f" {_convexity_recheck(crash_convexity_pct, convexity)}"
+                f" {_convexity_recheck(convexity)}"
             ),
         )
     if rally_pct >= triggers.rally_monitor_pct:
@@ -648,13 +624,13 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
     # state — the property that makes the contributions sum back to it (#306).
     shock = CrashShock.from_ips(convexity)
     crash_convexity_pct = analyzer.calculate_crash_convexity_pct(shock)
-    # Resolved once for the whole book (#408): the convexity trigger, the
-    # rally REVIEW band's own condition, and the roll planner's action all
-    # grade on this one boolean rather than three separate comparisons.
-    convexity_target_met = meets_convexity_target(
+    # Resolved once for the whole book (#408, #434): the convexity trigger,
+    # the rally REVIEW band's own condition, and the roll planner's action
+    # all read this one grading rather than three separate comparisons.
+    convexity_grading = grade_convexity(
         crash_convexity_pct,
-        target_min_pct=convexity.target_min_pct,
-        target_max_pct=convexity.target_max_pct,
+        convexity,
+        at_shock_pct=shock.crash_scenario_pct,
     )
 
     # Measure DTE against the portfolio's (what-if) valuation date, not the
@@ -687,7 +663,7 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                     leg_convexity_contribution_pct=None,
                     convexity_target_min_pct=convexity.target_min_pct,
                     convexity_target_max_pct=convexity.target_max_pct,
-                    convexity_target_met=convexity_target_met,
+                    convexity=convexity_grading,
                     verdict=RollVerdict.EXPIRED,
                     estimated_roll_up_cost=None,
                     time_trigger=expired_trigger,
@@ -702,16 +678,11 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
             roll_window_days,
             triggers.roll_review_buffer,
         )
-        convexity_trigger = _convexity_trigger_verdict(
-            crash_convexity_pct,
-            convexity.target_min_pct,
-            convexity.target_max_pct,
-        )
+        convexity_trigger = _convexity_trigger_verdict(convexity_grading)
         rally_trigger = _rally_trigger_verdict(
             rally_from_entry_pct(position, current_spot),
             triggers,
-            crash_convexity_pct=crash_convexity_pct,
-            convexity=convexity,
+            convexity=convexity_grading,
         )
         time_verdict = time_trigger.verdict
         convexity_verdict = convexity_trigger.verdict
@@ -757,7 +728,7 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                 ),
                 convexity_target_min_pct=convexity.target_min_pct,
                 convexity_target_max_pct=convexity.target_max_pct,
-                convexity_target_met=convexity_target_met,
+                convexity=convexity_grading,
                 verdict=verdict,
                 estimated_roll_up_cost=estimated_roll_up_cost,
                 time_trigger=time_trigger,

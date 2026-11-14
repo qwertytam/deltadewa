@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from deltadewa.analysis import roll_status
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.crash_repricing import CrashShock
 from deltadewa.analysis.roll_planner import (
     RollAction,
@@ -172,12 +173,15 @@ class TestGammaThetaDelay:
         """
         return gamma_theta_delay(
             months_to_maturity=months_to_maturity,
-            convexity_now_pct=convexity_now_pct,
+            convexity=grade_convexity(
+                convexity_now_pct,
+                self._convexity(15.0, 25.0),
+                at_shock_pct=-25.0,
+            ),
             drift_pct=drift_pct,
             ips_triggers=self._triggers(
                 roll_at_months_remaining=roll_at_months_remaining
             ),
-            ips_convexity=self._convexity(15.0, 25.0),
         )
 
     def test_all_three_conditions_met_returns_true(self) -> None:

@@ -2429,6 +2429,63 @@ release-by-release list (backfilled in #390). Folding that stretch into
 this doc's format is a separate pass, not done as part of recording
 Batch 5.
 
+## Batch 9a — one referee for the convexity band
+
+**Status: in progress** — branch `fix/convexity-referee`, closing #434, #431,
+#433, #436, #442 and #435. Followed by the roll-plan and digest wording PR
+(#461, #463, #462, #432). `#460`'s other missing sections of this doc are
+Batch 10's, not filled here.
+
+Review #4 found that "is crash convexity inside the IPS band?" was answered
+in 13 places (nine that set a verdict, four that re-graded for prose), and
+that they disagreed about what an *unmeasured* reading is, whether a figure
+at another crash depth may be graded, and how a reading is rounded. Nothing
+refereed them. `analysis/convexity_band.py` is now the only module that
+orders a reading against `target_min_pct`/`target_max_pct`
+(`grade_convexity`, returning `BELOW`/`WITHIN`/`ABOVE`/`UNMEASURED`); every
+`bool` "meets" in the program is derived from its grade, never recomputed,
+and a grep test fails if an inline comparison reappears.
+
+**The referee's rule** (also in its module docstring, so it has one home):
+
+- **Bounds are inclusive at both ends.** Exactly the floor or the ceiling is
+  `WITHIN`.
+- **The band belongs to one depth.** It is stated at the IPS crash depth
+  (handbook: +10%..+20% at -25% SPX). A reading at any other depth is
+  `UNMEASURED` against it, not a breach and not a pass (#431). The caller
+  passes the depth the reading was taken at, so nothing has to remember.
+- **Unmeasured is not breaching.** `None` in gives `UNMEASURED` out and
+  `meets is None`, never `False` (#433). A book with no underlying has no
+  protected notional, so `crash_convexity_pct` returns `None` there instead of
+  a measured `0.0` that every grader read as a below-band miss. The IPS
+  compliance section gains a third verdict, `INCOMPLETE`: nothing breached,
+  but a banded metric could not be read. Vega's unmeasured row reads
+  unmeasured too, as its own docstring always said.
+- **Grade on the unrounded value, and never print a figure that contradicts
+  its grade** (in the spirit of #393's freshness rule). One decimal place
+  unless that puts the printed figure on the other side of a band edge from
+  its grade (9.96% against a 10.0% floor is "9.96%", not "10.0%"); if two
+  places still touch the edge it prints a strict-signed edge ("<10.00%").
+  The ladder composer's IPS-depth cell printed "5.0%" beside a FAIL for a 4.99%
+  reading until this rule found it.
+
+**Decided, not reopened:** #436 keeps **gross** sizing (2026-11-13). Sizing
+covers the offset on gross payoff, convexity is graded net of premium, and an
+offset-sized hedge can land 0.1pp under the floor. `sizing.GROSS_SIZING_NOTE`
+says so beside every "covers the offset"; the §4 golden book's positions and
+every contract count are unchanged.
+
+**#442** pins `/monitor`'s dial path at its defaults to the composer's
+scorecard through one helper, `monitor_scenario.ips_anchor_dials`. **#435**
+retires `calculate_health_metrics`, an entry point with no product consumer
+since #279; its single-source test now points at the live
+`calculate_crash_convexity_pct`.
+
+Tests: `tests/test_analysis/test_convexity_band.py` (the referee and the
+no-inline-comparison guard) and `tests/test_app/test_convexity_surfaces_agree.py`
+(every surface's grade equals the referee's over the same boundary grid, a
+zero-underlying book through each builder, and the #436/#442 agreements).
+
 ---
 
 ## Deferred — backlog, not in this plan

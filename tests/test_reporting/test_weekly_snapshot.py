@@ -7,6 +7,10 @@ from datetime import date
 
 import pytest
 
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    ConvexityGrading,
+)
 from deltadewa.reporting.program_report import (
     CostSection,
     IpsComplianceRow,
@@ -37,6 +41,12 @@ _AS_OF = date(2026, 8, 5)
 # this default can't represent (data_quality and needs_alarm diverging).
 _DEFAULT_STALE_OR_WORSE = frozenset({"STALE", "STATIC", "UNAVAILABLE"})
 
+_GRADE_FOR_MEETS = {
+    True: ConvexityGrade.WITHIN,
+    False: ConvexityGrade.BELOW,
+    None: ConvexityGrade.UNMEASURED,
+}
+
 
 def _make_report(
     *,
@@ -51,7 +61,7 @@ def _make_report(
     hedge_cost_verdict: str | None = "FAIR",
     data_quality: str = "LIVE",
     needs_alarm: bool | None = None,
-    compliance_rows: tuple[tuple[str, bool], ...] = (
+    compliance_rows: tuple[tuple[str, bool | None], ...] = (
         ("Annual carry cost", True),
         ("Crash convexity (-25% shock)", True),
     ),
@@ -74,11 +84,15 @@ def _make_report(
         ),
         protection=ProtectionSection(
             payoff_vs_premium=payoff_vs_premium,
-            ips_crash_pct=-25.0,
-            convexity_pct=convexity_pct,
-            target_min_pct=15.0,
-            target_max_pct=25.0,
-            meets_target=meets_target,
+            # The snapshot tests drive the grade directly: they are about
+            # diffing two snapshots, not about grading a reading.
+            convexity=ConvexityGrading(
+                value_pct=convexity_pct,
+                min_pct=15.0,
+                max_pct=25.0,
+                shock_pct=-25.0,
+                grade=_GRADE_FOR_MEETS[meets_target],
+            ),
             premium_paid=300_000.0,
             premium_basis="paid",
         ),
@@ -459,7 +473,7 @@ class TestDiffSnapshotsMaterialMoves:
 def _snap_at(
     as_of: date,
     *,
-    compliance_rows: tuple[tuple[str, bool], ...],
+    compliance_rows: tuple[tuple[str, bool | None], ...],
 ) -> WeeklySnapshot:
     """A snapshot at a given as_of, varying only its compliance rows."""
     return replace(_snapshot(compliance_rows=compliance_rows), as_of=as_of)
@@ -597,3 +611,120 @@ class TestStandingBreaches:
             "Annual carry cost": 2,
             "Crash convexity (-25% shock)": 1,
         }
+
+
+class TestAnUnmeasuredMetricIsNotABreach:
+    """#433: ``None`` in a compliance row is unmeasured, not failing."""
+
+    _CONVEXITY = "Crash convexity (-25% shock)"
+
+    def test_an_unmeasured_row_starts_no_standing_breach(self) -> None:
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                (self._CONVEXITY, None),
+            ),
+        )
+
+        assert standing_breaches((), current) == ()
+
+    def test_an_unmeasured_week_ends_a_run_of_breaches(self) -> None:
+        """Only a recorded breach extends a run; unmeasured is a gap."""
+        history = (
+            _snap_at(
+                date(2026, 7, 22),
+                compliance_rows=((self._CONVEXITY, False),),
+            ),
+            _snap_at(
+                date(2026, 7, 29),
+                compliance_rows=((self._CONVEXITY, None),),
+            ),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=((self._CONVEXITY, False),),
+        )
+
+        (breach,) = standing_breaches(history, current)
+
+        assert breach.weeks == 1
+
+    def test_pass_to_unmeasured_is_a_crossing_that_says_so(self) -> None:
+        prior = _snap_at(
+            date(2026, 7, 29),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                (self._CONVEXITY, True),
+            ),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                (self._CONVEXITY, None),
+            ),
+        )
+
+        diff = diff_snapshots(prior, current)
+        details = {c.label: c.detail for c in diff.crossings}
+
+        assert details[f"IPS compliance: {self._CONVEXITY}"] == (
+            "pass \u2192 not measured"
+        )
+        assert details["IPS compliance (overall)"] == (
+            "all pass \u2192 a metric not measured"
+        )
+
+    def test_pass_to_fail_still_says_failing(self) -> None:
+        prior = _snap_at(
+            date(2026, 7, 29),
+            compliance_rows=((self._CONVEXITY, True),),
+        )
+        current = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=((self._CONVEXITY, False),),
+        )
+
+        details = {
+            c.label: c.detail for c in diff_snapshots(prior, current).crossings
+        }
+
+        assert details["IPS compliance (overall)"] == (
+            "all pass \u2192 a metric failing"
+        )
+
+
+class TestUnmeasuredRowsSurviveTheJsonFile:
+    """#433: an unmeasured row is ``null`` on disk and loads back unchanged."""
+
+    def test_a_none_row_round_trips_through_real_json(self) -> None:
+        import json
+
+        snap = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(
+                ("Annual carry cost", True),
+                ("Crash convexity (-25% shock)", None),
+            ),
+        )
+
+        restored = WeeklySnapshot.from_json_dict(
+            json.loads(json.dumps(snap.to_json_dict())),
+        )
+
+        assert restored.ips_compliance_rows == snap.ips_compliance_rows
+        assert restored.ips_compliance_rows[1][1] is None
+
+    def test_a_pre_433_file_with_boolean_rows_still_loads(self) -> None:
+        import json
+
+        snap = _snap_at(
+            date(2026, 8, 5),
+            compliance_rows=(("Annual carry cost", False),),
+        )
+        on_disk = json.loads(json.dumps(snap.to_json_dict()))
+
+        assert WeeklySnapshot.from_json_dict(on_disk).ips_compliance_rows == (
+            ("Annual carry cost", False),
+        )

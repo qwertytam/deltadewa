@@ -11,6 +11,11 @@ Date: 2026-01-12
 from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.candidate import CandidateMetrics, evaluate_candidate
+from deltadewa.analysis.convexity_band import (
+    ConvexityGrade,
+    ConvexityGrading,
+    grade_convexity,
+)
 from deltadewa.analysis.crash_payoff import (
     CrashConvexityResult,
     CrashScenarioRow,
@@ -109,7 +114,6 @@ from deltadewa.analysis.roll_status import (
     RollVerdict,
     evaluate_roll_status,
     leg_convexity_contribution_pct,
-    meets_convexity_target,
     new_strike_for_entry_otm,
     verdict_reason,
 )
@@ -150,6 +154,8 @@ __all__ = [
     "CandidateGrid",
     "CandidateGridResult",
     "CandidateMetrics",
+    "ConvexityGrade",
+    "ConvexityGrading",
     "CrashConvexityResult",
     "CrashScenarioRow",
     "CrashShock",
@@ -231,9 +237,9 @@ __all__ = [
     "forward_vol",
     "gamma_theta_delay",
     "get_volatility_stats",
+    "grade_convexity",
     "hedge_efficiency",
     "leg_convexity_contribution_pct",
-    "meets_convexity_target",
     "new_strike_for_entry_otm",
     "observe_spot",
     "payoff_vs_premium_multiple",

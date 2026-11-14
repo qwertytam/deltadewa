@@ -38,6 +38,11 @@ from dash import (
     no_update,
 )
 
+from deltadewa.analysis.convexity_band import (
+    NOT_MEASURED,
+    UNMEASURED_NOT_BREACHING,
+    format_depth,
+)
 from deltadewa.analysis.ladder import (
     LadderSource,
     ProposedLadder,
@@ -50,6 +55,7 @@ from deltadewa.analysis.ladder import (
     profile_depths,
     size_ladder,
 )
+from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.compliance import Scorecard, scorecard
@@ -344,8 +350,19 @@ def _status(note: str | None) -> Component | str:
 # ---------------------------------------------------------------------------
 
 
-def _badge(passes: bool) -> html.Span:
-    """Build a PASS/FAIL badge in the compliance strip's own classes."""
+def _badge(passes: bool | None) -> html.Span:
+    """Build a PASS/FAIL badge in the compliance strip's own classes.
+
+    ``None`` is an unmeasured reading: grey and worded as such, because a
+    metric that could not be measured must not read as one that is fine,
+    nor as one that failed.
+    """
+    if passes is None:
+        return html.Span(
+            "N/A",
+            className="verdict-badge verdict-badge--unavailable",
+            title=f"{NOT_MEASURED.capitalize()}. {UNMEASURED_NOT_BREACHING}",
+        )
     return html.Span(
         "PASS" if passes else "FAIL",
         className=(
@@ -548,10 +565,21 @@ def _rung_labels(sized: SizedLadder) -> list[str]:
     ]
 
 
+def _depth_label(shock_pct: float) -> str:
+    """Label a crash depth without rounding it: ``-25%``, ``-22.5%``."""
+    return f"{format_depth(shock_pct, signed=True)}%"
+
+
+def _percent_or_dash(value: float | None) -> str:
+    """Format a percent, or an em dash for a reading that was not measured."""
+    return "\u2014" if value is None else fmt.percent(value)
+
+
 def _depth_table(
     sized: SizedLadder,
     portfolio: OptionPortfolio,
     shadow: OptionPortfolio,
+    baseline: Scorecard,
     proposal: Scorecard,
 ) -> html.Table:
     """Crash gain by depth: per rung, the ladder, and the current book."""
@@ -569,25 +597,34 @@ def _depth_table(
         depths=depths,
     )
     conv_row = _convexity_row(proposal.compliance)
+    base_row = _convexity_row(baseline.compliance)
     rows = []
     for row, base_pct in zip(profile, baseline_pct, strict=True):
         graded: list[Component] = [html.Td("")]
+        combined_pct = _percent_or_dash(row.combined_pct_of_book)
+        book_pct = _percent_or_dash(base_pct)
         if row.is_ips_depth and conv_row is not None:
             graded = [html.Td(_badge(conv_row.passes))]
+            # The graded cell is the strip's own text, which follows the
+            # referee's display rule (#434): "4.99%" beside a FAIL, never
+            # "5.0%" beside it. The other depths are shown, not graded.
+            combined_pct = conv_row.actual
+            if base_row is not None:
+                # The book's own figure at the graded depth, from the same
+                # scorecard row, so the baseline beside a badge follows the
+                # same display rule as the proposal's.
+                book_pct = base_row.actual
         rows.append(
             html.Tr(
                 [
-                    html.Td(f"{row.shock_pct:+.0f}%"),
+                    html.Td(_depth_label(row.shock_pct)),
                     *(
                         html.Td(fmt.currency(g), className="num")
                         for g in row.rung_gains
                     ),
                     html.Td(fmt.currency(row.combined_gain), className="num"),
-                    html.Td(
-                        fmt.percent(row.combined_pct_of_book),
-                        className="num",
-                    ),
-                    html.Td(fmt.percent(base_pct), className="num"),
+                    html.Td(combined_pct, className="num"),
+                    html.Td(book_pct, className="num"),
                     *graded,
                 ],
                 className="depth-row--ips" if row.is_ips_depth else "",
@@ -675,9 +712,8 @@ def _composer_view(
             "rung rounds up to whole contracts, so the share held can "
             "differ a little from the weight asked for. Rungs are priced "
             "at the book's volatility "
-            f"({fmt.percent(portfolio.volatility * 100.0)}); the "
-            "convexity row below is the gain net of premium, so it reads a "
-            "little under that target.",
+            f"({fmt.percent(portfolio.volatility * 100.0)}). "
+            + GROSS_SIZING_NOTE,
             className="plain-language",
         ),
         html.H4("Rungs"),
@@ -686,7 +722,7 @@ def _composer_view(
         _scorecard_table(baseline, proposal, ips_config=ips_config),
         html.P(_CONVEXITY_CAVEAT, className="plain-language"),
         html.H4("Crash gain by depth"),
-        _depth_table(sized, portfolio, shadow, proposal),
+        _depth_table(sized, portfolio, shadow, baseline, proposal),
         html.P(_DEPTH_FOOTNOTE, className="plain-language"),
     ]
     for note in reversed(_comparability_notes(portfolio, ladder)):

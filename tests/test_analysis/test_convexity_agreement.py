@@ -296,13 +296,13 @@ class TestConvexityVerdictNamesTheSide:
 
     def test_below_band_is_below_not_over(self) -> None:
         # Sizing recovers ~|crash| - tolerance (~5%): a 15-25 band is above it.
-        result, conv = self._result(target_min_pct=15.0, target_max_pct=25.0)
-        assert _convexity_verdict(result, conv) == "below"
+        result, _conv = self._result(target_min_pct=15.0, target_max_pct=25.0)
+        assert _convexity_verdict(result) == "below"
 
     def test_inside_band_is_within(self) -> None:
-        result, conv = self._result(target_min_pct=0.0, target_max_pct=100.0)
-        assert _convexity_verdict(result, conv) == "within"
+        result, _conv = self._result(target_min_pct=0.0, target_max_pct=100.0)
+        assert _convexity_verdict(result) == "within"
 
     def test_above_band_is_above(self) -> None:
-        result, conv = self._result(target_min_pct=0.1, target_max_pct=0.2)
-        assert _convexity_verdict(result, conv) == "above"
+        result, _conv = self._result(target_min_pct=0.1, target_max_pct=0.2)
+        assert _convexity_verdict(result) == "above"

@@ -32,9 +32,11 @@ from deltadewa.analysis.candidate import (
     build_put_valuation,
     evaluate_candidate,
 )
+from deltadewa.analysis.convexity_band import grade_convexity
 from deltadewa.analysis.sizing import size_from_unit, sizing_basis
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
 
@@ -80,10 +82,13 @@ class GridCell:
             metrics.per_contract_convexity_pct`` -- crash gain over the
             unadjusted book notional, read through the compliance strip's
             own gauge (#410), **for this cell bought alone**.
-        meets_convexity: ``True`` when ``achieved_convexity_pct`` lies within
-            the IPS convexity band ``[target_min_pct, target_max_pct]``.
-        meets_target_within_budget: ``True`` when both ``within_budget`` and
-            ``meets_convexity`` are ``True``.
+        achieved_convexity: The referee's grading of
+            ``achieved_convexity_pct`` against the IPS convexity band
+            (:func:`~deltadewa.analysis.convexity_band.grade_convexity`).
+        meets_convexity: Derived from ``achieved_convexity``: ``True`` when
+            the figure lies within the band, inclusive at both ends.
+        meets_target_within_budget: Derived: ``True`` when both
+            ``within_budget`` and ``meets_convexity`` are ``True``.
 
     """
 
@@ -102,8 +107,17 @@ class GridCell:
     carry_headroom: float
     max_affordable_contracts: int
     achieved_convexity_pct: float
-    meets_convexity: bool
-    meets_target_within_budget: bool
+    achieved_convexity: ConvexityGrading
+
+    @property
+    def meets_convexity(self) -> bool | None:
+        """Derived from the grading; ``None`` only if it was unmeasured."""
+        return self.achieved_convexity.meets
+
+    @property
+    def meets_target_within_budget(self) -> bool:
+        """Both the carry budget and the convexity band are met."""
+        return self.within_budget and self.meets_convexity is True
 
 
 CandidateGrid = list[GridCell]
@@ -256,7 +270,9 @@ def build_candidate_grid(
     1. Resolves the strike via :func:`strike_for_delta`.
     2. Prices the candidate put via
        :func:`~deltadewa.analysis.candidate.evaluate_candidate`.
-    3. Sizes it via :func:`~deltadewa.analysis.sizing.size_from_unit`.
+    3. Sizes it via :func:`~deltadewa.analysis.sizing.size_from_unit`, on
+       gross payoff (#436: convexity is then graded net of premium, so a cell
+       sized to the offset can read a little under the band floor).
     4. Checks convexity against the IPS target band.
 
     No pricing or payoff logic is reimplemented here; every number flows
@@ -332,8 +348,10 @@ def build_candidate_grid(
         achieved_convexity_pct = (
             sizing.contracts_needed * metrics.per_contract_convexity_pct
         )
-        meets_convexity = (
-            conv.target_min_pct <= achieved_convexity_pct <= conv.target_max_pct
+        achieved_convexity = grade_convexity(
+            achieved_convexity_pct,
+            conv,
+            at_shock_pct=basis.shock.crash_scenario_pct,
         )
         cells.append(
             GridCell(
@@ -350,10 +368,7 @@ def build_candidate_grid(
                 carry_headroom=sizing.carry_headroom,
                 max_affordable_contracts=sizing.max_affordable_contracts,
                 achieved_convexity_pct=achieved_convexity_pct,
-                meets_convexity=meets_convexity,
-                meets_target_within_budget=(
-                    sizing.within_budget and meets_convexity
-                ),
+                achieved_convexity=achieved_convexity,
             ),
         )
     return CandidateGridResult(cells=cells, unsolvable=unsolvable)

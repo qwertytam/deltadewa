@@ -48,6 +48,10 @@ from typing import TYPE_CHECKING
 
 from deltadewa import constants as const
 from deltadewa.analysis.candidate import CandidateMetrics, evaluate_candidate
+from deltadewa.analysis.convexity_band import (
+    same_crash_depth,
+    with_ips_depth,
+)
 from deltadewa.analysis.crash_payoff import STANDARD_SCENARIO_SHOCKS
 from deltadewa.analysis.crash_repricing import (
     CrashShock,
@@ -382,6 +386,10 @@ def size_ladder(
     giving the total contract count, which is then split by weight (each
     rung rounded up). A one-rung ladder is exactly ``size_hedge``.
 
+    Sized on **gross** payoff (#436, decided 2026-11-13), like
+    ``size_hedge``: the ladder's repriced crash value covers the offset, and
+    its convexity, graded net of premium, reads a little under it.
+
     Args:
         portfolio: Live portfolio supplying market data and the underlying.
         ips_config: Policy (budget, drawdown tolerance, crash basis, beta).
@@ -512,7 +520,7 @@ class DepthRow:
     shock_pct: float
     rung_gains: tuple[float, ...]
     combined_gain: float
-    combined_pct_of_book: float
+    combined_pct_of_book: float | None
     is_ips_depth: bool
 
 
@@ -521,7 +529,7 @@ def profile_depths(shock: CrashShock) -> tuple[float, ...]:
 
     Ordered mild to severe, the scenario table's own order.
     """
-    depths = {*STANDARD_SCENARIO_SHOCKS, round(shock.crash_scenario_pct, 6)}
+    depths = with_ips_depth(STANDARD_SCENARIO_SHOCKS, shock.crash_scenario_pct)
     return tuple(sorted(depths, reverse=True))
 
 
@@ -561,7 +569,6 @@ def ladder_depth_profile(
         i: hedge_value(shadow, positions=[leg]) for i, leg in legs.items()
     }
     today_all = hedge_value(shadow)
-    ips_depth = round(shock.crash_scenario_pct, 6)
 
     rows: list[DepthRow] = []
     for depth in depths:
@@ -585,7 +592,10 @@ def ladder_depth_profile(
                     shadow,
                     shock=at_depth,
                 ),
-                is_ips_depth=round(depth, 6) == ips_depth,
+                is_ips_depth=same_crash_depth(
+                    depth,
+                    shock.crash_scenario_pct,
+                ),
             ),
         )
     return tuple(rows)
@@ -596,7 +606,7 @@ def book_convexity_by_depth(
     *,
     shock: CrashShock,
     depths: Sequence[float],
-) -> tuple[float, ...]:
+) -> tuple[float | None, ...]:
     """Return the live book's convexity at each depth (the baseline column).
 
     The strip's own figure (:func:`crash_convexity_pct`) at each depth, so
