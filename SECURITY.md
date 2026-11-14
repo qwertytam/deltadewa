@@ -58,8 +58,11 @@ repo.
 - Where a recovery or escrow key is kept, by place or by role. (That a
   second key exists, and how it works, is documented; where it sits is not.)
 - Credentials, tokens and capability URLs such as heartbeat URLs;
-  addresses, hostnames, SSH aliases, key file paths, and backup repo names
-  or accounts.
+  addresses, hostnames and droplet names, SSH aliases, key file paths
+  (where a key sits on this deployment's host; a bare example filename in a
+  documented command, such as the one `age-keygen -o` is told to write, is
+  not one), a deploy user name other than the conventional one, and backup
+  repo names or accounts.
 
 Anything in the second list is written as "see private ops doc."
 
@@ -89,10 +92,12 @@ the branch's commit messages and the draft PR body before a PR is opened.
 
 **What is enforced mechanically.** `tests/test_public_repo_hygiene.py` fails
 the gate on the patterns that can be checked without writing a deployment
-value down: a key file path, droplet sizing figures, and a mail or backup
-provider name anywhere but the three generic lists above. Which provider,
-port or arrangement this deployment uses cannot be pattern-checked, and
-stays with the scanner and review.
+value down: a key file path, droplet sizing figures, and a mail provider
+name anywhere but the three generic lists above and the test's own list of
+peer providers (which names no one provider in particular). A backup host
+cannot be guarded this way: no generic list of hosts exists to hide its
+name in, so it stays with the scanner and review, as does everything that
+depends on which provider, port or arrangement this deployment uses.
 
 The `secret-scanner` brief (`.claude/agents/secret-scanner.md`) carries
 these same two lists and this paragraph, plus its own check for real policy

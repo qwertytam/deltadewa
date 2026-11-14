@@ -450,7 +450,7 @@ sudo git clone <BACKUP_REMOTE — see private ops doc> \
 #    it's meant to be reachable, and §10 below for the mechanism. Only
 #    `age` and the private key matter here; the key never lives on this
 #    droplet by design, so it comes from wherever you (or the escrow
-#    holder) keep it -- a password manager, a printed sheet, etc.
+#    holder) keep it.
 # Replace AGE_KEY_FILE below with the path to WHICHEVER private key
 # you have to hand -- deliberately either one, since both are valid
 # recipients: the operator's own (§10 names it operator-key.txt) or
@@ -965,9 +965,8 @@ needed here.
   1. **The operator's own key.** Generate on any machine, never the
      droplet itself (`age-keygen -o operator-key.txt`; the public key is
      printed to stderr and also the second line of the file), keep the
-     private half wherever you keep other durable secrets (a password
-     manager, an encrypted volume) — never in this repo, public or
-     private-ops.
+     private half wherever you keep other durable secrets — never in
+     this repo, public or private-ops.
   2. **The escrowed key** (`age-keygen -o escrow-key.txt`, same as
      above), whose private half is deliberately kept somewhere
      reachable *without* the operator — see
