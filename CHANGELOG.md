@@ -17,6 +17,13 @@ history for that record instead.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.10.0] - 2026-11-14
+
+**Every convexity PASS/FAIL now comes from one referee and agrees across
+`/design`, `/monitor`, the digest and the roll plan.**
+
 ### Added
 
 - **#461 — a dated roll action: `ROLL BY <date>`.** A leg in Rule 1's review
@@ -658,7 +665,8 @@ Phase 1 close-out and the start of Phase 2, tagged together:
 - **M2.2 — Dash skeleton + shared layer** (#212) — the two-page app
   scaffold and `state.ProgramState`. Observation provenance (#213).
 
-[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/qwertytam/deltadewa/compare/v0.9.3...v0.10.0
 [0.9.3]: https://github.com/qwertytam/deltadewa/compare/v0.7.0...v0.9.3
 [0.7.0]: https://github.com/qwertytam/deltadewa/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/qwertytam/deltadewa/compare/v0.5.0...v0.6.0
