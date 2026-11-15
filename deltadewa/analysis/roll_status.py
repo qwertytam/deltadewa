@@ -8,6 +8,7 @@ HOLD/MONITOR/REVIEW/ROLL verdict for every position in a portfolio, or
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
@@ -155,6 +156,13 @@ class RollStatusRecord:
     from pricing entirely (#362). Zero would read as "this leg is worthless";
     ``None`` reads as "this leg was not priced", which is what happened.
 
+    ``roll_window_days`` is the window the time trigger compares, as the float
+    it is (``roll_at_months_remaining`` x the calendar month), not rounded to
+    a whole day: a 4.55-month window is 136.5 days, and a sentence or a
+    column that printed 136 would disagree with a trigger that fires at 136
+    and not at 137 only because day counts are whole (#470). Print it with
+    ``:g``.
+
     ``convexity`` is the referee's grading
     (:func:`~deltadewa.analysis.convexity_band.grade_convexity`) of
     ``crash_convexity_pct`` against the band beside it, resolved once here so
@@ -168,7 +176,7 @@ class RollStatusRecord:
     position: OptionPosition
     moneyness: MoneynessDrift
     days_to_maturity: int
-    roll_window_days: int
+    roll_window_days: float
     crash_convexity_pct: float | None
     leg_convexity_contribution_pct: float | None
     convexity_target_min_pct: float
@@ -490,7 +498,7 @@ def _rally_trigger_verdict(
         return TriggerReason(
             RollVerdict.ROLL,
             reason=(
-                f"{reading} — URGENT band (>{triggers.rally_urgent_pct:.0f}%):"
+                f"{reading} — URGENT band (>{triggers.rally_urgent_pct:g}%):"
                 " original strikes may provide negligible protection; close"
                 " and re-establish"
             ),
@@ -499,8 +507,8 @@ def _rally_trigger_verdict(
         return TriggerReason(
             RollVerdict.ROLL,
             reason=(
-                f"{reading} — ACTION band ({triggers.rally_action_pct:.0f}-"
-                f"{triggers.rally_urgent_pct:.0f}%): strikes likely too deep"
+                f"{reading} — ACTION band ({triggers.rally_action_pct:g}-"
+                f"{triggers.rally_urgent_pct:g}%): strikes likely too deep"
                 " OTM; roll the ladder closer to spot"
             ),
         )
@@ -508,8 +516,8 @@ def _rally_trigger_verdict(
         return TriggerReason(
             RollVerdict.REVIEW,
             reason=(
-                f"{reading} — REVIEW band ({triggers.rally_review_pct:.0f}-"
-                f"{triggers.rally_action_pct:.0f}%): roll strikes up if the"
+                f"{reading} — REVIEW band ({triggers.rally_review_pct:g}-"
+                f"{triggers.rally_action_pct:g}%): roll strikes up if the"
                 " convexity target is no longer met."
                 f" {_convexity_recheck(convexity)}"
             ),
@@ -518,15 +526,15 @@ def _rally_trigger_verdict(
         return TriggerReason(
             RollVerdict.MONITOR,
             reason=(
-                f"{reading} — MONITOR band ({triggers.rally_monitor_pct:.0f}-"
-                f"{triggers.rally_review_pct:.0f}%): recompute crash convexity"
+                f"{reading} — MONITOR band ({triggers.rally_monitor_pct:g}-"
+                f"{triggers.rally_review_pct:g}%): recompute crash convexity"
                 " at current spot"
             ),
         )
     return TriggerReason(
         RollVerdict.HOLD,
         reason=(
-            f"{reading} — below the {triggers.rally_monitor_pct:.0f}% monitor"
+            f"{reading} — below the {triggers.rally_monitor_pct:g}% monitor"
             " band"
         ),
     )
@@ -664,12 +672,17 @@ def roll_window_opens(record: RollStatusRecord) -> date:
 
     Maturity less the roll window. Read off the leg's fixed expiry rather
     than counted forward from today, so it is the same date on every
-    surface and does not move as the valuation date does. With an integral
-    day count the trigger fires when ``days_to_maturity <= window``, so the
-    window opens on the date ``days_between(date, maturity) == window``.
+    surface and does not move as the valuation date does.
+
+    The trigger fires when ``days_to_maturity <= window`` and a day count is
+    a whole number, so the first day it fires is the one where the count
+    equals ``floor(window)``: a 136.5-day window opens 136 days before
+    maturity (ROLL at 136, REVIEW at 137), and a whole window opens exactly
+    that many days before. The floor is the trigger's own edge, not a
+    rounding of it (#470).
     """
     maturity = record.position.option.maturity_date.date()
-    return maturity - timedelta(days=record.roll_window_days)
+    return maturity - timedelta(days=math.floor(record.roll_window_days))
 
 
 def verdict_reason(record: RollStatusRecord) -> str:
@@ -778,7 +791,7 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                     position=position,
                     moneyness=moneyness,
                     days_to_maturity=days_to_maturity,
-                    roll_window_days=int(roll_window_days),
+                    roll_window_days=roll_window_days,
                     crash_convexity_pct=crash_convexity_pct,
                     leg_convexity_contribution_pct=None,
                     convexity_target_min_pct=convexity.target_min_pct,
@@ -837,7 +850,7 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
                 position=position,
                 moneyness=moneyness,
                 days_to_maturity=days_to_maturity,
-                roll_window_days=int(roll_window_days),
+                roll_window_days=roll_window_days,
                 crash_convexity_pct=crash_convexity_pct,
                 leg_convexity_contribution_pct=(
                     leg_convexity_contribution_pct(

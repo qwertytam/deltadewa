@@ -58,7 +58,7 @@ def _dte_text(record: RollStatusRecord) -> str:
     """
     if record.verdict is RollVerdict.EXPIRED:
         return f"expired {record.position.option.maturity_date.date()}"
-    return f"{record.days_to_maturity}d / {record.roll_window_days}d"
+    return f"{record.days_to_maturity}d / {record.roll_window_days:g}d"
 
 
 def _leg_convexity_text(record: RollStatusRecord) -> str:

@@ -423,7 +423,7 @@ def _delay_rationale(
         f" the put has moved {nearer_pct:.1f}% nearer the money since"
         " entry, so it is gaining gamma;"
         f" {months_to_maturity:.1f} mo to expiry is still outside the"
-        f" {ips_triggers.roll_at_months_remaining:.0f} mo roll window;"
+        f" {ips_triggers.roll_at_months_remaining:g} mo roll window;"
         f" and crash convexity {record.convexity.display()} is inside the"
         f" {record.convexity.band_display(sep='-')} IPS target band."
         " Revisit when any of the three stops holding."

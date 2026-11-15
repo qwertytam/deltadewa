@@ -508,7 +508,7 @@ def rally_reason(
             label=label,
             status=TriggerStatus.ACTION,
             reason=(
-                f"{reading}, at or past the {t.rally_action_pct:.0f}% action"
+                f"{reading}, at or past the {t.rally_action_pct:g}% action"
                 " band — strikes are likely too deep OTM; roll the ladder"
                 " closer to spot"
             ),
@@ -518,17 +518,15 @@ def rally_reason(
             label=label,
             status=TriggerStatus.MONITOR,
             reason=(
-                f"{reading}, past the {t.rally_monitor_pct:.0f}% monitor band"
-                f" and below the {t.rally_action_pct:.0f}% action band —"
+                f"{reading}, past the {t.rally_monitor_pct:g}% monitor band"
+                f" and below the {t.rally_action_pct:g}% action band —"
                 " recompute crash convexity at current spot"
             ),
         )
     return HedgeTriggerReason(
         label=label,
         status=TriggerStatus.OK,
-        reason=(
-            f"{reading}, below the {t.rally_monitor_pct:.0f}% monitor band"
-        ),
+        reason=(f"{reading}, below the {t.rally_monitor_pct:g}% monitor band"),
     )
 
 
