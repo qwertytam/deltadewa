@@ -46,15 +46,17 @@ repo.
   it blocks certain outbound mail ports by default.
 - A technical lesson stated without the vendor: a host platform may block
   outbound mail ports; a rebuilt host's address may need re-allowlisting at
-  the mail relay; a minimum RAM below which the image build fails.
+  the mail relay; that a small host can fail the image build for lack of
+  memory (the size to use is a deployment fact: see below).
 
 **Not allowed** — it describes this deployment:
 
 - Which mail provider, backup host, SMTP port or sending-IP allowlist
   behaviour this deployment uses, including as a passing aside in a dev log.
-- Droplet sizing: the plan, CPU or disk this deployment runs on. (A minimum
-  the *software* needs, such as the RAM floor above, is a requirement and is
-  fine.)
+- Droplet sizing: the plan, RAM, CPU or disk this deployment runs on, and
+  any "minimum" set at that size. The software's own needs are described
+  without a figure ("do not go smaller than the size in the private ops
+  doc").
 - Where a recovery or escrow key is kept, by place or by role. (That a
   second key exists, and how it works, is documented; where it sits is not.)
 - Credentials, tokens and capability URLs such as heartbeat URLs;

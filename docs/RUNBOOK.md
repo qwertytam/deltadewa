@@ -29,12 +29,10 @@ broker, accountant, or credentials; that stays in the private ops doc.
 ## 1. First-time setup — provision the droplet
 
 **Size:** one Dash app + QuantLib is CPU-light (analytic pricing, no
-lattice/PDE) but the Poetry/Jupyter dependency set is heavy on disk and the
-image build wants headroom. Provision a droplet with **at least 4 GB RAM**,
-running Ubuntu 24.04 LTS; the exact plan this deployment runs on is in the
-private ops doc. Undersized (1 GB) has failed
-`docker compose build` from OOM during the QuantLib wheel install in
-testing elsewhere; go straight to 4 GB.
+lattice/PDE) but the dependency set is heavy on disk and the image build
+wants real memory headroom: a small host has failed `docker compose build`
+from OOM during the QuantLib wheel install. Provision a droplet of the size
+in the private ops doc, running Ubuntu 24.04 LTS, and do not go smaller.
 
 ```bash
 # (root — droplet console / first SSH as root, right after first boot)

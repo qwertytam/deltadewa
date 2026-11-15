@@ -9,8 +9,9 @@ down:
 
 * a key file path (anything under an ``.ssh`` directory other than the
   standard ``config`` / ``known_hosts`` / ``authorized_keys``),
-* droplet sizing figures (vCPU and SSD tokens; a RAM floor is a software
-  requirement and is allowed),
+* droplet sizing figures (vCPU and SSD tokens only: a RAM figure cannot be
+  told apart by pattern from an image or dependency size, so RAM stays with
+  the scanner, and the docs state no RAM figure at all),
 * a mail provider name anywhere except the three files that carry a generic
   list of supported providers.
 
@@ -182,7 +183,8 @@ def test_sizing_pattern_matches_cpu_and_disk_figures(line: str) -> None:
     "line",
     ["at least 16 GB RAM", "an Ubuntu LTS release", "program data is small"],
 )
-def test_sizing_pattern_allows_a_ram_floor(line: str) -> None:
+def test_sizing_pattern_leaves_ram_to_the_scanner(line: str) -> None:
+    """A GB figure also describes image sizes; RAM is not pattern-checkable."""
     assert not SIZING.search(line)
 
 

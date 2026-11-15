@@ -35,7 +35,9 @@ flag it. If no, it is allowed — do not flag it.
    host, SMTP port or sending-IP allowlist behaviour this deployment uses (also
    as a passing aside in a dev log); SMTP hosts, sender addresses, allowlisted
    IPs.
-4. Droplet sizing — the plan, CPU or disk this deployment runs on.
+4. Droplet sizing — the plan, RAM, CPU or disk this deployment runs on, and
+   any "minimum" set at that size. Describe the software's needs without a
+   figure.
 5. Key custody — where a recovery or escrow key is kept, by place or by role.
    That the key exists and how it works is documented; where it sits is not.
 6. Real policy numbers in files that are meant to be templates
@@ -49,9 +51,9 @@ flag it. If no, it is allowed — do not flag it.
 - Naming the hosting platform and its public policies (for example, that it
   blocks certain outbound mail ports by default).
 - A technical lesson stated without the vendor ("a host may block outbound mail
-  ports", "a rebuilt host's address may need re-allowlisting at the relay"), and
-  a minimum the *software* needs (a RAM floor below which the image build
-  fails).
+  ports", "a rebuilt host's address may need re-allowlisting at the relay",
+  "a small host can fail the image build for lack of memory"). No figure: a
+  RAM number is sizing, whatever it is called.
 - A pointer such as "see private ops doc".
 - Placeholders: `@example.com`, `192.0.2.x`, `127.0.0.1`, `0.0.0.0`, empty
   `VAR=` lines in `.env.example`, and the placeholder labels the RUNBOOK uses
