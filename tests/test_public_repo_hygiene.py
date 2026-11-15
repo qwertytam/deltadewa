@@ -24,8 +24,9 @@ review to catch. A backup host is not guarded at all: no generic list of
 hosts exists to hide its name in, and listing one here would put the name
 back into the tree, so it stays with the scanner and review.
 
-The test cases below use made-up figures on purpose. The real deployment's
-numbers must not be written down anywhere, tests included.
+The test cases below use made-up, illustrative figures on purpose, labelled
+"example" and in no hosting platform's plan-naming format. The real
+deployment's numbers must not be written down anywhere, tests included.
 """
 
 from __future__ import annotations
@@ -171,9 +172,17 @@ def test_key_path_pattern_ignores_standard_files_and_placeholders(
     assert not KEY_PATH.search(line)
 
 
+# Every figure in these two cases is ILLUSTRATIVE: invented to exercise the
+# pattern, not any real plan, and deliberately not written in any hosting
+# platform's plan-naming format. Keep it that way when adding cases.
 @pytest.mark.parametrize(
     "line",
-    ["8 vCPU / 32 GB", "slug s-8vcpu-16gb", "500 GB SSD", "two vCPUs"],
+    [
+        "example: 14 vCPU / 18 GB",
+        "example: 7vcpu-18gb",
+        "example: 650 GB SSD",
+        "example: two vCPUs",
+    ],
 )
 def test_sizing_pattern_matches_cpu_and_disk_figures(line: str) -> None:
     assert SIZING.search(line)
@@ -181,7 +190,11 @@ def test_sizing_pattern_matches_cpu_and_disk_figures(line: str) -> None:
 
 @pytest.mark.parametrize(
     "line",
-    ["at least 16 GB RAM", "an Ubuntu LTS release", "program data is small"],
+    [
+        "example: at least 18 GB RAM",
+        "an Ubuntu LTS release",
+        "program data is small",
+    ],
 )
 def test_sizing_pattern_leaves_ram_to_the_scanner(line: str) -> None:
     """A GB figure also describes image sizes; RAM is not pattern-checkable."""
