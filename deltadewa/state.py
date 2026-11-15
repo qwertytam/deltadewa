@@ -139,7 +139,7 @@ if TYPE_CHECKING:
     from deltadewa.constants import ExerciseStyle
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
-    from deltadewa.portfolio.history import OpenOrder
+    from deltadewa.portfolio.history import OpenOrder, RollLeg
     from deltadewa.portfolio.position import OptionPosition
 
 STATE_FILENAME: Final = "program_state.json"
@@ -1418,6 +1418,132 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 ],
             )
             return new
+
+    def roll_structure(  # pylint: disable=too-many-arguments,too-many-locals
+        self,
+        legs: Sequence[RollLeg],
+        *,
+        reason: CloseReason,
+        trade_date: date | None = None,
+        note: str | None = None,
+        confirm: bool = False,
+    ) -> tuple[OptionPosition, ...]:
+        """Roll several lots as one decision, each leg as two linked fills.
+
+        A put spread is rolled as one package, and a half-rolled spread is
+        not a book anyone holds: the roll plan would group the new long
+        leg with the old short one. So every leg is validated, every new
+        lot added and every old lot removed under one lock, and the
+        ``2 x len(legs)`` fills are journaled in one write, or none of it
+        happens.
+
+        The handbook's rule is unchanged by the batching: each leg is a
+        roll of its own, a ``CLOSE`` and an ``OPEN`` at their own fill
+        prices and fees sharing that leg's own ``roll_id``. No ``roll_id``
+        spans legs, so nothing that pairs a roll's two fills can pair a
+        close with another leg's open.
+
+        Args:
+            legs: The legs, one per lot rolled out of. A lot may appear
+                once.
+            reason: The closes' reason. Required: it decides whether the
+                proceeds reduce gross carry, and is never inferred.
+            trade_date: When it traded; today's program date if ``None``.
+            note: Free text kept with every fill.
+            confirm: Must be ``True``; this removes the old lots.
+
+        Returns:
+            The new positions, in the order of *legs*.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+            KeyError: If a leg names a lot that is not in the book.
+            ValueError: If *legs* is empty or names a lot twice, or a new
+                lot is refused (an expired maturity, say). Nothing has
+                changed when this is raised.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "roll_structure removes the old lots; pass confirm=True",
+            )
+        if not legs:
+            raise ValueError("a roll needs at least one leg")
+        ids = [leg.position_id for leg in legs]
+        if len(set(ids)) != len(ids):
+            raise ValueError("a lot can be rolled once in one action")
+        with self._lock:
+            self._check_history_readable()
+            olds = [self._find_position(position_id)[1] for position_id in ids]
+            traded = trade_date or self._program_date()
+            roll_ids = [new_event_id() for _ in legs]
+            closes = [
+                self._fill(
+                    FillKind.CLOSE,
+                    old,
+                    quantity=-int(old.quantity),
+                    price_per_share=leg.close_price_per_share,
+                    fees=leg.close_fees,
+                    trade_date=traded,
+                    reason=reason,
+                    roll_id=roll_id,
+                    note=note,
+                )
+                for leg, old, roll_id in zip(legs, olds, roll_ids, strict=True)
+            ]
+            # Add before removing, as roll_position does: a refused lot
+            # leaves the book untouched.
+            news = self._add_all_or_none(
+                [leg.into for leg in legs],
+                trade_date=traded,
+            )
+            for old in olds:
+                index, _ = self._find_position(old.position_id)
+                self._portfolio.remove_position(index)
+            opens = [
+                self._open_fill(
+                    new,
+                    leg.into,
+                    trade_date=traded,
+                    roll_id=roll_id,
+                    note=note,
+                )
+                for leg, new, roll_id in zip(legs, news, roll_ids, strict=True)
+            ]
+            # Each leg's open follows its own close.
+            records: list[Fill | BookEdit] = []
+            for close, opened in zip(closes, opens, strict=True):
+                records.extend((close, opened))
+            self._journal_and_save(records)
+            return tuple(news)
+
+    def _add_all_or_none(
+        self,
+        orders: Sequence[OpenOrder],
+        *,
+        trade_date: date,
+    ) -> list[OptionPosition]:
+        """Add every order's lot, or leave the book as it was.
+
+        ``_add_from_order`` appends, and a later order can be refused
+        after an earlier one was added; the lots already added are popped
+        back off before the refusal is re-raised.
+        """
+        added: list[OptionPosition] = []
+        try:
+            for order in orders:
+                # Not a comprehension: the rollback below needs the lots
+                # added so far when a later order is refused.
+                added.append(  # ruff: ignore[manual-list-comprehension]
+                    self._add_from_order(order, trade_date=trade_date),
+                )
+        except Exception:
+            for _ in added:
+                self._portfolio.remove_position(
+                    len(self._portfolio.positions) - 1,
+                )
+            raise
+        return added
 
     def _add_from_order(
         self,

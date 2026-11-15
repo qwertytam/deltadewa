@@ -131,6 +131,36 @@ def _require_aware(value: datetime, name: str) -> None:
         raise ValueError(f"{name} must be timezone-aware, got {value!r}")
 
 
+def fill_cash(
+    *,
+    quantity: int,
+    price_per_share: float,
+    fees: float,
+    contract_size: int,
+) -> float:
+    """Return the cash a trade moves: ``+`` received, ``-`` paid.
+
+    The one place the arithmetic lives:
+    ``-quantity * price_per_share * contract_size - fees``. Buying pays
+    (negative), selling and settling a long leg receive (positive), and
+    fees always reduce cash. :meth:`Fill.cash_flow` reads it for a
+    recorded fill; a form that shows the operator what a trade *will*
+    move reads it for one not yet recorded, so the two cannot disagree.
+
+    Args:
+        quantity: Signed contracts moved **into** the book: ``+`` bought,
+            ``-`` sold.
+        price_per_share: The fill price per share.
+        fees: Commissions and fees, ``>= 0``.
+        contract_size: Shares per contract.
+
+    Returns:
+        The signed cash flow.
+
+    """
+    return -quantity * price_per_share * contract_size - fees
+
+
 @dataclass(frozen=True)
 class ContractTerms:
     """The contract a lot holds: what is traded, not how much of it.
@@ -272,10 +302,7 @@ class Fill:  # pylint: disable=too-many-instance-attributes  # one field per han
     def cash_flow(self) -> float | None:
         """Return cash into the account: ``+`` received, ``-`` paid.
 
-        The one place cash is derived from a fill:
-        ``-quantity * price_per_share * contract_size - fees``. Buying
-        pays (negative), selling and settling a long leg receive
-        (positive), and fees always reduce cash.
+        The arithmetic is :func:`fill_cash`'s, the one place it lives.
 
         Returns:
             The signed cash flow, or ``None`` when either the price or
@@ -284,8 +311,12 @@ class Fill:  # pylint: disable=too-many-instance-attributes  # one field per han
         """
         if self.price_per_share is None or self.fees is None:
             return None
-        gross = -self.quantity * self.price_per_share * self.terms.contract_size
-        return gross - self.fees
+        return fill_cash(
+            quantity=self.quantity,
+            price_per_share=self.price_per_share,
+            fees=self.fees,
+            contract_size=self.terms.contract_size,
+        )
 
     def to_json(self) -> dict[str, Any]:
         """Serialize to a JSON-safe record."""
@@ -609,6 +640,42 @@ class OpenOrder:  # pylint: disable=too-many-instance-attributes  # one field pe
             )
         if self.fees < 0:
             raise ValueError(f"fees must be >= 0, got {self.fees}")
+
+
+@dataclass(frozen=True)
+class RollLeg:
+    """One leg of a structure roll: the lot closed and the lot opened.
+
+    The request half of ``ProgramState.roll_structure``. Each leg is its
+    own roll, a close at its own price and fees and an open at its own,
+    so a spread rolled as one decision still records every leg as two
+    linked fills, never one net figure.
+
+    Attributes:
+        position_id: The lot being rolled out of.
+        close_price_per_share: Its fill price.
+        close_fees: Its commissions and fees, ``>= 0``. Required, like
+            :class:`OpenOrder`'s: ``0.0`` is a legal, recorded zero.
+        into: The lot being rolled into, with its own fill and fees.
+
+    """
+
+    position_id: str
+    close_price_per_share: float
+    close_fees: float
+    into: OpenOrder
+
+    def __post_init__(self) -> None:
+        """Reject a close no fill could have produced."""
+        if self.close_price_per_share < 0:
+            raise ValueError(
+                "close_price_per_share must be >= 0, "
+                f"got {self.close_price_per_share}",
+            )
+        if self.close_fees < 0:
+            raise ValueError(
+                f"close_fees must be >= 0, got {self.close_fees}",
+            )
 
 
 HistoryRecord = Fill | BookEdit | BookMark
