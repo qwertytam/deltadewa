@@ -113,6 +113,7 @@ from deltadewa.analysis.hedge_triggers import (
 )
 from deltadewa.analysis.maturity import MaturityBuckets
 from deltadewa.analysis.roll_planner import (
+    ROLL_NOW_LABEL,
     leg_action_label,
     leg_action_rank,
     leg_reason,
@@ -146,10 +147,12 @@ from deltadewa.reporting.weekly_snapshot import (
     SnapshotChange,
     SnapshotDiff,
     StandingBreach,
+    StandingRollNow,
     WeeklySnapshot,
     diff_snapshots,
     snapshot_from_report,
     standing_breaches,
+    standing_roll_now,
 )
 from deltadewa.state import ProgramState
 
@@ -412,10 +415,12 @@ class WeeklyDigest:
             one-word reduction over all of them.
         headline: One-line verdict for a subject line or quick triage —
             ``"BREACH: <metric> out of policy (Nth week)"`` when IPS
-            compliance is failing (outranks everything else, #296),
-            else ``"NO ACTION"`` or ``"ACTION: <first crossing>"``,
-            prefixed ``"STALE DATA — "`` when data quality is worse than
-            CACHED.
+            compliance is failing (outranks everything else, #296), then
+            ``"INCOMPLETE: ..."`` for an unmeasured metric, then
+            ``"ACTION: PUT 5,600 ROLL NOW (Nth week)"`` while a leg stands
+            at ROLL NOW (#472), then ``"ACTION: <first crossing>"``, else
+            ``"NO ACTION"``; prefixed ``"STALE DATA — "`` when data
+            quality is worse than CACHED.
         weekly_carry_cost: This period's carry (theta) cost in dollars.
         elapsed_days: Days this ``weekly_carry_cost`` was integrated over
             (actual gap to the prior snapshot, or a nominal week on the
@@ -435,23 +440,51 @@ class WeeklyDigest:
     elapsed_days: int
     roll_legs: tuple[RollLegRow, ...] = ()
     backup_heartbeat_warning: str | None = None
+    standing_roll: StandingRollNow | None = None
 
 
-def _headline(
+def _roll_now_clause(legs: tuple[str, ...], standing: StandingRollNow) -> str:
+    """Name what stands at ROLL NOW, and for how long (#472).
+
+    The leg when there is one; the count when there are several, because a
+    subject line cannot carry every leg and the roll table below does.
+    """
+    what = legs[0] if len(legs) == 1 else f"{len(legs)} legs at"
+    return f"{what} {ROLL_NOW_LABEL} ({_ordinal(standing.weeks)} week)"
+
+
+_STANDING_ROLL_NOTE: Final[str] = (
+    "The ROLL NOW count may be longer than shown: it stops at an earlier week"
+    " whose worst leg was at REVIEW with no roll action recorded, and"
+    " snapshots written before actions were stored carry none."
+)
+
+
+def _headline(  # pylint: disable=too-many-arguments  # one precedence chain over the digest's standing states; each is a distinct input
     diff: SnapshotDiff,
     snapshot: WeeklySnapshot,
     compliance: IpsComplianceSection,
     breaches: tuple[StandingBreach, ...],
+    roll_now_legs: tuple[str, ...] = (),
+    standing_roll: StandingRollNow | None = None,
 ) -> str:
     """Derive the one-line triage verdict for this digest.
 
     Precedence: an IPS compliance breach outranks an unmeasured metric
-    (INCOMPLETE, #433), which outranks a threshold crossing, which outranks
-    a quiet week. Branching on
-    ``snapshot.ips_compliance_all_pass`` (the authoritative flag) rather
-    than on ``breaches`` being non-empty is what makes "NO ACTION requires
-    overall PASS" true by construction (#296). The ``"STALE DATA — "``
-    prefix is applied identically to all three branches, unchanged from
+    (INCOMPLETE, #433), which outranks a leg standing at ROLL NOW (#472),
+    which outranks a threshold crossing, which outranks a quiet week. A
+    standing ROLL NOW is a *state*, like a breach, so it sits above the
+    crossings that only report change: a leg that has stood at ROLL NOW for
+    weeks never crosses anything, and the headline used to read ``NO
+    ACTION`` above a table that said ROLL NOW. Only the **action** counts,
+    never the verdict and never ROLL BY, DELAY or CHECKED: ROLL BY is due,
+    not overdue; DELAY is a deliberate deferral; CHECKED is a cleared review.
+    The count is of legs at ROLL NOW, not a ranking of actions (#468).
+
+    Branching on ``snapshot.ips_compliance_all_pass`` (the authoritative
+    flag) rather than on ``breaches`` being non-empty is what makes "NO
+    ACTION requires overall PASS" true by construction (#296). The ``"STALE
+    DATA — "`` prefix is applied identically to every branch, unchanged from
     before — it's orthogonal to compliance state and must compose with it,
     never replace or gate it. Gated on ``snapshot.data_quality_alarm``
     (#393/#398's two-channel rule), not on ``data_quality`` itself — a
@@ -485,6 +518,8 @@ def _headline(
                 f"BREACH: {len(failing)} IPS metrics out of policy "
                 f"({_ordinal(weeks)} week)"
             )
+    elif standing_roll is not None and roll_now_legs:
+        base = f"ACTION: {_roll_now_clause(roll_now_legs, standing_roll)}"
     elif diff.crossings:
         base = f"ACTION: {diff.crossings[0].label}"
     else:
@@ -627,6 +662,11 @@ def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument
     )
     diff = diff_snapshots(prior_snapshot, snapshot)
     breaches = standing_breaches(history, snapshot)
+    roll_legs = _roll_leg_rows(roll_records, ips_triggers)
+    roll_now_legs = tuple(
+        row.leg for row in roll_legs if row.action == ROLL_NOW_LABEL
+    )
+    standing_roll = standing_roll_now(history, snapshot)
 
     return WeeklyDigest(
         report=enriched_report,
@@ -637,11 +677,14 @@ def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument
             snapshot,
             enriched_report.ips_compliance,
             breaches,
+            roll_now_legs,
+            standing_roll,
         ),
-        roll_legs=_roll_leg_rows(roll_records, ips_triggers),
+        roll_legs=roll_legs,
         weekly_carry_cost=weekly_carry_cost,
         elapsed_days=elapsed_days,
         backup_heartbeat_warning=backup_heartbeat_warning,
+        standing_roll=standing_roll,
     )
 
 
@@ -744,7 +787,10 @@ def _changes_markdown(title: str, changes: tuple[SnapshotChange, ...]) -> str:
     return "\n".join(lines)
 
 
-def _roll_legs_markdown(rows: tuple[RollLegRow, ...]) -> list[str]:
+def _roll_legs_markdown(
+    rows: tuple[RollLegRow, ...],
+    standing: StandingRollNow | None = None,
+) -> list[str]:
     """Render the per-leg roll table (#374), or nothing for an empty book."""
     if not rows:
         return []
@@ -764,10 +810,15 @@ def _roll_legs_markdown(rows: tuple[RollLegRow, ...]) -> list[str]:
         for r in rows
     ]
     lines.append("")
+    if standing is not None and standing.may_be_longer:
+        lines += [f"*{_STANDING_ROLL_NOTE}*", ""]
     return lines
 
 
-def _roll_legs_html(rows: tuple[RollLegRow, ...]) -> str:
+def _roll_legs_html(
+    rows: tuple[RollLegRow, ...],
+    standing: StandingRollNow | None = None,
+) -> str:
     """HTML counterpart of :func:`_roll_legs_markdown` (#374).
 
     Every cell is escaped: ``reason`` is engine-built prose today, but it
@@ -776,6 +827,11 @@ def _roll_legs_html(rows: tuple[RollLegRow, ...]) -> str:
     """
     if not rows:
         return ""
+    note = (
+        f"\n<p><em>{escape(_STANDING_ROLL_NOTE)}</em></p>"
+        if standing is not None and standing.may_be_longer
+        else ""
+    )
     body = "\n".join(
         f"<tr><td>{escape(r.verdict)}</td>"
         f"<td>{escape(r.action or _NO_ACTION)}</td>"
@@ -792,6 +848,7 @@ def _roll_legs_html(rows: tuple[RollLegRow, ...]) -> str:
         "<th>Reason</th></tr>\n"
         f"{body}\n"
         "</table>"
+        f"{note}"
     )
 
 
@@ -854,7 +911,7 @@ def render_weekly_digest_markdown(digest: WeeklyDigest) -> str:
                 "",
             ]
 
-    lines += _roll_legs_markdown(digest.roll_legs)
+    lines += _roll_legs_markdown(digest.roll_legs, digest.standing_roll)
 
     # Return framing (this week's/cumulative carry cost, point-in-time
     # premium) used to be repeated here in prose — now rendered once, by
@@ -938,7 +995,7 @@ def render_weekly_digest_html(digest: WeeklyDigest) -> str:
 {backup_heartbeat_html}
 <h2>What changed</h2>
 {change_html}
-{_roll_legs_html(digest.roll_legs)}
+{_roll_legs_html(digest.roll_legs, digest.standing_roll)}
 <hr>"""
 
     footer_html = "\n".join(

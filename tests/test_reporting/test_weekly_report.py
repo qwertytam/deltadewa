@@ -459,10 +459,11 @@ class TestTheDigestCarriesTheRollPlansAction:
             assert crossing is not None
             assert crossing.detail.startswith("HOLD \u2192 ROLL (PUT 5,700")
             assert "ROLL BY" not in crossing.detail
-            # The headline names the crossing that outranks the rest, and
-            # it is the roll.
-            assert digest.headline.startswith("ACTION: ")
-            assert "Worst roll verdict" in digest.headline
+            # The headline names the roll leg, never the dated one. Since
+            # #472 a leg standing at ROLL NOW is a headline state of its own
+            # and outranks the crossing that used to carry it ("ACTION:
+            # Worst roll verdict"); the crossing is still in the diff above.
+            assert digest.headline == "ACTION: PUT 5,700 ROLL NOW (1st week)"
             assert "ROLL BY" not in digest.headline
             # Both legs are still listed, each with its own action.
             actions = {row.leg: row.action for row in digest.roll_legs}

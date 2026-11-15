@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.convexity_band import NOT_MEASURED
 from deltadewa.analysis.market_environment import describe_lookback
+from deltadewa.analysis.roll_planner import ROLL_NOW_LABEL
+from deltadewa.analysis.roll_status import RollVerdict
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -804,3 +806,99 @@ def standing_breaches(
             since = snap.as_of
         breaches.append(StandingBreach(metric=metric, weeks=weeks, since=since))
     return tuple(breaches)
+
+
+@dataclass(frozen=True)
+class StandingRollNow:
+    """How long some leg has stood at ROLL NOW, counted in snapshots (#472).
+
+    The roll counterpart of :class:`StandingBreach`, and counted the same way:
+    consecutive *snapshots*, including the current one, not calendar weeks, so
+    a skipped cron week undercounts.
+
+    What is counted is **the book having a leg at ROLL NOW**, not one named
+    leg's tenure. A snapshot keeps only its worst leg, and the worst leg
+    carries ROLL NOW whenever any leg does (the verdict ranks first, and every
+    verdict-ROLL leg is ROLL NOW; among REVIEW legs the more urgent action
+    wins the tie), so the run is "a leg stood at ROLL NOW" week by week. If
+    one leg is rolled away and another reaches ROLL NOW the next week, the run
+    continues, and the headline says so by counting the book, not the leg.
+
+    Attributes:
+        weeks: Consecutive snapshots with a leg at ROLL NOW, including the
+            current one.
+        since: ``as_of`` of the first snapshot in the run.
+        may_be_longer: ``True`` when the run stopped on an earlier snapshot
+            whose worst leg was at REVIEW with **no roll action recorded**.
+            Snapshots written before the plan's action was stored (0.10.0)
+            have none, and a REVIEW-driven ROLL NOW (a rally REVIEW whose
+            condition failed, #468) is invisible in them, so the run may be
+            longer than counted. Said in the digest rather than guessed at.
+
+    """
+
+    weeks: int
+    since: date
+    may_be_longer: bool
+
+
+def _was_roll_now(snapshot: WeeklySnapshot) -> bool:
+    """Whether a past snapshot's worst leg was at ROLL NOW.
+
+    Read off the stored action. A snapshot written before 0.10.0 has none
+    (``worst_roll_action`` is optional on disk), so it falls back to the
+    verdict: a leg graded ROLL is at ROLL NOW, because every trigger that
+    grades ROLL resolves to ROLL NOW. The converse is the gap
+    :attr:`StandingRollNow.may_be_longer` reports.
+    """
+    if snapshot.worst_roll_action is not None:
+        return snapshot.worst_roll_action == ROLL_NOW_LABEL
+    return snapshot.worst_roll_verdict == RollVerdict.ROLL.value
+
+
+def _action_unrecorded_at_review(snapshot: WeeklySnapshot) -> bool:
+    """Whether a snapshot could be hiding a REVIEW-driven ROLL NOW."""
+    return (
+        snapshot.worst_roll_action is None
+        and snapshot.worst_roll_verdict == RollVerdict.REVIEW.value
+    )
+
+
+def standing_roll_now(
+    history: Sequence[WeeklySnapshot],
+    current: WeeklySnapshot,
+) -> StandingRollNow | None:
+    """Count the run of snapshots with a leg at ROLL NOW, ending at *current*.
+
+    Triggers on the **action**, not the verdict (#472): ROLL BY is due, not
+    overdue; DELAY is a deliberate deferral; CHECKED is a cleared review. None
+    of them starts a run. Like :func:`standing_breaches`, only snapshots
+    strictly older than ``current.as_of`` are walked, newest first, and the
+    first one without a leg at ROLL NOW ends the run.
+
+    Returns:
+        The run, or ``None`` when *current*'s worst leg is not at ROLL NOW.
+
+    """
+    if current.worst_roll_action != ROLL_NOW_LABEL:
+        return None
+
+    ordered = sorted(
+        (snap for snap in history if snap.as_of < current.as_of),
+        key=lambda snap: snap.as_of,
+        reverse=True,
+    )
+    weeks = 1
+    since = current.as_of
+    may_be_longer = False
+    for snap in ordered:
+        if not _was_roll_now(snap):
+            may_be_longer = _action_unrecorded_at_review(snap)
+            break
+        weeks += 1
+        since = snap.as_of
+    return StandingRollNow(
+        weeks=weeks,
+        since=since,
+        may_be_longer=may_be_longer,
+    )

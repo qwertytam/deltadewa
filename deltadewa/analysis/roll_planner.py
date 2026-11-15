@@ -146,6 +146,14 @@ def action_label(action: RollAction, window_opens: date | None = None) -> str:
     return action.value.replace("_", " ")
 
 
+ROLL_NOW_LABEL: Final[str] = action_label(RollAction.ROLL_NOW)
+"""The words a leg at ROLL NOW prints, and the string a snapshot stores (#472).
+
+Named once so the digest's headline and its week counter compare against the
+label the plan prints rather than a second hand-typed copy of it.
+"""
+
+
 @dataclass(frozen=True)
 class LegAction:
     """One leg's decided action (#461), before a target strike or cost.
