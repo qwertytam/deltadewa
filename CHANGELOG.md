@@ -30,13 +30,18 @@ than the number behind them.
   week)`, or `ACTION: 2 legs at ROLL NOW (3rd week)`, and so does the email
   subject. Only the **action** counts: ROLL BY (due, not overdue), DELAY (a
   deliberate deferral) and CHECKED (a cleared review) never set it. The week
-  count is consecutive snapshots with a leg at ROLL NOW, counted the way
-  breaches are. A breach or an unmeasured metric still outranks it; it
-  outranks a crossing. Snapshot files written before 0.10.0 have no action and
-  still load; for those the count uses the verdict ROLL, which a ROLL NOW leg
-  always has. A REVIEW-driven ROLL NOW is invisible in them, so for the first
-  weeks after the upgrade the count can be short, and the digest says so under
-  the roll table when it applies.
+  count is consecutive snapshots, as breaches are counted, and it counts what
+  the headline names: the named leg's own run when one leg is at ROLL NOW, the
+  book's when it says "legs". A breach or an unmeasured metric still outranks
+  it; it outranks a crossing. The weekly snapshot gains an optional
+  `roll_now_legs` (every leg at ROLL NOW), because the worst leg it already
+  kept is chosen by verdict first and so can be a short leg graded ROLL, which
+  has no action, hiding a long put at ROLL NOW from the headline. Snapshot
+  files from before this load unchanged. A 0.10.0 file holds only its worst
+  leg's action, so it counts for that leg. A file from before 0.10.0 has no
+  action at all: it counts a ROLL verdict as a ROLL NOW week, and a
+  REVIEW-driven ROLL NOW is invisible in it, so for the first weeks the count
+  can be short; the digest says so under the roll table when it applies.
 - **#471 — a rally REVIEW with unmeasured convexity gives no roll action.**
   This reverses 0.10.0, where such a leg read ROLL NOW. The REVIEW band says
   "roll strikes up if the convexity target is no longer met"; with crash

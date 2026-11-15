@@ -120,6 +120,15 @@ class WeeklySnapshot:
             the clock ticks — a phantom change on a book that had not
             moved. The verdict word is the thing that genuinely crosses;
             these two explain it.
+        roll_now_legs: Every leg whose roll plan action is ROLL NOW, by label
+            (``("PUT 5,600",)``); ``()`` when none is; ``None`` when it was not
+            recorded (a snapshot from before 0.10.0, or a digest assembled
+            without the IPS, which decides no action). The worst leg alone
+            cannot say this: it is chosen by verdict first, so a short or
+            non-put leg graded ROLL (which has no action) can outrank a long
+            put at ROLL NOW, and the standing run (#472) would miss the leg
+            the roll table shows. A 0.10.0 snapshot carries only the worst
+            leg's action, so it loads as that one leg (see ``from_json_dict``).
         rally_status: The book-level handbook Rule 2 reading
             (``OK``/``MONITOR``/``ACTION``/``UNAVAILABLE``) — diffed as a
             crossing (#297).
@@ -177,6 +186,8 @@ class WeeklySnapshot:
     skew_lookback_days: int | None = None
     # #461: defaulted and last, like the field above, for the same reason.
     worst_roll_action: str | None = None
+    # #472: the same.
+    roll_now_legs: tuple[str, ...] | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-safe dict (dates as ISO strings).
@@ -217,6 +228,9 @@ class WeeklySnapshot:
             "cumulative_carry_cost": self.cumulative_carry_cost,
             "skew_lookback_days": self.skew_lookback_days,
             "worst_roll_action": self.worst_roll_action,
+            "roll_now_legs": (
+                None if self.roll_now_legs is None else list(self.roll_now_legs)
+            ),
         }
 
     @classmethod
@@ -270,7 +284,34 @@ class WeeklySnapshot:
             ),
             # .get(): #461 added this after snapshots were persisted.
             worst_roll_action=data.get("worst_roll_action"),
+            roll_now_legs=_load_roll_now_legs(data),
         )
+
+
+def _load_roll_now_legs(data: dict[str, Any]) -> tuple[str, ...] | None:
+    """Read ``roll_now_legs``, reconstructing it for an older file (#472).
+
+    Three vintages of file, told apart by which keys they carry:
+
+    - **Current**: has ``roll_now_legs``. Read as written.
+    - **0.10.0**: has ``worst_roll_action`` but no ``roll_now_legs``. The
+      action was recorded for the worst leg only, so the legs at ROLL NOW are
+      that leg if its action is ROLL NOW and none if it is anything else
+      (including no action). The best that file can say, and not guessed
+      beyond it: a ROLL NOW leg behind a worse-verdict short leg is not in it.
+    - **Before 0.10.0**: neither key. No action was recorded, so ``None``:
+      the standing run falls back to the verdict ROLL for those weeks and says
+      when it may be short.
+    """
+    if "roll_now_legs" in data:
+        recorded = data["roll_now_legs"]
+        return None if recorded is None else tuple(recorded)
+    if "worst_roll_action" in data:
+        leg = data.get("worst_roll_leg")
+        if data["worst_roll_action"] == ROLL_NOW_LABEL and leg is not None:
+            return (leg,)
+        return ()
+    return None
 
 
 def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argument is a distinct snapshot field the caller computes
@@ -286,6 +327,7 @@ def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argumen
     first_as_of: date,
     cumulative_carry_cost: float,
     worst_roll_action: str | None = None,
+    roll_now_legs: tuple[str, ...] | None = None,
 ) -> WeeklySnapshot:
     """Build a ``WeeklySnapshot`` from a ``ProgramReport`` plus verdicts.
 
@@ -339,6 +381,7 @@ def snapshot_from_report(  # pylint: disable=too-many-arguments  # every argumen
         premium_paid_point_in_time=p.premium_paid,
         cumulative_carry_cost=cumulative_carry_cost,
         worst_roll_action=worst_roll_action,
+        roll_now_legs=roll_now_legs,
     )
 
 
@@ -810,56 +853,65 @@ def standing_breaches(
 
 @dataclass(frozen=True)
 class StandingRollNow:
-    """How long some leg has stood at ROLL NOW, counted in snapshots (#472).
+    """How long a leg has stood at ROLL NOW, counted in snapshots (#472).
 
-    The roll counterpart of :class:`StandingBreach`, and counted the same way:
+    The roll counterpart of :class:`StandingBreach`, counted the same way:
     consecutive *snapshots*, including the current one, not calendar weeks, so
     a skipped cron week undercounts.
 
-    What is counted is **the book having a leg at ROLL NOW**, not one named
-    leg's tenure. A snapshot keeps only its worst leg, and the worst leg
-    carries ROLL NOW whenever any leg does (the verdict ranks first, and every
-    verdict-ROLL leg is ROLL NOW; among REVIEW legs the more urgent action
-    wins the tie), so the run is "a leg stood at ROLL NOW" week by week. If
-    one leg is rolled away and another reaches ROLL NOW the next week, the run
-    continues, and the headline says so by counting the book, not the leg.
+    What is counted depends on what the headline names. With **one** leg at
+    ROLL NOW it is that leg: the run is the snapshots in which that label was
+    at ROLL NOW, so "PUT 4,200 ROLL NOW (4th week)" is never PUT 4,200 taking
+    over a run another leg began. With **several** it is the book: the
+    snapshots with any leg at ROLL NOW, which is what "2 legs at ROLL NOW
+    (4th week)" says. A label is a type and a strike, so two expiries at one
+    strike share one.
 
     Attributes:
-        weeks: Consecutive snapshots with a leg at ROLL NOW, including the
-            current one.
+        legs: The legs at ROLL NOW this week, by label.
+        weeks: Consecutive snapshots in the run, including the current one.
         since: ``as_of`` of the first snapshot in the run.
-        may_be_longer: ``True`` when the run stopped on an earlier snapshot
-            whose worst leg was at REVIEW with **no roll action recorded**.
-            Snapshots written before the plan's action was stored (0.10.0)
-            have none, and a REVIEW-driven ROLL NOW (a rally REVIEW whose
-            condition failed, #468) is invisible in them, so the run may be
+        may_be_longer: ``True`` when the run stopped on a snapshot written
+            before the plan's action was stored (0.10.0) whose worst leg was
+            at REVIEW. A REVIEW-driven ROLL NOW (a rally REVIEW whose
+            condition failed, #468) is invisible there, so the run may be
             longer than counted. Said in the digest rather than guessed at.
 
     """
 
+    legs: tuple[str, ...]
     weeks: int
     since: date
     may_be_longer: bool
 
 
-def _was_roll_now(snapshot: WeeklySnapshot) -> bool:
-    """Whether a past snapshot's worst leg was at ROLL NOW.
+def _was_roll_now(snapshot: WeeklySnapshot, legs: tuple[str, ...]) -> bool:
+    """Whether a past snapshot had a leg at ROLL NOW that this run counts.
 
-    Read off the stored action. A snapshot written before 0.10.0 has none
-    (``worst_roll_action`` is optional on disk), so it falls back to the
-    verdict: a leg graded ROLL is at ROLL NOW, because every trigger that
-    grades ROLL resolves to ROLL NOW. The converse is the gap
+    Read off the legs it recorded. One named leg must be among them; with
+    several named, any is enough. A snapshot from before 0.10.0 recorded none
+    (``roll_now_legs`` is ``None``), so it falls back to the verdict: a leg
+    graded ROLL is at ROLL NOW, because every trigger that grades ROLL on a
+    long put resolves to ROLL NOW. That fallback cannot name a leg, so it
+    counts for any run; the converse is the gap
     :attr:`StandingRollNow.may_be_longer` reports.
     """
-    if snapshot.worst_roll_action is not None:
-        return snapshot.worst_roll_action == ROLL_NOW_LABEL
-    return snapshot.worst_roll_verdict == RollVerdict.ROLL.value
+    recorded = snapshot.roll_now_legs
+    if recorded is None:
+        return snapshot.worst_roll_verdict == RollVerdict.ROLL.value
+    if len(legs) == 1:
+        return legs[0] in recorded
+    return bool(recorded)
 
 
-def _action_unrecorded_at_review(snapshot: WeeklySnapshot) -> bool:
-    """Whether a snapshot could be hiding a REVIEW-driven ROLL NOW."""
+def _unrecorded_review(snapshot: WeeklySnapshot) -> bool:
+    """Whether a snapshot predates the stored action and could hide a ROLL NOW.
+
+    Only a snapshot with no recorded legs at all can: a 0.10.0 or later file
+    states what it saw, so a REVIEW week in one is a real end to the run.
+    """
     return (
-        snapshot.worst_roll_action is None
+        snapshot.roll_now_legs is None
         and snapshot.worst_roll_verdict == RollVerdict.REVIEW.value
     )
 
@@ -872,15 +924,18 @@ def standing_roll_now(
 
     Triggers on the **action**, not the verdict (#472): ROLL BY is due, not
     overdue; DELAY is a deliberate deferral; CHECKED is a cleared review. None
-    of them starts a run. Like :func:`standing_breaches`, only snapshots
-    strictly older than ``current.as_of`` are walked, newest first, and the
-    first one without a leg at ROLL NOW ends the run.
+    of them starts a run. The current week reads ``current.roll_now_legs``,
+    which is every leg at ROLL NOW, not the worst leg's action. Like
+    :func:`standing_breaches`, only snapshots strictly older than
+    ``current.as_of`` are walked, newest first, and the first one without a
+    counted leg ends the run.
 
     Returns:
-        The run, or ``None`` when *current*'s worst leg is not at ROLL NOW.
+        The run, or ``None`` when no leg is at ROLL NOW this week.
 
     """
-    if current.worst_roll_action != ROLL_NOW_LABEL:
+    legs = current.roll_now_legs or ()
+    if not legs:
         return None
 
     ordered = sorted(
@@ -892,12 +947,13 @@ def standing_roll_now(
     since = current.as_of
     may_be_longer = False
     for snap in ordered:
-        if not _was_roll_now(snap):
-            may_be_longer = _action_unrecorded_at_review(snap)
+        if not _was_roll_now(snap, legs):
+            may_be_longer = _unrecorded_review(snap)
             break
         weeks += 1
         since = snap.as_of
     return StandingRollNow(
+        legs=legs,
         weeks=weeks,
         since=since,
         may_be_longer=may_be_longer,

@@ -466,12 +466,15 @@ def _with_standing_weeks(
     )
 
 
-def _roll_now_clause(legs: tuple[str, ...], standing: StandingRollNow) -> str:
+def _roll_now_clause(standing: StandingRollNow) -> str:
     """Name what stands at ROLL NOW, and for how long (#472).
 
     The leg when there is one; the count when there are several, because a
-    subject line cannot carry every leg and the roll table below does.
+    subject line cannot carry every leg and the roll table below does. The
+    run is counted for what is named (see :class:`StandingRollNow`), so the
+    ordinal is that leg's, or the book's when it says "legs".
     """
+    legs = standing.legs
     what = legs[0] if len(legs) == 1 else f"{len(legs)} legs at"
     return f"{what} {ROLL_NOW_LABEL} ({format_ordinal(standing.weeks)} week)"
 
@@ -483,12 +486,11 @@ _STANDING_ROLL_NOTE: Final[str] = (
 )
 
 
-def _headline(  # pylint: disable=too-many-arguments  # one precedence chain over the digest's standing states; each is a distinct input
+def _headline(
     diff: SnapshotDiff,
     snapshot: WeeklySnapshot,
     compliance: IpsComplianceSection,
     breaches: tuple[StandingBreach, ...],
-    roll_now_legs: tuple[str, ...] = (),
     standing_roll: StandingRollNow | None = None,
 ) -> str:
     """Derive the one-line triage verdict for this digest.
@@ -542,8 +544,8 @@ def _headline(  # pylint: disable=too-many-arguments  # one precedence chain ove
                 f"BREACH: {len(failing)} IPS metrics out of policy "
                 f"({format_ordinal(weeks)} week)"
             )
-    elif standing_roll is not None and roll_now_legs:
-        base = f"ACTION: {_roll_now_clause(roll_now_legs, standing_roll)}"
+    elif standing_roll is not None:
+        base = f"ACTION: {_roll_now_clause(standing_roll)}"
     elif diff.crossings:
         base = f"ACTION: {diff.crossings[0].label}"
     else:
@@ -623,6 +625,7 @@ def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument
 
     prior_snapshot = history[-1] if history else None
     worst_roll_record = _worst_roll_record(roll_records, ips_triggers)
+    roll_legs = _roll_leg_rows(roll_records, ips_triggers)
     worst_roll = (
         worst_roll_record.verdict.value
         if worst_roll_record is not None
@@ -674,6 +677,17 @@ def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument
             if worst_roll_record is not None
             else None
         ),
+        # Every leg at ROLL NOW, not just the worst one's action: the worst leg
+        # is chosen by verdict first, so a short leg graded ROLL (no action)
+        # can outrank a long put at ROLL NOW (#472). ``None`` without the IPS:
+        # no action was decided, which is not "no leg at ROLL NOW".
+        roll_now_legs=(
+            None
+            if ips_triggers is None
+            else tuple(
+                row.leg for row in roll_legs if row.action == ROLL_NOW_LABEL
+            )
+        ),
         expired_leg_count=_expired_leg_count(roll_records),
         rally_status=(
             rally.status.value
@@ -687,10 +701,6 @@ def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument
     diff = diff_snapshots(prior_snapshot, snapshot)
     breaches = standing_breaches(history, snapshot)
     enriched_report = _with_standing_weeks(enriched_report, breaches)
-    roll_legs = _roll_leg_rows(roll_records, ips_triggers)
-    roll_now_legs = tuple(
-        row.leg for row in roll_legs if row.action == ROLL_NOW_LABEL
-    )
     standing_roll = standing_roll_now(history, snapshot)
 
     return WeeklyDigest(
@@ -702,7 +712,6 @@ def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument
             snapshot,
             enriched_report.ips_compliance,
             breaches,
-            roll_now_legs,
             standing_roll,
         ),
         roll_legs=roll_legs,

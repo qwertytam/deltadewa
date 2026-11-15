@@ -371,14 +371,16 @@ class TestSnapshotsWrittenBeforeActionsWereRecorded:
         weeks_ago: int,
         verdict: str,
     ) -> WeeklySnapshot:
-        """A snapshot as 0.9.x wrote it, round-tripped through its JSON."""
+        """A snapshot as 0.9.x wrote it: no action, no legs at ROLL NOW."""
         data = replace(
             _prior_snapshot(),
             as_of=_AS_OF - timedelta(days=7 * weeks_ago),
             worst_roll_verdict=verdict,
             worst_roll_action=None,
+            roll_now_legs=None,
         ).to_json_dict()
         data.pop("worst_roll_action")
+        data.pop("roll_now_legs")
         return WeeklySnapshot.from_json_dict(json.loads(json.dumps(data)))
 
     def test_a_file_without_the_field_loads_with_no_action(self) -> None:
@@ -448,13 +450,15 @@ class TestSnapshotsWrittenBeforeActionsWereRecorded:
         assert digest.standing_roll.may_be_longer is False
 
 
-class TestTheWorstLegCarriesRollNowWheneverAnyLegDoes:
-    """The snapshot keeps one leg; the run is only sound if that holds.
+class TestTheSnapshotRecordsEveryLegAtRollNow:
+    """What the standing run reads, pinned over the mixes that could break it.
 
-    ``standing_roll_now`` reads the snapshot's worst leg. That equals "some leg
-    is at ROLL NOW" because the worst leg is chosen by verdict, then by action
-    urgency, and every verdict-ROLL leg is ROLL NOW. Pinned over the mixes that
-    could break it, rather than left to the argument.
+    The run reads ``roll_now_legs``: every leg whose action is ROLL NOW, taken
+    from the same rows the roll table prints. It does not read the worst leg's
+    action, which equals "some leg is at ROLL NOW" only while every leg is a
+    long put (a short leg graded ROLL outranks it and has no action; see
+    ``TestAShortLegAtRollDoesNotHideALongPutAtRollNow``). So the property here
+    is that the recorded legs and the table agree, for every mix.
     """
 
     @pytest.mark.parametrize(
@@ -484,7 +488,7 @@ class TestTheWorstLegCarriesRollNowWheneverAnyLegDoes:
             "convexity below the band rolls every leg",
         ],
     )
-    def test_the_snapshot_says_roll_now_exactly_when_a_leg_does(
+    def test_the_recorded_legs_are_the_tables_roll_now_rows(
         self,
         monkeypatch: pytest.MonkeyPatch,
         legs,
@@ -496,8 +500,11 @@ class TestTheWorstLegCarriesRollNowWheneverAnyLegDoes:
             convexity=convexity,
         )
 
-        any_leg = any(r.action == ROLL_NOW_LABEL for r in digest.roll_legs)
-        assert (digest.snapshot.worst_roll_action == ROLL_NOW_LABEL) is any_leg
+        table = tuple(
+            r.leg for r in digest.roll_legs if r.action == ROLL_NOW_LABEL
+        )
+        any_leg = bool(table)
+        assert digest.snapshot.roll_now_legs == table
         assert (digest.standing_roll is not None) is any_leg
         # A first run: no crossing can fire, so the standing state alone
         # decides between the two headlines.
@@ -522,3 +529,252 @@ def test_a_digest_without_the_ips_has_no_actions_and_no_standing_run() -> None:
 
 def test_the_label_the_run_compares_is_the_one_the_plan_prints() -> None:
     assert ROLL_NOW_LABEL == "ROLL NOW"
+
+
+def _short_roll_leg(strike: float = 5_400.0) -> OptionPosition:
+    """A short put inside the window: graded ROLL, and given no action.
+
+    The plan makes no recommendation for a short leg (it rolls with its
+    structure), so its action is ``None``, but the roll status table grades it
+    like any other leg.
+    """
+    return _put(days=150, strike=strike, quantity=-5)
+
+
+class TestAShortLegAtRollDoesNotHideALongPutAtRollNow:
+    """The worst leg is chosen by verdict first, and a short leg has no action.
+
+    A short put graded ROLL outranks a long put at verdict REVIEW whose action
+    is ROLL NOW (a rally REVIEW whose condition failed). The snapshot's worst
+    leg is then the short one, with no action, so a headline read off the worst
+    leg would say NO ACTION over a table that says ROLL NOW (#472's own
+    failure). The snapshot records every leg at ROLL NOW instead.
+    """
+
+    def _book(self, monkeypatch: pytest.MonkeyPatch) -> WeeklyDigest:
+        return _digest(
+            monkeypatch,
+            _short_roll_leg(),
+            _checked_leg(),
+            convexity=25.0,
+        )
+
+    def test_the_worst_leg_is_the_one_with_no_action(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        digest = self._book(monkeypatch)
+
+        assert digest.snapshot.worst_roll_verdict == "ROLL"
+        assert digest.snapshot.worst_roll_action is None
+        assert [r.action for r in digest.roll_legs] == [None, ROLL_NOW_LABEL]
+
+    def test_the_headline_still_reads_the_roll_now_leg(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        digest = self._book(monkeypatch)
+
+        assert digest.snapshot.roll_now_legs == ("PUT 5,600",)
+        assert digest.headline == "ACTION: PUT 5,600 ROLL NOW (1st week)"
+
+    def test_a_history_of_such_weeks_is_counted(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        first = self._book(monkeypatch)
+        history = (
+            _last_week(first, weeks_ago=2),
+            _last_week(first, weeks_ago=1),
+        )
+
+        digest = _digest(
+            monkeypatch,
+            _short_roll_leg(),
+            _checked_leg(),
+            history=history,
+            convexity=25.0,
+        )
+
+        assert digest.headline == "ACTION: PUT 5,600 ROLL NOW (3rd week)"
+
+
+class TestTheCountBelongsToWhatTheHeadlineNames:
+    """One leg named: that leg's run. Several: the book's."""
+
+    def test_a_leg_taking_over_does_not_inherit_the_run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """PUT 4,100 stood three weeks and was rolled; PUT 4,200 is new."""
+        old_leg = _digest(monkeypatch, _roll_now_leg(strike=4_100.0))
+        history = tuple(_last_week(old_leg, weeks_ago=n) for n in (3, 2, 1))
+
+        digest = _digest(
+            monkeypatch,
+            _roll_now_leg(strike=4_200.0),
+            history=history,
+        )
+
+        assert digest.headline == "ACTION: PUT 4,200 ROLL NOW (1st week)"
+
+    def test_the_same_leg_keeps_its_run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        leg = _digest(monkeypatch, _roll_now_leg(strike=4_200.0))
+        history = tuple(_last_week(leg, weeks_ago=n) for n in (3, 2, 1))
+
+        digest = _digest(
+            monkeypatch,
+            _roll_now_leg(strike=4_200.0),
+            history=history,
+        )
+
+        assert digest.headline == "ACTION: PUT 4,200 ROLL NOW (4th week)"
+
+    def test_several_legs_count_the_book(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ "2 legs at ROLL NOW (4th week)": any leg at ROLL NOW extends it."""
+        one = _digest(monkeypatch, _roll_now_leg(strike=4_100.0))
+        history = tuple(_last_week(one, weeks_ago=n) for n in (3, 2, 1))
+
+        digest = _digest(
+            monkeypatch,
+            _roll_now_leg(strike=4_200.0),
+            _roll_now_leg(strike=4_300.0),
+            history=history,
+        )
+
+        assert digest.headline == "ACTION: 2 legs at ROLL NOW (4th week)"
+
+
+class TestEachVintageOfSnapshotFile:
+    """Current, 0.10.0 and 0.9.x files, told apart by the keys they carry."""
+
+    @staticmethod
+    def _as_written_by_0_10_0(
+        *,
+        weeks_ago: int,
+        verdict: str,
+        action: str | None,
+        leg: str | None = "PUT 5,600",
+    ) -> WeeklySnapshot:
+        """0.10.0 stored the worst leg's action but not the legs at ROLL NOW."""
+        data = replace(
+            _prior_snapshot(),
+            as_of=_AS_OF - timedelta(days=7 * weeks_ago),
+            worst_roll_verdict=verdict,
+            worst_roll_leg=leg,
+            worst_roll_action=action,
+        ).to_json_dict()
+        data.pop("roll_now_legs")
+        return WeeklySnapshot.from_json_dict(json.loads(json.dumps(data)))
+
+    def test_a_current_file_round_trips_its_legs(self) -> None:
+        snapshot = replace(
+            _prior_snapshot(),
+            roll_now_legs=("PUT 5,600", "PUT 5,400"),
+        )
+
+        loaded = WeeklySnapshot.from_json_dict(
+            json.loads(json.dumps(snapshot.to_json_dict())),
+        )
+
+        assert loaded.roll_now_legs == ("PUT 5,600", "PUT 5,400")
+
+    def test_not_recorded_stays_not_recorded(self) -> None:
+        """``None`` is "no action was decided", not "no leg at ROLL NOW"."""
+        loaded = WeeklySnapshot.from_json_dict(
+            json.loads(json.dumps(_prior_snapshot().to_json_dict())),
+        )
+
+        assert loaded.roll_now_legs is None
+
+    def test_a_digest_without_the_ips_records_none(self) -> None:
+        digest = build_weekly_digest(
+            report=_make_report(within_budget=True),
+            roll_records=(),
+            as_of=_AS_OF,
+        )
+
+        assert digest.snapshot.roll_now_legs is None
+
+    def test_a_0_10_0_roll_now_week_loads_as_its_one_leg(self) -> None:
+        old = self._as_written_by_0_10_0(
+            weeks_ago=1,
+            verdict="ROLL",
+            action=ROLL_NOW_LABEL,
+        )
+
+        assert old.roll_now_legs == ("PUT 5,600",)
+
+    def test_a_0_10_0_week_with_no_action_is_not_a_roll_now_week(self) -> None:
+        """A short leg graded ROLL has verdict ROLL and no action, in 0.10.0.
+
+        It must not be counted as ROLL NOW by the pre-0.10.0 fallback, and a
+        0.10.0 file is not one that "may hide" a REVIEW-driven ROLL NOW: it
+        recorded what it saw.
+        """
+        old = self._as_written_by_0_10_0(
+            weeks_ago=1,
+            verdict="ROLL",
+            action=None,
+        )
+
+        assert old.roll_now_legs == ()
+
+    def test_a_0_10_0_run_is_counted_for_its_leg_and_ends_cleanly(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        history = (
+            self._as_written_by_0_10_0(
+                weeks_ago=2,
+                verdict="REVIEW",
+                action=None,
+                leg="PUT 5,600",
+            ),
+            self._as_written_by_0_10_0(
+                weeks_ago=1,
+                verdict="ROLL",
+                action=ROLL_NOW_LABEL,
+            ),
+        )
+
+        digest = _digest(monkeypatch, _roll_now_leg(), history=history)
+
+        assert digest.headline == "ACTION: PUT 5,600 ROLL NOW (2nd week)"
+        assert digest.standing_roll is not None
+        assert digest.standing_roll.may_be_longer is False
+        assert "may be longer than shown" not in (
+            render_weekly_digest_markdown(digest)
+        )
+
+    def test_only_a_pre_0_10_0_review_week_can_hide_a_roll_now(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        pre = TestSnapshotsWrittenBeforeActionsWereRecorded()._old(
+            weeks_ago=1,
+            verdict="REVIEW",
+        )
+        written_by_0_10_0 = self._as_written_by_0_10_0(
+            weeks_ago=1,
+            verdict="REVIEW",
+            action=None,
+        )
+
+        hidden = _digest(monkeypatch, _roll_now_leg(), history=(pre,))
+        recorded = _digest(
+            monkeypatch,
+            _roll_now_leg(),
+            history=(written_by_0_10_0,),
+        )
+
+        assert hidden.standing_roll is not None
+        assert hidden.standing_roll.may_be_longer is True
+        assert recorded.standing_roll is not None
+        assert recorded.standing_roll.may_be_longer is False
