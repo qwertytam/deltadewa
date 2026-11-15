@@ -271,8 +271,9 @@ class TestThePutFromIssue461KeepsItsDate:
     """#461's PUT 5,600 is ROLL BY 2026-12-22 under the shipped IPS, as it was.
 
     The window is 6.0 months, so 180 days, and the date does not move when
-    the window is carried as a float. Pinned as a calendar fact: a leg
-    maturing 2027-06-20 opens its window 180 days earlier.
+    the window is carried as a float. Pinned as a calendar fact, on a
+    fixture book that reproduces #461's published case: a leg maturing
+    2027-06-20 opens its window 180 days earlier.
     """
 
     def test_the_date_under_the_shipped_ips(self) -> None:

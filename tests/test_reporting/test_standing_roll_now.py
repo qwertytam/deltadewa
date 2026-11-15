@@ -10,6 +10,10 @@ The rule, as decided: the **action** triggers it, never the verdict, and only
 ROLL NOW. ROLL BY is due, not overdue; DELAY is a deliberate deferral; CHECKED
 is a cleared review. The week count is consecutive snapshots with a leg at
 ROLL NOW, counted the way ``standing_breaches`` counts.
+
+Every leg, strike, date and week count in this module is invented to
+exercise the rule; none is a figure from a real book.
+ROLL NOW, counted the way ``standing_breaches`` counts.
 """
 
 from __future__ import annotations

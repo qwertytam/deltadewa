@@ -12,6 +12,9 @@ read from the one compliance definition (#298), and every surface that
 renders the verdict renders them beside it. Feeding compliance into the
 verdict (option 3) is the decided target, filed separately.
 
+Every reading, run length and date used as a fixture here is invented to
+exercise the rule; none is a figure from a real digest.
+
 The surfaces that render a decision-matrix verdict are the digest's section 7
 (markdown and HTML) and ``/design``'s market-environment panel. ``/monitor``'s
 Decisions panel renders roll verdicts and monetization, not this verdict; that
