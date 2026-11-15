@@ -20,6 +20,8 @@ from deltadewa.analysis.convexity_band import (
     NOT_MEASURED,
     UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
+    classify_band,
+    display_graded,
     format_band_edge,
     format_depth,
     grade_convexity,
@@ -443,6 +445,47 @@ class VegaSection:
     ceiling_pct: float
     meets_target: bool | None
 
+    @property
+    def grade(self) -> ConvexityGrade:
+        """Where the reading sits against the band; ``UNMEASURED`` if none.
+
+        Derived from the raw reading by the same classifier crash convexity
+        uses (:func:`~deltadewa.analysis.convexity_band.classify_band`), and
+        the one :func:`build_vega_section` sets ``meets_target`` from, so a
+        grade and the flag beside it cannot disagree (#469).
+        """
+        if self.sufficiency_pct is None:
+            return ConvexityGrade.UNMEASURED
+        return classify_band(
+            self.sufficiency_pct,
+            self.floor_pct,
+            self.ceiling_pct,
+        )
+
+    def display(self) -> str:
+        """Return the reading as a reader should see it, matching its grade.
+
+        The convexity display rule, by the same implementation
+        (:func:`~deltadewa.analysis.convexity_band.display_graded`): grade on
+        the unrounded value, one decimal unless that lands the printed figure
+        on the other side of a band edge from its grade, then two, then a
+        strict-signed edge. A 1.46 reading against a 1.5 floor reads
+        "1.46%" beside FAIL, never "1.5%" (#469).
+        """
+        return display_graded(
+            self.sufficiency_pct,
+            self.floor_pct,
+            self.ceiling_pct,
+            self.grade,
+        )
+
+    def band_display(self) -> str:
+        """Return the band as text, without rounding an edge away."""
+        return (
+            f"{format_band_edge(self.floor_pct, min_places=1)}%\u2013"
+            f"{format_band_edge(self.ceiling_pct, min_places=1)}%"
+        )
+
 
 class ComplianceStanding(StrEnum):
     """The IPS compliance section's overall verdict (#433)."""
@@ -853,9 +896,12 @@ def build_vega_section(
             None
             if sufficiency_pct is None
             else (
-                ips_vega.sufficiency_min_pct
-                <= sufficiency_pct
-                <= ips_vega.sufficiency_max_pct
+                classify_band(
+                    sufficiency_pct,
+                    ips_vega.sufficiency_min_pct,
+                    ips_vega.sufficiency_max_pct,
+                )
+                is ConvexityGrade.WITHIN
             )
         ),
     )
@@ -1027,10 +1073,9 @@ def _vega_compliance_row(vega: VegaSection) -> IpsComplianceRow:
     is neither.
     """
     # The en dash matches the convexity row's own target string above,
-    # built the same way and read on the same table.
-    target = (
-        f"{vega.floor_pct:.1f}%\u2013{vega.ceiling_pct:.1f}% per +10 vol pts"
-    )
+    # built the same way and read on the same table, and an edge is never
+    # rounded away: a 1.45 floor is "1.45%", not "1.4%" or "1.5%" (#469).
+    target = f"{vega.band_display()} per +10 vol pts"
     if vega.sufficiency_pct is None:
         return IpsComplianceRow(
             metric="Vega sufficiency",
@@ -1047,7 +1092,7 @@ def _vega_compliance_row(vega: VegaSection) -> IpsComplianceRow:
     passes = vega.meets_target
     action: str | None = None
     if passes is not True:
-        if vega.sufficiency_pct < vega.floor_pct:
+        if vega.grade is ConvexityGrade.BELOW:
             action = (
                 "Vega sufficiency is below the IPS floor — the book will"
                 " barely respond to a volatility spike; increase hedge"
@@ -1063,7 +1108,9 @@ def _vega_compliance_row(vega: VegaSection) -> IpsComplianceRow:
     return IpsComplianceRow(
         metric="Vega sufficiency",
         target=target,
-        actual=f"{vega.sufficiency_pct:.1f}%",
+        # The referee's display rule, as the convexity row beside it uses:
+        # the printed figure never contradicts the grade (#469).
+        actual=vega.display(),
         passes=passes,
         action=action,
     )

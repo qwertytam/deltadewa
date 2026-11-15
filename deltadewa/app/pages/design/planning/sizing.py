@@ -119,15 +119,16 @@ def _vega_sufficiency_block(
             id="vega-sufficiency",
         )
     verdict = "within band" if section.meets_target else "outside band"
+    # The referee's display rule, as the convexity panels use it (#469): the
+    # figure printed beside "outside band" never sits on the band's edge.
     return html.Div(
         [
             html.H4("Vega sufficiency"),
             html.P(
-                f"The book as it stands moves {fmt.percent(value)} of total "
+                f"The book as it stands moves {section.display()} of total "
                 "portfolio value (options plus underlying) per +10 vol "
-                f"points, against an IPS band of "
-                f"{fmt.percent(section.floor_pct)}-"
-                f"{fmt.percent(section.ceiling_pct)} ({verdict}). "
+                f"points, against an IPS band of {section.band_display()} "
+                f"({verdict}). "
                 "This describes the current book, not the candidate sized "
                 "above.",
                 className="plain-language",
@@ -137,6 +138,8 @@ def _vega_sufficiency_block(
                 low=section.floor_pct,
                 high=section.ceiling_pct,
                 fmt=fmt.percent,
+                within=section.meets_target,
+                value_text=section.display(),
             ),
         ],
         id="vega-sufficiency",
