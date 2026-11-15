@@ -81,9 +81,9 @@ than taken on faith.
   `age`-encrypts every nightly push (#320); either of two recipients'
   private keys decrypts it on its own — recipient 1 is the operator's
   own, recipient 2 is a second key deliberately kept somewhere reachable
-  *without* the operator (with the accountant, in a safe — wherever this
-  program's own continuity plan records it; see RUNBOOK.md §10 for the
-  mechanism, the private ops doc for the actual location). If you are
+  *without* the operator (wherever this program's own continuity plan
+  records it; see RUNBOOK.md §10 for the mechanism, the private ops doc
+  for the actual location). If you are
   reading this page because the operator is genuinely gone, that second
   key — not a login the operator alone had — is what gets you into
   `program_state.json` and the policy snapshot inside the backup.

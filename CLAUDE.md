@@ -599,8 +599,11 @@ don't fix):
   against the repo and flags drift (test counts, version, milestone status, dead
   references). Run before a milestone and after a merge.
 - **secret-scanner** — scans the working tree for operational values that must not
-  land in this public repo (see SECURITY.md's standing rule). Run before any commit
-  that touches config, ops scripts, or RUNBOOK/docs.
+  land in this public repo (see SECURITY.md's standing rule), and reads the branch's
+  commit messages and the draft PR body too (#475). Run before any commit that
+  touches config, ops scripts, or RUNBOOK/docs. The pattern-checkable half of the
+  rule is `tests/test_public_repo_hygiene.py`, in the gate; the scanner is the half
+  that needs judgment.
 - **consumer-tracer** — maps every consumer of a symbol, config key, or file as a
   file:line inventory with a risk note per consumer. Use before any config-key
   removal, rename, or module retirement.
