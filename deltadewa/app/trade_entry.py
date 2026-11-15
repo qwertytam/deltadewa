@@ -25,8 +25,10 @@ Unknown is not zero
 
 Dates
     A blank trade date means today's program date, which ``ProgramState``
-    resolves from :mod:`deltadewa.clock` when it is ``None``; this module is
-    handed ``today`` and never reads a clock itself. A trade dated in the
+    resolves from :mod:`deltadewa.clock` when it is ``None``. This module
+    is handed ``today`` and reads the clock only through
+    :func:`program_day`, which is :func:`~deltadewa.clock.
+    program_trading_date`; it never calls the stdlib. A trade dated in the
     future is refused. One dated on or before the latest boundary mark is
     allowed but warned about: that period is already closed, so the fill
     reads as a break in it (``realized_carry._late_fill_breaks``).
@@ -36,11 +38,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.crash_repricing import is_expired
 from deltadewa.analysis.roll_planner import group_into_structures
+from deltadewa.clock import program_trading_date
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.formatters.values import format_currency
 from deltadewa.portfolio.history import (
@@ -130,6 +133,21 @@ class RollEntry:
     trade_date: date | None
     structure_tag: str | None
     note: str | None
+
+
+def program_day(state: ProgramState) -> datetime:
+    """Return the program's current trading date, as midnight in its zone."""
+    zone = state.ips_config.program.timezone if state.ips_config else None
+    return program_trading_date(zone)
+
+
+def program_today(state: ProgramState) -> date:
+    """Return the program's current trading date."""
+    return program_day(state).date()
+
+
+def _utc_midnight(day: date) -> datetime:
+    return datetime.combine(day, time.min, tzinfo=UTC)
 
 
 # ── Parsing ─────────────────────────────────────────────────────────────
@@ -329,6 +347,58 @@ def parse_roll(raw: Mapping[str, Any], *, today: date) -> RollEntry:
         structure_tag=tag.strip() or None if isinstance(tag, str) else None,
         note=_note(raw),
     )
+
+
+_ADD_REQUIRED_MESSAGE: Final = "Strike, maturity, and quantity are required."
+
+
+def parse_open(
+    raw: Mapping[str, Any],
+    *,
+    today: date,
+) -> tuple[OpenOrder, date | None]:
+    """Validate the add-position form as the opening fill it records.
+
+    The premium and the fees are both required: ``OpenOrder`` has no
+    "price not captured", and a trade entered through this form is entered
+    *as* a fill, so a blank fee is refused rather than recorded as zero. A
+    lot already held, with no trade to record, comes in through the
+    importer, which starts the history at an opening mark.
+
+    Returns:
+        The order, and the trade date (``None`` for today's program date).
+
+    Raises:
+        TradeEntryError: A field is blank, not a number, or in the future.
+
+    """
+    strike = raw.get("strike")
+    maturity = raw.get("maturity")
+    quantity = raw.get("quantity")
+    if strike is None or not maturity or quantity is None:
+        raise TradeEntryError(_ADD_REQUIRED_MESSAGE)
+    whole = _number(raw, "quantity", "Quantity", minimum=-1e9)
+    if not whole.is_integer() or whole == 0:
+        raise TradeEntryError(
+            "Quantity must be a non-zero whole number of contracts.",
+        )
+    tag = raw.get("structure_id")
+    order = OpenOrder(
+        strike_price=_number(raw, "strike", "Strike", minimum=0.01),
+        maturity_date=_utc_midnight(_date(maturity, "Maturity")),
+        option_type=OptionType(str(raw.get("option_type"))),
+        quantity=int(whole),
+        price_per_share=_number(
+            raw,
+            "price",
+            "Entry premium",
+            hint=" (the fill price per share)",
+        ),
+        fees=_fees(raw, "fees", "Fees"),
+        exercise_style=ExerciseStyle(str(raw.get("exercise_style"))),
+        structure_id=tag.strip() or None if isinstance(tag, str) else None,
+    )
+    return order, _optional_date(raw, "date", "Trade date", today=today)
 
 
 # ── What the book holds ─────────────────────────────────────────────────
@@ -708,11 +778,7 @@ def _roll_leg(
         close_fees=leg.close_fees,
         into=OpenOrder(
             strike_price=leg.strike,
-            maturity_date=datetime.combine(
-                leg.maturity,
-                datetime.min.time(),
-                tzinfo=UTC,
-            ),
+            maturity_date=_utc_midnight(leg.maturity),
             option_type=OptionType(old.option.option_type),
             quantity=(
                 leg.quantity if leg.quantity is not None else int(old.quantity)

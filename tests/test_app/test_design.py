@@ -301,7 +301,9 @@ class TestMutationsPersist:
             quantity=5,
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
-            entry_premium=None,
+            entry_premium=50.0,
+            fees=0.0,
+            trade_date=None,
             structure_id=None,
             version=0,
             state=state,
@@ -454,7 +456,9 @@ class TestExerciseStyleDefault:
             quantity=1,
             option_type=OptionType.PUT.value,
             exercise_style=ips_style.value,
-            entry_premium=None,
+            entry_premium=50.0,
+            fees=0.0,
+            trade_date=None,
             structure_id=None,
             version=0,
             state=state,
@@ -475,7 +479,9 @@ class TestGuardMechanism:
             quantity=1,
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
-            entry_premium=None,
+            entry_premium=50.0,
+            fees=0.0,
+            trade_date=None,
             structure_id=None,
             version=7,
             state=app.program_state,
@@ -490,7 +496,7 @@ class TestGuardMechanism:
     ) -> None:
         app = _app_with_ips(tmp_path)
         state = app.program_state
-        monkeypatch.setattr(state, "add_position", _raise_mid_write)
+        monkeypatch.setattr(state, "open_position", _raise_mid_write)
 
         version, status, *_rest = design._add_position_logic(
             strike=100.0,
@@ -498,7 +504,9 @@ class TestGuardMechanism:
             quantity=1,
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
-            entry_premium=None,
+            entry_premium=50.0,
+            fees=0.0,
+            trade_date=None,
             structure_id=None,
             version=7,
             state=state,
@@ -527,7 +535,9 @@ class TestAddPositionRejectsExpiredMaturity:
             quantity=1,
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
-            entry_premium=None,
+            entry_premium=50.0,
+            fees=0.0,
+            trade_date=None,
             structure_id=None,
             version=0,
             state=state,
@@ -552,7 +562,9 @@ class TestAddPositionRejectsExpiredMaturity:
             quantity=1,
             option_type=OptionType.CALL.value,
             exercise_style=ExerciseStyle.EUROPEAN.value,
-            entry_premium=None,
+            entry_premium=50.0,
+            fees=0.0,
+            trade_date=None,
             structure_id=None,
             version=0,
             state=state,
@@ -3758,13 +3770,71 @@ def _fill_add_form(
     quantity: str,
     maturity: str,
 ) -> None:
-    """Fill the add-position form's three required fields."""
+    """Fill the add-position form's required fields.
+
+    The premium and the fees are required since #446 (the form records the
+    trade as an opening fill); ``0`` is a legal fee, so it is typed, not
+    skipped.
+    """
     page.fill("#add-strike", strike)
     page.fill("#add-quantity", quantity)
+    page.fill("#add-entry-premium", "50")
+    page.fill("#add-fees", "0")
     page.fill("#add-maturity", maturity)
     page.keyboard.press(
         "Enter"
     )  # commits the typed date (dcc.DatePickerSingle)
+
+
+class TestAddingTheSameValuesTwice:
+    """The add form takes identical entries in a row (found in #446).
+
+    The form used to blank its inputs by setting each ``value`` to ``None``
+    from the server. A ``dcc.Input`` cleared that way keeps the last value
+    the operator typed and ignores the next entry if it is the same, so a
+    second lot with the same quantity read as "quantity is required". Now
+    that fees are required and ``0`` is the usual answer, every second add
+    would have failed. The form rebuilds its fields instead, and a rebuilt
+    input has no memory.
+    """
+
+    def test_three_identical_adds_in_a_row_all_land(
+        self,
+        page: Page,
+        design_app: DesignAppHandle,
+    ) -> None:
+        page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        page.wait_for_selector("#add-strike", timeout=_PAGE_LOAD_TIMEOUT_MS)
+        before_count = len(design_app.state.portfolio.positions)
+
+        for strike in ("4500", "4600", "4700"):
+            _fill_add_form(
+                page,
+                strike=strike,
+                quantity="7",
+                maturity=_MATURITY_STR,
+            )
+            page.click("#add-submit")
+            page.wait_for_function(
+                "document.getElementById('add-form-fieldset').disabled "
+                "=== true",
+                timeout=2_000,
+            )
+            page.wait_for_function(
+                "document.getElementById('add-form-fieldset').disabled "
+                "=== false",
+                timeout=5_000,
+            )
+
+        positions = design_app.state.portfolio.positions
+        assert len(positions) == before_count + 3, page.inner_text(
+            "#mutation-status",
+        )
+        assert {p.option.strike_price for p in positions[-3:]} == {
+            4500.0,
+            4600.0,
+            4700.0,
+        }
 
 
 class TestAddPositionRace:
@@ -3781,16 +3851,16 @@ class TestAddPositionRace:
         design_app: DesignAppHandle,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        original_add_position = design_app.state.add_position
+        original_open_position = design_app.state.open_position
 
-        def _slow_add_position(*args: object, **kwargs: object) -> object:
+        def _slow_open_position(*args: object, **kwargs: object) -> object:
             time.sleep(1.0)
-            return original_add_position(*args, **kwargs)
+            return original_open_position(*args, **kwargs)
 
         monkeypatch.setattr(
             design_app.state,
-            "add_position",
-            _slow_add_position,
+            "open_position",
+            _slow_open_position,
         )
 
         page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)
@@ -3844,7 +3914,9 @@ class TestAddPositionRace:
         )
 
         positions = design_app.state.portfolio.positions
-        assert len(positions) == before_count + 2
+        assert len(positions) == before_count + 2, page.inner_text(
+            "#mutation-status",
+        )
         strikes = {pos.option.strike_price for pos in positions[-2:]}
         assert strikes == {4400.0, 4600.0}
 
@@ -3855,16 +3927,16 @@ class TestAddPositionRace:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The issue's "incidentally fixes double-click" claim."""
-        original_add_position = design_app.state.add_position
+        original_open_position = design_app.state.open_position
 
-        def _slow_add_position(*args: object, **kwargs: object) -> object:
+        def _slow_open_position(*args: object, **kwargs: object) -> object:
             time.sleep(1.0)
-            return original_add_position(*args, **kwargs)
+            return original_open_position(*args, **kwargs)
 
         monkeypatch.setattr(
             design_app.state,
-            "add_position",
-            _slow_add_position,
+            "open_position",
+            _slow_open_position,
         )
 
         page.goto(f"{design_app.url}/design", timeout=_PAGE_LOAD_TIMEOUT_MS)

@@ -1273,3 +1273,37 @@ fieldset.editor-form {
 .planning-table td.scorecard-cell .verdict-badge {
   margin-left: 8px;
 }
+
+/* #446: the /design trade forms (close, settle, roll). */
+
+.trade-forms {
+  margin: 16px 0;
+}
+
+.trade-form {
+  margin: 20px 0;
+}
+
+.trade-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+fieldset.trade-leg {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  min-width: 0;
+}
+
+.trade-review ul {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+  font-size: 0.85rem;
+}
+
+.trade-warning {
+  color: #7a5b00;
+}

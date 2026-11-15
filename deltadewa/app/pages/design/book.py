@@ -28,7 +28,6 @@ import base64
 import binascii
 import logging
 import tempfile
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
@@ -37,6 +36,7 @@ from dash.development.base_component import Component
 
 from deltadewa.analysis.crash_repricing import is_expired
 from deltadewa.app import format as fmt
+from deltadewa.app import trade_entry as te
 from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.panel_guard import status_message as _status
 from deltadewa.app.section_nav import SectionSpec, back_to_top_link
@@ -61,7 +61,6 @@ _logger = logging.getLogger(__name__)
 # "import-pending-path" dcc.Store unchanged.
 _ImportSource = dict[str, str | None]
 
-_REQUIRED_ADD_FIELDS_MSG = "Strike, maturity, and quantity are required."
 
 # The two ids every other zone/panel module needs: every PLANNING and
 # EXPLORATION panel watches BOOK_VERSION_STORE as its re-render trigger,
@@ -69,11 +68,20 @@ _REQUIRED_ADD_FIELDS_MSG = "Strike, maturity, and quantity are required."
 BOOK_VERSION_STORE = "book-version"
 MUTATION_STATUS = "mutation-status"
 
-#: #357: this zone's three TOC entries and heading ids, in render order.
-SECTIONS: Final[tuple[SectionSpec, ...]] = (
+#: #357: this zone's TOC entries and heading ids, in render order. The
+#: trade forms (``trades.SECTIONS``, #446) sit between the two groups: they
+#: act on the lots the table lists, and the page composes the TOC around
+#: them because ``trades`` imports this module and not the reverse.
+SECTIONS_BEFORE_TRADES: Final[tuple[SectionSpec, ...]] = (
     SectionSpec(anchor_id="section-add-position", title="Add a position"),
     SectionSpec(anchor_id="section-positions", title="Positions"),
+)
+SECTIONS_AFTER_TRADES: Final[tuple[SectionSpec, ...]] = (
     SectionSpec(anchor_id="section-import-export", title="Import / export"),
+)
+SECTIONS: Final[tuple[SectionSpec, ...]] = (
+    *SECTIONS_BEFORE_TRADES,
+    *SECTIONS_AFTER_TRADES,
 )
 
 #: #357: this zone's own TOC group heading id — the anchor a "Book" link
@@ -118,7 +126,10 @@ def _position_row(index: int, position: OptionPosition) -> html.Tr:
         f"{position.option.option_type.value} "
         f"{position.option.strike_price:,.0f} exp "
         f"{position.option.maturity_date.strftime('%Y-%m-%d')}? This "
-        "cannot be undone from this page — re-add it manually if needed."
+        "records a deletion with no cash, so the period it falls in "
+        "cannot be reconciled, and it cannot be turned into a close "
+        "later. Use it only to correct a typo; to book a trade, cancel "
+        "and use Record a trade instead."
     )
     return html.Tr(
         [
@@ -234,19 +245,26 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
     option_type: str,
     exercise_style: str,
     entry_premium: float | None,
+    fees: float | None,
+    trade_date: str | None,
     structure_id: str | None,
     version: int,
     state: ProgramState,
-) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any, bool]:
-    """Add a position from the BOOK zone's add-form.
+) -> tuple[Any, ...]:
+    """Add a position from the BOOK zone's add-form, as an opening fill.
+
+    The form records a trade: the premium and the fees are required, and
+    the lot goes in through ``ProgramState.open_position`` so the history
+    holds an ``OPEN`` fill with its price and fees rather than one with the
+    fees not captured (#446). ``0`` is a legal fee; blank is refused.
 
     Returns:
         A tuple matching the callback's Outputs: the new ``book-version``
-        (or ``no_update`` on failure), a status message, the seven form
-        fields' next values — cleared on success (so the operator isn't
-        typing over stale values on the next add) and left as ``no_update``
-        on failure (so a typo can be fixed and resubmitted rather than
-        retyped from scratch) — and finally ``False`` for the
+        (or ``no_update`` on failure), a status message, the form's fields
+        — freshly built on success (so the operator isn't typing over stale
+        values on the next add, and no input remembers the last one) and
+        ``no_update`` on failure (so a typo can be fixed and resubmitted
+        rather than retyped from scratch) — and finally ``False`` for the
         ``add-form-fieldset``'s ``disabled``, on every branch: a
         clientside callback (see :func:`register`) sets it ``True`` the
         instant the button is clicked, closing the window #387 reported
@@ -258,56 +276,29 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         actually been applied.
 
     """
-    if strike is None or maturity is None or quantity is None:
-        return (
-            no_update,
-            _status(_REQUIRED_ADD_FIELDS_MSG, error=True),
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            False,
-        )
-
-    maturity_date = datetime.strptime(maturity, "%Y-%m-%d").replace(
-        tzinfo=UTC,
-    )
+    raw = {
+        "strike": strike,
+        "maturity": maturity,
+        "quantity": quantity,
+        "option_type": option_type,
+        "exercise_style": exercise_style,
+        "price": entry_premium,
+        "fees": fees,
+        "date": trade_date,
+        "structure_id": structure_id,
+    }
 
     def _do_add() -> None:
-        # A plain def, not a lambda: state.add_position returns the new
-        # OptionPosition, and _guarded_mutation's Callable[[], None]
-        # discards a def's return value more predictably under mypy
-        # than a lambda's inferred return type does.
-        state.add_position(
-            strike_price=strike,
-            maturity_date=maturity_date,
-            quantity=int(quantity),
-            option_type=OptionType(option_type),
-            exercise_style=ExerciseStyle(exercise_style),
-            entry_premium=entry_premium,
-            # Blank means "standalone leg", not "a structure named ''" —
-            # an empty text input yields "" and must not become a tag that
-            # silently groups every untagged leg into one structure (#333).
-            structure_id=(structure_id or "").strip() or None,
-        )
+        # A plain def, not a lambda: _guarded_mutation's Callable[[], None]
+        # discards a def's return value more predictably under mypy than a
+        # lambda's inferred return type does. Parsing happens in here so a
+        # refused form and a refused write read the same to the operator.
+        order, traded = te.parse_open(raw, today=te.program_today(state))
+        state.open_position(order, trade_date=traded)
 
     error = _guarded_mutation(_do_add)
     if error is not None:
-        return (
-            no_update,
-            _status(error, error=True),
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            no_update,
-            False,
-        )
+        return no_update, _status(error, error=True), no_update, False
 
     # Reset the exercise-style field back to the IPS default rather than
     # whatever was just submitted — ips_config is guaranteed non-None in
@@ -321,13 +312,7 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
     return (
         version + 1,
         _status("Added.", error=False),
-        None,
-        None,
-        None,
-        OptionType.PUT.value,
-        reset_style,
-        None,
-        None,
+        _add_form_fields(reset_style),
         False,
     )
 
@@ -686,13 +671,127 @@ def _import_picker_options(
     ]
 
 
+def _add_form_fields(default_style: str) -> list[Component]:
+    """Build the add-position form's fields, fresh.
+
+    Rebuilt rather than cleared after a successful add (see
+    :func:`_add_position_logic`): a ``dcc.Input`` the server blanks by
+    setting ``value`` to ``None`` keeps the last value the operator typed
+    and ignores the next entry if it is the same, so adding two lots with
+    the same quantity, or the same ``0`` fees, in a row read as blank. A
+    new component has no such memory.
+    """
+    return [
+        html.Div(
+            [
+                html.Label("Strike"),
+                dcc.Input(id="add-strike", type="number"),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Maturity"),
+                dcc.DatePickerSingle(id="add-maturity"),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Quantity"),
+                dcc.Input(id="add-quantity", type="number"),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Type"),
+                dcc.RadioItems(
+                    id="add-option-type",
+                    options=[
+                        OptionType.PUT.value,
+                        OptionType.CALL.value,
+                    ],
+                    value=OptionType.PUT.value,
+                ),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Exercise style"),
+                dcc.RadioItems(
+                    id="add-exercise-style",
+                    options=[
+                        ExerciseStyle.EUROPEAN.value,
+                        ExerciseStyle.AMERICAN.value,
+                    ],
+                    value=default_style,
+                ),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Entry premium per share"),
+                dcc.Input(
+                    id="add-entry-premium",
+                    type="number",
+                ),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Fees (enter 0 if none)"),
+                dcc.Input(id="add-fees", type="number"),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Trade date"),
+                dcc.DatePickerSingle(id="add-trade-date"),
+                html.Small(
+                    "Blank means today (the program's date).",
+                    className="field-hint",
+                ),
+            ],
+            className="editor-field",
+        ),
+        html.Div(
+            [
+                html.Label("Structure (optional)"),
+                dcc.Input(
+                    id="add-structure-id",
+                    type="text",
+                    placeholder="e.g. collar-2027",
+                ),
+                html.Small(
+                    "Same tag on both legs of a spread — the "
+                    "roll planner then moves them together "
+                    "and nets their cost. Blank = standalone.",
+                    className="field-hint",
+                ),
+            ],
+            className="editor-field",
+        ),
+    ]
+
+
 def layout(
     *,
     app: ProgramDashApp,
     portfolio: OptionPortfolio,
     default_style: str,
+    trade_forms: Component,
 ) -> html.Div:
-    """Build the BOOK zone: editor form, position table, import/export."""
+    """Build the BOOK zone: add form, positions, trade forms, import/export.
+
+    *trade_forms* is ``trades.layout()``, handed in by the page: ``trades``
+    imports this module for the ids it shares, so this module cannot import
+    ``trades`` back.
+    """
     return html.Div(
         [
             html.H2("Book", id=ZONE_ANCHOR),
@@ -730,89 +829,28 @@ def layout(
                 ),
                 id="book-total-underlying-value",
             ),
-            html.H3(SECTIONS[0].title, id=SECTIONS[0].anchor_id),
+            html.H3(
+                SECTIONS_BEFORE_TRADES[0].title,
+                id=SECTIONS_BEFORE_TRADES[0].anchor_id,
+            ),
             html.P(
-                "Editing a position is remove + add, not in-place edit — "
-                "there is no separate 'update' form.",
+                "Adding a position records the trade: the premium and the "
+                "fees are both required (enter 0 for no fees), and it is "
+                "written to the history as an opening fill. A lot you "
+                "already hold comes in through an import, not here. There "
+                "is no in-place edit: to fix a typo, Remove the lot and add "
+                "it again. To record a close, a settlement or a roll, use "
+                "Record a trade below, not Remove.",
                 className="plain-language",
             ),
             html.Fieldset(
                 [
+                    # ``display: contents`` keeps the fields laid out as
+                    # direct flex children of the fieldset.
                     html.Div(
-                        [
-                            html.Label("Strike"),
-                            dcc.Input(id="add-strike", type="number"),
-                        ],
-                        className="editor-field",
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Maturity"),
-                            dcc.DatePickerSingle(id="add-maturity"),
-                        ],
-                        className="editor-field",
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Quantity"),
-                            dcc.Input(id="add-quantity", type="number"),
-                        ],
-                        className="editor-field",
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Type"),
-                            dcc.RadioItems(
-                                id="add-option-type",
-                                options=[
-                                    OptionType.PUT.value,
-                                    OptionType.CALL.value,
-                                ],
-                                value=OptionType.PUT.value,
-                            ),
-                        ],
-                        className="editor-field",
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Exercise style"),
-                            dcc.RadioItems(
-                                id="add-exercise-style",
-                                options=[
-                                    ExerciseStyle.EUROPEAN.value,
-                                    ExerciseStyle.AMERICAN.value,
-                                ],
-                                value=default_style,
-                            ),
-                        ],
-                        className="editor-field",
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Entry premium (optional)"),
-                            dcc.Input(
-                                id="add-entry-premium",
-                                type="number",
-                            ),
-                        ],
-                        className="editor-field",
-                    ),
-                    html.Div(
-                        [
-                            html.Label("Structure (optional)"),
-                            dcc.Input(
-                                id="add-structure-id",
-                                type="text",
-                                placeholder="e.g. collar-2027",
-                            ),
-                            html.Small(
-                                "Same tag on both legs of a spread — the "
-                                "roll planner then moves them together "
-                                "and nets their cost. Blank = standalone.",
-                                className="field-hint",
-                            ),
-                        ],
-                        className="editor-field",
+                        _add_form_fields(default_style),
+                        id="add-form-fields",
+                        style={"display": "contents"},
                     ),
                     html.Button(
                         "Add position",
@@ -825,14 +863,21 @@ def layout(
                 disabled=False,
             ),
             html.Div(id=MUTATION_STATUS),
-            html.H3(SECTIONS[1].title, id=SECTIONS[1].anchor_id),
+            html.H3(
+                SECTIONS_BEFORE_TRADES[1].title,
+                id=SECTIONS_BEFORE_TRADES[1].anchor_id,
+            ),
             html.Div(
                 _render_position_table_logic(
                     positions=app.program_state.positions_snapshot(),
                 ),
                 id="position-table",
             ),
-            html.H3(SECTIONS[2].title, id=SECTIONS[2].anchor_id),
+            trade_forms,
+            html.H3(
+                SECTIONS_AFTER_TRADES[0].title,
+                id=SECTIONS_AFTER_TRADES[0].anchor_id,
+            ),
             html.Div(
                 [
                     html.Div(
@@ -942,13 +987,7 @@ def register(app: ProgramDashApp) -> None:
     @app.callback(
         Output(BOOK_VERSION_STORE, "data", allow_duplicate=True),
         Output(MUTATION_STATUS, "children", allow_duplicate=True),
-        Output("add-strike", "value"),
-        Output("add-maturity", "date"),
-        Output("add-quantity", "value"),
-        Output("add-option-type", "value"),
-        Output("add-exercise-style", "value"),
-        Output("add-entry-premium", "value"),
-        Output("add-structure-id", "value"),
+        Output("add-form-fields", "children"),
         Output("add-form-fieldset", "disabled", allow_duplicate=True),
         Input("add-submit", "n_clicks"),
         State("add-strike", "value"),
@@ -957,6 +996,8 @@ def register(app: ProgramDashApp) -> None:
         State("add-option-type", "value"),
         State("add-exercise-style", "value"),
         State("add-entry-premium", "value"),
+        State("add-fees", "value"),
+        State("add-trade-date", "date"),
         State("add-structure-id", "value"),
         State(BOOK_VERSION_STORE, "data"),
         prevent_initial_call=True,
@@ -969,9 +1010,11 @@ def register(app: ProgramDashApp) -> None:
         option_type: str,
         exercise_style: str,
         entry_premium: float | None,
+        fees: float | None,
+        trade_date: str | None,
         structure_id: str | None,
         version: int,
-    ) -> tuple[Any, Component, Any, Any, Any, Any, Any, Any, Any, bool]:
+    ) -> tuple[Any, ...]:
         return _add_position_logic(
             strike=strike,
             maturity=maturity,
@@ -979,6 +1022,8 @@ def register(app: ProgramDashApp) -> None:
             option_type=option_type,
             exercise_style=exercise_style,
             entry_premium=entry_premium,
+            fees=fees,
+            trade_date=trade_date,
             structure_id=structure_id,
             version=version,
             state=app.program_state,
