@@ -10,6 +10,7 @@ from deltadewa.formatters.values import (
     format_greek_value,
     format_number,
     format_number_auto_precision,
+    format_ordinal,
     format_ordinal_percentile,
     format_percentage,
     format_percentage_for_axis,
@@ -237,6 +238,38 @@ class TestNotebookDegradation:
 
         out = capsys.readouterr().out
         assert "3 rows x 1 columns" in out
+
+
+class TestFormatOrdinal:
+    """format_ordinal — the one English-ordinal rule, for weeks and ranks."""
+
+    @pytest.mark.parametrize(
+        ("n", "expected"),
+        [
+            (1, "1st"),
+            (2, "2nd"),
+            (3, "3rd"),
+            (4, "4th"),
+            (10, "10th"),
+            (11, "11th"),
+            (12, "12th"),
+            (13, "13th"),
+            (21, "21st"),
+            (22, "22nd"),
+            (23, "23rd"),
+            (101, "101st"),
+            (111, "111th"),
+            (112, "112th"),
+            (113, "113th"),
+        ],
+    )
+    def test_ordinal(self, n: int, expected: str) -> None:
+        assert format_ordinal(n) == expected
+
+    def test_the_percentile_helper_is_the_same_rule(self) -> None:
+        """No second copy of the suffix rule: the percentile calls this."""
+        assert format_ordinal_percentile(0.11) == format_ordinal(11)
+        assert format_ordinal_percentile(0.22) == format_ordinal(22)
 
 
 class TestFormatOrdinalPercentile:

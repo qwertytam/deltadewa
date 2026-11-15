@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Final
 
 from deltadewa.analysis.convexity_band import (
     COULD_NOT_BE_MEASURED,
+    NOT_MEASURED,
     UNMEASURED_NOT_BREACHING,
     ConvexityGrade,
     grade_convexity,
@@ -31,8 +32,11 @@ from deltadewa.analysis.market_environment import (
     HedgeCostVerdict,
     TermShape,
 )
+from deltadewa.formatters.values import format_ordinal
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.monetization import MonetizationPlan
     from deltadewa.ips_config import IpsConvexity
@@ -103,6 +107,90 @@ class HedgeAdequacy(StrEnum):
     OVER = "OVER"
 
 
+class UncoveredStatus(StrEnum):
+    """Why a banded metric is not covered by the verdict (#465)."""
+
+    FAIL = "FAIL"
+    """A reading outside its band: a breach."""
+
+    UNMEASURED = "UNMEASURED"
+    """No reading could be taken: neither a pass nor a breach (#433)."""
+
+
+@dataclass(frozen=True)
+class UncoveredMetric:
+    """A banded metric the verdict did not grade, and where it stands (#465).
+
+    The verdict is graded on crash convexity against the IPS band and nothing
+    else, but a reader takes ``MAINTAIN`` as a program-level instruction: it sat
+    beside a 10th-week vega breach whose recommended action was to add hedge.
+    These are the other IPS rows that are failing or unmeasured, read from the
+    one compliance definition (#298), never graded again here.
+
+    Attributes:
+        metric: The compliance row's own name, as the IPS compliance table
+            prints it.
+        status: Failing, or unmeasured.
+        actual: The row's reading as the table prints it.
+        target: The row's band as the table prints it.
+        weeks: Consecutive snapshots the metric has been failing, when the
+            caller knows (only the weekly digest keeps a history); ``None``
+            otherwise, and always ``None`` for an unmeasured metric, which has
+            no run length.
+
+    """
+
+    metric: str
+    status: UncoveredStatus
+    actual: str
+    target: str
+    weeks: int | None = None
+
+
+NOT_COVERED_PREFIX: Final[str] = "Not covered by this verdict:"
+"""How every surface starts the sentence naming what the verdict left out."""
+
+
+def _describe_uncovered(metric: UncoveredMetric) -> str:
+    """Name one uncovered metric, with its reading when it has one."""
+    if metric.status is UncoveredStatus.UNMEASURED:
+        return f"{metric.metric} {NOT_MEASURED}"
+    detail = f"{metric.actual} vs {metric.target}"
+    if metric.weeks is not None:
+        detail = f"{detail}, {format_ordinal(metric.weeks)} week"
+    return f"{metric.metric} {metric.status.value} ({detail})"
+
+
+def describe_not_covered(
+    metrics: Sequence[UncoveredMetric],
+    *,
+    see: str,
+) -> str | None:
+    """Say what the verdict did not grade, or ``None`` if it covered it all.
+
+    One sentence, worded here once so the digest's section 7 and ``/design``'s
+    market-environment panel print the same words beside the verdict (the
+    operator prose of this module's other notes is built at the source for the
+    same reason):
+
+        Not covered by this verdict: Vega sufficiency FAIL (0.7% vs 1.5%-4.0%
+        per +10 vol pts, 10th week) — see §6.
+
+    Args:
+        metrics: What :attr:`DecisionResult.not_covered` carries.
+        see: Where the reader finds the table those rows come from, in the
+            surface's own words (``"§6"``).
+
+    Returns:
+        The sentence, or ``None`` when *metrics* is empty.
+
+    """
+    if not metrics:
+        return None
+    named = "; ".join(_describe_uncovered(m) for m in metrics)
+    return f"{NOT_COVERED_PREFIX} {named} \u2014 see {see}."
+
+
 @dataclass(frozen=True)
 class DecisionResult:
     """Result of :func:`decision_matrix`.
@@ -123,6 +211,13 @@ class DecisionResult:
         cost_verdict: Mirrors ``market_env.hedge_cost_verdict``.
         gains_available: ``True`` when the monetization plan reports a
             positive ``value_to_harvest``.
+        not_covered: The banded metrics that are failing or unmeasured and
+            that this verdict did **not** grade (#465). The verdict's logic
+            is convexity-only by design; this is what lets a surface say so
+            beside it instead of leaving ``MAINTAIN`` to read as a statement
+            about the whole program. Set by the caller from the one
+            compliance definition and carried through unchanged, never
+            derived here. See :func:`describe_not_covered`.
 
     """
 
@@ -132,6 +227,7 @@ class DecisionResult:
     hedge_adequacy: HedgeAdequacy | None
     cost_verdict: HedgeCostVerdict | None
     gains_available: bool
+    not_covered: tuple[UncoveredMetric, ...] = ()
 
 
 @dataclass
@@ -234,6 +330,7 @@ def decision_matrix(
     *,
     convexity_now_pct: float | None,
     ips_convexity: IpsConvexity,
+    not_covered: Sequence[UncoveredMetric],
     monetization_plan: MonetizationPlan | None = None,
 ) -> DecisionResult:
     """Combine market environment, convexity, and monetization into a verdict.
@@ -274,6 +371,14 @@ def decision_matrix(
             both ends of the band: exactly at ``target_min_pct`` or
             ``target_max_pct`` is ``ADEQUATE``.
         ips_convexity: IPS convexity band configuration.
+        not_covered: The other banded metrics that are failing or
+            unmeasured, from the one compliance definition (#465). Required,
+            with no default, so no caller can build a verdict without
+            deciding what to say about the rest of the policy; pass ``()``
+            only when nothing else is out. It changes no verdict: the
+            matrix above is convexity-only and stays so; feeding compliance
+            into the verdict is the decided target, filed separately (see
+            the option-3 follow-up to #465).
         monetization_plan: Optional plan from
             :func:`build_monetization_plan`; ``value_to_harvest > 0``
             marks gains as available.
@@ -291,6 +396,7 @@ def decision_matrix(
     gains_available = (
         monetization_plan is not None and monetization_plan.value_to_harvest > 0
     )
+    uncovered = tuple(not_covered)
     adequacy = _ADEQUACY.get(grading.grade)
     if adequacy is None:
         return DecisionResult(
@@ -306,6 +412,7 @@ def decision_matrix(
             hedge_adequacy=None,
             cost_verdict=None,
             gains_available=gains_available,
+            not_covered=uncovered,
         )
 
     if market_env.data_quality not in _VERDICT_QUALITIES:
@@ -324,6 +431,7 @@ def decision_matrix(
             hedge_adequacy=adequacy,
             cost_verdict=None,
             gains_available=gains_available,
+            not_covered=uncovered,
         )
 
     cost = market_env.hedge_cost_verdict
@@ -343,6 +451,7 @@ def decision_matrix(
             hedge_adequacy=adequacy,
             cost_verdict=None,
             gains_available=gains_available,
+            not_covered=uncovered,
         )
 
     verdict = _environment_verdict(adequacy, cost, gains_available)
@@ -353,6 +462,7 @@ def decision_matrix(
         hedge_adequacy=adequacy,
         cost_verdict=cost,
         gains_available=gains_available,
+        not_covered=uncovered,
     )
 
 

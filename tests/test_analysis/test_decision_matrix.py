@@ -110,6 +110,7 @@ class TestDecisionMatrixInsufficientData:
             env,
             convexity_now_pct=15.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
         assert result.data_quality_note is not None
@@ -125,6 +126,7 @@ class TestDecisionMatrixInsufficientData:
             env,
             convexity_now_pct=15.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
 
@@ -136,6 +138,7 @@ class TestDecisionMatrixInsufficientData:
             env,
             convexity_now_pct=8.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
@@ -147,6 +150,7 @@ class TestDecisionMatrixInsufficientData:
             env,
             convexity_now_pct=15.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
         assert result.data_quality_note is not None
@@ -166,6 +170,7 @@ class TestDecisionMatrixBuySignals:
             env,
             convexity_now_pct=5.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.BUY
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
@@ -177,6 +182,7 @@ class TestDecisionMatrixBuySignals:
             env,
             convexity_now_pct=5.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.BUY
 
@@ -187,6 +193,7 @@ class TestDecisionMatrixBuySignals:
             env,
             convexity_now_pct=9.99,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.BUY
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
@@ -205,6 +212,7 @@ class TestDecisionMatrixAvoidSignal:
             env,
             convexity_now_pct=5.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.AVOID
         assert result.hedge_adequacy is HedgeAdequacy.UNDER
@@ -223,6 +231,7 @@ class TestDecisionMatrixMaintainSignals:
             env,
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
         assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
@@ -235,6 +244,7 @@ class TestDecisionMatrixMaintainSignals:
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
             monetization_plan=_make_plan(harvest=10_000.0),
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
 
@@ -246,6 +256,7 @@ class TestDecisionMatrixMaintainSignals:
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
             monetization_plan=_make_plan(harvest=10_000.0),
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
 
@@ -256,6 +267,7 @@ class TestDecisionMatrixMaintainSignals:
             env,
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
 
@@ -266,6 +278,7 @@ class TestDecisionMatrixMaintainSignals:
             env,
             convexity_now_pct=35.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
         assert result.hedge_adequacy is HedgeAdequacy.OVER
@@ -277,6 +290,7 @@ class TestDecisionMatrixMaintainSignals:
             env,
             convexity_now_pct=10.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
 
@@ -287,6 +301,7 @@ class TestDecisionMatrixMaintainSignals:
             env,
             convexity_now_pct=30.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
         assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
 
@@ -305,6 +320,7 @@ class TestDecisionMatrixMonetizeSignals:
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
             monetization_plan=_make_plan(harvest=10_000.0),
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MONETIZE
         assert result.gains_available is True
@@ -317,6 +333,7 @@ class TestDecisionMatrixMonetizeSignals:
             convexity_now_pct=35.0,
             ips_convexity=_IPS,
             monetization_plan=_make_plan(harvest=5_000.0),
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MONETIZE
 
@@ -328,6 +345,7 @@ class TestDecisionMatrixMonetizeSignals:
             convexity_now_pct=35.0,
             ips_convexity=_IPS,
             monetization_plan=_make_plan(harvest=5_000.0),
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MONETIZE
 
@@ -339,6 +357,7 @@ class TestDecisionMatrixMonetizeSignals:
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
             monetization_plan=_make_plan(harvest=0.0),
+            not_covered=(),
         )
         assert result.verdict is DecisionVerdict.MAINTAIN
         assert result.gains_available is False
@@ -512,6 +531,7 @@ class TestDataQualityGate:
             market_env=_make_env(data_quality=DataQuality.CACHED),
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
 
         assert result.verdict is not DecisionVerdict.INSUFFICIENT_DATA
@@ -523,6 +543,7 @@ class TestDataQualityGate:
             market_env=_make_env(data_quality=DataQuality.STALE),
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
 
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
@@ -535,6 +556,7 @@ class TestDataQualityGate:
             market_env=_make_env(data_quality=DataQuality.STALE),
             convexity_now_pct=20.0,
             ips_convexity=_IPS,
+            not_covered=(),
         )
 
         assert result.hedge_adequacy is HedgeAdequacy.ADEQUATE
@@ -572,6 +594,7 @@ class TestUnmeasuredConvexity:
             _make_env(),
             convexity_now_pct=None,
             ips_convexity=_IPS,
+            not_covered=(),
         )
 
         assert result.verdict is DecisionVerdict.INSUFFICIENT_DATA
@@ -582,6 +605,7 @@ class TestUnmeasuredConvexity:
             _make_env(),
             convexity_now_pct=None,
             ips_convexity=_IPS,
+            not_covered=(),
         )
 
         assert "could not be measured" in result.rationale
@@ -608,6 +632,7 @@ class TestUnmeasuredConvexity:
             _make_env(),
             convexity_now_pct=reading,
             ips_convexity=_IPS,
+            not_covered=(),
         )
 
         assert result.hedge_adequacy is adequacy

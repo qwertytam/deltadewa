@@ -30,7 +30,10 @@ from deltadewa.analysis.convexity_band import (
 from deltadewa.analysis.crash_repricing import describe_expired_legs
 from deltadewa.analysis.decision_matrix import (
     DecisionVerdict,
+    UncoveredMetric,
+    UncoveredStatus,
     decision_matrix,
+    describe_not_covered,
     entry_timing_tree,
 )
 from deltadewa.analysis.market_environment import describe_skew_percentile
@@ -505,6 +508,13 @@ class IpsComplianceRow:
             from the same ``CostSection``/``ProtectionSection`` fields that
             already decided ``passes``; it explains an already-decided
             failure, it never re-decides one (#307).
+        graded_by_decision: ``True`` on the one row the decision verdict is
+            graded on (crash convexity). The verdict reads no other row, so
+            every other failing or unmeasured row is something it did **not**
+            cover, which :func:`metrics_outside_the_verdict` reports beside it
+            (#465). Stated here, on the compliance definition, so a row added
+            later is "not covered" by default rather than by someone
+            remembering to list it.
 
     """
 
@@ -513,6 +523,7 @@ class IpsComplianceRow:
     actual: str
     passes: bool | None
     action: str | None = None
+    graded_by_decision: bool = False
 
 
 @dataclass(frozen=True)
@@ -562,6 +573,37 @@ class IpsComplianceSection:
         return ComplianceStanding.PASS
 
 
+def metrics_outside_the_verdict(
+    compliance: IpsComplianceSection,
+) -> tuple[UncoveredMetric, ...]:
+    """List the failing or unmeasured rows the decision verdict did not grade.
+
+    Read straight off the compliance rows (#298), the one definition of
+    "in policy": nothing here compares a reading to a band. A passing row is
+    not listed. The row the verdict itself is graded on
+    (``graded_by_decision``) is not listed either: the verdict and its
+    rationale already speak for it.
+
+    This is what lets a surface say "Not covered by this verdict" beside a
+    ``MAINTAIN`` (#465) without a second grader, and it is called where the
+    ``DecisionResult`` is built, not in each renderer.
+    """
+    return tuple(
+        UncoveredMetric(
+            metric=row.metric,
+            status=(
+                UncoveredStatus.FAIL
+                if row.passes is False
+                else UncoveredStatus.UNMEASURED
+            ),
+            actual=row.actual,
+            target=row.target,
+        )
+        for row in compliance.rows
+        if not row.graded_by_decision and row.passes is not True
+    )
+
+
 @dataclass(frozen=True)
 class DecisionSection:
     """Part X.2 decision-matrix + entry-timing verdict for this report.
@@ -576,6 +618,10 @@ class DecisionSection:
             ``decision_matrix`` or ``entry_timing_tree`` withheld a real
             verdict for data-quality reasons; ``None`` when both returned
             one.
+        not_covered: ``DecisionResult.not_covered``: the failing or
+            unmeasured metrics the verdict did not grade (#465), rendered
+            beside it so ``MAINTAIN`` cannot read as a program-level
+            instruction while another IPS row is out.
 
     """
 
@@ -584,6 +630,7 @@ class DecisionSection:
     entry_recommendation: str
     should_enter: bool
     data_quality_note: str | None
+    not_covered: tuple[UncoveredMetric, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -684,11 +731,15 @@ def build_program_report(  # pylint: disable=too-many-arguments
         ips_vega=ips_config.vega,
     )
     market_context = _build_market_context(market_env, provenance_ledger)
+    # Built before the decision, not after: the verdict names the rows it did
+    # not grade, and they are read from this one definition (#465, #298).
+    ips_compliance = build_ips_compliance(cost, protection, vega)
     decision = _build_decision(
         ips_config=ips_config,
         market_env=market_env,
         protection=protection,
         monetization_plan=monetization_plan,
+        ips_compliance=ips_compliance,
     )
 
     return ProgramReport(
@@ -719,7 +770,7 @@ def build_program_report(  # pylint: disable=too-many-arguments
                 else None
             ),
         ),
-        ips_compliance=build_ips_compliance(cost, protection, vega),
+        ips_compliance=ips_compliance,
         decision=decision,
     )
 
@@ -730,6 +781,7 @@ def _build_decision(
     market_env: MarketEnvironment,
     protection: ProtectionSection,
     monetization_plan: MonetizationPlan | None,
+    ips_compliance: IpsComplianceSection,
 ) -> DecisionSection:
     """Compute the decision-matrix + entry-timing verdict for this report.
 
@@ -770,12 +822,14 @@ def _build_decision(
                 "No convexity target is loaded from ips.yaml, so the hedge"
                 " cannot be graded against one."
             ),
+            not_covered=metrics_outside_the_verdict(ips_compliance),
         )
 
     decision = decision_matrix(
         market_env,
         convexity_now_pct=protection.convexity_pct,
         ips_convexity=ips_config.convexity,
+        not_covered=metrics_outside_the_verdict(ips_compliance),
         monetization_plan=monetization_plan,
     )
     return DecisionSection(
@@ -784,6 +838,7 @@ def _build_decision(
         entry_recommendation=entry.recommendation,
         should_enter=entry.should_enter,
         data_quality_note=decision.data_quality_note or entry.data_quality_note,
+        not_covered=decision.not_covered,
     )
 
 
@@ -1037,6 +1092,7 @@ def build_ips_compliance(
                 actual=actual_str,
                 passes=passes,
                 action=action,
+                graded_by_decision=True,
             ),
         )
     else:
@@ -1050,6 +1106,7 @@ def build_ips_compliance(
                     "No IPS convexity policy is loaded — load one to"
                     " enable crash-convexity compliance monitoring."
                 ),
+                graded_by_decision=True,
             ),
         )
 
@@ -1728,6 +1785,11 @@ def render_markdown(report: ProgramReport) -> str:
             f"**Verdict:** {d.verdict}  ",
             f"**Rationale:** {d.rationale}",
             "",
+        ]
+        not_covered = describe_not_covered(d.not_covered, see="§6")
+        if not_covered is not None:
+            lines += [f"> ⚠ {not_covered}", ""]
+        lines += [
             f"**Entry-timing recommendation:** {d.entry_recommendation}",
             "",
         ]
@@ -1899,10 +1961,16 @@ def render_html_body(report: ProgramReport) -> str:
             if d.data_quality_note is not None
             else ""
         )
+        not_covered = describe_not_covered(d.not_covered, see="§6")
+        not_covered_html = (
+            f'<p class="note">&#9888; {escape(not_covered)}</p>\n'
+            if not_covered is not None
+            else ""
+        )
         decision_html = f"""<h2>7. Decision &amp; entry timing</h2>
 <p><strong>Verdict:</strong> {escape(d.verdict)}</p>
 <p><strong>Rationale:</strong> {escape(d.rationale)}</p>
-<p><strong>Entry-timing recommendation:</strong> \
+{not_covered_html}<p><strong>Entry-timing recommendation:</strong> \
 {escape(d.entry_recommendation)}</p>
 {note_html}"""
 

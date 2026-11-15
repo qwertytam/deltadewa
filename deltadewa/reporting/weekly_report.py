@@ -104,6 +104,7 @@ from deltadewa.analysis import (
     verdict_reason,
 )
 from deltadewa.analysis.convexity_band import COULD_NOT_BE_MEASURED
+from deltadewa.analysis.decision_matrix import UncoveredStatus
 from deltadewa.analysis.hedge_triggers import (
     HedgeTriggerReason,
     HedgeTriggerThresholds,
@@ -119,6 +120,7 @@ from deltadewa.analysis.roll_planner import (
     leg_reason,
 )
 from deltadewa.clock import program_trading_date
+from deltadewa.formatters.values import format_ordinal
 from deltadewa.heartbeat import ping
 from deltadewa.history_cli import MarkOutcome, take_mark
 from deltadewa.marketdata import (
@@ -390,15 +392,6 @@ def _expired_leg_count(records: Sequence[RollStatusRecord]) -> int:
     return sum(1 for record in records if record.verdict is RollVerdict.EXPIRED)
 
 
-def _ordinal(n: int) -> str:
-    """English ordinal for a positive integer (1st, 2nd, 3rd, 4th, 11th...)."""
-    if 11 <= n % 100 <= 13:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
-
-
 # ── Pure assembly ────────────────────────────────────────────────────────
 
 
@@ -443,6 +436,36 @@ class WeeklyDigest:
     standing_roll: StandingRollNow | None = None
 
 
+def _with_standing_weeks(
+    report: ProgramReport,
+    breaches: tuple[StandingBreach, ...],
+) -> ProgramReport:
+    """Say how long each uncovered failing metric has been failing (#465).
+
+    The decision section names the metrics its verdict did not grade; the
+    digest alone keeps the history that says for how long, so the run length
+    is attached here, from the same ``standing_breaches`` the headline's
+    "Nth week" reads. Only a failing metric has a run; an unmeasured one
+    keeps ``None`` and is never given a week count it does not have.
+    """
+    decision = report.decision
+    if decision is None or not decision.not_covered:
+        return report
+    weeks = {b.metric: b.weeks for b in breaches}
+    return replace(
+        report,
+        decision=replace(
+            decision,
+            not_covered=tuple(
+                replace(metric, weeks=weeks.get(metric.metric))
+                if metric.status is UncoveredStatus.FAIL
+                else metric
+                for metric in decision.not_covered
+            ),
+        ),
+    )
+
+
 def _roll_now_clause(legs: tuple[str, ...], standing: StandingRollNow) -> str:
     """Name what stands at ROLL NOW, and for how long (#472).
 
@@ -450,7 +473,7 @@ def _roll_now_clause(legs: tuple[str, ...], standing: StandingRollNow) -> str:
     subject line cannot carry every leg and the roll table below does.
     """
     what = legs[0] if len(legs) == 1 else f"{len(legs)} legs at"
-    return f"{what} {ROLL_NOW_LABEL} ({_ordinal(standing.weeks)} week)"
+    return f"{what} {ROLL_NOW_LABEL} ({format_ordinal(standing.weeks)} week)"
 
 
 _STANDING_ROLL_NOTE: Final[str] = (
@@ -510,13 +533,14 @@ def _headline(  # pylint: disable=too-many-arguments  # one precedence chain ove
         if len(failing) == 1:
             weeks = weeks_by_metric.get(failing[0], 1)
             base = (
-                f"BREACH: {failing[0]} out of policy ({_ordinal(weeks)} week)"
+                f"BREACH: {failing[0]} out of policy "
+                f"({format_ordinal(weeks)} week)"
             )
         else:
             weeks = min(weeks_by_metric.values(), default=1)
             base = (
                 f"BREACH: {len(failing)} IPS metrics out of policy "
-                f"({_ordinal(weeks)} week)"
+                f"({format_ordinal(weeks)} week)"
             )
     elif standing_roll is not None and roll_now_legs:
         base = f"ACTION: {_roll_now_clause(roll_now_legs, standing_roll)}"
@@ -662,6 +686,7 @@ def build_weekly_digest(  # pylint: disable=too-many-arguments  # every argument
     )
     diff = diff_snapshots(prior_snapshot, snapshot)
     breaches = standing_breaches(history, snapshot)
+    enriched_report = _with_standing_weeks(enriched_report, breaches)
     roll_legs = _roll_leg_rows(roll_records, ips_triggers)
     roll_now_legs = tuple(
         row.leg for row in roll_legs if row.action == ROLL_NOW_LABEL

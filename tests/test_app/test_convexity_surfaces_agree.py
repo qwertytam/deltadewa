@@ -292,6 +292,7 @@ def _decision(
         _env(),
         convexity_now_pct=value,  # type: ignore[arg-type]
         ips_convexity=_ips().convexity,
+        not_covered=(),
     )
     if result.hedge_adequacy is None:
         return ConvexityGrade.UNMEASURED
@@ -1034,6 +1035,7 @@ class TestUnmeasuredIsSaidTheSameWayEverywhere:
             _env(),
             convexity_now_pct=None,
             ips_convexity=_ips().convexity,
+            not_covered=(),
         )
 
         assert convexity_row.action is not None

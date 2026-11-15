@@ -24,6 +24,7 @@ from dash import Input, Output, html
 from deltadewa.analysis.crash_payoff import book_convexity_grading
 from deltadewa.analysis.decision_matrix import (
     decision_matrix,
+    describe_not_covered,
     entry_timing_tree,
 )
 from deltadewa.analysis.market_environment import (
@@ -33,8 +34,13 @@ from deltadewa.analysis.market_environment import (
 from deltadewa.analysis.monetization import build_monetization_plan
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
+from deltadewa.app.compliance import compliance_sections_at_ips_anchor
 from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.section_nav import SectionSpec
+from deltadewa.reporting.program_report import (
+    build_ips_compliance,
+    metrics_outside_the_verdict,
+)
 
 from ..book import BOOK_VERSION_STORE
 
@@ -316,6 +322,24 @@ def _entry_timing_rows(
     return rows
 
 
+def _not_covered_rows(decision: DecisionResult) -> list[Component]:
+    """Return the sentence naming what the verdict did not grade (#465).
+
+    The verdict is graded on crash convexity alone, so ``MAINTAIN`` here read
+    as a program-level instruction beside a failing vega row. The same words
+    the digest's section 7 prints
+    (:func:`~deltadewa.analysis.decision_matrix.describe_not_covered`), with
+    this surface's own pointer to where the IPS table is.
+    """
+    sentence = describe_not_covered(
+        decision.not_covered,
+        see="the IPS compliance strip on /monitor",
+    )
+    if sentence is None:
+        return []
+    return [html.P(sentence, className="plain-language env-not-covered")]
+
+
 def _market_env_panel_view(
     market_env: MarketEnvironment,
     decision: DecisionResult,
@@ -370,6 +394,7 @@ def _market_env_panel_view(
                 if decision.data_quality_note is not None
                 else []
             ),
+            *_not_covered_rows(decision),
             *_entry_timing_rows(timing, market_env),
         ],
     )
@@ -395,10 +420,17 @@ def _render_market_env_panel_logic(
             ips_config,
             market_env=market_env,
         )
+        # The other IPS rows that are out, from the one compliance definition
+        # /monitor's strip and the digest read (#465, #298), so the verdict is
+        # never shown without saying what it did not grade.
+        compliance = build_ips_compliance(
+            *compliance_sections_at_ips_anchor(portfolio, ips_config),
+        )
         decision = decision_matrix(
             market_env,
             convexity_now_pct=convexity_now_pct,
             ips_convexity=ips_config.convexity,
+            not_covered=metrics_outside_the_verdict(compliance),
             monetization_plan=plan,
         )
         return _market_env_panel_view(
