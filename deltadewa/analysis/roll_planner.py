@@ -146,6 +146,14 @@ def action_label(action: RollAction, window_opens: date | None = None) -> str:
     return action.value.replace("_", " ")
 
 
+ROLL_NOW_LABEL: Final[str] = action_label(RollAction.ROLL_NOW)
+"""The words a leg at ROLL NOW prints, and the string a snapshot stores (#472).
+
+Named once so the digest's headline and its week counter compare against the
+label the plan prints rather than a second hand-typed copy of it.
+"""
+
+
 @dataclass(frozen=True)
 class LegAction:
     """One leg's decided action (#461), before a target strike or cost.
@@ -385,6 +393,48 @@ def rally_review_cleared(record: RollStatusRecord) -> bool:
     )
 
 
+def rally_review_unchecked(record: RollStatusRecord) -> bool:
+    """Return True when a rally REVIEW's condition could not be checked (#471).
+
+    The REVIEW band says "roll strikes up if the convexity target is no
+    longer met". With crash convexity **unmeasured** the condition has no
+    answer: it cannot be shown met (so it is not CHECKED, which asserts it
+    was checked and holds) and it cannot be shown failed (so it is not ROLL
+    NOW). The decided reading (#471) is "unmeasured, not breaching" applied
+    consistently: **no roll action from this trigger**, and the leg's other
+    triggers still decide.
+
+    This is only reachable on a book with no underlying: crash convexity is
+    ``None`` exactly when the protected book is zero, and roll status grades
+    at the IPS depth, so the referee's other UNMEASURED cause (a row at a
+    different depth, #431) cannot reach this path.
+    """
+    return (
+        record.rally_trigger.verdict is RollVerdict.REVIEW
+        and record.convexity.grade is ConvexityGrade.UNMEASURED
+    )
+
+
+def _unchecked_rationale(record: RollStatusRecord) -> str:
+    """Say a fired trigger gave no action because it could not be checked.
+
+    Quotes the rally trigger's own reason, like :func:`_checked_rationale`,
+    so the sentence is worded once (``roll_status._convexity_recheck``) and
+    the roll plan, the status table, ``/monitor`` and the digest read the
+    same words.
+    """
+    return f"Rally trigger: {_sentence(record.rally_trigger.reason)}"
+
+
+def _unchecked_note() -> str:
+    """Return the sentence for a leg whose other trigger decided its action."""
+    return (
+        "The rally trigger is also at REVIEW; its condition could not be"
+        f" checked because crash convexity {COULD_NOT_BE_MEASURED}, so it"
+        " adds no roll action."
+    )
+
+
 def _checked_rationale(record: RollStatusRecord) -> str:
     """State the recomputation that turned a fired trigger into no action.
 
@@ -423,7 +473,7 @@ def _delay_rationale(
         f" the put has moved {nearer_pct:.1f}% nearer the money since"
         " entry, so it is gaining gamma;"
         f" {months_to_maturity:.1f} mo to expiry is still outside the"
-        f" {ips_triggers.roll_at_months_remaining:.0f} mo roll window;"
+        f" {ips_triggers.roll_at_months_remaining:g} mo roll window;"
         f" and crash convexity {record.convexity.display()} is inside the"
         f" {record.convexity.band_display(sep='-')} IPS target band."
         " Revisit when any of the three stops holding."
@@ -848,6 +898,10 @@ def _resolve_convexity(record: RollStatusRecord) -> _Resolution | None:
 def _resolve_rally(record: RollStatusRecord) -> _Resolution | None:
     """Rule 2: ACTION/URGENT roll; REVIEW rolls only if convexity left the band.
 
+    Three outcomes for a REVIEW, one per answer to "is the convexity target
+    still met?": met is CHECKED, not met is ROLL NOW, and **no answer** (crash
+    convexity unmeasured) is no action from this trigger (#471).
+
     The trigger's own reason already carries the resolved conditional
     (``roll_status._convexity_recheck``), so it is quoted, not reworded.
     """
@@ -856,18 +910,12 @@ def _resolve_rally(record: RollStatusRecord) -> _Resolution | None:
         return None
     if rally_review_cleared(record):
         return RollAction.CHECKED, _checked_rationale(record)
+    if rally_review_unchecked(record):
+        # No answer to "if the convexity target is no longer met": no roll
+        # action from this trigger (#471), neither CHECKED nor ROLL NOW. The
+        # leg's other triggers still decide; see :func:`leg_action`.
+        return None
     rationale = f"Rally trigger: {_sentence(record.rally_trigger.reason)}"
-    if verdict is RollVerdict.REVIEW and (
-        record.convexity.grade is ConvexityGrade.UNMEASURED
-    ):
-        # The band's condition ("if the convexity target is no longer met")
-        # has no answer, so it cannot clear. Said here because the trigger's
-        # own reason ends "unmeasured, not breaching", which would otherwise
-        # sit beside ROLL NOW with nothing reconciling the two.
-        rationale = (
-            f"{rationale} Convexity {COULD_NOT_BE_MEASURED}, so this band's"
-            " condition cannot clear; the roll stands until it can be read."
-        )
     return RollAction.ROLL_NOW, rationale
 
 
@@ -981,10 +1029,18 @@ def leg_action(
         resolution = _resolve(name, record, ips_triggers)
         if resolution is not None:
             fired.append((name, *resolution))
+    unchecked = rally_review_unchecked(record)
     if not fired:
+        # HOLD, but not "no trigger active" if the rally REVIEW fired and its
+        # condition could not be checked: that leg needs the sentence saying
+        # why it has a verdict and no action (#471).
         return LegAction(
             action=RollAction.HOLD,
-            rationale="No trigger active; holding.",
+            rationale=(
+                _unchecked_rationale(record)
+                if unchecked
+                else "No trigger active; holding."
+            ),
             driver=None,
             window_opens=None,
         )
@@ -997,6 +1053,8 @@ def leg_action(
         for name, other_action, _ in fired
         if name != driver
     ]
+    if unchecked:
+        notes.append(_unchecked_note())
     return LegAction(
         action=action,
         rationale=" ".join([rationale, *notes]),

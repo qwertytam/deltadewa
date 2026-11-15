@@ -131,6 +131,30 @@ def format_percentage(
     return f"{sign}{pct_value:.{decimals}f}%"
 
 
+def format_ordinal(n: int) -> str:
+    """Render a whole number as an English ordinal: ``1st``, ``12th``, ``22nd``.
+
+    The suffix follows the English rule: ``1st``/``2nd``/``3rd``, but
+    ``11th``/``12th``/``13th`` and ``21st``/``22nd``. The one implementation,
+    for a percentile rank (:func:`format_ordinal_percentile`) and a week count
+    ("3rd week") alike.
+
+    Examples:
+        >>> format_ordinal(1)
+        '1st'
+        >>> format_ordinal(12)
+        '12th'
+        >>> format_ordinal(103)
+        '103rd'
+
+    """
+    if 11 <= n % 100 <= 13:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 def format_ordinal_percentile(fraction: float) -> str:
     """Render a 0-1 percentile rank as an English ordinal, e.g. ``"88th"``.
 
@@ -154,12 +178,7 @@ def format_ordinal_percentile(fraction: float) -> str:
         '12th'
 
     """
-    rank = math.floor(fraction * 100 + 0.5)
-    if rank % 100 in {11, 12, 13}:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(rank % 10, "th")
-    return f"{rank}{suffix}"
+    return format_ordinal(math.floor(fraction * 100 + 0.5))
 
 
 def format_percentage_for_axis(x: float, pos: int | None = None) -> str:

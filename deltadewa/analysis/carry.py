@@ -59,7 +59,13 @@ def carry_vs_budget(
     )
     return CarryBudgetStatus(
         carry_pct_of_notional=carry_pct,
-        within_budget=carry_pct <= budget_annual_pct,
+        # ``bool()``, not the comparison as it comes: the real theta is a
+        # numpy float, so ``<=`` yields a ``numpy.bool_``. That duck-types as
+        # a bool until something asks ``is True`` / ``is False``, which is how
+        # the compliance table reads a row. A ``numpy.False_`` is neither, so
+        # a breached carry row was not "failing" and a passing one made
+        # ``all_pass`` False (a clean book read "BREACH: 0 IPS metrics").
+        within_budget=bool(carry_pct <= budget_annual_pct),
         theta_annual=theta_annual,
     )
 

@@ -17,7 +17,86 @@ history for that record instead.
 
 ## [Unreleased]
 
-Nothing yet.
+**The verdicts an operator reads now say what they did not check.** A digest
+headline, a decision verdict and a vega figure each used to say less, or more,
+than the number behind them.
+
+### Changed
+
+- **#472 — a leg standing at ROLL NOW sets the digest headline.** The headline
+  read `NO ACTION` unless something *changed*, so a leg that had stood at ROLL
+  NOW for weeks, and so never crossed anything, sat under `NO ACTION` above a
+  table that said ROLL NOW. It now reads `ACTION: PUT 5,600 ROLL NOW (3rd
+  week)`, or `ACTION: 2 legs at ROLL NOW (3rd week)`, and so does the email
+  subject. Only the **action** counts: ROLL BY (due, not overdue), DELAY (a
+  deliberate deferral) and CHECKED (a cleared review) never set it. The week
+  count is consecutive snapshots, as breaches are counted, and it counts what
+  the headline names: the named leg's own run when one leg is at ROLL NOW, the
+  book's when it says "legs". A breach or an unmeasured metric still outranks
+  it; it outranks a crossing. The weekly snapshot gains an optional
+  `roll_now_legs` (every leg at ROLL NOW), because the worst leg it already
+  kept is chosen by verdict first and so can be a short leg graded ROLL, which
+  has no action, hiding a long put at ROLL NOW from the headline. Snapshot
+  files from before this load unchanged. A 0.10.0 file holds only its worst
+  leg's action, so it counts for that leg. A file from before 0.10.0 has no
+  action at all: it counts a ROLL verdict as a ROLL NOW week, and a
+  REVIEW-driven ROLL NOW is invisible in it, so for the first weeks the count
+  can be short; the digest says so under the roll table when it applies.
+- **#471 — a rally REVIEW with unmeasured convexity gives no roll action.**
+  This reverses 0.10.0, where such a leg read ROLL NOW. The REVIEW band says
+  "roll strikes up if the convexity target is no longer met"; with crash
+  convexity unmeasured (a book with no underlying) the condition has no answer,
+  and an unmeasured reading no longer produces the most urgent action while the
+  strip reads INCOMPLETE ("not breaching"). The leg's action is HOLD, or
+  whatever its other triggers decide, so a time trigger that fired still reads
+  ROLL NOW. It is never CHECKED. The verdict stays REVIEW, and the rally
+  trigger's reason says the condition could not be checked and gives no roll
+  action, on the roll plan, the status table, `/monitor` and the digest. A book
+  with an underlying is unaffected.
+- **#465 — the decision verdict says what it did not grade.** The verdict is
+  graded on crash convexity against the IPS band and nothing else, but
+  `MAINTAIN` in section 7 sat beside a vega breach. The
+  verdict's logic is unchanged. The failing or unmeasured IPS rows it did not
+  grade, read from the same compliance rows as section 6 and `/monitor`'s
+  strip, now sit beside it: "Not covered by this verdict: Vega sufficiency
+  FAIL (1.1% vs 1.5%–4.0% per +10 vol pts, 3rd week) — see §6." (Figures here
+  are invented.) In the
+  digest's section 7 (markdown and HTML) and on `/design`'s market-environment
+  panel. Carry over budget is listed the same way. `/monitor`'s Decisions panel
+  shows roll verdicts, not this verdict, so it needed nothing. Feeding
+  compliance into the verdict is the decided target and is tracked separately.
+
+### Fixed
+
+- **#467 — a book with no value no longer reads 0.0% vega sufficiency.** The
+  ratio is undefined with no underlying and no options; the literal `0.0` was
+  graded as a below-floor FAIL, and that FAIL hid the INCOMPLETE state for the
+  same book's unmeasured convexity. It is now unmeasured, so the strip reads
+  INCOMPLETE and the vega row reads "—". A put with no underlying has a value
+  and keeps its real reading.
+- **#469 — the vega figure never prints onto its band edge.** A reading of 1.46
+  against the 1.5% floor printed "1.5%" beside FAIL. The vega row, and
+  `/design`'s vega panel, now use the rule crash convexity already used
+  (one implementation): grade on the unrounded value, and print a second
+  decimal, or a strict "<1.50%", rather than a figure on the edge. A band edge
+  is no longer rounded either: a 1.45 floor reads "1.45%".
+- **#470 — trigger sentences print the edge the trigger compares.** The rally
+  bands and the DELAY window were printed at zero decimals while the trigger
+  compares the exact value: a 7.5% review band read "REVIEW band (8-...)" and
+  a 4.5-month window read "5 mo roll window". They print as set. The window is
+  carried as the float the trigger compares. The shipped IPS is all whole
+  numbers, so nothing changes on it, and #461's case (PUT 5,600) is still
+  ROLL BY 2026-12-22.
+- **A carry breach now counts, and an in-policy book no longer reads
+  `BREACH`.** Not one of the issues above: found by a test for #465. The carry
+  row's pass flag was a numpy boolean, which the compliance table's `is True` /
+  `is False` checks miss. So a breached carry row was left out of the failing
+  list (the digest headline counted one metric fewer than section 6 showed
+  failing), and with every row in policy the overall flag was False, so a clean
+  book's headline read "BREACH: 0 IPS metrics out of policy". The snapshot's
+  per-metric flags were right (they were coerced for JSON); its overall flag
+  and the report section's failing list were not. The digest and the strip
+  will now show a carry breach they had been omitting.
 
 ## [0.10.0] - 2026-11-14
 

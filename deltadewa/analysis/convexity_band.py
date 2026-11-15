@@ -44,8 +44,9 @@ The display is one decimal place unless that would put the printed figure on
 the other side of a band edge from its grade (9.96% shown as "10.0%" beside a
 FAIL). Then it gains a second place ("9.96%"); and if two places still touch
 the edge (9.999% -> "10.00%") it prints the edge with a strict sign instead
-("<10.00%", ">20.00%"). :meth:`ConvexityGrading.display` is the only place
-that rounds a graded convexity for a reader.
+("<10.00%", ">20.00%"). :func:`display_graded` (which
+:meth:`ConvexityGrading.display` calls) is the only place that rounds a graded
+band reading for a reader: crash convexity, and vega sufficiency since #469.
 """
 
 from __future__ import annotations
@@ -173,21 +174,67 @@ class ConvexityGrade(StrEnum):
         return self is ConvexityGrade.WITHIN
 
 
-def _classify(
+def classify_band(
     value_pct: float,
     min_pct: float,
     max_pct: float,
 ) -> ConvexityGrade:
-    """Classify a reading against the band, inclusive at both ends.
+    """Classify a reading against a band, inclusive at both ends.
 
-    The one *convexity* band comparison in the program. (Vega sufficiency has
-    its own band and its own section, ``build_vega_section``, #409.)
+    The one band comparison in the program, and the one display rule beside it
+    (:func:`display_graded`) is written once for the same reason. Crash
+    convexity reaches it through :func:`grade_convexity`; vega sufficiency has
+    its own band and its own section (``build_vega_section``, #409) and reaches
+    it directly, so a figure on either is graded and printed by one
+    implementation (#469). ``ConvexityGrade`` is the three-way grade for both:
+    the name is historical, the members are band-generic.
     """
     if value_pct < min_pct:
         return ConvexityGrade.BELOW
     if value_pct > max_pct:
         return ConvexityGrade.ABOVE
     return ConvexityGrade.WITHIN
+
+
+def display_graded(
+    value_pct: float | None,
+    min_pct: float,
+    max_pct: float,
+    grade: ConvexityGrade,
+) -> str:
+    """Return a graded reading as a reader should see it, matching its grade.
+
+    The rule from the module docstring, for any band: one decimal place unless
+    that would put the printed figure on the other side of a band edge from
+    *grade*, then two, then a strict-signed edge. Grading is always on the raw
+    value and has already happened: this only chooses the text.
+
+    Args:
+        value_pct: The raw, unrounded reading, or ``None`` when unmeasured.
+        min_pct: The band floor.
+        max_pct: The band ceiling.
+        grade: The grade of *value_pct* against that band, from
+            :func:`classify_band` (or the referee, which also refuses a
+            reading taken at the wrong depth).
+
+    Returns:
+        For example ``"10.2%"``, ``"9.96%"``, ``"<10.00%"``, or an em dash
+        when unmeasured.
+
+    """
+    if value_pct is None or grade is ConvexityGrade.UNMEASURED:
+        return _UNMEASURED_TEXT
+    for places in (1, 2):
+        text = f"{value_pct:.{places}f}"
+        if classify_band(float(text), min_pct, max_pct) is grade:
+            return f"{text}%"
+    if grade is ConvexityGrade.BELOW:
+        return f"<{format_band_edge(min_pct, min_places=2)}%"
+    if grade is ConvexityGrade.ABOVE:
+        return f">{format_band_edge(max_pct, min_places=2)}%"
+    # WITHIN yet outside the band at two places: only a band edge with more
+    # than two decimals can do that. Show the reading in full.
+    return f"{value_pct:.4f}%"
 
 
 @dataclass(frozen=True)
@@ -218,28 +265,20 @@ class ConvexityGrading:
     def display(self) -> str:
         """Return the reading as a reader should see it, matching its grade.
 
-        See the module docstring for the rule: one decimal place unless that
-        would contradict the grade, then two, then a strict-signed edge.
+        See the module docstring for the rule, and :func:`display_graded`,
+        which implements it for every band.
 
         Returns:
             For example ``"10.2%"``, ``"9.96%"``, ``"<10.00%"``, or an em
             dash when unmeasured.
 
         """
-        value = self.value_pct
-        if value is None or self.grade is ConvexityGrade.UNMEASURED:
-            return _UNMEASURED_TEXT
-        for places in (1, 2):
-            text = f"{value:.{places}f}"
-            if _classify(float(text), self.min_pct, self.max_pct) is self.grade:
-                return f"{text}%"
-        if self.grade is ConvexityGrade.BELOW:
-            return f"<{format_band_edge(self.min_pct, min_places=2)}%"
-        if self.grade is ConvexityGrade.ABOVE:
-            return f">{format_band_edge(self.max_pct, min_places=2)}%"
-        # WITHIN yet outside the band at two places: only a band edge with
-        # more than two decimals can do that. Show the reading in full.
-        return f"{value:.4f}%"
+        return display_graded(
+            self.value_pct,
+            self.min_pct,
+            self.max_pct,
+            self.grade,
+        )
 
     def band_display(self, *, sep: str = "\u2013") -> str:
         """Return the band as text, without rounding an edge away.
@@ -291,7 +330,7 @@ def grade_convexity(
     if value_pct is None or not same_depth:
         grade = ConvexityGrade.UNMEASURED
     else:
-        grade = _classify(
+        grade = classify_band(
             value_pct,
             ips_convexity.target_min_pct,
             ips_convexity.target_max_pct,

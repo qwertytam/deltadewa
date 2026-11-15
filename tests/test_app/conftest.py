@@ -7,11 +7,20 @@ past the test module. ``dash.testing``'s own browser/runner fixtures need
 ``selenium`` and ``multiprocess``, neither of which is a project
 dependency; only bare ``dash`` and ``playwright`` are, so this drives
 Playwright directly.
+
+Two apps are served. ``live_app_url`` boots with **no IPS**, on purpose: the
+no-policy gates on ``/monitor`` and ``/design`` are tests of that state.
+``live_app_with_ips_url`` boots the way the deployed app does, with the shipped
+example IPS and a book that exercises every roll action (``roll_book.py``), so
+the roll plan, the roll status table and ``/monitor``'s Decisions panel render
+in CI at all (#476). Before it, nothing in the browser suite saw them.
 """
 
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -23,24 +32,24 @@ from deltadewa.constants import ExerciseStyle
 from deltadewa.marketdata import StaticProvider
 from deltadewa.state import ProgramState
 
+from .roll_book import SPOT, seed_every_roll_action
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from playwright.sync_api import Browser, Page
 
+    from deltadewa.app.factory import ProgramDashApp
 
-@pytest.fixture(scope="module")
-def live_app_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
-    """Boot the Dash skeleton on a free local port; yield its base URL."""
-    exports_dir = tmp_path_factory.mktemp("app_smoke")
-    state = ProgramState.load(
-        exports_dir,
-        ips_path=exports_dir / "does-not-exist-ips.yaml",
-        default_exercise_style=ExerciseStyle.EUROPEAN,
-    )
-    market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
-    app = create_app(state=state, market_data=market_data)
+EXAMPLE_IPS = (
+    Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
+)
+"""The tracked template: the real ``config/ips.yaml`` is gitignored (#245)."""
 
+
+@contextmanager
+def _serving(app: ProgramDashApp) -> Iterator[str]:
+    """Serve *app* on a free local port; yield its base URL, then shut down."""
     server = make_server("127.0.0.1", 0, app.server)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -49,6 +58,45 @@ def live_app_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     finally:
         server.shutdown()
         thread.join()
+
+
+@pytest.fixture(scope="module")
+def live_app_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    """Boot the Dash skeleton with no IPS; yield its base URL."""
+    exports_dir = tmp_path_factory.mktemp("app_smoke")
+    state = ProgramState.load(
+        exports_dir,
+        ips_path=exports_dir / "does-not-exist-ips.yaml",
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+    market_data = StaticProvider(spot_prices={"SPX": 5000.0}, vix=18.0)
+    app = create_app(state=state, market_data=market_data)
+    with _serving(app) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def live_app_with_ips_url(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[str]:
+    """Boot the app as deployed: the example IPS and a five-action book (#476).
+
+    The IPS is wired the way ``wsgi.py`` wires it, from ``state.ips_config``
+    into ``create_app``, so the page that renders is the page an operator
+    gets, not a variant with the policy passed in by hand.
+    """
+    exports_dir = tmp_path_factory.mktemp("app_smoke_ips")
+    state = ProgramState.load(exports_dir, ips_path=EXAMPLE_IPS)
+    assert state.ips_config is not None
+    seed_every_roll_action(state)
+    market_data = StaticProvider(spot_prices={"SPX": SPOT}, vix=18.0)
+    app = create_app(
+        state=state,
+        market_data=market_data,
+        ips_config=state.ips_config,
+    )
+    with _serving(app) as url:
+        yield url
 
 
 @pytest.fixture(scope="module")

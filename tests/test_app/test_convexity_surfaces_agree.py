@@ -27,6 +27,7 @@ from typing import Any, Literal
 import pytest
 
 from deltadewa.analysis import roll_status as roll_status_module
+from deltadewa.analysis.base import PortfolioAnalyzer
 from deltadewa.analysis.convexity_band import (
     COULD_NOT_BE_MEASURED,
     NOT_MEASURED,
@@ -85,6 +86,7 @@ from deltadewa.ips_config import (
 from deltadewa.portfolio.core import OptionPortfolio
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.reporting.program_report import (
+    ComplianceStanding,
     IpsComplianceRow,
     IpsComplianceSection,
     _standing_html,
@@ -290,6 +292,7 @@ def _decision(
         _env(),
         convexity_now_pct=value,  # type: ignore[arg-type]
         ips_convexity=_ips().convexity,
+        not_covered=(),
     )
     if result.hedge_adequacy is None:
         return ConvexityGrade.UNMEASURED
@@ -594,6 +597,83 @@ class TestAZeroBookIsUnmeasuredEverywhere:
             "Not measured: Crash convexity (-25% shock).",
         )
         assert "compliance-verdict--fail" in verdict.className
+
+
+def _empty_book() -> OptionPortfolio:
+    """No underlying and no options: nothing to measure anything against."""
+    return OptionPortfolio(
+        spot_price=_SPOT,
+        underlying_quantity=0.0,
+        volatility=0.20,
+        risk_free_rate=0.04,
+        dividend_yield=0.0,
+        default_exercise_style=ExerciseStyle.EUROPEAN,
+    )
+
+
+class TestAnEmptyBookIsUnmeasuredOnVegaToo:
+    """#467: no value to normalise by is ``None``, as #433 did for convexity.
+
+    ``calculate_vega_sufficiency_pct`` used to return a literal ``0.0`` for a
+    book with no value, which is a number, so it was graded as a below-floor
+    FAIL. That FAIL then hid the INCOMPLETE state #433 added for the same
+    book's unmeasured convexity. Not to be confused with
+    ``_zero_underlying_book``: a put with no underlying has a defined value
+    (the put's), so its vega is a real number and a real FAIL.
+    """
+
+    def test_the_root_returns_none(self) -> None:
+        analyzer = PortfolioAnalyzer(_empty_book())
+
+        assert analyzer.calculate_vega_sufficiency_pct() is None
+
+    def test_a_put_with_no_underlying_still_reads_a_number(self) -> None:
+        """The case that must not change: a defined value, a real figure."""
+        analyzer = PortfolioAnalyzer(_zero_underlying_book())
+
+        assert analyzer.calculate_vega_sufficiency_pct() is not None
+
+    def test_the_vega_row_is_unmeasured_and_the_standing_is_incomplete(
+        self,
+    ) -> None:
+        compliance = build_ips_compliance(
+            *compliance_sections_at_ips_anchor(_empty_book(), _ips()),
+        )
+        (vega,) = (r for r in compliance.rows if r.metric == "Vega sufficiency")
+
+        assert vega.passes is None
+        assert vega.actual == "\u2014"
+        assert vega.action is not None
+        assert "Unmeasured, not breaching" in vega.action
+        assert compliance.failing_metrics == ()
+        assert set(compliance.unmeasured_metrics) == {
+            vega.metric,
+            "Crash convexity (-25% shock)",
+        }
+        assert compliance.standing is ComplianceStanding.INCOMPLETE
+        assert compliance.all_pass is False
+
+    def test_the_strip_reads_incomplete_not_fail(self) -> None:
+        compliance = build_ips_compliance(
+            *compliance_sections_at_ips_anchor(_empty_book(), _ips()),
+        )
+
+        verdict = compliance_strip(compliance, DataQuality.LIVE).children[0]
+
+        assert verdict.children.startswith("IPS compliance: INCOMPLETE")
+        assert "FAIL" not in verdict.children
+        assert "compliance-verdict--incomplete" in verdict.className
+
+    def test_the_design_vega_panel_says_it_could_not_measure(self) -> None:
+        """Its ``value is None`` branch used to be marked unreachable."""
+        from deltadewa.app.pages.design.planning import sizing as sizing_panel
+
+        block = sizing_panel._vega_sufficiency_block(_empty_book(), _ips())
+        text = _all_text(block)
+
+        assert COULD_NOT_BE_MEASURED in text
+        assert UNMEASURED_NOT_BREACHING in text
+        assert "outside band" not in text
 
 
 def _all_text(component: Any) -> str:
@@ -955,6 +1035,7 @@ class TestUnmeasuredIsSaidTheSameWayEverywhere:
             _env(),
             convexity_now_pct=None,
             ips_convexity=_ips().convexity,
+            not_covered=(),
         )
 
         assert convexity_row.action is not None
