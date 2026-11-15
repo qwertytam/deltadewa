@@ -1,11 +1,10 @@
 """A verdict never renders beside a failing metric without saying so (#465).
 
-The 2026-11-13 digest read ``BREACH: Vega sufficiency out of policy (10th
-week)`` in its headline and ``Verdict: MAINTAIN`` in section 7. Both were
-true: the decision matrix grades crash convexity against the IPS band and
-nothing else, and ``MAINTAIN`` was behaving as documented. But a reader who
-goes straight to the decision is told to do nothing, ten weeks into a breach
-whose recommended action is to add hedge.
+A digest once read a vega breach in its headline and ``Verdict: MAINTAIN`` in
+section 7. Both were true: the decision matrix grades crash convexity against
+the IPS band and nothing else, and ``MAINTAIN`` was behaving as documented. But
+a reader who goes straight to the decision is told to do nothing, weeks into a
+breach whose recommended action is to add hedge.
 
 Decided (option 2, 2026-11-14): the verdict's logic does not change.
 ``DecisionResult`` carries the failing or unmeasured metrics it did not grade,
@@ -80,7 +79,7 @@ _VEGA_TARGET = f"1.5%{_EN_DASH}4.0% per +10 vol pts"
 _VEGA_FAIL = UncoveredMetric(
     metric=_VEGA,
     status=UncoveredStatus.FAIL,
-    actual="0.7%",
+    actual="1.1%",
     target=_VEGA_TARGET,
 )
 _CARRY = "Annual carry cost"
@@ -186,13 +185,13 @@ class TestWhichRowsTheVerdictDidNotGrade:
 
 class TestTheSentence:
     def test_one_failing_metric_with_its_run(self) -> None:
-        metric = replace(_VEGA_FAIL, weeks=10)
+        metric = replace(_VEGA_FAIL, weeks=7)
 
         sentence = describe_not_covered([metric], see="§6")
 
         assert sentence == (
             f"Not covered by this verdict: {_VEGA} FAIL "
-            f"(0.7% vs {_VEGA_TARGET}, 10th week) — see §6."
+            f"(1.1% vs {_VEGA_TARGET}, 7th week) — see §6."
         )
 
     def test_without_a_history_there_is_no_week_count(self) -> None:
@@ -200,7 +199,7 @@ class TestTheSentence:
 
         assert sentence is not None
         assert "week" not in sentence
-        assert f"{_VEGA} FAIL (0.7% vs {_VEGA_TARGET})" in sentence
+        assert f"{_VEGA} FAIL (1.1% vs {_VEGA_TARGET})" in sentence
 
     def test_an_unmeasured_metric_says_so_and_is_not_called_a_failure(
         self,
@@ -434,7 +433,7 @@ class TestTheDigestPrintsItBesideTheVerdict:
         )
         failing_rows = (
             *base.ips_compliance.rows[:2],
-            replace(base.ips_compliance.rows[2], passes=False, actual="0.7%"),
+            replace(base.ips_compliance.rows[2], passes=False, actual="1.1%"),
         )
         report = replace(
             base,

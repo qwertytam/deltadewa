@@ -171,10 +171,10 @@ def describe_not_covered(
     One sentence, worded here once so the digest's section 7 and ``/design``'s
     market-environment panel print the same words beside the verdict (the
     operator prose of this module's other notes is built at the source for the
-    same reason):
+    same reason). For example, with invented figures:
 
-        Not covered by this verdict: Vega sufficiency FAIL (0.7% vs 1.5%-4.0%
-        per +10 vol pts, 10th week) — see §6.
+        Not covered by this verdict: Vega sufficiency FAIL (1.1% vs 1.5%-4.0%
+        per +10 vol pts, 3rd week) — see §6.
 
     Args:
         metrics: What :attr:`DecisionResult.not_covered` carries.

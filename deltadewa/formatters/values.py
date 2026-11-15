@@ -137,7 +137,7 @@ def format_ordinal(n: int) -> str:
     The suffix follows the English rule: ``1st``/``2nd``/``3rd``, but
     ``11th``/``12th``/``13th`` and ``21st``/``22nd``. The one implementation,
     for a percentile rank (:func:`format_ordinal_percentile`) and a week count
-    ("10th week") alike.
+    ("3rd week") alike.
 
     Examples:
         >>> format_ordinal(1)

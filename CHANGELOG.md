@@ -55,11 +55,12 @@ than the number behind them.
   with an underlying is unaffected.
 - **#465 — the decision verdict says what it did not grade.** The verdict is
   graded on crash convexity against the IPS band and nothing else, but
-  `MAINTAIN` in section 7 sat beside a vega breach in its tenth week. The
+  `MAINTAIN` in section 7 sat beside a vega breach. The
   verdict's logic is unchanged. The failing or unmeasured IPS rows it did not
   grade, read from the same compliance rows as section 6 and `/monitor`'s
   strip, now sit beside it: "Not covered by this verdict: Vega sufficiency
-  FAIL (0.7% vs 1.5%–4.0% per +10 vol pts, 10th week) — see §6." In the
+  FAIL (1.1% vs 1.5%–4.0% per +10 vol pts, 3rd week) — see §6." (Figures here
+  are invented.) In the
   digest's section 7 (markdown and HTML) and on `/design`'s market-environment
   panel. Carry over budget is listed the same way. `/monitor`'s Decisions panel
   shows roll verdicts, not this verdict, so it needed nothing. Feeding
@@ -84,8 +85,8 @@ than the number behind them.
   compares the exact value: a 7.5% review band read "REVIEW band (8-...)" and
   a 4.5-month window read "5 mo roll window". They print as set. The window is
   carried as the float the trigger compares. The shipped IPS is all whole
-  numbers, so nothing changes on it, and the live PUT 5,600 is still ROLL BY
-  2026-12-22.
+  numbers, so nothing changes on it, and #461's case (PUT 5,600) is still
+  ROLL BY 2026-12-22.
 - **A carry breach now counts, and an in-policy book no longer reads
   `BREACH`.** Not one of the issues above: found by a test for #465. The carry
   row's pass flag was a numpy boolean, which the compliance table's `is True` /

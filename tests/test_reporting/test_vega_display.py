@@ -64,7 +64,7 @@ _EDGE_GRID = [
     # One decimal lands on an edge, and the grade really is on that side.
     ("rounds onto the floor from above", 1.54, _WITHIN, "1.5%"),
     ("rounds onto the ceiling from below", 3.96, _WITHIN, "4.0%"),
-    ("well below", 0.7, _BELOW, "0.7%"),
+    ("well below", 0.9, _BELOW, "0.9%"),
     ("a measured zero", 0.0, _BELOW, "0.0%"),
     ("negative", -0.2, _BELOW, "-0.2%"),
     ("mid band", 2.5, _WITHIN, "2.5%"),

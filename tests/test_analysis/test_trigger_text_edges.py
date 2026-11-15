@@ -5,7 +5,7 @@ as an ``int``, while the triggers themselves compare the float. With a
 fractional edge the sentence and the decision disagree: a ``rally_review_pct``
 of 7.5 read "REVIEW band (8-...)" and graded REVIEW at 7.6%, under a label
 that started at 8. The shipped IPS is all whole numbers, so nothing was wrong
-on the live book, and these tests use values that make the difference show.
+on the shipped values, and these tests use values that make the difference show.
 
 Every figure below is invented to exercise the rule; none is a recommended
 setting.
@@ -267,8 +267,8 @@ class TestTheDelayWindowIsPrintedAsComparedAndDated:
         assert "outside the 6 mo roll window" in record.rationale
 
 
-class TestTheLivePutKeepsItsDate:
-    """PUT 5,600 under the shipped IPS is ROLL BY 2026-12-22, as it was.
+class TestThePutFromIssue461KeepsItsDate:
+    """#461's PUT 5,600 is ROLL BY 2026-12-22 under the shipped IPS, as it was.
 
     The window is 6.0 months, so 180 days, and the date does not move when
     the window is carried as a float. Pinned as a calendar fact: a leg
