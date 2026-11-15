@@ -260,7 +260,7 @@ class HealthMixin:
     def calculate_vega_sufficiency_pct(
         self,
         vol_shock_points: float = 10.0,
-    ) -> float:
+    ) -> float | None:
         """Calculate vega sufficiency: Portfolio % impact per vol shock.
 
         Shows how much the portfolio value changes for a vol point increase.
@@ -270,7 +270,16 @@ class HealthMixin:
             vol_shock_points: Volatility shock in points (default: 10.0)
 
         Returns:
-            Percentage change in portfolio value per vol point shock.
+            Percentage change in portfolio value per vol point shock, or
+            ``None`` when the book has no value to normalise by (no
+            underlying and no options). The ratio is undefined there, and a
+            literal ``0.0`` is a number: it would be graded as a below-floor
+            miss on a book that has nothing to measure, and its FAIL would
+            hide the INCOMPLETE state behind a breach that is not real. The
+            same root fix #433 made for crash convexity (#467); consumers
+            already read ``None`` as "unmeasured, not breaching" (#409).
+            A book with no underlying but a long put has a defined value
+            (the put's), so this is a real number there.
 
         """
         stats = self.portfolio.summary_stats()
@@ -278,7 +287,7 @@ class HealthMixin:
         portfolio_value = abs(stats["total_portfolio_value"])
 
         if portfolio_value == 0:
-            return 0.0
+            return None
 
         # Vega is $ change per 1% vol change
         # For vol_shock_points, impact = vega * vol_shock_points

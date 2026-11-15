@@ -106,18 +106,25 @@ class TestCalculateVegaSufficiencyPct:
         result = analyzer.calculate_vega_sufficiency_pct(vol_shock_points=10.0)
         assert result == pytest.approx(-20.0)
 
-    def test_zero_portfolio_value_returns_zero(self) -> None:
-        """portfolio_value == 0 → returns 0.0 (current behavior).
+    def test_zero_portfolio_value_is_unmeasured_not_zero(self) -> None:
+        """portfolio_value == 0 -> ``None``: the ratio is undefined (#467).
 
-        NOTE: This is inconsistent with calculate_net_carry_pct /
-        calculate_delta_ratio_deviation_pct, which return None when the
-        denominator is unset. Returning a literal 0.0 here vs None there is
-        a known inconsistency not addressed in this scope — this test pins
-        the current contract.
+        This used to pin ``0.0`` as "a known inconsistency not addressed in
+        this scope". ``0.0`` is a number, so a book with nothing to measure
+        was graded as a below-floor miss and its FAIL hid the INCOMPLETE
+        state. ``None`` is what #433 made crash convexity return for the same
+        reason, and what ``build_vega_section`` already reads as "unmeasured,
+        not breaching" (#409).
         """
         analyzer = _analyzer(total_vega=100.0, total_portfolio_value=0.0)
         result = analyzer.calculate_vega_sufficiency_pct(vol_shock_points=10.0)
-        assert result == pytest.approx(0.0, rel=1e-8)
+        assert result is None
+
+    def test_a_measured_zero_is_still_a_number(self) -> None:
+        """No vega on a book that has value is a real 0%, not unmeasured."""
+        analyzer = _analyzer(total_vega=0.0)
+        result = analyzer.calculate_vega_sufficiency_pct(vol_shock_points=10.0)
+        assert result == pytest.approx(0.0)
 
 
 class TestCalculateHedgeSuccessPct:

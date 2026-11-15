@@ -106,7 +106,7 @@ def _vega_sufficiency_block(
         ips_vega=ips_config.vega,
     )
     value = section.sufficiency_pct
-    if value is None:  # pragma: no cover - the reading is always taken here
+    if value is None:  # a book with no value to normalise by (#467)
         return html.Div(
             [
                 html.H4("Vega sufficiency"),
