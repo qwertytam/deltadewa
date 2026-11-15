@@ -413,9 +413,14 @@ def _convexity_recheck(convexity: ConvexityGrading) -> str:
     """
     band = f"{convexity.band_display(sep='-')} IPS target band"
     if convexity.grade is ConvexityGrade.UNMEASURED:
+        # The outcome is said here, once, because every surface already
+        # renders this sentence: the band's condition could not be checked,
+        # so it gives no roll action (#471). Not CHECKED, which asserts the
+        # condition was checked and holds.
         return (
             f"Recomputed: crash convexity {COULD_NOT_BE_MEASURED}, so the"
-            " target cannot be said to be met or not met."
+            " target cannot be said to be met or not met: this band's"
+            " condition could not be checked, and it gives no roll action."
             f" {UNMEASURED_NOT_BREACHING}"
         )
     if convexity.grade is ConvexityGrade.WITHIN:

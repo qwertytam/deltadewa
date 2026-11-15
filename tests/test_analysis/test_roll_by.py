@@ -126,8 +126,11 @@ def _book(*positions: OptionPosition) -> OptionPortfolio:
     return book
 
 
-def _convexity(monkeypatch: pytest.MonkeyPatch, value: float) -> None:
-    """Pin the book's crash convexity, as the roll tests beside this do."""
+def _convexity(
+    monkeypatch: pytest.MonkeyPatch,
+    value: float | None,
+) -> None:
+    """Pin the book's crash convexity; ``None`` is unmeasured (#471)."""
     monkeypatch.setattr(
         roll_status.PortfolioAnalyzer,
         "calculate_crash_convexity_pct",
@@ -416,10 +419,16 @@ class TestTheRationaleNamesTheTriggerThatDecided:
         assert verdict_reason(status) == status.time_trigger.reason
 
 
-class TestAnUnmeasuredBandCannotClearARallyReview:
-    """The REVIEW band's condition has no answer, and the plan says so."""
+class TestAnUnmeasuredBandGivesARallyReviewNoAction:
+    """The REVIEW band's condition has no answer: no action, and it says why.
 
-    def test_the_action_stands_and_the_rationale_says_why(
+    #471, option 2 (decided 2026-11-14): "unmeasured, not breaching" applied
+    consistently. Not ROLL NOW (it cannot be shown failed) and not CHECKED
+    (CHECKED asserts the condition was checked and holds). The grid across
+    all four surfaces is in ``test_roll_action_surfaces_agree.py``.
+    """
+
+    def test_there_is_no_roll_action_and_the_rationale_says_why(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -427,11 +436,38 @@ class TestAnUnmeasuredBandCannotClearARallyReview:
         # in-band convexity would make this CHECKED.
         (record,) = _plan(monkeypatch, _put(days=400), convexity=None)
 
-        assert record.action is RollAction.ROLL_NOW
-        assert record.driver == "rally"
+        assert record.verdict is RollVerdict.REVIEW
+        assert record.action is RollAction.HOLD
+        assert record.action_label == "HOLD"
+        assert record.driver is None
+        assert "condition could not be checked" in record.rationale
+        assert "gives no roll action" in record.rationale
         assert "could not be measured" in record.rationale
-        assert "condition cannot clear" in record.rationale
-        assert "the roll stands until it can be read" in record.rationale
+        # Neither of the two things it must not read as.
+        assert "no roll warranted" not in record.rationale.lower()
+        assert "roll strikes up." not in record.rationale
+
+    def test_the_legs_other_triggers_still_decide(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A time-trigger ROLL beside the unchecked rally REVIEW wins."""
+        (record,) = _plan(monkeypatch, _put(days=150), convexity=None)
+
+        assert record.action is RollAction.ROLL_NOW
+        assert record.driver == "time"
+        assert "inside the 180d roll window" in record.rationale
+        assert "adds no roll action" in record.rationale
+
+    def test_a_buffer_zone_roll_by_still_names_its_date(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        (record,) = _plan(monkeypatch, _put(days=219), convexity=None)
+
+        assert record.action is RollAction.ROLL_BY
+        assert record.window_opens is not None
+        assert "adds no roll action" in record.rationale
 
 
 class TestTheVerdictAndTheActionNameTheSameTrigger:
