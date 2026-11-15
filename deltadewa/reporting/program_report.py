@@ -482,10 +482,16 @@ class VegaSection:
             self.grade,
         )
 
-    def band_display(self) -> str:
-        """Return the band as text, without rounding an edge away."""
+    def band_display(self, *, sep: str = "\u2013") -> str:
+        """Return the band as text, without rounding an edge away.
+
+        Args:
+            sep: Between the edges. An en dash by default, as the compliance
+                table prints it; ``/design``'s vega panel keeps its hyphen.
+
+        """
         return (
-            f"{format_band_edge(self.floor_pct, min_places=1)}%\u2013"
+            f"{format_band_edge(self.floor_pct, min_places=1)}%{sep}"
             f"{format_band_edge(self.ceiling_pct, min_places=1)}%"
         )
 
@@ -1804,6 +1810,15 @@ def render_markdown(report: ProgramReport) -> str:
 
 # ── HTML renderer ─────────────────────────────────────────────────────────
 
+
+def _not_covered_html(decision: DecisionSection) -> str:
+    """Render the "Not covered by this verdict" paragraph, or nothing (#465)."""
+    sentence = describe_not_covered(decision.not_covered, see="§6")
+    if sentence is None:
+        return ""
+    return f'<p class="note">&#9888; {escape(sentence)}</p>\n'
+
+
 # Public (no leading underscore): the M2.6 weekly digest reuses this verbatim
 # so its own document shell matches this one visually, rather than embedding
 # a second, drifting copy of the same CSS.
@@ -1961,16 +1976,10 @@ def render_html_body(report: ProgramReport) -> str:
             if d.data_quality_note is not None
             else ""
         )
-        not_covered = describe_not_covered(d.not_covered, see="§6")
-        not_covered_html = (
-            f'<p class="note">&#9888; {escape(not_covered)}</p>\n'
-            if not_covered is not None
-            else ""
-        )
         decision_html = f"""<h2>7. Decision &amp; entry timing</h2>
 <p><strong>Verdict:</strong> {escape(d.verdict)}</p>
 <p><strong>Rationale:</strong> {escape(d.rationale)}</p>
-{not_covered_html}<p><strong>Entry-timing recommendation:</strong> \
+{_not_covered_html(d)}<p><strong>Entry-timing recommendation:</strong> \
 {escape(d.entry_recommendation)}</p>
 {note_html}"""
 

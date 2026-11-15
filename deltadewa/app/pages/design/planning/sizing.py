@@ -127,7 +127,8 @@ def _vega_sufficiency_block(
             html.P(
                 f"The book as it stands moves {section.display()} of total "
                 "portfolio value (options plus underlying) per +10 vol "
-                f"points, against an IPS band of {section.band_display()} "
+                f"points, against an IPS band of "
+                f"{section.band_display(sep='-')} "
                 f"({verdict}). "
                 "This describes the current book, not the candidate sized "
                 "above.",

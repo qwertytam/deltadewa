@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import re
 import threading
 import time
 from dataclasses import dataclass, replace
@@ -2518,7 +2519,16 @@ class TestMarketEnvironmentPanel:
         assert "Vol regime" in text
         assert "Skew percentile" in text
         assert "Forward variance" in text
-        assert "0.0" not in text
+        # The market readings: the sentence naming the IPS rows the verdict
+        # did not grade (#465) can carry a measured 0.0% about the *book* (a
+        # book with no options reads 0.0% vega, a real figure), which is not
+        # an unavailable market reading and is not what this checks.
+        readings = re.sub(
+            r"Not covered by this verdict:.*? see [^.]*\.",
+            "",
+            text,
+        )
+        assert "0.0" not in readings
 
     def test_bands_come_from_the_ips_not_a_literal(
         self,

@@ -377,8 +377,7 @@ def decision_matrix(
             deciding what to say about the rest of the policy; pass ``()``
             only when nothing else is out. It changes no verdict: the
             matrix above is convexity-only and stays so; feeding compliance
-            into the verdict is the decided target, filed separately (see
-            the option-3 follow-up to #465).
+            into the verdict is the decided target, tracked in #483.
         monetization_plan: Optional plan from
             :func:`build_monetization_plan`; ``value_to_harvest > 0``
             marks gains as available.
