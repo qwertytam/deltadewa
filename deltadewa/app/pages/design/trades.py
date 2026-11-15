@@ -759,8 +759,9 @@ def _roll_raw(values: tuple[object, ...]) -> dict[str, Any]:
         )
     for item in maturities:
         lot = item["id"]["lot"]
+        # ``value`` whichever property the State reads: here, ``date``.
         legs.setdefault(lot, {"position_id": lot})["maturity"] = item.get(
-            "date",
+            "value",
         )
     return {
         "legs": list(legs.values()),

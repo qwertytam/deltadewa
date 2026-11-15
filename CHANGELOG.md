@@ -21,6 +21,34 @@ history for that record instead.
 headline, a decision verdict and a vega figure each used to say less, or more,
 than the number behind them.
 
+### Added
+
+- **#446 — close, settle and roll on `/design`, so a trade is recorded as
+  fills.** Until now the only way to take a lot out of the book was Remove,
+  which journals a deletion with no cash and made any period holding a close
+  unreconcilable in digest §4. A **Record a trade** block in the BOOK zone
+  records a **Close** (all or part of a lot), a **Settle** (a lot at or past
+  expiry; SPX is cash-settled, so every expiry is a settlement and a worthless
+  one is `0`) and a **Roll**, each with its price, fees and reason. A spread
+  rolls as **one action**: pick the structure and enter each leg's close and
+  replacement; every leg is recorded together or none are, and each leg is
+  still two linked fills at its own price and fees, never a net figure. Each
+  form is review, then confirm: the review states the fills and their cash and
+  writes nothing, and the confirm records exactly what was reviewed (the
+  button locks on click, so a double click cannot record twice). A blank fee,
+  price or settlement value is refused and `0` is accepted. A trade dated in
+  the future is refused; one dated on or before the latest weekly mark is
+  recorded with a warning that realized carry will list it as a break in that
+  closed period. Remove stays, for correcting a typo, and says so.
+- **An unsettled-expiry prompt.** A lot at or past expiry that is still in the
+  book is listed above the forms, with a link to Settle. It uses the same
+  expiry test the weekly mark does, so it appears exactly when the next mark
+  would carry the break.
+- RUNBOOK §6.1, "How to record a roll, a close and an expiry", including what
+  a back-dated trade does and why a lot removed with Remove cannot later be
+  turned into a close (a deletion is a book edit, only a fill can be corrected,
+  and the lot is gone).
+
 ### Changed
 
 - **#472 — a leg standing at ROLL NOW sets the digest headline.** The headline
@@ -66,6 +94,14 @@ than the number behind them.
   shows roll verdicts, not this verdict, so it needed nothing. Feeding
   compliance into the verdict is the decided target and is tracked separately.
 
+- **Add position now records a trade, so it asks for the premium and the
+  fees.** Both are required (enter `0` for no fees; a blank is refused, because
+  "not captured" and "zero" are different things in the history), and the lot
+  is written as an opening fill with its fees. The premium used to be
+  optional. A lot you already hold is not a trade: it comes in through the
+  importer, which starts the history at an opening mark. A new optional Trade
+  date defaults to today's program date.
+
 ### Fixed
 
 - **#467 — a book with no value no longer reads 0.0% vega sufficiency.** The
@@ -87,6 +123,13 @@ than the number behind them.
   carried as the float the trigger compares. The shipped IPS is all whole
   numbers, so nothing changes on it, and #461's case (PUT 5,600) is still
   ROLL BY 2026-12-22.
+- **Adding two lots with the same quantity in a row no longer fails.** The add
+  form blanked its inputs from the server, and a `dcc.Input` blanked that way
+  keeps the last value typed and ignores the next entry if it is the same, so a
+  second lot with the same quantity was refused as "quantity is required". Found
+  while adding required fees (`0` every time would have failed every second
+  add). The add form, and the new trade forms, now rebuild their fields on
+  success instead of blanking them.
 - **A carry breach now counts, and an in-policy book no longer reads
   `BREACH`.** Not one of the issues above: found by a test for #465. The carry
   row's pass flag was a numpy boolean, which the compliance table's `is True` /

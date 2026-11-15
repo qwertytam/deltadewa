@@ -375,12 +375,13 @@ position history before <date>". `init` refuses a second time (exit 1).
 If it is never run, Sunday's weekly digest starts the history itself,
 so a missed step costs a few days of history, not all of it.
 
-From then on, record trades so realized carry can tie to the statements.
-Until `/design` has close/settle/roll forms (a #313 follow-on), closing or rolling a
-leg there by deleting or editing it is journaled as a **book edit with no
-fill**, and §4 lists that period as not reconcilable. That is correct,
-not a bug. To see every recorded break and any lot the history does not
-explain:
+From then on, record trades through `/design`'s **Record a trade** block (§6
+and §6.1), so realized carry can tie to the statements. A close, a settlement
+and a roll are recorded as fills with their price and fees. **Remove** and an
+in-place edit are corrections, not trades: they are journaled as a **book
+edit with no fill**, and §4 lists that period as not reconcilable. That is
+correct, not a bug. To see every recorded break and any lot the history does
+not explain:
 
 ```bash
 docker compose run --rm --no-deps jobs python -m deltadewa.history_cli status
@@ -392,24 +393,87 @@ Bookmark `http://<tailscale-ip>:8050/design`. This is the operator's editor
 — §5's CLI importer is still the right tool for a bulk or fresh load;
 `/design` is for one-off additions to a book that's already live.
 
-- Fill in Strike, Maturity, Quantity, Type (put/call, defaults to put),
-  Exercise style (defaults from `config/ips.yaml`'s pricing exercise
-  style — don't override it for an SPX leg), and Entry premium (optional,
-  but needed for the monetization panel's real gain basis rather than its
-  "unknown" one). Click **Add position**.
+- Fill in Strike, Maturity, Quantity (signed: negative for a short leg),
+  Type (put/call, defaults to put), Exercise style (defaults from
+  `config/ips.yaml`'s pricing exercise style — don't override it for an SPX
+  leg), **Entry premium per share** and **Fees**. Both are required, because
+  **Add position records a trade**: an opening fill with its price and fees.
+  Enter `0` if there were no fees; a blank is refused, since "not captured"
+  and "zero" are different things in the history. Trade date is blank for
+  today. Click **Add position**.
+- **A lot you already hold is not entered here.** It comes in through §5's
+  importer, which starts the history at an opening mark. Adding it here would
+  record a purchase that did not happen in this period.
 - There is no in-place edit — changing a position is remove + add. Click
   **Remove** on the old row (a browser confirm dialog is the safety gate,
   and it can't be scripted around), then re-add it with the new numbers.
+  **Remove is for correcting a typo**: it records a deletion with no cash. To
+  record a close, a settlement or a roll, use §6.1.
 - Underlying quantity has its own field at the top of the BOOK zone; it
   autosaves like every other mutation on this page.
 - Every add/remove autosaves immediately to `exports/program_state.json`
   — the same file `/monitor` reads — so there's nothing further to run.
 
 **Verify:** reload `/monitor` — the new position should be in the collapsed
-"Position detail" table, and (if `entry_premium` was set) the monetization
-panel should show a real gain percentage instead of "No entry price is
-recorded...". `/design`'s own PLANNING panels reprice against the change on
+"Position detail" table, and the monetization panel should show a real gain
+percentage (the entry premium is recorded with the trade) instead of "No entry
+price is recorded...". `/design`'s own PLANNING panels reprice against the change on
 their own — there's no Recompute button anywhere on this page.
+
+### 6.1. How to record a roll, a close and an expiry (#446)
+
+Use **Record a trade**, in the BOOK zone below the Positions table. Have the
+broker's confirmation open: you are entering *each fill*, not the net.
+
+**A roll** (a spread is rolled as one action):
+
+1. **Roll** → choose the structure. A put spread lists both legs under its
+   structure tag; a single put is a structure of one.
+2. For each leg, enter what traded: **close price per share** and **close
+   fees**, then the replacement: **new strike**, **new maturity**, **new
+   quantity** (blank keeps the old signed quantity), **new price per share**
+   and **new fees**. Enter `0` for no fees; a blank is refused. If the broker
+   priced the spread as one package, enter each leg's executed price from the
+   confirmation. The package net the review shows is for checking against the
+   broker's net, and is not stored.
+3. **Reason**: ROUTINE for a scheduled roll; MONETIZATION only for a gain
+   harvested in stress. It is never inferred later, and it decides whether the
+   proceeds reduce gross carry.
+4. **Trade date**: blank is today (the program's date). Entering a roll
+   afterwards, give the date it traded. A future date is refused; a date on or
+   before the latest weekly mark is allowed but warned about (see below).
+5. **New structure tag** blank keeps each leg's tag, so the legs stay grouped
+   for the roll plan.
+6. **Review roll**. Read the lines: each leg is a close and an open with its
+   own cash. Nothing is written yet. Change anything and the confirm button
+   goes away, so you review again.
+7. **Confirm and record roll**. All legs are recorded together or none are.
+
+**Verify:** the Positions table shows the new legs and not the old ones, and
+the **Book changes** panel shows a close and an open per leg, each marked
+"(roll)" with its cash. The next digest's §4 should not list this roll as a
+reason it cannot be reconciled.
+
+**A close**: **Close** → lot, **contracts** (the **Whole lot** button fills the
+size; a partial close is a number you type), price per share, fees, reason,
+date. **An expiry**: SPX options are European and cash-settled, so every
+expiry is a **settlement**, in the money or not. A lot at or past expiry still
+in the book is listed above the forms with a **Settle…** link; enter the
+settlement value per share from the statement (`0` if worthless), fees, and the
+**settlement date** (required: it decides which period the cash falls in).
+
+**What a back-dated trade does.** The history takes a mark each week. A trade
+dated on or before the latest mark belongs to a period that has already
+closed, so the review warns you and realized carry will list that trade as a
+break in it. Enter trades the week they happen.
+
+**If you used Remove for a trade.** It cannot be turned into a close
+afterwards. A deletion is a book edit, only a recorded fill can be corrected,
+and the lot is gone, so there is nothing to close. The period holding the
+deletion stays "not reconcilable", which is the honest answer. Do **not** add
+the lot back and close it: that records a purchase that never happened. There
+is no tool to convert a deletion; if it matters for a period you must report,
+say so in the report rather than editing the history.
 
 ## 7. Recovery — the droplet dies
 

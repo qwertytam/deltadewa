@@ -80,11 +80,12 @@ Every change to the book is also journaled to ``exports/history/``
 mutator decides which record:
 
 * a trade method (``open_position``, ``close_position``,
-  ``settle_position``, ``roll_position``) writes a
-  :class:`~deltadewa.portfolio.history.Fill` with its price and fees;
+  ``settle_position``, ``roll_position``, ``roll_structure``) writes a
+  :class:`~deltadewa.portfolio.history.Fill` with its price and fees. These
+  are what ``/design``'s Add, Close, Settle and Roll forms call (#446);
 * ``add_position`` writes an ``OPEN`` fill at ``entry_premium`` with the
-  fees *not captured*. It is the existing entry form, and the form has no
-  fee field;
+  fees *not captured*. Nothing in the app calls it any more: it remains for
+  a caller with no fee to record, and for the tests;
 * ``update_position`` (when it changes a lot's contract or quantity),
   ``remove_position``, ``clear_positions`` and ``import_portfolio``
   change the book without a fill, so they write a
@@ -844,9 +845,9 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         """Add a position. See ``OptionPortfolio.add_position``.
 
         Journaled as an ``OPEN`` fill at ``entry_premium``, dated
-        ``entry_date`` (or today), with fees *not captured*: this is the
-        existing entry form, which has no fee field. Use
-        :meth:`open_position` to record a trade with its fees.
+        ``entry_date`` (or today), with fees *not captured*. ``/design``'s
+        Add form no longer calls this (#446): it records a trade, so it
+        goes through :meth:`open_position` with its fees.
         """
         with self._lock:
             self._check_history_readable()
