@@ -30,8 +30,11 @@ Dates
     :func:`program_day`, which is :func:`~deltadewa.clock.
     program_trading_date`; it never calls the stdlib. A trade dated in the
     future is refused. One dated on or before the latest boundary mark is
-    allowed but warned about: that period is already closed, so the fill
-    reads as a break in it (``realized_carry._late_fill_breaks``).
+    allowed but warned about: that mark was taken without it, so realized
+    carry will not tie around that date. It is listed as a break when the
+    mark falls after the opening mark (``realized_carry._late_fill_breaks``)
+    and by no period when it falls before it, so the warning promises only
+    that the figures will not tie, never that a break will say so.
 """
 
 from __future__ import annotations
@@ -429,11 +432,13 @@ def unsettled_lots(
 ) -> tuple[OptionPosition, ...]:
     """Return the lots at or past expiry that are still in the book.
 
-    The boundary is :func:`~deltadewa.analysis.crash_repricing.is_expired`
-    on the book's valuation date: the same call ``mark_book`` makes for
-    ``LegMark.expired_unsettled``, so this fires exactly when the next mark
-    would carry the break. A settled lot has left the book, so what remains
-    here is by construction not settled.
+    The boundary is :func:`~deltadewa.analysis.crash_repricing.is_expired`,
+    the same call ``mark_book`` makes for ``LegMark.expired_unsettled``.
+    Pass the program's day (:func:`program_day`), not the running app's
+    ``portfolio.valuation_date``: the weekly job loads the book afresh, so
+    its mark is taken on the program's day, while the app's own date is
+    seeded once at boot and lags after a midnight. A settled lot has left the
+    book, so what remains here is by construction not settled.
     """
     return tuple(
         position
@@ -499,9 +504,10 @@ def _warnings(
     if last_mark is not None and when <= last_mark:
         return (
             (
-                f"Dated {when}, on or before the {last_mark} boundary mark: "
-                "that period is already closed, so realized carry will list "
-                "this trade as a break in it."
+                f"Dated {when}, on or before the {last_mark} boundary mark, "
+                "which was taken without this trade: realized carry will "
+                "not tie to your statements for that stretch. Record trades "
+                "the week they happen."
             ),
         )
     return ()

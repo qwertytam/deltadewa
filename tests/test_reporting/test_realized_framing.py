@@ -23,7 +23,7 @@ from deltadewa.reporting.program_report import (
     build_realized_carry_section,
     realized_framing_rows,
 )
-from tests.history_builders import fill, leg, mark
+from tests.history_builders import at, fill, leg, mark
 
 D0 = date(2026, 11, 7)
 D1 = date(2026, 11, 14)
@@ -166,6 +166,69 @@ class TestRows:
         assert any("(7 reason(s))" in note for note in notes)
         assert sum(note.startswith("- OPEN") for note in notes) == 5
         assert any("and 2 more" in note for note in notes)
+
+    def test_a_break_only_the_latest_period_has_is_named(self) -> None:
+        """Found auditing the trade forms (#446): the digest read clean.
+
+        A trade dated on a period's last day but recorded after that period's
+        mark breaks the *next* period's lot rule only. The span since
+        inception is exact, so §4 printed no reason beside a latest-period
+        figure that ``history_cli status`` called not reconcilable.
+        """
+        late = fill(
+            FillKind.OPEN,
+            "b",
+            5,
+            4.0,
+            day=D1,
+            fees=0.0,
+            recorded_at=at(D2, 6),
+        )
+        history = PositionHistory(
+            recorded_fills=(late,),
+            marks=(
+                mark(D0, is_opening=True),
+                mark(D1, (leg("b", 5, 4.0),)),
+                mark(D2, (leg("b", 5, 3.0),)),
+            ),
+        )
+        section = build_realized_carry_section(history)
+        assert section.inception is not None
+        assert section.inception.reconcilable
+        assert section.latest is not None
+        assert not section.latest.reconcilable
+
+        _, notes = realized_framing_rows(_framing(section))
+
+        assert any(
+            "From 2026-11-14 to 2026-11-21" in note
+            and "1 further reason(s)" in note
+            for note in notes
+        )
+        assert any("was recorded after the 2026-11-14 mark" in n for n in notes)
+
+    def test_a_reason_already_listed_since_inception_is_not_repeated(
+        self,
+    ) -> None:
+        """An uncaptured fee in the latest period is in both spans' lists."""
+        history = PositionHistory(
+            recorded_fills=(
+                fill(FillKind.OPEN, "b", 5, 4.0, day=D2, fees=None),
+            ),
+            marks=(
+                mark(D0, is_opening=True),
+                mark(D1),
+                mark(D2, (leg("b", 5, 3.0),)),
+            ),
+        )
+        section = build_realized_carry_section(history)
+        assert section.latest is not None
+        assert not section.latest.reconcilable
+
+        _, notes = realized_framing_rows(_framing(section))
+
+        assert any("(1 reason(s))" in note for note in notes)
+        assert not any("further reason(s)" in note for note in notes)
 
     def test_one_mark_shows_no_figure(self) -> None:
         """No zero, no dash: it says why there is no figure yet."""

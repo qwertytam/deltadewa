@@ -452,9 +452,10 @@ class LegMark:
         value: ``quantity * price_per_share * contract_size``, signed.
         expired_unsettled: The lot is at or past expiry and no settlement
             has been recorded, so it is still in the book. The model
-            prices an expired option at zero, which is not its settlement
-            value, so any period this mark bounds is not reconcilable
-            until the ``SETTLE`` fill is entered.
+            prices an expired option at its intrinsic value at the mark's
+            spot, which is not its settlement value, so any period this
+            mark bounds is not reconcilable until the ``SETTLE`` fill is
+            entered.
 
     """
 

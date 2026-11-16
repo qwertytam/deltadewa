@@ -426,7 +426,11 @@ class TestTheBackdatingWarning:
         assert bool(review.warnings) is warned
         if warned:
             assert str(last_mark) in review.warnings[0]
-            assert "break" in review.warnings[0]
+            assert "taken without this trade" in review.warnings[0]
+            # It promises that the figures will not tie, not that a break
+            # will say so: a trade dated before the opening mark is listed
+            # by no period.
+            assert "break" not in review.warnings[0]
 
     def test_no_mark_no_warning(self, state: ProgramState) -> None:
         position = state.open_position(_order(10))

@@ -517,6 +517,45 @@ class TestGuardMechanism:
         assert state.portfolio.positions == []
 
 
+class TestAddWhoseFormCannotBeRebuilt:
+    """The lot is recorded; a failed rebuild must not strand the form."""
+
+    def test_the_add_still_reports_and_the_form_reopens(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        app = _app_with_ips(tmp_path)
+        state = app.program_state
+
+        def _broken(_style: str) -> object:
+            raise RuntimeError("cannot build the fields")
+
+        monkeypatch.setattr(
+            "deltadewa.app.pages.design.book._add_form_fields", _broken
+        )
+
+        version, status, fields, form_disabled = design._add_position_logic(
+            strike=100.0,
+            maturity=_MATURITY_STR,
+            quantity=5,
+            option_type=OptionType.CALL.value,
+            exercise_style=ExerciseStyle.EUROPEAN.value,
+            entry_premium=50.0,
+            fees=0.0,
+            trade_date=None,
+            structure_id=None,
+            version=7,
+            state=state,
+        )
+
+        assert version == 8
+        assert status.children == "Added."
+        assert fields is no_update
+        assert form_disabled is False
+        assert len(state.portfolio.positions) == 1
+
+
 class TestAddPositionRejectsExpiredMaturity:
     """#365: the add-form surfaces add_position()'s new expired-maturity
     guard as a status-message error, without clearing the typed fields.
@@ -3807,7 +3846,7 @@ class TestAddingTheSameValuesTwice:
         page.wait_for_selector("#add-strike", timeout=_PAGE_LOAD_TIMEOUT_MS)
         before_count = len(design_app.state.portfolio.positions)
 
-        for strike in ("4500", "4600", "4700"):
+        for added, strike in enumerate(("4500", "4600", "4700"), start=1):
             _fill_add_form(
                 page,
                 strike=strike,
@@ -3815,14 +3854,23 @@ class TestAddingTheSameValuesTwice:
                 maturity=_MATURITY_STR,
             )
             page.click("#add-submit")
+            # Wait for the outcome, not for the transient lock: a fast
+            # server round trip can finish inside one poll of "disabled",
+            # which made the old wait here flaky under load.
+            deadline = time.monotonic() + 10
+            while len(design_app.state.portfolio.positions) < (
+                before_count + added
+            ):
+                assert time.monotonic() < deadline, page.inner_text(
+                    "#mutation-status",
+                )
+                page.wait_for_timeout(50)
+            # The strike was typed, so an empty one means the form was
+            # rebuilt; the fieldset is open again for the next entry.
             page.wait_for_function(
                 "document.getElementById('add-form-fieldset').disabled "
-                "=== true",
-                timeout=2_000,
-            )
-            page.wait_for_function(
-                "document.getElementById('add-form-fieldset').disabled "
-                "=== false",
+                "=== false && "
+                "document.getElementById('add-strike').value === ''",
                 timeout=5_000,
             )
 

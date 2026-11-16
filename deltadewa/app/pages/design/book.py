@@ -128,8 +128,10 @@ def _position_row(index: int, position: OptionPosition) -> html.Tr:
         f"{position.option.maturity_date.strftime('%Y-%m-%d')}? This "
         "records a deletion with no cash, so the period it falls in "
         "cannot be reconciled, and it cannot be turned into a close "
-        "later. Use it only to correct a typo; to book a trade, cancel "
-        "and use Record a trade instead."
+        "later. A lot entered with Add keeps its opening fill in the "
+        "history, so re-adding it would record the purchase twice. Use "
+        "Remove only for a lot that should never have been in the book; to "
+        "book a trade, cancel and use Record a trade."
     )
     return html.Tr(
         [
@@ -309,12 +311,15 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         if state.ips_config is not None
         else exercise_style
     )
-    return (
-        version + 1,
-        _status("Added.", error=False),
-        _add_form_fields(reset_style),
-        False,
-    )
+    # The lot is already recorded: a rebuild that raises must not strand the
+    # form (no version bump, no "Added.", the fieldset left locked), so the
+    # fields are left as they were and the form re-opens.
+    fields: Any = no_update
+    try:
+        fields = _add_form_fields(reset_style)
+    except Exception:  # pylint: disable=broad-exception-caught
+        _logger.exception("Could not rebuild the add-position form")
+    return version + 1, _status("Added.", error=False), fields, False
 
 
 def _remove_position_logic(

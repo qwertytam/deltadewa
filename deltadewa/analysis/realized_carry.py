@@ -215,8 +215,8 @@ def _edit_breaks(edits: Iterable[BookEdit]) -> list[str]:
 def _expired_breaks(marks: Iterable[BookMark]) -> list[str]:
     return [
         f"{leg.terms.describe()} was past expiry at the {mark.mark_date} "
-        "mark with no settlement recorded — the model marks it at zero, "
-        "not its settlement value"
+        "mark with no settlement recorded — the model marks it at its "
+        "intrinsic value at the mark's spot, not its settlement value"
         for mark in marks
         for leg in mark.expired_unsettled_legs
     ]

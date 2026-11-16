@@ -1304,6 +1304,41 @@ def _break_notes(carry: RealizedCarry) -> list[str]:
     return notes
 
 
+def _latest_break_notes(
+    latest: RealizedCarry | None,
+    inception: RealizedCarry,
+) -> list[str]:
+    """Name the reasons the latest period cannot be reconciled.
+
+    The span since inception can be exact while its latest period is not: a
+    trade dated in an earlier period but recorded after that period's mark
+    breaks the later period's lot rule only (``_late_fill_breaks``), and the
+    two spans' break lists differ. Without this the latest row would print
+    clean beside a ``history_cli status`` that says otherwise. Reasons the
+    inception notes already list are not repeated.
+    """
+    if latest is None or latest.reconcilable:
+        return []
+    new = [reason for reason in latest.breaks if reason not in inception.breaks]
+    if not new:
+        return []
+    listed = new[:_MAX_LISTED_BREAKS]
+    notes = [
+        (
+            f"From {latest.start} to {latest.end}, realized carry cannot be "
+            f"reconciled against statements ({len(new)} further reason(s)):"
+        ),
+        *(f"- {reason}" for reason in listed),
+    ]
+    hidden = len(new) - len(listed)
+    if hidden:
+        notes.append(
+            f"- …and {hidden} more; `python -m deltadewa.history_cli "
+            "status` lists them all.",
+        )
+    return notes
+
+
 def _measured_rows(
     section: RealizedCarrySection,
 ) -> tuple[list[tuple[str, str]], list[str]]:
@@ -1341,7 +1376,11 @@ def _measured_rows(
             _return_cell(section.inception_return, after=True),
         ),
     ]
-    notes = [_REALIZED_VS_THETA_NOTE, *_break_notes(inception)]
+    notes = [
+        _REALIZED_VS_THETA_NOTE,
+        *_break_notes(inception),
+        *_latest_break_notes(section.latest, inception),
+    ]
     reason = (
         section.inception_return.unavailable_reason
         if section.inception_return is not None

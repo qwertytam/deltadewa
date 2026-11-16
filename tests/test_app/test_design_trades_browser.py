@@ -114,6 +114,20 @@ def trade_app(tmp_path: Path) -> Iterator[TradeApp]:
         thread.join()
 
 
+@pytest.fixture(autouse=True)
+def _no_page_errors(page: Page) -> Iterator[None]:
+    """Fail a test whose page threw an uncaught JavaScript error.
+
+    The smoke suite does this for the page loads; the forms are exercised
+    here, and a callback that renders a bad component shows up as a page
+    error before it shows up as a wrong value.
+    """
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    yield
+    assert errors == []
+
+
 def _open(page: Page, trade_app: TradeApp) -> None:
     page.goto(f"{trade_app.url}/design", timeout=_LOAD_MS)
     page.wait_for_selector("#close-lot", timeout=_LOAD_MS)

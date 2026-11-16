@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, TypeVar
 
 from dash import ALL, Input, Output, State, ctx, dcc, html, no_update
 
@@ -54,6 +54,8 @@ if TYPE_CHECKING:
     from deltadewa.state import ProgramState
 
 _logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 #: #357: this block's one TOC entry. The three forms are sub-headings.
 SECTION: Final[SectionSpec] = SectionSpec(
@@ -215,12 +217,66 @@ def confirm_trade(
                 te.last_mark_date(state),
             ).summary,
         )
-        form.record(entry, state)
+        try:
+            form.record(entry, state)
+        except KeyError as exc:
+            # The lot went between the re-review above and the write.
+            raise te.TradeEntryError(
+                "That lot is no longer in the book (it was changed or "
+                "removed since the review). Review it again.",
+            ) from exc
 
+    was_dirty = state.dirty
     error = _guarded_mutation(_record)
     if error is not None:
+        if state.dirty and not was_dirty:
+            # The write went in and the save did not: the book holds the
+            # trade unsaved, and entering it again would record it twice.
+            error += (
+                " The book now holds changes that were not saved: check "
+                "Book changes before entering this trade again."
+            )
         return no_update, _status(error, error=True), False
     return version + 1, _status(f"Recorded: {said[0]}", error=False), True
+
+
+def review_outputs(
+    form: TradeForm,
+    read_raw: Callable[[tuple[object, ...]], dict[str, Any]],
+    values: tuple[object, ...],
+    state: ProgramState,
+) -> tuple[Any, ...]:
+    """Return the review callback's outputs, with the form's read guarded.
+
+    Reading the fields is outside :func:`review_trade`'s own guard, and a
+    raise there would leave the Review button doing nothing, with no status
+    and no review text. It is reported like any other unexpected failure.
+    """
+    try:
+        raw = read_raw(values)
+    except Exception:  # pylint: disable=broad-exception-caught
+        _logger.exception("Could not read a /design trade form")
+        return None, True, [], _status(_UNEXPECTED, error=True)
+    return review_trade(form, raw, state)
+
+
+def confirm_outputs(
+    form: TradeForm,
+    pending: Mapping[str, Any] | None,
+    version: int,
+    state: ProgramState,
+    rebuild: Callable[[], Component],
+) -> tuple[Any, ...]:
+    """Return the confirm callback's outputs: record, then rebuild fields.
+
+    The trade is already recorded when the fields are rebuilt, so a rebuild
+    that raises must not strand the form with no version bump and no status:
+    the fields are simply left as they were.
+    """
+    new_version, status, recorded = confirm_trade(form, pending, version, state)
+    keep: object = no_update
+    fields = _guarded(rebuild, keep) if recorded else keep
+    return (new_version, status, None, True, False, fields)
 
 
 @dataclass(frozen=True)
@@ -260,9 +316,10 @@ def _register_form(
         prevent_initial_call=True,
     )
     def _review(_clicks: int | None, *values: object) -> tuple[Any, ...]:
-        return review_trade(
+        return review_outputs(
             form,
-            wiring.read_raw(values),
+            wiring.read_raw,
+            values,
             app.program_state,
         )
 
@@ -283,14 +340,13 @@ def _register_form(
         pending: dict[str, Any] | None,
         version: int,
     ) -> tuple[Any, ...]:
-        new_version, status, recorded = confirm_trade(
+        return confirm_outputs(
             form,
             pending,
             version,
             app.program_state,
+            wiring.rebuild,
         )
-        fields = wiring.rebuild() if recorded else no_update
-        return (new_version, status, None, True, False, fields)
 
     @app.callback(
         Output(f"{prefix}-confirm-row", "hidden", allow_duplicate=True),
@@ -306,15 +362,16 @@ def _register_form(
         return True, None
 
 
-def _guarded_options(
-    build: Callable[[], tuple[Any, ...]],
-    fallback: tuple[Any, ...],
-) -> tuple[Any, ...]:
-    """Run an options builder; an empty control beats a dead page."""
+def _guarded(build: Callable[[], _T], fallback: _T) -> _T:
+    """Run a callback body; an empty control beats a dead callback.
+
+    The callbacks that list lots and fill small helpers are read-only, so a
+    raise has nothing to undo: it is logged and the control stays as it was.
+    """
     try:
         return build()
     except Exception:  # pylint: disable=broad-exception-caught
-        _logger.exception("Could not list lots for a /design trade form")
+        _logger.exception("A /design trade form's helper callback failed")
         return fallback
 
 
@@ -597,8 +654,8 @@ def layout() -> html.Div:
                 "Record a trade here rather than with Remove. A close, a "
                 "settlement or a roll is recorded with its cash, so realized "
                 "carry can be reconciled against your statements. Remove "
-                "records a deletion with no cash: use it to correct a typo, "
-                "not to book a trade.",
+                "records a deletion with no cash: use it for a lot that should "
+                "never have been in the book, not to book a trade.",
                 className="plain-language",
             ),
             html.Div(id="trade-unsettled-prompt"),
@@ -617,9 +674,10 @@ def unsettled_prompt(state: ProgramState) -> Component:
     """List the lots past expiry with no settlement, each linked to Settle.
 
     Empty when there are none. The test is
-    :func:`~deltadewa.app.trade_entry.unsettled_lots`, the same expiry
-    boundary ``mark_book`` flags legs with, so this appears exactly when the
-    next boundary mark would carry the break.
+    :func:`~deltadewa.app.trade_entry.unsettled_lots` on the program's day,
+    the expiry boundary ``mark_book`` flags legs with on the weekly job's
+    freshly loaded book, so this appears when the next boundary mark would
+    carry the break.
     """
     lots = te.unsettled_lots(
         state.positions_snapshot(),
@@ -650,8 +708,9 @@ def unsettled_prompt(state: ProgramState) -> Component:
         [
             html.P(
                 "Expired and still in the book. The model marks an expired "
-                "lot at zero, which is not its settlement value, and the "
-                "period it falls in cannot reconcile until it is settled:",
+                "lot at its intrinsic value at the book's spot, which is not "
+                "its settlement value, so the period it falls in cannot "
+                "reconcile until it is settled:",
                 className="panel-notice__headline",
             ),
             html.Ul(rows),
@@ -834,7 +893,7 @@ def _register_close(app: ProgramDashApp) -> None:
             ]
             return options, _keep_if_present(value, options)
 
-        return _guarded_options(_build, ([], None))
+        return _guarded(_build, ([], None))
 
     @app.callback(
         Output("close-contracts", "value", allow_duplicate=True),
@@ -843,10 +902,14 @@ def _register_close(app: ProgramDashApp) -> None:
         prevent_initial_call=True,
     )
     def _whole_lot(_clicks: int | None, lot_id: str | None) -> object:
-        for position in app.program_state.positions_snapshot():
-            if position.position_id == lot_id:
-                return abs(int(position.quantity))
-        return no_update
+        def _size() -> object:
+            for position in app.program_state.positions_snapshot():
+                if position.position_id == lot_id:
+                    return abs(int(position.quantity))
+            return no_update
+
+        keep: object = no_update
+        return _guarded(_size, keep)
 
 
 def _register_settle(app: ProgramDashApp) -> None:
@@ -902,7 +965,18 @@ def _register_settle(app: ProgramDashApp) -> None:
                 unsettled_prompt(state),
             )
 
-        return _guarded_options(_build, ([], None, html.Div()))
+        return _guarded(
+            _build,
+            (
+                [],
+                None,
+                _status(
+                    "Could not check the book for expired lots: see the "
+                    "server log. An expired lot may be waiting to be settled.",
+                    error=True,
+                ),
+            ),
+        )
 
     @app.callback(
         Output("settle-lot", "value", allow_duplicate=True),
@@ -923,13 +997,16 @@ def _register_settle(app: ProgramDashApp) -> None:
         Input("settle-lot", "value"),
     )
     def _expiry_hint(lot_id: str | None) -> str:
-        for position in app.program_state.positions_snapshot():
-            if position.position_id == lot_id:
-                return (
-                    f"Expires {position.option.maturity_date.date()}. "
-                    "The settlement date cannot be earlier."
-                )
-        return ""
+        def _hint() -> str:
+            for position in app.program_state.positions_snapshot():
+                if position.position_id == lot_id:
+                    return (
+                        f"Expires {position.option.maturity_date.date()}. "
+                        "The settlement date cannot be earlier."
+                    )
+            return ""
+
+        return _guarded(_hint, "")
 
 
 def _register_roll(app: ProgramDashApp) -> None:
@@ -975,7 +1052,7 @@ def _register_roll(app: ProgramDashApp) -> None:
             )
             return options, _keep_if_present(value, options)
 
-        return _guarded_options(_build, ([], None))
+        return _guarded(_build, ([], None))
 
     @app.callback(
         Output("roll-legs", "children"),

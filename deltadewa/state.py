@@ -134,7 +134,7 @@ from deltadewa.portfolio.history import (
 from deltadewa.reporting import PortfolioLogger
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from zoneinfo import ZoneInfo
 
     from deltadewa.constants import ExerciseStyle
@@ -1207,11 +1207,12 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         """
         with self._lock:
             self._check_history_readable()
-            position = self._add_from_order(order, trade_date=trade_date)
-            self._journal_and_save(
-                [
+            (position,), fills = self._add_then_build(
+                [order],
+                trade_date=trade_date,
+                build=lambda lots: [
                     self._open_fill(
-                        position,
+                        lots[0],
                         order,
                         trade_date=trade_date,
                         roll_id=roll_id,
@@ -1219,6 +1220,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                     ),
                 ],
             )
+            self._journal_and_save(fills)
             return position
 
     def close_position(  # pylint: disable=too-many-arguments
@@ -1492,25 +1494,31 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 )
                 for leg, old, roll_id in zip(legs, olds, roll_ids, strict=True)
             ]
-            # Add before removing, as roll_position does: a refused lot
-            # leaves the book untouched.
-            news = self._add_all_or_none(
+            # Add and build every fill before removing anything, so a
+            # refusal (or a fill that cannot be built) leaves the book as it
+            # was; only the removal below, which cannot fail, is left.
+            news, opens = self._add_then_build(
                 [leg.into for leg in legs],
                 trade_date=traded,
+                build=lambda lots: [
+                    self._open_fill(
+                        new,
+                        leg.into,
+                        trade_date=traded,
+                        roll_id=roll_id,
+                        note=note,
+                    )
+                    for leg, new, roll_id in zip(
+                        legs,
+                        lots,
+                        roll_ids,
+                        strict=True,
+                    )
+                ],
             )
             for old in olds:
                 index, _ = self._find_position(old.position_id)
                 self._portfolio.remove_position(index)
-            opens = [
-                self._open_fill(
-                    new,
-                    leg.into,
-                    trade_date=traded,
-                    roll_id=roll_id,
-                    note=note,
-                )
-                for leg, new, roll_id in zip(legs, news, roll_ids, strict=True)
-            ]
             # Each leg's open follows its own close.
             records: list[Fill | BookEdit] = []
             for close, opened in zip(closes, opens, strict=True):
@@ -1518,17 +1526,30 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             self._journal_and_save(records)
             return tuple(news)
 
-    def _add_all_or_none(
+    def _add_then_build(
         self,
         orders: Sequence[OpenOrder],
         *,
-        trade_date: date,
-    ) -> list[OptionPosition]:
-        """Add every order's lot, or leave the book as it was.
+        trade_date: date | None,
+        build: Callable[[list[OptionPosition]], list[Fill]],
+    ) -> tuple[list[OptionPosition], list[Fill]]:
+        """Add every order's lot and build their fills, or change nothing.
 
-        ``_add_from_order`` appends, and a later order can be refused
-        after an earlier one was added; the lots already added are popped
-        back off before the refusal is re-raised.
+        ``_add_from_order`` appends, and a later order can be refused after
+        an earlier one was added, or a fill can fail to build once the lots
+        exist. Either way the lots already added are popped back off before
+        the error is re-raised, so the book is as it was and nothing is left
+        for ``_journal_and_save``'s revert to find: that only covers a
+        failure *inside* the journal write.
+
+        Args:
+            orders: The lots to open.
+            trade_date: When they traded; today's program date if ``None``.
+            build: Builds the fills from the new lots, in order.
+
+        Returns:
+            The new lots and their fills.
+
         """
         added: list[OptionPosition] = []
         try:
@@ -1538,13 +1559,14 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 added.append(  # ruff: ignore[manual-list-comprehension]
                     self._add_from_order(order, trade_date=trade_date),
                 )
+            fills = build(added)
         except Exception:
             for _ in added:
                 self._portfolio.remove_position(
                     len(self._portfolio.positions) - 1,
                 )
             raise
-        return added
+        return added, fills
 
     def _add_from_order(
         self,

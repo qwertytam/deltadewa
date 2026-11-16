@@ -299,6 +299,64 @@ class TestItIsAllOrNothing:
         assert len(state.portfolio.positions) == 2
 
 
+class TestAFillThatCannotBeBuiltChangesNothing:
+    """The window between adding a lot and journaling it (blast-radius audit).
+
+    ``_journal_and_save`` reverts a failed journal *write*; a fill that fails
+    to build after the lots were added and the old ones removed was outside
+    it, leaving the book changed in memory with nothing journaled and
+    ``dirty`` unset, so ``/health`` read clean over a phantom roll.
+    """
+
+    def test_a_roll_whose_second_open_cannot_be_built(
+        self,
+        state: ProgramState,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        long_leg, short_leg = _spread(state)
+        original = state._open_fill
+        calls: list[int] = []
+
+        def _fails_on_the_second(*args: object, **kwargs: object) -> object:
+            calls.append(1)
+            if len(calls) == 2:
+                raise RuntimeError("cannot build this fill")
+            return original(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(state, "_open_fill", _fails_on_the_second)
+        before = _history(state).events_path.read_text()
+
+        with pytest.raises(RuntimeError, match="cannot build"):
+            state.roll_structure(
+                _legs(long_leg, short_leg),
+                reason=CloseReason.ROUTINE,
+                confirm=True,
+            )
+
+        assert [p.position_id for p in state.portfolio.positions] == [
+            long_leg.position_id,
+            short_leg.position_id,
+        ]
+        assert _history(state).events_path.read_text() == before
+        assert not state.dirty
+
+    def test_an_open_whose_fill_cannot_be_built(
+        self,
+        state: ProgramState,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def _boom(*_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("cannot build this fill")
+
+        monkeypatch.setattr(state, "_open_fill", _boom)
+
+        with pytest.raises(RuntimeError, match="cannot build"):
+            state.open_position(_order(10))
+
+        assert state.portfolio.positions == []
+        assert not state.dirty
+
+
 class TestItRefusesWhatItShould:
     def test_needs_confirmation(self, state: ProgramState) -> None:
         long_leg, short_leg = _spread(state)

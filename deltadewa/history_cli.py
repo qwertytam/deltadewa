@@ -30,7 +30,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from deltadewa.analysis.realized_carry import latest_period, reconcile_book
+from deltadewa.analysis.realized_carry import (
+    latest_period,
+    reconcile_book,
+    since_inception,
+)
 from deltadewa.clock import program_now
 from deltadewa.portfolio.history import BookMark, mark_book
 from deltadewa.state import ProgramState
@@ -164,6 +168,20 @@ def _status_lines(state: ProgramState) -> list[str]:
             + ("" if period.reconcilable else " — NOT reconcilable:"),
         )
         lines.extend(f"  - {reason}" for reason in period.breaks)
+        # The digest names the first few since-inception reasons and points
+        # here for the rest, so this lists them all, not only the latest
+        # period's.
+        inception = since_inception(history)
+        if (
+            inception is not None
+            and inception != period
+            and not inception.reconcilable
+        ):
+            lines.append(
+                f"Since {inception.start}: NOT reconcilable "
+                f"({len(inception.breaks)} reason(s)):",
+            )
+            lines.extend(f"  - {reason}" for reason in inception.breaks)
     findings = reconcile_book(history, state.positions_snapshot())
     lines.append(
         "Lots reconcile with the history."

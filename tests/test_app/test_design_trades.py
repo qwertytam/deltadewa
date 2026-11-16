@@ -474,6 +474,120 @@ class TestTheRollFormsFieldsAreGatheredByLeg:
         assert second["maturity"] == "2028-05-19"
 
 
+class TestTheCallbacksFailSafely:
+    """What the blast-radius audit found outside the happy path."""
+
+    def test_a_form_that_cannot_be_read_says_so(self, tmp_path: Path) -> None:
+        state = _app(tmp_path).program_state
+
+        def _unreadable(_values: tuple[object, ...]) -> dict[str, Any]:
+            raise RuntimeError("no states_list")
+
+        pending, hidden, text, status = design.review_outputs(
+            design.CLOSE,
+            _unreadable,
+            (),
+            state,
+        )
+
+        assert (pending, hidden, text) == (None, True, [])
+        assert "went wrong" in status.children
+
+    def test_a_rebuild_that_raises_after_a_recorded_trade_strands_nothing(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _app(tmp_path).program_state
+        position = state.open_position(_order(10))
+
+        def _broken() -> Component:
+            raise RuntimeError("cannot build the fields")
+
+        version, status, pending, hidden, disabled, fields = (
+            design.confirm_outputs(
+                design.CLOSE,
+                _close_raw(position),
+                3,
+                state,
+                _broken,
+            )
+        )
+
+        assert version == 4  # the trade is recorded, so the page refreshes
+        assert status.children.startswith("Recorded:")
+        assert (pending, hidden, disabled) == (None, True, False)
+        assert fields is no_update  # the form stays as it was, and re-opens
+        assert int(state.positions_snapshot()[0].quantity) == 6
+
+    def test_a_lot_gone_between_review_and_write_reads_as_gone(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        state = _app(tmp_path).program_state
+        position = state.open_position(_order(10))
+
+        def _gone(*_args: object, **_kwargs: object) -> None:
+            raise KeyError("no position with id 'x'")
+
+        monkeypatch.setattr(state, "close_position", _gone)
+
+        version, status, recorded = design.confirm_trade(
+            design.CLOSE,
+            _close_raw(position),
+            3,
+            state,
+        )
+
+        assert (version is no_update, recorded) == (True, False)
+        assert "no longer in the book" in status.children
+        assert "went wrong" not in status.children
+
+    def test_a_write_that_went_in_unsaved_says_not_to_enter_it_again(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The journal took the fill and the save failed: a re-entry doubles."""
+        state = _app(tmp_path).program_state
+        position = state.open_position(_order(10))
+
+        def _saved_nothing(*_args: object, **_kwargs: object) -> None:
+            state._dirty = True  # as _mutate_and_save leaves it on failure
+            raise OSError("No space left on device")
+
+        monkeypatch.setattr(state, "close_position", _saved_nothing)
+
+        _version, status, recorded = design.confirm_trade(
+            design.CLOSE,
+            _close_raw(position),
+            3,
+            state,
+        )
+
+        assert recorded is False
+        assert "not saved" in status.children
+        assert "check Book changes" in status.children
+
+    def test_a_plain_refusal_does_not_claim_unsaved_changes(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _app(tmp_path).program_state
+        position = state.open_position(_order(3))
+
+        _version, status, recorded = design.confirm_trade(
+            design.CLOSE,
+            _close_raw(position, contracts=4),
+            3,
+            state,
+        )
+
+        assert recorded is False
+        assert "Cannot close 4" in status.children
+        assert "not saved" not in status.children
+
+
 class TestTheUnsettledExpiryPrompt:
     def _book_with_an_expired_lot(self, state: ProgramState) -> OptionPosition:
         state.open_position(_order(5))
@@ -528,6 +642,61 @@ class TestTheUnsettledExpiryPrompt:
 
         assert flagged == {expired.position_id}
         assert expired.position_id in str(design.unsettled_prompt(state))
+
+
+class TestThePromptAgreesWithTheMarkTheJobTakes:
+    """The prompt reads the program's day; so does a freshly loaded job.
+
+    The weekly job loads the book afresh and takes its mark on that load's
+    valuation date, which is the program day. The long-running app's own
+    ``portfolio.valuation_date`` is seeded once at boot and not advanced, so
+    after a midnight it lags: the prompt must not follow it, or a lot that
+    expired today would be missing from the prompt and present in the mark
+    (clock audit of #446).
+    """
+
+    def test_a_lot_expiring_today_is_listed_though_the_app_date_lags(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _app(tmp_path).program_state
+        state.open_position(_order(5))
+        expiring = state.portfolio.add_position(
+            strike_price=3900.0,
+            maturity_date=program_date(),
+            quantity=2,
+            option_type=OptionType.PUT,
+            reject_expired=False,
+        )
+        # The running app's date three days behind the program's.
+        state.update_market_conditions(
+            valuation_date=program_date() - timedelta(days=3),
+        )
+        assert (
+            te.unsettled_lots(
+                state.positions_snapshot(),
+                valuation_date=state.portfolio.valuation_date,
+            )
+            == ()
+        ), "the stale date alone would hide the lot"
+
+        prompted = expiring.position_id in str(design.unsettled_prompt(state))
+
+        fresh = ProgramState.load(
+            tmp_path,
+            ips_path=_EXAMPLE_IPS_YAML,
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        flagged = {
+            leg.position_id
+            for leg in mark_book(
+                fresh.portfolio,
+                marked_at=program_now(),
+                written_by="test",
+            ).expired_unsettled_legs
+        }
+        assert prompted
+        assert flagged == {expiring.position_id}
 
 
 class TestTheRollFormsLegBlocks:
