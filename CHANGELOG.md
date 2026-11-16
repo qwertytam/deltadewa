@@ -38,12 +38,13 @@ than the number behind them.
   button locks on click, so a double click cannot record twice). A blank fee,
   price or settlement value is refused and `0` is accepted. A trade dated in
   the future is refused; one dated on or before the latest weekly mark is
-  recorded with a warning that realized carry will list it as a break in that
-  closed period. Remove stays, for correcting a typo, and says so.
+  recorded with a warning that the mark was taken without it, so realized
+  carry will not tie for that stretch. Remove stays, for taking out a lot that
+  should never have been in the book, and says what it does not undo.
 - **An unsettled-expiry prompt.** A lot at or past expiry that is still in the
   book is listed above the forms, with a link to Settle. It uses the same
-  expiry test the weekly mark does, so it appears exactly when the next mark
-  would carry the break.
+  expiry test the weekly mark does, on the program's day, so it appears when
+  the next mark would carry the break.
 - RUNBOOK §6.1, "How to record a roll, a close and an expiry", including what
   a back-dated trade does and why a lot removed with Remove cannot later be
   turned into a close (a deletion is a book edit, only a fill can be corrected,

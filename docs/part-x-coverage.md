@@ -1252,8 +1252,9 @@ quarters-sum-to-the-year and reconciliation.
   makes the period not reconcilable.
 - **Edits without a fill are recorded, not forbidden.** `update_position`
   (contract or quantity), `remove_position`, `clear_positions` and
-  `import_portfolio` write a `BookEdit`, so `/design`'s correction workflow
-  keeps working and the period says it cannot tie to a statement.
+  `import_portfolio` write a `BookEdit`, so a removal stays possible and the
+  period says it cannot tie to a statement. (No `/design` control calls
+  `update_position`; nothing in the app writes a fill correction either.)
 - **The history starts at an opening mark.** Legs held before it enter at V0,
   never as synthetic opens from `entry_premium` (that would charge years of
   premium to week one). Every surface says "No position history before
@@ -1353,7 +1354,9 @@ settlement or a roll as fills with their cash.
   comes in through the importer, which starts the history at an opening mark.
 - **Dates** come from `clock.py`: blank is today's program date, a future date
   is refused, and a date on or before the latest boundary mark is allowed with
-  a warning that realized carry will list it as a break in the closed period.
+  a warning that the marks around it were taken without the trade, so realized
+  carry will not tie there (a late trade is listed as a break in the period it
+  reaches; one dated before the opening mark is listed by none).
 - **The unsettled-expiry prompt** lists the lots at or past expiry still in the
   book, using the same `is_expired` call `mark_book` flags `LegMark.
   expired_unsettled` with, each with a link to Settle.

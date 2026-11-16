@@ -528,8 +528,8 @@ figure could be derived from is stored.
 The rules:
 - **Unknown is not zero.** An uncaptured fee is `None` and a named break.
 - **Edits without a fill are journaled as `BookEdit`, not forbidden.** That is
-  what `/design`'s Remove and an in-place edit write: a correction, never a
-  trade. Trades go through the Close, Settle and Roll forms (#446).
+  what `/design`'s Remove writes: a removal, never a trade. Trades go through
+  the Close, Settle and Roll forms (#446).
 - **The history starts at an opening mark.** Legs already held enter at V0,
   never as synthetic opens, and every surface says "No position history
   before <date>".
