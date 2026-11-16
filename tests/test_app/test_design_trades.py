@@ -44,6 +44,7 @@ _EXAMPLE_IPS_YAML = (
     Path(__file__).parent.parent.parent / "config" / "ips.example.yaml"
 )  # #245: real config/ips.yaml is gitignored; use the tracked example.
 
+TODAY = program_date().date()
 _LATER = days_from_today(540)
 _TAG = "tranche-a"
 
@@ -437,10 +438,14 @@ class TestTheRollFormsFieldsAreGatheredByLeg:
                 "value": value,
             }
 
+        # Dates from the program clock, not literals: a fixture date is a
+        # figure that can look real and that goes stale.
+        traded = TODAY.isoformat()
+        maturity = _LATER.date().isoformat()
         states = [
             {"value": "tag:a"},
             {"value": "ROUTINE"},
-            {"value": "2026-11-15"},
+            {"value": traded},
             {"value": ""},
             {"value": "a note"},
             [
@@ -448,7 +453,7 @@ class TestTheRollFormsFieldsAreGatheredByLeg:
                 _field("L1", "close_fees", 0.0),
                 _field("L2", "close_price", 15.0),
             ],
-            [_maturity("L1", "2028-05-19"), _maturity("L2", "2028-05-19")],
+            [_maturity("L1", maturity), _maturity("L2", maturity)],
         ]
         monkeypatch.setattr(
             trades,
@@ -457,21 +462,21 @@ class TestTheRollFormsFieldsAreGatheredByLeg:
         )
 
         raw = trades._roll_raw(
-            ("tag:a", "ROUTINE", "2026-11-15", "", "a note", [], []),
+            ("tag:a", "ROUTINE", traded, "", "a note", [], []),
         )
 
         assert raw["reason"] == "ROUTINE"
-        assert raw["date"] == "2026-11-15"
+        assert raw["date"] == traded
         assert raw["note"] == "a note"
         first, second = raw["legs"]
         assert first == {
             "position_id": "L1",
             "close_price": 44.0,
             "close_fees": 0.0,
-            "maturity": "2028-05-19",
+            "maturity": maturity,
         }
         assert second["position_id"] == "L2"
-        assert second["maturity"] == "2028-05-19"
+        assert second["maturity"] == maturity
 
 
 class TestTheCallbacksFailSafely:
