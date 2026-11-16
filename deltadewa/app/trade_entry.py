@@ -219,6 +219,25 @@ def _optional_date(
     return parsed
 
 
+def _live_maturity(value: object, label: str, *, today: date) -> date:
+    """Read a maturity the program's day has not reached.
+
+    ``OptionPortfolio.add_position`` refuses an expired maturity too, but
+    against the portfolio's own ``valuation_date``, which a long-running
+    app seeds once at boot and does not advance: after a midnight it lags,
+    and a maturity the program day has already reached passes that guard
+    (#437's class). The form is held to the program's day instead, with
+    the same boundary ``is_expired`` draws (at or before the date).
+    """
+    parsed = _date(value, label)
+    if parsed <= today:
+        raise TradeEntryError(
+            f"{label} {parsed} is on or before today ({today}): refusing "
+            "to add an already-expired position.",
+        )
+    return parsed
+
+
 def _reason(raw: Mapping[str, Any]) -> CloseReason:
     value = raw.get("reason")
     if value is None or value == "":
@@ -308,7 +327,12 @@ def _new_quantity(raw: Mapping[str, Any]) -> int | None:
     return int(signed)
 
 
-def _parse_roll_leg(raw: Mapping[str, Any], number: int) -> RollLegEntry:
+def _parse_roll_leg(
+    raw: Mapping[str, Any],
+    number: int,
+    *,
+    today: date,
+) -> RollLegEntry:
     try:
         return RollLegEntry(
             position_id=_position_id(raw),
@@ -319,7 +343,11 @@ def _parse_roll_leg(raw: Mapping[str, Any], number: int) -> RollLegEntry:
             ),
             close_fees=_fees(raw, "close_fees", "Closing fees"),
             strike=_number(raw, "strike", "New strike", minimum=0.01),
-            maturity=_date(raw.get("maturity"), "New maturity"),
+            maturity=_live_maturity(
+                raw.get("maturity"),
+                "New maturity",
+                today=today,
+            ),
             quantity=_new_quantity(raw),
             price_per_share=_number(raw, "price", "New price per share"),
             fees=_fees(raw, "fees", "New fees"),
@@ -333,7 +361,7 @@ def parse_roll(raw: Mapping[str, Any], *, today: date) -> RollEntry:
 
     Raises:
         TradeEntryError: A field is blank, not a number, or in the future,
-            or the form has no legs.
+            a new maturity is not after today, or the form has no legs.
 
     """
     leg_values = raw.get("legs")
@@ -342,7 +370,7 @@ def parse_roll(raw: Mapping[str, Any], *, today: date) -> RollEntry:
     tag = raw.get("tag")
     return RollEntry(
         legs=tuple(
-            _parse_roll_leg(values, number)
+            _parse_roll_leg(values, number, today=today)
             for number, values in enumerate(leg_values, start=1)
         ),
         reason=_reason(raw),
@@ -372,7 +400,8 @@ def parse_open(
         The order, and the trade date (``None`` for today's program date).
 
     Raises:
-        TradeEntryError: A field is blank, not a number, or in the future.
+        TradeEntryError: A field is blank, not a number, or in the future,
+            or the maturity is not after today.
 
     """
     strike = raw.get("strike")
@@ -388,7 +417,9 @@ def parse_open(
     tag = raw.get("structure_id")
     order = OpenOrder(
         strike_price=_number(raw, "strike", "Strike", minimum=0.01),
-        maturity_date=_utc_midnight(_date(maturity, "Maturity")),
+        maturity_date=_utc_midnight(
+            _live_maturity(maturity, "Maturity", today=today),
+        ),
         option_type=OptionType(str(raw.get("option_type"))),
         quantity=int(whole),
         price_per_share=_number(
@@ -511,6 +542,22 @@ def _warnings(
             ),
         )
     return ()
+
+
+def back_dating_warnings(
+    state: ProgramState,
+    trade_date: date | None,
+) -> tuple[str, ...]:
+    """Return the warning a form with no review step shows after recording.
+
+    Close, settle and roll warn in their review. Add records on submit, so
+    it asks this instead, with the same words and the same boundary.
+    """
+    return _warnings(
+        trade_date,
+        today=program_today(state),
+        last_mark=last_mark_date(state),
+    )
 
 
 def _side(quantity: int) -> str:

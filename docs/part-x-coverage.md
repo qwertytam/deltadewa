@@ -1356,7 +1356,13 @@ settlement or a roll as fills with their cash.
   is refused, and a date on or before the latest boundary mark is allowed with
   a warning that the marks around it were taken without the trade, so realized
   carry will not tie there (a late trade is listed as a break in the period it
-  reaches; one dated before the opening mark is listed by none).
+  reaches; one dated before the opening mark is listed by none). The review
+  states the day a blank date meant and the confirm replays that day, so a
+  confirm after program midnight cannot move the trade. Add has no review and
+  carries the same warning beside "Added.". A new maturity on or before the
+  program's day is refused by the parsers, because the portfolio's own
+  expired-maturity guard reads `valuation_date`, which a long-running app does
+  not advance (#437's class).
 - **The unsettled-expiry prompt** lists the lots at or past expiry still in the
   book, using the same `is_expired` call `mark_book` flags `LegMark.
   expired_unsettled` with, each with a link to Settle.

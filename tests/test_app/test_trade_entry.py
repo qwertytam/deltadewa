@@ -287,6 +287,71 @@ class TestRefusals:
             te.parse_roll(raw, today=TODAY)
 
 
+def _open_raw(**overrides: Any) -> dict[str, Any]:
+    raw: dict[str, Any] = {
+        "strike": 4000.0,
+        "maturity": _LATER.date().isoformat(),
+        "quantity": 3,
+        "option_type": "PUT",
+        "exercise_style": "EUROPEAN",
+        "price": 61.0,
+        "fees": 8.0,
+        "date": None,
+        "structure_id": "",
+    }
+    raw.update(overrides)
+    return raw
+
+
+class TestAMaturityTheProgramDayHasReachedIsRefused:
+    """Held to the program's day, not the app's lagging valuation date.
+
+    ``OptionPortfolio.add_position`` refuses an expired maturity against
+    ``portfolio.valuation_date``, which a long-running app seeds at boot and
+    never advances: after a midnight a maturity the program day has reached
+    passes it (Codex review of #486; #437's class). The parsers check the
+    program's day themselves.
+    """
+
+    @pytest.mark.parametrize("days", [-30, -1, 0])
+    def test_add_refuses_a_maturity_on_or_before_today(self, days: int) -> None:
+        raw = _open_raw(
+            maturity=(TODAY + timedelta(days=days)).isoformat(),
+        )
+        with pytest.raises(te.TradeEntryError, match="already-expired"):
+            te.parse_open(raw, today=TODAY)
+
+    def test_add_accepts_the_day_after_today(self) -> None:
+        raw = _open_raw(maturity=(TODAY + timedelta(days=1)).isoformat())
+        order, _traded = te.parse_open(raw, today=TODAY)
+        assert order.maturity_date.date() == TODAY + timedelta(days=1)
+
+    @pytest.mark.parametrize("days", [-1, 0])
+    def test_a_roll_refuses_a_new_maturity_on_or_before_today(
+        self,
+        state: ProgramState,
+        days: int,
+    ) -> None:
+        long_leg, short_leg = _spread(state)
+        stale = (TODAY + timedelta(days=days)).isoformat()
+        raw = _roll_raw(
+            _leg_raw(long_leg),
+            _leg_raw(short_leg, maturity=stale),
+        )
+        with pytest.raises(
+            te.TradeEntryError,
+            match=r"Leg 2: New maturity .* already-expired",
+        ):
+            te.parse_roll(raw, today=TODAY)
+
+    def test_the_day_is_the_one_the_caller_passes(self) -> None:
+        """The check reads ``today``, not a clock of its own."""
+        raw = _open_raw(maturity=(TODAY + timedelta(days=5)).isoformat())
+        te.parse_open(raw, today=TODAY)
+        with pytest.raises(te.TradeEntryError, match="already-expired"):
+            te.parse_open(raw, today=TODAY + timedelta(days=5))
+
+
 class TestReviewSaysWhatWillBeRecorded:
     def test_a_partial_close_says_how_many_remain(
         self,
@@ -442,6 +507,33 @@ class TestTheBackdatingWarning:
             last_mark=None,
         )
         assert review.warnings == ()
+
+    def test_the_add_form_asks_the_same_question(
+        self,
+        state: ProgramState,
+    ) -> None:
+        """Add has no review, so it reads the warning from the same place."""
+        state.open_position(_order(10))
+        state.history.append_mark(  # type: ignore[union-attr]
+            mark_book(
+                state.portfolio,
+                marked_at=program_now(),
+                written_by="test",
+                is_opening=True,
+            ),
+        )
+        mark_day = te.last_mark_date(state)
+        assert mark_day is not None
+
+        inside = te.back_dating_warnings(state, mark_day)
+        blank = te.back_dating_warnings(state, None)
+        after = te.back_dating_warnings(state, mark_day + timedelta(days=1))
+
+        assert "taken without this trade" in inside[0]
+        assert str(mark_day) in inside[0]
+        # A blank date is today's, which is on the mark's day here.
+        assert blank == te.back_dating_warnings(state, te.program_today(state))
+        assert after == ()
 
 
 class TestRecordClose:

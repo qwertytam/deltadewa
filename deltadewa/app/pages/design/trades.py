@@ -177,8 +177,14 @@ def review_trade(
     except Exception:  # pylint: disable=broad-exception-caught
         _logger.exception("Unexpected error reviewing a /design trade")
         return None, True, [], _status(_UNEXPECTED, error=True)
+    # The review said "today" for a blank date, so the confirm replays that
+    # day: left blank, a confirm after program midnight would record the
+    # next day's date under a review that named the previous one.
+    pending = dict(raw)
+    if not pending.get("date"):
+        pending["date"] = today.isoformat()
     return (
-        dict(raw),
+        pending,
         False,
         _review_children(review),
         _status("Review the trade below, then confirm it.", error=False),

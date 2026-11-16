@@ -12,7 +12,7 @@ Every strike, price, fee and date here is an invented figure.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -217,7 +217,9 @@ class TestAReviewWritesNothing:
             state,
         )
 
-        assert pending == raw
+        # The raw values, plus the day a blank date meant when it was
+        # reviewed (see TestAConfirmRecordsTheDateThatWasReviewed).
+        assert pending == {**raw, "date": te.program_today(state).isoformat()}
         assert hidden is False
         assert "Close 4 of 10" in str(text)
         assert "Review the trade below" in status.children
@@ -591,6 +593,220 @@ class TestTheCallbacksFailSafely:
         assert recorded is False
         assert "Cannot close 4" in status.children
         assert "not saved" not in status.children
+
+
+class TestAConfirmRecordsTheDateThatWasReviewed:
+    """A blank date is resolved when it is reviewed, not when it is confirmed.
+
+    The review says "(today)"; left blank in the pending values, a confirm
+    after program midnight would record the next day under a review that
+    named the previous one, and could move the trade across a boundary
+    mark (clock audit of #446).
+    """
+
+    def test_the_review_stores_the_day_it_named(self, tmp_path: Path) -> None:
+        state = _app(tmp_path).program_state
+        position = state.open_position(_order(10))
+
+        pending, *_ = design.review_trade(
+            design.CLOSE,
+            _close_raw(position, date=""),
+            state,
+        )
+
+        assert pending["date"] == te.program_today(state).isoformat()
+
+    def test_a_confirm_after_midnight_records_the_reviewed_day(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        state = _app(tmp_path).program_state
+        position = state.open_position(_order(10))
+        reviewed_on = te.program_today(state)
+        pending, *_ = design.review_trade(
+            design.CLOSE,
+            _close_raw(position),
+            state,
+        )
+
+        # Program midnight passes between the review and the confirm.
+        monkeypatch.setattr(
+            te,
+            "program_today",
+            lambda _state: reviewed_on + timedelta(days=1),
+        )
+        _version, _status, recorded = design.confirm_trade(
+            design.CLOSE,
+            pending,
+            0,
+            state,
+        )
+
+        assert recorded is True
+        assert _history(state).load().fills[-1].trade_date == reviewed_on
+
+
+def _add(state: ProgramState, **overrides: Any) -> tuple[Any, ...]:
+    values: dict[str, Any] = {
+        "strike": 4000.0,
+        "maturity": _LATER.date().isoformat(),
+        "quantity": 3,
+        "option_type": OptionType.PUT.value,
+        "exercise_style": ExerciseStyle.EUROPEAN.value,
+        "entry_premium": 61.0,
+        "fees": 8.0,
+        "trade_date": None,
+        "structure_id": None,
+        "version": 0,
+        "state": state,
+    }
+    values.update(overrides)
+    return design._add_position_logic(**values)
+
+
+class TestAMaturityTheProgramDayHasReachedIsNotRecorded:
+    """The portfolio's guard reads a date that lags; the forms read the day.
+
+    A process that outlives program midnight keeps ``valuation_date`` at its
+    boot day, so ``OptionPortfolio.add_position``'s expired-maturity guard
+    accepts a maturity the program day has already reached (Codex review of
+    #486; #437's class). Both forms are refused on the program's day.
+    """
+
+    @staticmethod
+    def _lag(state: ProgramState) -> None:
+        state.update_market_conditions(
+            valuation_date=program_date() - timedelta(days=3),
+        )
+
+    def test_the_stale_date_alone_would_accept_it(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Control: the guard the forms used to rely on lets it through."""
+        state = _app(tmp_path).program_state
+        self._lag(state)
+        lot = state.portfolio.add_position(
+            strike_price=3900.0,
+            maturity_date=program_date() - timedelta(days=1),
+            quantity=1,
+            option_type=OptionType.PUT,
+        )
+        assert lot in state.portfolio.positions
+
+    def test_add_refuses_it(self, tmp_path: Path) -> None:
+        state = _app(tmp_path).program_state
+        self._lag(state)
+        fills_before = len(_history(state).load().fills)
+
+        version, status, *_rest = _add(
+            state,
+            maturity=(te.program_today(state) - timedelta(days=1)).isoformat(),
+        )
+
+        assert version is no_update
+        assert "already-expired" in status.children
+        assert state.portfolio.positions == []
+        assert len(_history(state).load().fills) == fills_before
+
+    def test_a_roll_refuses_it_and_leaves_the_spread(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _app(tmp_path).program_state
+        long_leg, short_leg = _spread(state)
+        self._lag(state)
+        raw = _roll_raw(long_leg, short_leg)
+        raw["legs"][0]["maturity"] = (
+            te.program_today(state) - timedelta(days=1)
+        ).isoformat()
+        fills_before = len(_history(state).load().fills)
+
+        version, status, recorded = design.confirm_trade(
+            design.ROLL,
+            raw,
+            0,
+            state,
+        )
+
+        assert (version is no_update, recorded) == (True, False)
+        assert "Leg 1: New maturity" in status.children
+        assert "already-expired" in status.children
+        assert [p.position_id for p in state.positions_snapshot()] == [
+            long_leg.position_id,
+            short_leg.position_id,
+        ]
+        assert len(_history(state).load().fills) == fills_before
+
+
+class TestAddWarnsWhenItIsBackdated:
+    """Add records on submit, so its warning rides beside "Added." (#486)."""
+
+    @staticmethod
+    def _mark(state: ProgramState) -> date:
+        state.history.append_mark(  # type: ignore[union-attr]
+            mark_book(
+                state.portfolio,
+                marked_at=program_now(),
+                written_by="test",
+                is_opening=True,
+            ),
+        )
+        mark_day = te.last_mark_date(state)
+        assert mark_day is not None
+        return mark_day
+
+    def test_a_trade_on_or_before_the_mark_is_recorded_and_warned(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state = _app(tmp_path).program_state
+        state.open_position(_order(5))
+        mark_day = self._mark(state)
+
+        version, status, *_rest = _add(
+            state,
+            trade_date=(mark_day - timedelta(days=1)).isoformat(),
+        )
+
+        assert version == 1
+        assert status.children.startswith("Added. ⚠ ")
+        assert "taken without this trade" in status.children
+        assert "status-message--success" in status.className
+        assert len(state.portfolio.positions) == 2
+
+    def test_a_trade_dated_today_after_the_mark_day_is_not(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """No mark, no warning: the plain message is unchanged."""
+        state = _app(tmp_path).program_state
+
+        version, status, *_rest = _add(state)
+
+        assert version == 1
+        assert status.children == "Added."
+
+    def test_a_history_that_cannot_be_read_refuses_the_add(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The warning is read before the write: no unwarned fill."""
+        state = _app(tmp_path).program_state
+
+        def _broken(_state: ProgramState) -> None:
+            msg = "unreadable"
+            raise RuntimeError(msg)
+
+        monkeypatch.setattr(te, "last_mark_date", _broken)
+
+        version, status, *_rest = _add(state)
+
+        assert version is no_update
+        assert "status-message--error" in status.className
+        assert state.portfolio.positions == []
 
 
 class TestTheUnsettledExpiryPrompt:

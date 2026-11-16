@@ -401,7 +401,11 @@ Bookmark `http://<tailscale-ip>:8050/design`. This is the operator's editor
   **Add position records a trade**: an opening fill with its price and fees.
   Enter `0` if there were no fees; a blank is refused, since "not captured"
   and "zero" are different things in the history. Trade date is blank for
-  today. Click **Add position**.
+  today. A maturity on or before today is refused (the program's day, not the
+  app's possibly older valuation date). Click **Add position**. Add records at
+  once, with no review step: a trade dated on or before the latest weekly mark
+  is recorded and the status line carries the warning beside "Added." (see
+  "What a back-dated trade does", §6.1).
 - **A lot you already hold is not entered here.** It comes in through §5's
   importer, which starts the history at an opening mark. Adding it here would
   record a purchase that did not happen in this period.
@@ -485,7 +489,8 @@ settlement** and **Confirm and record settlement**.
 **What a back-dated trade does.** The history takes a mark each week (the
 Sunday digest, §9). A trade dated on or before the latest mark belongs to a
 stretch whose marks were taken without it, so realized carry will not tie to
-your statements there, and the review warns you. It may be listed as a break
+your statements there, and the review warns you (Add has no review, so it
+warns in its status line once it has recorded). It may be listed as a break
 and it may not (one dated before the history's opening mark is not listed by
 any period). Enter trades the week they happen.
 

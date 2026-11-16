@@ -290,12 +290,19 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         "structure_id": structure_id,
     }
 
+    warned: list[str] = []
+
     def _do_add() -> None:
         # A plain def, not a lambda: _guarded_mutation's Callable[[], None]
         # discards a def's return value more predictably under mypy than a
         # lambda's inferred return type does. Parsing happens in here so a
         # refused form and a refused write read the same to the operator.
         order, traded = te.parse_open(raw, today=te.program_today(state))
+        # Add records on submit, so it cannot warn in a review the way the
+        # trade forms do: it says so beside "Added." instead. Read before
+        # the write, so a history that cannot be read refuses the add
+        # rather than recording it unwarned.
+        warned.extend(te.back_dating_warnings(state, traded))
         state.open_position(order, trade_date=traded)
 
     error = _guarded_mutation(_do_add)
@@ -319,7 +326,8 @@ def _add_position_logic(  # pylint: disable=too-many-arguments
         fields = _add_form_fields(reset_style)
     except Exception:  # pylint: disable=broad-exception-caught
         _logger.exception("Could not rebuild the add-position form")
-    return version + 1, _status("Added.", error=False), fields, False
+    message = " ".join(("Added.", *(f"⚠ {text}" for text in warned)))
+    return version + 1, _status(message, error=False), fields, False
 
 
 def _remove_position_logic(

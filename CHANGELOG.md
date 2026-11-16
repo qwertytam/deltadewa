@@ -39,7 +39,9 @@ than the number behind them.
   price or settlement value is refused and `0` is accepted. A trade dated in
   the future is refused; one dated on or before the latest weekly mark is
   recorded with a warning that the mark was taken without it, so realized
-  carry will not tie for that stretch. Remove stays, for taking out a lot that
+  carry will not tie for that stretch (Add, which has no review, shows the
+  warning beside "Added."). A new maturity on or before the program's day is
+  refused on Add and on each roll leg. Remove stays, for taking out a lot that
   should never have been in the book, and says what it does not undo.
 - **An unsettled-expiry prompt.** A lot at or past expiry that is still in the
   book is listed above the forms, with a link to Settle. It uses the same
