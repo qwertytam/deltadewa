@@ -528,7 +528,8 @@ figure could be derived from is stored.
 The rules:
 - **Unknown is not zero.** An uncaptured fee is `None` and a named break.
 - **Edits without a fill are journaled as `BookEdit`, not forbidden.** That is
-  what `/design`'s delete and edit write until #313's trade forms (a follow-on).
+  what `/design`'s Remove writes: a removal, never a trade. Trades go through
+  the Close, Settle and Roll forms (#446).
 - **The history starts at an opening mark.** Legs already held enter at V0,
   never as synthetic opens, and every surface says "No position history
   before <date>".
@@ -538,10 +539,15 @@ The audit that motivated it also found that `ProgramState`'s change log was
 never written: no mutator called `log_portfolio_change`, which corrects #262's
 premise: **#262 is built** on the history (a `/design` Book changes panel,
 `analysis/book_changes.py`), not on that logger, which is still there and
-still empty. Follow-ons to #313: the `/design` close/settle/roll forms, an
-unsettled-expiry prompt, `/monitor` cost since inception, and the hedge-success
-gauge rebuilt on realized carry. See `docs/part-x-coverage.md`, "The position
-history (8e.1)", and RUNBOOK §5.1 (run `history_cli init` once).
+still empty. **9d.1 (#446) built the `/design` trade forms**: Close, Settle
+and Roll (review, then confirm; a spread rolls as one atomic action, two linked
+fills per leg), the unsettled-expiry prompt, and fees on Add (premium and fees
+both required; `0` is a recorded zero, blank is refused). The logic is
+`deltadewa/app/trade_entry.py` (no Dash import); the page is
+`app/pages/design/trades.py`. Remaining follow-ons to #313: `/monitor` cost
+since inception, and the hedge-success gauge rebuilt on realized carry. See
+`docs/part-x-coverage.md`, "The position history (8e.1)", and RUNBOOK §5.1
+(run `history_cli init` once) and §6.1 (recording a roll).
 
 **Read `docs/part-x-coverage.md` before adding or moving a dashboard panel**
 — it is the current handbook-item → surface map (mapping into the public

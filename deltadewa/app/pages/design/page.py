@@ -48,7 +48,7 @@ from deltadewa.app.section_nav import (
 )
 from deltadewa.app.shape_notice import shape_notice_text
 
-from . import book
+from . import book, trades
 from .exploration import (
     monte_carlo,
     spot_vol,
@@ -187,6 +187,7 @@ def render(app: ProgramDashApp) -> html.Div:
         app=app,
         portfolio=portfolio,
         default_style=default_style,
+        trade_forms=trades.layout(),
     )
 
     planning_zone = html.Div(
@@ -327,7 +328,11 @@ def render(app: ProgramDashApp) -> html.Div:
             SectionGroup(
                 label="Book",
                 anchor_id=book.ZONE_ANCHOR,
-                sections=book.SECTIONS,
+                sections=(
+                    *book.SECTIONS_BEFORE_TRADES,
+                    *trades.SECTIONS,
+                    *book.SECTIONS_AFTER_TRADES,
+                ),
             ),
             SectionGroup(
                 label="Planning",
@@ -402,6 +407,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
     ips_config = app.ips_config
 
     book.register(app)
+    trades.register(app)
     compliance_panel.register(app, ips_config=ips_config)
     convexity_cliff.register(app, ips_config=ips_config)
     position_aging.register(app, ips_config=ips_config)

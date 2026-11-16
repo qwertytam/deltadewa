@@ -161,3 +161,39 @@ class TestCli:
         assert _cli(tmp_path, "mark") == 0
         assert "kept the" in capsys.readouterr().out
         assert len(state.history.load().marks) == 1
+
+
+class TestStatusListsEveryReasonSinceInception:
+    """The digest names five and says ``status`` lists them all (#446)."""
+
+    def test_a_reason_outside_the_latest_period_is_listed(self) -> None:
+        from datetime import date
+        from types import SimpleNamespace
+
+        from deltadewa.history_cli import _status_lines
+        from deltadewa.portfolio.history import FillKind, PositionHistory
+        from tests.history_builders import fill, leg, mark
+
+        d0, d1, d2 = date(2026, 11, 7), date(2026, 11, 14), date(2026, 11, 21)
+        history = PositionHistory(
+            recorded_fills=(
+                fill(FillKind.OPEN, "b", 5, 4.0, day=d1, fees=None),
+            ),
+            marks=(
+                mark(d0, is_opening=True),
+                mark(d1, (leg("b", 5, 4.0),)),
+                mark(d2, (leg("b", 5, 3.0),)),
+            ),
+        )
+        state = SimpleNamespace(
+            history=SimpleNamespace(load=lambda: history),
+            positions_snapshot=lambda: (),
+        )
+
+        lines = _status_lines(state)  # type: ignore[arg-type]
+
+        text = "\n".join(lines)
+        assert "Latest period 2026-11-14 to 2026-11-21" in text
+        assert "NOT reconcilable" in text  # the since-inception line
+        assert "Since 2026-11-07: NOT reconcilable (1 reason(s))" in text
+        assert "fees not captured" in text

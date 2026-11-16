@@ -24,11 +24,12 @@ from deltadewa.portfolio.history import (
     HistorySchemaError,
     MarkBasis,
     PositionHistory,
+    fill_cash,
     mark_book,
     record_from_json,
 )
 from deltadewa.portfolio.stamps import MarketParameterStamps
-from tests.history_builders import at, edit, fill, leg, mark, terms
+from tests.history_builders import SIZE, at, edit, fill, leg, mark, terms
 
 D1 = date(2026, 11, 7)
 D2 = date(2026, 11, 14)
@@ -151,6 +152,56 @@ class TestCashFlow:
             fill(FillKind.OPEN, "a", 1, price, day=D1, fees=fees).cash_flow()
             is None
         )
+
+
+class TestFillCashIsTheOneFormula:
+    """A form's preview and a recorded fill cannot disagree on the cash."""
+
+    @pytest.mark.parametrize(
+        ("quantity", "price", "fees"),
+        [(2, 10.0, 5.0), (-2, 15.0, 5.0), (3, 0.0, 0.0)],
+        ids=["buy", "sell", "worthless settlement"],
+    )
+    def test_matches_a_recorded_fill(
+        self,
+        quantity: int,
+        price: float,
+        fees: float,
+    ) -> None:
+        recorded = fill(
+            FillKind.OPEN if quantity > 0 else FillKind.SETTLE,
+            "a",
+            quantity,
+            price,
+            day=D1,
+            fees=fees,
+        )
+
+        assert recorded.cash_flow() == pytest.approx(
+            fill_cash(
+                quantity=quantity,
+                price_per_share=price,
+                fees=fees,
+                contract_size=SIZE,
+            ),
+        )
+
+    def test_fees_reduce_cash_in_both_directions(self) -> None:
+        paid = fill_cash(
+            quantity=1,
+            price_per_share=10.0,
+            fees=2.0,
+            contract_size=100,
+        )
+        received = fill_cash(
+            quantity=-1,
+            price_per_share=10.0,
+            fees=2.0,
+            contract_size=100,
+        )
+
+        assert paid == pytest.approx(-1002.0)
+        assert received == pytest.approx(998.0)
 
 
 class TestCodec:

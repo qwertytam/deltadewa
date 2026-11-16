@@ -1252,8 +1252,9 @@ quarters-sum-to-the-year and reconciliation.
   makes the period not reconcilable.
 - **Edits without a fill are recorded, not forbidden.** `update_position`
   (contract or quantity), `remove_position`, `clear_positions` and
-  `import_portfolio` write a `BookEdit`, so `/design`'s correction workflow
-  keeps working and the period says it cannot tie to a statement.
+  `import_portfolio` write a `BookEdit`, so a removal stays possible and the
+  period says it cannot tie to a statement. (No `/design` control calls
+  `update_position`; nothing in the app writes a fill correction either.)
 - **The history starts at an opening mark.** Legs held before it enter at V0,
   never as synthetic opens from `entry_premium` (that would charge years of
   premium to week one). Every surface says "No position history before
@@ -1282,10 +1283,10 @@ quarters-sum-to-the-year and reconciliation.
 - `python -m deltadewa.history_cli init|mark|status`.
 - `/design`'s Book changes panel (#262, below). Not on `/monitor`.
 
+**Built since (9d.1, #446).** The `/design` Close, Settle and Roll forms, the
+unsettled-expiry prompt, and fees on Add: see "The trade forms (9d.1)" below.
+
 **Not built (follow-ons to #313).**
-- `/design` close/settle/roll forms with fees and reason. Until then, closing
-  a leg in the UI is a `DELETE` edit, honestly unreconcilable. (#446)
-- An unsettled-expiry prompt. (#446)
 - Program cost since inception on `/monitor`. (#447)
 - The hedge-success gauge. (#447)
 
@@ -1321,9 +1322,65 @@ fixed before merge, and four gaps left as follow-ons.
   green. §4 is the only signal, and the headline does not carry it.
 - **With an empty book the digest refuses before sending**, so a mark failure
   that week is only logged.
-- **Nothing exercises the trade methods in production** (#446). `open_position`,
-  `close_position`, `settle_position` and `roll_position` have no caller
-  outside tests (the first follow-on above).
+- ~~**Nothing exercises the trade methods in production** (#446).~~ Built in
+  9d.1: the forms call them.
+
+## The trade forms (9d.1)
+
+Closes #446. `/design`'s BOOK zone had only **Remove**, which journals a
+`DELETE` with no proceeds, so any period holding a close read "not
+reconcilable" in digest §4. A **Record a trade** block now records a close, a
+settlement or a roll as fills with their cash.
+
+- **Close** (all or part of a lot; reason ROUTINE or MONETIZATION, required and
+  never inferred), **Settle** (lots at or past expiry; SPX is cash-settled, so
+  every expiry is a settlement and a worthless one is `0`; the settlement date
+  is required because it decides the period), **Roll**.
+- **A spread rolls as one action.** Roll picks a *structure*
+  (`roll_planner.group_into_structures`; a lone lot is a structure of one) and
+  asks for each leg's close and new lot. `ProgramState.roll_structure` closes
+  and opens every leg under one lock and journals the `2 x N` fills in one
+  write, or changes nothing. **Each leg is still its own roll**: a `CLOSE` and
+  an `OPEN` at their own price and fees sharing that leg's own `roll_id`; no id
+  spans legs and no net figure is stored. The review shows the package net,
+  labelled as for checking against the broker's confirmation only.
+- **Review, then confirm.** Review states the fills and their cash (from
+  `history.fill_cash`, the one cash formula a recorded fill also uses) and
+  writes nothing; Confirm replays exactly the reviewed values, and the button
+  locks the instant it is clicked so a double click cannot record twice.
+- **Unknown is not zero**, again. A blank fee, price or settlement value is
+  refused; `0` is accepted. Add position now records a trade: premium and fees
+  are both required and it goes through `open_position`. A lot already held
+  comes in through the importer, which starts the history at an opening mark.
+- **Dates** come from `clock.py`: blank is today's program date, a future date
+  is refused, and a date on or before the latest boundary mark is allowed with
+  a warning that the marks around it were taken without the trade, so realized
+  carry will not tie there (a late trade is listed as a break in the period it
+  reaches; one dated before the opening mark is listed by none). The review
+  states the day a blank date meant and the confirm replays that day, so a
+  confirm after program midnight cannot move the trade. Add has no review and
+  carries the same warning beside "Added.". A new maturity on or before the
+  program's day is refused by the parsers, because the portfolio's own
+  expired-maturity guard reads `valuation_date`, which a long-running app does
+  not advance (#437's class).
+- **The unsettled-expiry prompt** lists the lots at or past expiry still in the
+  book, using the same `is_expired` call `mark_book` flags `LegMark.
+  expired_unsettled` with, each with a link to Settle.
+
+**A removed lot cannot be turned into a close later.** `DELETE` is a
+`BookEdit`; only a `Fill` can be superseded, and a correction may not change a
+record's kind. The lot is gone from the book, so `close_position` raises
+`KeyError`, and a fill for an unheld lot would make `reconcile_book` report it
+(the delete zeroes the lot, the fill subtracts again). The period holding the
+delete stays "not reconcilable", which is the honest answer. A deliberate
+"convert a deletion into a close" correction is a design of its own.
+
+**Found on the way (main, not this change).** A `dcc.Input` the server blanks by
+setting `value` to `None` keeps the last value typed and ignores the next entry
+if it is the same, so two adds with the same quantity in a row failed with
+"quantity is required". With required fees (`0` every time) it would have failed
+every second add. The add form and the trade forms rebuild their fields on
+success instead of blanking them.
 
 ## Book changes (#262)
 
