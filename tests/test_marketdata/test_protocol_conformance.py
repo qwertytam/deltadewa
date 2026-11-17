@@ -25,6 +25,8 @@ from deltadewa.marketdata import (
     Observation,
     StaticProvider,
 )
+from deltadewa.marketdata.chain import parse_cboe_chain
+from tests.chain_builders import standard_chain
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -38,6 +40,7 @@ _VIX_FAMILY_CSV = "DATE,OPEN,HIGH,LOW,CLOSE\n06/15/2026,16.0,16.5,15.5,16.5\n"
 
 # Real FRED format: "observation_date" as the date column.
 _VIXCLS_CSV = "observation_date,VIXCLS\n2026-06-15,16.5\n"
+_DGS1_CSV = "observation_date,DGS1\n2026-06-15,4.6\n"
 
 
 def _mock_response(text: str) -> MagicMock:
@@ -49,6 +52,8 @@ def _mock_response(text: str) -> MagicMock:
 
 def _csv_for_url(url: str) -> str:
     """Route a CBOE/FRED URL to its canned CSV fixture by symbol suffix."""
+    if "id=DGS1" in url:
+        return _DGS1_CSV
     if "fredgraph.csv" in url:
         return _VIXCLS_CSV
     if url.endswith("SPX_History.csv"):
@@ -60,6 +65,11 @@ def _csv_for_url(url: str) -> str:
 
 def _fake_get(url: str, timeout: float | None = None) -> MagicMock:
     _ = timeout
+    if url.endswith("_SPX.json"):
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = standard_chain()
+        return response
     return _mock_response(_csv_for_url(url))
 
 
@@ -73,6 +83,8 @@ def _static_provider() -> StaticProvider:
     return StaticProvider(
         spot_prices={"SPX": 5000.0},
         vix_history=[10.0, 11.0, 12.0],
+        rates={"DGS1": 4.6},
+        chains={"SPX": parse_cboe_chain(standard_chain())},
     )
 
 
@@ -94,6 +106,8 @@ _ACCESSORS: list[tuple[str, tuple[object, ...]]] = [
     ("get_vix_term_structure", ()),
     ("get_skew_index", ()),
     ("get_skew_percentile", (1,)),
+    ("get_rate", ("DGS1",)),
+    ("get_option_chain", ("SPX",)),
 ]
 
 

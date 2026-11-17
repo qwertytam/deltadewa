@@ -64,6 +64,7 @@ from deltadewa.ips_config import (
     IpsMaturitySelection,
     IpsMonetization,
     IpsPricing,
+    IpsPricingFeed,
     IpsPricingInputs,
     IpsProgram,
     IpsSizing,
@@ -184,6 +185,18 @@ _CLASSIFICATION: Final[dict[str, BandKind]] = {
     # graded against. The bands the ladder is scored on are the existing
     # budget/convexity/efficiency ones above.
     "strike_ladder.rungs": BandKind.NOT_A_BAND,
+    # ── Fetched pricing inputs (9b) ───────────────────────────────────
+    # Which inputs a feed may price and which FRED series stands for the
+    # book rate are selectors, not thresholds.
+    "pricing_feed.adopt": BandKind.NOT_A_BAND,
+    "pricing_feed.rate_series": BandKind.NOT_A_BAND,
+    # How old a fetched quote may be before it is not used: a cadence,
+    # like pricing_inputs.*_max_age_days and liquidity.observation_*.
+    "pricing_feed.max_quote_age_days": BandKind.TRIGGER,
+    # A spread above which a quote yields no IV, and the vol-point gap past
+    # which an override is flagged: they label a reading, nothing is graded.
+    "pricing_feed.max_spread_pct": BandKind.INTERPRETATION,
+    "pricing_feed.override_warn_vol_points": BandKind.INTERPRETATION,
 }
 
 #: IPS sections that define no thresholds at all — names, an exercise
@@ -229,6 +242,7 @@ def _ips_section_types() -> dict[str, type]:
         "maturity_selection": IpsMaturitySelection,
         "liquidity": IpsLiquidity,
         "strike_ladder": IpsStrikeLadder,
+        "pricing_feed": IpsPricingFeed,
     }
     for field in dataclasses.fields(IpsConfig):
         if field.name in bookkeeping:
