@@ -171,7 +171,7 @@ to bring it back. See `part-x-coverage.md`,
 
 This section covers the *configuration* surface. For the reading-by-reading
 map — which series are observed, from which source, on what cadence, and
-which pricing inputs are hand-entered and never refresh — see
+which pricing inputs are fetched and which hand-entered — see
 [market-data.md](market-data.md).
 
 The deployed app always constructs a `CboeFredProvider` in **read-only**
@@ -191,7 +191,8 @@ Two public endpoints are used — no API key required:
 | Source | Host | Data |
 | --- | --- | --- |
 | CBOE CDN | `cdn.cboe.com` | SPX, VIX9D/VIX/VIX3M/VIX6M/VIX1Y, SKEW (daily CSV) |
-| FRED | `fred.stlouisfed.org` | VIXCLS series (daily CSV) |
+| CBOE CDN (delayed quotes) | `cdn.cboe.com` (redirects to `cdn-api.cboe.com`) | The SPX option chain (JSON, about 13 MB), only with a `pricing_feed` section |
+| FRED | `fred.stlouisfed.org` | VIXCLS, and the `pricing_feed.rate_series` Treasury series (daily CSV) |
 
 Data is delayed/end-of-day, not real-time. Check CBOE's and FRED's own
 terms before redistributing pulled values outside this session.
@@ -200,8 +201,9 @@ terms before redistributing pulled values outside this session.
 
 `CboeFredProvider` caches each successful response to disk (by default
 `~/.cache/deltadewa/marketdata/`, or `DELTADEWA_CACHE_DIR` if set — the
-deployed app and its refresh cron both point this at `exports/` so they
-share one cache) with a TTL per endpoint. A fresh entry within that window
+deployed app and its refresh cron both point this at the `./cache` bind
+mount, outside `exports/`, so they share one cache that never rides the
+offsite backup) with a TTL per endpoint. A fresh entry within that window
 is served from cache with no HTTP request. On network failure the provider
 falls back to the last cached value (regardless of TTL); if no cached value
 exists and the network is unreachable, a `MarketDataError` is raised.
@@ -238,6 +240,25 @@ maximum number of days a stamped input may go unconfirmed before the
 provenance banner and `/health`'s `pricing_inputs` object grade it
 `AGING`. Optional — a missing section, like `market_environment`/`sizing`/
 `vega`, falls back to the module defaults (1/7/30/90 days). See
-[market-data.md](market-data.md#hand-entered-inputs-which-never-refresh)
+[market-data.md](market-data.md#hand-entered-inputs)
 for what a confirmation stamp means and when it is set, and
 `deltadewa/ips_config.py` for the authoritative field list.
+
+### Fetched pricing inputs (`pricing_feed`)
+
+Optional, and with **no code defaults**: omit the whole section and nothing
+is fetched and every pricing input stays hand-entered. If the section is
+present, every key is required (a partial section is an error), and
+`ips_config --check` lists an absent one under "optional sections that have
+NO code defaults". Both shipped templates carry it with `adopt: []`.
+
+| Key | Meaning |
+| --- | --- |
+| `adopt` | The inputs a feed may **price** the book on: any of `spot`, `risk_free_rate`, `volatility`; `[]` fetches and shows only. `dividend_yield` is refused: put-call parity cannot isolate it (9b.0). Read by the adoption step; until that is built it is recorded and shown, not applied |
+| `rate_series` | The FRED constant-maturity series standing for the book's one rate: `DGS1MO`, `DGS3MO`, `DGS6MO`, `DGS1`, `DGS2`, `DGS3`, `DGS5`, `DGS7`, `DGS10`, `DGS20` or `DGS30`. `DGS1` suits 6-18 month options |
+| `max_quote_age_days` | Calendar days between the program's date and the chain's trading session beyond which a fetched quote is not used (`STALE-QUOTE`). 5 spans a long weekend plus a missed night |
+| `max_spread_pct` | Percent of mid. A quote wider than this yields no IV (`WIDE`). The strikes a hedge ladder uses quoted 2-5% wide at the close in the spike |
+| `override_warn_vol_points` | Vol points. `/design` warns when a typed-in IV differs from the fetched one by more than this. Read by the overrides step; not yet applied |
+
+See [market-data.md](market-data.md#fetched-pricing-inputs-9b) for the
+rules these keys feed.

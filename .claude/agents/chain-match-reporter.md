@@ -54,6 +54,14 @@ scripts and output. If any is missing, say so and stop. If the caller gives a
 list of candidate strikes instead of a book, treat it as a book of long
 puts of the stated expiry.
 
+The payload path is either the vendor's own JSON (`timestamp`, `data`,
+`symbol`) or one of the refresh job's cache files, `chain_SPX.json` or last
+night's `chain_SPX.prev.json` in the host's cache folder (`./cache`, outside
+`exports/`). A cache file wraps the same payload as `{"value": <payload>,
+"fetched_at": <ISO time>}`: if the top-level object has a `value` key, read
+the payload from it and report `fetched_at` once, beside the payload's own
+`timestamp` (the job's fetch time, which is not the vendor's quote time).
+
 ## Method
 
 1. Load the book with `PortfolioSerializer(...).import_portfolio(path,

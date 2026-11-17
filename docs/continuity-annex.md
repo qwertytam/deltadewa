@@ -38,7 +38,9 @@ than taken on faith.
 
 - **A stale or missing hand-entered price says so.** Per-leg implied
   volatility, spot, the risk-free rate, and the dividend yield are typed
-  in by a person and never refresh on their own. The provenance ledger
+  in by a person and do not refresh on their own (a pricing feed, when
+  one is configured, can supply the first three; the dividend yield is
+  always typed). The provenance ledger
   grades every one of them against a review-cadence policy and shows the
   worst grade on both pages' banner (#367) — a book nobody has touched
   in months reads as stale, not as quietly current. **What this does not

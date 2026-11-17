@@ -6,9 +6,13 @@ of the pricing inputs are not.
 
 Two things are true at once and are easy to conflate:
 
-- The app **observes** six index-level readings, refreshed nightly.
-- The app **prices the book** off hand-entered values — per-leg implied
-  volatility, the risk-free rate, the dividend yield, and spot.
+- The app **observes** six index-level readings, refreshed nightly, and,
+  when `ips.yaml` has a `pricing_feed` section, the SPX option chain and a
+  Treasury yield as well.
+- The app **prices the book** off four inputs: per-leg implied volatility,
+  the risk-free rate, the dividend yield, and spot. The feed supplies the
+  first, second and fourth; the dividend yield is always hand-entered
+  (see ["Fetched pricing inputs"](#fetched-pricing-inputs-9b)).
 
 Batch 3d (#367/#368) closed the gap this section used to describe: the
 provenance banner used to grade only the first group, so a book priced
@@ -56,6 +60,14 @@ Notes on the table:
   and a failed series' previous cache entry is left untouched, because
   the disk cache only writes on success.
 
+- **Two more with a `pricing_feed` section.** `chain` and `rate` join the
+  same run with the same rules (fetched independently, `LIVE` only on a real
+  fetch, read back through the app's own path). They are described under
+  ["Fetched pricing inputs"](#fetched-pricing-inputs-9b). `/health` lists
+  them under `market_data.feed`, beside `series` and not in it: `series`
+  is the environment's reduction and feeds `oldest_series`, the banner and
+  `status`, and nothing is priced on the feed yet.
+
 ### The skew percentile's window (#317)
 
 The SKEW percentile is the inclusive rank of the latest SKEW close over a
@@ -89,33 +101,158 @@ time it quotes a percentile", so every surface does: `/design` reads
 - `get_vix_history`'s 252-session window is a **different metric** (the
   vol-regime true percentile in `analysis/health.py`) and is unchanged.
 
-## Hand-entered inputs, which never refresh
+## Fetched pricing inputs (9b)
 
-These come from the loaded portfolio (or `/design`'s position editor) and
-have **no market feed behind them at all** — nothing in the app updates
-them automatically. Every one of the four is now flagged, though not all
-the same way (#367):
+> **Status.** Built: the nightly fetch and its cache, the daily chain
+> record, liquidity from the chain, and `/design`'s read-only **Fetched
+> inputs** panel. **Not built yet:** pricing the book on the feed. Until
+> that lands, every pricing input is hand-entered and the feed is shown
+> beside it, never applied. The rules below are the design the adoption
+> follows.
+
+**What is fetched.** With a `pricing_feed:` section in `ips.yaml` the
+nightly refresh adds two series to its six. Without the section nothing
+below is fetched and every input stays hand-entered.
+
+| Series | Source | Cache key |
+| --- | --- | --- |
+| `chain` | Cboe delayed-quote SPX option chain (about 13 MB), cached **raw** | `chain_SPX` (last night's copy kept as `chain_SPX.prev`) |
+| `rate` | the FRED constant-maturity series the policy names (`pricing_feed.rate_series`) | `rate_<series>` |
+
+Both live in the **cache folder**, `./cache` on the host (`/app/cache` in
+the containers), which is **outside `exports/`**: the payload is vendor
+data and must never be committed, ride the offsite backup, or become a
+test fixture (tests build synthetic chains from the engine). The folder is
+gitignored and rebuilt by one run of the refresh job; a restore starts
+without it. The one thing the job leaves under `exports/` is
+`chain-history/` (below). A payload that downloads but does not parse never
+replaces a good cache entry: the parse runs inside the fetch.
+
+**How an input is chosen.** One effective value per input, decided once
+when the process starts: the app, and the weekly digest (its own process,
+the same function), resolve spot, rate and per-leg IV from the cached feed
+and price the in-memory book on them. The book file keeps what a human
+typed; a fetched value is never saved into it. There is no live reload
+(#355: a book swapped under a render tears it), so the nightly refresh is
+followed by a restart of the app, and the app's date rolls forward with it.
+Nothing is journaled to the position history when the inputs are resolved:
+they move the marks, not the book.
+
+**Per-leg IV** is solved from the close **mid** with this program's own
+European engine at the book's effective rate and dividend yield, at the
+chain's own index level and session date. A vendor IV is an answer at the
+vendor's own rate and yield; adopted beside different ones it misprices a
+leg by about 6-8% per point of difference (see the spike, below), whereas the
+solved IV reprices the leg to the mid by construction. The vendor's IV is
+shown, never priced on. An IV and the (r, q) it was solved with are a
+pair: changing the rate or the yield re-solves every IV; overriding spot
+does not, and says so.
+
+- *Matching.* The expiry comes from the contract symbol, never a computed
+  third Friday. The standard `SPX` monthly is preferred; `SPXW` is used only
+  where `SPX` does not list the date; `SPXO` is never matched. Each leg shows
+  the contract that priced it.
+- *A quote yields no IV* when it has no bid or no ask, is wider than
+  `pricing_feed.max_spread_pct` of mid, cannot be solved (the mid is outside
+  the no-arbitrage bounds at the book's r and q), or the contract is not
+  listed. The vendor's `iv: 0` is irrelevant (the IV is solved), and a bid
+  and an IV are tested separately.
+- *Stale quotes.* The payload carries no per-contract quote time, so a
+  quote's age is the program date minus the chain's trading session
+  (NYSE calendar; a payload overnight, at a weekend or on a holiday belongs
+  to the last close). Beyond `pricing_feed.max_quote_age_days` it is not
+  used.
+- *Candidates.* A strike the book does not hold (the strike grid, the
+  sizing workbench, the ladder composer, a roll's cost) takes its IV from
+  the same chain: the exact listed contract; else between the two listed
+  strikes either side; else between the two listed expiries either side, in
+  total variance. Nothing is extrapolated: outside the listed range the
+  candidate uses the book's flat vol and is labelled so.
+
+**Rate.** One book-level rate from one named FRED series
+(`pricing_feed.rate_series`, `DGS1` in the template), converted from a
+bond-equivalent yield to a continuous one. Per-leg rates were rejected: the
+batch pricer, the crash repricing, the candidates and the Monte Carlo all
+broadcast one book rate, so a per-leg rate would disagree with them for
+about a percent of price. FRED publishes about a business day late; the
+observation date is always shown and a late figure is the normal case, not
+an alarm (#368).
+
+**Dividend yield** stays hand-entered and confirmed quarterly
+(`pricing_inputs.dividend_yield_max_age_days`). Put-call parity measures the
+dividend, funding and timing together and cannot isolate the yield, so
+`adopt` may not name it.
+
+**Spot** is the chain's own index level: struck at the same instant as the
+quotes the IVs are solved from. The nightly index close is the fallback.
+On a weekend or holiday the book prices at the last trading day's close.
+`/monitor`'s book-versus-observed cross-check warns only when both figures
+are from the same session.
+
+**Provenance.** A fetched input is graded as a fetched one (`DataQuality`,
+by `fetched_at` against the data TTL, with the quote's age gating whether
+it is used). An override or a fallback is a hand-entered input, graded by
+`pricing_inputs`; those ages apply to overrides and fallbacks only. A
+fallback in use also shows the feed as unavailable, so a dead feed alarms
+through the fetched channel. The two-channel rule (`assess_freshness`) is
+unchanged: one rule, applied to every fetched entry.
+
+**Overrides** are set on `/design` (review, then confirm), last until
+cleared, and are listed on `/monitor` and in the digest with their age and
+the fetched value beside them. `/design` warns when an override is far from
+the fetched value: past `market_environment.spot_divergence_warn_pct` for
+spot, `pricing_feed.override_warn_vol_points` for an IV.
+
+**When the feed fails**, each input falls down a ladder:
+
+| Rung | Condition | Priced on | What is said |
+| --- | --- | --- | --- |
+| 1 | Normal | today's fetched value | the session of the quotes |
+| 2 | A night's download failed | the last good value, labelled with its date | `STALE` once `fetched_at` passes the TTL: banner, `/health`, and the digest headline by the unchanged #398 rule |
+| 3 | Last good value older than `max_quote_age_days` | the typed value, graded by its stamp | the banner: "feed down since <date>; pricing on your value from <date>" |
+| - | The resolving code itself raises | typed values for everything | `/health` and the banner say so; the weekly email still sends and pings |
+
+**Realized carry.** An option whose IV source changed between two weekly
+marks (the feed failed, or came back) was re-priced with no trade. The
+weekly figure flags that week, since part of it is a re-pricing, not carry.
+
+**Daily record.** After a live chain fetch the job appends one session's
+rows to `exports/chain-history/SPX-<year>.jsonl`: each held option's close
+quote, and about 120 fixed market points (the standard `SPX` expiries 30
+days to 3 years out; the listed put nearest 5, 10, 20, 30, 40 and 50% out
+of the money; the at-the-money put and call). The rows are raw (bid, ask,
+the vendor's IV, open interest), so they can be re-solved at any rate and
+yield later. About 5 MB a year, backed up. It is the start of this
+program's own IV history: the free feed has none.
+
+## Hand-entered inputs
+
+These come from the loaded portfolio (or `/design`'s position editor). The
+dividend yield is always hand-entered; spot, the rate and per-leg IV are
+too until `pricing_feed.adopt` names them, and after that they are the
+override and the fallback (see
+["Fetched pricing inputs"](#fetched-pricing-inputs-9b)). Every one is
+flagged, though not all the same way (#367):
 
 | Input | Where it is set | Refresh path | Staleness signal |
 | --- | --- | --- | --- |
-| Per-leg implied volatility | `OptionPosition.volatility_as_of` | None — hand-entered | Confirmation age, vs. `pricing_inputs.volatility_max_age_days` |
-| Risk-free rate | `MarketParameterStamps.risk_free_rate_as_of` on the book | None — hand-entered | Confirmation age, vs. `pricing_inputs.risk_free_rate_max_age_days` |
-| Dividend yield | `MarketParameterStamps.dividend_yield_as_of` on the book | None — hand-entered | Confirmation age, vs. `pricing_inputs.dividend_yield_max_age_days` |
-| **Spot price** | `MarketParameterStamps.spot_as_of` on the book | None — changes only on portfolio import, but see below | Confirmation age (above) **and** the #336 observed-spot cross-check (below) |
+| Per-leg implied volatility | `OptionPosition.volatility_as_of` | Hand-entered, or the feed | Confirmation age, vs. `pricing_inputs.volatility_max_age_days` |
+| Risk-free rate | `MarketParameterStamps.risk_free_rate_as_of` on the book | Hand-entered, or the feed | Confirmation age, vs. `pricing_inputs.risk_free_rate_max_age_days` |
+| Dividend yield | `MarketParameterStamps.dividend_yield_as_of` on the book | Hand-entered only | Confirmation age, vs. `pricing_inputs.dividend_yield_max_age_days` |
+| **Spot price** | `MarketParameterStamps.spot_as_of` on the book | Hand-entered, or the feed | Confirmation age (above) **and** the #336 observed-spot cross-check (below) |
 
 Spot is the one that matters most, because it is the reference point
 almost every other number is measured against — crash convexity, roll
 OTM%, every drift trigger, hedge value, the monetization gain. A stale
-spot biases all of them in the same direction. It is still never
-refreshed itself, but as of #336 it carries a second, independent signal
+spot biases all of them in the same direction. A hand-entered spot
+carries, as of #336, a second, independent signal
 beyond the confirmation age above: `/monitor` shows it beside the
 independently observed market spot (see the "Observed readings" table
 above), so a divergence past `market_environment.spot_divergence_warn_pct`
 in `ips.yaml` is visible rather than silent. The other three hand-entered
-inputs have no observed counterpart to cross-check against — nothing
-fetches per-leg IV, the risk-free rate, or the dividend yield — so
-confirmation age is the only signal available for them, and it is a
-review cadence, not a market fact: it answers "how long since a human
+inputs have no observed counterpart to cross-check against on `/monitor`,
+so for a hand-entered one confirmation age is the only signal available, and
+it is a review cadence, not a market fact: it answers "how long since a human
 last confirmed this number," not "has the market moved."
 
 ### Confirmation stamps: what they mean, and what they don't
@@ -296,28 +433,36 @@ every input #367 added made the banner louder, operators would stop
 reading a banner that never turns off; see `analysis/provenance.py`'s
 module docstring and `app/chrome.py` for the full reasoning.
 
-## Liquidity: hand-entered quotes, not a feed
+## Liquidity
 
-Part X #12 Liquidity Risk needs per-strike bid/ask and open interest,
-which no connected source provides (see below). Since 8c (N10) the
-operator can record what they *can* see — the quote on their own broker
-for a leg they hold — and `/design`'s **Liquidity check (hand-entered)**
-panel grades it. This turns a feed-blocked metric into a checklist item;
-it does not make it a liquidity feed.
+Part X #12 Liquidity Risk needs per-strike bid/ask and open interest.
+`/design`'s **Liquidity check** panel grades one quote per held leg against
+`ips.yaml`'s optional `liquidity:` section. The quote is the operator's own,
+read off their broker and recorded by hand (8c), or, with a `pricing_feed`
+section, last night's close quote for that contract, derived from the cached
+chain (9b).
 
 - **What is captured.** Per leg, a `LiquidityObservation`
-  (`portfolio/liquidity.py`): bid, ask, optional open interest, and when
-  it was read. Spread is the handbook's `(Ask − Bid) / Mid`. It is
-  persisted with the book (JSON and YAML), restored verbatim on import,
-  and discarded if the leg's strike, maturity or type is edited — it
-  described a different contract.
-- **When, and by whom.** By the operator, by hand, at the moments the
-  handbook says liquidity matters: rolling, monetizing, and scaling a
-  position (Tier 4 §12). The panel flags a leg as needing a fresh quote
-  when it has never been checked, when its last quote is older than the
-  review cadence, or when the leg's roll status is `ROLL`/`REVIEW` — the
-  exit side of a roll. A newly added leg starts as "never checked", which
-  covers the entry side and any scaling.
+  (`portfolio/liquidity.py`): bid, ask, optional open interest, when it was
+  read, and its source (`OPERATOR` or `FETCHED`). Spread is the handbook's
+  `(Ask - Bid) / Mid`. An operator quote is persisted with the book (JSON
+  and YAML), restored verbatim on import, and discarded if the leg's strike,
+  maturity or type is edited: it described a different contract.
+- **Fetched quotes are derived, never stored.** At read time each held leg
+  is matched on the cached chain; the result is a `FETCHED` observation
+  dated to the close of its trading session (never later than the payload
+  itself). It puts no nightly write on the book and cannot overwrite an
+  operator quote.
+- **Which is graded.** The later of the two is graded and the other is shown
+  beside it; on a tie the operator's wins. A broker quote taken at roll time
+  therefore outranks last night's close until the next close arrives, and a
+  leg in its roll window still wants a quote read on the program date: a
+  fetched close from yesterday does not satisfy it.
+- **When the operator records one.** At the moments the handbook says
+  liquidity matters: rolling, monetizing and scaling a position (Tier 4
+  §12). The panel flags a leg as needing a fresh quote when it has never
+  been checked, when its last quote is older than the review cadence, or
+  when the leg's roll status is `ROLL`/`REVIEW`.
 - **What grades it.** `ips.yaml`'s optional `liquidity:` section:
   `spread_warn_pct` (a recorded spread wider than this grades WIDE),
   `open_interest_min` (optional; unset records OI ungraded), and
@@ -340,36 +485,34 @@ it does not make it a liquidity feed.
   ledger is also "every *pricing* input", and a spread prices nothing. So
   liquidity lives on `/design` only: not the banner, the digest,
   `/health` or `/monitor`.
-- **What it does not claim** — and what #156's chain feed would add that
-  this cannot:
-  - quotes for **every strike**, including strike-ladder candidates the
-    book does not hold yet;
-  - **depth** behind the top of book, and traded **volume**;
-  - **intraday and stress-time widening** — a quote read on a calm
-    Tuesday says nothing about the bid in a crash, which is when the
-    handbook says liquidity matters most;
-  - **automatic refresh**, so "how old is this quote" stops being a
-    question.
+- **What it does not claim.**
+  - **Depth** behind the top of book, and traded **volume**;
+  - **intraday and stress-time widening**: a close quote says nothing about
+    the bid in a crash, which is when the handbook says liquidity matters
+    most. The feed is a once-a-day read after the close;
+  - quotes for strikes the book does not hold. The **Fetched inputs**
+    panel shows the `strike_ladder` rungs' quotes, but the checklist grades
+    held legs only.
 
 ## What is not connected
 
-There is **no options-chain feed**. The app has no per-strike implied
-volatility, no fetched bid/ask, and no fetched open interest.
-Consequences:
-
-- Every leg is priced on its hand-entered volatility.
-- Part X **#12 Liquidity Risk** can only be built as the hand-entered
-  checklist above — the real metric needs per-strike bid/ask and open
-  interest from a feed. See `part-x-coverage.md`.
-
-Connecting a real chain feed is tracked in #156, and is the blocker on
-both of the above. What a feed would and would not supply was measured in
-the 9b.0 spike, below.
+- **Intraday data.** Every feed here is a once-a-day read after the close.
+  The 15-minute delay and in-session spreads were never measured and are out
+  of scope.
+- **A dividend yield.** It cannot be derived from the chain (see
+  ["Fetched pricing inputs"](#fetched-pricing-inputs-9b)) and no free source
+  publishes one cleanly. It stays hand-entered.
+- **Historical chains.** The free endpoint keeps none. What accumulates is
+  this program's own `chain-history/` record, from the day the feed was
+  turned on. Backtesting over past drawdowns, and a realised vol-surface
+  history, remain a paid-data question (#156).
+- **Depth and volume** behind a quote, beyond the traded volume the payload
+  reports.
 
 ## Option-chain spike (9b.0)
 
-A one-off measurement, not a connection: nothing in the app reads a chain
-yet. It was run on 2026-11-16 against Cboe's delayed-quote chain for the
+A one-off measurement that preceded the feed, and the reference for the
+payload's shape and quirks. It was run on 2026-11-16 against Cboe's delayed-quote chain for the
 SPX (terms of use are the operator's to settle and are not revisited here),
 one payload, fetched once, **after the close** (20:39
 New York). The payload was kept outside the repo and is not committed.
@@ -581,11 +724,15 @@ carry, with no break named. Three facts frame the fix, all in the code today:
 - Each mark already records the spot, rate, dividend yield and per-leg
   volatility it was priced on.
 
-**Decision for 9b:** mark the switch with a new `MarkBasis` member, so the week
-that spans it reads "not comparable" and since-inception restarts at the first
-mark on the new basis. `MarkBasis` defines the basis by the volatilities, so
-adopting spot and rate alone does not change it; the move to measured
-volatilities does.
+**Decision for 9b:** the switch itself is not marked: nothing is in
+production, so no history spans it, and a new `MarkBasis` member (with every
+period across it "not comparable") would be machinery for an event that
+does not occur. What does recur is a single option's IV source changing
+between two weekly marks (the feed failed, or came back), which re-prices
+that option with no trade. Each mark records the IV's origin per option, and
+a week whose two marks disagree on any option's origin is flagged in section
+4: part of that figure is a re-pricing, not carry. The figure is still
+printed, with the caveat.
 
 ### Limits
 
@@ -599,10 +746,13 @@ live program state and policy, and that result also went to the operator.
 
 ## Where the data lives
 
-- **On disk:** `exports/marketdata-cache/`, one JSON file per cache key,
-  each holding `{"value": …, "fetched_at": …}`. Both the `app` and `jobs`
-  containers point at it via `DELTADEWA_CACHE_DIR` so a refresh actually
-  warms what the app reads.
+- **On disk:** the cache folder, `./cache` on the host and `/app/cache` in
+  the containers, one JSON file per cache key, each holding `{"value": …,
+  "fetched_at": …}`. It is **outside `exports/`**, so vendor payloads never
+  ride the offsite backup. Both the `app` and `jobs` containers point at it
+  via `DELTADEWA_CACHE_DIR` so a refresh actually warms what the app
+  reads. Writes are atomic (a temporary file, then a rename). The one
+  chain-derived file under `exports/` is `chain-history/`.
 - **Endpoints and credentials:** see
   [yaml-config-guide.md](yaml-config-guide.md#live-market-data). Both
   endpoints are public; no API key is required for the six readings
