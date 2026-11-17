@@ -2565,9 +2565,10 @@ M2.8 shipped both immediately after. Struck through below rather than
 removed, so the reclassification stays legible next to what it led to;
 only #12 and #9 are still actually deferred.
 
-- **#12 Liquidity Risk** — **data-blocked.** Needs a live options-chain feed
-  (bid/ask, OI per strike); the free CBOE/FRED provider returns index-level
-  series only.
+- **#12 Liquidity Risk** — **partial.** 8c gave it a hand-entered per-leg
+  checklist; 9b fills it from the nightly Cboe option-chain fetch (bid, ask
+  and open interest per held leg). Depth, volume and stress-time widening
+  stay unmeasurable on the free feed.
 - ~~**#13 Delta Drift** — a surfacing gap, not a data gap. Handbook §13
   defines it as `Δ(−5%) − Δ(0)` — two shocked deltas at one valuation date,
   not a series from position history. `analysis/scenarios.py` already prices
@@ -2596,9 +2597,9 @@ only #12 and #9 are still actually deferred.
 Opened during Phase 4 and deliberately not taken there:
 
 - **#156 — options-chain feed (D2: Tier-4 liquidity, skew-aware pricing,
-  backtesting).** The blocker behind **#12** above; the free CBOE/FRED
-  provider returns index-level series only. Everything data-blocked in this
-  plan is waiting on this one issue.
+  backtesting).** 9b built the free half (the delayed chain: per-leg bid, ask,
+  open interest and IV). What remains for #156 is paid history, for
+  backtesting and a realised vol surface.
 - ~~**#70 — track hedge historical P&L.** The position-history layer. Also the
   blocker behind the **hedge-success gauge**, which M2.4 (finding M2)
   deliberately omitted and M4.1's gauge audit re-confirmed as omitted: it

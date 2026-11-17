@@ -519,17 +519,30 @@ class CboeFredProvider:
     ) -> list[tuple[str, float]]:
         response = self._session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
-        frame = pd.read_csv(StringIO(response.text))
-        frame = frame[[date_col, value_col]].dropna()
-        frame[value_col] = pd.to_numeric(frame[value_col], errors="coerce")
-        frame = frame.dropna()
-        # Sort chronologically regardless of date string format (CBOE uses
-        # MM/DD/YYYY; FRED uses YYYY-MM-DD — string sort would mis-order CBOE).
-        frame = frame.iloc[pd.to_datetime(frame[date_col]).argsort()]
-        return [
-            (str(row[date_col]), float(row[value_col]))
-            for _, row in frame.iterrows()
-        ]
+        try:
+            frame = pd.read_csv(StringIO(response.text))
+            frame = frame[[date_col, value_col]].dropna()
+            frame[value_col] = pd.to_numeric(frame[value_col], errors="coerce")
+            frame = frame.dropna()
+            # Sort chronologically regardless of date string format (CBOE
+            # uses MM/DD/YYYY; FRED uses YYYY-MM-DD: a string sort would
+            # mis-order CBOE).
+            frame = frame.iloc[pd.to_datetime(frame[date_col]).argsort()]
+            series = [
+                (str(row[date_col]), float(row[value_col]))
+                for _, row in frame.iterrows()
+            ]
+        except (KeyError, ValueError, TypeError, IndexError) as exc:
+            # A page that is not the CSV expected (a renamed column, an HTML
+            # error body) is a failed fetch, not a crash: only
+            # MarketDataError is contained per series by the refresh job,
+            # and it falls back to the last cached value.
+            raise MarketDataError(
+                f"unreadable series response from {url}: {exc}",
+            ) from exc
+        if not series:
+            raise MarketDataError(f"series response from {url} has no rows")
+        return series
 
     def _request_with_fallback(
         self,

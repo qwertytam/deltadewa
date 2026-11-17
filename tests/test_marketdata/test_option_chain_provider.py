@@ -386,6 +386,54 @@ class TestRate:
         assert observation.value == pytest.approx(4.60)
 
 
+class TestUnreadableSeries:
+    """A page that is not the CSV expected is a failed fetch, not a crash.
+
+    Only MarketDataError is contained per series by the refresh job; a bare
+    KeyError, IndexError or pandas error used to escape and be reported as
+    a total outage.
+    """
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "observation_date,DGS1\n",  # no rows
+            "observation_date,DGS1\n2026-11-13,.\n",  # only a gap
+            "observation_date,OTHER\n2026-11-13,4.6\n",  # renamed column
+            "<html><body>Service unavailable</body></html>",
+            "",
+        ],
+    )
+    def test_is_a_market_data_error(self, tmp_path: Path, body: str) -> None:
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _csv_response(body)
+        provider = CboeFredProvider(cache_dir=tmp_path, session=session)
+
+        with pytest.raises(MarketDataError):
+            provider.get_rate("DGS1")
+
+        assert not (tmp_path / "rate_DGS1.json").exists()
+
+    def test_falls_back_to_the_cache_instead_of_replacing_it(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _csv_response(_DGS_CSV)
+        provider = CboeFredProvider(
+            cache_dir=tmp_path,
+            session=session,
+            force_fetch=True,
+        )
+        provider.get_rate("DGS1")
+        session.get.return_value = _csv_response("<html>oops</html>")
+
+        observation = provider.get_rate("DGS1")
+
+        assert observation.source is Source.STALE
+        assert observation.value == pytest.approx(4.60)
+
+
 class TestStaticProvider:
     """StaticProvider serves registered rates and chains, deterministically."""
 

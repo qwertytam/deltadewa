@@ -33,8 +33,9 @@ def default_cache_dir() -> Path:
 
     Honours ``DELTADEWA_CACHE_DIR`` so a production refresh job and the
     read-only app *resolve the same directory by the same logic* — in
-    production this points at a path under the ``exports/`` bind mount, so
-    the cache survives container recreation, unlike the per-container
+    production this points at the ``./cache`` bind mount (``/app/cache``),
+    outside ``exports/`` so vendor payloads never ride the offsite backup,
+    and so the cache survives container recreation, unlike the per-container
     writable layer. Falls back to ``~/.cache/deltadewa/marketdata`` for
     notebook/local use, unchanged from the provider's own prior default.
 

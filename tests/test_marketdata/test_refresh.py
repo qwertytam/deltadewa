@@ -941,6 +941,77 @@ class TestPricingFeedSeries:
         assert len(verified) == len(live)
 
 
+class TestUnexpectedFaultInOneSeries:
+    """One series raising something other than MarketDataError is contained.
+
+    Left alone it escaped refresh_all to main()'s guard, which returns 2
+    before the manifest, the read-back and the heartbeat, so a 7-of-8 run
+    read as a total outage.
+    """
+
+    def test_refresh_all_keeps_the_other_series(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+
+        def boom(_series: str) -> None:
+            raise OverflowError("cannot convert float infinity to integer")
+
+        with (
+            patch.object(writer, "get_option_chain", side_effect=boom),
+            caplog.at_level(logging.WARNING),
+        ):
+            live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+
+        assert total == 8
+        assert "chain" not in live
+        assert {"rate", "spot", "vix"} <= set(live)
+        assert "chain: FAILED unexpectedly" in caplog.text
+
+    def test_main_still_writes_the_manifest_and_pings(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        session = _dispatching_session()
+        real = _factory(session)
+
+        def build(**kwargs: Any) -> CboeFredProvider:
+            provider = real(**kwargs)
+            provider.get_rate = MagicMock(  # type: ignore[method-assign]
+                side_effect=IndexError("list index out of range"),
+            )
+            return provider
+
+        with (
+            patch.object(refresh_module, "CboeFredProvider", side_effect=build),
+            patch.object(refresh_module, "ping") as ping,
+        ):
+            exit_code = main(
+                [
+                    "--cache-dir",
+                    str(tmp_path / "cache"),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS),
+                    "--exports-dir",
+                    str(tmp_path / "exports"),
+                ],
+            )
+
+        assert exit_code == 1
+        ping.assert_called_once()
+        manifest = json.loads(
+            (tmp_path / "cache" / CACHE_MANIFEST_FILENAME).read_text(),
+        )
+        assert "rate" not in manifest["series"]
+        assert "chain" in manifest["series"]
+
+
 class TestMainPricingFeed:
     """main() with and without the ips.yaml pricing_feed section."""
 

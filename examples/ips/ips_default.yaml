@@ -225,11 +225,12 @@ maturity_selection:
   maintain_min_years: 1.0
   maintain_max_years: 2.0
 
-# Hand-entered liquidity checks (Part X #12, 8c). The real metric needs a
-# per-strike options-chain feed (#156); until then the operator records the
-# bid/ask (and open interest, if available) for each leg at the moments the
-# handbook says liquidity matters — rolling, monetizing, scaling — on
-# /design's "Liquidity check" panel. These keys grade those quotes.
+# Liquidity checks (Part X #12, 8c). The operator records the bid/ask (and
+# open interest, if available) for each leg at the moments the handbook says
+# liquidity matters — rolling, monetizing, scaling — on /design's "Liquidity
+# check" panel, and with a pricing_feed section (below) the nightly chain
+# fills in last night's close for every held leg. These keys grade those
+# quotes.
 # POLICY, and the handbook gives NO number for either warning sign, so there
 # are no code defaults: omit the whole section and recorded quotes are shown
 # ungraded. If the section is present, the first two keys are required.

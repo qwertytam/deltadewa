@@ -229,6 +229,10 @@ def append_daily_record(
         _row("market", quote, snapshot) for quote in market_quotes(snapshot)
     )
     payload = "".join(json.dumps(row) + "\n" for row in rows)
+    if path.exists() and not path.read_text(encoding="utf-8").endswith("\n"):
+        # A torn final row (a crash mid-append): start on a fresh line so
+        # the new session's first row is not glued onto the corrupt one.
+        payload = "\n" + payload
     with path.open("a", encoding="utf-8") as handle:
         handle.write(payload)
     return len(rows)

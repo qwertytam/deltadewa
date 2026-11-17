@@ -19,6 +19,7 @@ the same on a quiet day as on a bad one.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Final
 
 from dash import Input, Output, State, dcc, html, no_update
@@ -58,6 +59,8 @@ if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig
     from deltadewa.marketdata import MarketDataProvider
     from deltadewa.portfolio.core import OptionPortfolio
+
+_logger = logging.getLogger(__name__)
 
 #: #357: this panel's TOC entry and heading id, from one source.
 SECTION: Final[SectionSpec] = SectionSpec(
@@ -323,12 +326,23 @@ def _build_checklist(
     market_data: MarketDataProvider | None = None,
 ) -> tuple[LiquidityChecklist, str]:
     program_date = program_trading_date(ips_config.program.timezone).date()
-    fetched, note = _fetched_for_book(
-        portfolio,
-        ips_config,
-        market_data,
-        program_date,
-    )
+    try:
+        fetched, note = _fetched_for_book(
+            portfolio,
+            ips_config,
+            market_data,
+            program_date,
+        )
+    except Exception:  # pylint: disable=broad-exception-caught
+        # The fetched half is a bonus: a fault reading the chain must not
+        # hide the operator's own recorded quotes (the panel guard would
+        # take the whole checklist down with it).
+        _logger.exception("Liquidity check: reading the fetched chain failed")
+        fetched = {}
+        note = (
+            "Fetched quotes are unavailable (reading the cached chain "
+            "failed; see the app log). Your recorded quotes are shown."
+        )
     checklist = assess_liquidity(
         portfolio,
         ips_config.liquidity,

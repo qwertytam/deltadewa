@@ -331,6 +331,34 @@ class TestFetchedLiquidity:
         assert "fetched close" not in text
         assert "1 never checked" in text
 
+    def test_a_fault_reading_the_chain_never_hides_your_own_quotes(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        class Faulty(StaticProvider):
+            def get_option_chain(self, underlying: str):
+                raise RuntimeError("parser bug")
+
+        app = _app(tmp_path)
+        _record_liquidity_logic(
+            position_id=_leg_id(app),
+            bid=10.0,
+            ask=12.0,
+            open_interest=None,
+            version=0,
+            state=app.program_state,
+        )
+        app.market_data = Faulty(spot_prices={"SPX": 5000.0}, vix=18.0)
+
+        with caplog.at_level("ERROR"):
+            text = _panel_text(app)
+
+        assert "your quote" in text
+        assert "Fetched quotes are unavailable" in text
+        assert "Something went wrong" not in text
+        assert "parser bug" in caplog.text
+
     def test_no_cached_chain_says_so_and_falls_back_to_your_quotes(
         self,
         tmp_path: Path,

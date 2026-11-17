@@ -108,11 +108,14 @@ docker compose up -d
 `~/deltadewa/cache`, outside `exports/` so it never rides the offsite
 backup. Docker creates it on the first `up` and the entrypoint hands it to
 the app user, exactly as for `exports/`. It starts empty: run the refresh
-once by hand (§11) so `/health` reads `CACHED` before the first cron.
+once by hand (§11, which needs `.env` populated per §10: the `jobs`
+service refuses to start without its SMTP block) so `/health` reads
+`CACHED` before the first cron.
 **Upgrading a box that has `exports/marketdata-cache/`:** after the deploy
-and that first refresh, `rm -r ~/deltadewa/exports/marketdata-cache` (the
-old copy is now unread, and still committed by the next backup until it
-is gone).
+and that first refresh, `sudo rm -r ~/deltadewa/exports/marketdata-cache`
+(`sudo`: the entries are app-owned inside a root-owned, sticky `exports/`,
+§10). The old copy is now unread, and still committed by the next backup
+until it is gone, so confirm with `ls ~/deltadewa/exports`.
 
 **exports/ ownership (#220):** the container runs as a fixed-UID non-root
 user, not root, and `docker-entrypoint.sh` chowns the bind-mounted
@@ -252,6 +255,13 @@ docker compose restart app
 # a bare 200 here doesn't confirm the policy actually loaded.
 curl http://<tailscale-ip>:8050/health
 ```
+
+**The first deploy that carries the 9b cache move (the `./cache` mount)**
+needs one extra step: the new cache folder starts empty, so `/health` reads
+`market_data` `UNAVAILABLE` (and `status` degraded) until the refresh job
+has run once. Run it by hand right after `up -d` (§11; `.env` must already
+carry the SMTP block, §10) instead of waiting for the 02:30 cron, then remove
+the old `exports/marketdata-cache` (§1). Later deploys need neither.
 
 Host cron drives the market-data refresh, the weekly digest email, and the
 `exports/` backup push automatically — see §9 for the crontab lines, §11 to
@@ -623,8 +633,11 @@ docker compose up -d
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 # market_data.source reads UNAVAILABLE until the refresh job has run once:
 # the market-data cache lives in ~/deltadewa/cache, outside the backup, so
-# a restored box starts without it. Run the refresh by hand now (§11) and
-# /health reads CACHED within the minute. Check
+# a restored box starts without it. Populate .env first (§10: the jobs
+# service will not start without its SMTP block, and .env is not part of
+# the backup), run the refresh by hand (§11), and /health reads CACHED —
+# a refresh exit of 1 is normal when FRED's VIXCLS lags (§11), so read
+# the market_data.series qualities, not just the exit code. Check
 # boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
 # degraded, by design, so 200 alone doesn't confirm the restored
 # config/ips.yaml actually loaded.
@@ -898,7 +911,8 @@ one problem per run; work through it rather than guessing:
 
 ## 8. What lives where
 
-- **`exports/`** — the only stateful directory. Bind-mounted (not a named
+- **`exports/`** — the only stateful directory that is backed up (the cache
+  below is state, but rebuildable). Bind-mounted (not a named
   volume, so `ops/backup-exports.sh` can read it directly off the host
   filesystem — see `compose.yaml`). Contains `program_state.json` (the
   live portfolio + IPS state), `exports/chain-history/` (a small daily

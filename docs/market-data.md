@@ -24,7 +24,7 @@ value has no feed to compare against.
 
 ## Observed readings
 
-All six are warmed by the nightly refresh job
+The six index readings are warmed by the nightly refresh job
 (`deltadewa/marketdata/refresh.py`), which runs **daily, seven days a
 week** — CBOE and FRED are closed at weekends, so a weekend run
 re-observes Friday's close rather than leaving a 72-hour gap for the TTL
@@ -38,6 +38,8 @@ to absorb. See RUNBOOK §9 for the crontab line and §11 to run it by hand.
 | SKEW index | `get_skew_index` | CBOE | `spot_SKEW` | `assess_market_environment` |
 | SKEW percentile | `get_skew_percentile` | CBOE | `skew_percentile_history` | `assess_market_environment` |
 | **Spot (SPX)** | `get_spot` | CBOE | `spot_SPX` | `analysis.spot_reading.observe_spot`, `/monitor` (#336) |
+| Treasury yield *(with `pricing_feed`)* | `get_rate(series)` | FRED `DGS*` | `rate_<series>` | `/design` Fetched inputs |
+| SPX option chain *(with `pricing_feed`)* | `get_option_chain(underlying)` | CBOE delayed quotes | `chain_SPX`, plus last night's copy as `chain_SPX.prev` (files carry a `.json` suffix) | `/design` Fetched inputs and Liquidity check |
 
 Notes on the table:
 

@@ -249,6 +249,14 @@ def refresh_all(
         except MarketDataError as exc:
             _logger.warning("%s: FAILED — %s", name, exc)
             continue
+        except Exception:  # pylint: disable=broad-exception-caught
+            # "One failure never aborts the run": a fault outside
+            # MarketDataError (a parser bug, a cache write error) used to
+            # escape to main()'s guard, which returns 2 before the manifest,
+            # the read-back and the heartbeat, and so reported a 6-of-8 run
+            # as a total outage. It is one failed series like any other.
+            _logger.exception("%s: FAILED unexpectedly", name)
+            continue
         if observation.source is Source.LIVE:
             if observation.fetched_at is not None:
                 live[name] = observation.fetched_at
@@ -335,6 +343,9 @@ def verify_read_back(
             observation = fetch()
         except MarketDataError as exc:
             _logger.warning("%s: read-back FAILED — %s", name, exc)
+            continue
+        except Exception:  # pylint: disable=broad-exception-caught
+            _logger.exception("%s: read-back FAILED unexpectedly", name)
             continue
         read_fetched_at = observation.fetched_at
         if (

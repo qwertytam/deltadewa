@@ -172,6 +172,36 @@ class TestAppendDailyRecord:
 
         assert append_daily_record(snapshot, None, tmp_path) == 0
 
+    def test_a_torn_last_line_is_not_glued_onto_the_next_sessions_rows(
+        self,
+        snapshot,
+        tmp_path: Path,
+    ) -> None:
+        """A crash mid-append leaves a partial row; the next session starts
+        on a fresh line so every row it wrote still parses."""
+        append_daily_record(snapshot, None, tmp_path)
+        path = tmp_path / "SPX-2026.jsonl"
+        path.write_text(path.read_text() + '{"session": "2026-11-1')
+        next_day = parse_cboe_chain(
+            {**standard_chain(), "timestamp": "2026-11-18 01:33:27"},
+        )
+
+        written = append_daily_record(next_day, None, tmp_path)
+
+        parsed = 0
+        for line in path.read_text().splitlines():
+            try:
+                json.loads(line)
+            except ValueError:
+                continue
+            parsed += 1
+        sessions = [
+            json.loads(line)["session"]
+            for line in path.read_text().splitlines()[-written:]
+        ]
+        assert set(sessions) == {"2026-11-17"}
+        assert parsed == len(path.read_text().splitlines()) - 1
+
     def test_the_file_is_named_for_the_sessions_year(
         self,
         tmp_path: Path,

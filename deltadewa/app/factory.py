@@ -32,7 +32,7 @@ from deltadewa.app.pages import design, monitor
 from deltadewa.app.panel_guard import safe_chrome
 from deltadewa.clock import program_trading_date
 from deltadewa.ips_config import IpsPricingInputs
-from deltadewa.marketdata import default_cache_dir
+from deltadewa.marketdata import MarketDataError, default_cache_dir
 
 if TYPE_CHECKING:
     from dash.development.base_component import Component
@@ -117,8 +117,10 @@ def _feed_payload(
     not degrade ``/health`` for an input nothing reads; the series move
     into the environment when the book is priced on them.
 
-    Never raises: a missing series is reported ``UNAVAILABLE`` with null
-    times, which is a different thing from a code fault.
+    Never raises. A series nothing has cached is ``UNAVAILABLE`` with null
+    times (an ordinary state, not logged); anything else that goes wrong
+    reading it is ``ERROR``, logged with its traceback, so a code fault
+    never reads as an empty cache.
     """
     if ips_config is None or ips_config.pricing_feed is None:
         return None
@@ -133,9 +135,19 @@ def _feed_payload(
     for name, read in readings.items():
         try:
             observation = read()
-        except Exception:  # pylint: disable=broad-exception-caught
+        except MarketDataError:
             payload[name] = {
                 "quality": "UNAVAILABLE",
+                "as_of": None,
+                "fetched_at": None,
+            }
+            continue
+        except Exception:  # pylint: disable=broad-exception-caught
+            _logger.exception(
+                "/health: reading the %s feed series failed", name
+            )
+            payload[name] = {
+                "quality": "ERROR",
                 "as_of": None,
                 "fetched_at": None,
             }

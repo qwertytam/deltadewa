@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from deltadewa.app.factory import create_app
-from deltadewa.marketdata import write_cache_manifest
+from deltadewa.marketdata import StaticProvider, write_cache_manifest
 from deltadewa.marketdata.chain import parse_cboe_chain
 from tests.chain_builders import standard_chain
 from tests.test_app.freshness_fixtures import cached_provider
@@ -137,6 +137,34 @@ class TestFeedSeries:
         )
         assert payload["status"] == "ok"
         assert payload["freshness_reason"] is None
+
+    def test_a_code_fault_reads_error_and_is_logged_not_unavailable(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """An empty cache and a bug must not look the same."""
+
+        class Faulty(StaticProvider):
+            def get_option_chain(self, underlying: str):
+                raise RuntimeError("parser bug")
+
+        state = _fully_wired_state(tmp_path)
+        app = create_app(
+            state=state,
+            market_data=Faulty(spot_prices={"SPX": 5000.0}, vix=18.0),
+            ips_config=state.ips_config,
+        )
+
+        with caplog.at_level("ERROR"):
+            payload = _health(app)
+
+        assert payload["market_data"]["feed"]["chain"]["quality"] == "ERROR"
+        assert (
+            payload["market_data"]["feed"]["rate"]["quality"] == "UNAVAILABLE"
+        )
+        assert "parser bug" in caplog.text
+        assert payload["provenance_error"] is None
 
     def test_no_policy_section_means_no_feed_object(
         self,

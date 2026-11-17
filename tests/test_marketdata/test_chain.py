@@ -116,6 +116,11 @@ class TestParse:
             lambda p: p["data"].update(options=None),
             lambda p: p["data"]["options"][0].update(option="NOT-OCC"),
             lambda p: p["data"]["options"][0].update(bid="x"),
+            lambda p: p["data"]["options"][0].update(
+                open_interest=float("inf"),
+            ),
+            lambda p: p["data"]["options"][0].update(volume=float("nan")),
+            lambda p: p["data"]["options"][0].update(bid=float("inf")),
             lambda p: p["data"]["options"][0].pop("option"),
             lambda p: p["data"]["options"][0].update(
                 option="SPX261399P00500000"

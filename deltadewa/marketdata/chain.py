@@ -22,6 +22,7 @@ payload in the 9b.0 spike (``docs/market-data.md``, "Option-chain spike"):
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -306,11 +307,18 @@ def _number(raw: Any, field: str, symbol: str) -> float:  # ruff: ignore[any-typ
     if raw is None:
         return 0.0
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError) as exc:
         raise MarketDataError(
             f"chain contract {symbol}: field {field!r} is not a number",
         ) from exc
+    if not math.isfinite(value):
+        # JSON's Infinity/NaN parse as floats; int() of one would raise an
+        # OverflowError the job does not contain.
+        raise MarketDataError(
+            f"chain contract {symbol}: field {field!r} is not finite",
+        )
+    return value
 
 
 def _parse_quote(raw: Mapping[str, Any]) -> ChainQuote | None:
@@ -386,7 +394,13 @@ def parse_cboe_chain(payload: Mapping[str, Any]) -> ChainSnapshot:
             if quote is not None
         )
         underlying = str(payload.get("symbol", ""))
-    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        AttributeError,
+        OverflowError,
+    ) as exc:
         raise MarketDataError(
             f"unreadable option-chain payload: {exc}",
         ) from exc
