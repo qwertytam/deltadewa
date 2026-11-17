@@ -363,7 +363,212 @@ Consequences:
   interest from a feed. See `part-x-coverage.md`.
 
 Connecting a real chain feed is tracked in #156, and is the blocker on
-both of the above.
+both of the above. What a feed would and would not supply was measured in
+the 9b.0 spike, below.
+
+## Option-chain spike (9b.0)
+
+A one-off measurement, not a connection: nothing in the app reads a chain
+yet. It was run on 2026-11-16 against Cboe's delayed-quote chain for the
+SPX (terms of use are the operator's to settle and are not revisited here),
+one payload, fetched once, **after the close** (20:39
+New York). The payload was kept outside the repo and is not committed.
+No figure from the operator's book is recorded here: a leg is described by
+class, and anything derived from the book's own inputs (a per-leg reading, a
+compliance grade) stays with the operator. Where a lesson needs a number, it
+is measured on listed contracts instead.
+
+### Verdict per input
+
+| Input | Verdict | Why, in one line |
+| --- | --- | --- |
+| Spot | **GO** | The chain's own `current_price` is struck at the same instant as its quotes and a trading day fresher than the nightly job's CBOE history file. |
+| Risk-free rate | **GO** | FRED publishes eleven constant-maturity series, all one business day behind; the provider's own client reaches them. Which tenor stands for a whole book is a decision for 9b, not a data gap. |
+| Per-leg IV | **GO, with a condition** | The listed contracts checked all had a two-sided quote and a vendor IV. Adopt the IV **solved from the mid at the same r and q the engine prices with**: on a one-year put, a 1 pp error in either moves the IV by 0.5–0.7 vol points and the price by 6–8% (2b). |
+| Dividend yield | **NO-GO** to derive it | Put–call parity gives a number that is negative at 14 days and 0.2–0.5% beyond four months, not the published yield. It cannot separate the dividend from funding and timing. Keep it hand-entered. |
+| Liquidity | **GO** for bid, ask and open interest | Present on every listed contract checked. There is **no per-contract quote time** (only the last trade's), and this was a post-close snapshot: re-measure spreads in session before relying on them. |
+
+### 2a. The payload
+
+- **URL.** `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json`
+  answers `307` to the same path on `cdn-api.cboe.com`; a client must follow
+  redirects (the provider's `requests` session does).
+- **Size and time.** 13,579,238 bytes (1,827,830 gzipped), 30,424 contracts,
+  about one second to download. Fetched 2026-11-17 01:39:03 UTC. The response
+  carried `Last-Modified: 01:33:29 GMT` and `Cache-Control: max-age=0,
+  s-maxage=5`.
+- **Top level.** `timestamp`, `data`, `symbol` (`_SPX`).
+- **`data`.** `options` (the contract list) beside the index's own fields:
+  `symbol` (`^SPX`), `security_type`, `exchange_id`, `current_price`,
+  `price_change`, `price_change_percent`, `bid`, `ask`, `bid_size`,
+  `ask_size`, `open`, `high`, `low`, `close`, `prev_day_close`, `volume`,
+  `iv30`, `iv30_change`, `iv30_change_percent`, `seqno`, `last_trade_time`,
+  `tick`.
+- **Per contract (23 fields, present on all).** `option`, `bid`, `bid_size`,
+  `ask`, `ask_size`, `iv`, `open_interest`, `volume`, `delta`, `gamma`,
+  `vega`, `theta`, `rho`, `theo`, `change`, `open`, `high`, `low`, `tick`,
+  `last_trade_price`, `last_trade_time` (null on 6,236 contracts that have not
+  traded), `percent_change`, `prev_day_close`.
+- **Symbol.** OCC form: root, `YYMMDD`, `C` or `P`, then the strike times
+  1000 as eight digits (`SPX261120C00400000` is a 400 call on 2026-11-20).
+  Every symbol parsed. Roots: `SPX` 10,022, `SPXW` 19,728, `SPXO` 674.
+- **Time zones: two clocks in one payload.** `timestamp` is a naive
+  `YYYY-MM-DD HH:MM:SS` in **UTC**: it equals the response's `Last-Modified`
+  to within two seconds (01:33:27 against 01:33:29 GMT), and read as New York
+  time it would be five hours in the future. `last_trade_time`, on the index
+  and on each contract, is naive **New York** time: today's values run
+  09:30:02 to 16:14:59.
+- **Units.** A contract's `iv` is a decimal fraction (0.2677); the index's
+  `iv30` is in vol points (17.977).
+- **`iv: 0`.** 1,745 of 30,424 contracts, 1,261 of them with a bid: deep
+  in-the-money contracts the vendor does not solve. Among out-of-the-money
+  contracts, 263 of 15,212, of which 233 have no bid: 232 inside 30 days, none
+  between 31 and 365 days, 31 beyond a year. The reverse also occurs: far-dated
+  puts with an IV and no bid (75 of the 94 puts on the December 2030 expiry).
+  A flag must test the bid and the IV separately.
+
+### 2b. The book's legs and the roll candidates against the chain
+
+The book's legs were matched against the chain and the per-leg result was
+reported to the operator. It is a reading of the operator's own legs and is not
+recorded here (see the opening of this section). Everything below was measured
+on listed contracts.
+
+- **What was solved.** IV from the mid with `OptionValuation` (European,
+  analytic), at the payload's own spot and the program's valuation date. A
+  hand-entered book spot is older than the quotes, and solving with it would put
+  that age into the IV.
+- **An IV and the (r, q) it was solved with are a pair.** At the FRED rate and
+  the parity yield for the expiry, the IV solved from the mid lands within 0.15
+  vol points of the vendor's on every contract checked: the vendor quotes an IV
+  consistent with the market's forward. Move r or q off that forward and the
+  same mid gives a different IV, and the vendor IV stops repricing to the mid.
+  Measured on three listed one-year puts (20, 30 and 40% out of the money, the
+  2027-12-17 expiry):
+
+  | Strike | Solved IV, +1 pp on q | Solved IV, +1 pp on r | Vendor IV priced at q + 1 pp, vs mid | Vendor IV priced at r + 1 pp, vs mid |
+  | --- | --- | --- | --- | --- |
+  | 20% out | −0.65 vol pts | +0.74 vol pts | +8.1% | −7.1% |
+  | 30% out | −0.55 vol pts | +0.64 vol pts | +8.3% | −6.5% |
+  | 40% out | −0.49 vol pts | +0.57 vol pts | +8.4% | −5.7% |
+
+  So adopting a vendor IV while the engine keeps a hand-entered r and q that
+  differ from the market's forward misprices the leg by about 6–8% per point
+  of error; adopting the IV solved at the engine's own r and q reprices it to
+  the mid by construction.
+- **Quote time.** Among the contracts checked, one carried a two-sided quote
+  and open interest in the thousands with a last trade four days before the
+  snapshot, so `last_trade_time` says nothing about how old a quote is. The
+  only quote time in the payload is `timestamp`.
+- **Roll candidates.** Six puts: the three example-ladder rungs (20, 30 and 40%
+  out of the money, snapped to the listed strike) on each of the two standard
+  expiries a year or more out. All six have a bid, an ask and an IV. Spreads are
+  1.9–3.3% of mid on the nearer expiry (open interest 1,126–8,290) and
+  3.1–4.7% on the further one (open interest 46–645, thin at the 20% rung).
+- **Depth of the chain.** Among the 15 `SPX` expiries 150 days or more out,
+  more than 97% of puts carry a bid out to December 2028. It thins beyond:
+  December 2030 has a bid on 18 of 94 puts.
+
+### 2c. SPX (AM) and SPXW (PM)
+
+- `SPX` lists 20 standard expiries, 2026-11-20 to 2031-12-19; `SPXW` lists 40,
+  2026-11-16 to 2027-09-30, mostly daily and weekly. On a third Friday both
+  roots list the date through 2027-03-19. From 2027-04-16 the standard monthly
+  lists on `SPX` only; `SPXW` appears at month ends (2027-03-31, 04-30, 06-30,
+  09-30).
+- **A standard monthly expiry from 2027-04-16 on lists on `SPX` only**, the
+  AM-settled monthly; `SPXW` does not list those dates. A leg on one of them
+  can only be `SPX`. The book has no field that says which root a leg is; a
+  matcher must check both roots and flag a date on which both list.
+- A standard monthly moves off the third Friday when that Friday is an exchange
+  holiday: the chain lists June 2027's `SPX` expiry on Thursday 2027-06-17
+  (Friday 2027-06-18 is the observed Juneteenth holiday), and no `SPX` symbol
+  for the 18th. A matcher must take the date from the symbol, not recompute a
+  third Friday.
+- A third root, `SPXO`, lists two Wednesdays (2026-11-18, 2026-12-16), 674
+  contracts. It was not identified; it must not be matched as `SPX`.
+
+### 2d. Dividend yield by put–call parity
+
+Solved per expiry from call and put mids, `q = −ln((C − P + K·e^(−rT)) / S) / T`,
+at the five strikes nearest the forward that quote two-sided, with `r` from the
+FRED curve (continuously compounded, interpolated to the expiry) and `T` on 365
+days. Median over the five strikes, `SPX` root, in percent:
+
+| Expiry | Days | r | q |
+| --- | --- | --- | --- |
+| 2026-11-30 (`SPXW`) | 14 | 4.06 | −3.02 |
+| 2026-12-18 | 32 | 4.06 | −0.75 |
+| 2027-01-15 | 60 | 4.16 | −0.58 |
+| 2027-02-19 | 95 | 4.28 | −0.09 |
+| 2027-03-19 | 123 | 4.31 | +0.18 |
+| 2027-05-21 | 186 | 4.38 | +0.21 |
+| 2027-07-16 | 242 | 4.45 | +0.26 |
+| 2027-09-17 | 305 | 4.52 | +0.34 |
+| 2027-11-19 | 368 | 4.60 | +0.37 |
+| 2028-06-16 | 578 | 4.73 | +0.45 |
+| 2028-12-15 | 760 | 4.82 | +0.53 |
+| 2029-12-21 | 1,131 | 4.86 | +0.53 |
+| 2031-12-19 | 1,859 | 4.92 | +0.49 |
+
+- From 60 days out to a year the five strikes of an expiry agree to 0.02 pp,
+  and to 0.09 pp beyond; inside 30 days they spread by up to 0.14 pp. Where both
+  roots list a date they agree to 0.03 pp.
+- **Not stable across expiries**, and not close to the published figure: S&P
+  Dow Jones Indices puts the trailing 12-month yield at 1.12% (2026-04-30); a
+  third party's weighted indicated yield read 1.60% (2026-07-22). Neither was
+  taken on the day of the snapshot.
+- What a parity solve measures is the carry between the spot print and the
+  options' forward: the dividend yield, any funding spread over Treasuries, and
+  any timing gap between the spot and the quotes are in it together and cannot
+  be separated from one payload. The short end's large negative values are
+  what a small gap looks like when divided by a short `T`.
+
+### 2e. FRED
+
+- **Series.** Eleven exist: `DGS1MO`, `DGS3MO`, `DGS6MO`, `DGS1`, `DGS2`,
+  `DGS3`, `DGS5`, `DGS7`, `DGS10`, `DGS20`, `DGS30`. `DGS2MO` and `DGS4MO`
+  answer `404`.
+- **Lag.** Probed on Monday 2026-11-16 at 20:45 New York, every series' newest
+  observation was Friday 2026-11-13: one business day behind. One probe is one
+  data point; when Monday's value posts was not measured. Each series' last
+  ten rows hold one missing marker, on 2026-11-11 (Veterans Day); the
+  provider's `dropna` already skips it.
+- **Transport.** `curl` over HTTP/2 with a browser-style User-Agent failed on
+  all thirteen requests (a stream error, then a timeout); `requests`, the
+  provider's client, answered in 0.4 seconds. The cause was not isolated.
+- At the same probe, the CBOE history file the nightly job reads for the SPX
+  ended at Friday's close, the figure the chain reports as `prev_day_close`;
+  the chain's `current_price` is Monday's.
+
+### 2f. What adoption will change on deploy day
+
+The program report was built twice over a copy of the book, by the digest's
+own build path: **A**, the hand-entered inputs as they stand; **B**, the
+fetched spot, a solved IV per leg (at B's rate and the unchanged dividend
+yield), and the one-year FRED rate as the book's single rate. Both variants
+were stamped as reviewed, so provenance does not differ, and the market
+environment was one fixed provider at `CACHED` quality for both. The IPS was
+the shipped example's.
+
+**The result is not recorded here.** A grade, a headline or a roll verdict
+moved by a change of inputs is a reading of the operator's own book, and it
+was reported to the operator directly. What the doc records is the method and
+the standing lesson: adopting measured inputs can change the graded verdicts an
+operator reads (compliance rows, roll verdicts, the digest headline), so the
+comparison should be rerun on the live book, with the live IPS, before a
+source change is deployed. `verdict-diff-reporter` is the agent for it.
+
+What the preview cannot show: how adopted inputs would be stamped (both
+variants here were stamped as reviewed), the live IPS's bands, and the real
+market environment.
+
+### Limits
+
+One payload, after the close, on a Monday. No in-session snapshot, so spreads
+and the 15-minute delay are unmeasured. No second fetch, so the payload's
+regeneration cadence is unknown. The book used was a copy of a book file from
+the local exports directory, not a program state with history.
 
 ## Where the data lives
 
