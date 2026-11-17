@@ -581,8 +581,11 @@ carry, with no break named. Three facts frame the fix, all in the code today:
 - Each mark already records the spot, rate, dividend yield and per-leg
   volatility it was priced on.
 
-9b has to decide how the switch is marked, and what since-inception shows across
-it, before a feed prices a mark.
+**Decision for 9b:** mark the switch with a new `MarkBasis` member, so the week
+that spans it reads "not comparable" and since-inception restarts at the first
+mark on the new basis. `MarkBasis` defines the basis by the volatilities, so
+adopting spot and rate alone does not change it; the move to measured
+volatilities does.
 
 ### Limits
 
