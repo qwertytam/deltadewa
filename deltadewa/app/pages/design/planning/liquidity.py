@@ -303,8 +303,16 @@ def _fetched_for_book(
         observation = fetched_observation(reading)
         if observation is not None:
             fetched[position_id] = observation
+    session = f"{snapshot.session_date:%Y-%m-%d}"
+    age_days = (program_date - snapshot.session_date).days
+    if age_days > feed.max_quote_age_days:
+        return fetched, (
+            f"The cached chain is the {session} close, {age_days} days old, "
+            f"past pricing_feed.max_quote_age_days ({feed.max_quote_age_days}"
+            "): fetched quotes are not used until the refresh job runs again."
+        )
     return fetched, (
-        f"Fetched quotes are the {snapshot.session_date:%Y-%m-%d} close "
+        f"Fetched quotes are the {session} close "
         f"({chain.observation.source.value.lower()})."
     )
 

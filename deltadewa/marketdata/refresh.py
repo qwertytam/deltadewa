@@ -486,7 +486,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         ips_config = load_ips_config(args.ips_path)
     except IpsConfigError as exc:
         _logger.warning(
-            "%s unavailable, using the default TTL: %s",
+            "%s unavailable, using the default TTL and fetching NO pricing "
+            "feed (the chain and the rate need its pricing_feed section): %s",
             args.ips_path,
             exc,
         )

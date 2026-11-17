@@ -62,9 +62,9 @@ _EXPLANATION = (
     'anything. "IV at book r, q" is solved from the close mid with the '
     "program's own European engine at the book's rate and dividend yield, "
     "so it reprices the mid exactly; Cboe's IV is solved at Cboe's own "
-    "rate and dividend, and differs from it by roughly half a vol point "
-    "per point of rate or yield. The two are a pair with their rate and "
-    "yield, never mixed."
+    "rate and dividend, and differs from it by roughly half to three "
+    "quarters of a vol point per point of rate or yield. An IV and the "
+    "rate and yield it was solved with are a pair, never mixed."
 )
 
 _DIVIDEND_NOTE = (

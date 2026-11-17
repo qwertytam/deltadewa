@@ -354,6 +354,24 @@ class TestFetchedObservation:
         assert observation is not None
         assert observation.observed_at == intraday.quoted_at
 
+    def test_a_chain_past_max_quote_age_is_not_used(self) -> None:
+        """pricing_feed.max_quote_age_days owns how old a fetched close may be.
+
+        A dead feed must stop filling the checklist, not pass as a recent
+        read under the (longer) operator-quote cadence.
+        """
+        reading = _reading(_quote())
+        stale = ChainReading(
+            label=reading.label,
+            quote=reading.quote,
+            solved_iv=reading.solved_iv,
+            flags=frozenset({MatchFlag.STALE_QUOTE}),
+            session_date=_SESSION,
+            quoted_at=reading.quoted_at,
+        )
+
+        assert fetched_observation(stale) is None
+
     def test_a_no_bid_quote_is_kept_as_the_strongest_warning(self) -> None:
         observation = fetched_observation(_reading(_quote(bid=0.0, ask=0.4)))
 

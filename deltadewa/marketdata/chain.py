@@ -69,7 +69,6 @@ _OCC: Final[re.Pattern[str]] = re.compile(
     r"(?P<right>[CP])(?P<strike>\d{8})$",
 )
 _STRIKE_SCALE: Final[float] = 1000.0
-_STRIKE_TOLERANCE: Final[float] = 1e-6
 
 
 class MatchFlag(StrEnum):

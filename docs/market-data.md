@@ -452,7 +452,10 @@ chain (9b).
   is matched on the cached chain; the result is a `FETCHED` observation
   dated to the close of its trading session (never later than the payload
   itself). It puts no nightly write on the book and cannot overwrite an
-  operator quote.
+  operator quote. A chain older than `pricing_feed.max_quote_age_days` is
+  not used at all (that key, not the operator-quote cadence, owns how old a
+  fetched close may be), so a dead feed leaves the checklist as it was
+  rather than passing as a recent read.
 - **Which is graded.** The later of the two is graded and the other is shown
   beside it; on a tie the operator's wins. A broker quote taken at roll time
   therefore outranks last night's close until the next close arrives, and a

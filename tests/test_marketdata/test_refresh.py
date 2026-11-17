@@ -616,6 +616,7 @@ class TestMain:
 
         assert exit_code == 0
         assert "unavailable" in caplog.text
+        assert "NO pricing feed" in caplog.text
 
 
 class TestMainHeartbeat:

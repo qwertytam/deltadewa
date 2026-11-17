@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING
 
 from deltadewa.analysis.provenance import Freshness, grade_hand_entered
 from deltadewa.analysis.roll_status import RollVerdict
-from deltadewa.marketdata.chain import session_close
+from deltadewa.marketdata.chain import MatchFlag, session_close
 from deltadewa.portfolio.liquidity import LiquidityObservation, LiquiditySource
 
 if TYPE_CHECKING:
@@ -235,11 +235,21 @@ def fetched_observation(reading: ChainReading) -> LiquidityObservation | None:
         trading session (or, for a payload generated before that close,
         to the payload's own time: a quote is never dated after it was
         generated), or ``None`` when the contract is not listed, has no
-        ask, or is crossed (a quote no market could show).
+        ask, is crossed (a quote no market could show), or the chain is
+        older than ``pricing_feed.max_quote_age_days`` (``STALE_QUOTE``):
+        that key, not the operator-quote cadence, owns how old a fetched
+        close may be, so a dead feed stops filling the checklist instead
+        of passing as a recent read. A no-bid or wide quote is *kept*: it
+        is the warning this checklist exists to show.
 
     """
     quote = reading.quote
-    if quote is None or quote.ask <= 0.0 or quote.ask < quote.bid:
+    if (
+        quote is None
+        or quote.ask <= 0.0
+        or quote.ask < quote.bid
+        or MatchFlag.STALE_QUOTE in reading.flags
+    ):
         return None
     return LiquidityObservation(
         bid=quote.bid,

@@ -230,7 +230,10 @@ class TestLiquidityPanel:
 
 
 def _app_with_chain(
-    tmp_path: Path, *, with_chain: bool = True
+    tmp_path: Path,
+    *,
+    with_chain: bool = True,
+    timestamp: str | None = None,
 ) -> ProgramDashApp:
     """The one-leg book, with a cached chain that lists its contract."""
     app = _app(tmp_path)
@@ -246,7 +249,7 @@ def _app_with_chain(
         # Stamped from the program clock (20:33 New York today), so the
         # quote's age never drifts past the policy cadence as the calendar
         # moves: the session is today, or the last trading day before it.
-        stamp = (
+        stamp = timestamp or (
             program_date().replace(hour=20, minute=33).astimezone(UTC)
         ).strftime("%Y-%m-%d %H:%M:%S")
         chains = {
@@ -313,6 +316,20 @@ class TestFetchedLiquidity:
         assert "your quote" in text
         assert f"also: fetched close {_session_text(app)}" in text
         assert position.liquidity is not None
+
+    def test_a_chain_past_max_quote_age_is_not_used_and_says_so(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A chain from 2020 is far past any max_quote_age_days."""
+        app = _app_with_chain(tmp_path, timestamp="2020-01-03 01:00:00")
+
+        text = _panel_text(app)
+
+        assert "fetched quotes are not used" in text
+        assert "2020-01-02 close" in text
+        assert "fetched close" not in text
+        assert "1 never checked" in text
 
     def test_no_cached_chain_says_so_and_falls_back_to_your_quotes(
         self,
