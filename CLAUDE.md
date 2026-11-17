@@ -698,8 +698,8 @@ don't fix):
   same thing, before adding a second way to compute something that already
   exists, and whenever a bug report starts "same book, same instant, two
   answers" — e.g. Batch 8a.1's N1, where `/design`'s today-marks path and
-  `/monitor`'s position detail priced the same June tranche to `$0` and
-  `+$8.29K` respectively, with nothing comparing them.
+  `/monitor`'s position detail priced the same tranche to zero and to a
+  positive value respectively, with nothing comparing them.
 - **pr-preflight** — checks a branch against the PR *process* rules this file
   and `docs/RELEASING.md` state, reporting PASS / FIX per line: not on `main`,
   PR not already merged (#444/#449), changelog entry or `no changelog entry:
