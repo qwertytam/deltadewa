@@ -1,13 +1,13 @@
-"""Grade hand-entered liquidity quotes: Part X #12 as a checklist (8c, N10).
+"""Grade liquidity quotes: Part X #12 as a checklist (8c, N10; 9b).
 
-The real Part X #12 Liquidity Risk metric needs per-strike bid/ask and
-open interest from an options-chain feed (#156), which the free CBOE/FRED
-provider does not have. This module grades what the operator *can*
-supply instead — a quote read off their broker for each held leg
-(:class:`~deltadewa.portfolio.liquidity.LiquidityObservation`) — and
-turns a data-blocked metric into a checklist: which legs have never been
-checked, which checks are overdue, which spread was wide when last read,
-and which legs are in a roll window and need a fresh read now.
+Part X #12 Liquidity Risk needs per-strike bid/ask and open interest.
+This module grades the quote it has for each held leg: one the operator
+read off their broker
+(:class:`~deltadewa.portfolio.liquidity.LiquidityObservation`, 8c), or one
+derived from the nightly option-chain fetch (9b). It turns that into a
+checklist: which legs have never been checked, which checks are overdue,
+which spread was wide when last read, and which legs are in a roll window
+and need a fresh read now.
 
 Three rules keep it honest:
 
@@ -24,6 +24,18 @@ Three rules keep it honest:
   again). The ledger is also "every *pricing* input", and a spread
   prices nothing.
 
+Fetched quotes (9b)
+    When ``ips.yaml`` has a ``pricing_feed`` section the nightly chain
+    fetch gives every held leg a second observation,
+    ``source=FETCHED``, derived here at read time from the cached chain
+    and **never stored**: it cannot overwrite an operator quote, and it
+    puts no nightly write on the book. Of the two, the one read later is
+    graded and the other is shown beside it; on a tie the operator's wins.
+    A fetched quote is dated to the close of its trading session, so a
+    broker quote taken at roll time outranks last night's close until the
+    next close arrives. It stays out of the provenance ledger and its
+    alarm, exactly like a hand-entered one.
+
 The headline is counts, never one verdict word: "the book's liquidity is
 fine" is not a sentence a handful of point-in-time quotes can support.
 """
@@ -36,16 +48,18 @@ from typing import TYPE_CHECKING
 
 from deltadewa.analysis.provenance import Freshness, grade_hand_entered
 from deltadewa.analysis.roll_status import RollVerdict
+from deltadewa.marketdata.chain import session_close
+from deltadewa.portfolio.liquidity import LiquidityObservation, LiquiditySource
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from datetime import date
 
+    from deltadewa.analysis.chain_quotes import ChainReading
     from deltadewa.analysis.provenance import InputProvenance
     from deltadewa.analysis.roll_status import RollStatusRecord
     from deltadewa.ips_config import IpsLiquidity
     from deltadewa.portfolio.core import OptionPortfolio
-    from deltadewa.portfolio.liquidity import LiquidityObservation
     from deltadewa.portfolio.position import OptionPosition
 
 
@@ -104,6 +118,9 @@ class LegLiquidity:
         capture_due: A fresh quote is due now — never checked, the last
             check not ``FRESH``, or the leg is in a roll window and its
             quote was not read on the program trading date.
+        other: The quote that was *not* graded when a leg has both an
+            operator quote and a fetched one, shown beside it; ``None``
+            when the leg has only one.
 
     """
 
@@ -117,6 +134,7 @@ class LegLiquidity:
     held_share_of_oi_pct: float | None
     roll_due: bool
     capture_due: bool
+    other: LiquidityObservation | None = None
 
 
 @dataclass(frozen=True)
@@ -206,14 +224,68 @@ def _held_share_of_oi_pct(
     return abs(position.quantity) / observation.open_interest * 100
 
 
+def fetched_observation(reading: ChainReading) -> LiquidityObservation | None:
+    """Turn a chain reading into a fetched liquidity observation.
+
+    Args:
+        reading: One held leg's chain reading.
+
+    Returns:
+        A ``FETCHED`` observation dated to the close of the reading's
+        trading session (or, for a payload generated before that close,
+        to the payload's own time: a quote is never dated after it was
+        generated), or ``None`` when the contract is not listed, has no
+        ask, or is crossed (a quote no market could show).
+
+    """
+    quote = reading.quote
+    if quote is None or quote.ask <= 0.0 or quote.ask < quote.bid:
+        return None
+    return LiquidityObservation(
+        bid=quote.bid,
+        ask=quote.ask,
+        open_interest=quote.open_interest,
+        observed_at=min(session_close(reading.session_date), reading.quoted_at),
+        source=LiquiditySource.FETCHED,
+    )
+
+
+def effective_observation(
+    operator: LiquidityObservation | None,
+    fetched: LiquidityObservation | None,
+) -> tuple[LiquidityObservation | None, LiquidityObservation | None]:
+    """Pick the quote to grade, and the one to show beside it.
+
+    The quote read later is graded; on a tie the operator's wins. The
+    operator's quote is never replaced, only outranked, and only until it
+    is older than the fetched one.
+
+    Args:
+        operator: The quote recorded on the book, if any.
+        fetched: The quote derived from the cached chain, if any.
+
+    Returns:
+        ``(graded, other)``; ``other`` is ``None`` unless both exist.
+
+    """
+    if operator is None:
+        return fetched, None
+    if fetched is None:
+        return operator, None
+    if fetched.observed_at > operator.observed_at:
+        return fetched, operator
+    return operator, fetched
+
+
 def _assess_leg(
     position: OptionPosition,
     policy: IpsLiquidity | None,
     *,
     as_of: date,
     roll_due: bool,
+    fetched: LiquidityObservation | None = None,
 ) -> LegLiquidity:
-    observation = position.liquidity
+    observation, other = effective_observation(position.liquidity, fetched)
     label = _leg_label(position)
     freshness = (
         grade_hand_entered(
@@ -257,6 +329,7 @@ def _assess_leg(
         capture_due=(
             observation is None or stale or (roll_due and not read_today)
         ),
+        other=other,
     )
 
 
@@ -266,6 +339,7 @@ def assess_liquidity(
     *,
     as_of: date,
     roll_due_ids: frozenset[str] = frozenset(),
+    fetched: Mapping[str, LiquidityObservation] | None = None,
 ) -> LiquidityChecklist:
     """Build the liquidity checklist for every held leg.
 
@@ -281,6 +355,9 @@ def assess_liquidity(
         roll_due_ids: Legs about to be traded
             (:func:`roll_due_position_ids`), which need a quote read on
             *as_of* itself, however recent the last one is by cadence.
+        fetched: Observations derived from the cached chain
+            (:func:`fetched_observation`), by ``position_id``. ``None``
+            when there is no pricing feed.
 
     Returns:
         A :class:`LiquidityChecklist` in book order.
@@ -292,6 +369,7 @@ def assess_liquidity(
             policy,
             as_of=as_of,
             roll_due=position.position_id in roll_due_ids,
+            fetched=(fetched or {}).get(position.position_id),
         )
         for position in portfolio.positions
     )

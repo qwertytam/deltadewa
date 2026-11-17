@@ -22,16 +22,26 @@ from typing import TYPE_CHECKING, Final
 from deltadewa import constants as const
 from deltadewa.analysis.implied_vol import solve_implied_vol
 from deltadewa.constants import OptionType
+from deltadewa.marketdata import MarketDataError
 from deltadewa.marketdata.chain import MatchFlag
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-    from datetime import date
+    from datetime import date, datetime
 
     from deltadewa.ips_config import IpsConfig, IpsPricingFeed
+    from deltadewa.marketdata import MarketDataProvider, Observation
     from deltadewa.marketdata.chain import ChainQuote, ChainSnapshot
+    from deltadewa.portfolio.core import OptionPortfolio
 
-__all__ = ["ChainReading", "read_contract", "rung_readings"]
+__all__ = [
+    "ChainReading",
+    "FetchedChain",
+    "read_contract",
+    "read_fetched_chain",
+    "read_positions",
+    "rung_readings",
+]
 
 #: Flags that do not make a quote unusable: the match is still the right
 #: contract, and ``SPX`` was preferred.
@@ -52,6 +62,7 @@ class ChainReading:
             mid is outside the no-arbitrage bounds.
         flags: Everything wrong with the reading.
         session_date: The trading session the quote belongs to.
+        quoted_at: When the vendor generated the payload (aware UTC).
 
     """
 
@@ -60,6 +71,7 @@ class ChainReading:
     solved_iv: float | None
     flags: frozenset[MatchFlag]
     session_date: date
+    quoted_at: datetime
 
     @property
     def usable(self) -> bool:
@@ -138,7 +150,95 @@ def read_contract(  # pylint: disable=too-many-arguments
         solved_iv=solved,
         flags=frozenset(flags),
         session_date=snapshot.session_date,
+        quoted_at=snapshot.quoted_at,
     )
+
+
+@dataclass(frozen=True)
+class FetchedChain:
+    """The cached chain, or the plain reason there is none.
+
+    Attributes:
+        observation: The chain with its provenance, or ``None``.
+        note: Why there is no chain (no ``pricing_feed`` section, nothing
+            cached yet), or ``""`` when there is one.
+
+    """
+
+    observation: Observation[ChainSnapshot] | None
+    note: str
+
+
+def read_fetched_chain(
+    provider: MarketDataProvider,
+    ips_config: IpsConfig,
+) -> FetchedChain:
+    """Read the cached option chain for the program's instrument.
+
+    Never raises. Without a ``pricing_feed`` section nothing is fetched, so
+    nothing is read and the note says so; with one, a chain the refresh job
+    has not yet cached (a cold cache, a failed run) is a note, not an error.
+
+    Args:
+        provider: The market-data provider (the app's read-only one).
+        ips_config: The policy.
+
+    Returns:
+        The chain or the reason it is absent.
+
+    """
+    if ips_config.pricing_feed is None:
+        return FetchedChain(
+            None,
+            "ips.yaml has no pricing_feed section, so no option chain is "
+            "fetched and every pricing input is hand-entered.",
+        )
+    try:
+        observation = provider.get_option_chain(ips_config.program.instrument)
+    except MarketDataError:
+        return FetchedChain(
+            None,
+            "No option chain is cached yet: the nightly refresh has not "
+            "fetched one (or its last run failed).",
+        )
+    return FetchedChain(observation, "")
+
+
+def read_positions(
+    snapshot: ChainSnapshot,
+    portfolio: OptionPortfolio,
+    feed: IpsPricingFeed,
+    *,
+    program_date: date,
+) -> dict[str, ChainReading]:
+    """Read every held leg off the chain, at the book's own r and q.
+
+    Args:
+        snapshot: The parsed chain.
+        portfolio: The live book.
+        feed: The ``pricing_feed`` policy (spread and age limits).
+        program_date: The program's trading date.
+
+    Returns:
+        ``position_id`` to reading, in book order. Labels are ``L1``,
+        ``L2`` ... by book order.
+
+    """
+    return {
+        position.position_id: read_contract(
+            snapshot,
+            label=f"L{index}",
+            expiry=position.option.maturity_date.date(),
+            option_type=position.option.option_type,
+            strike=position.option.strike_price,
+            risk_free_rate=portfolio.risk_free_rate,
+            dividend_yield=portfolio.dividend_yield,
+            max_spread_pct=feed.max_spread_pct,
+            max_quote_age_days=feed.max_quote_age_days,
+            program_date=program_date,
+        )
+        for index, position in enumerate(portfolio.positions, start=1)
+    }
 
 
 def rung_readings(  # pylint: disable=too-many-arguments
@@ -234,4 +334,5 @@ def _absent(label: str, snapshot: ChainSnapshot) -> ChainReading:
         solved_iv=None,
         flags=frozenset({MatchFlag.ABSENT}),
         session_date=snapshot.session_date,
+        quoted_at=snapshot.quoted_at,
     )

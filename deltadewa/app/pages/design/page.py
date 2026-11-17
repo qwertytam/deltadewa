@@ -245,7 +245,11 @@ def render(app: ProgramDashApp) -> html.Div:
                 portfolio=portfolio,
                 ips_config=ips_config,
             ),
-            liquidity.layout(portfolio=portfolio, ips_config=ips_config),
+            liquidity.layout(
+                portfolio=portfolio,
+                ips_config=ips_config,
+                market_data=app.market_data,
+            ),
             book_changes.layout(app=app),
             position_aging.layout(
                 portfolio=portfolio,

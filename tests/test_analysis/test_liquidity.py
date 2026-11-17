@@ -7,17 +7,25 @@ from types import SimpleNamespace
 
 import pytest
 
+from deltadewa.analysis.chain_quotes import ChainReading
 from deltadewa.analysis.liquidity import (
     OpenInterestGrade,
     SpreadGrade,
     assess_liquidity,
+    effective_observation,
+    fetched_observation,
     roll_due_position_ids,
 )
 from deltadewa.analysis.provenance import Freshness
 from deltadewa.analysis.roll_status import RollVerdict
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.ips_config import IpsLiquidity
+from deltadewa.marketdata.chain import ChainQuote, MatchFlag
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.liquidity import (
+    LiquidityObservation,
+    LiquiditySource,
+)
 from tests.clock_helpers import days_from_today
 
 _AS_OF = date(2026, 11, 9)
@@ -245,3 +253,254 @@ class TestCounts:
         assert [leg.position_id for leg in checklist.legs] == [
             p.position_id for p in portfolio.positions
         ]
+
+
+_SESSION = date(2026, 11, 6)
+
+
+def _quote(
+    *,
+    bid: float = 2.4,
+    ask: float = 2.6,
+    open_interest: int | None = 3_400,
+) -> ChainQuote:
+    return ChainQuote(
+        symbol="SPX271217P04000000",
+        root="SPX",
+        expiry=date(2027, 12, 17),
+        option_type=OptionType.PUT,
+        strike=4000.0,
+        bid=bid,
+        ask=ask,
+        vendor_iv=0.3,
+        open_interest=open_interest,
+        volume=1,
+    )
+
+
+def _reading(quote: ChainQuote | None) -> ChainReading:
+    return ChainReading(
+        label="L1",
+        quote=quote,
+        solved_iv=0.3 if quote is not None else None,
+        flags=(
+            frozenset() if quote is not None else frozenset({MatchFlag.ABSENT})
+        ),
+        session_date=_SESSION,
+        quoted_at=datetime(2026, 11, 7, 1, 33, tzinfo=UTC),
+    )
+
+
+def _fetched(
+    *, observed: date = _SESSION, bid: float = 2.4
+) -> LiquidityObservation:
+    return LiquidityObservation(
+        bid=bid,
+        ask=bid + 0.2,
+        open_interest=3_400,
+        observed_at=datetime(
+            observed.year,
+            observed.month,
+            observed.day,
+            21,
+            15,
+            tzinfo=UTC,
+        ),
+        source=LiquiditySource.FETCHED,
+    )
+
+
+class TestFetchedObservation:
+    """A chain reading becomes a fetched quote, dated to its session close."""
+
+    def test_close_quote_carries_bid_ask_open_interest_and_source(self) -> None:
+        observation = fetched_observation(_reading(_quote()))
+
+        assert observation is not None
+        assert observation.source is LiquiditySource.FETCHED
+        assert (observation.bid, observation.ask) == (2.4, 2.6)
+        assert observation.open_interest == 3_400
+
+    def test_it_is_dated_to_the_session_close_not_the_fetch(self) -> None:
+        observation = fetched_observation(_reading(_quote()))
+
+        assert observation is not None
+        assert observation.observed_at.date() == _SESSION
+        assert observation.observed_at.utcoffset() is not None
+        assert (
+            observation.observed_at.hour,
+            observation.observed_at.minute,
+        ) == (
+            16,
+            15,
+        )
+
+    def test_an_intraday_payload_is_not_dated_after_it_was_generated(
+        self,
+    ) -> None:
+        """Generated at 12:00 New York, the quote is not dated to 16:15."""
+        reading = _reading(_quote())
+        intraday = ChainReading(
+            label=reading.label,
+            quote=reading.quote,
+            solved_iv=reading.solved_iv,
+            flags=reading.flags,
+            session_date=_SESSION,
+            quoted_at=datetime(2026, 11, 6, 17, 0, tzinfo=UTC),
+        )
+
+        observation = fetched_observation(intraday)
+
+        assert observation is not None
+        assert observation.observed_at == intraday.quoted_at
+
+    def test_a_no_bid_quote_is_kept_as_the_strongest_warning(self) -> None:
+        observation = fetched_observation(_reading(_quote(bid=0.0, ask=0.4)))
+
+        assert observation is not None
+        assert observation.bid == pytest.approx(0.0)
+        assert observation.spread_pct == pytest.approx(200.0)
+
+    @pytest.mark.parametrize(
+        "quote",
+        [None, _quote(bid=0.0, ask=0.0), _quote(bid=3.0, ask=2.0)],
+    )
+    def test_unlisted_askless_or_crossed_has_no_observation(
+        self, quote
+    ) -> None:
+        assert fetched_observation(_reading(quote)) is None
+
+    def test_a_recorded_operator_quote_is_the_default_source(self) -> None:
+        book = _book(1)
+        _record(book, 0)
+
+        assert book.positions[0].liquidity is not None
+        assert book.positions[0].liquidity.source is LiquiditySource.OPERATOR
+
+
+class TestEffectiveObservation:
+    """The later quote is graded, the other shown; a tie is the operator's."""
+
+    def _operator(self, observed: date) -> LiquidityObservation:
+        return LiquidityObservation(
+            bid=2.0,
+            ask=2.2,
+            open_interest=100,
+            observed_at=datetime(
+                observed.year,
+                observed.month,
+                observed.day,
+                21,
+                15,
+                tzinfo=UTC,
+            ),
+        )
+
+    def test_only_one_source_is_graded_with_nothing_beside_it(self) -> None:
+        fetched = _fetched()
+        operator = self._operator(date(2026, 11, 5))
+
+        assert effective_observation(None, fetched) == (fetched, None)
+        assert effective_observation(operator, None) == (operator, None)
+        assert effective_observation(None, None) == (None, None)
+
+    def test_a_newer_fetched_quote_is_graded_and_the_operators_shown(
+        self,
+    ) -> None:
+        fetched = _fetched(observed=date(2026, 11, 6))
+        operator = self._operator(date(2026, 11, 5))
+
+        assert effective_observation(operator, fetched) == (fetched, operator)
+
+    def test_a_newer_operator_quote_outranks_last_nights_close(self) -> None:
+        fetched = _fetched(observed=date(2026, 11, 6))
+        operator = self._operator(date(2026, 11, 9))
+
+        assert effective_observation(operator, fetched) == (operator, fetched)
+
+    def test_a_tie_goes_to_the_operator(self) -> None:
+        fetched = _fetched(observed=date(2026, 11, 6))
+        operator = self._operator(date(2026, 11, 6))
+
+        assert effective_observation(operator, fetched)[0] is operator
+
+
+class TestAssessWithFetched:
+    """assess_liquidity with fetched quotes beside the book's own."""
+
+    def test_a_fetched_quote_satisfies_never_checked_without_touching_the_book(
+        self,
+    ) -> None:
+        book = _book(2)
+        fetched = {book.positions[0].position_id: _fetched()}
+
+        checklist = assess_liquidity(
+            book,
+            _POLICY,
+            as_of=date(2026, 11, 9),
+            fetched=fetched,
+        )
+
+        assert checklist.legs[0].observation is not None
+        assert checklist.legs[0].observation.source is LiquiditySource.FETCHED
+        assert checklist.legs[0].capture_due is False
+        assert checklist.legs[1].observation is None
+        assert checklist.never_checked == 1
+        assert book.positions[0].liquidity is None  # never stored
+
+    def test_the_operators_quote_is_never_overwritten(self) -> None:
+        book = _book(1)
+        _record(book, 0, observed=date(2026, 11, 9))
+        before = book.positions[0].liquidity
+
+        checklist = assess_liquidity(
+            book,
+            _POLICY,
+            as_of=date(2026, 11, 9),
+            fetched={book.positions[0].position_id: _fetched()},
+        )
+
+        assert book.positions[0].liquidity is before
+        leg = checklist.legs[0]
+        assert leg.observation is before
+        assert leg.other is not None
+        assert leg.other.source is LiquiditySource.FETCHED
+
+    def test_a_roll_window_leg_still_wants_a_quote_read_today(self) -> None:
+        """Last night's close does not satisfy a leg about to be traded."""
+        book = _book(1)
+        position_id = book.positions[0].position_id
+
+        checklist = assess_liquidity(
+            book,
+            _POLICY,
+            as_of=date(2026, 11, 9),
+            roll_due_ids=frozenset({position_id}),
+            fetched={position_id: _fetched()},
+        )
+
+        assert checklist.legs[0].capture_due is True
+
+    def test_it_is_graded_against_policy_like_any_other_quote(self) -> None:
+        book = _book(1)
+        wide = _fetched(bid=1.0)
+        wide = LiquidityObservation(
+            bid=1.0,
+            ask=2.0,
+            open_interest=10,
+            observed_at=wide.observed_at,
+            source=LiquiditySource.FETCHED,
+        )
+
+        checklist = assess_liquidity(
+            book,
+            _POLICY,
+            as_of=date(2026, 11, 9),
+            fetched={book.positions[0].position_id: wide},
+        )
+
+        leg = checklist.legs[0]
+        assert leg.spread_grade is SpreadGrade.WIDE
+        assert leg.open_interest_grade is OpenInterestGrade.LOW
+        assert leg.freshness is not None
+        assert leg.freshness.freshness is Freshness.FRESH
