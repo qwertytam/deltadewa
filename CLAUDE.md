@@ -698,8 +698,8 @@ don't fix):
   same thing, before adding a second way to compute something that already
   exists, and whenever a bug report starts "same book, same instant, two
   answers" — e.g. Batch 8a.1's N1, where `/design`'s today-marks path and
-  `/monitor`'s position detail priced the same June tranche to `$0` and
-  `+$8.29K` respectively, with nothing comparing them.
+  `/monitor`'s position detail priced the same tranche to zero and to a
+  positive value respectively, with nothing comparing them.
 - **pr-preflight** — checks a branch against the PR *process* rules this file
   and `docs/RELEASING.md` state, reporting PASS / FIX per line: not on `main`,
   PR not already merged (#444/#449), changelog entry or `no changelog entry:
@@ -724,6 +724,23 @@ don't fix):
   output; this runs a chosen selection and turns the failures into a diff. Run
   when a sizing, pricing or policy change is expected to move golden values
   (#436's accepted 0.1pp flip at the band floor is the standing example).
+- **chain-match-reporter** — given a saved vendor option-chain payload and a
+  book copy, one row per leg: the matched symbol and root, bid/ask/mid, the
+  vendor's iv beside the iv solved from the mid with this repo's own European
+  engine at the book's rate and dividend yield, open interest, quote time, and
+  flags (ZERO-BID, IV-ZERO, ABSENT, AMBIGUOUS). Never prints the payload.
+  Separate from `agreement-auditor`: that finds two *code paths* computing one
+  quantity; this compares two *numbers* for one contract (the vendor's and the
+  engine's) on real data. Run it before building a feed on a vendor's chain and
+  whenever a fetched quote and a hand-entered input might disagree (9b).
+- **verdict-diff-reporter** — builds the program report for one book under two
+  input sets or two IPS files, on a temporary copy, and tabulates only what
+  changed (compliance rows and the overall, convexity and vega value and grade,
+  each leg's roll action and date, the decision verdict, the digest headline) as
+  FLIPPED / MOVED / SAME. Separate from `golden-diff-reporter`: that turns
+  failing *test* expectations into a diff; this diffs the *verdicts an operator
+  reads* across a change of input or policy, with no test involved. Run it before
+  adopting a new source for a pricing input and before moving an IPS band.
 
 Since #349, `.gitignore` excludes `.claude/*` but un-ignores `!.claude/agents/`,
 so the agent *definition files* are tracked and public — only `agent-memory/`

@@ -22,9 +22,9 @@ Not a wrong number and not a wrong sentence about a number — **two numbers tha
 should be one**, produced by different code, with nothing that fails when they
 disagree.
 
-- **N1** — the same June tranche prices to `$0` in `/design`'s today-marks path
+- **N1** — the same tranche prices to zero in `/design`'s today-marks path
   (position aging, expiration calendar, vega term exposure, delta drift) and to
-  `+$8.29K` in `/monitor`'s position detail. Same book, same instant. Both paths
+  a positive value in `/monitor`'s position detail. Same book, same instant. Both paths
   are "the leg's value today"; only one is right, and nothing compared them.
 - **N2** — the roll planner says `ROLL NOW` for three legs while `/monitor`'s
   Decisions panel and the roll-status table say `REVIEW` for the same legs at
