@@ -1098,6 +1098,24 @@ class TestSpotCrossCheck:
         assert "+5.0% vs book" in layout_text
         assert "spot-crosscheck--diverged" in layout_text
 
+    def test_a_book_with_the_default_symbol_still_reads_the_observed_spot(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """#509: the observed spot is keyed on the policy's instrument.
+
+        A book that never set a symbol reads ``"UNKNOWN"``; the refresh job
+        warms ``spot_<program.instrument>``. Before the fix /monitor looked
+        up ``spot_UNKNOWN`` and showed the reading as unavailable while the
+        right key was warm and fresh.
+        """
+        app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=5050.0)
+        app.program_state.portfolio.symbol = "UNKNOWN"
+
+        layout_text = str(monitor.render(app))
+
+        assert "+1.0% vs book" in layout_text
+
     def test_observed_below_book_reads_negative(self, tmp_path: Path) -> None:
         """A lower observed spot than book renders a signed negative."""
         app = _app_with_spot(tmp_path, book_spot=5000.0, market_spot=4900.0)
