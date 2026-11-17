@@ -386,7 +386,7 @@ is measured on listed contracts instead.
 | Risk-free rate | **GO** | FRED publishes eleven constant-maturity series, all one business day behind; the provider's own client reaches them. Which tenor stands for a whole book is a decision for 9b, not a data gap. |
 | Per-leg IV | **GO, with a condition** | The listed contracts checked all had a two-sided quote and a vendor IV. Adopt the IV **solved from the mid at the same r and q the engine prices with**: on a one-year put, a 1 pp error in either moves the IV by 0.5–0.7 vol points and the price by 6–8% (2b). |
 | Dividend yield | **NO-GO** to derive it | Put–call parity gives a number that is negative at 14 days and 0.2–0.5% beyond four months, not the published yield. It cannot separate the dividend from funding and timing. Keep it hand-entered. |
-| Liquidity | **GO** for bid, ask and open interest | Present on every listed contract checked. There is **no per-contract quote time** (only the last trade's), and this was a post-close snapshot: re-measure spreads in session before relying on them. |
+| Liquidity | **GO** for bid, ask and open interest | Present on every listed contract checked. There is **no per-contract quote time** (only the last trade's). The feed is designed as a **once-a-day read after the close**, like the nightly refresh above, so a close snapshot is what it supplies: spreads here are close-of-day spreads, and in-session spreads are out of scope. |
 
 ### 2a. The payload
 
@@ -548,8 +548,9 @@ own build path: **A**, the hand-entered inputs as they stand; **B**, the
 fetched spot, a solved IV per leg (at B's rate and the unchanged dividend
 yield), and the one-year FRED rate as the book's single rate. Both variants
 were stamped as reviewed, so provenance does not differ, and the market
-environment was one fixed provider at `CACHED` quality for both. The IPS was
-the shipped example's.
+environment was one fixed provider at `CACHED` quality for both. The first run
+used the shipped example IPS; it was then repeated on the live program state
+and policy.
 
 **The result is not recorded here.** A grade, a headline or a roll verdict
 moved by a change of inputs is a reading of the operator's own book, and it
@@ -565,10 +566,14 @@ market environment.
 
 ### Limits
 
-One payload, after the close, on a Monday. No in-session snapshot, so spreads
-and the 15-minute delay are unmeasured. No second fetch, so the payload's
-regeneration cadence is unknown. The book used was a copy of a book file from
-the local exports directory, not a program state with history.
+One payload, after the close, on a Monday. The feed is designed as a
+once-a-day post-close read, so in-session spreads and the 15-minute delay were
+not measured and are out of scope; they would need measuring only if an
+intraday read were ever wanted. No second fetch, so the payload's regeneration
+cadence is unknown. The book copy used for the legs was a book file from the
+local exports directory; the verdict preview was then repeated on a copy of the
+live program state and policy (without its history), and that result also went
+to the operator.
 
 ## Where the data lives
 
