@@ -265,3 +265,31 @@ strike_ladder:
     - {pct_otm: 20.0, weight_pct: 35.0}   # EXAMPLE VALUES -- the handbook's
     - {pct_otm: 30.0, weight_pct: 40.0}   # example allocation, not a handbook
     - {pct_otm: 40.0, weight_pct: 25.0}   # limit. Set your own.
+
+# Fetched pricing inputs (9b). The nightly refresh job downloads Cboe's
+# delayed SPX option chain and a FRED Treasury yield, and /design's "Fetched
+# inputs" panel shows them beside the typed-in values. POLICY, with NO code
+# defaults: omit the whole section and nothing is fetched and every pricing
+# input stays hand-entered. If the section is present, every key is required.
+pricing_feed:
+  adopt: []                      # Inputs a feed may PRICE the book on: any of
+                                 # spot, risk_free_rate, volatility. Empty =
+                                 # fetch and show only. dividend_yield cannot
+                                 # be named: put-call parity cannot separate
+                                 # the dividend from funding and timing, so it
+                                 # stays hand-entered (docs/market-data.md).
+  rate_series: DGS1              # EXAMPLE VALUE — the FRED constant-maturity
+                                 # series standing for the book's one rate.
+                                 # DGS1 (1-year) suits 6-18 month options.
+  max_quote_age_days: 5          # EXAMPLE VALUE — calendar days between the
+                                 # program's date and the chain's trading
+                                 # session beyond which a fetched quote is not
+                                 # used. 5 spans a long weekend plus a missed
+                                 # night.
+  max_spread_pct: 25.0           # EXAMPLE VALUE — % of mid. A quote wider than
+                                 # this yields no implied volatility. The
+                                 # strikes a hedge ladder uses quoted 2-5%
+                                 # wide at the close (9b.0).
+  override_warn_vol_points: 2.0  # EXAMPLE VALUE — vol points. /design warns
+                                 # when a typed-in IV differs from the fetched
+                                 # one by more than this.

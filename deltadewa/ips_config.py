@@ -44,7 +44,7 @@ _EXAMPLE_IPS_PATH: Final[Path] = (
 # (8c / N10). --check reports them on their own line rather than under the
 # "these have code defaults" message, which would be false for them.
 _SECTIONS_WITHOUT_CODE_DEFAULTS: Final[frozenset[str]] = frozenset(
-    {"liquidity", "strike_ladder"},
+    {"liquidity", "strike_ladder", "pricing_feed"},
 )
 
 # CLI-only default (see main() below) — matches the cwd-relative default
@@ -587,6 +587,40 @@ class IpsLiquidity:
 
 
 @dataclass(frozen=True)
+class IpsPricingFeed:
+    """Policy for pricing the book from fetched market data (9b).
+
+    Optional, and deliberately **without code defaults** (#474): which
+    inputs a program lets a feed price, which Treasury series stands for
+    its one book rate, and how wide a spread or how old a quote it will
+    trust are program decisions. Absent, ``IpsConfig.pricing_feed`` is
+    ``None``: nothing is fetched and every pricing input stays hand-entered
+    exactly as before. Present, every key is required.
+
+    Units:
+        ``adopt`` names the inputs a feed may price: any of ``spot``,
+        ``risk_free_rate``, ``volatility``. ``dividend_yield`` is refused:
+        put-call parity measures the dividend, funding and timing together
+        and cannot isolate the yield (9b.0, ``docs/market-data.md``).
+        ``rate_series`` is the FRED constant-maturity series whose yield is
+        the book's single rate.
+        ``max_quote_age_days`` is calendar days between the program's date
+        and the chain's trading session, beyond which a fetched quote is
+        not used.
+        ``max_spread_pct`` is a percent of mid; a quote wider than this
+        yields no IV.
+        ``override_warn_vol_points`` is the gap, in vol points, between an
+        overridden IV and the fetched one past which ``/design`` warns.
+    """
+
+    adopt: tuple[str, ...]
+    rate_series: str
+    max_quote_age_days: int
+    max_spread_pct: float
+    override_warn_vol_points: float
+
+
+@dataclass(frozen=True)
 class IpsLadderRung:
     """One rung of the program's intended strike ladder (8d, #410).
 
@@ -768,6 +802,9 @@ class IpsConfig:
     # ladder composer then seeds from the live book. Like `liquidity`, not
     # in defaulted_sections: there is no code default to be running on.
     strike_ladder: IpsStrikeLadder | None = None
+    # 9b: None when ips.yaml has no `pricing_feed:` section -- nothing is
+    # fetched and every pricing input stays hand-entered. No code default.
+    pricing_feed: IpsPricingFeed | None = None
     # #309: which of the optional sections above (market_environment,
     # sizing, vega, pricing_inputs, maturity_selection) were absent from
     # the loaded ips.yaml and are running on their DEFAULT_* module
@@ -1408,6 +1445,102 @@ def _parse_liquidity(config: dict[str, Any]) -> IpsLiquidity | None:
     )
 
 
+#: Pricing inputs a feed may price. ``dividend_yield`` is absent on purpose.
+_ADOPTABLE_INPUTS: Final[tuple[str, ...]] = (
+    "spot",
+    "risk_free_rate",
+    "volatility",
+)
+
+#: FRED constant-maturity series that exist (9b.0 measured them).
+_FRED_RATE_SERIES: Final[frozenset[str]] = frozenset(
+    {
+        "DGS1MO",
+        "DGS3MO",
+        "DGS6MO",
+        "DGS1",
+        "DGS2",
+        "DGS3",
+        "DGS5",
+        "DGS7",
+        "DGS10",
+        "DGS20",
+        "DGS30",
+    },
+)
+
+
+def _positive_number(section: dict[str, Any], key: str) -> float:
+    """Return ``pricing_feed.<key>`` as a float > 0, or raise."""
+    value = _require_field(section, "pricing_feed", key)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or value <= 0
+    ):
+        raise IpsConfigError(
+            f"pricing_feed.{key} must be a number > 0, got {value!r}",
+        )
+    return float(value)
+
+
+def _parse_pricing_feed(config: dict[str, Any]) -> IpsPricingFeed | None:
+    """Parse the optional ``pricing_feed`` policy section (9b).
+
+    Absent -> ``None`` (nothing is fetched; every input stays hand-entered).
+    Present -> every key is required: there is no handbook number to fall
+    back to, so a partial section is an error rather than a silent default.
+    """
+    if "pricing_feed" not in config:
+        return None
+    section = config["pricing_feed"]
+    if not isinstance(section, dict):
+        raise IpsConfigError(
+            "ips.yaml 'pricing_feed' section must be a mapping",
+        )
+    raw_adopt = _require_field(section, "pricing_feed", "adopt")
+    if not isinstance(raw_adopt, list):
+        raise IpsConfigError(
+            "pricing_feed.adopt must be a list (possibly empty) drawn from "
+            f"{list(_ADOPTABLE_INPUTS)}, got {raw_adopt!r}",
+        )
+    if "dividend_yield" in raw_adopt:
+        raise IpsConfigError(
+            "pricing_feed.adopt cannot name dividend_yield: put-call parity "
+            "measures the dividend, funding and timing together and cannot "
+            "isolate the yield (9b.0, docs/market-data.md, 2d). Keep it "
+            "hand-entered and confirm it quarterly.",
+        )
+    unknown = [name for name in raw_adopt if name not in _ADOPTABLE_INPUTS]
+    if unknown or len(set(raw_adopt)) != len(raw_adopt):
+        raise IpsConfigError(
+            "pricing_feed.adopt must list each of "
+            f"{list(_ADOPTABLE_INPUTS)} at most once, got {raw_adopt!r}",
+        )
+    series = _require_field(section, "pricing_feed", "rate_series")
+    if series not in _FRED_RATE_SERIES:
+        raise IpsConfigError(
+            "pricing_feed.rate_series must be one of "
+            f"{sorted(_FRED_RATE_SERIES)}, got {series!r}",
+        )
+    max_age = _require_field(section, "pricing_feed", "max_quote_age_days")
+    if not _is_int(max_age) or max_age <= 0:
+        raise IpsConfigError(
+            "pricing_feed.max_quote_age_days must be an integer > 0, "
+            f"got {max_age!r}",
+        )
+    return IpsPricingFeed(
+        adopt=tuple(raw_adopt),
+        rate_series=series,
+        max_quote_age_days=max_age,
+        max_spread_pct=_positive_number(section, "max_spread_pct"),
+        override_warn_vol_points=_positive_number(
+            section,
+            "override_warn_vol_points",
+        ),
+    )
+
+
 _LADDER_WEIGHT_SUM_TOLERANCE: Final[float] = 1e-6
 
 
@@ -1632,6 +1765,7 @@ def load_ips_config(path: str | Path) -> IpsConfig:
             config,
             maturity_selection.entry_tenor_years,
         ),
+        pricing_feed=_parse_pricing_feed(config),
         defaulted_sections=defaulted_sections,
     )
 

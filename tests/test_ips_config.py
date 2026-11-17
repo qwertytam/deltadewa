@@ -1623,6 +1623,149 @@ class TestLiquidity:
             load_ips_config(_write_yaml(tmp_path, config))
 
 
+_VALID_FEED: dict[str, object] = {
+    "adopt": [],
+    "rate_series": "DGS1",
+    "max_quote_age_days": 5,
+    "max_spread_pct": 25.0,
+    "override_warn_vol_points": 2.0,
+}
+
+
+class TestPricingFeed:
+    """The optional ``pricing_feed`` policy section (9b).
+
+    No code defaults: which inputs a feed may price, which Treasury series
+    stands for the book rate, and how wide or old a quote is trusted are
+    program decisions. Absent means nothing is fetched and every pricing
+    input stays hand-entered; present means every key is required.
+    """
+
+    def test_absent_section_is_none_not_defaults(self, tmp_path: Path) -> None:
+        ips = load_ips_config(_write_yaml(tmp_path, _VALID_CONFIG))
+
+        assert ips.pricing_feed is None
+        assert "pricing_feed" not in ips.defaulted_sections
+
+    def test_both_shipped_templates_carry_the_section_adopting_nothing(
+        self,
+    ) -> None:
+        for path in (EXAMPLE_IPS_YAML, _DEFAULT_IPS_YAML):
+            feed = load_ips_config(path).pricing_feed
+
+            assert feed is not None
+            assert feed.adopt == ()
+            assert feed.rate_series == "DGS1"
+            assert feed.max_quote_age_days == 5
+            assert feed.max_spread_pct == pytest.approx(25.0)
+            assert feed.override_warn_vol_points == pytest.approx(2.0)
+
+    def test_round_trips_custom_values(self, tmp_path: Path) -> None:
+        section = {
+            "adopt": ["spot", "risk_free_rate", "volatility"],
+            "rate_series": "DGS2",
+            "max_quote_age_days": 3,
+            "max_spread_pct": 15.5,
+            "override_warn_vol_points": 1.25,
+        }
+        config = {**_VALID_CONFIG, "pricing_feed": section}
+
+        feed = load_ips_config(_write_yaml(tmp_path, config)).pricing_feed
+
+        assert feed is not None
+        assert feed.adopt == ("spot", "risk_free_rate", "volatility")
+        assert feed.rate_series == "DGS2"
+        assert feed.max_quote_age_days == 3
+        assert feed.max_spread_pct == pytest.approx(15.5)
+        assert feed.override_warn_vol_points == pytest.approx(1.25)
+
+    @pytest.mark.parametrize(
+        "missing",
+        [
+            "adopt",
+            "rate_series",
+            "max_quote_age_days",
+            "max_spread_pct",
+            "override_warn_vol_points",
+        ],
+    )
+    def test_every_key_is_required(
+        self,
+        tmp_path: Path,
+        missing: str,
+    ) -> None:
+        section = {k: v for k, v in _VALID_FEED.items() if k != missing}
+        config = {**_VALID_CONFIG, "pricing_feed": section}
+
+        with pytest.raises(IpsConfigError, match=missing):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_dividend_yield_cannot_be_adopted(self, tmp_path: Path) -> None:
+        """9b.0: parity cannot isolate the yield, so a feed may not price it."""
+        section = {**_VALID_FEED, "adopt": ["spot", "dividend_yield"]}
+        config = {**_VALID_CONFIG, "pricing_feed": section}
+
+        with pytest.raises(IpsConfigError, match=r"dividend_yield.*9b\.0"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    @pytest.mark.parametrize(
+        ("overrides", "match"),
+        [
+            ({"adopt": ["vix"]}, "adopt"),
+            ({"adopt": ["spot", "spot"]}, "adopt"),
+            ({"adopt": "spot"}, "adopt"),
+            ({"rate_series": "DGS2MO"}, "rate_series"),
+            ({"rate_series": 1}, "rate_series"),
+            ({"max_quote_age_days": 0}, "max_quote_age_days"),
+            ({"max_quote_age_days": 2.5}, "max_quote_age_days"),
+            ({"max_quote_age_days": True}, "max_quote_age_days"),
+            ({"max_spread_pct": 0}, "max_spread_pct"),
+            ({"max_spread_pct": -1.0}, "max_spread_pct"),
+            ({"max_spread_pct": True}, "max_spread_pct"),
+            ({"override_warn_vol_points": 0}, "override_warn_vol_points"),
+        ],
+    )
+    def test_invalid_values_raise(
+        self,
+        tmp_path: Path,
+        overrides: dict[str, object],
+        match: str,
+    ) -> None:
+        config = {
+            **_VALID_CONFIG,
+            "pricing_feed": {**_VALID_FEED, **overrides},
+        }
+
+        with pytest.raises(IpsConfigError, match=match):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_section_must_be_a_mapping(self, tmp_path: Path) -> None:
+        config = {**_VALID_CONFIG, "pricing_feed": ["spot"]}
+
+        with pytest.raises(IpsConfigError, match="pricing_feed"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_check_lists_an_absent_section_under_no_code_defaults(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        path = _write_yaml(tmp_path, deepcopy(_VALID_CONFIG))
+
+        exit_code = main(["--check", str(path)])
+
+        out = capsys.readouterr().out
+        defaults_line = next(
+            line for line in out.splitlines() if "have code defaults" in line
+        )
+        no_defaults_line = next(
+            line for line in out.splitlines() if "NO code defaults" in line
+        )
+        assert exit_code == 0
+        assert "pricing_feed" not in defaults_line
+        assert "pricing_feed" in no_defaults_line
+
+
 _DEFAULT_IPS_YAML = (
     Path(__file__).parent.parent / "examples" / "ips" / "ips_default.yaml"
 )
