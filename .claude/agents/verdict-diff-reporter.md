@@ -90,9 +90,19 @@ process, so nothing can fall back to the default cache path.
   `ProgramState.load` read it: do not import, because the load restores what the
   app would hold, including stamps. The IPS is the one the caller names (the
   state directory's own `ips.yaml`): copy it to a temp path and pass that as
-  `ips_path`. A state directory comes with no `history/` (it is not copied), so
-  the history stays empty and the digest says so. `state.ips_config` is `None`
-  if the IPS failed to load; check `state.ips_load_error` and stop.
+  `ips_path`. If the directory has a `history/`, copy it to `<temp>/history`
+  too; without one the history is empty and the digest says so.
+  `state.ips_config` is `None` if the IPS failed to load; check
+  `state.ips_load_error` and stop.
+- **With a history, take the week's mark the way the weekly job does.** After
+  applying a variant's inputs and `mark_inputs_reviewed`, call
+  `weekly_report._take_weekly_mark(state, as_of=<program date>)` and pass its
+  result to `build_and_render(..., mark_outcome=...)`. Digest section 4 (the
+  markdown block "4. Return Framing") then reports realized carry from the
+  recorded marks to the new one. Report its realized-carry lines for each
+  variant: a re-pricing between two marks with no trade between them is booked
+  as realized carry, and no break is named for it, so a change of pricing
+  source shows up there as a large figure, not as a flip.
 - **Apply an input set** with the state's own mutators:
   `update_market_conditions(spot_price=, risk_free_rate=, dividend_yield=)`
   (omit what the set leaves alone) and `update_position(index, volatility=)`
@@ -186,6 +196,9 @@ counted separately.
 **Attribution** — only when you ran it: `quantity | A | B | first part alone |
 second part alone`, one row per compliance reading and per roll verdict. These
 are extra runs, not counted in the summary.
+
+**Realized carry (§4)** — only when a history was given: per variant, the
+since-first-mark and latest-period lines, and any break named.
 
 **Not varied** — one line: what both variants shared.
 
