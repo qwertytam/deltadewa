@@ -564,6 +564,26 @@ What the preview cannot show: how adopted inputs would be stamped (both
 variants here were stamped as reviewed), the live IPS's bands, and the real
 market environment.
 
+### What the switch does to realized carry
+
+Digest section 4's realized carry is an identity over two boundary marks, both
+priced on the `MODEL` basis: the engine at the book's hand-entered inputs. A
+mark taken after adopting measured inputs prices the same lots differently with
+no trade between the two marks, and the identity books that re-pricing as
+carry, with no break named. Three facts frame the fix, all in the code today:
+
+- `MarkBasis` says a mid-market basis would be a new member and a period whose
+  marks disagree is refused (`realized_carry` raises). Section 4 then degrades
+  to a stated error for any period that spans the switch, since-inception
+  included.
+- A second opening mark is refused by the history store, so the history cannot
+  simply be restarted at the switch.
+- Each mark already records the spot, rate, dividend yield and per-leg
+  volatility it was priced on.
+
+9b has to decide how the switch is marked, and what since-inception shows across
+it, before a feed prices a mark.
+
 ### Limits
 
 One payload, after the close, on a Monday. The feed is designed as a
@@ -572,8 +592,7 @@ not measured and are out of scope; they would need measuring only if an
 intraday read were ever wanted. No second fetch, so the payload's regeneration
 cadence is unknown. The book copy used for the legs was a book file from the
 local exports directory; the verdict preview was then repeated on a copy of the
-live program state and policy (without its history), and that result also went
-to the operator.
+live program state and policy, and that result also went to the operator.
 
 ## Where the data lives
 
