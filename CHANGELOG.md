@@ -17,9 +17,15 @@ history for that record instead.
 
 ## [Unreleased]
 
-**The verdicts an operator reads now say what they did not check.** A digest
-headline, a decision verdict and a vega figure each used to say less, or more,
-than the number behind them.
+Nothing yet.
+
+## [0.11.0] - 2026-11-16
+
+**A trade is now recorded as fills from `/design`, and the verdicts an operator
+reads say what they did not check.** Close, settle and roll are forms in the
+BOOK zone, and a digest headline, a decision verdict and a vega figure each
+used to say less, or more, than the number behind them. No 0.10.1 was cut: the
+verdict changes below were never released on their own, and ship here.
 
 ### Added
 
@@ -790,7 +796,8 @@ Phase 1 close-out and the start of Phase 2, tagged together:
 - **M2.2 — Dash skeleton + shared layer** (#212) — the two-page app
   scaffold and `state.ProgramState`. Observation provenance (#213).
 
-[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/qwertytam/deltadewa/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/qwertytam/deltadewa/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/qwertytam/deltadewa/compare/v0.9.3...v0.10.0
 [0.9.3]: https://github.com/qwertytam/deltadewa/compare/v0.7.0...v0.9.3
 [0.7.0]: https://github.com/qwertytam/deltadewa/compare/v0.6.0...v0.7.0
