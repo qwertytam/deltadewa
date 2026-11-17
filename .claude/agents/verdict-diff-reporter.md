@@ -46,10 +46,11 @@ verdicts move, so the operator is not first to find out on the day.
 
 ## Input
 
-A **book file** (a copy), **one of**: two input sets (a small JSON or YAML
-file naming, per set, the spot, rate, dividend yield and per-leg volatilities
-to apply, or "as in the book") **or** two IPS files; a **scratch directory**;
-and the program date. Anything else is a question for the caller, not a
+A **book file** (a copy) **or a program-state directory** (a copy holding
+`program_state.json` and the IPS, as the live host has them); **one of**: two
+input sets (a small JSON or YAML file naming, per set, the spot, rate,
+dividend yield and per-leg volatilities to apply, or "as in the book") **or**
+two IPS files; a **scratch directory**; and the program date. Anything else is a question for the caller, not a
 guess. Never use the live `exports/` or the live `config/ips.yaml`: they are
 copied to the scratch directory by the caller.
 
@@ -59,16 +60,17 @@ copied to the scratch directory by the caller.
    book and the IPS in. Everything below runs from a script in the scratch
    directory with `poetry run python -I`, so nothing is written to the repo.
 2. For each variant, load `ProgramState.load(export_dir=<temp>,
-   ips_path=<copy>, history_dir=<temp>/history)`, import the book with
-   `import_portfolio(..., confirm=True)`, and apply that variant's inputs with
-   the state's own mutators (`update_market_conditions`, `update_position`),
-   so the book is changed the way the app changes it.
+   ips_path=<copy>, history_dir=<temp>/history)`, bring the book in (import a
+   book file with `import_portfolio(..., confirm=True)`; given a program-state
+   directory, let the load read it instead: see the Recipe), and apply that
+   variant's inputs with the state's own mutators (`update_market_conditions`,
+   `update_position`), so the book is changed the way the app changes it.
 3. Build the report through the real digest path
    (`deltadewa.reporting.weekly_report.build_and_render`), not a second copy of
    it. Pin the market environment: both variants read the same market-data
    provider, so the only thing that can move is the thing under test. Say how
    it was pinned.
-4. Pull out: the compliance rows (value, target, status) and the overall
+4. Pull out: the compliance rows (actual, target and pass/fail) and the overall
    result; crash convexity and vega sufficiency (value and grade); each leg's
    roll verdict, action and date; the decision verdict; and the digest headline.
 5. Compare variant against variant. Report only the quantities that differ.
@@ -83,23 +85,33 @@ process, so nothing can fall back to the default cache path.
 - **Load.** `ProgramState.load(<temp>, ips_path=<ips copy>, history_dir=<temp>/
   history, examples_dir=<temp>/examples)` (create `examples` first; without it
   the loader touches the repo's own). Then `state.import_portfolio(<book copy>,
-  confirm=True)`. `state.ips_config` is `None` if the IPS failed to load; check
-  `state.ips_load_error` and stop.
+  confirm=True)`. **Given a program-state directory instead,** copy its
+  `program_state.json` into `<temp>` as the export directory and let
+  `ProgramState.load` read it: do not import, because the load restores what the
+  app would hold, including stamps. The IPS is the one the caller names (the
+  state directory's own `ips.yaml`): copy it to a temp path and pass that as
+  `ips_path`. A state directory comes with no `history/` (it is not copied), so
+  the history stays empty and the digest says so. `state.ips_config` is `None`
+  if the IPS failed to load; check `state.ips_load_error` and stop.
 - **Apply an input set** with the state's own mutators:
   `update_market_conditions(spot_price=, risk_free_rate=, dividend_yield=)`
   (omit what the set leaves alone) and `update_position(index, volatility=)`
   per leg, in book order. Then **always** `mark_inputs_reviewed(confirm=True)`
   in *every* variant: an unstamped book grades `UNKNOWN`, and the digest then
   prefixes `STALE DATA` to the headline and hides the verdict you came to
-  compare. Report one extra "as read today, unstamped" headline for reference.
+  compare. Report one extra "as read today, unstamped" headline for reference;
+  on that build the market context's `data_quality` reads `STATIC` where the
+  stamped builds read `CACHED`.
 - **Build** with `deltadewa.reporting.weekly_report.build_and_render(state=,
   ips_config=, as_of=<program date>, period_label=, export_dir=<temp>)`. It
-  returns an object whose `.digest` holds `.headline`, `.roll_legs` (rows with
+  returns a result with only `.digest`, `.markdown` and `.html`; everything else
+  is under `out.digest`: `.headline`, `.roll_legs` (rows with
   `.verdict`, `.leg`, `.reason`, `.action`, in book order, one per leg) and
-  `.report`. A leg's roll **date** has no field of its own: it is inside the
-  action text (`ROLL BY <date>`), so compare and report `.action` verbatim. From
-  the report:
-  `.ips_compliance.rows` (`.metric`, `.actual`, `.passes`) and `.all_pass`,
+  `.report` (so the report is **`out.digest.report`**, not `out.report`). A leg's
+  roll **date** has no field of its own: it is inside the action text
+  (`ROLL BY <date>`), so compare and report `.action` verbatim. From the report:
+  `.ips_compliance.rows` (`.metric`, `.actual`, `.passes`, and `.target`, a
+  string; there is no separate status field) and `.all_pass`,
   `.protection.convexity` (a grading with `.value_pct` and `.grade`),
   `.vega.sufficiency_pct` and `.meets_target`, `.cost.carry_pct_of_notional`
   and `.within_budget`, `.decision.verdict`, `.market_context.data_quality`.
@@ -110,10 +122,13 @@ process, so nothing can fall back to the default cache path.
   decision verdict into `INSUFFICIENT_DATA` and the headline into `STALE DATA`
   for every variant, and the preview compares nothing. Subclass it and wrap
   each reading as `Observation(value=..., source=Source.CACHED, as_of=<aware
-  datetime>, fetched_at=<aware datetime>)` (`deltadewa.marketdata._observation`).
-  When the caller names a VIX level, set it on `vix` **and** on the `VIX` entry
-  of `vix_term_structure`, or the two disagree inside one environment; leave
-  every other field at the provider's default and say so.
+  datetime>, fetched_at=<aware datetime>)`; `Observation` and `Source` are
+  imported from the module `deltadewa.marketdata._observation`. When the caller
+  names a VIX level, set it on `vix` **and** on the `VIX` entry of
+  `vix_term_structure`, or the two disagree inside one environment; leave every
+  other field at the provider's default and say so. The default skew percentile
+  (0.5) is a 0 to 1 fraction, the same scale the live provider returns, so it
+  needs no conversion.
 - **Input-set file** (JSON): per variant a `label`, and `spot`, `rate`,
   `dividend` and `vols` (a list in book order), where `null` means "leave as in
   the book".
@@ -132,7 +147,10 @@ process, so nothing can fall back to the default cache path.
 
 A compliance row and the section reading it repeats (the carry row and
 `cost.within_budget`, the vega row and `vega.meets_target`) are **one quantity**:
-list it once, with both names, and count it once.
+list it once, with both names, and count it once. A leg's roll verdict, action
+and date together are one quantity per leg. A number quoted inside a reason's
+text (a rally figure, say) is detail on that quantity, noted under Moved, not
+counted separately.
 
 ## Execution rules
 
@@ -165,11 +183,15 @@ list it once, with both names, and count it once.
 
 **Moved** — `quantity | A -> B (delta, unit)`.
 
+**Attribution** — only when you ran it: `quantity | A | B | first part alone |
+second part alone`, one row per compliance reading and per roll verdict. These
+are extra runs, not counted in the summary.
+
 **Not varied** — one line: what both variants shared.
 
 **Repo state** — `git status` clean or not.
 
-Under 60 lines.
+Under 60 lines, or 80 when attribution rows are asked for.
 
 ## Project context
 
@@ -191,4 +213,5 @@ Record which kinds of verdict flipped for which kind of input change, keyed by
 date, so the next preview can be compared with the last: "spot and rate
 together relaxed some roll verdicts", never a figure, a strike or a grade of the
 book. Your memory directory is gitignored local state, the one place you may
-write inside the repo tree.
+write inside the repo tree. Create its files, `MEMORY.md` index included, with
+the Write tool: a shell redirect into it can be refused.
