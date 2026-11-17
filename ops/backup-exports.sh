@@ -17,9 +17,12 @@
 # `exports/` is treated as its own standalone git repo, nested inside the
 # app repo's already-fully-gitignored exports/ directory — no submodule
 # conflict, since the parent repo never walks into an ignored path.
-# exports/marketdata-cache/ (a few KB of JSON) is backed up along with
-# everything else in exports/ — on a fresh box after a restore, that
-# means the app comes up STALE-with-numbers rather than UNAVAILABLE.
+# The market-data cache is NOT in exports/ (9b): it lives in its own bind
+# mount, ./cache, because it holds the raw option-chain payload (~13 MB of
+# vendor data) that must never ride this push. After a restore the app comes
+# up UNAVAILABLE until the refresh job has run once (RUNBOOK §7 step 4, §11).
+# What the nightly refresh does leave under exports/ is chain-history/, a
+# small daily extract (about 5 MB a year) that this push does carry.
 #
 # exports/config-backup/ips.yaml is a copy of config/ips.yaml, staged by
 # stage_policy_snapshot() below (#301) so it rides this same push, remote

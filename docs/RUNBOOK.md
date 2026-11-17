@@ -104,6 +104,16 @@ docker compose build app jobs
 docker compose up -d
 ```
 
+**cache/ (9b):** the market-data cache is its own bind mount,
+`~/deltadewa/cache`, outside `exports/` so it never rides the offsite
+backup. Docker creates it on the first `up` and the entrypoint hands it to
+the app user, exactly as for `exports/`. It starts empty: run the refresh
+once by hand (§11) so `/health` reads `CACHED` before the first cron.
+**Upgrading a box that has `exports/marketdata-cache/`:** after the deploy
+and that first refresh, `rm -r ~/deltadewa/exports/marketdata-cache` (the
+old copy is now unread, and still committed by the next backup until it
+is gone).
+
 **exports/ ownership (#220):** the container runs as a fixed-UID non-root
 user, not root, and `docker-entrypoint.sh` chowns the bind-mounted
 `exports/` tree to that user on every container start — so a fresh
@@ -555,9 +565,11 @@ sudo age -d -i AGE_KEY_FILE \
     ~/deltadewa/exports/exports.tar.age
 sudo tar -xf /tmp/exports.tar -C ~/deltadewa/exports
 sudo rm -f /tmp/exports.tar   # root-owned (age -d ran via sudo above)
-#    ~/deltadewa/exports now holds program_state.json,
-#    marketdata-cache/, reports/weekly/, and config-backup/ — exactly
-#    what backup-exports.sh staged before encrypting, nothing more.
+#    ~/deltadewa/exports now holds program_state.json, history/,
+#    chain-history/, reports/weekly/, and config-backup/ — exactly what
+#    backup-exports.sh staged before encrypting, nothing more. It does NOT
+#    hold the market-data cache: that is its own mount, ~/deltadewa/cache,
+#    outside the backup, and starts empty (step 4 below).
 
 # 2b. Restore the policy file. config/ips.yaml is baked into the image at
 #    build time (§4/§5) — it is NOT part of the exports/ bind mount and
@@ -609,9 +621,10 @@ docker compose up -d
 
 # 4. Confirm state actually came back
 curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
-# market_data.source should read CACHED (or STALE, not UNAVAILABLE) —
-# the restored exports/marketdata-cache/ means this box doesn't start
-# blind even before the next refresh cron fires. Check
+# market_data.source reads UNAVAILABLE until the refresh job has run once:
+# the market-data cache lives in ~/deltadewa/cache, outside the backup, so
+# a restored box starts without it. Run the refresh by hand now (§11) and
+# /health reads CACHED within the minute. Check
 # boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
 # degraded, by design, so 200 alone doesn't confirm the restored
 # config/ips.yaml actually loaded.
@@ -726,9 +739,10 @@ routine. See §14 for how often.
      let the next nightly run recapture it.
    - `exported_at` should be within the last week or so. This is the
      only check here that catches a *frozen* state file:
-     `marketdata-cache/` inside `exports/` churns every night regardless,
-     so the backup repo keeps committing and looks healthy even if
-     `program_state.json` itself stopped updating months ago.
+     `chain-history/` (once the pricing feed is on) and the weekly report
+     files churn on their own schedule regardless, so the backup repo
+     keeps committing and looks healthy even if `program_state.json`
+     itself stopped updating months ago.
 
 4. **Validate the policy on the currently-deployed version** — the
    same-version case, which should be routine:
@@ -887,13 +901,19 @@ one problem per run; work through it rather than guessing:
 - **`exports/`** — the only stateful directory. Bind-mounted (not a named
   volume, so `ops/backup-exports.sh` can read it directly off the host
   filesystem — see `compose.yaml`). Contains `program_state.json` (the
-  live portfolio + IPS state), `exports/marketdata-cache/` (the warmed
-  CBOE/FRED cache both `app` and `jobs` share via `DELTADEWA_CACHE_DIR` —
-  see `docs/market-data.md` for which readings live in it and which
-  pricing inputs are hand-entered and never refresh),
-  `exports/reports/weekly/` (digest + snapshot history),
+  live portfolio + IPS state), `exports/chain-history/` (a small daily
+  extract of the option chain, written by the refresh job when
+  `ips.yaml` has a `pricing_feed` section — about 5 MB a year, backed
+  up), `exports/reports/weekly/` (digest + snapshot history),
   `exports/history/` (see below), `exports/config-backup/` (see below),
   and any autosaves.
+- **`cache/`** — the market-data cache, **outside `exports/` on
+  purpose** (9b): the warmed CBOE/FRED readings and the raw option-chain
+  payload (about 13 MB, tonight's and last night's), which both `app` and
+  `jobs` share via `DELTADEWA_CACHE_DIR=/app/cache`. It is vendor data, so
+  it must never be committed or ride the offsite backup; it is gitignored,
+  rebuilt by one run of the refresh job, and absent from a restore. See
+  `docs/market-data.md` for which readings live in it.
 - **`exports/history/`** — the position history (#313), the record
   realized carry is measured from: `events.jsonl` (every fill — open,
   close, settle, each with its price and fees — and every book edit that
@@ -1108,7 +1128,7 @@ needed here.
   invisible to git's owner-based check) instead of ownership.
 
   **The resulting invariant:** the app owns its data files
-  (`program_state.json`, `marketdata-cache/`, `reports/weekly/`); root
+  (`program_state.json`, `chain-history/`, `reports/weekly/`); root
   owns `.git/` and `exports/` itself; neither re-owns the other's.
   Restart the container as often as you like, run the backup cron as
   often as you like — neither disturbs the other's ownership.
@@ -1158,7 +1178,9 @@ deliberately not interchangeable.
 ## 11. Running each job manually
 
 ```bash
-# Market-data refresh
+# Market-data refresh. Run it once by hand after the first deploy that
+# moves the cache to ./cache (9b), and after any restore (§7 step 4):
+# the cache is its own mount, outside exports/, and starts empty.
 docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh
 
 # Weekly digest — build only, no email (files land under exports/reports/weekly/)
@@ -1176,6 +1198,22 @@ docker compose run --rm --no-deps jobs python -m deltadewa.history_cli init
 docker compose run --rm --no-deps jobs python -m deltadewa.history_cli mark
 docker compose run --rm --no-deps jobs python -m deltadewa.history_cli status
 ```
+
+**The pricing feed (9b).** With a `pricing_feed:` section in
+`config/ips.yaml` the refresh run has eight series instead of six: the
+Cboe delayed SPX option chain (`chain`, about 13 MB, cached raw in
+`./cache` with the previous night's copy beside it) and the FRED yield the
+policy names (`rate`). A chain download failing is a partial run (exit
+`1`): it does not stop the other series or the heartbeat. After a live
+chain fetch the job appends a small daily record to
+`exports/chain-history/`; a failure there is logged and never changes the
+exit code. With no `pricing_feed:` section neither series is fetched and
+nothing is written to `chain-history/`. Nothing is *priced* on the feed
+yet: `/design`'s **Fetched inputs** panel shows it beside the typed values.
+To prove the failure path, point the chain host at nothing for one run:
+`docker compose run --rm --no-deps --add-host cdn.cboe.com:127.0.0.1 jobs
+python -m deltadewa.marketdata.refresh` (the other Cboe readings go stale
+too; that is expected).
 
 **Market-data refresh exit codes** — a manual `echo $?` after the refresh
 command above is a documented diagnosis, not a guess:
@@ -1222,7 +1260,7 @@ sudo tail -50 /var/log/deltadewa-backup.log
 ls -la ~/deltadewa/exports/reports/weekly/ | tail -5
 
 # Market-data cache freshness (mtimes should track the refresh schedule)
-ls -la ~/deltadewa/exports/marketdata-cache/
+ls -la ~/deltadewa/cache/
 
 # Last backup commit actually pushed
 cd ~/deltadewa/exports && git log -1 --format='%H %ci'
@@ -1263,8 +1301,8 @@ to read):
   "exercise_style_wired": {"ok": true, "detail": "default_exercise_style=EUROPEAN"},
   "state_persisted": {"ok": true, "detail": "no unsaved changes"},
   "state_file_undisturbed": {"ok": true, "detail": "..."},
-  "cache_dir_writable": {"ok": true, "detail": "...", "value": "/app/exports/marketdata-cache"},
-  "cache_manifest_matches": {"ok": true, "detail": "...", "value": {"recorded_cache_dir": "/app/exports/marketdata-cache", "written_at": "...", "resolved_cache_dir": "/app/exports/marketdata-cache"}}
+  "cache_dir_writable": {"ok": true, "detail": "...", "value": "/app/cache"},
+  "cache_manifest_matches": {"ok": true, "detail": "...", "value": {"recorded_cache_dir": "/app/cache", "written_at": "...", "resolved_cache_dir": "/app/cache"}}
 }
 ```
 

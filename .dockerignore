@@ -14,3 +14,4 @@ docs/
 .vscode/
 .claude/
 .DS_Store
+cache/

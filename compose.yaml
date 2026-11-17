@@ -16,12 +16,16 @@ services:
       # container recreate must not silently wipe the warmed cache back
       # to UNAVAILABLE, and this is the same path the `jobs` service
       # below writes to, so a refresh actually warms what the app reads.
-      DELTADEWA_CACHE_DIR: /app/exports/marketdata-cache
+      # Its own mount, OUTSIDE exports/ (9b): exports/ is the nightly
+      # offsite backup, and the option-chain payload cached here is ~13 MB
+      # of vendor data that must not be committed, pushed or redistributed.
+      DELTADEWA_CACHE_DIR: /app/cache
     volumes:
       # Bind mount, not a named volume: M2.6's backup cron pushes exports/
       # to an offsite repo and needs direct host filesystem access to it —
       # a Docker-managed named volume would need `docker cp` gymnastics.
       - ./exports:/app/exports
+      - ./cache:/app/cache
     ports:
       # BIND_ADDR MUST be the host's Tailscale IP in production — NEVER
       # 0.0.0.0, and never left unset in a way that defaults to it. Docker
@@ -56,7 +60,7 @@ services:
     # belt-and-braces, not the enforcement.
     profiles: ["jobs"]
     environment:
-      DELTADEWA_CACHE_DIR: /app/exports/marketdata-cache
+      DELTADEWA_CACHE_DIR: /app/cache
       # Fail loudly at `docker compose run` time — not silently, 3am,
       # inside a job's Python traceback — if .env was never populated
       # with these per .env.example. This is a one-time setup gate, not a
@@ -75,3 +79,4 @@ services:
     env_file: .env
     volumes:
       - ./exports:/app/exports
+      - ./cache:/app/cache

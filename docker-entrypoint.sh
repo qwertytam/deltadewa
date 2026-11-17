@@ -11,7 +11,7 @@
 # directive), fixes ownership, then steps down. See issue #220.
 #
 # Ownership invariant (#220 / #237): the app owns its data files
-# (program_state.json, marketdata-cache/, reports/weekly/); root owns
+# (program_state.json, chain-history/, reports/weekly/); root owns
 # exports/.git — created and pushed by the host's root cron,
 # ops/backup-exports.sh — and exports/ itself. Neither side re-owns the
 # other's. This used to chown -R the whole tree on every start, which
@@ -24,6 +24,11 @@
 # nobody's watching. See #237.
 #
 # So: never chown exports/ itself, never touch anything under .git/.
+#
+# The market-data cache (9b) is a SEPARATE bind mount, /app/cache, outside
+# exports/: it holds the raw option-chain payload (~13 MB of vendor data),
+# which must never ride the offsite backup. It has no .git and no root-side
+# writer, so it is simply handed to appuser whole.
 # appuser instead gets access via the GROUP bit — chgrp (not chown)
 # leaves the owner/uid untouched, so it's invisible to git's owner-based
 # check — plus the sticky bit, so having group-write doesn't hand
@@ -43,6 +48,7 @@ set -eu
 # inside an actual container, not on a dev machine or in CI. Default
 # unchanged.
 EXPORTS_DIR="${DELTADEWA_EXPORTS_DIR:-/app/exports}"
+CACHE_DIR="${DELTADEWA_CACHE_ROOT:-/app/cache}"
 
 if [ "$(id -u)" = "0" ]; then
     mkdir -p "${EXPORTS_DIR}"
@@ -53,6 +59,9 @@ if [ "$(id -u)" = "0" ]; then
 
     find "${EXPORTS_DIR}" -mindepth 1 -maxdepth 1 ! -name .git \
         -exec chown -R appuser:appuser {} +
+
+    mkdir -p "${CACHE_DIR}"
+    chown -R appuser:appuser "${CACHE_DIR}"
 
     exec runuser -u appuser -- "$@"
 fi

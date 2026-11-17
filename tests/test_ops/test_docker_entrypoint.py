@@ -90,6 +90,7 @@ def _run_entrypoint(
     *,
     root: bool,
     command: list[str],
+    cache_dir: Path | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     fakebin = _fake_bin_dir(tmp_path, root=root)
     log = tmp_path / "fakebin.log"
@@ -97,6 +98,7 @@ def _run_entrypoint(
         "PATH": f"{fakebin}:/usr/bin:/bin",
         "FAKEBIN_LOG": str(log),
         "DELTADEWA_EXPORTS_DIR": str(exports_dir),
+        "DELTADEWA_CACHE_ROOT": str(cache_dir or tmp_path / "cache"),
     }
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true]
         [_SH, str(_SCRIPT), *command],
@@ -115,13 +117,78 @@ def _seeded_exports_dir(tmp_path: Path) -> Path:
     git_dir.mkdir(parents=True)
     (git_dir / "config").write_text("[core]\n")
     (exports / "program_state.json").write_text('{"positions": []}')
-    marketdata_cache = exports / "marketdata-cache"
-    marketdata_cache.mkdir()
-    (marketdata_cache / "vix.json").write_text("{}")
+    chain_history = exports / "chain-history"
+    chain_history.mkdir()
+    (chain_history / "SPX-2026.jsonl").write_text("{}\n")
     reports = exports / "reports"
     reports.mkdir()
     (reports / "digest-2026-08-05.md").write_text("# Weekly Digest\n")
     return exports
+
+
+class TestEntrypointCacheMount:
+    """9b: the market-data cache is its own mount, outside exports/."""
+
+    def test_cache_dir_is_created_and_handed_to_appuser_whole(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        exports = _seeded_exports_dir(tmp_path)
+        cache = tmp_path / "the-cache"
+
+        result, log = _run_entrypoint(
+            tmp_path,
+            exports,
+            root=True,
+            command=_marker_command(tmp_path / "ran.marker"),
+            cache_dir=cache,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert cache.is_dir()
+        assert f"chown -R appuser:appuser {cache}" in log.read_text()
+
+    def test_the_cache_is_never_chowned_as_part_of_exports(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """exports/ children are chowned one by one; the cache is not one."""
+        exports = _seeded_exports_dir(tmp_path)
+        cache = tmp_path / "the-cache"
+
+        _, log = _run_entrypoint(
+            tmp_path,
+            exports,
+            root=True,
+            command=_marker_command(tmp_path / "ran.marker"),
+            cache_dir=cache,
+        )
+
+        exports_lines = [
+            line
+            for line in log.read_text().splitlines()
+            if line.startswith("chown") and str(exports) in line
+        ]
+        assert not any(str(cache) in line for line in exports_lines)
+
+    def test_a_non_root_start_does_not_touch_the_cache(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        exports = _seeded_exports_dir(tmp_path)
+        cache = tmp_path / "the-cache"
+
+        result, log = _run_entrypoint(
+            tmp_path,
+            exports,
+            root=False,
+            command=_marker_command(tmp_path / "ran.marker"),
+            cache_dir=cache,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert not cache.exists()
+        assert not log.exists() or "chown" not in log.read_text()
 
 
 class TestEntrypointOwnershipScope:
@@ -161,7 +228,7 @@ class TestEntrypointOwnershipScope:
         chown_lines = "\n".join(
             line for line in log_text.splitlines() if line.startswith("chown")
         )
-        for name in ("program_state.json", "marketdata-cache", "reports"):
+        for name in ("program_state.json", "chain-history", "reports"):
             assert name in chown_lines, chown_lines
 
     def test_exports_dir_itself_is_chgrpped_not_chowned(
