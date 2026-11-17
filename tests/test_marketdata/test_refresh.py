@@ -21,6 +21,7 @@ from deltadewa.marketdata import (
 from deltadewa.marketdata import cboe_fred_provider as _cfp_module
 from deltadewa.marketdata import refresh as refresh_module
 from deltadewa.marketdata.refresh import main, refresh_all, verify_read_back
+from tests.chain_builders import standard_chain
 
 
 class _IncrementingClock:
@@ -68,6 +69,7 @@ _SKEW_CSV = (
     )
     + "\n"
 )
+_DGS1_CSV = "observation_date,DGS1\n2026-11-12,4.55\n2026-11-13,4.60\n"
 _VIXCLS_CSV = (
     "observation_date,VIXCLS\n"
     + "\n".join(f"2026-{(i % 12) + 1:02d}-01,{12.0 + i}" for i in range(10))
@@ -101,8 +103,15 @@ def _dispatching_session(
         for needle in fail_url_substrings:
             if needle in url:
                 raise requests.ConnectionError(f"offline: {needle}")
+        if "delayed_quotes" in url:
+            chain = MagicMock()
+            chain.raise_for_status = MagicMock()
+            chain.json.return_value = standard_chain()
+            return chain
         if "fred.stlouisfed.org" in urlparse(url).netloc:
-            return _mock_response(_VIXCLS_CSV)
+            return _mock_response(
+                _DGS1_CSV if "id=DGS1" in url else _VIXCLS_CSV,
+            )
         if "SPX_History.csv" in url:
             return _mock_response(_SPX_CSV)
         if "SKEW_History.csv" in url:
@@ -784,3 +793,362 @@ class TestMainUnexpectedFailure:
 
         assert exit_code == 2
         mock_ping.assert_not_called()
+
+
+_EXAMPLE_IPS = Path(__file__).parents[2] / "config" / "ips.example.yaml"
+
+
+def _factory(session: MagicMock):
+    """Stand in for ``CboeFredProvider(...)`` with the fake session wired."""
+
+    def build(**kwargs: Any) -> CboeFredProvider:
+        return CboeFredProvider(session=session, **kwargs)
+
+    return build
+
+
+def _ips_without_feed(tmp_path: Path) -> Path:
+    """The shipped example, minus its ``pricing_feed`` section."""
+    text = _EXAMPLE_IPS.read_text()
+    kept = text[: text.index("# Fetched pricing inputs (9b).")]
+    path = tmp_path / "ips-no-feed.yaml"
+    path.write_text(kept)
+    return path
+
+
+class TestPricingFeedSeries:
+    """The chain and the rate join the run only with a pricing_feed section."""
+
+    def test_no_rate_series_means_the_six_readings_only(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+
+        live, total = refresh_all(writer, "SPX")
+
+        assert total == 6
+        assert {"chain", "rate"}.isdisjoint(live)
+        assert not (tmp_path / "chain_SPX.json").exists()
+
+    def test_a_rate_series_adds_the_chain_and_the_rate(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+
+        live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+
+        assert (len(live), total) == (8, 8)
+        assert {"chain", "rate"} <= set(live)
+        assert (tmp_path / "chain_SPX.json").exists()
+        assert (tmp_path / "rate_DGS1.json").exists()
+
+    def test_a_chain_failure_leaves_every_other_series_alone(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(
+                fail_url_substrings=frozenset({"delayed_quotes"}),
+            ),
+        )
+
+        with caplog.at_level(logging.WARNING):
+            live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+
+        assert total == 8
+        assert "chain" not in live
+        assert len(live) == 7
+        assert "chain: FAILED" in caplog.text
+
+    def test_a_rate_failure_leaves_the_chain_alone(
+        self, tmp_path: Path
+    ) -> None:
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(
+                fail_url_substrings=frozenset({"id=DGS1"}),
+            ),
+        )
+
+        live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+
+        assert total == 8
+        assert "chain" in live
+        assert "rate" not in live
+
+    def test_an_unparseable_chain_is_a_failed_series_not_a_crash(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        session = _dispatching_session()
+        real_get = session.get.side_effect
+
+        def broken_chain(url: str, timeout: int) -> MagicMock:
+            if "delayed_quotes" in url:
+                response = MagicMock()
+                response.raise_for_status = MagicMock()
+                response.json.return_value = {"data": {}}
+                return response
+            return real_get(url, timeout)
+
+        session.get.side_effect = broken_chain
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=session,
+        )
+
+        live, total = refresh_all(writer, "SPX", rate_series="DGS1")
+
+        assert total == 8
+        assert "chain" not in live
+        assert not (tmp_path / "chain_SPX.json").exists()
+
+    def test_read_back_verifies_the_chain_and_the_rate(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        writer = CboeFredProvider(
+            cache_dir=tmp_path,
+            force_fetch=True,
+            session=_dispatching_session(),
+        )
+        live, _ = refresh_all(writer, "SPX", rate_series="DGS1")
+
+        verified = verify_read_back(
+            tmp_path,
+            "SPX",
+            live,
+            rate_series="DGS1",
+        )
+
+        assert {"chain", "rate"} <= set(verified)
+        assert len(verified) == len(live)
+
+
+class TestMainPricingFeed:
+    """main() with and without the ips.yaml pricing_feed section."""
+
+    def _run(
+        self,
+        tmp_path: Path,
+        ips: Path,
+        *extra: str,
+    ) -> int:
+        session = _dispatching_session()
+        with patch.object(
+            refresh_module,
+            "CboeFredProvider",
+            side_effect=_factory(session),
+        ):
+            return main(
+                [
+                    "--cache-dir",
+                    str(tmp_path / "cache"),
+                    "--ips-path",
+                    str(ips),
+                    "--exports-dir",
+                    str(tmp_path / "exports"),
+                    *extra,
+                ],
+            )
+
+    def test_with_the_section_all_eight_series_refresh_and_record_history(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        (tmp_path / "exports").mkdir()
+        (tmp_path / "exports" / "program_state.json").write_text(
+            json.dumps(
+                {
+                    "positions": [
+                        {
+                            "option_type": "PUT",
+                            "strike_price": 4000.0,
+                            "maturity_date": "2027-12-17T00:00:00",
+                        },
+                    ],
+                },
+            ),
+        )
+
+        exit_code = self._run(tmp_path, _EXAMPLE_IPS)
+
+        assert exit_code == 0
+        history = tmp_path / "exports" / "chain-history" / "SPX-2026.jsonl"
+        kinds = {
+            json.loads(line)["kind"]
+            for line in history.read_text().splitlines()
+        }
+        assert kinds == {"held", "market"}
+        manifest = json.loads(
+            (tmp_path / "cache" / CACHE_MANIFEST_FILENAME).read_text(),
+        )
+        assert {"chain", "rate"} <= set(manifest["series"])
+
+    def test_a_second_run_does_not_duplicate_the_days_rows(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        self._run(tmp_path, _EXAMPLE_IPS)
+        history = tmp_path / "exports" / "chain-history" / "SPX-2026.jsonl"
+        first = history.read_text()
+
+        assert self._run(tmp_path, _EXAMPLE_IPS) == 0
+        assert history.read_text() == first
+
+    def test_without_the_section_nothing_new_is_fetched_or_written(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        exit_code = self._run(tmp_path, _ips_without_feed(tmp_path))
+
+        assert exit_code == 0
+        assert not (tmp_path / "cache" / "chain_SPX.json").exists()
+        assert not (tmp_path / "cache" / "rate_DGS1.json").exists()
+        assert not (tmp_path / "exports" / "chain-history").exists()
+
+    def test_an_unreadable_book_costs_only_the_held_rows(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """No program_state.json: the market points are still recorded."""
+        exit_code = self._run(tmp_path, _EXAMPLE_IPS)
+
+        history = tmp_path / "exports" / "chain-history" / "SPX-2026.jsonl"
+        kinds = {
+            json.loads(line)["kind"]
+            for line in history.read_text().splitlines()
+        }
+        assert exit_code == 0
+        assert kinds == {"market"}
+
+    def test_a_history_failure_never_changes_the_exit_code(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """An exports path that cannot be a directory: logged, exit 0."""
+        blocker = tmp_path / "exports"
+        blocker.write_text("a file, not a directory")
+
+        with caplog.at_level(logging.WARNING):
+            exit_code = self._run(tmp_path, _EXAMPLE_IPS)
+
+        assert exit_code == 0
+        assert "chain history" in caplog.text
+
+    def test_a_chain_failure_is_a_partial_run_that_still_pings(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        session = _dispatching_session(
+            fail_url_substrings=frozenset({"delayed_quotes"}),
+        )
+        with (
+            patch.object(
+                refresh_module,
+                "CboeFredProvider",
+                side_effect=_factory(session),
+            ),
+            patch.object(refresh_module, "ping") as ping,
+        ):
+            exit_code = main(
+                [
+                    "--cache-dir",
+                    str(tmp_path / "cache"),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS),
+                    "--exports-dir",
+                    str(tmp_path / "exports"),
+                ],
+            )
+
+        assert exit_code == 1
+        ping.assert_called_once()
+        assert not (tmp_path / "exports" / "chain-history").exists()
+
+
+class TestSymbolFromPolicy:
+    """#509: the job warms the key the app reads."""
+
+    def test_the_symbol_defaults_to_the_policys_instrument(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ips = tmp_path / "ips.yaml"
+        ips.write_text(
+            _EXAMPLE_IPS.read_text().replace(
+                "instrument: SPX ",
+                "instrument: XSP ",
+                1,
+            ),
+        )
+        with patch.object(
+            refresh_module,
+            "refresh_all",
+            return_value=({}, 6),
+        ) as refresh:
+            main(
+                [
+                    "--cache-dir",
+                    str(tmp_path),
+                    "--ips-path",
+                    str(ips),
+                ],
+            )
+
+        assert refresh.call_args.args[1] == "XSP"
+
+    def test_an_explicit_symbol_wins(self, tmp_path: Path) -> None:
+        with patch.object(
+            refresh_module,
+            "refresh_all",
+            return_value=({}, 6),
+        ) as refresh:
+            main(
+                [
+                    "--cache-dir",
+                    str(tmp_path),
+                    "--ips-path",
+                    str(_EXAMPLE_IPS),
+                    "--symbol",
+                    "NDX",
+                ],
+            )
+
+        assert refresh.call_args.args[1] == "NDX"
+
+    def test_without_a_policy_file_the_default_is_spx(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        with patch.object(
+            refresh_module,
+            "refresh_all",
+            return_value=({}, 6),
+        ) as refresh:
+            main(
+                [
+                    "--cache-dir",
+                    str(tmp_path),
+                    "--ips-path",
+                    str(tmp_path / "missing.yaml"),
+                ],
+            )
+
+        assert refresh.call_args.args[1] == "SPX"

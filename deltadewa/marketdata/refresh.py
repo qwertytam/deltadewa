@@ -2,7 +2,7 @@
 
 Usage::
 
-    python -m deltadewa.marketdata.refresh [--symbol SPX]
+    python -m deltadewa.marketdata.refresh [--symbol SPX] [--exports-dir DIR]
 
 The only process in the deployment permitted to make a live market-data
 fetch — the Dash app is constructed with ``read_only=True``
@@ -74,6 +74,15 @@ this job ran — a Saturday run fetching Friday's close reports
 ``Observation`` level (``deltadewa.marketdata.Observation``); it's called
 out here because once this job runs daily, "the banner's as_of is a day or
 more behind fetched_at" becomes the routine case rather than a rare one.
+
+**The pricing feed (9b).** When ``ips.yaml`` has a ``pricing_feed`` section,
+two more series join the run: ``chain`` (Cboe's delayed SPX option chain,
+about 13 MB, cached raw in the cache folder) and ``rate`` (the FRED series
+the policy names). With no section neither is fetched and the run, its
+total and its exit code are exactly what they were. After a live chain
+fetch the job also appends a small daily record to
+``<exports-dir>/chain-history/`` (``deltadewa.marketdata.chain_history``);
+that step is logged and never changes the exit code.
 """
 
 from __future__ import annotations
@@ -101,16 +110,24 @@ from deltadewa.marketdata import (
     resolve_data_ttl,
     write_cache_manifest,
 )
+from deltadewa.marketdata.chain_history import (
+    append_daily_record,
+    read_held_contracts,
+)
 
 if TYPE_CHECKING:
     from datetime import datetime
 
     from deltadewa.marketdata import MarketDataProvider
+    from deltadewa.marketdata.chain_history import HeldContract
 
 _logger = logging.getLogger(__name__)
 
 _DEFAULT_SYMBOL = "SPX"
 _DEFAULT_IPS_PATH = Path("config/ips.yaml")
+_DEFAULT_EXPORTS_DIR = Path("exports")
+_BOOK_FILENAME = "program_state.json"
+_CHAIN_HISTORY_DIRNAME = "chain-history"
 _HEARTBEAT_ENV_VAR = "REFRESH_HEARTBEAT_URL"
 
 _EXIT_OK: Final[int] = 0
@@ -124,6 +141,7 @@ def _series(
     symbol: str,
     *,
     skew_lookback_days: int,
+    rate_series: str | None = None,
 ) -> list[tuple[str, Callable[[], Observation[Any]]]]:
     """List the (name, fetch) pairs the app depends on, in fetch order.
 
@@ -137,6 +155,11 @@ def _series(
     Five of the six mirror exactly the calls ``assess_market_environment``
     makes (``vix``, ``vix_term_structure``, ``skew_index``,
     ``skew_percentile``) plus ``vix_history`` (``analysis.health``).
+
+    *rate_series* is the ``pricing_feed.rate_series`` policy value, or
+    ``None`` when ips.yaml has no ``pricing_feed`` section. Only when it is
+    set do ``chain`` and ``rate`` join the list (9b): without the section
+    nothing is fetched beyond the six readings below.
 
     ``spot`` was the exception until #336: fetched here since before #279,
     but read by nothing once #279 deleted its old consumer,
@@ -163,7 +186,7 @@ def _series(
     where the second call was a same-run cache hit and no second request
     went out.
     """
-    return [
+    series: list[tuple[str, Callable[[], Observation[Any]]]] = [
         ("vix", provider.get_vix),
         ("vix_history", provider.get_vix_history),
         ("vix_term_structure", provider.get_vix_term_structure),
@@ -174,6 +197,10 @@ def _series(
         ),
         ("spot", lambda: provider.get_spot(symbol)),
     ]
+    if rate_series is not None:
+        series.append(("chain", lambda: provider.get_option_chain(symbol)))
+        series.append(("rate", lambda: provider.get_rate(rate_series)))
+    return series
 
 
 def refresh_all(
@@ -181,6 +208,7 @@ def refresh_all(
     symbol: str,
     *,
     skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS,
+    rate_series: str | None = None,
 ) -> tuple[dict[str, datetime], int]:
     """Refresh every series the app depends on, independently.
 
@@ -199,6 +227,8 @@ def refresh_all(
         symbol: Underlying symbol to warm the spot cache for.
         skew_lookback_days: The IPS skew-percentile window; see
             ``_series``.
+        rate_series: The ``pricing_feed.rate_series`` policy value, or
+            ``None`` for no pricing feed; see ``_series``.
 
     Returns:
         ``(live, total)`` — ``live`` maps each series name that fetched
@@ -210,6 +240,7 @@ def refresh_all(
         provider,
         symbol,
         skew_lookback_days=skew_lookback_days,
+        rate_series=rate_series,
     )
     live: dict[str, datetime] = {}
     for name, fetch in series:
@@ -244,6 +275,7 @@ def verify_read_back(
     live: Mapping[str, datetime],
     *,
     skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS,
+    rate_series: str | None = None,
 ) -> tuple[str, ...]:
     """Confirm each just-refreshed series reads back through the app's own path.
 
@@ -273,6 +305,8 @@ def verify_read_back(
         symbol: Underlying symbol, for the ``spot`` series.
         skew_lookback_days: The IPS skew-percentile window; see
             ``_series``.
+        rate_series: The ``pricing_feed.rate_series`` policy value, or
+            ``None``; see ``_series``.
         live: The series names and ``fetched_at`` timestamps
             ``refresh_all`` reported as freshly written.
 
@@ -286,7 +320,12 @@ def verify_read_back(
 
     reader = CboeFredProvider(cache_dir=cache_dir, read_only=True)
     fetch_by_name = dict(
-        _series(reader, symbol, skew_lookback_days=skew_lookback_days),
+        _series(
+            reader,
+            symbol,
+            skew_lookback_days=skew_lookback_days,
+            rate_series=rate_series,
+        ),
     )
 
     verified: list[str] = []
@@ -330,8 +369,13 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--symbol",
-        default=_DEFAULT_SYMBOL,
-        help=f"Underlying to warm spot cache for (default: {_DEFAULT_SYMBOL})",
+        default=None,
+        help=(
+            "Underlying to warm the spot (and chain) cache for. Default: "
+            "the policy file's program.instrument, so the job warms the "
+            "key the app reads (#509); "
+            f"{_DEFAULT_SYMBOL} if the policy cannot be loaded."
+        ),
     )
     parser.add_argument(
         "--ips-path",
@@ -352,7 +396,73 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
             "resolution the app itself uses, so they agree by construction."
         ),
     )
+    parser.add_argument(
+        "--exports-dir",
+        type=Path,
+        default=_DEFAULT_EXPORTS_DIR,
+        help=(
+            "The exports directory: read for the book's held options and "
+            "written for the daily chain record, only when ips.yaml has a "
+            f"pricing_feed section (default: {_DEFAULT_EXPORTS_DIR})."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def record_chain_history(
+    cache_dir: Path,
+    symbol: str,
+    exports_dir: Path,
+) -> int:
+    """Append the day's chain record; never raises and never fails the run.
+
+    Reads the chain back from the cache through a read-only provider (the
+    one just written), and the book's held options from
+    ``<exports_dir>/program_state.json``. A book that cannot be read costs
+    only the ``held`` rows.
+
+    Args:
+        cache_dir: The resolved cache directory the writer just used.
+        symbol: The underlying whose chain was fetched.
+        exports_dir: The exports directory.
+
+    Returns:
+        The number of rows written (``0`` if already recorded, or on any
+        failure, which is logged).
+
+    """
+    try:
+        snapshot = (
+            CboeFredProvider(
+                cache_dir=cache_dir,
+                read_only=True,
+            )
+            .get_option_chain(symbol)
+            .value
+        )
+        held: tuple[HeldContract, ...] | None
+        try:
+            held = read_held_contracts(exports_dir / _BOOK_FILENAME)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            _logger.warning(
+                "chain history: could not read the book, recording market "
+                "points only: %s",
+                exc,
+            )
+            held = None
+        written = append_daily_record(
+            snapshot,
+            held,
+            exports_dir / _CHAIN_HISTORY_DIRNAME,
+        )
+    except Exception:  # pylint: disable=broad-exception-caught
+        # Same contain-everything contract as main()'s own guard: this is a
+        # best-effort record, and it must never turn a good refresh into a
+        # failed one or skip the manifest and heartbeat that follow it.
+        _logger.exception("chain history: could not record today's chain")
+        return 0
+    _logger.info("chain history: %d rows written", written)
+    return written
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -385,6 +495,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     cache_dir = (
         args.cache_dir if args.cache_dir is not None else default_cache_dir()
     )
+    symbol: str = (
+        args.symbol
+        if args.symbol is not None
+        else (
+            ips_config.program.instrument
+            if ips_config is not None
+            else _DEFAULT_SYMBOL
+        )
+    )
+    rate_series = (
+        ips_config.pricing_feed.rate_series
+        if ips_config is not None and ips_config.pricing_feed is not None
+        else None
+    )
 
     try:
         provider = CboeFredProvider(
@@ -406,16 +530,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         live, total = refresh_all(
             provider,
-            args.symbol,
+            symbol,
             skew_lookback_days=skew_lookback_days,
+            rate_series=rate_series,
         )
         _logger.info("Fetched %d/%d series live", len(live), total)
 
         verified = verify_read_back(
             cache_dir,
-            args.symbol,
+            symbol,
             live,
             skew_lookback_days=skew_lookback_days,
+            rate_series=rate_series,
         )
         _logger.info(
             "Verified %d/%d fetched series read back through the app's "
@@ -440,6 +566,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             file=sys.stderr,
         )
         return _EXIT_FETCH_FAILED
+
+    if "chain" in verified:
+        record_chain_history(cache_dir, symbol, args.exports_dir)
 
     try:
         write_cache_manifest(cache_dir, live)

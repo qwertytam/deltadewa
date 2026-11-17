@@ -25,6 +25,7 @@ from deltadewa.constants import OptionType
 from deltadewa.marketdata.chain import MatchFlag
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Sequence
     from datetime import date
 
     from deltadewa.ips_config import IpsConfig, IpsPricingFeed
@@ -188,7 +189,7 @@ def rung_readings(  # pylint: disable=too-many-arguments
         if not expiries:
             readings.append(_absent(label, snapshot))
             continue
-        expiry = min(expiries, key=lambda day: abs((day - target).days))
+        expiry = _nearest_expiry(expiries, target)
         strikes = snapshot.listed_strikes(
             expiry=expiry,
             option_type=OptionType.PUT,
@@ -197,7 +198,7 @@ def rung_readings(  # pylint: disable=too-many-arguments
             readings.append(_absent(label, snapshot))
             continue
         wanted = snapshot.spot * (1.0 - rung.pct_otm / 100.0)
-        strike = min(strikes, key=lambda listed: abs(listed - wanted))
+        strike = min(strikes, key=_distance_to(wanted))
         readings.append(
             read_contract(
                 snapshot,
@@ -213,6 +214,16 @@ def rung_readings(  # pylint: disable=too-many-arguments
             ),
         )
     return tuple(readings)
+
+
+def _nearest_expiry(expiries: Sequence[date], target: date) -> date:
+    """Return the listed expiry closest to *target*."""
+    return min(expiries, key=lambda day: abs((day - target).days))
+
+
+def _distance_to(wanted: float) -> Callable[[float], float]:
+    """Return a sort key: how far a strike is from *wanted*."""
+    return lambda listed: abs(listed - wanted)
 
 
 def _absent(label: str, snapshot: ChainSnapshot) -> ChainReading:

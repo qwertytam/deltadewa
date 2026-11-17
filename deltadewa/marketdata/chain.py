@@ -387,8 +387,6 @@ def parse_cboe_chain(payload: Mapping[str, Any]) -> ChainSnapshot:
             if quote is not None
         )
         underlying = str(payload.get("symbol", ""))
-    except MarketDataError:
-        raise
     except (KeyError, TypeError, ValueError, AttributeError) as exc:
         raise MarketDataError(
             f"unreadable option-chain payload: {exc}",
