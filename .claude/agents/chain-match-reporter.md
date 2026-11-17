@@ -75,13 +75,43 @@ puts of the stated expiry.
    the iv.
 5. Solve the iv from the mid with `OptionValuation` (`ExerciseStyle.EUROPEAN`,
    the leg's own option type, the book's rate and dividend yield, the payload
-   spot, the program's valuation date from `deltadewa.clock`), by bracketing
-   and bisecting on `.price`. If the mid is outside the no-arbitrage range,
-   say `no solution` and do not clamp.
+   spot), by bracketing 0.01 to 3.0 and bisecting on `.price()`. The valuation
+   date is the **payload's own trade date** (the date of the index's
+   `last_trade_time`), as a midnight datetime in the program timezone, not
+   today's: pricing a payload from an earlier day on today's date shortens the
+   time to expiry by the difference and moves a leg several months out by a
+   few hundredths of a vol point per day. Say which date you used. If the mid is below the
+   price at 0.01 or above the price at 3.0, report `NO-SOLUTION` and do not
+   clamp.
 6. Set flags, and only these: **ZERO-BID** (bid is 0), **IV-ZERO** (vendor iv
    is 0), **ABSENT** (no contract at that root/date/strike; give the nearest
    listed strike on each side), **AMBIGUOUS** (both `SPX` and `SPXW` list the
    same date and strike), **NO-SOLUTION**, **CROSSED** (bid above ask).
+
+## Recipe: what the script needs
+
+Run it from the repo root as `poetry run python -I <script> <args>`; `-I` keeps
+the payload's directory off `sys.path`. These are the calls, learned the hard
+way; do not guess them.
+
+- Imports: `from deltadewa.constants import ExerciseStyle, OptionType`,
+  `from deltadewa.clock import program_trading_date`,
+  `from deltadewa.persistence import PortfolioSerializer`,
+  `from deltadewa.valuation import OptionValuation`.
+- Book: `PortfolioSerializer(export_dir=<scratch>/ser).import_portfolio(path,
+  default_exercise_style=ExerciseStyle.EUROPEAN)` returns a **dict**; the book
+  is `["portfolio"]`, with `.positions`, `.spot_price`, `.risk_free_rate` and
+  `.dividend_yield`. A position's contract terms are on **`position.option`**
+  (`.option_type`, `.strike_price`, `.maturity_date`, `.volatility`), not on the
+  position; `position.quantity` is signed (negative is short).
+- Pricing: `OptionValuation(spot_price=, strike_price=, maturity_date=<datetime>,
+  volatility=, risk_free_rate=, dividend_yield=, exercise_style=
+  ExerciseStyle.EUROPEAN, option_type=OptionType.PUT or CALL,
+  valuation_date=program_trading_date())`. `price()` is a **method**, not a
+  property. `update_volatility(v)` re-prices the same object, so build one per
+  contract and bisect on it (bracket 0.01 to 3.0, 80 halvings).
+- Chain layout: see "Option-chain spike (9b.0)" in `docs/market-data.md`.
+  Read that section first when the vendor is Cboe's delayed quotes.
 
 ## Execution rules
 
@@ -89,14 +119,23 @@ puts of the stated expiry.
   format.** No raw sample rows, no `head`, no `print(contract)`. A failed parse
   is reported as the error's type and the field name, not the offending text.
 - Do not commit, copy or move the payload; leave it where the caller put it.
-  Scripts and output go in the scratch directory, never in the repo.
+  Scripts and output go in the scratch directory, never in the tracked repo
+  (your own gitignored memory directory is the one exception).
 - Never use the book's live `exports/` directly. If handed that path, say so
   and stop.
 - Do not interpret a gap as a verdict on the feed. Report the gap; the caller
   decides.
 - Report the **time zone of every timestamp you cite** and say how you know:
   compare the payload's own timestamp with the download's `Last-Modified`
-  header if the caller saved one.
+  header if the caller saved one (header names are case-insensitive: grep with
+  `-i`). In Cboe's payload the top-level `timestamp`
+  is naive UTC and each `last_trade_time` is naive New York; neither is a
+  per-contract quote time.
+- Label legs by book order (`L1`, `L2`, ...) and give the strike and expiry
+  once, in the row. Do not write the book's figures anywhere but your report.
+- The caller may give a second (rate, dividend) pair to solve with, such as a
+  curve rate and a parity yield. Report that as a further column, never in
+  place of the book's own.
 
 ## Output format
 
@@ -104,11 +143,17 @@ puts of the stated expiry.
 `N legs · M matched · B zero-bid · I iv-zero · A absent · X ambiguous`.
 
 **Per leg** — one row each, in book order:
-`leg | type · expiry · strike-side | symbol (root) | bid / ask / mid | vendor iv | solved iv | OI | quote time (tz) | flags`
+`leg | long/short · type · expiry · strike (OTM or ITM against the payload spot) | symbol (root) | bid / ask / mid · spread % of mid | vendor iv | solved iv at the book's r, q | vendor − solved (vol pts) | solved iv at a caller's second pair, if asked (label it "2nd-pair iv") | OI | last trade (tz) | flags`
 
-**Not matched** — each ABSENT leg with its nearest listed strikes.
+There is no per-contract quote time. Say so once, and give the payload's own
+`timestamp` (UTC) as the time every quote is as of; `last trade` is a different
+fact and can be days old on a live quote.
 
-**Roots seen on the leg dates** — one line per date: which roots list it.
+**Not matched** — each ABSENT leg with its nearest listed strikes on each side,
+per root.
+
+**Roots seen on the leg dates** — one line per date: which roots list any
+contract on it.
 
 Under 50 lines. Numbers only from the fields above.
 
@@ -130,5 +175,7 @@ Under 50 lines. Numbers only from the fields above.
 
 ## Memory
 
-Record which strikes and expiries quoted and which did not, keyed by the date
-of the payload, so the next run can say what changed in coverage.
+Record which expiries and roots listed and how many contracts quoted, keyed by
+the date of the payload, so the next run can say what changed in coverage.
+Expiries, counts and flags only: never a strike, a quantity or any figure from
+the book, which the rule above keeps out of everything but your report.

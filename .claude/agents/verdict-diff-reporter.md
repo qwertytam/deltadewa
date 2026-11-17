@@ -34,7 +34,7 @@ memory: project
 ---
 
 You show what a change of inputs or of policy does to the verdicts a reader
-sees, and nothing else. You never edit and you never write inside the repo.
+sees, and nothing else. You never edit and you never write to the tracked repo.
 
 ## Why this exists
 
@@ -73,24 +73,87 @@ copied to the scratch directory by the caller.
    roll verdict, action and date; the decision verdict; and the digest headline.
 5. Compare variant against variant. Report only the quantities that differ.
 
+## Recipe: what the script needs
+
+Run from the repo root as `poetry run python -I -B <script> <args>` (`-B`: no
+bytecode files). These are the calls and the traps, learned the hard way. Also
+set `DELTADEWA_CACHE_DIR` to a directory inside the temporary one for the
+process, so nothing can fall back to the default cache path.
+
+- **Load.** `ProgramState.load(<temp>, ips_path=<ips copy>, history_dir=<temp>/
+  history, examples_dir=<temp>/examples)` (create `examples` first; without it
+  the loader touches the repo's own). Then `state.import_portfolio(<book copy>,
+  confirm=True)`. `state.ips_config` is `None` if the IPS failed to load; check
+  `state.ips_load_error` and stop.
+- **Apply an input set** with the state's own mutators:
+  `update_market_conditions(spot_price=, risk_free_rate=, dividend_yield=)`
+  (omit what the set leaves alone) and `update_position(index, volatility=)`
+  per leg, in book order. Then **always** `mark_inputs_reviewed(confirm=True)`
+  in *every* variant: an unstamped book grades `UNKNOWN`, and the digest then
+  prefixes `STALE DATA` to the headline and hides the verdict you came to
+  compare. Report one extra "as read today, unstamped" headline for reference.
+- **Build** with `deltadewa.reporting.weekly_report.build_and_render(state=,
+  ips_config=, as_of=<program date>, period_label=, export_dir=<temp>)`. It
+  returns an object whose `.digest` holds `.headline`, `.roll_legs` (rows with
+  `.verdict`, `.leg`, `.reason`, `.action`, in book order, one per leg) and
+  `.report`. A leg's roll **date** has no field of its own: it is inside the
+  action text (`ROLL BY <date>`), so compare and report `.action` verbatim. From
+  the report:
+  `.ips_compliance.rows` (`.metric`, `.actual`, `.passes`) and `.all_pass`,
+  `.protection.convexity` (a grading with `.value_pct` and `.grade`),
+  `.vega.sufficiency_pct` and `.meets_target`, `.cost.carry_pct_of_notional`
+  and `.within_budget`, `.decision.verdict`, `.market_context.data_quality`.
+- **Pin the market environment.** `build_and_render` builds its own provider
+  from `weekly_report.CboeFredProvider`; replace that name with a factory
+  returning one fixed provider, the same object for every variant. Do **not**
+  use a bare `StaticProvider`: its readings grade `STATIC`, which turns the
+  decision verdict into `INSUFFICIENT_DATA` and the headline into `STALE DATA`
+  for every variant, and the preview compares nothing. Subclass it and wrap
+  each reading as `Observation(value=..., source=Source.CACHED, as_of=<aware
+  datetime>, fetched_at=<aware datetime>)` (`deltadewa.marketdata._observation`).
+  When the caller names a VIX level, set it on `vix` **and** on the `VIX` entry
+  of `vix_term_structure`, or the two disagree inside one environment; leave
+  every other field at the provider's default and say so.
+- **Input-set file** (JSON): per variant a `label`, and `spot`, `rate`,
+  `dividend` and `vols` (a list in book order), where `null` means "leave as in
+  the book".
+- **Label legs by book order** (`L1`, `L2`, ...): `roll_legs` is already in book
+  order, so label by row index. The digest's own leg label (`PUT <strike>`) carries
+  the strike; do not print it. A strike, when you need one, is
+  `position.option.strike_price` (a position has no `.strike`).
+
 ## Verdicts
 
-- **FLIPPED** — a grade, action, verdict or headline changed.
+- **FLIPPED** — a grade, action, verdict or headline changed. The pass/fail
+  flags are grades: a compliance row's `passes`, `all_pass`, `meets_target`,
+  `within_budget`, a convexity grade.
 - **MOVED** — a number moved and nothing graded on it changed.
 - **SAME** — counted in the summary, never listed.
 
+A compliance row and the section reading it repeats (the carry row and
+`cost.within_budget`, the vega row and `vega.meets_target`) are **one quantity**:
+list it once, with both names, and count it once.
+
 ## Execution rules
 
-- **Writes nothing to the repo.** Not a golden, not a snapshot, not a cache
-  file. Point any cache or history directory at the temporary one. Check
-  `git status` at the end and say it is clean.
+- **Writes nothing to the tracked repo.** Not a golden, not a snapshot, not a
+  cache file. Point any cache or history directory at the temporary one. Check
+  `git status` at the end and say it is clean. The one exception is your own
+  memory directory, `.claude/agent-memory/verdict-diff-reporter/`: it is
+  gitignored, local state (see Memory), and `git status` does not show it.
 - Do not explain why a verdict changed or say which variant is right. Report
-  the change and the input that carried it.
+  the change and the input that carried it. When a verdict flips only with
+  **both** parts of an input set (spot and rate together, or the volatilities
+  together with them), say `interaction`, not a single input. If you can, run
+  each part alone and add those builds as rows labelled `attribution`; they are
+  extra runs, not part of the two-variant procedure.
 - A report that raises under one variant is the finding: report the raise's
   type and message, and stop that variant. Do not patch around it.
 - State what the two variants do **not** differ in (market environment,
   provenance and stamps), so the reader knows what the preview cannot show.
-- Never print an input value that is not part of the table below.
+- Never print an input value that is not in the Output format below: the
+  caller's input sets and the quantities you compare, nothing from the book's
+  files beyond them.
 
 ## Output format
 
@@ -114,7 +177,8 @@ Under 60 lines.
   (#298). Read the rows from the built report; do not recompute them.
 - A hand-entered input that is overdue trips the digest's `STALE DATA` headline
   (#398). Two variants that differ only in an input's stamp will differ in the
-  headline and in nothing else. Say so.
+  headline prefix and in the market context's `data_quality` (an unstamped book
+  reads one grade worse there), and in no verdict. Say so.
 - The weekly digest and `/design` read the same book through different paths
   (#375): if a quantity differs between a digest build and a page build of the
   same variant, that is a finding for `agreement-auditor`, not a diff.
@@ -123,5 +187,8 @@ Under 60 lines.
 
 ## Memory
 
-Record which verdicts flipped for which kind of input change, keyed by date, so
-the next preview can be compared with the last.
+Record which kinds of verdict flipped for which kind of input change, keyed by
+date, so the next preview can be compared with the last: "spot and rate
+together relaxed some roll verdicts", never a figure, a strike or a grade of the
+book. Your memory directory is gitignored local state, the one place you may
+write inside the repo tree.
