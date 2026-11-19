@@ -110,6 +110,19 @@ class TestReadContract:
         assert reading.solved_iv is None
         assert not reading.usable
 
+    def test_crossed_quote_is_flagged_and_not_solved(self) -> None:
+        """A bid above the ask is no market: no IV, never reads clean."""
+        symbol = occ("SPX", DECEMBER, OptionType.PUT, 3000.0)
+        chain = parse_cboe_chain(
+            payload([raw_contract(symbol, bid=3.0, ask=1.0, iv=0.45)]),
+        )
+
+        reading = _read(chain, strike=3000.0)
+
+        assert reading.flags == frozenset({MatchFlag.CROSSED})
+        assert reading.solved_iv is None
+        assert not reading.usable
+
     def test_wide_quote_is_flagged_and_unusable(self) -> None:
         """Wider than the policy spread: shown, not trusted."""
         symbol = occ("SPX", DECEMBER, OptionType.PUT, 3000.0)

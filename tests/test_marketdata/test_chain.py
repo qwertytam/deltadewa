@@ -112,6 +112,9 @@ class TestParse:
             lambda p: p["data"].pop("current_price"),
             lambda p: p["data"].update(current_price="x"),
             lambda p: p["data"].update(current_price=0.0),
+            lambda p: p["data"].update(current_price=float("nan")),
+            lambda p: p["data"].update(current_price=float("inf")),
+            lambda p: p["data"].update(current_price=float("-inf")),
             lambda p: p["data"].update(options=[]),
             lambda p: p["data"].update(options=None),
             lambda p: p["data"]["options"][0].update(option="NOT-OCC"),
@@ -287,6 +290,7 @@ class TestMatch:
             (1.0, 0.0, {MatchFlag.NO_ASK}),
             (0.0, 0.0, {MatchFlag.ZERO_BID, MatchFlag.NO_ASK}),
             (10.0, 20.0, {MatchFlag.WIDE}),
+            (11.0, 10.0, {MatchFlag.CROSSED}),
             (10.0, 11.0, set()),
         ],
     )

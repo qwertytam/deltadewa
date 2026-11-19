@@ -83,6 +83,8 @@ class MatchFlag(StrEnum):
     """No ask."""
     WIDE = "WIDE"
     """Spread wider than the policy's ``max_spread_pct``."""
+    CROSSED = "CROSSED"
+    """Bid above ask: a market nobody could trade, so its mid is no price."""
     NO_SOLVE = "NO-SOLVE"
     """The mid is outside the no-arbitrage bounds at the book's r and q."""
     AMBIGUOUS_ROOT = "AMBIGUOUS-ROOT"
@@ -228,6 +230,10 @@ class ChainSnapshot:
             flags.add(MatchFlag.ZERO_BID)
         if quote.ask <= 0.0:
             flags.add(MatchFlag.NO_ASK)
+        if 0.0 < quote.ask < quote.bid:
+            # A crossed market has a negative spread, which would pass the
+            # WIDE test below and read as the tightest quote on the chain.
+            flags.add(MatchFlag.CROSSED)
         spread = quote.spread_pct
         if (
             quote.bid > 0.0
@@ -404,7 +410,10 @@ def parse_cboe_chain(payload: Mapping[str, Any]) -> ChainSnapshot:
         raise MarketDataError(
             f"unreadable option-chain payload: {exc}",
         ) from exc
-    if spot <= 0.0 or not quotes:
+    if not math.isfinite(spot) or spot <= 0.0 or not quotes:
+        # float() accepts JSON's NaN and Infinity, and neither fails the
+        # sign test: a non-finite index level must not be cached as a good
+        # chain (the contract fields are held to the same rule in _number).
         raise MarketDataError(
             "option-chain payload has no usable index level or contracts",
         )

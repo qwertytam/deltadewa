@@ -112,8 +112,9 @@ def read_contract(  # pylint: disable=too-many-arguments
         program_date: The program's trading date.
 
     Returns:
-        The reading. The IV is solved only from a two-sided quote: a mid
-        built from a missing bid or ask is not a price.
+        The reading. The IV is solved only from a two-sided, uncrossed
+        quote: a mid built from a missing bid or ask, or from a bid above
+        the ask, is not a price.
 
     """
     match = snapshot.match(
@@ -131,6 +132,7 @@ def read_contract(  # pylint: disable=too-many-arguments
         quote is not None
         and MatchFlag.ZERO_BID not in flags
         and MatchFlag.NO_ASK not in flags
+        and MatchFlag.CROSSED not in flags
     ):
         solved = solve_implied_vol(
             price=quote.mid,
