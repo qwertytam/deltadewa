@@ -200,7 +200,8 @@ def _spot_headline(
     Args:
         reading: The book spot beside the observed market spot, from
             ``analysis.spot_reading.observe_spot``.
-        symbol: The book's underlying symbol, for the label.
+        symbol: The program's instrument (``program.instrument``), for the
+            label and the cache key behind *reading*.
         warn_pct: ``ips.market_environment.spot_divergence_warn_pct`` — the
             divergence, in percent, past which the cross-check line flags
             rather than merely reports.
@@ -917,9 +918,13 @@ def _build_scenario_explorer_panel(
             marker_hedge_value=result.hedge_value_shocked,
             ips_crash_pct=convexity.crash_scenario_pct,
         )
+        # #509: the key the refresh job warms is the policy's instrument,
+        # not the book's free-text symbol (which defaults to "UNKNOWN" and
+        # so read a key nothing ever wrote).
+        instrument = ips_config.program.instrument
         spot_reading = observe_spot(
             app.market_data,
-            symbol=portfolio.get_symbol(),
+            symbol=instrument,
             book_spot=portfolio.spot_price,
         )
         # Book-level facts for the efficiency sentence's "cheap but too
@@ -940,7 +945,7 @@ def _build_scenario_explorer_panel(
                 ),
                 _spot_headline(
                     spot_reading,
-                    portfolio.get_symbol(),
+                    instrument,
                     ips_config.market_environment.spot_divergence_warn_pct,
                 ),
                 html.Div(

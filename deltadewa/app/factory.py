@@ -32,7 +32,7 @@ from deltadewa.app.pages import design, monitor
 from deltadewa.app.panel_guard import safe_chrome
 from deltadewa.clock import program_trading_date
 from deltadewa.ips_config import IpsPricingInputs
-from deltadewa.marketdata import default_cache_dir
+from deltadewa.marketdata import MarketDataError, default_cache_dir
 
 if TYPE_CHECKING:
     from dash.development.base_component import Component
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.provenance import ProvenanceLedger
     from deltadewa.ips_config import IpsConfig
-    from deltadewa.marketdata import MarketDataProvider
+    from deltadewa.marketdata import MarketDataProvider, Observation
     from deltadewa.state import ProgramState
 
 _logger = logging.getLogger(__name__)
@@ -98,6 +98,74 @@ def _market_data_payload(environment: MarketEnvironment) -> dict[str, Any]:
             for series in environment.series
         },
     }
+
+
+def _feed_payload(
+    provider: MarketDataProvider,
+    ips_config: IpsConfig | None,
+) -> dict[str, Any] | None:
+    """Build ``/health``'s ``market_data.feed``: the 9b pricing-feed series.
+
+    The option chain and the policy's FRED rate series, each with the same
+    quality / as_of / fetched_at triple ``series`` carries. ``None`` when
+    ips.yaml has no ``pricing_feed`` section (nothing is fetched).
+
+    Deliberately **outside** ``market_data.series`` and outside
+    ``assess_market_environment``: that reduction feeds ``oldest_series``,
+    the banner and ``status``, so a series added there would count toward
+    them at once. Nothing is priced on the feed yet, so a stale chain must
+    not degrade ``/health`` for an input nothing reads; the series move
+    into the environment when the book is priced on them.
+
+    Never raises. A series nothing has cached is ``UNAVAILABLE`` with null
+    times (an ordinary state, not logged); anything else that goes wrong
+    reading it is ``ERROR``, logged with its traceback, so a code fault
+    never reads as an empty cache.
+    """
+    if ips_config is None or ips_config.pricing_feed is None:
+        return None
+    feed = ips_config.pricing_feed
+    readings: dict[str, Callable[[], Observation[Any]]] = {
+        "chain": lambda: provider.get_option_chain(
+            ips_config.program.instrument
+        ),
+        "rate": lambda: provider.get_rate(feed.rate_series),
+    }
+    payload: dict[str, Any] = {}
+    for name, read in readings.items():
+        try:
+            observation = read()
+        except MarketDataError:
+            payload[name] = {
+                "quality": "UNAVAILABLE",
+                "as_of": None,
+                "fetched_at": None,
+            }
+            continue
+        except Exception:  # pylint: disable=broad-exception-caught
+            _logger.exception(
+                "/health: reading the %s feed series failed", name
+            )
+            payload[name] = {
+                "quality": "ERROR",
+                "as_of": None,
+                "fetched_at": None,
+            }
+            continue
+        payload[name] = {
+            "quality": observation.source.value,
+            "as_of": (
+                observation.as_of.isoformat()
+                if observation.as_of is not None
+                else None
+            ),
+            "fetched_at": (
+                observation.fetched_at.isoformat()
+                if observation.fetched_at is not None
+                else None
+            ),
+        }
+    return payload
 
 
 def _pricing_inputs_payload(ledger: ProvenanceLedger) -> dict[str, Any]:
@@ -311,6 +379,10 @@ def create_app(
             provenance_error = f"{type(exc).__name__}: {exc}"
         else:
             market_data_payload = _market_data_payload(environment)
+            market_data_payload["feed"] = _feed_payload(
+                market_data,
+                ips_config,
+            )
             pricing_inputs_payload = _pricing_inputs_payload(ledger)
             # #393: the freshness half of "status". Only reachable on
             # this branch — a raise above leaves no ledger to grade, and

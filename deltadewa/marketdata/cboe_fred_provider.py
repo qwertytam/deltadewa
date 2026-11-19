@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 import pandas as pd
 import requests
@@ -16,9 +17,13 @@ import requests
 from deltadewa.marketdata._errors import MarketDataError
 from deltadewa.marketdata._observation import Observation, Source
 from deltadewa.marketdata._policy import default_cache_dir
+from deltadewa.marketdata.chain import ChainSnapshot, parse_cboe_chain
 
 _CBOE_HISTORY_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 _FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+_CBOE_CHAIN_URL = (
+    "https://cdn.cboe.com/api/global/delayed_quotes/options/_{underlying}.json"
+)
 
 _VIX_TERM_STRUCTURE_SYMBOLS = {
     "VIX9D": "VIX9D",
@@ -33,6 +38,12 @@ _VIX_TERM_STRUCTURE_SYMBOLS = {
 _CBOE_OHLCV_SYMBOLS: frozenset[str] = frozenset(_VIX_TERM_STRUCTURE_SYMBOLS)
 
 _REQUEST_TIMEOUT_SECONDS = 10
+
+# The SPX chain is a ~13 MB download (about 1.8 MB gzipped), not a CSV row.
+_CHAIN_TIMEOUT_SECONDS = 60
+
+# The only chain the parser understands: its roots are SPX's (chain.py).
+_CHAIN_UNDERLYING = "SPX"
 
 # A fetched series: (observation date as written by the source, value).
 _Series = list[tuple[str, float]]
@@ -66,6 +77,15 @@ class _CacheHit:
     """
 
     value: Any
+    fetched_at: datetime
+
+
+@dataclass(frozen=True)
+class _Resolved(Generic[T]):
+    """A resolved value plus the provenance of how it was obtained."""
+
+    value: T
+    source: Source
     fetched_at: datetime
 
 
@@ -133,8 +153,38 @@ class _DiskCache:
             fetched_at=datetime.fromisoformat(entry["fetched_at"]),
         )
 
-    def set(self, key: str, value: Any) -> datetime:  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
+    def signature(self, key: str) -> tuple[int, int] | None:
+        """Return ``(mtime_ns, size)`` of *key*'s file, or ``None``.
+
+        Lets a caller holding a parsed copy of a large entry notice that the
+        file has not changed without reading and decoding it again.
+        """
+        try:
+            stat = self._path(key).stat()
+        except OSError:
+            return None
+        return (stat.st_mtime_ns, stat.st_size)
+
+    def set(
+        self,
+        key: str,
+        value: Any,  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
+        *,
+        keep_previous: bool = False,
+    ) -> datetime:
         """Write *value* for *key*, stamped with the current time.
+
+        The write is atomic: the entry is written to a temporary file in the
+        same directory and renamed over the old one, so a reader (the
+        read-only app) sees either the whole old entry or the whole new one,
+        never a half-written file. That matters for the ~13 MB option chain.
+
+        Args:
+            key: The cache key.
+            value: A JSON-serialisable value.
+            keep_previous: When ``True`` and an entry already exists, first
+                copy it to ``<key>.prev.json``, so the last good payload
+                survives one further refresh.
 
         Returns:
             The timestamp written, so the caller can stamp the same instant
@@ -147,7 +197,18 @@ class _DiskCache:
             "value": value,
             "fetched_at": fetched_at.isoformat(),
         }
-        self._path(key).write_text(json.dumps(entry))
+        path = self._path(key)
+        temporary = path.with_name(path.name + ".tmp")
+        try:
+            temporary.write_text(json.dumps(entry))
+            if keep_previous and path.exists():
+                previous = path.with_name(f"{key}.prev.json")
+                staged = previous.with_name(previous.name + ".tmp")
+                shutil.copyfile(path, staged)
+                staged.replace(previous)
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
         return fetched_at
 
 
@@ -224,6 +285,10 @@ class CboeFredProvider:
         self._fred_api_key = fred_api_key
         self._read_only = read_only
         self._force_fetch = force_fetch
+        self._chain_memo: dict[
+            str,
+            tuple[tuple[int, int] | None, datetime, ChainSnapshot],
+        ] = {}
 
     @property
     def is_read_only(self) -> bool:
@@ -328,6 +393,110 @@ class CboeFredProvider:
         rank = sum(1 for value in values if value <= latest)
         return fetched.observe(rank / len(values), rows)
 
+    def get_rate(self, series: str) -> Observation[float]:
+        """Return the latest yield of FRED constant-maturity *series*.
+
+        The value is the yield in **percent** as FRED publishes it (``4.60``
+        for 4.60%); ``deltadewa.analysis.implied_vol.cmt_to_continuous``
+        turns it into the continuously compounded rate the engine takes.
+        FRED publishes about a business day behind, so ``as_of`` is
+        routinely a day older than ``fetched_at``.
+        """
+        fetched = self._request_with_fallback(
+            f"rate_{series}",
+            lambda: self._fetch_fred_history(series),
+        )
+        rows = fetched.series
+        return fetched.observe(float(rows[-1][1]), rows)
+
+    def get_option_chain(self, underlying: str) -> Observation[ChainSnapshot]:
+        """Return Cboe's delayed-quote option chain for *underlying*.
+
+        The raw payload is cached (``chain_<UND>.json``, with the previous
+        night's copy kept as ``chain_<UND>.prev.json``) and parsed on read.
+        A payload that fails to parse never replaces a good cache entry: the
+        parse runs inside the fetch, before the write. The parsed snapshot
+        is memoised on the cache file's identity, so a read-only app does
+        not decode 13 MB on every page render.
+
+        Raises:
+            MarketDataError: If *underlying* is not ``SPX``, or no chain can
+                be fetched or read from cache.
+
+        """
+        if underlying != _CHAIN_UNDERLYING:
+            raise MarketDataError(
+                f"option chains are supported for {_CHAIN_UNDERLYING} only, "
+                f"not {underlying!r}",
+            )
+        key = f"chain_{underlying}"
+        memoised = self._memoised_chain(key)
+        if memoised is not None:
+            return memoised
+        parsed: dict[str, ChainSnapshot] = {}
+
+        def fetch() -> dict[str, Any]:
+            payload = self._download_chain(underlying)
+            parsed["snapshot"] = parse_cboe_chain(payload)
+            return payload
+
+        resolved = self._resolve(
+            key,
+            fetch,
+            decode=lambda raw: raw,
+            keep_previous=True,
+        )
+        snapshot = parsed.get("snapshot")
+        if snapshot is None:
+            snapshot = parse_cboe_chain(resolved.value)
+        self._chain_memo[key] = (
+            self._cache.signature(key),
+            resolved.fetched_at,
+            snapshot,
+        )
+        return Observation(
+            value=snapshot,
+            source=resolved.source,
+            as_of=snapshot.quoted_at,
+            fetched_at=resolved.fetched_at,
+        )
+
+    def _memoised_chain(self, key: str) -> Observation[ChainSnapshot] | None:
+        """Return the parsed chain again if its cache file is unchanged.
+
+        Only where the answer cannot differ from the full ladder's: a read
+        that would not fetch (read-only, or within the TTL).
+        """
+        memo = self._chain_memo.get(key)
+        if memo is None:
+            return None
+        signature, fetched_at, snapshot = memo
+        if signature is None or signature != self._cache.signature(key):
+            return None
+        within_ttl = datetime.now(tz=UTC) - fetched_at <= self._cache.ttl
+        if self._force_fetch or not (within_ttl or self._read_only):
+            return None
+        return Observation(
+            value=snapshot,
+            source=Source.CACHED if within_ttl else Source.STALE,
+            as_of=snapshot.quoted_at,
+            fetched_at=fetched_at,
+        )
+
+    def _download_chain(self, underlying: str) -> dict[str, Any]:
+        url = _CBOE_CHAIN_URL.format(underlying=underlying)
+        response = self._session.get(url, timeout=_CHAIN_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise MarketDataError(
+                "option-chain response is not valid JSON",
+            ) from exc
+        if not isinstance(payload, dict):
+            raise MarketDataError("option-chain response is not an object")
+        return payload
+
     def _fetch_cboe_history(self, symbol: str) -> list[tuple[str, float]]:
         url = _CBOE_HISTORY_URL.format(symbol=symbol)
         value_col = "CLOSE" if symbol in _CBOE_OHLCV_SYMBOLS else symbol
@@ -350,23 +519,56 @@ class CboeFredProvider:
     ) -> list[tuple[str, float]]:
         response = self._session.get(url, timeout=_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
-        frame = pd.read_csv(StringIO(response.text))
-        frame = frame[[date_col, value_col]].dropna()
-        frame[value_col] = pd.to_numeric(frame[value_col], errors="coerce")
-        frame = frame.dropna()
-        # Sort chronologically regardless of date string format (CBOE uses
-        # MM/DD/YYYY; FRED uses YYYY-MM-DD — string sort would mis-order CBOE).
-        frame = frame.iloc[pd.to_datetime(frame[date_col]).argsort()]
-        return [
-            (str(row[date_col]), float(row[value_col]))
-            for _, row in frame.iterrows()
-        ]
+        try:
+            frame = pd.read_csv(StringIO(response.text))
+            frame = frame[[date_col, value_col]].dropna()
+            frame[value_col] = pd.to_numeric(frame[value_col], errors="coerce")
+            frame = frame.dropna()
+            # Sort chronologically regardless of date string format (CBOE
+            # uses MM/DD/YYYY; FRED uses YYYY-MM-DD: a string sort would
+            # mis-order CBOE).
+            frame = frame.iloc[pd.to_datetime(frame[date_col]).argsort()]
+            series = [
+                (str(row[date_col]), float(row[value_col]))
+                for _, row in frame.iterrows()
+            ]
+        except (KeyError, ValueError, TypeError, IndexError) as exc:
+            # A page that is not the CSV expected (a renamed column, an HTML
+            # error body) is a failed fetch, not a crash: only
+            # MarketDataError is contained per series by the refresh job,
+            # and it falls back to the last cached value.
+            raise MarketDataError(
+                f"unreadable series response from {url}: {exc}",
+            ) from exc
+        if not series:
+            raise MarketDataError(f"series response from {url} has no rows")
+        return series
 
     def _request_with_fallback(
         self,
         cache_key: str,
         fetch: Callable[[], _Series],
     ) -> _Fetched:
+        """Resolve a CSV series: live, then cache, then a stale value.
+
+        See :meth:`_resolve` for the ladder; this wraps its result in the
+        series-shaped ``_Fetched`` the CSV readings use.
+        """
+        resolved = self._resolve(cache_key, fetch, decode=_as_series)
+        return _Fetched(
+            series=resolved.value,
+            source=resolved.source,
+            fetched_at=resolved.fetched_at,
+        )
+
+    def _resolve(
+        self,
+        cache_key: str,
+        fetch: Callable[[], T],
+        *,
+        decode: Callable[[Any], T],
+        keep_previous: bool = False,
+    ) -> _Resolved[T]:
         """Try a live fetch, then cache, then fall back to a stale value.
 
         Each branch is labelled with the ``Source`` it actually represents,
@@ -375,12 +577,23 @@ class CboeFredProvider:
 
         Skips the fresh-cache check below entirely when constructed with
         ``force_fetch=True`` — see the constructor docstring.
+
+        Args:
+            cache_key: The disk-cache key.
+            fetch: Downloads and returns the JSON-serialisable value. It
+                may raise ``requests.RequestException`` or
+                ``MarketDataError`` (a payload that downloaded but does not
+                parse), and either falls back to the last cached value.
+            decode: Turns a JSON-round-tripped cache value back into ``T``.
+            keep_previous: Keep the entry this write replaces as
+                ``<key>.prev.json``.
+
         """
         if not self._force_fetch:
             cached = self._cache.get(cache_key)
             if cached is not None:
-                return _Fetched(
-                    series=_as_series(cached.value),
+                return _Resolved(
+                    value=decode(cached.value),
                     source=Source.CACHED,
                     fetched_at=cached.fetched_at,
                 )
@@ -388,8 +601,8 @@ class CboeFredProvider:
         if self._read_only:
             stale = self._cache.get_stale(cache_key)
             if stale is not None:
-                return _Fetched(
-                    series=_as_series(stale.value),
+                return _Resolved(
+                    value=decode(stale.value),
                     source=Source.STALE,
                     fetched_at=stale.fetched_at,
                 )
@@ -400,11 +613,11 @@ class CboeFredProvider:
 
         try:
             value = fetch()
-        except requests.RequestException as exc:
+        except (requests.RequestException, MarketDataError) as exc:
             stale = self._cache.get_stale(cache_key)
             if stale is not None:
-                return _Fetched(
-                    series=_as_series(stale.value),
+                return _Resolved(
+                    value=decode(stale.value),
                     source=Source.STALE,
                     fetched_at=stale.fetched_at,
                 )
@@ -412,9 +625,13 @@ class CboeFredProvider:
                 f"Could not fetch '{cache_key}' and no cached value exists",
             ) from exc
 
-        fetched_at = self._cache.set(cache_key, value)
-        return _Fetched(
-            series=value,
+        fetched_at = self._cache.set(
+            cache_key,
+            value,
+            keep_previous=keep_previous,
+        )
+        return _Resolved(
+            value=value,
             source=Source.LIVE,
             fetched_at=fetched_at,
         )

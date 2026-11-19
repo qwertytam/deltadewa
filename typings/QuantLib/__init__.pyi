@@ -47,6 +47,7 @@ class Calendar:
 
     @staticmethod
     def from_name(name: str) -> "Calendar": ...
+    def isBusinessDay(self, date: Date) -> bool: ...
 
 class UnitedStates(Calendar):
     """United States calendar."""

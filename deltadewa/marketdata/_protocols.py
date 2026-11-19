@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from deltadewa.marketdata._observation import Observation
+    from deltadewa.marketdata.chain import ChainSnapshot
 
 
 @runtime_checkable
@@ -81,5 +82,30 @@ class MarketDataProvider(Protocol):
                 shorter than *lookback_days* — a percentile ranked over
                 fewer sessions than the window it is labelled with would
                 be a silent truncation.
+
+        """
+
+    def get_rate(self, series: str) -> Observation[float]:
+        """Return the latest yield of a Treasury constant-maturity *series*.
+
+        The value is the yield in **percent** as published (``4.60`` for
+        4.60%); ``deltadewa.analysis.implied_vol.cmt_to_continuous``
+        converts it to the continuously compounded rate the engine takes.
+
+        Raises:
+            MarketDataError: If no observation is available.
+
+        """
+
+    def get_option_chain(self, underlying: str) -> Observation[ChainSnapshot]:
+        """Return the vendor's delayed-quote option chain for *underlying*.
+
+        The observation's ``as_of`` is when the vendor generated the
+        payload; ``ChainSnapshot.session_date`` is the trading session its
+        quotes belong to.
+
+        Raises:
+            MarketDataError: If no chain is available, or *underlying* is
+                not one the provider supports.
 
         """

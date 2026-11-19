@@ -274,10 +274,10 @@ Two follow-ups came out of it, both now resolved:
   See `docs/part-x-coverage.md`, "The matplotlib half of `visualization/` —
   retired (#312)".
 
-Still open: **#12 Liquidity Risk**'s full metric is genuinely data-blocked
-(needs per-strike bid/ask and open interest, which the free CBOE/FRED
-provider doesn't return) — 8c gave it a hand-entered checklist, below.
-**#9**'s skew-beta scalar, never built before, was built in 8c.
+**#12 Liquidity Risk** is a per-held-leg checklist: 8c gave it a
+hand-entered one, and 9b fills it from the nightly option-chain fetch
+(depth, volume and stress-time widening stay unmeasurable on the free
+feed). **#9**'s skew-beta scalar, never built before, was built in 8c.
 
 **8c has shipped** (#317, N5/#411, N9/#415, N10/#416, N11/#417), from
 review #3's market-environment and Part X findings:

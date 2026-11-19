@@ -17,7 +17,52 @@ history for that record instead.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **9b (PR-A) — the nightly refresh can fetch Cboe's delayed SPX option chain
+  and a FRED Treasury yield, and `/design` shows them beside the typed
+  values. Nothing is priced on them yet.** A new optional `pricing_feed:`
+  section in `ips.yaml` turns it on; with no section nothing is fetched and
+  the run is exactly what it was. Both shipped IPS templates carry it with
+  `adopt: []` (fetch and show only). Every key is required when the section
+  is present and there are no code defaults; `ips_config --check` lists an
+  absent section under "NO code defaults". `/design`'s new **Fetched inputs**
+  panel shows the index level and rate, fetched against typed, and for every
+  held option and every `strike_ladder` rung the matched contract, its close
+  bid and ask, Cboe's IV, and the IV this program's own engine solves from
+  the mid at the book's rate and dividend yield. The dividend yield is never
+  fetched. `/health` gains `market_data.feed` (the chain and the rate); it
+  does not count toward `status` until the book is priced on them.
+- **The Liquidity check fills from the chain.** Each held leg gets the last
+  close's bid, ask and open interest beside any quote you recorded; the later
+  of the two is graded and the other is shown. A fetched quote is derived at
+  read time and never stored, so it cannot overwrite yours or write to the
+  book each night. The panel gains a **Source** column, and is now titled
+  "Liquidity check".
+- **The refresh job keeps a small daily record of the chain** under
+  `exports/chain-history/` (each held option's close quote and about 120
+  fixed market points, about 9 MB a year), the start of this program's own IV
+  history: the free feed has none.
+
+### Changed
+
+- **Deploy step: the market-data cache moves out of `exports/`.** The raw
+  option-chain payload is about 13 MB of vendor data and must not ride the
+  offsite backup, so `DELTADEWA_CACHE_DIR` is now `/app/cache`, a `./cache`
+  bind mount on the host for both containers. After deploying, run the refresh
+  once by hand (RUNBOOK §11) so `/health` reads `CACHED`, then remove the old
+  `exports/marketdata-cache`. A restore now starts without a cache; one
+  refresh rebuilds it (RUNBOOK §7 step 4). The disk-cache write is atomic.
+- The refresh job keys the spot (and the chain) on `ips.yaml`'s
+  `program.instrument`, not a CLI default of `SPX`; `--symbol` still
+  overrides it.
+
+### Fixed
+
+- **#509 — `/monitor` read the observed spot under the book's own symbol,
+  which defaults to `UNKNOWN`,** while the refresh job warms the instrument's
+  key, so a book that never set a symbol showed the cross-check as
+  unavailable beside a warm, fresh cache. Both now use `program.instrument`.
 
 ## [0.11.0] - 2026-11-16
 

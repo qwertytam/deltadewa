@@ -1,12 +1,11 @@
-"""Hand-entered liquidity observations for one option leg (8c, N10).
+"""Liquidity observations for one option leg (8c, N10; 9b).
 
-Part X #12 Liquidity Risk needs per-strike bid/ask and open interest,
-which the free CBOE/FRED provider does not return; the real metric stays
-blocked on #156's options-chain feed. What *is* available without a feed
-is the operator's own observation at the moments the handbook says
-liquidity matters — "monetizing hedges during crashes, rolling positions,
-scaling hedge size" (`Tier 4 §12
+Part X #12 Liquidity Risk needs per-strike bid/ask and open interest. The
+first source (8c) was the operator's own observation at the moments the
+handbook says liquidity matters: "monetizing hedges during crashes,
+rolling positions, scaling hedge size" (`Tier 4 §12
 <https://qwertytam.github.io/deltadewa-handbook/part-10/tier-4-tactical-optional-trading-metrics/>`_).
+The second (9b) is the nightly option-chain fetch, for every held leg.
 
 What an observation is
     A point-in-time quote the operator read off their broker for **this
@@ -19,8 +18,10 @@ What an observation is
 What it is not
     A liquidity feed. It cannot see a strike the book does not hold,
     depth behind the quote, traded volume, or a spread that has widened
-    since it was read. See ``docs/market-data.md``, "Liquidity:
-    hand-entered quotes, not a feed".
+    since it was read. When ``ips.yaml`` has a ``pricing_feed`` section the
+    nightly chain fetch adds a second kind of observation for each held
+    leg (``source=FETCHED``), derived at read time and never stored; see
+    ``docs/market-data.md``, "Liquidity".
 
 When it is (and isn't) set
     Only by ``OptionPortfolioBase.record_liquidity`` — an explicit
@@ -36,10 +37,23 @@ When it is (and isn't) set
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+
+class LiquiditySource(StrEnum):
+    """Who read a quote."""
+
+    OPERATOR = "OPERATOR"
+    """Typed in by the operator from their broker; the only kind ever
+    persisted with the book."""
+    FETCHED = "FETCHED"
+    """Derived from the nightly option-chain fetch (9b) at read time for
+    a held leg; never stored, so it can never overwrite an operator quote
+    or put a nightly write on the book."""
 
 
 @dataclass(frozen=True)
@@ -53,7 +67,10 @@ class LiquidityObservation:
             the bid (a crossed quote is a typing error, not a market).
         open_interest: Contracts of open interest, or ``None`` when the
             operator recorded the quote without it.
-        observed_at: When the operator read the quote.
+        observed_at: When the quote was read: by the operator, or (for a
+            fetched quote) the close of the trading session it belongs to.
+        source: Who read it. Defaults to the operator, which is what every
+            quote written to the book is.
 
     Raises:
         ValueError: On a negative bid, a non-positive ask, a crossed
@@ -65,6 +82,7 @@ class LiquidityObservation:
     ask: float
     open_interest: int | None
     observed_at: datetime
+    source: LiquiditySource = LiquiditySource.OPERATOR
 
     def __post_init__(self) -> None:
         """Reject a quote no market could have shown."""

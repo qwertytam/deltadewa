@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from deltadewa.marketdata._errors import MarketDataUnavailableError
 from deltadewa.marketdata._observation import Observation
+from deltadewa.marketdata.chain import ChainSnapshot
 
 _DEFAULT_VIX_TERM_STRUCTURE = {
     "VIX9D": 15.5,
@@ -38,6 +39,10 @@ class StaticProvider:
             ``get_vix_history`` raises and vol-regime callers fall back to a
             (labelled) normalized figure rather than a fabricated percentile.
             Tests can inject a series to exercise the true-percentile path.
+        rates: Mapping of Treasury series id (``DGS1``) to yield in percent.
+            Empty by default: ``get_rate`` raises for an unregistered series.
+        chains: Mapping of underlying to a parsed option chain. Empty by
+            default: ``get_option_chain`` raises for an unregistered one.
 
     """
 
@@ -49,6 +54,8 @@ class StaticProvider:
     skew_index: float = 120.0
     skew_percentile: float = 0.5
     vix_history: list[float] = field(default_factory=list)
+    rates: dict[str, float] = field(default_factory=dict)
+    chains: dict[str, ChainSnapshot] = field(default_factory=dict)
 
     @property
     def is_read_only(self) -> bool:
@@ -109,3 +116,32 @@ class StaticProvider:
         """
         _ = lookback_days
         return Observation.static(self.skew_percentile)
+
+    def get_rate(self, series: str) -> Observation[float]:
+        """Return the yield registered for Treasury *series*, in percent.
+
+        Raises:
+            MarketDataUnavailableError: If *series* has no registered yield.
+
+        """
+        try:
+            return Observation.static(self.rates[series])
+        except KeyError as exc:
+            raise MarketDataUnavailableError(
+                f"No rate registered for series '{series}'",
+            ) from exc
+
+    def get_option_chain(self, underlying: str) -> Observation[ChainSnapshot]:
+        """Return the option chain registered for *underlying*.
+
+        Raises:
+            MarketDataUnavailableError: If *underlying* has no registered
+                chain.
+
+        """
+        try:
+            return Observation.static(self.chains[underlying])
+        except KeyError as exc:
+            raise MarketDataUnavailableError(
+                f"No option chain registered for '{underlying}'",
+            ) from exc

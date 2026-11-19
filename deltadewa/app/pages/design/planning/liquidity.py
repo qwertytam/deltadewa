@@ -1,8 +1,11 @@
-"""PLANNING zone: the Liquidity Check panel (Part X #12, 8c / N10).
+"""PLANNING zone: the Liquidity Check panel (Part X #12, 8c / N10; 9b).
 
-Part X #12 needs a per-strike options chain (#156); this is the honest
-substitute: a checklist of the operator's own quotes, one per held leg,
-graded by ``analysis.liquidity`` against the IPS ``liquidity:`` policy.
+A checklist of one quote per held leg, graded by ``analysis.liquidity``
+against the IPS ``liquidity:`` policy. The quote is the operator's own
+(typed from their broker), or, when ips.yaml has a ``pricing_feed`` section
+and the nightly refresh has cached a chain, last night's close quote for
+that contract. The later of the two is graded and the other is shown beside
+it; an operator quote is never overwritten.
 
 Like the provenance panel, its "record a quote" control is a BOOK
 mutation: the callback writes ``book.BOOK_VERSION_STORE`` and
@@ -16,16 +19,19 @@ the same on a quiet day as on a bad one.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, Final
 
 from dash import Input, Output, State, dcc, html, no_update
 
+from deltadewa.analysis.chain_quotes import read_fetched_chain, read_positions
 from deltadewa.analysis.liquidity import (
     LegLiquidity,
     LiquidityChecklist,
     OpenInterestGrade,
     SpreadGrade,
     assess_liquidity,
+    fetched_observation,
     roll_due_position_ids,
 )
 from deltadewa.analysis.provenance import Freshness
@@ -33,6 +39,10 @@ from deltadewa.analysis.roll_status import evaluate_roll_status
 from deltadewa.app.panel_guard import safe_render as _safe_render
 from deltadewa.app.section_nav import SectionSpec
 from deltadewa.clock import program_trading_date
+from deltadewa.portfolio.liquidity import (
+    LiquidityObservation,
+    LiquiditySource,
+)
 
 from ..book import (
     BOOK_VERSION_STORE,
@@ -41,16 +51,21 @@ from ..book import (
 )
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from dash.development.base_component import Component
 
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
+    from deltadewa.marketdata import MarketDataProvider
     from deltadewa.portfolio.core import OptionPortfolio
+
+_logger = logging.getLogger(__name__)
 
 #: #357: this panel's TOC entry and heading id, from one source.
 SECTION: Final[SectionSpec] = SectionSpec(
     anchor_id="section-liquidity",
-    title="Liquidity check (hand-entered)",
+    title="Liquidity check",
 )
 
 _PANEL_ID = "plan-liquidity-panel"
@@ -60,17 +75,18 @@ _ASK_INPUT = "liquidity-ask"
 _OI_INPUT = "liquidity-open-interest"
 _RECORD_BUTTON = "liquidity-record"
 
-#: Rendered always. Says what this is, and what #156's feed would add
-#: that a hand-entered quote cannot — the panel's own "what it does not
-#: claim", kept beside the numbers rather than only in docs.
+#: Rendered always. Says what these quotes are, and what a close quote
+#: cannot see, beside the numbers rather than only in docs.
 _DISCLAIMER = (
-    "Point-in-time quotes you entered — not a liquidity feed. A spread "
-    "here describes the moment you looked, not now. A live options chain "
-    "(#156) would add what this cannot: quotes for every strike, "
-    "including ladder candidates you don't hold; depth behind the quote; "
-    "traded volume; intraday and stress-time widening; and automatic "
-    "refresh. Record a quote whenever you roll, monetize or add to a "
-    "leg — the moments the handbook says liquidity matters."
+    "One quote per held leg: one you typed from your broker, or (when the "
+    "pricing feed is on) last night's close quote fetched from Cboe, "
+    "whichever was read later. Both are point-in-time: a spread here "
+    "describes that moment, not now. Neither sees depth behind the "
+    "quote, intraday or stress-time widening, or strikes you do not "
+    "hold. A broker quote taken at the moment you roll outranks the "
+    "previous close until the next close arrives; record one whenever you "
+    "roll, monetize or add to a leg, the moments the handbook says "
+    "liquidity matters."
 )
 
 
@@ -140,12 +156,39 @@ def _due_text(leg: LegLiquidity) -> str:
     return "no"
 
 
+def _source_text(obs: LiquidityObservation | None) -> str:
+    if obs is None:
+        return "—"
+    if obs.source is LiquiditySource.FETCHED:
+        return f"fetched close {obs.observed_at:%Y-%m-%d}"
+    return "your quote"
+
+
+def _source_cell(leg: LegLiquidity) -> html.Td:
+    text = _source_text(leg.observation)
+    if leg.other is None:
+        return html.Td(text)
+    other = leg.other
+    return html.Td(
+        [
+            text,
+            html.Br(),
+            html.Span(
+                f"also: {_source_text(other)}, "
+                f"{other.bid:,.2f} / {other.ask:,.2f}",
+                className="plain-language",
+            ),
+        ],
+    )
+
+
 def _leg_row(leg: LegLiquidity) -> html.Tr:
     obs = leg.observation
     quote = f"{obs.bid:,.2f} / {obs.ask:,.2f}" if obs is not None else "—"
     return html.Tr(
         [
             html.Td(leg.label),
+            _source_cell(leg),
             html.Td(quote),
             html.Td(_spread_text(leg)),
             html.Td(_open_interest_text(leg)),
@@ -196,10 +239,12 @@ def _policy_text(ips_config: IpsConfig) -> str:
 def _liquidity_panel_view(
     checklist: LiquidityChecklist,
     ips_config: IpsConfig,
+    chain_note: str = "",
 ) -> Component:
     header = html.Tr(
         [
             html.Th("Leg"),
+            html.Th("Source"),
             html.Th("Bid / ask"),
             html.Th("Spread"),
             html.Th("Open interest"),
@@ -211,6 +256,8 @@ def _liquidity_panel_view(
         html.P(_DISCLAIMER, className="plain-language"),
         html.P(_policy_text(ips_config), className="plain-language"),
     ]
+    if chain_note:
+        body.append(html.P(chain_note, className="plain-language"))
     if not checklist.legs:
         body.append(html.P("No legs in the book.", className="env-verdict"))
         return html.Div(body)
@@ -229,32 +276,98 @@ def _liquidity_panel_view(
     return html.Div(body)
 
 
+def _fetched_for_book(
+    portfolio: OptionPortfolio,
+    ips_config: IpsConfig,
+    market_data: MarketDataProvider | None,
+    program_date: date,
+) -> tuple[dict[str, LiquidityObservation], str]:
+    """Derive each held leg's fetched quote from the cached chain.
+
+    Returns:
+        ``(by position id, note)``. The note says why there are none, or
+        names the session the quotes are from; ``""`` with no feed.
+
+    """
+    feed = ips_config.pricing_feed
+    if market_data is None or feed is None:
+        return {}, ""
+    chain = read_fetched_chain(market_data, ips_config)
+    if chain.observation is None:
+        return {}, chain.note
+    snapshot = chain.observation.value
+    fetched: dict[str, LiquidityObservation] = {}
+    for position_id, reading in read_positions(
+        snapshot,
+        portfolio,
+        feed,
+        program_date=program_date,
+    ).items():
+        observation = fetched_observation(reading)
+        if observation is not None:
+            fetched[position_id] = observation
+    session = f"{snapshot.session_date:%Y-%m-%d}"
+    age_days = (program_date - snapshot.session_date).days
+    if age_days > feed.max_quote_age_days:
+        return fetched, (
+            f"The cached chain is the {session} close, {age_days} days old, "
+            f"past pricing_feed.max_quote_age_days ({feed.max_quote_age_days}"
+            "): fetched quotes are not used until the refresh job runs again."
+        )
+    return fetched, (
+        f"Fetched quotes are the {session} close "
+        f"({chain.observation.source.value.lower()})."
+    )
+
+
 def _build_checklist(
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
-) -> LiquidityChecklist:
-    return assess_liquidity(
+    market_data: MarketDataProvider | None = None,
+) -> tuple[LiquidityChecklist, str]:
+    program_date = program_trading_date(ips_config.program.timezone).date()
+    try:
+        fetched, note = _fetched_for_book(
+            portfolio,
+            ips_config,
+            market_data,
+            program_date,
+        )
+    except Exception:  # pylint: disable=broad-exception-caught
+        # The fetched half is a bonus: a fault reading the chain must not
+        # hide the operator's own recorded quotes (the panel guard would
+        # take the whole checklist down with it).
+        _logger.exception("Liquidity check: reading the fetched chain failed")
+        fetched = {}
+        note = (
+            "Fetched quotes are unavailable (reading the cached chain "
+            "failed; see the app log). Your recorded quotes are shown."
+        )
+    checklist = assess_liquidity(
         portfolio,
         ips_config.liquidity,
-        as_of=program_trading_date(ips_config.program.timezone).date(),
+        as_of=program_date,
         roll_due_ids=roll_due_position_ids(
             evaluate_roll_status(portfolio, ips_config),
         ),
+        fetched=fetched,
     )
+    return checklist, note
 
 
 def _render_liquidity_panel_logic(
     *,
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
+    market_data: MarketDataProvider | None = None,
 ) -> Component:
     """Render the liquidity checklist for the current book."""
-    return _safe_render(
-        lambda: _liquidity_panel_view(
-            _build_checklist(portfolio, ips_config),
-            ips_config,
-        ),
-    )
+
+    def build() -> Component:
+        checklist, note = _build_checklist(portfolio, ips_config, market_data)
+        return _liquidity_panel_view(checklist, ips_config, note)
+
+    return _safe_render(build)
 
 
 def _leg_options(portfolio: OptionPortfolio) -> list[dict[str, str]]:
@@ -285,6 +398,7 @@ def layout(
     *,
     portfolio: OptionPortfolio,
     ips_config: IpsConfig,
+    market_data: MarketDataProvider | None = None,
 ) -> html.Div:
     """Build the Liquidity Check panel: checklist, then the record form."""
     return html.Div(
@@ -295,6 +409,7 @@ def layout(
                 _render_liquidity_panel_logic(
                     portfolio=portfolio,
                     ips_config=ips_config,
+                    market_data=market_data,
                 ),
                 id=_PANEL_ID,
             ),
@@ -342,6 +457,7 @@ def register(app: ProgramDashApp, *, ips_config: IpsConfig) -> None:
         return _render_liquidity_panel_logic(
             portfolio=app.program_state.portfolio,
             ips_config=ips_config,
+            market_data=app.market_data,
         )
 
     @app.callback(

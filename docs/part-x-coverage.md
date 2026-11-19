@@ -158,7 +158,7 @@ default is chipped:
 | 9 | Skew Exposure / Beta | 3 | `/design` PLANNING — **Skew exposure (skew beta)** | `analysis/skew_beta.calculate_skew_beta` | **PRESENT** (8c, N9) — ungraded: the handbook gives no band |
 | 10 | Net Delta Exposure | 3 | `/design` BOOK — `_net_delta_readout`; grid form via the `net_delta` heatmap metric | `portfolio/greeks.net_delta` via `summary_stats()` | **PRESENT** (M2.7) |
 | 11 | Hedge Rebalance Triggers | 3 | `/monitor` — *Decisions*; `/design` PLANNING — *Roll plan*, *Roll status by tranche*, **Hedge rebalance triggers**, *Monetization* | `analysis/roll_status.evaluate_roll_status`, `analysis/roll_planner.build_roll_plan`, `analysis/hedge_triggers.evaluate_hedge_trigger_set`, `analysis/monetization` | **PRESENT** — both trigger sets now live (see note); `roll_planner` gained its consumer in #258 |
-| 12 | Liquidity Risk | 4 | `/design` PLANNING — **Liquidity check (hand-entered)** | `analysis/liquidity.assess_liquidity` over operator-recorded `LiquidityObservation`s | **PARTIAL** (8c, N10) — a hand-entered checklist; the real metric is still blocked on #156 |
+| 12 | Liquidity Risk | 4 | `/design` PLANNING — **Liquidity check**, **Fetched inputs** | `analysis/liquidity.assess_liquidity` over operator-recorded and chain-derived `LiquidityObservation`s | **PARTIAL** (8c, N10; 9b) — a checklist per held leg from your own quote or last night's close; depth, volume and stress-time widening are not measurable on the free feed |
 | 13 | Delta Drift | 4 | `/design` PLANNING — **Delta drift** | `analysis/scenarios.ScenariosMixin.calculate_delta_drift` | **PRESENT** (M2.8) |
 | 14 | Vega Term Exposure | 4 | `/design` EXPLORATION — **Vega term exposure** | `analysis/maturity.MaturityMixin.calculate_vega_by_maturity` | **PRESENT** (M2.8) |
 | 15 | Hedge Efficiency Ratio | 4 | `/monitor` `_cost_panel`; digest `ProtectionSection.payoff_vs_premium` | Same function as #5 — see below | **PRESENT** (M2.7) |
@@ -324,23 +324,25 @@ express but nothing currently drives.
 
 ## Outstanding
 
-**#12 Liquidity Risk** — **partial since 8c (N10)**, and still the only
-item whose full metric is data-blocked. It needs per-strike bid/ask
-spreads and open interest from a live options-chain feed; the free
-CBOE/FRED provider returns index-level series only. Tracked in #156 (the
-options-chain feed), which also unlocks skew-aware pricing and
-backtesting — #12 is the Part X piece of that issue's scope.
+**#12 Liquidity Risk** — **partial since 8c (N10), and filled from the
+chain since 9b**. The full metric would need per-strike bid/ask spreads
+and open interest. The nightly Cboe chain fetch (9b, when `ips.yaml` has a
+`pricing_feed` section) supplies bid, ask and open interest for every held
+leg; what no free source gives is depth, traded volume beyond the payload's
+own, or the in-session and stress-time widening the handbook says matters
+most. Paid history for backtesting stays #156's open question.
 
-What 8c added in the meantime is a checklist, not the metric: the
-operator records a quote per held leg on `/design`'s **Liquidity check
-(hand-entered)** panel, `ips.yaml`'s optional `liquidity:` section grades
-its spread (and, if a minimum is set, its open interest), and its age is
-graded by #367's hand-entry rule. The panel states what it cannot see —
-unheld strikes, depth, volume, stress-time widening, automatic refresh —
-on every render. See `docs/market-data.md`, "Liquidity: hand-entered
-quotes, not a feed", including why it stays out of the provenance ledger
-and its alarm. #416's structural "deep-OTM + long-dated" proxy was not
-built; a measured quote supersedes a heuristic about one.
+`/design`'s **Liquidity check** panel grades one quote per held leg: the
+one the operator recorded from their broker, or last night's close from the
+chain, whichever was read later, with the other shown beside it.
+`ips.yaml`'s optional `liquidity:` section grades its spread (and, if a
+minimum is set, its open interest), and its age is graded by #367's
+hand-entry rule. The panel states what it cannot see on every render. The
+**Fetched inputs** panel shows the `strike_ladder` rungs' quotes too, which
+the checklist does not grade. See `docs/market-data.md`, "Liquidity",
+including why it stays out of the provenance ledger and its alarm. #416's
+structural "deep-OTM + long-dated" proxy was not built; a measured quote
+supersedes a heuristic about one.
 
 **#13 Delta Drift** and **#14 Vega Term Exposure** were surfacing gaps, not
 data gaps — both closed in M2.8. See the coverage table above:
