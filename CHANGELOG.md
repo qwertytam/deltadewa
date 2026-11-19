@@ -41,7 +41,7 @@ history for that record instead.
   "Liquidity check".
 - **The refresh job keeps a small daily record of the chain** under
   `exports/chain-history/` (each held option's close quote and about 120
-  fixed market points, about 5 MB a year), the start of this program's own IV
+  fixed market points, about 9 MB a year), the start of this program's own IV
   history: the free feed has none.
 
 ### Changed

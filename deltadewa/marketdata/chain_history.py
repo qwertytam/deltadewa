@@ -16,7 +16,8 @@ Two kinds of row, both keyed by the chain's trading **session**:
   the series stays comparable year to year.
 
 This is the only chain data under ``exports/`` (the raw payload lives in the
-cache folder, outside the git-backed backup): about 5 MB a year.
+cache folder, outside the git-backed backup): about 34 KB a session, so
+about 9 MB a year.
 
 Idempotent per session: a second run for a session already recorded writes
 nothing. A book that cannot be read costs only the ``held`` rows.

@@ -917,7 +917,7 @@ one problem per run; work through it rather than guessing:
   filesystem — see `compose.yaml`). Contains `program_state.json` (the
   live portfolio + IPS state), `exports/chain-history/` (a small daily
   extract of the option chain, written by the refresh job when
-  `ips.yaml` has a `pricing_feed` section — about 5 MB a year, backed
+  `ips.yaml` has a `pricing_feed` section — about 9 MB a year, backed
   up), `exports/reports/weekly/` (digest + snapshot history),
   `exports/history/` (see below), `exports/config-backup/` (see below),
   and any autosaves.
@@ -1224,10 +1224,29 @@ chain fetch the job appends a small daily record to
 exit code. With no `pricing_feed:` section neither series is fetched and
 nothing is written to `chain-history/`. Nothing is *priced* on the feed
 yet: `/design`'s **Fetched inputs** panel shows it beside the typed values.
-To prove the failure path, point the chain host at nothing for one run:
-`docker compose run --rm --no-deps --add-host cdn.cboe.com:127.0.0.1 jobs
-python -m deltadewa.marketdata.refresh` (the other Cboe readings go stale
-too; that is expected).
+To prove the failure path, point the Cboe host at nothing for one run.
+`docker compose run` has no `--add-host` flag, so use an override file kept
+outside the repo, with `compose.yaml` first so the mounts resolve as usual:
+
+```bash
+cat > ~/block-cboe.yaml <<'EOF'
+services:
+  jobs:
+    extra_hosts:
+      - "cdn.cboe.com:127.0.0.1"
+EOF
+docker compose -f compose.yaml -f ~/block-cboe.yaml run --rm --no-deps \
+    jobs python -m deltadewa.marketdata.refresh; echo "exit=$?"
+rm ~/block-cboe.yaml
+```
+
+Every Cboe reading fails (the chain, spot, skew and the VIX term structure);
+FRED's (`vix`, `vix_history`, `rate`) do not. Expect `NOT refreshed` for the
+five Cboe series, `Fetched 3/8 series live`, exit `1` and a heartbeat ping.
+The cache files are left as they were. A series reads `STALE` in `/health`
+only once its cache is older than `market_environment.data_ttl_minutes`, so
+the run's own log and the unchanged cache files are the proof, not `/health`
+straight afterwards.
 
 **Market-data refresh exit codes** — a manual `echo $?` after the refresh
 command above is a documented diagnosis, not a guess:

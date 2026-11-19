@@ -224,7 +224,8 @@ quote, and about 120 fixed market points (the standard `SPX` expiries 30
 days to 3 years out; the listed put nearest 5, 10, 20, 30, 40 and 50% out
 of the money; the at-the-money put and call). The rows are raw (bid, ask,
 the vendor's IV, open interest), so they can be re-solved at any rate and
-yield later. About 5 MB a year, backed up. It is the start of this
+yield later. About 34 KB a trading session, so about 9 MB a year, backed
+up. It is the start of this
 program's own IV history: the free feed has none.
 
 ## Hand-entered inputs
