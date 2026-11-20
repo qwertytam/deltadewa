@@ -254,11 +254,11 @@ NO code defaults". Both shipped templates carry it with `adopt: []`.
 
 | Key | Meaning |
 | --- | --- |
-| `adopt` | The inputs a feed may **price** the book on: any of `spot`, `risk_free_rate`, `volatility`; `[]` fetches and shows only. `dividend_yield` is refused: put-call parity cannot isolate it (9b.0). Read by the adoption step; until that is built it is recorded and shown, not applied |
+| `adopt` | The inputs a feed may **price** the book on: any of `spot`, `risk_free_rate`, `volatility`; `[]` fetches and shows only. `dividend_yield` is refused: put-call parity cannot isolate it (9b.0). Read at start: the app prices the book on what `adopt` names, once, when it starts (RUNBOOK §4.1: a page reload does not re-read prices, only a restart does). Your typed values stay in the book file as the override and the fallback |
 | `rate_series` | The FRED constant-maturity series standing for the book's one rate: `DGS1MO`, `DGS3MO`, `DGS6MO`, `DGS1`, `DGS2`, `DGS3`, `DGS5`, `DGS7`, `DGS10`, `DGS20` or `DGS30`. `DGS1` suits 6-18 month options |
 | `max_quote_age_days` | Calendar days between the program's date and the chain's trading session beyond which a fetched quote is not used (`STALE-QUOTE`). 5 spans a long weekend plus a missed night |
 | `max_spread_pct` | Percent of mid. A quote wider than this yields no IV (`WIDE`). The strikes a hedge ladder uses quoted 2-5% wide at the close in the spike |
-| `override_warn_vol_points` | Vol points. `/design` warns when a typed-in IV differs from the fetched one by more than this. Read by the overrides step; not yet applied |
+| `override_warn_vol_points` | Vol points. The Pricing inputs review warns when an IV you override differs from the fetched one by more than this |
 
 See [market-data.md](market-data.md#fetched-pricing-inputs-9b) for the
 rules these keys feed.

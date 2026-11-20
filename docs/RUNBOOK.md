@@ -267,6 +267,98 @@ Host cron drives the market-data refresh, the weekly digest email, and the
 `exports/` backup push automatically — see §9 for the crontab lines, §11 to
 run any of them by hand.
 
+### 4.1. The pricing feed: turning it on, overriding it, turning it off (9b)
+
+With a `pricing_feed:` section in `config/ips.yaml` and a non-empty `adopt:`
+list, the book is priced on the nightly feed instead of on numbers you typed:
+spot and each option's implied volatility from Cboe's delayed SPX option
+chain, and the risk-free rate from one FRED Treasury series. The dividend
+yield is never fetched (put-call parity cannot separate it from funding and
+timing) and stays yours. Your typed values stay in `program_state.json`
+untouched, as the override and the fallback; a fetched number is never
+written to it.
+
+**The data path, and why the app restarts nightly.**
+
+```text
+02:30  refresh job   -> ./cache  (the chain, the rate; §9)
+02:30+ restart app   -> the app reads ./cache ONCE, decides each input's
+                        value, and prices every page on it
+Sun 03:00 digest job -> reads the same ./cache in its own process and
+                        decides the same way
+```
+
+**The app reads new prices only when it restarts.** Refreshing a page does
+not update them: every page renders the one reading the process took at
+start. That is why the cron line in §9 restarts the app right after the
+refresh, and why a manual `docker compose run ... refresh` during the day
+changes nothing on the pages until the next restart (the Pricing inputs panel
+says "a newer chain is cached; restart the app to price on it" when that is
+so). The header on `/monitor` and `/design` says when the prices were read
+and which close they are from. The restart takes a few seconds; the app is
+unavailable for that long at about 21:31 New York.
+
+**Turning it on** (the first time, or after a deploy that changed policy):
+
+1. Edit `config/ips.yaml` on the droplet: `pricing_feed.adopt: [spot,
+   risk_free_rate, volatility]` (any subset; `dividend_yield` is refused).
+   The policy is baked into the image (§4), so rebuild and bring it up:
+   `docker compose build app jobs && docker compose up -d`.
+2. Run the refresh once by hand so there is a cache (§11), then
+   `docker compose restart app`.
+3. Check: `curl http://<tailscale-ip>:8050/health` shows
+   `market_data.resolution.adopting: true`, `origins` counting the inputs
+   by where each came from, `resolution_error: null`, and `status: "ok"`;
+   `/design`'s **Pricing inputs** panel shows, per input, what prices the
+   book, where it came from, what you typed and what the feed says now.
+4. Add `; docker compose restart app` after the refresh line in your
+   crontab (§9) if you have not already.
+
+**What each input is priced on, and what you are told when the feed fails.**
+One effective value per input, each labelled with its origin
+(`FETCHED`, `LAST_GOOD`, `OVERRIDE`, `FALLBACK`, `ENTERED`):
+
+|Situation|The book is priced on|What you are told|
+|---|---|---|
+|Normal|Last night's fetched value|The close it is from, in the header and the panel|
+|A night's download failed|The last good value, labelled with its date|`STALE` once the cache is older than `market_environment.data_ttl_minutes`: the banner, `/health`, and the digest's `STALE DATA` headline|
+|The last good value is older than `pricing_feed.max_quote_age_days`|Your typed value, graded by when you last confirmed it|The banner: "PRICING FEED DOWN — feed down since <date>; pricing on your value from <date>"; `/health` `status` degraded|
+|One option's quote has no bid or ask, is wider than `max_spread_pct`, or cannot be solved|That option alone falls back to your typed IV|The panel names the reason; a never-confirmed typed IV alarms through the existing hand-entered rule|
+|The resolving code itself raises|Your typed values, for everything|`/health` `resolution_error` and `status: "degraded"`; the Pricing inputs panel says so; **the app still boots and the weekly email still sends and pings**|
+
+A dead feed does not stop the dead-man's-switch pings: the refresh job
+counts a failed download as having run.
+
+**Overriding a number.** On `/design`, **Pricing inputs**: pick the input
+(spot, or one option's IV), type your value (spot as an index level, an IV in
+percent), **Review**, then **Confirm**. The review says what confirming does
+and warns when your number is further from the feed's than
+`market_environment.spot_divergence_warn_pct` (spot) or
+`pricing_feed.override_warn_vol_points` (an IV). An override lasts **until
+you clear it** (pick it again, **Clear my override**, Review, Confirm); it
+does not expire. Every active override is listed on `/monitor` and in the
+weekly digest with its age and what the feed says today, so it cannot be
+forgotten. Overriding spot does not re-solve the options' IVs. To price on
+your own risk-free rate, take `risk_free_rate` out of `adopt`.
+
+**Editing the dividend yield.** The same panel, **Dividend yield**: it is
+never fetched, so confirm it against the published yield each quarter.
+Changing it re-solves every adopted IV at the new yield. The **Mark pricing
+inputs reviewed** button stamps only the typed values that are pricing the
+book: it will not stamp a typed number the feed is hiding.
+
+**Turning it off.** Remove the `pricing_feed:` section (nothing is fetched
+and every input is typed), or set `adopt: []` (the feed is fetched and shown,
+and nothing is priced on it). Rebuild (§4) and restart. Your typed values
+were never touched, so the book prices exactly as before. Drop the
+`; docker compose restart app` from the crontab if you like: it does no harm
+without a feed.
+
+**Realized carry.** An option whose IV changed source between two weekly
+marks (the feed failed, or came back, or this is the first week after
+adoption) was re-priced with no trade. Digest section 4 names it and says
+part of the figure is a re-pricing, not carry; the figure is still printed.
+
 ## 5. Loading your positions
 
 For a bulk or fresh load, the CLI importer is still the right tool — it's
@@ -915,7 +1007,9 @@ one problem per run; work through it rather than guessing:
   below is state, but rebuildable). Bind-mounted (not a named
   volume, so `ops/backup-exports.sh` can read it directly off the host
   filesystem — see `compose.yaml`). Contains `program_state.json` (the
-  live portfolio + IPS state), `exports/chain-history/` (a small daily
+  live portfolio + IPS state: **what you typed**, plus your override pins;
+  a number fetched from the feed is never written to it, §4.1),
+  `exports/chain-history/` (a small daily
   extract of the option chain, written by the refresh job when
   `ips.yaml` has a `pricing_feed` section — about 9 MB a year, backed
   up), `exports/reports/weekly/` (digest + snapshot history),
@@ -987,7 +1081,11 @@ crontab -e
 # but a weekend run still re-observes Friday's close and refreshes
 # fetched_at; a weekdays-only schedule would leave a 72h gap the TTL
 # can't absorb — see deltadewa/marketdata/refresh.py's own docstring).
-30 2 * * * cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh >> /home/deploy/deltadewa/logs/refresh.log 2>&1
+# The restart after it (9b, §4.1) is how the app picks up each night's
+# prices: it reads the cache ONCE, at start, so a page reload does not.
+# `;` not `&&`: restart even when the refresh failed, so the app's date
+# still rolls forward and it still prices on the last good data.
+30 2 * * * cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh >> /home/deploy/deltadewa/logs/refresh.log 2>&1 ; docker compose restart app >> /home/deploy/deltadewa/logs/refresh.log 2>&1
 
 # Weekly digest, with delivery — Sundays 03:00 UTC, after the refresh above.
 0 3 * * 0 cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_report --send-email >> /home/deploy/deltadewa/logs/weekly_report.log 2>&1
@@ -1222,8 +1320,9 @@ policy names (`rate`). A chain download failing is a partial run (exit
 chain fetch the job appends a small daily record to
 `exports/chain-history/`; a failure there is logged and never changes the
 exit code. With no `pricing_feed:` section neither series is fetched and
-nothing is written to `chain-history/`. Nothing is *priced* on the feed
-yet: `/design`'s **Fetched inputs** panel shows it beside the typed values.
+nothing is written to `chain-history/`. What the book is priced on, and when
+the app reads it, is §4.1: the app reads the cache once, when it starts, so
+a refresh run by hand changes nothing on the pages until the app restarts.
 To prove the failure path, point the Cboe host at nothing for one run.
 `docker compose run` has no `--add-host` flag, so use an override file kept
 outside the repo, with `compose.yaml` first so the mounts resolve as usual:
@@ -1348,6 +1447,12 @@ to read):
   `UNAVAILABLE`) is the *machine* half — the refresh job or the provider;
   start at §11's refresh command and its exit code, and at the REFRESH
   heartbeat (§13), which would normally have alarmed first.
+  `"market_data STALE (oldest series: chain (pricing feed))"` (or `rate`)
+  is the pricing feed (9b, §4.1): an input in `pricing_feed.adopt` is
+  priced on that series and it is stale, or past `max_quote_age_days` and
+  so `UNAVAILABLE` (the book is then priced on your typed values, and the
+  banner says so). A chain no input adopts is only listed under
+  `market_data.feed`, never counted.
   `"pricing_inputs UNKNOWN (...)"` is the *book* half — a hand-entered
   input (spot, the risk-free rate, the dividend yield, or a leg's IV)
   that has **never** been confirmed, which is what a book predating #367
@@ -1366,6 +1471,15 @@ to read):
   look at the provenance banner on `/monitor`. See
   `deltadewa/app/health_checks.py`'s module docstring before changing
   where that line sits.
+- **`resolution_error` is non-null when resolving the pricing inputs
+  itself failed (9b).** The book is then priced on your typed values for
+  everything, `status` reads `"degraded"`, and the app still boots and the
+  weekly email still sends. The message names the fault; the log has the
+  traceback. `market_data.resolution` reports what the app priced on: how
+  many inputs came from each origin (`FETCHED`, `LAST_GOOD`, `OVERRIDE`,
+  `FALLBACK`, `ENTERED`), when it read the prices (`resolved_at`, once, at
+  start), and `newer_cached_session` when the cache holds a later close
+  than the one the app priced on: restart the app to price on it (§4.1).
 - **`ips_sections_configured`'s `value` lists which of
   `market_environment`/`sizing`/`vega` fell back to code defaults.** This
   one never turns `status` to `degraded` on its own — a program

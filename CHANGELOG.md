@@ -19,20 +19,75 @@ history for that record instead.
 
 ### Added
 
-- **9b (PR-A) — the nightly refresh can fetch Cboe's delayed SPX option chain
-  and a FRED Treasury yield, and `/design` shows them beside the typed
-  values. Nothing is priced on them yet.** A new optional `pricing_feed:`
-  section in `ips.yaml` turns it on; with no section nothing is fetched and
-  the run is exactly what it was. Both shipped IPS templates carry it with
-  `adopt: []` (fetch and show only). Every key is required when the section
-  is present and there are no code defaults; `ips_config --check` lists an
-  absent section under "NO code defaults". `/design`'s new **Fetched inputs**
-  panel shows the index level and rate, fetched against typed, and for every
-  held option and every `strike_ladder` rung the matched contract, its close
-  bid and ask, Cboe's IV, and the IV this program's own engine solves from
-  the mid at the book's rate and dividend yield. The dividend yield is never
-  fetched. `/health` gains `market_data.feed` (the chain and the rate); it
-  does not count toward `status` until the book is priced on them.
+- **9b — the book is priced on a nightly feed instead of on numbers you
+  type (#413, #510).** With a `pricing_feed:` section in `ips.yaml` the
+  nightly refresh fetches Cboe's delayed SPX option chain and a FRED Treasury
+  yield, and whatever the section's `adopt` list names is priced on them:
+  `spot` is the chain's own index level (the nightly index close is the
+  backup), `risk_free_rate` is the one FRED series you name, and `volatility`
+  is, for every option you hold, the IV this program's own engine solves from
+  the close mid at the book's effective rate and dividend yield, so each leg
+  reprices to the market's mid. The dividend yield is never fetched (put-call
+  parity cannot isolate it) and stays yours. With no section, or
+  `adopt: []`, nothing changes: the book is priced on exactly what you typed.
+  Every key is required when the section is present and there are no code
+  defaults; both shipped templates carry it with `adopt: []`, and
+  `ips_config --check` lists an absent section under "NO code defaults".
+  **Your typed values stay in `program_state.json` untouched, as the override
+  and the fallback; a fetched number is never written to it, stamped as
+  confirmed, or journaled as a trade.**
+- **The app reads new prices only when it restarts.** It resolves the feed
+  once, when it starts; refreshing a page does not update the prices. Both
+  pages say so in the header ("Prices read at <time> from the <date> close...
+  refreshing this page does not update them"), and the Pricing inputs panel
+  says when a newer chain is cached that only a restart would adopt.
+- **`/design`'s Fetched inputs panel becomes Pricing inputs.** For the index
+  level, the rate, the dividend yield and every option's IV it shows what
+  prices the book, where it came from (fetched, last good, your override,
+  fallback to your value, or your value), what you typed and how old it is,
+  and what the feed says now, plus every held option's matched contract,
+  quote and flags and every `strike_ladder` rung. It carries the controls:
+  **override** spot or one option's IV (your value prices the book until you
+  clear it), **clear** an override, and **edit the dividend yield**. Each is
+  review then confirm, and the review warns when your number is further from
+  the feed's than `market_environment.spot_divergence_warn_pct` (spot) or
+  `pricing_feed.override_warn_vol_points` (an IV). Every active override is
+  listed on `/monitor` and in the weekly digest with its age and the feed's
+  figure beside it, so it cannot be forgotten.
+- **When the feed fails, each input says what it fell back to.** A night's
+  download that failed prices on the last good value, labelled with its date
+  (`STALE` once the cache is past `data_ttl_minutes`); a value older than
+  `pricing_feed.max_quote_age_days` falls back to yours, and the banner reads
+  "PRICING FEED DOWN — feed down since <date>; pricing on your value from
+  <date>"; one option whose quote has no bid or ask, is too wide or cannot be
+  solved falls back alone. `/health` counts an adopted series toward `status`
+  (one that nothing adopts is only listed), and gains
+  `market_data.resolution` (what each input was priced on, when the prices
+  were read, a newer cached session) and `resolution_error`. A fault in the
+  resolving code leaves the book on your typed values; the app still boots
+  and the weekly email still sends and pings.
+- **Candidate options are priced on the fetched smile.** A strike the book
+  does not hold (the strike grid, the sizing workbench, the ladder composer,
+  the new strike a roll moves to) used to be priced at the book's one flat
+  IV. It is now the listed contract's own IV, else linear in strike between
+  listed neighbours, else total variance between the two listed expiries
+  either side, else the book's flat vol, labelled: nothing is extrapolated.
+  A candidate at a held strike and expiry gets exactly the held leg's IV.
+  The panels say what their candidates were priced on, and the composer
+  shows each rung's IV and basis. The N7 "every leg at one IV" nudge looks
+  only at IVs you typed.
+- **Realized carry names an option whose IV changed source.** Each weekly
+  mark records where every option's IV came from; a period whose two marks
+  disagree on whether it was the feed's number or a typed one (the feed
+  failed, came back, or this is the first week after adoption) says part of
+  that figure is a re-pricing, not carry. The figure is still printed.
+- **The nightly refresh can fetch Cboe's delayed SPX option chain and a FRED
+  Treasury yield** (the first half of 9b). `/design` shows the index level
+  and rate fetched against typed, and for every held option and every
+  `strike_ladder` rung the matched contract, its close bid and ask, Cboe's
+  IV, and the IV this program's own engine solves from the mid at the book's
+  rate and dividend yield. `/health` gains `market_data.feed` (the chain and
+  the rate).
 - **The Liquidity check fills from the chain.** Each held leg gets the last
   close's bid, ask and open interest beside any quote you recorded; the later
   of the two is graded and the other is shown. A fetched quote is derived at
@@ -46,6 +101,17 @@ history for that record instead.
 
 ### Changed
 
+- **Deploy step: add `; docker compose restart app` after the refresh line in
+  the crontab** (RUNBOOK §9, §4.1). The app reads the feed once, when it
+  starts, so the nightly restart is how it picks up each night's prices and
+  rolls its date forward; it is down for a few seconds at about 21:31 New
+  York. To turn adoption on, set `pricing_feed.adopt` in `config/ips.yaml`,
+  rebuild, run the refresh once by hand and restart. To turn it off, remove
+  the section or set `adopt: []`.
+- `/monitor`'s spot cross-check warns only on same-session figures: a spot
+  fetched from the chain is struck at its own session's close, and the
+  observed figure (the index history) is one session behind it after hours,
+  so across sessions it says "not compared".
 - **Deploy step: the market-data cache moves out of `exports/`.** The raw
   option-chain payload is about 13 MB of vendor data and must not ride the
   offsite backup, so `DELTADEWA_CACHE_DIR` is now `/app/cache`, a `./cache`
@@ -59,6 +125,13 @@ history for that record instead.
 
 ### Fixed
 
+- **A rate or dividend-yield change dropped every leg's recorded liquidity
+  quote.** The rebuild that re-prices each leg at a new rate built a fresh
+  position without the quote you had recorded (and ran even when the rate
+  was repeated). It now carries everything a leg holds.
+- **The option-chain cache's `.prev` copy is the previous *session*,** not
+  whatever the previous fetch was (two runs in one evening left it equal to
+  tonight's).
 - **#509 — `/monitor` read the observed spot under the book's own symbol,
   which defaults to `UNKNOWN`,** while the refresh job warms the instrument's
   key, so a book that never set a symbol showed the cross-check as
