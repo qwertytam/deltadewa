@@ -83,6 +83,11 @@ class OptionPosition:
         # freshly-built position, and only record_liquidity sets it live.
         # See deltadewa.portfolio.liquidity.
         self.liquidity: LiquidityObservation | None = None
+        # 9b / D7: the operator pinned this leg's typed volatility, so a
+        # fetched one must not replace it. Not a constructor argument, for
+        # the same reason as ``liquidity``: only the override mutators and
+        # the persistence restore set it.
+        self.volatility_override: bool = False
 
     def position_value(self) -> float:
         """Calculate the total value of the position.

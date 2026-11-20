@@ -17,7 +17,11 @@ import requests
 from deltadewa.marketdata._errors import MarketDataError
 from deltadewa.marketdata._observation import Observation, Source
 from deltadewa.marketdata._policy import default_cache_dir
-from deltadewa.marketdata.chain import ChainSnapshot, parse_cboe_chain
+from deltadewa.marketdata.chain import (
+    ChainSnapshot,
+    parse_cboe_chain,
+    payload_session_date,
+)
 
 _CBOE_HISTORY_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 _FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
@@ -66,6 +70,23 @@ def _parse_as_of(raw: str) -> datetime:
     CBOE writes MM/DD/YYYY and FRED writes YYYY-MM-DD; both parse here.
     """
     return pd.Timestamp(raw).to_pydatetime().replace(tzinfo=UTC)
+
+
+def _is_new_session(existing: Any, new: Any) -> bool:  # ruff: ignore[any-type]  # raw cached payloads
+    """Whether *new* is a different trading session from *existing*.
+
+    The rotation rule for the option chain's ``.prev`` copy. An unreadable
+    existing payload has no session, so it is not worth keeping; a new
+    payload that cannot be dated (it was parsed before it got here, so this
+    is unreachable in the job) rotates, the safe side of "keep one more".
+    """
+    old_session = (
+        payload_session_date(existing) if isinstance(existing, dict) else None
+    )
+    if old_session is None:
+        return False
+    new_session = payload_session_date(new) if isinstance(new, dict) else None
+    return new_session is None or new_session != old_session
 
 
 @dataclass(frozen=True)
@@ -170,7 +191,7 @@ class _DiskCache:
         key: str,
         value: Any,  # ruff: ignore[any-type]  # cache stores heterogeneous values (float, dict, str)
         *,
-        keep_previous: bool = False,
+        keep_previous: bool | Callable[[Any, Any], bool] = False,
     ) -> datetime:
         """Write *value* for *key*, stamped with the current time.
 
@@ -184,7 +205,13 @@ class _DiskCache:
             value: A JSON-serialisable value.
             keep_previous: When ``True`` and an entry already exists, first
                 copy it to ``<key>.prev.json``, so the last good payload
-                survives one further refresh.
+                survives one further refresh. A callable is asked instead,
+                with the existing entry's value and *value*, and rotates
+                only when it returns ``True``: the option chain passes
+                "the new payload is a different trading session", so
+                ``.prev`` is the previous session, not whatever the
+                previous fetch happened to be (two runs in one evening
+                would otherwise leave ``.prev`` equal to tonight).
 
         Returns:
             The timestamp written, so the caller can stamp the same instant
@@ -201,7 +228,7 @@ class _DiskCache:
         temporary = path.with_name(path.name + ".tmp")
         try:
             temporary.write_text(json.dumps(entry))
-            if keep_previous and path.exists():
+            if self._should_rotate(key, value, keep_previous):
                 previous = path.with_name(f"{key}.prev.json")
                 staged = previous.with_name(previous.name + ".tmp")
                 shutil.copyfile(path, staged)
@@ -210,6 +237,23 @@ class _DiskCache:
         finally:
             temporary.unlink(missing_ok=True)
         return fetched_at
+
+    def _should_rotate(
+        self,
+        key: str,
+        value: Any,  # ruff: ignore[any-type]  # same heterogeneous cache value as set()
+        keep_previous: bool | Callable[[Any, Any], bool],
+    ) -> bool:
+        """Whether the entry *value* replaces should be kept as ``.prev``."""
+        if keep_previous is False or not self._path(key).exists():
+            return False
+        if keep_previous is True:
+            return True
+        existing = self._read(key)
+        return existing is not None and keep_previous(
+            existing.get("value"),
+            value,
+        )
 
 
 class CboeFredProvider:
@@ -444,7 +488,7 @@ class CboeFredProvider:
             key,
             fetch,
             decode=lambda raw: raw,
-            keep_previous=True,
+            keep_previous=_is_new_session,
         )
         snapshot = parsed.get("snapshot")
         if snapshot is None:
@@ -567,7 +611,7 @@ class CboeFredProvider:
         fetch: Callable[[], T],
         *,
         decode: Callable[[Any], T],
-        keep_previous: bool = False,
+        keep_previous: bool | Callable[[Any, Any], bool] = False,
     ) -> _Resolved[T]:
         """Try a live fetch, then cache, then fall back to a stale value.
 
@@ -586,7 +630,8 @@ class CboeFredProvider:
                 parse), and either falls back to the last cached value.
             decode: Turns a JSON-round-tripped cache value back into ``T``.
             keep_previous: Keep the entry this write replaces as
-                ``<key>.prev.json``.
+                ``<key>.prev.json``; see :meth:`_DiskCache.set` for the
+                callable form.
 
         """
         if not self._force_fetch:

@@ -21,6 +21,68 @@ if TYPE_CHECKING:
     from deltadewa.portfolio._protocols import _PortfolioProtocol
 
 
+def rebuilt_position(  # pylint: disable=too-many-arguments  # one leg's whole market input set
+    position: OptionPosition,
+    *,
+    spot_price: float,
+    volatility: float,
+    risk_free_rate: float,
+    dividend_yield: float,
+    valuation_date: dt,
+) -> OptionPosition:
+    """Return *position* re-created at the given market inputs.
+
+    The one place a leg is rebuilt for a new rate, yield, spot or
+    volatility, so nothing a leg carries can be dropped by one caller and
+    kept by another: identity (``position_id``), cost basis, structure tag,
+    the confirmation stamp, the operator's recorded liquidity quote and the
+    override pin all survive. (The r/q rebuild in
+    ``update_market_conditions`` used to drop the liquidity quote.)
+
+    Args:
+        position: The leg to copy. Never mutated.
+        spot_price: The underlying's spot for the new option.
+        volatility: The new option's implied volatility.
+        risk_free_rate: Continuous risk-free rate.
+        dividend_yield: Continuous dividend yield.
+        valuation_date: The valuation date.
+
+    Returns:
+        A new position with a new ``OptionValuation``.
+
+    """
+    option = position.option
+    new_option = OptionValuation(
+        spot_price=spot_price,
+        strike_price=option.strike_price,
+        maturity_date=option.maturity_date,
+        volatility=volatility,
+        risk_free_rate=risk_free_rate,
+        dividend_yield=dividend_yield,
+        option_type=option.option_type,
+        valuation_date=valuation_date,
+        exercise_style=position.exercise_style,
+        grid_resolution=option.grid_resolution,
+        use_closed_form=option.use_closed_form,
+    )
+    rebuilt = OptionPosition(
+        new_option,
+        position.quantity,
+        contract_size=position.contract_size,
+        custom_volatility=position.custom_volatility,
+        exercise_style=position.exercise_style,
+        entry_spot=position.entry_spot,
+        entry_date=position.entry_date,
+        entry_premium=position.entry_premium,
+        position_id=position.position_id,
+        volatility_as_of=position.volatility_as_of,
+        structure_id=position.structure_id,
+    )
+    rebuilt.liquidity = position.liquidity
+    rebuilt.volatility_override = position.volatility_override
+    return rebuilt
+
+
 class OptionPortfolioBase:
     """Base class for option portfolio management.
 
@@ -85,6 +147,10 @@ class OptionPortfolioBase:
         self.default_exercise_style = default_exercise_style
         self.contract_size = contract_size
         self.stamps = stamps if stamps is not None else MarketParameterStamps()
+        # 9b / D7: the operator pinned the typed spot, so a fetched one must
+        # not replace it. The value itself is ``spot_price``; this is only
+        # the pin. A leg's pin is ``OptionPosition.volatility_override``.
+        self.spot_override: bool = False
         self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
@@ -553,6 +619,9 @@ class OptionPortfolioBase:
             # this strike/expiry; dropping it makes the leg read "never
             # checked" until the operator records the new contract's quote.
             pos.liquidity = None
+            # 9b / D7: likewise a pinned volatility described the old
+            # contract; pinning a different contract to it would surprise.
+            pos.volatility_override = False
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert portfolio to pandas DataFrame."""
@@ -653,47 +722,19 @@ class OptionPortfolioBase:
                     )
                 self.dividend_yield = dividend_yield
 
-            # Recreate all positions with new rates, preserving custom
-            # volatility
-            new_positions = []
-            for pos in self.positions:
-                new_option = OptionValuation(
+            # Recreate all positions with new rates, preserving everything
+            # else a leg carries (see rebuilt_position).
+            new_positions = [
+                rebuilt_position(
+                    pos,
                     spot_price=self.spot_price,
-                    strike_price=pos.option.strike_price,
-                    maturity_date=pos.option.maturity_date,
-                    # Preserve existing volatility
                     volatility=pos.option.volatility,
                     risk_free_rate=self.risk_free_rate,
                     dividend_yield=self.dividend_yield,
-                    option_type=pos.option.option_type,
                     valuation_date=self.valuation_date,
-                    exercise_style=pos.exercise_style,
-                    grid_resolution=pos.option.grid_resolution,
                 )
-                new_positions.append(
-                    OptionPosition(
-                        new_option,
-                        pos.quantity,
-                        contract_size=pos.contract_size,
-                        # Preserve custom volatility flag
-                        custom_volatility=pos.custom_volatility,
-                        exercise_style=pos.exercise_style,
-                        # Preserve cost basis and identity across the rebuild
-                        entry_spot=pos.entry_spot,
-                        entry_date=pos.entry_date,
-                        entry_premium=pos.entry_premium,
-                        position_id=pos.position_id,
-                        # Preserve the volatility stamp — the rate/dividend
-                        # rebuild does not touch volatility itself, so
-                        # losing this here would be a silent reset to
-                        # UNKNOWN for every leg on the next rate change.
-                        volatility_as_of=pos.volatility_as_of,
-                        # Likewise for the structure tag: a rate change
-                        # must not silently break a spread into two
-                        # unrelated legs (#333).
-                        structure_id=pos.structure_id,
-                    ),
-                )
+                for pos in self.positions
+            ]
             self.positions = new_positions
 
     def clear_positions(self) -> None:
