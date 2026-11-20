@@ -74,6 +74,16 @@ body {
   padding: 4px 24px;
 }
 
+/* 9b: prices are read once, at start, and a reload does not re-read them.
+   Informational, not an alarm, but plainly readable on every page. */
+.chrome-priced {
+  background: #eaf2fb;
+  color: #1e3a5f;
+  font-size: 0.8rem;
+  padding: 4px 24px;
+  border-left: 4px solid #1e3a5f;
+}
+
 .chrome-banner {
   padding: 8px 24px;
   font-weight: 600;

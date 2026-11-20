@@ -18,7 +18,10 @@ from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.pricing_resolution import ResolvedInputs
+    from deltadewa.analysis.pricing_resolution import (
+        ResolvedInputs,
+        TypedInUse,
+    )
     from deltadewa.portfolio._protocols import _PortfolioProtocol
 
 
@@ -814,8 +817,13 @@ class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the boo
         """Clear all positions from the portfolio."""
         self.positions = []
 
-    def confirm_current_inputs(self, *, as_of: dt | None = None) -> None:
-        """Stamp every hand-entered pricing input as confirmed *now*.
+    def confirm_current_inputs(
+        self,
+        *,
+        as_of: dt | None = None,
+        only: "TypedInUse | None" = None,
+    ) -> None:
+        """Stamp the hand-entered pricing inputs as confirmed *now*.
 
         Unlike ``update_market_conditions``/``set_volatility``/
         ``update_position``, this stamps unconditionally — an operator
@@ -833,19 +841,97 @@ class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the boo
         Args:
             as_of: When this confirmation is deemed to have happened.
                 Defaults to ``program_now()``.
+            only: When the feed prices some inputs (9b), the typed values
+                that actually price the book. A typed value the feed is
+                hiding is **not** stamped: the operator did not look at
+                it, and confirming it would launder a stale fallback into
+                looking freshly checked for the night the feed fails.
+                ``None`` (no feed) stamps every input, as before.
 
         """
         effective_stamp = as_of if as_of is not None else program_now()
         self.stamps = MarketParameterStamps(
-            spot_as_of=effective_stamp,
-            risk_free_rate_as_of=effective_stamp,
-            dividend_yield_as_of=effective_stamp,
+            spot_as_of=(
+                effective_stamp
+                if only is None or only.spot
+                else self.stamps.spot_as_of
+            ),
+            risk_free_rate_as_of=(
+                effective_stamp
+                if only is None or only.risk_free_rate
+                else self.stamps.risk_free_rate_as_of
+            ),
+            dividend_yield_as_of=(
+                effective_stamp
+                if only is None or only.dividend_yield
+                else self.stamps.dividend_yield_as_of
+            ),
         )
         for pos in self.positions:
-            pos.volatility_as_of = effective_stamp
+            if only is None or pos.position_id in only.legs:
+                pos.volatility_as_of = effective_stamp
         # Deliberately not pos.liquidity: an observation is a quote the
         # operator read, not a confirmation of a value already held, so
         # "mark inputs reviewed" cannot refresh it (8c / N10).
+
+    def pin_spot(self, value: float, *, as_of: dt | None = None) -> None:
+        """Pin the typed spot above a fetched one (9b, D7).
+
+        Stamps unconditionally, even when *value* repeats the current spot:
+        choosing to override is a human confirming this number now, which
+        the change-gated stamping of ``update_market_conditions`` would not
+        record.
+        """
+        effective_stamp = as_of if as_of is not None else program_now()
+        self.spot_price = value
+        for pos in self.positions:
+            pos.option.update_spot_price(value)
+        self.stamps = dataclass_replace(self.stamps, spot_as_of=effective_stamp)
+        self.spot_override = True
+
+    def unpin_spot(self) -> None:
+        """Let a fetched spot replace the typed one again.
+
+        The typed value stays, as the fallback; nothing is re-stamped.
+        """
+        self.spot_override = False
+
+    def _leg(self, position_id: str) -> OptionPosition:
+        for pos in self.positions:
+            if pos.position_id == position_id:
+                return pos
+        raise KeyError(f"no position with id {position_id!r}")
+
+    def pin_volatility(
+        self,
+        position_id: str,
+        value: float,
+        *,
+        as_of: dt | None = None,
+    ) -> None:
+        """Pin one leg's typed IV above a fetched one (9b, D7).
+
+        Keyed by ``position_id``, like :meth:`record_liquidity`. Stamps
+        unconditionally for the reason :meth:`pin_spot` does.
+
+        Raises:
+            KeyError: If no position has *position_id*.
+
+        """
+        pos = self._leg(position_id)
+        pos.option.update_volatility(value)
+        pos.custom_volatility = True
+        pos.volatility_as_of = as_of if as_of is not None else program_now()
+        pos.volatility_override = True
+
+    def unpin_volatility(self, position_id: str) -> None:
+        """Let a fetched IV replace this leg's typed one again.
+
+        Raises:
+            KeyError: If no position has *position_id*.
+
+        """
+        self._leg(position_id).volatility_override = False
 
     def record_liquidity(  # pylint: disable=too-many-arguments
         self,

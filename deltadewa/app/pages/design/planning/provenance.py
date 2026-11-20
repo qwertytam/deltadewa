@@ -73,6 +73,7 @@ def _render_provenance_panel_logic(
             portfolio,
             ips_config.pricing_inputs,
             as_of=program_trading_date(ips_config.program.timezone).date(),
+            resolution=app.program_state.resolution,
         )
         return build_provenance_panel(ledger)
 

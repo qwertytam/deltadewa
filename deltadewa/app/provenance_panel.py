@@ -23,7 +23,11 @@ from dash import html
 from deltadewa.analysis.provenance import Freshness, InputKind
 
 if TYPE_CHECKING:
-    from deltadewa.analysis.provenance import InputProvenance, ProvenanceLedger
+    from deltadewa.analysis.provenance import (
+        InputProvenance,
+        OverrideNote,
+        ProvenanceLedger,
+    )
 
 _KIND_LABEL = {
     InputKind.FETCHED: "Fetched",
@@ -56,6 +60,70 @@ def _entry_row(entry: InputProvenance) -> html.Tr:
             html.Td(entry.detail),
         ],
     )
+
+
+def _override_row(note: OverrideNote) -> html.Tr:
+    age = f"{note.age_days}d" if note.age_days is not None else "never"
+    return html.Tr(
+        [
+            html.Td(note.label),
+            html.Td(note.show(note.value)),
+            html.Td(note.show(note.fetched)),
+            html.Td(age),
+        ],
+    )
+
+
+def overrides_block(ledger: ProvenanceLedger) -> list[html.Div]:
+    """List every active override, with its age and the feed's figure.
+
+    An override lasts until it is cleared (D7), so it is the one pricing
+    input that can be forgotten and keep pricing the book on a stale number
+    while the feed has moved on. Listing each with its age and what the feed
+    says today, on every page that shows the provenance panel and in the
+    digest, is what keeps it from being forgotten. Empty when there is none.
+    """
+    if not ledger.overrides:
+        return []
+    return [
+        html.Div(
+            [
+                html.Div(
+                    f"{len(ledger.overrides)} active override"
+                    f"{'s' if len(ledger.overrides) != 1 else ''}: your "
+                    "value prices the book until you clear it.",
+                    className="provenance-overrides-title",
+                ),
+                html.Table(
+                    [
+                        html.Thead(
+                            html.Tr(
+                                [
+                                    html.Th("Input"),
+                                    html.Th("Your value"),
+                                    html.Th("Feed today"),
+                                    html.Th("Confirmed"),
+                                ],
+                            ),
+                        ),
+                        html.Tbody(
+                            [_override_row(n) for n in ledger.overrides]
+                        ),
+                    ],
+                    className="provenance-table",
+                ),
+            ],
+            className="provenance-overrides",
+        ),
+    ]
+
+
+def _notes_block(ledger: ProvenanceLedger) -> list[html.Div]:
+    """List the inputs that fell back to your value, and why."""
+    return [
+        html.Div(note, className="provenance-input-note")
+        for note in ledger.input_notes
+    ]
 
 
 def _summary_text(ledger: ProvenanceLedger) -> str:
@@ -109,6 +177,8 @@ def build_provenance_panel(ledger: ProvenanceLedger) -> html.Div:
     return html.Div(
         [
             html.Div(_summary_text(ledger), className="provenance-summary"),
+            *_notes_block(ledger),
+            *overrides_block(ledger),
             *nudge,
             html.Details(
                 [

@@ -50,6 +50,7 @@ def leg(
     *,
     contract: ContractTerms | None = None,
     expired_unsettled: bool = False,
+    origin: str = "ENTERED",
 ) -> LegMark:
     """Return one lot's mark."""
     contract = contract or terms()
@@ -62,6 +63,7 @@ def leg(
         price_per_share=price,
         value=quantity * price * contract.contract_size,
         expired_unsettled=expired_unsettled,
+        volatility_origin=origin,
     )
 
 

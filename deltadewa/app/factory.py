@@ -19,6 +19,7 @@ from flask import jsonify
 
 from deltadewa.analysis.cache import ScenarioGridCache
 from deltadewa.analysis.market_environment import assess_market_environment
+from deltadewa.analysis.pricing_resolution import newer_cached_session
 from deltadewa.analysis.provenance import InputKind, build_provenance_ledger
 from deltadewa.app.chrome import (
     NAV_ID,
@@ -100,6 +101,48 @@ def _market_data_payload(environment: MarketEnvironment) -> dict[str, Any]:
     }
 
 
+def _resolution_payload(
+    state: ProgramState,
+    provider: MarketDataProvider,
+    ips_config: IpsConfig | None,
+) -> dict[str, Any]:
+    """Build ``/health``'s ``market_data.resolution``: what the app priced on.
+
+    Which of the four origins each input came from, when the process read
+    the prices (once, at start; a reload does not re-read them), and whether
+    a newer chain is cached that only a restart would adopt. Never raises:
+    a provider that cannot be read is simply "nothing newer".
+    """
+    resolution = state.resolution
+    origins: dict[str, int] = {}
+    for value in (
+        resolution.spot,
+        resolution.risk_free_rate,
+        resolution.dividend_yield,
+        *resolution.legs.values(),
+    ):
+        origins[value.origin.value] = origins.get(value.origin.value, 0) + 1
+    try:
+        newer = newer_cached_session(provider, ips_config, resolution)
+    except Exception:  # pylint: disable=broad-exception-caught
+        _logger.exception("/health: reading the newest cached chain failed")
+        newer = None
+    return {
+        "adopting": resolution.adopting,
+        "resolved_at": resolution.resolved_at.isoformat(),
+        "session_date": (
+            resolution.session_date.isoformat()
+            if resolution.session_date is not None
+            else None
+        ),
+        "origins": origins,
+        "newer_cached_session": (
+            newer.isoformat() if newer is not None else None
+        ),
+        "error": resolution.error,
+    }
+
+
 def _feed_payload(
     provider: MarketDataProvider,
     ips_config: IpsConfig | None,
@@ -111,11 +154,12 @@ def _feed_payload(
     ips.yaml has no ``pricing_feed`` section (nothing is fetched).
 
     Deliberately **outside** ``market_data.series`` and outside
-    ``assess_market_environment``: that reduction feeds ``oldest_series``,
-    the banner and ``status``, so a series added there would count toward
-    them at once. Nothing is priced on the feed yet, so a stale chain must
-    not degrade ``/health`` for an input nothing reads; the series move
-    into the environment when the book is priced on them.
+    ``assess_market_environment`` (the four VIX-family readings). Each
+    series carries ``adopted``: whether an input in ``pricing_feed.adopt``
+    is priced on it. An adopted series counts toward ``status``, the banner
+    and the digest through the provenance ledger, which folds its quality
+    into ``market_data_quality``; one nothing adopts is only listed, so a
+    stale chain cannot degrade ``/health`` for an input nothing reads.
 
     Never raises. A series nothing has cached is ``UNAVAILABLE`` with null
     times (an ordinary state, not logged); anything else that goes wrong
@@ -165,6 +209,16 @@ def _feed_payload(
                 else None
             ),
         }
+    adopt = frozenset(feed.adopt)
+    adopted = {
+        "chain": bool(adopt & {"spot", "volatility"}),
+        "rate": "risk_free_rate" in adopt,
+    }
+    for name, entry in payload.items():
+        # 9b: whether an adopted input is priced on this series. Counted
+        # toward ``status`` through the ledger (the series' quality folds
+        # into market_data_quality), not through this block.
+        entry["adopted"] = adopted[name]
     return payload
 
 
@@ -299,6 +353,7 @@ def create_app(
             state.portfolio,
             pricing_inputs_policy,
             as_of=program_trading_date(program_tz).date(),
+            resolution=state.resolution,
         )
         return environment, ledger
 
@@ -383,6 +438,11 @@ def create_app(
                 market_data,
                 ips_config,
             )
+            market_data_payload["resolution"] = _resolution_payload(
+                state,
+                market_data,
+                ips_config,
+            )
             pricing_inputs_payload = _pricing_inputs_payload(ledger)
             # #393: the freshness half of "status". Only reachable on
             # this branch — a raise above leaves no ledger to grade, and
@@ -428,6 +488,7 @@ def create_app(
                 or provenance_error is not None
                 or boot_wiring_error is not None
                 or freshness_reason is not None
+                or state.resolution.error is not None
             )
             else "ok"
         )
@@ -448,6 +509,11 @@ def create_app(
                 # two error fields it reports a condition this endpoint
                 # successfully assessed, not a failure to assess one.
                 "freshness_reason": freshness_reason,
+                # 9b: null unless resolving the pricing inputs itself
+                # failed, in which case the book is priced on the typed
+                # values and this names the fault (the app still boots and
+                # the weekly email still sends).
+                "resolution_error": state.resolution.error,
                 # #355: who last wrote the shared state file, and whether
                 # it has changed since this worker last read or wrote it
                 # itself — a single Path.stat() under external_write_

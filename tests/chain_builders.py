@@ -117,6 +117,7 @@ def priced_contract(  # pylint: disable=too-many-arguments
     spot: float = SPOT,
     rate: float = RATE,
     dividend: float = DIVIDEND,
+    valuation: date = SESSION,
 ) -> dict[str, Any]:
     """Return a contract quoted around the engine's price on the smile.
 
@@ -132,6 +133,7 @@ def priced_contract(  # pylint: disable=too-many-arguments
         spot=spot,
         rate=rate,
         dividend=dividend,
+        valuation=valuation,
     )
     return raw_contract(
         occ(root, expiry, option_type, strike),

@@ -65,11 +65,13 @@ __all__ = [
     "FeedInputs",
     "InputOrigin",
     "LegTerms",
+    "OverrideKind",
     "ResolvedInputs",
     "ResolvedValue",
     "SeriesUse",
     "TypedInUse",
     "leg_terms",
+    "newer_cached_session",
     "read_feed",
     "resolve_pricing_inputs",
 ]
@@ -100,6 +102,17 @@ class InputOrigin(StrEnum):
     OVERRIDE = "OVERRIDE"
     FALLBACK = "FALLBACK"
     ENTERED = "ENTERED"
+
+
+class OverrideKind(StrEnum):
+    """The inputs an operator can pin above the feed (D7).
+
+    The rate is not one: it has no divergence threshold to warn against, and
+    to price on your own rate you take it out of ``pricing_feed.adopt``.
+    """
+
+    SPOT = "spot"
+    VOLATILITY = "volatility"
 
 
 #: Origins that are the feed's own number (the others are typed values).
@@ -227,6 +240,43 @@ def read_feed(
     return FeedInputs(chain=chain, rate=rate, index_spot=index_spot)
 
 
+def newer_cached_session(
+    provider: MarketDataProvider,
+    ips_config: IpsConfig | None,
+    resolution: ResolvedInputs,
+) -> date | None:
+    """Return the chain session cached now, if it is later than the priced one.
+
+    The app reads the feed once, at start, so a refresh that lands after
+    the start is cached but not adopted until the next restart. This is the
+    one question the pages and ``/health`` ask to say so ("a newer chain is
+    cached; restart the app to price on it"). Never raises.
+
+    Args:
+        provider: The market-data provider.
+        ips_config: The policy.
+        resolution: What the process priced the book on.
+
+    Returns:
+        The newer session's date, or ``None`` when nothing newer is cached,
+        nothing is adopted, or the chain cannot be read.
+
+    """
+    policy = ips_config.pricing_feed if ips_config is not None else None
+    if ips_config is None or policy is None or not resolution.adopting:
+        return None
+    if not frozenset(policy.adopt) & {_SPOT, _VOLATILITY}:
+        return None
+    try:
+        cached = provider.get_option_chain(ips_config.program.instrument)
+    except MarketDataError:
+        return None
+    session = cached.value.session_date
+    if resolution.session_date is None or session > resolution.session_date:
+        return session
+    return None
+
+
 @dataclass(frozen=True)
 class ResolvedValue:
     """One effective input, with where it came from.
@@ -312,6 +362,9 @@ class ResolvedInputs:  # pylint: disable=too-many-instance-attributes  # the res
         session_date: The chain session the prices are from, if any.
         is_identity: Whether every effective value equals the typed one, so
             the book needs no priced view at all.
+        adopting: Whether the policy adopts anything from the feed. False
+            with no ``pricing_feed`` section or an empty ``adopt`` list,
+            when the pages say nothing about prices being read.
 
     """
 
@@ -326,6 +379,7 @@ class ResolvedInputs:  # pylint: disable=too-many-instance-attributes  # the res
     resolved_at: datetime
     session_date: date | None
     is_identity: bool
+    adopting: bool = False
 
     @classmethod
     def all_entered(
@@ -334,6 +388,7 @@ class ResolvedInputs:  # pylint: disable=too-many-instance-attributes  # the res
         *,
         resolved_at: datetime,
         error: str | None = None,
+        adopting: bool = False,
     ) -> ResolvedInputs:
         """Price on every typed value, optionally saying why.
 
@@ -355,6 +410,7 @@ class ResolvedInputs:  # pylint: disable=too-many-instance-attributes  # the res
             resolved_at=resolved_at,
             session_date=None,
             is_identity=True,
+            adopting=adopting,
         )
 
     def typed_in_use(self) -> TypedInUse:
@@ -763,6 +819,7 @@ def resolve_pricing_inputs(  # pylint: disable=too-many-arguments,too-many-local
         resolved_at=resolved_at,
         session_date=session_date,
         is_identity=identical,
+        adopting=True,
     )
 
 

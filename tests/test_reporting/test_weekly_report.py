@@ -64,6 +64,7 @@ from deltadewa.reporting.weekly_snapshot import (
 )
 from deltadewa.valuation import OptionValuation
 from tests.clock_helpers import days_from_today
+from tests.feed_fixtures import FedProvider, adopting_ips
 
 _GOLDEN_PATH = Path(__file__).parent / "goldens" / "weekly_digest.md"
 _EXAMPLE_IPS_YAML = (
@@ -1977,6 +1978,95 @@ class TestMainSendEmail:
             "https://hc-ping.com/x",
             label="digest",
         )
+
+
+class TestMainWithAFailingFeed:
+    """9b: a fault reading or resolving the feed never costs the digest."""
+
+    @staticmethod
+    def _send_env(monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("SMTP_PORT", "587")
+        monkeypatch.setenv("SMTP_USERNAME", "hedge-program@example.com")
+        monkeypatch.setenv("SMTP_PASSWORD", "fake-smtp-password")
+        monkeypatch.setenv("REPORT_EMAIL_TO", "ic@example.com")
+        monkeypatch.setenv("REPORT_EMAIL_FROM", "hedge-program@example.com")
+        monkeypatch.setenv("DIGEST_HEARTBEAT_URL", "https://hc-ping.com/x")
+
+    def _run(
+        self,
+        seeded_export_dir: _MainFixture,
+        ips_path: Path,
+    ) -> tuple[int, object, object]:
+        with (
+            patch.object(weekly_report_module, "send_email") as mock_send,
+            patch.object(weekly_report_module, "ping") as mock_ping,
+        ):
+            exit_code = main(
+                [
+                    "--export-dir",
+                    str(seeded_export_dir.export_dir),
+                    "--ips-path",
+                    str(ips_path),
+                    "--as-of",
+                    "2026-08-05",
+                    "--send-email",
+                ],
+            )
+        return exit_code, mock_send, mock_ping
+
+    def test_a_resolver_that_raises_still_sends_and_pings(
+        self,
+        seeded_export_dir: _MainFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self._send_env(monkeypatch)
+        ips = adopting_ips(seeded_export_dir.export_dir)
+
+        def boom(**_kwargs: object) -> object:
+            raise RuntimeError("resolver fault")
+
+        monkeypatch.setattr("deltadewa.state.resolve_pricing_inputs", boom)
+        monkeypatch.setattr(
+            weekly_report_module,
+            "read_only_provider_for",
+            lambda _ips: FedProvider(),
+        )
+
+        exit_code, mock_send, mock_ping = self._run(seeded_export_dir, ips)
+
+        assert exit_code == 0
+        mock_send.assert_called_once()  # type: ignore[attr-defined]
+        mock_ping.assert_called_once()  # type: ignore[attr-defined]
+
+    def test_a_provider_that_cannot_be_built_still_sends_and_pings(
+        self,
+        seeded_export_dir: _MainFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        self._send_env(monkeypatch)
+        ips = adopting_ips(seeded_export_dir.export_dir)
+        calls: list[object] = []
+
+        def broken(ips_config: object) -> object:
+            # load() asks once and is refused; the build below must not
+            # then depend on a provider that never existed.
+            calls.append(ips_config)
+            if len(calls) == 1:
+                raise RuntimeError("cache directory unreadable")
+            return FedProvider()
+
+        monkeypatch.setattr(
+            weekly_report_module,
+            "read_only_provider_for",
+            broken,
+        )
+
+        exit_code, mock_send, mock_ping = self._run(seeded_export_dir, ips)
+
+        assert exit_code == 0
+        mock_send.assert_called_once()  # type: ignore[attr-defined]
+        mock_ping.assert_called_once()  # type: ignore[attr-defined]
 
 
 class TestMainBuildFailure:

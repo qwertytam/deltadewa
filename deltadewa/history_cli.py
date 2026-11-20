@@ -36,6 +36,7 @@ from deltadewa.analysis.realized_carry import (
     since_inception,
 )
 from deltadewa.clock import program_now
+from deltadewa.marketdata import read_only_provider_for
 from deltadewa.portfolio.history import BookMark, mark_book
 from deltadewa.state import ProgramState
 
@@ -115,6 +116,10 @@ def take_mark(
         marked_at=program_now(tz),
         written_by=written_by,
         is_opening=not existing,
+        volatility_origins={
+            position_id: leg.origin.value
+            for position_id, leg in state.resolution.legs.items()
+        },
     )
     if store.append_mark(mark):
         started = (
@@ -222,7 +227,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     """
     logging.basicConfig(level=logging.INFO)
     args = _parse_args(argv)
-    state = ProgramState.load(args.export_dir, ips_path=args.ips_path)
+    state = ProgramState.load(
+        args.export_dir,
+        ips_path=args.ips_path,
+        market_data=read_only_provider_for,
+    )
     if args.command == "status":
         print("\n".join(_status_lines(state)))
         return _EXIT_OK

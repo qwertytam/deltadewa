@@ -17,11 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from deltadewa.app.factory import create_app
-from deltadewa.marketdata import (
-    CboeFredProvider,
-    default_cache_dir,
-    resolve_data_ttl,
-)
+from deltadewa.marketdata import read_only_provider_for
 from deltadewa.state import ProgramState
 
 if TYPE_CHECKING:
@@ -33,13 +29,20 @@ if TYPE_CHECKING:
 def _build() -> ProgramDashApp:
     """Construct the app once, against the shared ``exports/`` state."""
     logging.basicConfig(level=logging.INFO)
-    state = ProgramState.load(Path("exports"), writer_label="app")
+    # The provider's TTL is policy, so load() builds it from the IPS it
+    # parses, reads the feed through it once, and hands it back: the app
+    # prices on that one reading until it is restarted.
+    state = ProgramState.load(
+        Path("exports"),
+        writer_label="app",
+        market_data=read_only_provider_for,
+    )
     return create_app(
         state=state,
-        market_data=CboeFredProvider(
-            cache_dir=default_cache_dir(),
-            ttl=resolve_data_ttl(state.ips_config),
-            read_only=True,
+        market_data=(
+            state.market_data
+            if state.market_data is not None
+            else read_only_provider_for(state.ips_config)
         ),
         ips_config=state.ips_config,
     )

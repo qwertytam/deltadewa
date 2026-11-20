@@ -63,7 +63,7 @@ from typing import TYPE_CHECKING, Any, Final
 from deltadewa.constants import ExerciseStyle, OptionType
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Mapping
 
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
@@ -456,6 +456,12 @@ class LegMark:
             spot, which is not its settlement value, so any period this
             mark bounds is not reconcilable until the ``SETTLE`` fill is
             entered.
+        volatility_origin: Where that volatility came from (9b): an
+            ``InputOrigin`` value. A week whose two marks disagree on
+            whether an option's IV was the feed's or a typed one was
+            re-priced with no trade, and ``realized_carry`` says so.
+            Defaults to ``"ENTERED"``, which is what every mark written
+            before the feed existed read as.
 
     """
 
@@ -467,6 +473,7 @@ class LegMark:
     price_per_share: float
     value: float
     expired_unsettled: bool
+    volatility_origin: str = "ENTERED"
 
     def to_json(self) -> dict[str, Any]:
         """Serialize to a JSON-safe dict."""
@@ -479,6 +486,7 @@ class LegMark:
             "price_per_share": self.price_per_share,
             "value": self.value,
             "expired_unsettled": self.expired_unsettled,
+            "volatility_origin": self.volatility_origin,
         }
 
     @classmethod
@@ -493,6 +501,7 @@ class LegMark:
             price_per_share=float(data["price_per_share"]),
             value=float(data["value"]),
             expired_unsettled=bool(data["expired_unsettled"]),
+            volatility_origin=str(data.get("volatility_origin", "ENTERED")),
         )
 
 
@@ -852,6 +861,7 @@ def mark_book(
     written_by: str,
     basis: MarkBasis = MarkBasis.MODEL,
     is_opening: bool = False,
+    volatility_origins: Mapping[str, str] | None = None,
 ) -> BookMark:
     """Mark the whole book on its own valuation date.
 
@@ -869,6 +879,9 @@ def mark_book(
         basis: The pricing basis. Only ``MODEL`` exists today.
         is_opening: Whether this is the migration mark that starts the
             history.
+        volatility_origins: Where each lot's volatility came from, by
+            ``position_id`` (``ProgramState.resolution``'s legs). A lot not
+            named is a typed value, ``"ENTERED"``.
 
     Returns:
         The mark. Nothing is written.
@@ -880,6 +893,7 @@ def mark_book(
     from deltadewa.analysis.crash_repricing import is_expired
 
     valuation_date = portfolio.valuation_date
+    origins = volatility_origins if volatility_origins is not None else {}
     legs = tuple(
         LegMark(
             position_id=pos.position_id,
@@ -890,6 +904,7 @@ def mark_book(
             price_per_share=float(pos.option.price()),
             value=float(pos.position_value()),
             expired_unsettled=is_expired(pos, valuation_date=valuation_date),
+            volatility_origin=origins.get(pos.position_id, "ENTERED"),
         )
         for pos in portfolio.positions
     )

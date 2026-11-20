@@ -234,6 +234,11 @@ class MarketContextSection:
             merely ``AGING`` maps onto ``data_quality == "STALE"`` via
             ``combined_quality``'s lossy channel merge, but must not
             alarm — see ``assess_freshness``'s docstring.
+        input_lines: Plain lines about what the book was priced on when a
+            feed is adopted (9b): the close it was priced on, every active
+            override with its age and the feed's figure beside it, each input
+            on a fallback, and a resolver fault. Informational, never an
+            alarm of its own; empty without an adopted feed.
 
     """
 
@@ -244,6 +249,7 @@ class MarketContextSection:
     data_quality: str
     needs_alarm: bool
     skew_lookback_days: int | None = None
+    input_lines: tuple[str, ...] = ()
 
 
 class RealizedStatus(StrEnum):
@@ -1000,7 +1006,30 @@ def _build_market_context(
         data_quality=provenance_ledger.combined_quality.value,
         needs_alarm=assess_freshness(provenance_ledger) is not None,
         skew_lookback_days=market_env.skew_lookback_days,
+        input_lines=_input_lines(provenance_ledger),
     )
+
+
+def _input_lines(ledger: ProvenanceLedger) -> tuple[str, ...]:
+    """Say what the book was priced on, when a feed is adopted (9b).
+
+    The digest is its own fresh process, so "priced on the <close>" is
+    always the latest cached session. Overrides are listed every time
+    (they last until cleared, so each is a number that can be forgotten),
+    with the feed's own figure beside it.
+    """
+    lines: list[str] = []
+    if ledger.priced_at is not None:
+        if ledger.priced_session is not None:
+            lines.append(
+                f"Priced on the {ledger.priced_session} close from the "
+                "pricing feed.",
+            )
+        else:
+            lines.append("The pricing feed gave no usable close to price on.")
+    lines.extend(note.sentence() for note in ledger.overrides)
+    lines.extend(ledger.input_notes)
+    return tuple(lines)
 
 
 def build_ips_compliance(
@@ -1458,6 +1487,15 @@ def _realized_framing_html(rf: ReturnFramingSection) -> str:
     )
 
 
+def _input_lines_html(lines: tuple[str, ...]) -> str:
+    """Render the pricing-input lines as a list; nothing when there are none."""
+    if not lines:
+        return ""
+    return (
+        "<ul>" + "".join(f"<li>{escape(line)}</li>" for line in lines) + "</ul>"
+    )
+
+
 def _data_quality_cell(mc: MarketContextSection) -> str:
     """Build the Market Context table's "Data quality" value, qualified.
 
@@ -1697,6 +1735,9 @@ def render_markdown(report: ProgramReport) -> str:
         f"| Data quality | {_data_quality_cell(mc)} |",
         "",
     ]
+    if mc.input_lines:
+        lines += [f"- {line}" for line in mc.input_lines]
+        lines.append("")
 
     # ── 4. Return Framing ──────────────────────────────────────
     rf = report.return_framing
@@ -2134,6 +2175,7 @@ offset) shown on <code>/monitor</code>. See the handbook's \
 <td>{_html_or_dash(mc.hedge_cost_verdict)}</td></tr>
 <tr><td>Data quality</td><td>{escape(_data_quality_cell(mc))}</td></tr>
 </table>
+{_input_lines_html(mc.input_lines)}
 
 <h2>4. Return Framing</h2>
 {return_framing_html}

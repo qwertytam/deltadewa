@@ -108,11 +108,13 @@ class TestFeedSeries:
                 "quality": "UNAVAILABLE",
                 "as_of": None,
                 "fetched_at": None,
+                "adopted": False,
             },
             "rate": {
                 "quality": "UNAVAILABLE",
                 "as_of": None,
                 "fetched_at": None,
+                "adopted": False,
             },
         }
         assert payload["provenance_error"] is None
@@ -121,7 +123,7 @@ class TestFeedSeries:
         self,
         tmp_path: Path,
     ) -> None:
-        """Listed, not counted: nothing is priced on it yet."""
+        """Listed, not counted: no input adopts it (the example's adopt: [])."""
         _write_matching_manifest(tmp_path)
         state = _fully_wired_state(tmp_path)
         app = create_app(

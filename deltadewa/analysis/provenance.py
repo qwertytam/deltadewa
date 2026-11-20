@@ -37,16 +37,23 @@ a dead feed, so the endpoint grades each channel on its own cut instead
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
-from deltadewa.analysis.market_environment import DataQuality
+from deltadewa.analysis.market_environment import DataQuality, worst_quality
+from deltadewa.analysis.pricing_resolution import InputOrigin
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
     from datetime import date, datetime
 
     from deltadewa.analysis.market_environment import MarketEnvironment
+    from deltadewa.analysis.pricing_resolution import (
+        ResolvedInputs,
+        ResolvedValue,
+        SeriesUse,
+    )
     from deltadewa.ips_config import IpsPricingInputs
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
@@ -137,6 +144,8 @@ class InputProvenance:
             ``None`` for ``FETCHED`` entries, which have no such policy.
         quality: The underlying ``DataQuality``, ``FETCHED`` entries only.
         detail: A one-clause human explanation of the grade.
+        origin: Where a typed input's value came from when the feed is
+            adopted (``OVERRIDE`` or ``FALLBACK``), else ``None``.
 
     """
 
@@ -149,6 +158,54 @@ class InputProvenance:
     max_age_days: int | None
     quality: DataQuality | None
     detail: str
+    origin: str | None = None
+
+
+@dataclass(frozen=True)
+class OverrideNote:
+    """One active override, for the lists that must not let it be forgotten.
+
+    Attributes:
+        key: ``"book.spot"`` or ``"leg.<position_id>.iv"``.
+        label: Human-readable name.
+        value: Your pinned value.
+        fetched: What the feed says today, when it says anything.
+        stamp: When you last confirmed your value.
+        age_days: Whole days since *stamp*, or ``None`` if never stamped.
+
+    """
+
+    key: str
+    label: str
+    value: float
+    fetched: float | None
+    stamp: datetime | None
+    age_days: int | None
+
+    def show(self, value: float | None) -> str:
+        """Format one of this override's figures: an index level or an IV."""
+        if value is None:
+            return "—"
+        if self.key == "book.spot":
+            return f"{value:,.2f}"
+        return f"{value:.2%}"
+
+    def sentence(self) -> str:
+        """Say what is pinned, how old it is, and what the feed says now."""
+        confirmed = (
+            f"confirmed {self.age_days}d ago"
+            if self.age_days is not None
+            else "never confirmed"
+        )
+        feed = (
+            f"the feed says {self.show(self.fetched)} today"
+            if self.fetched is not None
+            else "the feed has no figure today"
+        )
+        return (
+            f"Override: {self.label} is your {self.show(self.value)} "
+            f"({confirmed}); {feed}."
+        )
 
 
 @dataclass(frozen=True)
@@ -169,6 +226,14 @@ class ProvenanceLedger:
     market_data_fetched_at: datetime | None
     market_data_quality: DataQuality
     oldest_series: str | None
+    overrides: tuple[OverrideNote, ...] = ()
+    """Every pin above the feed, with its age and the feed's own figure (D7)."""
+    input_notes: tuple[str, ...] = ()
+    """Plain lines: inputs in fallback, a resolver fault. Never graded."""
+    priced_at: datetime | None = None
+    """When the process read the prices; ``None`` unless a feed is adopted."""
+    priced_session: date | None = None
+    """The chain session those prices are from, if any."""
     flat_iv_note: str | None = None
     """A nudge, not a grade: set when every leg carries one IV (N7).
 
@@ -326,7 +391,11 @@ def _leg_label(position: OptionPosition) -> str:
 _FLAT_IV_TOLERANCE: Final[float] = 5e-5
 
 
-def flat_iv_nudge(portfolio: OptionPortfolio) -> str | None:
+def flat_iv_nudge(
+    portfolio: OptionPortfolio,
+    *,
+    only: Collection[str] | None = None,
+) -> str | None:
     """Return a "really?" note when every leg is marked at one IV, else None.
 
     N7 (8f): a book whose legs sit at different strikes or maturities and
@@ -347,13 +416,21 @@ def flat_iv_nudge(portfolio: OptionPortfolio) -> str | None:
 
     Args:
         portfolio: The live book.
+        only: When the feed prices some legs (9b), the ``position_id`` of
+            each leg whose **typed** IV is what prices it. A fetched IV is
+            the market's own surface, so it is never "flat" in this sense
+            and is left out. ``None`` considers every leg.
 
     Returns:
         The note, or ``None`` when the book has fewer than two distinct
         strike/maturity points or any IV differs.
 
     """
-    options = [position.option for position in portfolio.positions]
+    options = [
+        position.option
+        for position in portfolio.positions
+        if only is None or position.position_id in only
+    ]
     points = {(o.strike_price, o.maturity_date) for o in options}
     if len(points) < 2:
         return None
@@ -369,20 +446,172 @@ def flat_iv_nudge(portfolio: OptionPortfolio) -> str | None:
     )
 
 
-def build_provenance_ledger(
+#: How a typed input that the feed was meant to price is described.
+_TYPED_ORIGIN_LABEL: Final[dict[InputOrigin, str]] = {
+    InputOrigin.OVERRIDE: "your override",
+    InputOrigin.FALLBACK: "feed unusable, priced on your value",
+}
+
+
+def _typed_entry(
+    entry: InputProvenance,
+    value: ResolvedValue | None,
+) -> InputProvenance:
+    """Say, on a typed input's entry, that it is an override or a fallback."""
+    if value is None or value.origin not in _TYPED_ORIGIN_LABEL:
+        return entry
+    reason = (
+        value.detail
+        if value.origin is InputOrigin.FALLBACK
+        else _TYPED_ORIGIN_LABEL[value.origin]
+    )
+    return replace(
+        entry,
+        origin=value.origin.value,
+        detail=f"{reason} — {entry.detail}",
+    )
+
+
+def _fallback_stamp_text(
+    resolution: ResolvedInputs,
+    portfolio: OptionPortfolio,
+) -> str:
+    """Name the oldest typed value the book is falling back on."""
+    stamps: list[datetime | None] = []
+    if resolution.spot.origin is InputOrigin.FALLBACK:
+        stamps.append(portfolio.stamps.spot_as_of)
+    if resolution.risk_free_rate.origin is InputOrigin.FALLBACK:
+        stamps.append(portfolio.stamps.risk_free_rate_as_of)
+    stamps.extend(
+        position.volatility_as_of
+        for position in portfolio.positions
+        if (leg := resolution.legs.get(position.position_id)) is not None
+        and leg.origin is InputOrigin.FALLBACK
+    )
+    if not stamps:
+        return "pricing on your values"
+    if any(stamp is None for stamp in stamps):
+        return "pricing on your values (never confirmed)"
+    oldest = min(stamp for stamp in stamps if stamp is not None)
+    return f"pricing on your value from {oldest:%Y-%m-%d}"
+
+
+def _feed_entry(
+    use: SeriesUse,
+    resolution: ResolvedInputs,
+    portfolio: OptionPortfolio,
+    as_of: date,
+) -> InputProvenance:
+    """Grade one adopted feed series as the fetched data it is."""
+    detail = use.detail
+    if use.quality is DataQuality.UNAVAILABLE:
+        since = (
+            f"feed down since {resolution.feed_down_since}"
+            if resolution.feed_down_since is not None
+            else "no feed data cached"
+        )
+        detail = f"{since}; {_fallback_stamp_text(resolution, portfolio)}"
+    return InputProvenance(
+        key=f"feed.{use.name}",
+        label=f"Pricing feed: {use.name}",
+        kind=InputKind.FETCHED,
+        freshness=_QUALITY_TO_FRESHNESS[use.quality],
+        as_of=use.as_of,
+        age_days=(
+            _age_days(as_of, use.as_of) if use.as_of is not None else None
+        ),
+        max_age_days=None,
+        quality=use.quality,
+        detail=detail,
+    )
+
+
+def _override_notes(
+    resolution: ResolvedInputs,
+    portfolio: OptionPortfolio,
+    as_of: date,
+) -> tuple[OverrideNote, ...]:
+    """List every pin above the feed, with the feed's own figure beside it."""
+    notes: list[OverrideNote] = []
+    if resolution.spot.origin is InputOrigin.OVERRIDE:
+        stamp = portfolio.stamps.spot_as_of
+        notes.append(
+            OverrideNote(
+                key="book.spot",
+                label="Spot price",
+                value=resolution.spot.value,
+                fetched=resolution.spot.fetched,
+                stamp=stamp,
+                age_days=None if stamp is None else _age_days(as_of, stamp),
+            ),
+        )
+    for position in portfolio.positions:
+        leg = resolution.legs.get(position.position_id)
+        if leg is None or leg.origin is not InputOrigin.OVERRIDE:
+            continue
+        stamp = position.volatility_as_of
+        notes.append(
+            OverrideNote(
+                key=f"leg.{position.position_id}.iv",
+                label=_leg_label(position),
+                value=leg.value,
+                fetched=leg.fetched,
+                stamp=stamp,
+                age_days=None if stamp is None else _age_days(as_of, stamp),
+            ),
+        )
+    return tuple(notes)
+
+
+def _input_notes(
+    resolution: ResolvedInputs,
+    portfolio: OptionPortfolio,
+) -> tuple[str, ...]:
+    """Say, in words, which inputs are on a fallback and why."""
+    notes: list[str] = []
+    if resolution.error is not None:
+        notes.append(
+            "The pricing inputs could not be resolved "
+            f"({resolution.error}); the book is priced on your typed values.",
+        )
+    if resolution.spot.origin is InputOrigin.FALLBACK:
+        notes.append(f"Spot price: {resolution.spot.detail}.")
+    if resolution.risk_free_rate.origin is InputOrigin.FALLBACK:
+        notes.append(f"Risk-free rate: {resolution.risk_free_rate.detail}.")
+    notes.extend(
+        f"{_leg_label(position)}: {leg.detail}."
+        for position in portfolio.positions
+        if (leg := resolution.legs.get(position.position_id)) is not None
+        and leg.origin is InputOrigin.FALLBACK
+    )
+    return tuple(notes)
+
+
+def build_provenance_ledger(  # pylint: disable=too-many-locals
     environment: MarketEnvironment,
     portfolio: OptionPortfolio,
     policy: IpsPricingInputs,
     *,
     as_of: date,
+    resolution: ResolvedInputs | None = None,
 ) -> ProvenanceLedger:
     """Build the ledger covering fetched market data and hand-entered inputs.
 
     Never raises: every field it reads (``environment``'s already-assessed
-    quality, ``portfolio.stamps``, each position's ``volatility_as_of``)
-    is a plain attribute with no provider call behind it, so there is
-    nothing here to fail. Safe to call unguarded from ``build_chrome``
-    and ``/health``, which both render unconditionally.
+    quality, ``portfolio.stamps``, each position's ``volatility_as_of``,
+    the resolution's own fields) is a plain attribute with no provider call
+    behind it, so there is nothing here to fail. Safe to call unguarded
+    from ``build_chrome`` and ``/health``, which both render
+    unconditionally.
+
+    With a *resolution* (9b) the two channels split by what actually prices
+    the book. An input the feed prices is graded as **fetched** (through its
+    series, ``feed.chain`` / ``feed.rate``); its typed twin is not graded at
+    all, since it is not what prices anything. An input the feed does not
+    price (an override, a fallback, anything not adopted) is graded as
+    hand-entered, by its stamp, exactly as before. The adopted series'
+    quality is folded into ``market_data_quality``, so the one #393/#398
+    rule (:func:`assess_freshness`) alarms on a dead feed with no change.
 
     Args:
         environment: A pre-assessed ``MarketEnvironment`` — this function
@@ -394,11 +623,15 @@ def build_provenance_ledger(
         as_of: The program's current trading date (a plain ``date``,
             e.g. ``program_trading_date().date()``), against which every
             hand-entered stamp's age is measured.
+        resolution: What the feed priced, from
+            ``ProgramState.resolution``, or ``None`` when the feed is not
+            in play (every input is then hand-entered, as before 9b).
 
     Returns:
         A ``ProvenanceLedger`` with one entry for the fetched market data
-        as a whole, one each for the book-level spot/rate/dividend
-        stamps, and one per position's volatility stamp.
+        as a whole, one per adopted feed series, one each for the typed
+        book-level spot/rate/dividend stamps, and one per typed position
+        volatility stamp.
 
     """
     market_data_freshness = _QUALITY_TO_FRESHNESS[environment.data_quality]
@@ -419,24 +652,51 @@ def build_provenance_ledger(
     )
 
     entries: list[InputProvenance] = [market_data_entry]
-    entries.append(
-        grade_hand_entered(
-            key="book.spot",
-            label="Spot price",
-            stamp=portfolio.stamps.spot_as_of,
-            max_age_days=policy.spot_max_age_days,
-            as_of=as_of,
-        ),
-    )
-    entries.append(
-        grade_hand_entered(
-            key="book.risk_free_rate",
-            label="Risk-free rate",
-            stamp=portfolio.stamps.risk_free_rate_as_of,
-            max_age_days=policy.risk_free_rate_max_age_days,
-            as_of=as_of,
-        ),
-    )
+    market_quality = environment.data_quality
+    oldest_series = environment.oldest_series
+    if resolution is not None:
+        entries.extend(
+            _feed_entry(use, resolution, portfolio, as_of)
+            for use in resolution.series
+        )
+        fed_worst = resolution.worst_series_quality
+        if fed_worst is not None:
+            combined = worst_quality([market_quality, fed_worst])
+            if combined is not market_quality:
+                oldest_series = next(
+                    f"{use.name} (pricing feed)"
+                    for use in resolution.series
+                    if use.quality is combined
+                )
+            market_quality = combined
+
+    typed_legs: Collection[str] | None = None
+    if resolution is None or not resolution.spot.from_feed:
+        entries.append(
+            _typed_entry(
+                grade_hand_entered(
+                    key="book.spot",
+                    label="Spot price",
+                    stamp=portfolio.stamps.spot_as_of,
+                    max_age_days=policy.spot_max_age_days,
+                    as_of=as_of,
+                ),
+                None if resolution is None else resolution.spot,
+            ),
+        )
+    if resolution is None or not resolution.risk_free_rate.from_feed:
+        entries.append(
+            _typed_entry(
+                grade_hand_entered(
+                    key="book.risk_free_rate",
+                    label="Risk-free rate",
+                    stamp=portfolio.stamps.risk_free_rate_as_of,
+                    max_age_days=policy.risk_free_rate_max_age_days,
+                    as_of=as_of,
+                ),
+                None if resolution is None else resolution.risk_free_rate,
+            ),
+        )
     entries.append(
         grade_hand_entered(
             key="book.dividend_yield",
@@ -446,24 +706,48 @@ def build_provenance_ledger(
             as_of=as_of,
         ),
     )
-    entries.extend(
-        grade_hand_entered(
-            key=f"leg.{position.position_id}.iv",
-            label=_leg_label(position),
-            stamp=position.volatility_as_of,
-            max_age_days=policy.volatility_max_age_days,
-            as_of=as_of,
+    if resolution is not None:
+        typed_legs = resolution.typed_in_use().legs
+    for position in portfolio.positions:
+        if typed_legs is not None and position.position_id not in typed_legs:
+            continue
+        entries.append(
+            _typed_entry(
+                grade_hand_entered(
+                    key=f"leg.{position.position_id}.iv",
+                    label=_leg_label(position),
+                    stamp=position.volatility_as_of,
+                    max_age_days=policy.volatility_max_age_days,
+                    as_of=as_of,
+                ),
+                None
+                if resolution is None
+                else resolution.legs.get(position.position_id),
+            ),
         )
-        for position in portfolio.positions
-    )
 
+    adopting = resolution is not None and resolution.adopting
     return ProvenanceLedger(
         entries=tuple(entries),
         market_data_as_of=environment.as_of,
         market_data_fetched_at=environment.fetched_at,
-        market_data_quality=environment.data_quality,
-        oldest_series=environment.oldest_series,
-        flat_iv_note=flat_iv_nudge(portfolio),
+        market_data_quality=market_quality,
+        oldest_series=oldest_series,
+        overrides=(
+            _override_notes(resolution, portfolio, as_of)
+            if resolution is not None
+            else ()
+        ),
+        input_notes=(
+            _input_notes(resolution, portfolio)
+            if resolution is not None
+            else ()
+        ),
+        priced_at=resolution.resolved_at if adopting and resolution else None,
+        priced_session=(
+            resolution.session_date if adopting and resolution else None
+        ),
+        flat_iv_note=flat_iv_nudge(portfolio, only=typed_legs),
     )
 
 

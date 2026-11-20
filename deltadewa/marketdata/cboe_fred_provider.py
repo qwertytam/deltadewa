@@ -9,19 +9,22 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from io import StringIO
 from pathlib import Path
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 import pandas as pd
 import requests
 
 from deltadewa.marketdata._errors import MarketDataError
 from deltadewa.marketdata._observation import Observation, Source
-from deltadewa.marketdata._policy import default_cache_dir
+from deltadewa.marketdata._policy import default_cache_dir, resolve_data_ttl
 from deltadewa.marketdata.chain import (
     ChainSnapshot,
     parse_cboe_chain,
     payload_session_date,
 )
+
+if TYPE_CHECKING:
+    from deltadewa.ips_config import IpsConfig
 
 _CBOE_HISTORY_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 _FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
@@ -680,3 +683,19 @@ class CboeFredProvider:
             source=Source.LIVE,
             fetched_at=fetched_at,
         )
+
+
+def read_only_provider_for(ips_config: IpsConfig | None) -> CboeFredProvider:
+    """Build the read-only provider every reader of the cache shares.
+
+    The app, the weekly digest and the history CLI all read what the nightly
+    refresh cached and must never fetch: same cache directory
+    (``DELTADEWA_CACHE_DIR``), same freshness window (the IPS's
+    ``data_ttl_minutes``, or the default without one). One construction, so
+    the three cannot disagree about either.
+    """
+    return CboeFredProvider(
+        cache_dir=default_cache_dir(),
+        ttl=resolve_data_ttl(ips_config),
+        read_only=True,
+    )

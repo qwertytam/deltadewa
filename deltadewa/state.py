@@ -20,7 +20,22 @@ unguarded mutation, so a caller cannot reach a destructive
 
 ``ProgramState.portfolio`` returns the live, shared object — read it fresh
 each time rather than caching a reference, since ``import_portfolio``
-replaces the instance wholesale.
+replaces the instance wholesale and every edit rebuilds the priced view.
+
+Typed book and priced view (9b)
+-------------------------------
+The state holds **two** books. The *typed* book is what a human typed and
+what ``save_if_dirty`` writes; every mutator works on it, so stamping,
+journaling and the file format are exactly what they were before the feed
+existed. The *priced view* is what :attr:`ProgramState.portfolio` returns:
+the typed book itself when nothing is adopted, otherwise a copy priced on
+the spot, rate and per-option IVs :func:`~deltadewa.analysis.
+pricing_resolution.resolve_pricing_inputs` chose. A fetched number therefore
+cannot be saved, stamped as confirmed, or journaled as a trade: it never
+touches the book that is. The feed is read **once**, when the process
+starts; an edit re-resolves from that same reading, so a page never sees
+two chains, and a page reload does not read new prices (only a restart
+does).
 
 Concurrency (#299)
 ------------------
@@ -55,8 +70,9 @@ consistent view.
 What this module still does not do (#355)
 ------------------------------------------
 There is no reload path, and this is deliberate rather than an omission.
-``self._portfolio`` is rebound in exactly one place — inside
-``import_portfolio``, in-process, under the lock — and nowhere else. A file
+``self._portfolio`` is rebound in ``import_portfolio`` (in-process, under
+the lock) and in the revert after a failed journal write, and nowhere
+else; the priced view is rebuilt after each. A file
 watcher or an admin reload endpoint would rebind it from *outside* a
 request, mid-render: a page callback reads :attr:`ProgramState.portfolio`
 more than once, so half the panels would price the book a reload swapped in
@@ -110,6 +126,7 @@ does not explain. Either way, the error is raised.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -117,6 +134,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from deltadewa import create_empty_portfolio
+from deltadewa.analysis.pricing_resolution import (
+    EnteredInputs,
+    FeedInputs,
+    OverrideKind,
+    ResolvedInputs,
+    leg_terms,
+    read_feed,
+    resolve_pricing_inputs,
+)
 from deltadewa.clock import program_now, program_trading_date
 from deltadewa.constants import OptionType
 from deltadewa.history_store import HISTORY_DIRNAME, HistoryStore
@@ -139,6 +165,7 @@ if TYPE_CHECKING:
 
     from deltadewa.constants import ExerciseStyle
     from deltadewa.ips_config import IpsConfig
+    from deltadewa.marketdata import MarketDataProvider
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.history import OpenOrder, RollLeg
     from deltadewa.portfolio.position import OptionPosition
@@ -149,6 +176,11 @@ STATE_FILENAME: Final = "program_state.json"
 # export directory — bundled example portfolios, not operator data. Shipped
 # into the production image at this same relative path (Dockerfile).
 _DEFAULT_EXAMPLES_DIR: Final = Path("examples/portfolios")
+
+#: An IV override is a fraction; anything above this is a percentage typed
+#: where a fraction was asked for (25 for 25%), which would price the leg at
+#: 2,500% vol.
+_MAX_OVERRIDE_VOLATILITY: Final = 5.0
 
 _logger = logging.getLogger(__name__)
 
@@ -173,6 +205,32 @@ class ConfirmationRequiredError(RuntimeError):
     Raised when a destructive mutator is called without ``confirm=True``, or
     when ``import_portfolio`` would discard unsaved changes.
     """
+
+
+def _read_feed_once(
+    factory: Callable[[IpsConfig | None], MarketDataProvider] | None,
+    ips_config: IpsConfig | None,
+) -> tuple[MarketDataProvider | None, FeedInputs, str | None]:
+    """Build the provider and read the feed once, containing any failure.
+
+    A provider that cannot be built, or a cache that cannot be read, must
+    not stop the app booting or the digest sending: the failure becomes an
+    error string, the book prices on its typed values, and ``/health`` and
+    the banner say why. Only ``MarketDataError`` is an expected "nothing
+    cached" (``read_feed`` turns it into an empty reading); anything else
+    here is a fault, logged with its traceback.
+    """
+    if factory is None:
+        return None, FeedInputs(), None
+    provider: MarketDataProvider | None = None
+    try:
+        provider = factory(ips_config)
+        return provider, read_feed(provider, ips_config), None
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # contained: pricing falls back to typed values
+        _logger.exception(
+            "reading the pricing feed failed; pricing on the typed values",
+        )
+        return provider, FeedInputs(), f"{type(exc).__name__}: {exc}"
 
 
 class ProgramState:  # pylint: disable=too-many-public-methods
@@ -202,12 +260,19 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         loaded_at: str | None = None,
         loaded_mtime: float | None = None,
         history: HistoryStore | None = None,
+        market_data: MarketDataProvider | None = None,
+        feed: FeedInputs | None = None,
+        resolution_error: str | None = None,
     ) -> None:
         """Wrap already-resolved state; prefer :meth:`load`.
 
         ``history`` is ``None`` only for a state constructed directly,
         e.g. in a test; :meth:`load` always attaches one. Without it,
         nothing is journaled.
+
+        ``market_data`` and ``feed`` are the provider and what it held when
+        the process started (9b); without them every input is the typed one.
+        ``resolution_error`` says why reading the feed failed, when it did.
         """
         self._history = history
         self._portfolio = portfolio
@@ -232,6 +297,16 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         self._written_by = written_by
         self._loaded_at = loaded_at
         self._own_mtime = loaded_mtime
+        # 9b: the typed book above is what is saved. The priced view below
+        # is what every reader sees; it is the same object when nothing is
+        # adopted. Prices are read once, here, at process start.
+        self._market_data = market_data
+        self._feed = feed if feed is not None else FeedInputs()
+        self._resolution_error = resolution_error
+        self._resolved_at = program_now(self._timezone())
+        self._resolution: ResolvedInputs
+        self._view: OptionPortfolio
+        self._rebuild_view()
 
     @classmethod
     def load(
@@ -243,6 +318,8 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         writer_label: str = "app",
         examples_dir: Path | None = None,
         history_dir: Path | None = None,
+        market_data: Callable[[IpsConfig | None], MarketDataProvider]
+        | None = None,
     ) -> ProgramState:
         """Load the shared program state from ``export_dir``.
 
@@ -275,6 +352,15 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             history_dir: Where the position history lives (#313).
                 Defaults to ``export_dir/history``, which is what puts
                 it inside the nightly offsite backup.
+            market_data: Builds the read-only provider from the loaded IPS
+                (its TTL is policy, so it cannot be built before the IPS is
+                read), e.g. ``read_only_provider_for``. With a
+                ``pricing_feed`` section the process reads the feed once,
+                here, and prices the book on what it adopts (9b); the book
+                file is never changed by it. Omitted, every input is the
+                typed one. A provider that cannot be built or read never
+                stops the load: the book prices on typed values and
+                :attr:`resolution` says why.
 
         Returns:
             A ready-to-use ``ProgramState``.
@@ -374,6 +460,11 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 state_path,
             )
 
+        provider, feed, resolution_error = _read_feed_once(
+            market_data,
+            ips_config,
+        )
+
         return cls(
             portfolio=portfolio,
             loaded_from=loaded_from,
@@ -391,6 +482,9 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 if history_dir is not None
                 else export_dir / HISTORY_DIRNAME,
             ),
+            market_data=provider,
+            feed=feed,
+            resolution_error=resolution_error,
         )
 
     @property
@@ -416,8 +510,15 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         a slightly stale book; they do not tolerate blocking.
 
         Use :meth:`positions_snapshot` where iteration must not tear.
+
+        **This is the priced view (9b).** It is the typed book itself when
+        nothing is adopted, and otherwise a copy of it priced on the spot,
+        rate and per-option IVs :attr:`resolution` chose, so every reader
+        sees one effective value per input. It is never what is saved: the
+        typed book is, and a fetched number is never written to it. Read
+        :attr:`entered` for what a human typed.
         """
-        return self._portfolio
+        return self._view
 
     def positions_snapshot(self) -> tuple[OptionPosition, ...]:
         """Return a point-in-time copy of the positions, safe to iterate.
@@ -439,7 +540,32 @@ class ProgramState:  # pylint: disable=too-many-public-methods
 
         """
         with self._lock:
-            return tuple(self._portfolio.positions)
+            return tuple(self._view.positions)
+
+    @property
+    def entered(self) -> EnteredInputs:
+        """What a human typed, with the override pins (9b).
+
+        Read off the typed book, the one that is saved. A panel showing
+        "your value" beside an effective one reads this, never
+        :attr:`portfolio`, whose values may be the feed's.
+        """
+        return EnteredInputs.from_portfolio(self._portfolio)
+
+    @property
+    def resolution(self) -> ResolvedInputs:
+        """Each effective input and where it came from (9b).
+
+        Decided once, when the process started, and re-derived from the
+        same readings after an edit. A reload of a page does **not** read
+        new prices: only a restart does.
+        """
+        return self._resolution
+
+    @property
+    def market_data(self) -> MarketDataProvider | None:
+        """The provider the feed was read through, or ``None`` (9b)."""
+        return self._market_data
 
     @property
     def ips_config(self) -> IpsConfig | None:
@@ -673,6 +799,59 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         with self._lock:
             self._dirty = True
             self.save_if_dirty()
+            self._rebuild_view()
+
+    def _rebuild_view(self) -> None:
+        """Re-resolve the inputs and rebuild the priced view. Never raises.
+
+        Called once at construction and at the tail of every change to the
+        typed book. The feed is **not** read again: a re-resolution after
+        an edit uses the readings the process took at start, so a page can
+        never see two chains. A failure anywhere in resolving leaves the
+        typed book as the view and says why in :attr:`resolution`.
+        """
+        with self._lock:
+            entered = EnteredInputs.from_portfolio(self._portfolio)
+            try:
+                if self._resolution_error is not None:
+                    raise RuntimeError(self._resolution_error)
+                policy = (
+                    self._ips_config.pricing_feed
+                    if self._ips_config is not None
+                    else None
+                )
+                resolution = resolve_pricing_inputs(
+                    entered=entered,
+                    legs=leg_terms(self._portfolio),
+                    policy=policy,
+                    feed=self._feed,
+                    program_date=self._portfolio.valuation_date.date(),
+                    resolved_at=self._resolved_at,
+                )
+                view = (
+                    self._portfolio
+                    if resolution.is_identity
+                    else self._portfolio.priced_view(resolution)
+                )
+            except Exception as exc:  # pylint: disable=broad-exception-caught  # contained: pricing falls back to typed values
+                if self._resolution_error is None:
+                    _logger.exception(
+                        "resolving the pricing inputs failed; pricing on "
+                        "the typed values",
+                    )
+                resolution = ResolvedInputs.all_entered(
+                    entered,
+                    resolved_at=self._resolved_at,
+                    error=str(exc),
+                    adopting=bool(
+                        self._ips_config is not None
+                        and self._ips_config.pricing_feed is not None
+                        and self._ips_config.pricing_feed.adopt
+                    ),
+                )
+                view = self._portfolio
+            self._resolution = resolution
+            self._view = view
 
     # ── Position history (#313) ─────────────────────────────────────────
 
@@ -747,12 +926,14 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 )
             else:
                 self._portfolio = result["portfolio"]
+                self._rebuild_view()
                 _logger.error(
                     "Position history write failed; the book was reverted "
                     "to its last save so the two still agree",
                 )
                 return
         self._dirty = True
+        self._rebuild_view()
         _logger.error(
             "Position history write failed and the book could not be "
             "reverted safely; the change is unsaved and the history does "
@@ -859,7 +1040,11 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 contract_size=contract_size,
                 volatility=volatility,
                 exercise_style=exercise_style,
-                entry_spot=entry_spot,
+                entry_spot=(
+                    entry_spot
+                    if entry_spot is not None
+                    else self._view.spot_price
+                ),
                 entry_date=entry_date,
                 entry_premium=entry_premium,
                 structure_id=structure_id,
@@ -1020,8 +1205,124 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 "current; pass confirm=True",
             )
         with self._lock:
-            self._portfolio.confirm_current_inputs(as_of=as_of)
+            # Only the typed values that price the book: confirming one the
+            # feed is hiding would launder it into looking freshly checked.
+            self._portfolio.confirm_current_inputs(
+                as_of=as_of,
+                only=self._resolution.typed_in_use(),
+            )
             self._mutate_and_save()
+
+    def set_input_override(
+        self,
+        kind: OverrideKind,
+        value: float,
+        *,
+        position_id: str | None = None,
+        confirm: bool = False,
+    ) -> None:
+        """Pin your own spot or one option's IV above the feed (9b, D7).
+
+        The typed value is stored and stamped as confirmed now (choosing to
+        override is a human confirming that number), and pinned: the feed's
+        value stops pricing it until :meth:`clear_input_override`. Lasts
+        until cleared; nothing expires it. Not journaled: it moves the marks,
+        not the book.
+
+        Args:
+            kind: ``SPOT``, or ``VOLATILITY`` for one option.
+            value: Your value: an index level, or an IV as a fraction.
+            position_id: The option, for ``VOLATILITY``.
+            confirm: Must be ``True``. An override changes what every
+                number on every page is priced on, so it is a deliberate act
+                (the page asks first), like :meth:`mark_inputs_reviewed`.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+            ValueError: If the policy does not adopt that input (there is
+                nothing to override: edit the value), the value is not
+                sensible, or *position_id* is missing or unknown.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "an override changes what the book is priced on; pass "
+                "confirm=True",
+            )
+        self._require_adopted(kind)
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError("an override must be a positive number")
+        with self._lock:
+            if kind is OverrideKind.SPOT:
+                self._portfolio.pin_spot(value)
+            else:
+                if value > _MAX_OVERRIDE_VOLATILITY:
+                    raise ValueError(
+                        "an IV override is a fraction (0.25 for 25%), not "
+                        "a percentage",
+                    )
+                self._portfolio.pin_volatility(
+                    self._require_leg(position_id),
+                    value,
+                )
+            self._mutate_and_save()
+
+    def clear_input_override(
+        self,
+        kind: OverrideKind,
+        *,
+        position_id: str | None = None,
+        confirm: bool = False,
+    ) -> None:
+        """Let the feed price this input again (9b, D7).
+
+        Your typed value stays, as the fallback, with the stamp it had.
+
+        Raises:
+            ConfirmationRequiredError: If not ``confirm``.
+            ValueError: If *position_id* is missing or unknown.
+
+        """
+        if not confirm:
+            raise ConfirmationRequiredError(
+                "clearing an override changes what the book is priced on; "
+                "pass confirm=True",
+            )
+        with self._lock:
+            if kind is OverrideKind.SPOT:
+                self._portfolio.unpin_spot()
+            else:
+                self._portfolio.unpin_volatility(
+                    self._require_leg(position_id),
+                )
+            self._mutate_and_save()
+
+    def _require_adopted(self, kind: OverrideKind) -> None:
+        """Refuse an override of an input the policy does not adopt."""
+        policy = (
+            self._ips_config.pricing_feed
+            if self._ips_config is not None
+            else None
+        )
+        if policy is None or kind.value not in policy.adopt:
+            raise ValueError(
+                f"{kind.value} is not adopted from the feed "
+                "(pricing_feed.adopt), so there is nothing to override: "
+                "edit the value instead",
+            )
+
+    def _require_leg(self, position_id: str | None) -> str:
+        """Return *position_id* if it names a held leg, else raise."""
+        if position_id is None:
+            raise ValueError("an IV override names the option it is for")
+        if all(
+            position.position_id != position_id
+            for position in self._portfolio.positions
+        ):
+            raise ValueError(
+                "that option is no longer in the book; pick it again",
+            )
+        return position_id
 
     def record_liquidity(  # pylint: disable=too-many-arguments
         self,
@@ -1587,6 +1888,10 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             contract_size=order.contract_size,
             volatility=order.volatility,
             exercise_style=order.exercise_style,
+            # The effective spot, not the typed one: a lot opened while the
+            # feed prices the book must plant the spot it was opened at in
+            # the rally trigger's baseline, not a stale typed number.
+            entry_spot=self._view.spot_price,
             entry_date=entry_date,
             entry_premium=order.price_per_share,
             structure_id=order.structure_id,
