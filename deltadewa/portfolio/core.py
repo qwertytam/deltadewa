@@ -2,7 +2,7 @@
 
 from dataclasses import replace as dataclass_replace
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 import pandas as pd
 
@@ -18,6 +18,7 @@ from deltadewa.portfolio.stamps import MarketParameterStamps
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
+    from deltadewa.analysis.pricing_resolution import ResolvedInputs
     from deltadewa.portfolio._protocols import _PortfolioProtocol
 
 
@@ -83,7 +84,7 @@ def rebuilt_position(  # pylint: disable=too-many-arguments  # one leg's whole m
     return rebuilt
 
 
-class OptionPortfolioBase:
+class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the book's mutators, and its priced view (9b)
     """Base class for option portfolio management.
 
     Handles core portfolio functionality including position management,
@@ -736,6 +737,78 @@ class OptionPortfolioBase:
                 for pos in self.positions
             ]
             self.positions = new_positions
+
+    def _positions_at(
+        self,
+        resolved: "ResolvedInputs",
+    ) -> list[OptionPosition]:
+        """Rebuild every leg at the resolved spot, rate, yield and IVs.
+
+        A leg the resolution has no IV for keeps its own. A leg priced on
+        the feed's IV is marked custom: a book-level volatility edit must
+        not overwrite a number the market gave it.
+        """
+        rebuilt: list[OptionPosition] = []
+        for pos in self.positions:
+            leg = resolved.legs.get(pos.position_id)
+            new = rebuilt_position(
+                pos,
+                spot_price=resolved.spot.value,
+                volatility=(
+                    leg.value if leg is not None else pos.option.volatility
+                ),
+                risk_free_rate=resolved.risk_free_rate.value,
+                dividend_yield=resolved.dividend_yield.value,
+                valuation_date=self.valuation_date,
+            )
+            if leg is not None and leg.from_feed:
+                new.custom_volatility = True
+            rebuilt.append(new)
+        return rebuilt
+
+    def apply_resolved_inputs(self, resolved: "ResolvedInputs") -> None:
+        """Price this book on *resolved*, in place, **without stamping**.
+
+        Unlike ``update_market_conditions`` (which stamps a changed value as
+        confirmed by a human) nothing here touches ``stamps`` or a leg's
+        ``volatility_as_of``: a fetched number was not confirmed by anyone,
+        and a typed one is exactly as confirmed as it was. Identity, cost
+        basis, structure tags, recorded liquidity and override pins all
+        survive.
+
+        Meant for a *copy* of the typed book (:meth:`priced_view`); applying
+        it to the book that is saved would write fetched values into the
+        book file.
+        """
+        self.spot_price = resolved.spot.value
+        self.risk_free_rate = resolved.risk_free_rate.value
+        self.dividend_yield = resolved.dividend_yield.value
+        self.positions = self._positions_at(resolved)
+
+    def priced_view(self, resolved: "ResolvedInputs") -> Self:
+        """Return a copy of this book priced on *resolved*.
+
+        This book (the typed one) is not touched. The copy shares the typed
+        book's stamps, pins, symbol, valuation date and exercise-style
+        default, and carries each leg's identity and recorded liquidity, so
+        a reader of the view sees the same book on other inputs.
+        """
+        view = type(self)(
+            underlying_quantity=self.underlying_quantity,
+            spot_price=self.spot_price,
+            volatility=self.volatility,
+            risk_free_rate=self.risk_free_rate,
+            dividend_yield=self.dividend_yield,
+            valuation_date=self.valuation_date,
+            symbol=self.symbol,
+            default_exercise_style=self.default_exercise_style,
+            contract_size=self.contract_size,
+            stamps=self.stamps,
+        )
+        view.spot_override = self.spot_override
+        view.positions = list(self.positions)
+        view.apply_resolved_inputs(resolved)
+        return view
 
     def clear_positions(self) -> None:
         """Clear all positions from the portfolio."""

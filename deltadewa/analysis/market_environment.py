@@ -26,6 +26,7 @@ from deltadewa.marketdata._errors import MarketDataError
 from deltadewa.marketdata._observation import Observation, Source
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from datetime import datetime
 
     from deltadewa.marketdata._protocols import MarketDataProvider
@@ -80,6 +81,35 @@ _SOURCE_TO_QUALITY: Final[dict[Source, DataQuality]] = {
     Source.STALE: DataQuality.STALE,
     Source.STATIC: DataQuality.STATIC,
 }
+
+#: ``DataQuality`` from best to worst, the order ``Freshness`` follows
+#: (``LIVE``/``CACHED`` fresh, ``STALE`` aging, ``STATIC`` unconfirmed,
+#: ``UNAVAILABLE`` missing).
+_QUALITY_SEVERITY: Final[dict[DataQuality, int]] = {
+    DataQuality.LIVE: 0,
+    DataQuality.CACHED: 1,
+    DataQuality.STALE: 2,
+    DataQuality.STATIC: 3,
+    DataQuality.UNAVAILABLE: 4,
+}
+
+
+def data_quality_of(source: Source) -> DataQuality:
+    """Return the ``DataQuality`` an observation's ``Source`` grades as."""
+    return _SOURCE_TO_QUALITY[source]
+
+
+def worst_quality(qualities: Iterable[DataQuality]) -> DataQuality:
+    """Return the least trustworthy of *qualities*.
+
+    Raises:
+        ValueError: If *qualities* is empty: there is no honest answer.
+
+    """
+    ordered = sorted(qualities, key=lambda quality: _QUALITY_SEVERITY[quality])
+    if not ordered:
+        raise ValueError("worst_quality() requires at least one quality")
+    return ordered[-1]
 
 
 @dataclass(frozen=True)
