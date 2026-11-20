@@ -15,14 +15,18 @@ from deltadewa.portfolio.pnl import PnLMixin
 from deltadewa.portfolio.position import OptionPosition
 from deltadewa.portfolio.risk import RiskMixin
 from deltadewa.portfolio.stamps import MarketParameterStamps
+from deltadewa.portfolio.vol_quote import VolOrigin, VolQuote
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from deltadewa.analysis.pricing_resolution import (
         ResolvedInputs,
         TypedInUse,
     )
     from deltadewa.portfolio._protocols import _PortfolioProtocol
+    from deltadewa.portfolio.vol_quote import VolSource
 
 
 def rebuilt_position(  # pylint: disable=too-many-arguments  # one leg's whole market input set
@@ -155,6 +159,11 @@ class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the boo
         # not replace it. The value itself is ``spot_price``; this is only
         # the pin. A leg's pin is ``OptionPosition.volatility_override``.
         self.spot_override: bool = False
+        # 9b / D3: where a candidate option (a strike the book does not hold)
+        # gets its volatility. ``None`` is the book's flat ``volatility``,
+        # which is what every candidate was priced at before the feed. Not
+        # persisted: it is derived from the chain at start.
+        self.vol_source: VolSource | None = None
         self._monte_carlo_results: dict[str, Any] | None = None
 
         # Monte Carlo staleness tracking
@@ -769,6 +778,39 @@ class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the boo
             rebuilt.append(new)
         return rebuilt
 
+    def candidate_vol(
+        self,
+        *,
+        strike: float,
+        maturity: "dt | date",
+        option_type: OptionType = OptionType.PUT,
+    ) -> VolQuote:
+        """Return the volatility a *candidate* option is priced at (9b, D3).
+
+        The one place a hypothetical option's volatility is decided, so the
+        strike grid, the sizing workbench, the ladder composer and a roll's
+        cost cannot read different surfaces. From the fetched chain when the
+        policy adopts volatility and the chain is usable, else the book's
+        flat ``volatility``, labelled as such.
+
+        Args:
+            strike: The candidate's strike in index points.
+            maturity: Its expiry.
+            option_type: Put (the default: candidates are protective puts).
+
+        Returns:
+            The volatility and how it was decided.
+
+        """
+        if self.vol_source is None:
+            return VolQuote(self.volatility, VolOrigin.BOOK_FLAT)
+        day = maturity.date() if isinstance(maturity, dt) else maturity
+        return self.vol_source.vol_for(
+            strike=strike,
+            maturity=day,
+            option_type=option_type,
+        )
+
     def apply_resolved_inputs(self, resolved: "ResolvedInputs") -> None:
         """Price this book on *resolved*, in place, **without stamping**.
 
@@ -809,6 +851,7 @@ class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the boo
             stamps=self.stamps,
         )
         view.spot_override = self.spot_override
+        view.vol_source = self.vol_source
         view.positions = list(self.positions)
         view.apply_resolved_inputs(resolved)
         return view

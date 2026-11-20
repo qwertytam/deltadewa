@@ -134,6 +134,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from deltadewa import create_empty_portfolio
+from deltadewa.analysis.market_environment import DataQuality
 from deltadewa.analysis.pricing_resolution import (
     EnteredInputs,
     FeedInputs,
@@ -143,6 +144,7 @@ from deltadewa.analysis.pricing_resolution import (
     read_feed,
     resolve_pricing_inputs,
 )
+from deltadewa.analysis.vol_source import ChainVolSource
 from deltadewa.clock import program_now, program_trading_date
 from deltadewa.constants import OptionType
 from deltadewa.history_store import HISTORY_DIRNAME, HistoryStore
@@ -850,8 +852,55 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                     ),
                 )
                 view = self._portfolio
+            view.vol_source = self._candidate_vol_source(resolution, view)
             self._resolution = resolution
             self._view = view
+
+    def _candidate_vol_source(
+        self,
+        resolution: ResolvedInputs,
+        view: OptionPortfolio,
+    ) -> ChainVolSource | None:
+        """Build where candidates get their volatility, or ``None`` (D3).
+
+        The fetched chain's smile, at the rate and yield the book is
+        *effectively* priced at, when the policy adopts volatility and the
+        chain is usable. Otherwise ``None``: a candidate is priced at the
+        book's flat volatility, as before the feed. Never raises; a failure
+        is logged and means no surface.
+        """
+        policy = (
+            self._ips_config.pricing_feed
+            if self._ips_config is not None
+            else None
+        )
+        chain = self._feed.chain
+        chain_usable = any(
+            use.name == "chain" and use.quality is not DataQuality.UNAVAILABLE
+            for use in resolution.series
+        )
+        if (
+            policy is None
+            or "volatility" not in policy.adopt
+            or chain is None
+            or not chain_usable
+        ):
+            return None
+        try:
+            return ChainVolSource(
+                chain.value,
+                risk_free_rate=view.risk_free_rate,
+                dividend_yield=view.dividend_yield,
+                feed=policy,
+                program_date=self._portfolio.valuation_date.date(),
+                book_vol=view.volatility,
+            )
+        except Exception:  # pylint: disable=broad-exception-caught  # contained: candidates fall back to the flat vol
+            _logger.exception(
+                "building the candidate volatility surface failed; "
+                "candidates are priced on the book's flat volatility",
+            )
+            return None
 
     # ── Position history (#313) ─────────────────────────────────────────
 

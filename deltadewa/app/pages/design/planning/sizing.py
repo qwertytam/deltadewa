@@ -29,6 +29,7 @@ from deltadewa.analysis.convexity_band import (
     format_band_edge,
 )
 from deltadewa.analysis.sizing import GROSS_SIZING_NOTE, size_hedge
+from deltadewa.analysis.vol_source import vol_basis_note
 from deltadewa.app import format as fmt
 from deltadewa.app.bands import band_bar
 from deltadewa.app.basis_chip import basis_chip
@@ -236,6 +237,28 @@ def _sizing_panel_view(
     )
 
 
+def _vol_basis_children(result: HedgeSizingResult) -> list[Component]:
+    """Say what the candidate was priced on, when it is not the flat vol (9b).
+
+    A candidate priced from the fetched chain reads differently from one
+    priced at the book's one volatility, so the panel names the IV and how it
+    was decided; the flat case says nothing, as the page always has.
+    """
+    quote = result.vol_quote
+    if quote is None:
+        return []
+    note = vol_basis_note([quote])
+    if note is None:
+        return []
+    return [
+        html.P(
+            f"Priced at an IV of {fmt.percent(quote.vol * 100.0)} "
+            f"({quote.origin.value.lower().replace('_', ' ')}). {note}",
+            className="plain-language",
+        ),
+    ]
+
+
 def _convexity_children(
     result: HedgeSizingResult,
     conv: IpsConvexity,
@@ -259,6 +282,7 @@ def _convexity_children(
             ),
         ]
     return [
+        *_vol_basis_children(result),
         html.P(
             "Achieved convexity "
             f"{result.achieved_convexity.display()} vs "

@@ -18,12 +18,14 @@ from deltadewa.analysis.pricing_resolution import InputOrigin, OverrideKind
 from deltadewa.constants import ExerciseStyle, OptionType
 from deltadewa.state import ConfirmationRequiredError, ProgramState
 from tests.chain_builders import RATE, SPOT, smile
+from tests.clock_helpers import days_from_today
 from tests.feed_fixtures import (
     STRIKES,
     TYPED_RATE,
     TYPED_SPOT,
     TYPED_VOL,
     adopting_ips,
+    fed_chain,
     leg_expiry,
     load_state,
     make_provider,
@@ -598,3 +600,107 @@ class TestWeeklyMarks:
             leg.position_id: leg.volatility_origin for leg in outcome.mark.legs
         }
         assert origins[position_id] == "OVERRIDE"
+
+
+class TestTheCandidateSurface:
+    """Candidates are priced on the chain when the feed prices volatility."""
+
+    def test_a_fed_book_has_a_surface_at_its_effective_rate_and_yield(
+        self,
+        adopted: ProgramState,
+    ) -> None:
+        book = adopted.portfolio
+
+        assert book.vol_source is not None
+        quote = book.candidate_vol(
+            strike=4000.0,
+            maturity=_expiry(),
+            option_type=OptionType.PUT,
+        )
+        assert quote.origin.value == "EXACT"
+        assert quote.vol == pytest.approx(smile(4000.0), abs=2e-3)
+
+    def test_a_candidate_at_a_held_strike_has_the_held_legs_iv(
+        self,
+        adopted: ProgramState,
+    ) -> None:
+        book = adopted.portfolio
+        held = next(
+            p for p in book.positions if round(p.option.strike_price) == 4000
+        )
+
+        quote = book.candidate_vol(
+            strike=4000.0,
+            maturity=held.option.maturity_date,
+            option_type=OptionType.PUT,
+        )
+
+        assert quote.vol == pytest.approx(held.option.volatility)
+
+    def test_volatility_not_adopted_means_no_surface(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ips = adopting_ips(tmp_path, ("spot", "risk_free_rate"))
+        _typed_book(tmp_path, ips)
+
+        state = _load(tmp_path, ips, _provider())
+
+        assert state.portfolio.vol_source is None
+        quote = state.portfolio.candidate_vol(
+            strike=4000.0,
+            maturity=_expiry(),
+        )
+        assert quote.origin.value == "BOOK_FLAT"
+
+    def test_no_chain_means_no_surface(self, tmp_path: Path) -> None:
+        ips = adopting_ips(tmp_path)
+        _typed_book(tmp_path, ips)
+
+        state = _load(tmp_path, ips, _provider(with_chain=False))
+
+        assert state.portfolio.vol_source is None
+
+    def test_a_dead_chain_means_no_surface(self, tmp_path: Path) -> None:
+        ips = adopting_ips(tmp_path)
+        _typed_book(tmp_path, ips)
+        provider = _provider()
+        provider.chains = {
+            "SPX": fed_chain(
+                _expiry().date(),
+                _STRIKES,
+                program_day=days_from_today(-30),
+            ),
+        }
+
+        state = _load(tmp_path, ips, provider)
+
+        assert state.portfolio.vol_source is None
+
+    def test_changing_the_yield_re_solves_the_surface(
+        self,
+        adopted: ProgramState,
+    ) -> None:
+        before = adopted.portfolio.candidate_vol(
+            strike=4000.0,
+            maturity=_expiry(),
+        ).vol
+
+        adopted.update_market_conditions(dividend_yield=0.03)
+
+        after = adopted.portfolio.candidate_vol(
+            strike=4000.0,
+            maturity=_expiry(),
+        ).vol
+        assert after != pytest.approx(before, abs=1e-4)
+
+    def test_the_surface_is_never_saved(
+        self,
+        adopted: ProgramState,
+        tmp_path: Path,
+    ) -> None:
+        adopted.update_market_conditions(dividend_yield=0.03)
+
+        text = (tmp_path / "program_state.json").read_text()
+
+        assert "vol_source" not in text

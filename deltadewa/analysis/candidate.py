@@ -30,6 +30,7 @@ from deltadewa.analysis.crash_repricing import (
 )
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.position import OptionPosition
+from deltadewa.portfolio.vol_quote import VolOrigin, VolQuote
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
@@ -72,6 +73,10 @@ class CandidateMetrics:
             ``n`` times this (position value is linear in quantity), which is
             how sizing and the candidate grid read their achieved convexity
             (#410). ``0.0`` when the portfolio has no underlying position.
+        vol_quote: The volatility the candidate was priced at and where it
+            came from (9b, D3): a listed contract's own IV, interpolated
+            between listed strikes or expiries, your override, or the
+            book's flat volatility. ``None`` only for a hand-built record.
 
     """
 
@@ -83,6 +88,7 @@ class CandidateMetrics:
     per_contract_intrinsic_floor: float
     per_contract_carry: float
     per_contract_convexity_pct: float
+    vol_quote: VolQuote | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -178,8 +184,11 @@ def evaluate_candidate(
             its anchor. **Required, with no default**, and built by callers with
             ``CrashShock.from_ips(ips_config.convexity)``, so a candidate can
             never be priced against a different crash state than the book.
-        vol: Implied volatility override (annualised fraction).  Defaults to
-            ``portfolio.volatility`` when ``None``.
+        vol: Implied volatility override (annualised fraction).  When
+            ``None`` the candidate is priced where the portfolio says a
+            candidate trades (``OptionPortfolio.candidate_vol``): the fetched
+            chain's smile when the feed prices volatility (9b), else the
+            book's flat ``volatility``.
 
     Returns:
         :class:`CandidateMetrics` with strike, OTM %, delta, premium,
@@ -187,13 +196,18 @@ def evaluate_candidate(
 
     """
     spot = portfolio.spot_price
-    effective_vol = vol if vol is not None else portfolio.volatility
 
     pct_otm = (spot - strike) / spot * 100.0
 
     maturity_date = portfolio.valuation_date + timedelta(
         days=round(maturity_years * const.DAYS_PER_YEAR),
     )
+    vol_quote = (
+        VolQuote(vol, VolOrigin.OVERRIDE)
+        if vol is not None
+        else portfolio.candidate_vol(strike=strike, maturity=maturity_date)
+    )
+    effective_vol = vol_quote.vol
     valuation = build_put_valuation(
         spot, strike, maturity_date, effective_vol, portfolio
     )
@@ -256,4 +270,5 @@ def evaluate_candidate(
         per_contract_intrinsic_floor=per_contract_intrinsic_floor,
         per_contract_carry=per_contract_carry,
         per_contract_convexity_pct=per_contract_convexity_pct,
+        vol_quote=vol_quote,
     )

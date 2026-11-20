@@ -32,6 +32,7 @@ from deltadewa.analysis.crash_repricing import (
 )
 from deltadewa.clock import days_between
 from deltadewa.constants import OptionType
+from deltadewa.portfolio.vol_quote import VolOrigin
 from deltadewa.valuation import OptionValuation
 
 if TYPE_CHECKING:
@@ -233,6 +234,31 @@ def compute_moneyness_drift(
         current_otm_pct=current_otm_pct,
         drift_pct=current_otm_pct - entry_otm_pct,
     )
+
+
+def roll_target_vol(
+    portfolio: OptionPortfolio,
+    position: OptionPosition,
+    new_strike: float,
+) -> float:
+    """Return the volatility to price a roll's new strike at (9b, D3).
+
+    The held leg's own volatility is the right basis for a same-expiry
+    option at a nearby strike only when volatility is flat across strikes.
+    With a fetched smile the new strike has its own IV on the same chain,
+    at the same rate and yield the held leg's IV was solved at, so the cost
+    of the roll is measured on one surface. Where the chain cannot say (the
+    new strike is outside the listed range, or no feed prices volatility)
+    this is the held leg's own volatility, exactly as before.
+    """
+    quote = portfolio.candidate_vol(
+        strike=new_strike,
+        maturity=position.option.maturity_date,
+        option_type=position.option.option_type,
+    )
+    if quote.origin is VolOrigin.BOOK_FLAT:
+        return position.option.volatility
+    return quote.vol
 
 
 def estimate_roll_up_cost(
@@ -847,7 +873,7 @@ def evaluate_roll_status(  # pylint: disable=too-many-locals  # four triggers, t
             estimated_roll_up_cost = estimate_roll_up_cost(
                 position,
                 new_strike,
-                position.option.volatility,
+                roll_target_vol(portfolio, position, new_strike),
             )
 
         records.append(

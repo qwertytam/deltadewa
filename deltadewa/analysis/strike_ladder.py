@@ -192,8 +192,13 @@ def strike_for_delta(
         target_delta: Desired put-delta magnitude as a positive number
             (e.g. ``0.10`` for a 10-delta put).
         maturity_years: Time to expiry in years.
-        vol: Implied volatility override (annualised fraction).  Defaults to
-            ``portfolio.volatility`` when ``None``.
+        vol: Implied volatility override (annualised fraction).  When
+            ``None`` each trial strike is priced where the portfolio says a
+            candidate there trades (``OptionPortfolio.candidate_vol``): the
+            fetched smile when the feed prices volatility (9b), else the
+            book's flat ``volatility``. With a smile the delta is no longer
+            guaranteed monotone in strike, so the solve brackets a sign
+            change rather than a unique root.
 
     Returns:
         Strike price (float) at which ``|put_delta| ≈ target_delta``, or
@@ -211,13 +216,24 @@ def strike_for_delta(
         raise ValueError(msg)
 
     spot = portfolio.spot_price
-    effective_vol = vol if vol is not None else portfolio.volatility
     maturity_date = portfolio.valuation_date + timedelta(
         days=round(maturity_years * const.DAYS_PER_YEAR),
     )
 
     def _put_delta_at(strike: float) -> float:
-        """Compute put delta for *strike*, all other inputs fixed."""
+        """Compute put delta for *strike* at the vol a candidate there has.
+
+        With a fetched smile the volatility varies with the strike (9b), so
+        it is read per strike; an explicit override or no feed is one number.
+        """
+        effective_vol = (
+            vol
+            if vol is not None
+            else portfolio.candidate_vol(
+                strike=strike,
+                maturity=maturity_date,
+            ).vol
+        )
         v = build_put_valuation(
             spot, strike, maturity_date, effective_vol, portfolio
         )

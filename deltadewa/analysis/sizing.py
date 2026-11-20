@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.vol_quote import VolQuote
 
 # ---------------------------------------------------------------------------
 # Dataclass
@@ -116,6 +117,8 @@ class HedgeSizingResult:
             inclusive at both ends.
         meets_convexity_target: Derived from ``achieved_convexity``:
             True when the figure lies within the band.
+        vol_quote: The volatility the candidate was priced at and where it
+            came from (9b, D3); ``None`` only for a hand-built result.
 
     """
 
@@ -147,6 +150,10 @@ class HedgeSizingResult:
     # Steps 4-5 - convexity check
     achieved_convexity_pct: float
     achieved_convexity: ConvexityGrading
+
+    # The volatility the candidate was priced at, and where it came from
+    # (9b, D3). ``None`` only for a hand-built result.
+    vol_quote: VolQuote | None = None
 
     @property
     def meets_convexity_target(self) -> bool | None:
@@ -491,4 +498,5 @@ def size_hedge(
         max_affordable_contracts=sizing.max_affordable_contracts,
         achieved_convexity_pct=achieved_convexity_pct,
         achieved_convexity=achieved_convexity,
+        vol_quote=metrics.vol_quote,
     )

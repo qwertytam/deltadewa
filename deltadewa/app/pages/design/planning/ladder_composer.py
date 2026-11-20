@@ -56,6 +56,7 @@ from deltadewa.analysis.ladder import (
     size_ladder,
 )
 from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
+from deltadewa.analysis.vol_source import vol_basis_note
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.compliance import Scorecard, scorecard
@@ -77,6 +78,7 @@ if TYPE_CHECKING:
     from deltadewa.app.factory import ProgramDashApp
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.vol_quote import VolQuote
     from deltadewa.reporting.program_report import (
         IpsComplianceRow,
         IpsComplianceSection,
@@ -470,6 +472,13 @@ def _scorecard_table(
     )
 
 
+def _rung_iv_text(quote: VolQuote | None) -> str:
+    """Show a rung's IV and how it was decided (9b, D3)."""
+    if quote is None:
+        return "n/a"
+    return f"{fmt.percent(quote.vol * 100.0)} ({quote.origin.value.lower()})"
+
+
 def _rung_table(sized: SizedLadder) -> html.Table:
     """Tabulate the sized rungs: strike, tenor, weight, contracts, cost."""
     weights = sized.ladder.normalized_weights
@@ -480,6 +489,7 @@ def _rung_table(sized: SizedLadder) -> html.Table:
                 html.Td(f"{rung.spec.pct_otm:.1f}% OTM"),
                 html.Td(f"{rung.metrics.strike:,.0f}"),
                 html.Td(f"{rung.spec.maturity_years:.2f}y"),
+                html.Td(_rung_iv_text(rung.metrics.vol_quote), className="num"),
                 html.Td(fmt.percent(weight * 100.0), className="num"),
                 html.Td(f"{rung.contracts:,}", className="num"),
                 # Achieved, not asked: rounding each rung up moves it.
@@ -510,6 +520,7 @@ def _rung_table(sized: SizedLadder) -> html.Table:
                 html.Td(""),
                 html.Td(""),
                 html.Td(""),
+                html.Td(""),
                 html.Td(f"{sized.total_contracts:,}", className="num"),
                 html.Td(""),
                 html.Td(
@@ -536,6 +547,7 @@ def _rung_table(sized: SizedLadder) -> html.Table:
                         html.Th("Rung"),
                         html.Th("Strike"),
                         html.Th("Tenor"),
+                        html.Th("IV (basis)", className="num"),
                         html.Th("Weight asked", className="num"),
                         html.Th("Contracts", className="num"),
                         html.Th("Share held", className="num"),
@@ -672,6 +684,19 @@ def _comparability_notes(
             '(short, call or expired). "Current book" includes them; '
             '"This ladder" cannot.'
         )
+    if portfolio.vol_source is not None:
+        # 9b: with a fetched smile the rungs are priced on the chain, not
+        # the book's flat volatility, so the old "own entered volatility"
+        # wording would be wrong. A held leg is on the chain's basis where
+        # the feed prices it and on your typed IV where it does not (an
+        # override, or a quote the chain could not use).
+        notes.append(
+            "Current legs are priced at their own IV (the chain's where the "
+            "feed prices them, yours where it does not); rungs are priced "
+            "from the fetched chain, so the two columns are on one "
+            "volatility basis only for legs the chain prices.",
+        )
+        return notes
     # Compared by value, not by the custom_volatility flag: a leg entered
     # explicitly at the book's own volatility (the golden book does this)
     # shares the basis, and warning there would cry wolf.
@@ -686,6 +711,23 @@ def _comparability_notes(
             "columns are not on one volatility basis."
         )
     return notes
+
+
+def _rung_vol_text(portfolio: OptionPortfolio, sized: SizedLadder) -> str:
+    """Say what the rungs were priced on: the chain's smile, or the book's vol.
+
+    Names each rung's origin (a listed contract, between strikes, between
+    expiries, the flat fallback) so a reader knows how far each rung's IV is
+    the market's and how far a placeholder; the old flat sentence when no
+    feed prices volatility.
+    """
+    note = vol_basis_note(rung.metrics.vol_quote for rung in sized.rungs)
+    if note is not None:
+        return note
+    return (
+        "Rungs are priced at the book's volatility "
+        f"({fmt.percent(portfolio.volatility * 100.0)})."
+    )
 
 
 def _composer_view(
@@ -710,9 +752,9 @@ def _composer_view(
             f"annual carry {fmt.currency(sized.implied_annual_carry)} "
             f"against a {fmt.currency(basis.carry_budget)} budget. Each "
             "rung rounds up to whole contracts, so the share held can "
-            "differ a little from the weight asked for. Rungs are priced "
-            "at the book's volatility "
-            f"({fmt.percent(portfolio.volatility * 100.0)}). "
+            "differ a little from the weight asked for. "
+            + _rung_vol_text(portfolio, sized)
+            + " "
             + GROSS_SIZING_NOTE,
             className="plain-language",
         ),

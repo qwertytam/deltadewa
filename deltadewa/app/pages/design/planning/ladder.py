@@ -33,6 +33,7 @@ from dash import ALL, Input, NoUpdate, Output, State, ctx, dcc, html, no_update
 from deltadewa.analysis.convexity_band import NOT_MEASURED, ConvexityGrade
 from deltadewa.analysis.sizing import GROSS_SIZING_NOTE
 from deltadewa.analysis.strike_ladder import build_candidate_grid
+from deltadewa.analysis.vol_source import vol_basis_note
 from deltadewa.app import format as fmt
 from deltadewa.app.basis_chip import basis_chip
 from deltadewa.app.panel_guard import NoticeKind, panel_notice
@@ -338,6 +339,19 @@ def _ladder_rung_row(rung: GridCell) -> html.Tr:
     )
 
 
+def _vol_basis_children(result: CandidateGridResult) -> list[Component]:
+    """Say what the candidates were priced on, when it is the fetched smile.
+
+    With the feed pricing volatility each cell is priced at its own strike's
+    and expiry's IV (9b); without it every cell is the book's one flat
+    volatility and nothing needs saying.
+    """
+    note = vol_basis_note(cell.metrics.vol_quote for cell in result.cells)
+    if note is None:
+        return []
+    return [html.P(note, className="plain-language")]
+
+
 def _ladder_panel_view(
     result: CandidateGridResult,
     sort_state: _SortState | None,
@@ -380,6 +394,7 @@ def _ladder_panel_view(
             _ALONE_NOTE,
             className="plain-language",
         ),
+        *_vol_basis_children(result),
         html.Table(
             [
                 html.Thead(_sort_header_row(sort_state)),

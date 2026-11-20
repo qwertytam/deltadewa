@@ -64,6 +64,7 @@ from deltadewa.analysis.sizing import SizingBasis, size_from_unit, sizing_basis
 from deltadewa.clock import days_between
 from deltadewa.constants import OptionType
 from deltadewa.portfolio.core import OptionPortfolio
+from deltadewa.portfolio.vol_quote import VolOrigin
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -445,6 +446,23 @@ def size_ladder(
     )
 
 
+def _rung_volatility(sized: SizedLadder, rung: SizedRung) -> float | None:
+    """Return the volatility to hold *rung* at in the shadow book.
+
+    The rung's own (the one its metrics were priced at, so the shadow book
+    and the per-rung figures cannot disagree), unless that was only the
+    book's flat volatility, which the shadow book inherits anyway and which
+    keeps the leg "inheriting" rather than "custom". An explicit
+    ``sized.vol`` override wins, as it always did.
+    """
+    if sized.vol is not None:
+        return sized.vol
+    quote = rung.metrics.vol_quote
+    if quote is None or quote.origin is VolOrigin.BOOK_FLAT:
+        return None
+    return quote.vol
+
+
 def materialize_ladder(
     portfolio: OptionPortfolio,
     sized: SizedLadder,
@@ -482,6 +500,7 @@ def materialize_ladder(
         default_exercise_style=portfolio.default_exercise_style,
         contract_size=portfolio.contract_size,
     )
+    shadow.vol_source = portfolio.vol_source
     for rung in sized.rungs:
         if rung.contracts == 0:
             continue
@@ -493,7 +512,7 @@ def materialize_ladder(
             ),
             quantity=rung.contracts,
             option_type=OptionType.PUT,
-            volatility=sized.vol,
+            volatility=_rung_volatility(sized, rung),
         )
     return shadow
 
