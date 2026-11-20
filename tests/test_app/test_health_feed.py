@@ -106,12 +106,14 @@ class TestFeedSeries:
         assert payload["market_data"]["feed"] == {
             "chain": {
                 "quality": "UNAVAILABLE",
+                "session_date": None,
                 "as_of": None,
                 "fetched_at": None,
                 "adopted": False,
             },
             "rate": {
                 "quality": "UNAVAILABLE",
+                "session_date": None,
                 "as_of": None,
                 "fetched_at": None,
                 "adopted": False,

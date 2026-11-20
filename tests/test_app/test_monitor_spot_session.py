@@ -77,3 +77,36 @@ class TestSessions:
         assert "Not compared" not in text
         assert "vs book" in text
         assert "hand-entered reference point" in text
+
+
+class TestTheWordsSayWhereTheBookSpotCame:
+    def test_unavailable_says_the_fed_spot_is_the_charts(self) -> None:
+        reading = SpotReading(
+            book_spot=5000.0,
+            observed_spot=None,
+            quality=DataQuality.UNAVAILABLE,
+            as_of=None,
+            fetched_at=None,
+        )
+
+        fed = _collect_text(
+            _spot_headline(reading, "SPX", 2.0, fed_session=date(2026, 11, 13)),
+        )
+        typed = _collect_text(_spot_headline(reading, "SPX", 2.0))
+
+        assert "fetched chain's index level only" in fed
+        assert "hand-entered only" not in fed
+        assert "hand-entered only" in typed
+
+    def test_a_last_good_spot_does_not_read_like_a_fresh_one(self) -> None:
+        text = _collect_text(
+            _spot_headline(
+                _reading(observed=5000.0),
+                "SPX",
+                2.0,
+                fed_session=date(2026, 11, 13),
+                fed_last_good=True,
+            ),
+        )
+
+        assert "last good" in text

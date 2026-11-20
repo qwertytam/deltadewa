@@ -272,6 +272,12 @@ def newer_cached_session(
     except MarketDataError:
         return None
     session = cached.value.session_date
+    # Only a chain the book could now be priced on counts as "newer": one
+    # that is still older than the limit would be rejected again after a
+    # restart, so telling the operator to restart would be wrong.
+    started = resolution.resolved_at.date()
+    if (started - session).days > policy.max_quote_age_days:
+        return None
     if resolution.session_date is None or session > resolution.session_date:
         return session
     return None
@@ -365,6 +371,11 @@ class ResolvedInputs:  # pylint: disable=too-many-instance-attributes  # the res
         adopting: Whether the policy adopts anything from the feed. False
             with no ``pricing_feed`` section or an empty ``adopt`` list,
             when the pages say nothing about prices being read.
+        surface_error: Why the candidate volatility surface could not be
+            built from the chain (candidates are then priced on the book's
+            flat volatility), or ``None``. Set by ``ProgramState`` after
+            resolving; not a resolver fault, since held legs are still
+            priced on the feed.
 
     """
 
@@ -380,6 +391,7 @@ class ResolvedInputs:  # pylint: disable=too-many-instance-attributes  # the res
     session_date: date | None
     is_identity: bool
     adopting: bool = False
+    surface_error: str | None = None
 
     @classmethod
     def all_entered(

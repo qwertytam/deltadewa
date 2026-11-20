@@ -8,6 +8,7 @@ HOLD/MONITOR/REVIEW/ROLL verdict for every position in a portfolio, or
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from datetime import timedelta
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     from deltadewa.ips_config import IpsConfig, IpsTriggers
     from deltadewa.portfolio.core import OptionPortfolio
     from deltadewa.portfolio.position import OptionPosition
+
+_logger = logging.getLogger(__name__)
 
 
 class RollVerdict(StrEnum):
@@ -251,11 +254,23 @@ def roll_target_vol(
     new strike is outside the listed range, or no feed prices volatility)
     this is the held leg's own volatility, exactly as before.
     """
-    quote = portfolio.candidate_vol(
-        strike=new_strike,
-        maturity=position.option.maturity_date,
-        option_type=position.option.option_type,
-    )
+    try:
+        quote = portfolio.candidate_vol(
+            strike=new_strike,
+            maturity=position.option.maturity_date,
+            option_type=position.option.option_type,
+        )
+    except Exception:  # pylint: disable=broad-exception-caught  # contained: this is on the digest's build path
+        # Roll status feeds the weekly digest, and an unexpected fault in a
+        # chain read must not take the whole build (and so the send and the
+        # heartbeat) down for an estimate that has an honest fallback. Logged,
+        # and the estimate is priced on the held leg's own volatility as it
+        # was before the feed.
+        _logger.exception(
+            "reading the candidate surface for a roll's new strike failed; "
+            "pricing it on the held leg's own volatility",
+        )
+        return position.option.volatility
     if quote.origin is VolOrigin.BOOK_FLAT:
         return position.option.volatility
     return quote.vol

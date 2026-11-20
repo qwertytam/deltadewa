@@ -139,6 +139,13 @@ def _summary_text(ledger: ProvenanceLedger) -> str:
     if worst is None:
         return "No pricing inputs to grade."
     if worst.freshness is Freshness.FRESH:
+        if ledger.input_notes:
+            # Every graded input is within its review age, but something the
+            # grades do not cover needs saying (an input on a fallback).
+            return (
+                "Graded inputs are within their review ages, but the notes "
+                "below need attention."
+            )
         return f"All inputs current. Worst: {worst.label} ({worst.detail})."
     return f"Worst: {worst.label} — {worst.freshness.value}. {worst.detail}"
 

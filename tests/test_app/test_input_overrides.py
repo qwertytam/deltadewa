@@ -359,3 +359,15 @@ def test_the_typed_spot_is_not_the_effective_spot(state: ProgramState) -> None:
     """A guard on the fixture the whole module relies on."""
     assert state.entered.spot == pytest.approx(TYPED_SPOT)
     assert state.portfolio.spot_price == pytest.approx(SPOT)
+
+
+def test_the_form_and_the_state_share_one_iv_ceiling() -> None:
+    from deltadewa.app import input_overrides
+    from deltadewa.state import MAX_OVERRIDE_VOLATILITY
+
+    assert (
+        pytest.approx(
+            MAX_OVERRIDE_VOLATILITY * 100.0,
+        )
+        == input_overrides._MAX_IV_PCT
+    )

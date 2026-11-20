@@ -171,3 +171,23 @@ class TestComposer:
         assert not any(
             "book's" in n and "entered volatility" in n for n in notes
         )
+
+
+class TestMonteCarloSaysWhatItDiffuses:
+    def test_it_names_the_typed_book_vol_when_a_surface_prices_the_legs(
+        self,
+    ) -> None:
+        from deltadewa.app.pages.design.exploration import monte_carlo
+
+        book = _portfolio(100.0)
+        book.vol_source = _Smile()
+
+        text = _collect_text(monte_carlo._diffusion_note(book))
+
+        assert "diffuse the underlying at the book's volatility" in text
+        assert "a typed value" in text
+
+    def test_it_says_nothing_without_a_surface(self) -> None:
+        from deltadewa.app.pages.design.exploration import monte_carlo
+
+        assert monte_carlo._diffusion_note(_portfolio(100.0)) == []

@@ -254,7 +254,9 @@ def ladder_from_book(portfolio: OptionPortfolio) -> ProposedLadder | None:
     are the held quantity. Only **live, long puts** become rungs; shorts,
     calls and expired legs are counted in ``excluded_leg_count`` so the
     caller can say what was left out, never netted in with a sign. Per-leg
-    volatility is not carried: a rung is repriced at the book's volatility.
+    volatility is not carried: a rung is repriced where a candidate at its
+    strike and tenor trades (the fetched smile when the feed prices
+    volatility, else the book's volatility).
 
     Args:
         portfolio: The live book.
@@ -471,10 +473,12 @@ def materialize_ladder(
 
     The result is a throwaway shadow book: the live book's market inputs,
     valuation date and underlying, and only the ladder's legs (rungs sized
-    to zero contracts are omitted). Every leg is priced at the book's
-    volatility (or ``sized.vol``); a held leg's own entered volatility is
-    not carried, so a held ladder reads exactly as the book does only where
-    its legs sit at book volatility; the composer says so when they do not.
+    to zero contracts are omitted). Every leg is priced at the volatility
+    its rung was sized at (the fetched smile's, when the feed prices
+    volatility; else the book's, or ``sized.vol``); a held leg's own
+    entered volatility is not carried, so a held ladder reads exactly as the
+    book does only where its legs sit at that volatility; the composer says
+    so when they do not.
 
     It exists so the existing graders -- the compliance strip,
     ``build_scenario`` -- can score a proposal with no ladder-specific

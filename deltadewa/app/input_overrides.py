@@ -32,6 +32,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
 from deltadewa.analysis.pricing_resolution import InputOrigin, OverrideKind
+from deltadewa.state import MAX_OVERRIDE_VOLATILITY
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -63,7 +64,7 @@ _LISTED: Final = (
 #: where a percentage was asked for (``0.27`` for 27%), which would price an
 #: option at a quarter of one percent.
 _MIN_IV_PCT: Final = 1.0
-_MAX_IV_PCT: Final = 500.0
+_MAX_IV_PCT: Final = MAX_OVERRIDE_VOLATILITY * 100.0
 #: Yields at or above this are not a dividend yield.
 _MAX_DIVIDEND_PCT: Final = 20.0
 

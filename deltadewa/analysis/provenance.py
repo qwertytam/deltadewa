@@ -38,21 +38,21 @@ a dead feed, so the endpoint grades each channel on its own cut instead
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
 from deltadewa.analysis.market_environment import DataQuality, worst_quality
-from deltadewa.analysis.pricing_resolution import InputOrigin
+from deltadewa.analysis.pricing_resolution import InputOrigin, SeriesUse
 
 if TYPE_CHECKING:
     from collections.abc import Collection
-    from datetime import date, datetime
+    from datetime import date
 
     from deltadewa.analysis.market_environment import MarketEnvironment
     from deltadewa.analysis.pricing_resolution import (
         ResolvedInputs,
         ResolvedValue,
-        SeriesUse,
     )
     from deltadewa.ips_config import IpsPricingInputs
     from deltadewa.portfolio.core import OptionPortfolio
@@ -477,6 +477,9 @@ def _fallback_stamp_text(
     portfolio: OptionPortfolio,
 ) -> str:
     """Name the oldest typed value the book is falling back on."""
+    # Compared as dates (the text only shows a date): a hand-edited file can
+    # carry a naive stamp beside aware ones, and ``min`` of mixed datetimes
+    # raises, which would take the digest build down.
     stamps: list[datetime | None] = []
     if resolution.spot.origin is InputOrigin.FALLBACK:
         stamps.append(portfolio.stamps.spot_as_of)
@@ -492,8 +495,47 @@ def _fallback_stamp_text(
         return "pricing on your values"
     if any(stamp is None for stamp in stamps):
         return "pricing on your values (never confirmed)"
-    oldest = min(stamp for stamp in stamps if stamp is not None)
+    oldest = min(stamp.date() for stamp in stamps if stamp is not None)
     return f"pricing on your value from {oldest:%Y-%m-%d}"
+
+
+#: A stand-in series for a resolver fault, so it folds into the ledger's
+#: market-data quality the way a dead feed does (one rule, one alarm).
+_RESOLUTION_SERIES: Final = SeriesUse(
+    name="pricing inputs",
+    quality=DataQuality.UNAVAILABLE,
+    as_of=None,
+    fetched_at=None,
+    detail="could not be resolved",
+)
+
+#: Sorts a series with no date as older than every dated one.
+_EPOCH: Final = datetime.min.replace(tzinfo=UTC)
+
+
+def _resolution_entry(resolution: ResolvedInputs) -> InputProvenance:
+    """Grade a fault in the resolving code itself, as a dead feed is."""
+    return InputProvenance(
+        key="feed.resolution",
+        label="Pricing inputs: could not be resolved",
+        kind=InputKind.FETCHED,
+        freshness=_QUALITY_TO_FRESHNESS[DataQuality.UNAVAILABLE],
+        as_of=None,
+        age_days=None,
+        max_age_days=None,
+        quality=DataQuality.UNAVAILABLE,
+        detail=(
+            f"could not be resolved ({resolution.error}); the book is "
+            "priced on your typed values"
+        ),
+    )
+
+
+def _priced_session(resolution: ResolvedInputs) -> date | None:
+    """Return the close the book was priced on, if any input is fed."""
+    if resolution.session_date is not None:
+        return resolution.session_date
+    return resolution.spot.session if resolution.spot.from_feed else None
 
 
 def _feed_entry(
@@ -573,6 +615,13 @@ def _input_notes(
         notes.append(
             "The pricing inputs could not be resolved "
             f"({resolution.error}); the book is priced on your typed values.",
+        )
+    if resolution.surface_error is not None:
+        notes.append(
+            "Candidate options (the strike grid, sizing, the ladder composer "
+            "and a roll's cost) are priced on the book's flat volatility, "
+            "not the chain: building the chain's surface failed "
+            f"({resolution.surface_error}).",
         )
     if resolution.spot.origin is InputOrigin.FALLBACK:
         notes.append(f"Spot price: {resolution.spot.detail}.")
@@ -654,20 +703,37 @@ def build_provenance_ledger(  # pylint: disable=too-many-locals
     entries: list[InputProvenance] = [market_data_entry]
     market_quality = environment.data_quality
     oldest_series = environment.oldest_series
+    market_as_of = environment.as_of
+    market_fetched_at = environment.fetched_at
     if resolution is not None:
         entries.extend(
             _feed_entry(use, resolution, portfolio, as_of)
             for use in resolution.series
         )
-        fed_worst = resolution.worst_series_quality
+        if resolution.error is not None:
+            entries.append(_resolution_entry(resolution))
+        series = list(resolution.series)
+        if resolution.error is not None:
+            series.append(_RESOLUTION_SERIES)
+        fed_worst = (
+            worst_quality(use.quality for use in series) if series else None
+        )
         if fed_worst is not None:
             combined = worst_quality([market_quality, fed_worst])
             if combined is not market_quality:
-                oldest_series = next(
-                    f"{use.name} (pricing feed)"
-                    for use in resolution.series
-                    if use.quality is combined
+                # The feed is what is worst. The stamp pairs a date with a
+                # series name, so both come from the same series: the one
+                # that is worst, and of those the one whose data is oldest.
+                worst_use = min(
+                    (use for use in series if use.quality is combined),
+                    key=lambda use: (
+                        use.as_of is not None,
+                        use.as_of or _EPOCH,
+                    ),
                 )
+                oldest_series = f"{worst_use.name} (pricing feed)"
+                market_as_of = worst_use.as_of
+                market_fetched_at = worst_use.fetched_at
             market_quality = combined
 
     typed_legs: Collection[str] | None = None
@@ -729,8 +795,8 @@ def build_provenance_ledger(  # pylint: disable=too-many-locals
     adopting = resolution is not None and resolution.adopting
     return ProvenanceLedger(
         entries=tuple(entries),
-        market_data_as_of=environment.as_of,
-        market_data_fetched_at=environment.fetched_at,
+        market_data_as_of=market_as_of,
+        market_data_fetched_at=market_fetched_at,
         market_data_quality=market_quality,
         oldest_series=oldest_series,
         overrides=(
@@ -745,7 +811,7 @@ def build_provenance_ledger(  # pylint: disable=too-many-locals
         ),
         priced_at=resolution.resolved_at if adopting and resolution else None,
         priced_session=(
-            resolution.session_date if adopting and resolution else None
+            _priced_session(resolution) if adopting and resolution else None
         ),
         flat_iv_note=flat_iv_nudge(portfolio, only=typed_legs),
     )

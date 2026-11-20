@@ -56,7 +56,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Final
 
@@ -862,6 +862,7 @@ def mark_book(
     basis: MarkBasis = MarkBasis.MODEL,
     is_opening: bool = False,
     volatility_origins: Mapping[str, str] | None = None,
+    fed_spot_session: date | None = None,
 ) -> BookMark:
     """Mark the whole book on its own valuation date.
 
@@ -882,6 +883,11 @@ def mark_book(
         volatility_origins: Where each lot's volatility came from, by
             ``position_id`` (``ProgramState.resolution``'s legs). A lot not
             named is a typed value, ``"ENTERED"``.
+        fed_spot_session: The chain session the book's spot was fetched
+            from, when the feed prices it. The mark's ``spot_as_of`` is then
+            that session, not the typed spot's confirmation stamp: a fetched
+            number was confirmed by nobody, and recording the typed stamp
+            beside it would date the mark's spot weeks before it was read.
 
     Returns:
         The mark. Nothing is written.
@@ -914,7 +920,16 @@ def mark_book(
         written_by=written_by,
         basis=basis,
         spot=float(portfolio.spot_price),
-        spot_as_of=portfolio.stamps.spot_as_of,
+        spot_as_of=(
+            datetime(
+                fed_spot_session.year,
+                fed_spot_session.month,
+                fed_spot_session.day,
+                tzinfo=UTC,
+            )
+            if fed_spot_session is not None
+            else portfolio.stamps.spot_as_of
+        ),
         risk_free_rate=float(portfolio.risk_free_rate),
         dividend_yield=float(portfolio.dividend_yield),
         underlying_quantity=float(portfolio.underlying_quantity),

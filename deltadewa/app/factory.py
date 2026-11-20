@@ -108,39 +108,48 @@ def _resolution_payload(
 ) -> dict[str, Any]:
     """Build ``/health``'s ``market_data.resolution``: what the app priced on.
 
-    Which of the four origins each input came from, when the process read
-    the prices (once, at start; a reload does not re-read them), and whether
-    a newer chain is cached that only a restart would adopt. Never raises:
-    a provider that cannot be read is simply "nothing newer".
+    Where each book-level input came from (``book``), how the legs split by
+    origin (``legs``: the dividend yield is always typed, so it is reported
+    on its own rather than inflating a count), when the process read the
+    prices (once, at start; a reload does not re-read them), and whether a
+    newer usable chain is cached that only a restart would adopt.
+
+    Never raises: ``/health`` is what a dead-man's switch reads, so a fault
+    here is reported in the payload, never as a 500.
     """
-    resolution = state.resolution
-    origins: dict[str, int] = {}
-    for value in (
-        resolution.spot,
-        resolution.risk_free_rate,
-        resolution.dividend_yield,
-        *resolution.legs.values(),
-    ):
-        origins[value.origin.value] = origins.get(value.origin.value, 0) + 1
     try:
-        newer = newer_cached_session(provider, ips_config, resolution)
-    except Exception:  # pylint: disable=broad-exception-caught
-        _logger.exception("/health: reading the newest cached chain failed")
-        newer = None
-    return {
-        "adopting": resolution.adopting,
-        "resolved_at": resolution.resolved_at.isoformat(),
-        "session_date": (
-            resolution.session_date.isoformat()
-            if resolution.session_date is not None
-            else None
-        ),
-        "origins": origins,
-        "newer_cached_session": (
-            newer.isoformat() if newer is not None else None
-        ),
-        "error": resolution.error,
-    }
+        resolution = state.resolution
+        legs: dict[str, int] = {}
+        for value in resolution.legs.values():
+            legs[value.origin.value] = legs.get(value.origin.value, 0) + 1
+        try:
+            newer = newer_cached_session(provider, ips_config, resolution)
+        except Exception:  # pylint: disable=broad-exception-caught
+            _logger.exception("/health: reading the newest cached chain failed")
+            newer = None
+        return {
+            "adopting": resolution.adopting,
+            "resolved_at": resolution.resolved_at.isoformat(),
+            "session_date": (
+                resolution.session_date.isoformat()
+                if resolution.session_date is not None
+                else None
+            ),
+            "book": {
+                "spot": resolution.spot.origin.value,
+                "risk_free_rate": resolution.risk_free_rate.origin.value,
+                "dividend_yield": resolution.dividend_yield.origin.value,
+            },
+            "legs": legs,
+            "newer_cached_session": (
+                newer.isoformat() if newer is not None else None
+            ),
+            "error": resolution.error,
+            "surface_error": resolution.surface_error,
+        }
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        _logger.exception("/health: describing the resolution failed")
+        return {"error": f"{type(exc).__name__}: {exc}"}
 
 
 def _feed_payload(
@@ -182,6 +191,7 @@ def _feed_payload(
         except MarketDataError:
             payload[name] = {
                 "quality": "UNAVAILABLE",
+                "session_date": None,
                 "as_of": None,
                 "fetched_at": None,
             }
@@ -192,12 +202,18 @@ def _feed_payload(
             )
             payload[name] = {
                 "quality": "ERROR",
+                "session_date": None,
                 "as_of": None,
                 "fetched_at": None,
             }
             continue
         payload[name] = {
             "quality": observation.source.value,
+            "session_date": (
+                observation.value.session_date.isoformat()
+                if name == "chain"
+                else None
+            ),
             "as_of": (
                 observation.as_of.isoformat()
                 if observation.as_of is not None
@@ -489,6 +505,7 @@ def create_app(
                 or boot_wiring_error is not None
                 or freshness_reason is not None
                 or state.resolution.error is not None
+                or state.resolution.surface_error is not None
             )
             else "ok"
         )
@@ -514,6 +531,10 @@ def create_app(
                 # values and this names the fault (the app still boots and
                 # the weekly email still sends).
                 "resolution_error": state.resolution.error,
+                # 9b: null unless candidates are on the flat volatility
+                # because the chain's surface could not be built (held legs
+                # are still priced on the chain); also degrades status.
+                "surface_error": state.resolution.surface_error,
                 # #355: who last wrote the shared state file, and whether
                 # it has changed since this worker last read or wrote it
                 # itself — a single Path.stat() under external_write_

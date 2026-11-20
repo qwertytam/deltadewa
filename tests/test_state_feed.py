@@ -704,3 +704,36 @@ class TestTheCandidateSurface:
         text = (tmp_path / "program_state.json").read_text()
 
         assert "vol_source" not in text
+
+
+class TestTheMarkDatesAFedSpot:
+    """A fetched spot is dated by its session, not by a typed stamp."""
+
+    def test_the_mark_carries_the_sessions_date(
+        self,
+        adopted: ProgramState,
+    ) -> None:
+        from deltadewa.history_cli import take_mark
+
+        outcome = take_mark(adopted, written_by="test")
+
+        assert outcome.mark is not None
+        session = adopted.resolution.spot.session
+        assert session is not None
+        assert outcome.mark.spot_as_of is not None
+        assert outcome.mark.spot_as_of.date() == session
+
+    def test_a_typed_spot_keeps_its_confirmation_stamp(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from deltadewa.history_cli import take_mark
+
+        ips = adopting_ips(tmp_path, ("volatility",))
+        _typed_book(tmp_path, ips)
+        state = _load(tmp_path, ips, _provider())
+
+        outcome = take_mark(state, written_by="test")
+
+        assert outcome.mark is not None
+        assert outcome.mark.spot_as_of == state.portfolio.stamps.spot_as_of

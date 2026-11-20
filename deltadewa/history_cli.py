@@ -98,7 +98,10 @@ def take_mark(
     store = state.history
     if store is None:
         raise RuntimeError("this ProgramState has no history store")
-    portfolio = state.portfolio
+    # Read together, once: the portfolio is the priced view the resolution
+    # describes, so the mark's volatilities and their origins cannot come
+    # from two different rebuilds.
+    portfolio, resolution = state.portfolio, state.resolution
     book_date = portfolio.valuation_date.date()
     if as_of is not None and as_of != book_date:
         return MarkOutcome(
@@ -118,8 +121,11 @@ def take_mark(
         is_opening=not existing,
         volatility_origins={
             position_id: leg.origin.value
-            for position_id, leg in state.resolution.legs.items()
+            for position_id, leg in resolution.legs.items()
         },
+        fed_spot_session=(
+            resolution.spot.session if resolution.spot.from_feed else None
+        ),
     )
     if store.append_mark(mark):
         started = (

@@ -52,6 +52,10 @@ __all__ = [
 #: How many listed strikes either side to try before giving up on finding
 #: one with a usable quote. The wings thin out; a long walk would reach a
 #: strike so far from the candidate that interpolating to it means nothing.
+#: A bound on a search, not a policy threshold: past it the candidate falls
+#: back to the book's flat volatility, labelled ``BOOK_FLAT``, never to an
+#: invented one. (The interpolated IV is labelled ``BETWEEN_STRIKES`` whatever
+#: the bracket's width; a sparse wing gives a wide one.)
 _MAX_NEIGHBOURS: Final = 6
 
 #: Two strikes closer than this are the same strike.
@@ -111,7 +115,14 @@ class ChainVolSource:
         self._feed = feed
         self._program_date = program_date
         self._book_vol = book_vol
-        self._expiries = snapshot.expiries()
+        # Both roots: a contract listed only on the weekly root is still a
+        # listed contract (``match`` prefers ``SPX`` where both list a date),
+        # so an expiry only ``SPXW`` lists is exact, not interpolated.
+        self._expiries = tuple(
+            sorted(
+                set(snapshot.expiries()) | set(snapshot.expiries(root="SPXW")),
+            ),
+        )
         self._solved_memo: dict[tuple[date, OptionType, float], float | None]
         self._solved_memo = {}
         self._listed_memo: dict[tuple[date, OptionType], tuple[float, ...]]

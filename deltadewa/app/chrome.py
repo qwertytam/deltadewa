@@ -164,6 +164,9 @@ _FALLBACK_BANNER_TEXT: Final[str] = "MARKET DATA DEGRADED"
 #: The ledger key prefix of an adopted feed series (``feed.chain``).
 _FEED_KEY_PREFIX: Final[str] = "feed."
 
+#: The ledger key of a fault in the resolving code itself.
+_RESOLUTION_KEY: Final[str] = "feed.resolution"
+
 _FEED_BANNER_PREFIX: Final[dict[DataQuality, str]] = {
     DataQuality.STALE: "PRICING ON THE LAST GOOD FEED DATA",
     DataQuality.STATIC: "SYNTHETIC PRICING DATA",
@@ -248,6 +251,8 @@ def _banner_text(ledger: ProvenanceLedger) -> str:
         # unguarded chrome shared by every page and /health — degrade to
         # a plain statement rather than ever raising here.
         return _FALLBACK_BANNER_TEXT
+    if worst.key == _RESOLUTION_KEY:
+        return f"PRICING INPUTS NOT RESOLVED — {worst.detail}."
     if worst.key.startswith(_FEED_KEY_PREFIX) and worst.quality is not None:
         # An adopted feed series (9b): its own entry says what is wrong and
         # what the book is priced on instead, e.g. "feed down since

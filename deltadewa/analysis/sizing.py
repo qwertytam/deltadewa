@@ -439,8 +439,11 @@ def size_hedge(
             (e.g. 5.0 → ``strike = spot * 0.95``).
         candidate_maturity_years: Time to expiry in years
             (e.g. 0.25 for ~3 months).
-        vol: Override for implied volatility (annualised fraction).  Defaults
-            to ``portfolio.volatility`` when ``None``.
+        vol: Override for implied volatility (annualised fraction).  When
+            ``None`` the candidate is priced where the portfolio says a
+            candidate there trades (``OptionPortfolio.candidate_vol``): the
+            fetched smile when the feed prices volatility (9b), else the
+            book's flat ``volatility``.
 
     Returns:
         ``HedgeSizingResult`` with all sizing and convexity metrics.

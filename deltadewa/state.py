@@ -128,7 +128,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
@@ -182,7 +182,7 @@ _DEFAULT_EXAMPLES_DIR: Final = Path("examples/portfolios")
 #: An IV override is a fraction; anything above this is a percentage typed
 #: where a fraction was asked for (25 for 25%), which would price the leg at
 #: 2,500% vol.
-_MAX_OVERRIDE_VOLATILITY: Final = 5.0
+MAX_OVERRIDE_VOLATILITY: Final = 5.0
 
 _logger = logging.getLogger(__name__)
 
@@ -216,11 +216,11 @@ def _read_feed_once(
     """Build the provider and read the feed once, containing any failure.
 
     A provider that cannot be built, or a cache that cannot be read, must
-    not stop the app booting or the digest sending: the failure becomes an
-    error string, the book prices on its typed values, and ``/health`` and
-    the banner say why. Only ``MarketDataError`` is an expected "nothing
-    cached" (``read_feed`` turns it into an empty reading); anything else
-    here is a fault, logged with its traceback.
+    not stop the *load*: the failure becomes an error string, the book
+    prices on its typed values, and ``/health`` and the banner say why. Only
+    ``MarketDataError`` is an expected "nothing cached" (``read_feed`` turns
+    it into an empty reading); anything else here is a fault, logged with its
+    traceback.
     """
     if factory is None:
         return None, FeedInputs(), None
@@ -360,9 +360,12 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                 ``pricing_feed`` section the process reads the feed once,
                 here, and prices the book on what it adopts (9b); the book
                 file is never changed by it. Omitted, every input is the
-                typed one. A provider that cannot be built or read never
-                stops the load: the book prices on typed values and
-                :attr:`resolution` says why.
+                typed one. A provider that cannot be built, or a feed that
+                cannot be read, never stops the load: the book prices on
+                typed values and :attr:`resolution` says why. (The pages
+                still need a provider to read market data through, so a
+                caller that gets none back builds its own, as ``wsgi`` and the
+                digest do.)
 
         Returns:
             A ready-to-use ``ProgramState``.
@@ -852,7 +855,12 @@ class ProgramState:  # pylint: disable=too-many-public-methods
                     ),
                 )
                 view = self._portfolio
-            view.vol_source = self._candidate_vol_source(resolution, view)
+            view.vol_source, surface_error = self._candidate_vol_source(
+                resolution,
+                view,
+            )
+            if surface_error is not None:
+                resolution = replace(resolution, surface_error=surface_error)
             self._resolution = resolution
             self._view = view
 
@@ -860,14 +868,22 @@ class ProgramState:  # pylint: disable=too-many-public-methods
         self,
         resolution: ResolvedInputs,
         view: OptionPortfolio,
-    ) -> ChainVolSource | None:
+    ) -> tuple[ChainVolSource | None, str | None]:
         """Build where candidates get their volatility, or ``None`` (D3).
 
         The fetched chain's smile, at the rate and yield the book is
         *effectively* priced at, when the policy adopts volatility and the
         chain is usable. Otherwise ``None``: a candidate is priced at the
-        book's flat volatility, as before the feed. Never raises; a failure
-        is logged and means no surface.
+        book's flat volatility, as before the feed. Never raises. A failure
+        is logged **and returned as a message**: without it candidates would
+        silently revert to the flat volatility while the held legs are priced
+        on the chain, and nothing but the log would say so.
+
+        Returns:
+            ``(surface, error)``: the surface or ``None``, and why it could
+            not be built, or ``None`` when there was nothing to build or it
+            was built.
+
         """
         policy = (
             self._ips_config.pricing_feed
@@ -885,22 +901,25 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             or chain is None
             or not chain_usable
         ):
-            return None
+            return None, None
         try:
-            return ChainVolSource(
-                chain.value,
-                risk_free_rate=view.risk_free_rate,
-                dividend_yield=view.dividend_yield,
-                feed=policy,
-                program_date=self._portfolio.valuation_date.date(),
-                book_vol=view.volatility,
+            return (
+                ChainVolSource(
+                    chain.value,
+                    risk_free_rate=view.risk_free_rate,
+                    dividend_yield=view.dividend_yield,
+                    feed=policy,
+                    program_date=self._portfolio.valuation_date.date(),
+                    book_vol=view.volatility,
+                ),
+                None,
             )
-        except Exception:  # pylint: disable=broad-exception-caught  # contained: candidates fall back to the flat vol
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # contained: candidates fall back to the flat vol
             _logger.exception(
                 "building the candidate volatility surface failed; "
                 "candidates are priced on the book's flat volatility",
             )
-            return None
+            return None, f"{type(exc).__name__}: {exc}"
 
     # ── Position history (#313) ─────────────────────────────────────────
 
@@ -1305,7 +1324,7 @@ class ProgramState:  # pylint: disable=too-many-public-methods
             if kind is OverrideKind.SPOT:
                 self._portfolio.pin_spot(value)
             else:
-                if value > _MAX_OVERRIDE_VOLATILITY:
+                if value > MAX_OVERRIDE_VOLATILITY:
                     raise ValueError(
                         "an IV override is a fraction (0.25 for 25%), not "
                         "a percentage",

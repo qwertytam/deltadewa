@@ -603,3 +603,95 @@ class TestRollCost:
         vol = roll_target_vol(book, book.positions[0], _SPOT * 0.9)
 
         assert vol == pytest.approx(0.27)
+
+
+class TestWeeklyOnlyExpiries:
+    """A contract only the weekly root lists is a listed contract."""
+
+    def test_an_spxw_only_expiry_is_exact_not_interpolated(self) -> None:
+        from tests.chain_builders import WEEKLY_ONLY
+
+        # Near the money: a four-day put 20% out is worthless and has no bid.
+        quote = _source().vol_for(
+            strike=4900.0,
+            maturity=WEEKLY_ONLY,
+            option_type=OptionType.PUT,
+        )
+
+        assert quote.origin is VolOrigin.EXACT
+        assert quote.vol == pytest.approx(smile(4900.0), abs=5e-3)
+
+
+class TestRollAgreesWithCandidatesOnTheSurface:
+    """Inside the listed range a roll's new strike and a candidate agree."""
+
+    def _book(self) -> OptionPortfolio:
+        book = OptionPortfolio(
+            spot_price=SPOT,
+            underlying_quantity=100.0,
+            volatility=_BOOK_VOL,
+            risk_free_rate=RATE,
+            dividend_yield=DIVIDEND,
+            valuation_date=datetime(SESSION.year, SESSION.month, SESSION.day),
+            default_exercise_style=ExerciseStyle.EUROPEAN,
+        )
+        book.vol_source = _source()
+        book.add_position(
+            strike_price=3500.0,
+            maturity_date=datetime(
+                DECEMBER.year,
+                DECEMBER.month,
+                DECEMBER.day,
+            ),
+            quantity=5,
+            option_type=OptionType.PUT,
+            volatility=0.31,
+        )
+        return book
+
+    def test_a_listed_new_strike_is_the_candidates_vol(self) -> None:
+        book = self._book()
+        held = book.positions[0]
+
+        roll = roll_target_vol(book, held, 4000.0)
+        candidate = book.candidate_vol(
+            strike=4000.0,
+            maturity=held.option.maturity_date,
+        )
+
+        assert candidate.origin is VolOrigin.EXACT
+        assert roll == pytest.approx(candidate.vol)
+
+    def test_outside_the_range_a_roll_prices_on_the_held_legs_vol(self) -> None:
+        """By design, and different from a fresh candidate: a roll's
+        reference is the leg it replaces. Labelled, documented, pinned."""
+        book = self._book()
+        held = book.positions[0]
+
+        roll = roll_target_vol(book, held, 1000.0)
+        candidate = book.candidate_vol(
+            strike=1000.0,
+            maturity=held.option.maturity_date,
+        )
+
+        assert candidate.origin is VolOrigin.BOOK_FLAT
+        assert roll == pytest.approx(0.31)
+        assert candidate.vol == pytest.approx(_BOOK_VOL)
+
+    def test_a_surface_that_raises_cannot_take_the_digest_down(
+        self,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        book = self._book()
+
+        class _Broken:
+            def vol_for(self, **_kwargs: object) -> VolQuote:
+                raise RuntimeError("surface fault")
+
+        book.vol_source = _Broken()
+
+        with caplog.at_level("ERROR"):
+            vol = roll_target_vol(book, book.positions[0], 4000.0)
+
+        assert vol == pytest.approx(0.31)
+        assert "surface fault" in caplog.text

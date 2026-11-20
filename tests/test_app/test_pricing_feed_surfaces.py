@@ -10,6 +10,8 @@ override. All of it on the one #393/#398 rule, unchanged.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -18,7 +20,10 @@ from deltadewa.analysis.market_environment import (
     DataQuality,
     assess_market_environment,
 )
-from deltadewa.analysis.pricing_resolution import OverrideKind
+from deltadewa.analysis.pricing_resolution import (
+    OverrideKind,
+    newer_cached_session,
+)
 from deltadewa.analysis.provenance import (
     InputKind,
     ProvenanceLedger,
@@ -346,8 +351,12 @@ class TestHealth:
         assert payload["status"] == "ok", payload["freshness_reason"]
         resolution = payload["market_data"]["resolution"]
         assert resolution["adopting"] is True
-        assert resolution["origins"]["FETCHED"] == 4
-        assert resolution["origins"]["ENTERED"] == 1
+        assert resolution["book"] == {
+            "spot": "FETCHED",
+            "risk_free_rate": "FETCHED",
+            "dividend_yield": "ENTERED",
+        }
+        assert resolution["legs"] == {"FETCHED": 2}
         assert resolution["error"] is None
         assert resolution["newer_cached_session"] is None
         assert resolution["resolved_at"]
@@ -363,7 +372,8 @@ class TestHealth:
         payload = _health(state, provider)
 
         assert payload["status"] == "degraded"
-        assert "chain" in payload["freshness_reason"]
+        # Both feed series are stale; the reason names the older of them.
+        assert "(pricing feed)" in payload["freshness_reason"]
 
     def test_a_chain_nothing_adopts_does_not_degrade_status(
         self,
@@ -446,3 +456,288 @@ def test_the_ips_type_is_what_the_state_exposes(tmp_path: Path) -> None:
         "risk_free_rate",
         "volatility",
     }
+
+
+class TestTheLedgerNamesTheSeriesItDates:
+    """The stamp pairs a date with the series it belongs to."""
+
+    def test_the_date_and_the_name_are_the_feeds_when_the_feed_is_worst(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state, provider = _state(tmp_path, feed_source=Source.STALE)
+
+        ledger = _ledger(state, provider)
+
+        assert ledger.oldest_series is not None
+        assert ledger.oldest_series.endswith("(pricing feed)")
+        named = ledger.oldest_series.split(" ")[0]
+        series = next(u for u in state.resolution.series if u.name == named)
+        assert ledger.market_data_as_of == series.as_of
+        assert ledger.market_data_fetched_at == series.fetched_at
+
+    def test_of_equally_bad_series_the_oldest_is_named(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state, provider = _state(tmp_path, feed_source=Source.STALE)
+        older, newer = state.resolution.series
+        series = (
+            replace(older, name="rate", as_of=datetime(2026, 1, 5, tzinfo=UTC)),
+            replace(
+                newer, name="chain", as_of=datetime(2026, 3, 5, tzinfo=UTC)
+            ),
+        )
+        resolution = replace(state.resolution, series=series)
+        ips = state.ips_config
+        assert ips is not None
+
+        ledger = build_provenance_ledger(
+            assess_market_environment(provider, ips.market_environment),
+            state.portfolio,
+            ips.pricing_inputs,
+            as_of=program_trading_date(ips.program.timezone).date(),
+            resolution=resolution,
+        )
+
+        assert ledger.oldest_series == "rate (pricing feed)"
+        assert ledger.market_data_as_of == datetime(2026, 1, 5, tzinfo=UTC)
+
+    def test_a_series_with_no_date_is_the_oldest(self, tmp_path: Path) -> None:
+        state, provider = _state(tmp_path, feed_source=Source.STALE)
+        dated, undated = state.resolution.series
+        resolution = replace(
+            state.resolution,
+            series=(
+                replace(dated, name="chain"),
+                replace(undated, name="rate", as_of=None),
+            ),
+        )
+        ips = state.ips_config
+        assert ips is not None
+
+        ledger = build_provenance_ledger(
+            assess_market_environment(provider, ips.market_environment),
+            state.portfolio,
+            ips.pricing_inputs,
+            as_of=program_trading_date(ips.program.timezone).date(),
+            resolution=resolution,
+        )
+
+        assert ledger.oldest_series == "rate (pricing feed)"
+
+
+class TestAResolverFaultReachesTheReader:
+    """A fault in the resolving code is graded like a dead feed."""
+
+    def _faulted(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> tuple[ProgramState, MarketDataProvider]:
+        ips = adopting_ips(tmp_path)
+        write_typed_book(tmp_path, ips)
+
+        def boom(**_kwargs: object) -> object:
+            raise RuntimeError("resolver fault")
+
+        monkeypatch.setattr("deltadewa.state.resolve_pricing_inputs", boom)
+        provider = make_provider()
+        return load_state(tmp_path, ips, provider), provider
+
+    def test_the_banner_says_so(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        state, provider = self._faulted(tmp_path, monkeypatch)
+
+        text = _collect_text(build_chrome(_ledger(state, provider)))
+
+        assert "PRICING INPUTS NOT RESOLVED" in text
+        assert "resolver fault" in text
+
+    def test_the_one_rule_alarms_on_it(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        state, provider = self._faulted(tmp_path, monkeypatch)
+
+        reason = assess_freshness(_ledger(state, provider))
+
+        assert reason is not None
+        assert "pricing inputs (pricing feed)" in reason
+
+    def test_the_panel_does_not_say_all_inputs_are_current(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        state, provider = self._faulted(tmp_path, monkeypatch)
+
+        text = _collect_text(build_provenance_panel(_ledger(state, provider)))
+
+        assert "All inputs current" not in text
+        assert "could not be resolved" in text
+
+    def test_the_digest_says_it(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        state, provider = self._faulted(tmp_path, monkeypatch)
+
+        lines = _input_lines(_ledger(state, provider))
+
+        assert any("could not be resolved" in line for line in lines)
+
+
+class TestPricedSession:
+    """The digest names the close the book was priced on."""
+
+    def test_a_spot_fed_from_the_index_close_still_names_its_session(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ips = adopting_ips(tmp_path, ("spot",))
+        write_typed_book(tmp_path, ips)
+        provider = make_provider(with_chain=False)
+        provider.index_close = 4950.0
+        state = load_state(tmp_path, ips, provider)
+
+        ledger = _ledger(state, provider)
+
+        assert state.resolution.spot.from_feed
+        assert ledger.priced_session is not None
+        assert any(
+            "close from the pricing feed" in line
+            for line in _input_lines(ledger)
+        )
+
+
+class TestANewerChainMustBeUsable:
+    """ "Restart to price on it" is only said where a restart would."""
+
+    def test_a_cached_chain_still_past_the_limit_is_not_newer(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ips = adopting_ips(tmp_path)
+        write_typed_book(tmp_path, ips)
+        stale = make_provider()
+        stale.chains = {
+            "SPX": fed_chain(
+                leg_expiry().date(),
+                STRIKES,
+                program_day=days_from_today(-30),
+            ),
+        }
+        state = load_state(tmp_path, ips, stale)
+        assert state.resolution.session_date is None
+
+        newer = newer_cached_session(stale, state.ips_config, state.resolution)
+
+        assert newer is None
+
+    def test_a_usable_chain_cached_after_a_dead_start_is_newer(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        ips = adopting_ips(tmp_path)
+        write_typed_book(tmp_path, ips)
+        state = load_state(tmp_path, ips, make_provider(with_chain=False))
+        assert state.resolution.session_date is None
+
+        newer = newer_cached_session(
+            make_provider(),
+            state.ips_config,
+            state.resolution,
+        )
+
+        assert newer is not None
+
+
+class TestHealthIsNeverA500:
+    """/health reports a fault in its own resolution block, not as a 500."""
+
+    def test_a_resolution_that_raises_is_reported_in_the_payload(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from deltadewa.app.factory import _resolution_payload
+
+        class _Broken:
+            @property
+            def resolution(self) -> object:
+                raise RuntimeError("broken resolution")
+
+        payload = _resolution_payload(
+            _Broken(),  # type: ignore[arg-type]
+            make_provider(),
+            None,
+        )
+
+        assert payload == {"error": "RuntimeError: broken resolution"}
+
+    def test_the_book_and_the_legs_are_reported_apart(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        state, provider = _state(tmp_path)
+
+        resolution = _health(state, provider)["market_data"]["resolution"]
+
+        assert resolution["book"]["dividend_yield"] == "ENTERED"
+        assert "dividend_yield" not in resolution["legs"]
+        assert sum(resolution["legs"].values()) == len(
+            state.portfolio.positions,
+        )
+
+    def test_the_chain_block_reports_its_session(self, tmp_path: Path) -> None:
+        state, provider = _state(tmp_path)
+
+        feed = _health(state, provider)["market_data"]["feed"]
+
+        assert feed["chain"]["session_date"] is not None
+        assert feed["rate"]["session_date"] is None
+
+
+class TestACandidateSurfaceFailureIsLoud:
+    """Candidates silently reverting to the flat vol would be a false green."""
+
+    def test_it_is_in_health_the_notes_and_status(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def boom(*_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("surface fault")
+
+        monkeypatch.setattr("deltadewa.state.ChainVolSource", boom)
+        state, provider = _state(tmp_path)
+
+        payload = _health(state, provider)
+
+        assert state.portfolio.vol_source is None
+        assert state.resolution.surface_error == "RuntimeError: surface fault"
+        assert payload["status"] == "degraded"
+        assert payload["surface_error"] == "RuntimeError: surface fault"
+        notes = _ledger(state, provider).input_notes
+        assert any("flat volatility" in note for note in notes)
+        assert any("surface fault" in note for note in notes)
+
+    def test_held_legs_are_still_priced_on_the_feed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def boom(*_args: object, **_kwargs: object) -> object:
+            raise RuntimeError("surface fault")
+
+        monkeypatch.setattr("deltadewa.state.ChainVolSource", boom)
+        state, _provider = _state(tmp_path)
+
+        assert state.resolution.error is None
+        assert state.resolution.legs
+        assert all(leg.from_feed for leg in state.resolution.legs.values())

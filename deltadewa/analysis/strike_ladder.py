@@ -303,8 +303,11 @@ def build_candidate_grid(
             (e.g. ``[0.05, 0.10, 0.15]``).
         maturities_years: Sequence of maturities to include as columns
             (e.g. ``[0.25, 0.50, 1.0]``).
-        vol: Implied volatility override (annualised fraction).  Defaults to
-            ``portfolio.volatility`` when ``None``.
+        vol: Implied volatility override (annualised fraction).  When
+            ``None`` each cell is priced where the portfolio says a candidate
+            there trades (``OptionPortfolio.candidate_vol``): the fetched
+            smile when the feed prices volatility (9b), else the book's flat
+            ``volatility``.
 
     Returns:
         :class:`CandidateGridResult` — ``cells`` is a flat list of

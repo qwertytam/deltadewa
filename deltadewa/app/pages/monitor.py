@@ -49,6 +49,7 @@ from deltadewa.analysis.monitor_scenario import (
     build_scenario_curve,
     ips_anchor_dials,
 )
+from deltadewa.analysis.pricing_resolution import InputOrigin
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.roll_planner import leg_action_label, leg_reason
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
@@ -184,6 +185,7 @@ def _spot_headline(
     warn_pct: float,
     *,
     fed_session: date | None = None,
+    fed_last_good: bool = False,
 ) -> html.Div:
     """Build the spot headline: book spot plus the #336 observed cross-check.
 
@@ -216,6 +218,9 @@ def _spot_headline(
             hours is one session behind it, so comparing across sessions
             would report a one-day move as a divergence. They are only
             compared when they are the same session's.
+        fed_last_good: Whether that fetched spot is the last good one (the
+            cache served past its TTL because a night's download failed), so
+            the sentence does not read the same as a fresh fetch.
 
     Returns:
         The headline ``html.Div``.
@@ -223,6 +228,7 @@ def _spot_headline(
     """
     origin = (
         f"fetched from the {fed_session} close"
+        + (" (last good: the feed was not refreshed)" if fed_last_good else "")
         if fed_session is not None
         else "hand-entered"
     )
@@ -239,7 +245,12 @@ def _spot_headline(
                 book_line,
                 html.P(
                     "No market spot reading is available to cross-check "
-                    "against — the value above is hand-entered only.",
+                    "against — the value above is "
+                    + (
+                        "the fetched chain's index level only."
+                        if fed_session is not None
+                        else "hand-entered only."
+                    ),
                     className="spot-crosscheck spot-crosscheck--unavailable",
                 ),
             ],
@@ -988,6 +999,10 @@ def _build_scenario_explorer_panel(
                         app.program_state.resolution.spot.session
                         if app.program_state.resolution.spot.from_feed
                         else None
+                    ),
+                    fed_last_good=(
+                        app.program_state.resolution.spot.origin
+                        is InputOrigin.LAST_GOOD
                     ),
                 ),
                 html.Div(
