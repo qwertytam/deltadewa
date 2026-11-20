@@ -804,7 +804,11 @@ class OptionPortfolioBase:  # pylint: disable=too-many-public-methods  # the boo
         """
         if self.vol_source is None:
             return VolQuote(self.volatility, VolOrigin.BOOK_FLAT)
-        day = maturity.date() if isinstance(maturity, dt) else maturity
+        # Duck-typed, not ``isinstance(maturity, dt)``: only a datetime has
+        # ``.date()``, and a datetime built from another class object (a
+        # subclass, or a test's clock) must reduce to its day all the same.
+        to_day = getattr(maturity, "date", None)
+        day = to_day() if callable(to_day) else maturity
         return self.vol_source.vol_for(
             strike=strike,
             maturity=day,

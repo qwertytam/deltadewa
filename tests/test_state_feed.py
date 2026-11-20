@@ -16,6 +16,7 @@ import pytest
 
 from deltadewa.analysis.pricing_resolution import InputOrigin, OverrideKind
 from deltadewa.constants import ExerciseStyle, OptionType
+from deltadewa.portfolio.vol_quote import VolOrigin, VolQuote
 from deltadewa.state import ConfirmationRequiredError, ProgramState
 from tests.chain_builders import RATE, SPOT, smile
 from tests.clock_helpers import days_from_today
@@ -619,6 +620,38 @@ class TestTheCandidateSurface:
         )
         assert quote.origin.value == "EXACT"
         assert quote.vol == pytest.approx(smile(4000.0), abs=2e-3)
+
+    def test_a_datetime_maturity_reaches_the_surface_as_its_day(
+        self,
+        adopted: ProgramState,
+    ) -> None:
+        """A datetime of any class, or a plain date, is asked for as a date.
+
+        The conversion must not depend on which ``datetime`` class object a
+        caller built the value from (the clock-shift probe swaps it).
+        """
+        book = adopted.portfolio
+        seen: list[object] = []
+
+        class _Recorder:
+            def vol_for(
+                self,
+                *,
+                strike: float,
+                maturity: object,
+                option_type: OptionType,
+            ) -> VolQuote:
+                del strike, option_type
+                seen.append(maturity)
+                return VolQuote(0.2, VolOrigin.BOOK_FLAT)
+
+        book.vol_source = _Recorder()
+        stamp = _expiry()
+        book.candidate_vol(strike=4000.0, maturity=stamp)
+        book.candidate_vol(strike=4000.0, maturity=stamp.date())
+
+        assert seen == [stamp.date(), stamp.date()]
+        assert all(type(day) is type(stamp.date()) for day in seen)
 
     def test_a_candidate_at_a_held_strike_has_the_held_legs_iv(
         self,
