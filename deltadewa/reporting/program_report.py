@@ -1487,6 +1487,13 @@ def _realized_framing_html(rf: ReturnFramingSection) -> str:
     )
 
 
+def _input_lines_markdown(lines: tuple[str, ...]) -> list[str]:
+    """Render the pricing-input lines as bullets, or nothing if none."""
+    if not lines:
+        return []
+    return [*(f"- {line}" for line in lines), ""]
+
+
 def _input_lines_html(lines: tuple[str, ...]) -> str:
     """Render the pricing-input lines as a list; nothing when there are none."""
     if not lines:
@@ -1735,9 +1742,7 @@ def render_markdown(report: ProgramReport) -> str:
         f"| Data quality | {_data_quality_cell(mc)} |",
         "",
     ]
-    if mc.input_lines:
-        lines += [f"- {line}" for line in mc.input_lines]
-        lines.append("")
+    lines += _input_lines_markdown(mc.input_lines)
 
     # ── 4. Return Framing ──────────────────────────────────────
     rf = report.return_framing
