@@ -19,6 +19,7 @@ from deltadewa.app.pages.design.planning import pricing_inputs
 from tests.chain_builders import smile
 from tests.clock_helpers import days_from_today
 from tests.feed_fixtures import (
+    FRED_PCT,
     STRIKES,
     TYPED_SPOT,
     TYPED_VOL,
@@ -109,13 +110,16 @@ class TestThePanel:
         self,
         tmp_path: Path,
     ) -> None:
-        text = _text(_app(tmp_path))
+        app = _app(tmp_path)
+        text = _text(app)
+        session = app.program_state.resolution.session_date
 
         assert "Index level (spot)" in text
         assert "5,000.00" in text  # what prices the book
         assert f"{TYPED_SPOT:,.2f}" in text  # what you typed
         assert "fetched — Cboe index level" in text
-        assert "DGS1 4.60% as published" in text or "DGS1" in text
+        assert f"chain, {session:%Y-%m-%d} close" in text
+        assert f"DGS1 {FRED_PCT:.2f}% as published" in text
         assert "% continuous" in text
 
     def test_the_dividend_yield_is_never_fetched_and_says_why(
@@ -180,6 +184,7 @@ class TestThePanel:
         assert app.program_state.portfolio.positions[0].option.volatility == (
             pytest.approx(before)
         )
+        assert app.program_state.portfolio.positions[0].liquidity is None
         assert app.program_state.dirty is False
 
 
