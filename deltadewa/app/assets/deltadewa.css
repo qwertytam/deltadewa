@@ -1317,3 +1317,32 @@ fieldset.trade-leg {
 .trade-warning {
   color: #7a5b00;
 }
+
+/* 9b: the Pricing inputs panel. Origin says where a priced number came from;
+   an override or a fallback is a typed value, so it reads as one. */
+
+.origin--fetched {
+  color: #1b5e20;
+}
+
+.origin--last-good,
+.origin--fallback {
+  color: #7a3e00;
+  font-weight: 600;
+}
+
+.origin--override {
+  color: #7a0000;
+  font-weight: 600;
+}
+
+.env-verdict--warn {
+  color: #7a3e00;
+  font-weight: 600;
+}
+
+.pricing-controls {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #ddd;
+}

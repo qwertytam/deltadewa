@@ -58,6 +58,7 @@ from deltadewa.clock import program_now
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from datetime import date, datetime
 
     from dash.development.base_component import Component
 
@@ -215,28 +216,28 @@ def _stamp_text(ledger: ProvenanceLedger) -> str:
     return f"{market_part} · {pricing_part}"
 
 
-def _priced_text(ledger: ProvenanceLedger) -> str | None:
+def priced_notice(read_at: datetime, session: date | None) -> str:
     """Say when the prices were read, and that a reload does not re-read them.
 
-    Only when the feed prices the book. The app resolves its inputs **once,
-    at start** (9b, D1-B): a page reload re-renders the same readings, and
-    only a restart (the nightly one, after the refresh) reads new ones. A
-    viewer who reloads expecting fresh prices must be told they will not
-    get them, on every page that shows a price.
+    The app resolves its inputs **once, at start** (9b, D1-B): a page reload
+    re-renders the same readings, and only a restart (the nightly one, after
+    the refresh) reads new ones. A viewer who reloads expecting fresh prices
+    must be told they will not get them, on every page that shows a price.
     """
-    if ledger.priced_at is None:
-        return None
-    read = ledger.priced_at.astimezone(program_now().tzinfo)
-    session = (
-        f" from the {ledger.priced_session} close"
-        if ledger.priced_session is not None
-        else ""
-    )
+    local = read_at.astimezone(program_now().tzinfo)
+    close = f" from the {session} close" if session is not None else ""
     return (
-        f"Prices read at {read:%Y-%m-%d %H:%M %Z}{session}. The app reads "
+        f"Prices read at {local:%Y-%m-%d %H:%M %Z}{close}. The app reads "
         "new prices only when it restarts (nightly, after the refresh); "
         "refreshing this page does not update them."
     )
+
+
+def _priced_text(ledger: ProvenanceLedger) -> str | None:
+    """Return the header's priced-at notice, or ``None`` without a feed."""
+    if ledger.priced_at is None:
+        return None
+    return priced_notice(ledger.priced_at, ledger.priced_session)
 
 
 def _banner_text(ledger: ProvenanceLedger) -> str:
