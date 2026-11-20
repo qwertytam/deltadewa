@@ -73,6 +73,7 @@ def _render_provenance_panel_logic(
             portfolio,
             ips_config.pricing_inputs,
             as_of=program_trading_date(ips_config.program.timezone).date(),
+            resolution=app.program_state.resolution,
         )
         return build_provenance_panel(ledger)
 
@@ -107,7 +108,10 @@ def layout(
                     "Mark every hand-entered pricing input "
                     "(spot, risk-free rate, dividend yield, and "
                     "every leg's volatility) as confirmed "
-                    "current, as of now? This clears any "
+                    "current, as of now? Where the feed prices an "
+                    "input, only the value you typed that is in "
+                    "use is marked; one the feed is hiding is "
+                    "left as it was. This clears any "
                     "existing staleness signal — it does not "
                     "change any value, only its confirmed date."
                 ),

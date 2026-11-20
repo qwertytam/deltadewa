@@ -49,6 +49,7 @@ from deltadewa.analysis.monitor_scenario import (
     build_scenario_curve,
     ips_anchor_dials,
 )
+from deltadewa.analysis.pricing_resolution import InputOrigin
 from deltadewa.analysis.provenance import build_provenance_ledger
 from deltadewa.analysis.roll_planner import leg_action_label, leg_reason
 from deltadewa.analysis.roll_status import RollVerdict, evaluate_roll_status
@@ -76,6 +77,8 @@ from deltadewa.reporting.program_report import build_ips_compliance
 from deltadewa.visualization.crash_charts_plotly import plot_scenario_curve
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.analysis.monetization import MonetizationPlan
     from deltadewa.analysis.monitor_scenario import ScenarioResult
@@ -180,6 +183,9 @@ def _spot_headline(
     reading: SpotReading,
     symbol: str,
     warn_pct: float,
+    *,
+    fed_session: date | None = None,
+    fed_last_good: bool = False,
 ) -> html.Div:
     """Build the spot headline: book spot plus the #336 observed cross-check.
 
@@ -205,15 +211,31 @@ def _spot_headline(
         warn_pct: ``ips.market_environment.spot_divergence_warn_pct`` — the
             divergence, in percent, past which the cross-check line flags
             rather than merely reports.
+        fed_session: The chain session the book's spot came from, when the
+            feed prices it (9b); ``None`` when it is a typed value. A
+            fetched spot is struck at the close of its own session, and
+            the observed figure is the index history's close, which after
+            hours is one session behind it, so comparing across sessions
+            would report a one-day move as a divergence. They are only
+            compared when they are the same session's.
+        fed_last_good: Whether that fetched spot is the last good one (the
+            cache served past its TTL because a night's download failed), so
+            the sentence does not read the same as a fresh fetch.
 
     Returns:
         The headline ``html.Div``.
 
     """
+    origin = (
+        f"fetched from the {fed_session} close"
+        + (" (last good: the feed was not refreshed)" if fed_last_good else "")
+        if fed_session is not None
+        else "hand-entered"
+    )
     book_line = html.P(
         f"Book {symbol} spot: "
         f"{fmt.currency(reading.book_spot, decimals=2)} — the shocks "
-        "below move from this hand-entered reference point.",
+        f"below move from this {origin} reference point.",
         className="plain-language",
     )
     observed = reading.observed_spot
@@ -223,7 +245,12 @@ def _spot_headline(
                 book_line,
                 html.P(
                     "No market spot reading is available to cross-check "
-                    "against — the value above is hand-entered only.",
+                    "against — the value above is "
+                    + (
+                        "the fetched chain's index level only."
+                        if fed_session is not None
+                        else "hand-entered only."
+                    ),
                     className="spot-crosscheck spot-crosscheck--unavailable",
                 ),
             ],
@@ -236,6 +263,27 @@ def _spot_headline(
         else "no as-of date"
     )
     quality_label = _SPOT_QUALITY_LABEL[reading.quality]
+    if (
+        fed_session is not None
+        and reading.as_of is not None
+        and reading.as_of.date() != fed_session
+    ):
+        return html.Div(
+            [
+                book_line,
+                html.P(
+                    f"Observed {symbol} spot ({quality_label}, {as_of_text}): "
+                    f"{fmt.currency(observed, decimals=2)}. Not compared: it "
+                    f"is the {reading.as_of.date()} close and the book spot "
+                    f"is the {fed_session} close.",
+                    className=(
+                        f"spot-crosscheck "
+                        f"spot-crosscheck--{reading.quality.value.lower()}"
+                    ),
+                ),
+            ],
+            className="spot-headline",
+        )
     divergence = reading.divergence_pct
     diverged = divergence is not None and abs(divergence) >= warn_pct
     modifier = " spot-crosscheck--diverged" if diverged else ""
@@ -947,6 +995,15 @@ def _build_scenario_explorer_panel(
                     spot_reading,
                     instrument,
                     ips_config.market_environment.spot_divergence_warn_pct,
+                    fed_session=(
+                        app.program_state.resolution.spot.session
+                        if app.program_state.resolution.spot.from_feed
+                        else None
+                    ),
+                    fed_last_good=(
+                        app.program_state.resolution.spot.origin
+                        is InputOrigin.LAST_GOOD
+                    ),
                 ),
                 html.Div(
                     [
@@ -1106,6 +1163,7 @@ def _build_provenance_panel(
             portfolio,
             ips_config.pricing_inputs,
             as_of=program_trading_date(ips_config.program.timezone).date(),
+            resolution=app.program_state.resolution,
         )
         return build_provenance_panel(ledger)
 

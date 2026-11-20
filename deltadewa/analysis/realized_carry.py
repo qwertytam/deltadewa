@@ -222,6 +222,39 @@ def _expired_breaks(marks: Iterable[BookMark]) -> list[str]:
     ]
 
 
+#: IV origins that are the feed's own number; every other origin is typed.
+_FEED_IV_ORIGINS: Final = frozenset({"FETCHED", "LAST_GOOD"})
+
+
+def _origin_breaks(start: BookMark, end: BookMark) -> list[str]:
+    """Name each lot whose IV changed source between the two marks (9b, D11).
+
+    A lot priced on the feed's IV at one mark and on a typed one at the
+    other (the feed failed, or came back, or this is the first week after
+    adoption) was re-priced with no trade, and the identity books that as
+    carry. Compared by *basis class* (the feed's number, or a typed one):
+    ``FETCHED`` to ``LAST_GOOD`` is the same chain on another night, which
+    is real market movement, not a change of basis. Only lots in both marks
+    are compared; a lot opened or closed in the period is a trade.
+    """
+    started = {leg.position_id: leg for leg in start.legs}
+    breaks: list[str] = []
+    for leg in end.legs:
+        before = started.get(leg.position_id)
+        if before is None:
+            continue
+        if (before.volatility_origin in _FEED_IV_ORIGINS) != (
+            leg.volatility_origin in _FEED_IV_ORIGINS
+        ):
+            breaks.append(
+                f"{leg.terms.describe()}: its IV changed source between the "
+                f"{start.mark_date} mark ({before.volatility_origin}) and the "
+                f"{end.mark_date} mark ({leg.volatility_origin}), so part of "
+                "this figure is a re-pricing, not carry",
+            )
+    return breaks
+
+
 def _spot_age_days(mark: BookMark) -> int | None:
     if mark.spot_as_of is None:
         return None
@@ -292,6 +325,7 @@ def realized_carry(
     )
     breaks.extend(_expired_breaks((start, end)))
     breaks.extend(_late_fill_breaks(history.fills, start, end))
+    breaks.extend(_origin_breaks(start, end))
 
     v0 = start.hedge_value
     v1 = end.hedge_value

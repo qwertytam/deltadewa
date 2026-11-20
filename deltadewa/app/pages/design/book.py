@@ -471,7 +471,25 @@ def _set_spot_price_logic(
     )
     if error is not None:
         return no_update, _status(error, error=True)
+    spot = state.resolution.spot
+    if spot.from_feed:
+        # 9b: your number is stored, but it is the fallback, not what
+        # prices the book. Saying so here is what stops "I changed it and
+        # nothing moved" being read as a bug.
+        return version + 1, _status(
+            f"Your spot {value:,.2f} is stored as the fallback. The book is "
+            f"priced on the feed's {spot.value:,.2f}; to price on yours, "
+            "override it under Pricing inputs.",
+            error=False,
+        )
     return version + 1, _status("Spot price updated.", error=False)
+
+
+def _spot_label(state: ProgramState) -> str:
+    """Label the spot box: yours, when the feed prices the book instead."""
+    if state.resolution.spot.from_feed:
+        return "Spot price (your value; the feed prices the book)"
+    return "Spot price"
 
 
 def _decode_upload_contents(contents: str) -> bytes:
@@ -822,11 +840,14 @@ def layout(
             ),
             html.Div(
                 [
-                    html.Label("Spot price"),
+                    html.Label(_spot_label(app.program_state)),
                     dcc.Input(
                         id="book-spot-price",
                         type="number",
-                        value=portfolio.spot_price,
+                        # What you typed, never the book's effective spot:
+                        # when the feed prices it, writing the feed's number
+                        # back into this box would store it as yours.
+                        value=app.program_state.entered.spot,
                         debounce=True,
                     ),
                 ],

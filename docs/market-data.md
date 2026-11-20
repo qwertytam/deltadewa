@@ -38,12 +38,14 @@ to absorb. See RUNBOOK §9 for the crontab line and §11 to run it by hand.
 | SKEW index | `get_skew_index` | CBOE | `spot_SKEW` | `assess_market_environment` |
 | SKEW percentile | `get_skew_percentile` | CBOE | `skew_percentile_history` | `assess_market_environment` |
 | **Spot (SPX)** | `get_spot` | CBOE | `spot_SPX` | `analysis.spot_reading.observe_spot`, `/monitor` (#336) |
-| Treasury yield *(with `pricing_feed`)* | `get_rate(series)` | FRED `DGS*` | `rate_<series>` | `/design` Fetched inputs |
-| SPX option chain *(with `pricing_feed`)* | `get_option_chain(underlying)` | CBOE delayed quotes | `chain_SPX`, plus last night's copy as `chain_SPX.prev` (files carry a `.json` suffix) | `/design` Fetched inputs and Liquidity check |
+| Treasury yield *(with `pricing_feed`)* | `get_rate(series)` | FRED `DGS*` | `rate_<series>` | The book's rate when `adopt` names it; `/design` Pricing inputs |
+| SPX option chain *(with `pricing_feed`)* | `get_option_chain(underlying)` | CBOE delayed quotes | `chain_SPX`, plus last night's copy as `chain_SPX.prev` (files carry a `.json` suffix) | The book's spot and per-leg IVs when `adopt` names them; candidate IVs; `/design` Pricing inputs and Liquidity check |
 
 Notes on the table:
 
-- **Six readings, nine cache files.** `vix`/`vix_history` deliberately
+- **Six index readings and nine cache files** (the two feed rows below the
+  six add `rate_<series>` and `chain_SPX` with its `.prev`, three more files,
+  only with a `pricing_feed` section). `vix`/`vix_history` deliberately
   share `vix_fred`; the term structure fans out to five.
 - **VIX arrives twice, from two sources.** The headline VIX comes from
   FRED (`vix_fred`); the term structure's front leg is CBOE
@@ -67,8 +69,11 @@ Notes on the table:
   fetch, read back through the app's own path). They are described under
   ["Fetched pricing inputs"](#fetched-pricing-inputs-9b). `/health` lists
   them under `market_data.feed`, beside `series` and not in it: `series`
-  is the environment's reduction and feeds `oldest_series`, the banner and
-  `status`, and nothing is priced on the feed yet.
+  is the environment's four-reading reduction. A feed series that an
+  `adopt`ed input is priced on counts toward `oldest_series`, the banner and
+  `status` through the provenance ledger (it is a `feed.chain` / `feed.rate`
+  entry, and its quality is folded into `market_data_quality`); a series no
+  input adopts is only listed.
 
 ### The skew percentile's window (#317)
 
@@ -105,13 +110,6 @@ time it quotes a percentile", so every surface does: `/design` reads
 
 ## Fetched pricing inputs (9b)
 
-> **Status.** Built: the nightly fetch and its cache, the daily chain
-> record, liquidity from the chain, and `/design`'s read-only **Fetched
-> inputs** panel. **Not built yet:** pricing the book on the feed. Until
-> that lands, every pricing input is hand-entered and the feed is shown
-> beside it, never applied. The rules below are the design the adoption
-> follows.
-
 **What is fetched.** With a `pricing_feed:` section in `ips.yaml` the
 nightly refresh adds two series to its six. Without the section nothing
 below is fetched and every input stays hand-entered.
@@ -133,12 +131,25 @@ replaces a good cache entry: the parse runs inside the fetch.
 **How an input is chosen.** One effective value per input, decided once
 when the process starts: the app, and the weekly digest (its own process,
 the same function), resolve spot, rate and per-leg IV from the cached feed
-and price the in-memory book on them. The book file keeps what a human
-typed; a fetched value is never saved into it. There is no live reload
-(#355: a book swapped under a render tears it), so the nightly refresh is
-followed by a restart of the app, and the app's date rolls forward with it.
-Nothing is journaled to the position history when the inputs are resolved:
-they move the marks, not the book.
+and price the book on them. `ProgramState` keeps two books. The **typed**
+book is what a person typed and the only one ever saved; every edit works on
+it, so stamping, journaling and the file format are what they always were,
+and a fetched value can never be saved, stamped as confirmed or journaled as
+a trade. The **priced view** (what every page reads) is that book itself when
+nothing is adopted, and otherwise a copy priced on the resolved values. An
+edit re-resolves from the same reading the process took at start, so a page
+never sees two chains.
+
+**The app reads new prices only when it restarts.** There is no live reload
+(#355: a book swapped under a render tears it), so a page reload re-renders
+the same readings and does not update the prices; the nightly refresh is
+followed by a restart of the app (RUNBOOK §4.1, §9), and the app's date
+rolls forward with it. Every page says so: the header on `/monitor` and
+`/design` states when the prices were read and from which close, and the
+Pricing inputs panel adds "a newer chain is cached; restart the app to price
+on it" when the cache holds a later session than the one resolved. Nothing is
+journaled to the position history when the inputs are resolved: they move the
+marks, not the book.
 
 **Per-leg IV** is solved from the close **mid** with this program's own
 European engine at the book's effective rate and dividend yield, at the
@@ -164,9 +175,10 @@ does not, and says so.
   (NYSE calendar; a payload overnight, at a weekend or on a holiday belongs
   to the last close). Beyond `pricing_feed.max_quote_age_days` it is not
   used.
-- *Candidates.* A strike the book does not hold (the strike grid, the
-  sizing workbench, the ladder composer, a roll's cost) takes its IV from
-  the same chain: the exact listed contract; else between the two listed
+- *Candidates.* When `adopt` names `volatility` (otherwise they are priced at
+  the book's flat vol, as before the feed), a strike the book does not hold
+  (the strike grid, the sizing workbench, the ladder composer, a roll's cost)
+  takes its IV from the same chain: the exact listed contract; else between the two listed
   strikes either side; else between the two listed expiries either side, in
   total variance. Nothing is extrapolated: outside the listed range the
   candidate uses the book's flat vol and is labelled so.
@@ -199,11 +211,17 @@ fallback in use also shows the feed as unavailable, so a dead feed alarms
 through the fetched channel. The two-channel rule (`assess_freshness`) is
 unchanged: one rule, applied to every fetched entry.
 
-**Overrides** are set on `/design` (review, then confirm), last until
-cleared, and are listed on `/monitor` and in the digest with their age and
-the fetched value beside them. `/design` warns when an override is far from
-the fetched value: past `market_environment.spot_divergence_warn_pct` for
-spot, `pricing_feed.override_warn_vol_points` for an IV.
+**Overrides** (spot, and one option's IV) are set on `/design`'s Pricing
+inputs panel (review, then confirm), last until cleared, and are listed on
+`/monitor` and in the digest with their age and the fetched value beside
+them. The review warns when an override is far from the fetched value: past
+`market_environment.spot_divergence_warn_pct` for spot,
+`pricing_feed.override_warn_vol_points` for an IV. The rate has no override:
+to price on your own, take `risk_free_rate` out of `adopt`. The pins are the
+only thing saved about an override (`spot_override` on the book,
+`volatility_override` on a leg); the value is your typed one, stamped as
+confirmed when you chose it. Overriding spot does not re-solve the IVs, and
+the panel says they stay solved at the chain's own index level.
 
 **When the feed fails**, each input falls down a ladder:
 
@@ -278,7 +296,10 @@ confirmed. The one deliberate exception is
 `ProgramState.mark_inputs_reviewed`, confirm-gated, and to /design's
 "Mark pricing inputs reviewed" control): reviewing a book and finding
 every number still correct is itself a confirmation, so this stamps
-unconditionally.
+unconditionally. (With a feed pricing some inputs it stamps only the typed
+values that are in use: a typed number the feed is hiding was not looked at,
+and confirming it would launder it into looking checked for the night the
+feed fails.)
 
 That unconditional stamp is also why the button cannot tell CONFIRM from
 RE-MARK: a flat per-leg IV surface confirms just as green as a skewed one.
@@ -396,6 +417,21 @@ row and `/health`'s vocabulary need no new grade string. This is a
 deliberate, lossy mapping (`AGING → STALE`, `UNKNOWN → STATIC`,
 `MISSING → UNAVAILABLE`) — see the property's own docstring.
 
+**With a feed adopted (9b) the two channels split by what actually prices
+the book.** An input the feed prices is graded as **fetched** data, through
+one `feed.chain` / `feed.rate` entry per adopted series, and its typed twin
+is not graded at all: it is not what prices anything. An input the feed does
+not price (an override, a fallback, anything not adopted) is graded as
+hand-entered, by its stamp, exactly as before, with its origin named on the
+entry. The adopted series' quality is folded into `market_data_quality`, so
+the one `assess_freshness` rule alarms on a dead feed with no change to it:
+a chain served stale degrades the fetched cut, and a chain older than
+`max_quote_age_days` (not used, so the book is priced on typed values) reads
+`UNAVAILABLE` and says "feed down since <date>; pricing on your value from
+<date>". One option whose quote cannot be priced from falls back alone and
+is graded by its typed stamp, so a never-confirmed typed IV alarms through
+the hand-entered cut and never reads fresh.
+
 `/health`'s `market_data` and `pricing_inputs` objects are **never
 merged**: a stale hand-entered rate must not make `/health` claim the
 *fetched* market data feed itself is stale, which would just relocate
@@ -496,7 +532,7 @@ chain (9b).
   - **intraday and stress-time widening**: a close quote says nothing about
     the bid in a crash, which is when the handbook says liquidity matters
     most. The feed is a once-a-day read after the close;
-  - quotes for strikes the book does not hold. The **Fetched inputs**
+  - quotes for strikes the book does not hold. The **Pricing inputs**
     panel shows the `strike_ladder` rungs' quotes, but the checklist grades
     held legs only.
 

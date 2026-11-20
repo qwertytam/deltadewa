@@ -346,7 +346,10 @@ def _reprice_leg(
     )
 
 
-@functools.cache
+# Bounded: with a fetched smile each candidate has its own float volatility,
+# so the key space is no longer a handful of book volatilities and an
+# unbounded cache would grow with every distinct strike the app ever priced.
+@functools.lru_cache(maxsize=4096)
 def _solve_wing_strike(
     *,
     spot: float,

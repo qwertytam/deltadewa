@@ -4,7 +4,7 @@ One function, :func:`read_contract`, answers "what does the chain say about
 this contract, and is it safe to price from?": the matched symbol, the
 close quote, the vendor's IV beside the IV solved from the mid at **the
 caller's own rate and dividend yield** (``analysis.implied_vol``), and the
-reasons the quote may be unusable. The ``/design`` Fetched inputs panel and
+reasons the quote may be unusable. The ``/design`` Pricing inputs panel and
 the liquidity autofill both read through it, so they cannot disagree about
 which contract a leg is or whether its quote is good.
 

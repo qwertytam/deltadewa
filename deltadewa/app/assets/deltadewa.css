@@ -74,6 +74,16 @@ body {
   padding: 4px 24px;
 }
 
+/* 9b: prices are read once, at start, and a reload does not re-read them.
+   Informational, not an alarm, but plainly readable on every page. */
+.chrome-priced {
+  background: #eaf2fb;
+  color: #1e3a5f;
+  font-size: 0.8rem;
+  padding: 4px 24px;
+  border-left: 4px solid #1e3a5f;
+}
+
 .chrome-banner {
   padding: 8px 24px;
   font-weight: 600;
@@ -1306,4 +1316,33 @@ fieldset.trade-leg {
 
 .trade-warning {
   color: #7a5b00;
+}
+
+/* 9b: the Pricing inputs panel. Origin says where a priced number came from;
+   an override or a fallback is a typed value, so it reads as one. */
+
+.origin--fetched {
+  color: #1b5e20;
+}
+
+.origin--last-good,
+.origin--fallback {
+  color: #7a3e00;
+  font-weight: 600;
+}
+
+.origin--override {
+  color: #7a0000;
+  font-weight: 600;
+}
+
+.env-verdict--warn {
+  color: #7a3e00;
+  font-weight: 600;
+}
+
+.pricing-controls {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #ddd;
 }

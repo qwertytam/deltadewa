@@ -271,6 +271,10 @@ class PortfolioSerializer:
                     if portfolio.stamps.dividend_yield_as_of
                     else None
                 ),
+                # 9b / D7: the operator pinned the typed spot above a
+                # fetched one. The pin is the only thing saved about it;
+                # a fetched value is never written to the book.
+                "spot_override": portfolio.spot_override,
             },
             "positions": [],
             "risk_metrics": portfolio.summary_stats(),
@@ -293,6 +297,7 @@ class PortfolioSerializer:
                     if pos.volatility_as_of
                     else None
                 ),
+                "volatility_override": pos.volatility_override,
                 "liquidity": _liquidity_to_dict(pos.liquidity),
                 "greeks": {
                     "delta": pos.option.delta(),
@@ -558,6 +563,9 @@ class PortfolioSerializer:
             contract_size=market_params["contract_size"],
             stamps=_stamps_from_market_params(market_params),
         )
+        imported_portfolio.spot_override = bool(
+            market_params.get("spot_override", False),
+        )
 
         # Add positions (robust to variations in exported field names)
         for pos_data in data["positions"]:
@@ -637,6 +645,9 @@ class PortfolioSerializer:
             new_position.liquidity = _liquidity_from_dict(
                 pos_data.get("liquidity"),
             )
+            new_position.volatility_override = bool(
+                pos_data.get("volatility_override", False),
+            )
 
         return {
             "portfolio": imported_portfolio,
@@ -712,6 +723,9 @@ class PortfolioSerializer:
             contract_size=market_params["contract_size"],
             stamps=_stamps_from_market_params(market_params),
         )
+        imported_portfolio.spot_override = bool(
+            market_params.get("spot_override", False),
+        )
 
         # Add positions
         for pos_config in config["positions"]:
@@ -777,6 +791,9 @@ class PortfolioSerializer:
             )
             new_position.liquidity = _liquidity_from_dict(
                 pos_config.get("liquidity"),
+            )
+            new_position.volatility_override = bool(
+                pos_config.get("volatility_override", False),
             )
 
         return {

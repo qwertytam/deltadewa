@@ -60,13 +60,13 @@ from .planning import (
     book_changes,
     convexity_cliff,
     delta_drift,
-    fetched_inputs,
     hedge_triggers,
     ladder,
     ladder_composer,
     liquidity,
     monetization,
     position_aging,
+    pricing_inputs,
     provenance,
     roll_plan,
     roll_status,
@@ -127,7 +127,7 @@ _PLANNING_SECTIONS: Final = (
     roll_status.SECTION,
     provenance.SECTION,
     liquidity.SECTION,
-    fetched_inputs.SECTION,
+    pricing_inputs.SECTION,
     book_changes.SECTION,
     position_aging.SECTION,
     hedge_triggers.SECTION,
@@ -252,8 +252,8 @@ def render(app: ProgramDashApp) -> html.Div:
                 ips_config=ips_config,
                 market_data=app.market_data,
             ),
-            fetched_inputs.layout(
-                portfolio=portfolio,
+            pricing_inputs.layout(
+                state=app.program_state,
                 ips_config=ips_config,
                 market_data=app.market_data,
             ),
@@ -432,7 +432,7 @@ def register_callbacks(  # pylint: disable=too-many-locals
     roll_status.register(app, ips_config=ips_config)
     provenance.register(app, ips_config=ips_config)
     liquidity.register(app, ips_config=ips_config)
-    fetched_inputs.register(app, ips_config=ips_config)
+    pricing_inputs.register(app, ips_config=ips_config)
     book_changes.register(app)
     monetization.register(app, ips_config=ips_config)
     market_env_panel.register(app, ips_config=ips_config)

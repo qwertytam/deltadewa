@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from deltadewa.analysis.convexity_band import ConvexityGrading
     from deltadewa.ips_config import IpsConfig
     from deltadewa.portfolio.core import OptionPortfolio
+    from deltadewa.portfolio.vol_quote import VolQuote
 
 # ---------------------------------------------------------------------------
 # Dataclass
@@ -116,6 +117,8 @@ class HedgeSizingResult:
             inclusive at both ends.
         meets_convexity_target: Derived from ``achieved_convexity``:
             True when the figure lies within the band.
+        vol_quote: The volatility the candidate was priced at and where it
+            came from (9b, D3); ``None`` only for a hand-built result.
 
     """
 
@@ -147,6 +150,10 @@ class HedgeSizingResult:
     # Steps 4-5 - convexity check
     achieved_convexity_pct: float
     achieved_convexity: ConvexityGrading
+
+    # The volatility the candidate was priced at, and where it came from
+    # (9b, D3). ``None`` only for a hand-built result.
+    vol_quote: VolQuote | None = None
 
     @property
     def meets_convexity_target(self) -> bool | None:
@@ -432,8 +439,11 @@ def size_hedge(
             (e.g. 5.0 → ``strike = spot * 0.95``).
         candidate_maturity_years: Time to expiry in years
             (e.g. 0.25 for ~3 months).
-        vol: Override for implied volatility (annualised fraction).  Defaults
-            to ``portfolio.volatility`` when ``None``.
+        vol: Override for implied volatility (annualised fraction).  When
+            ``None`` the candidate is priced where the portfolio says a
+            candidate there trades (``OptionPortfolio.candidate_vol``): the
+            fetched smile when the feed prices volatility (9b), else the
+            book's flat ``volatility``.
 
     Returns:
         ``HedgeSizingResult`` with all sizing and convexity metrics.
@@ -491,4 +501,5 @@ def size_hedge(
         max_affordable_contracts=sizing.max_affordable_contracts,
         achieved_convexity_pct=achieved_convexity_pct,
         achieved_convexity=achieved_convexity,
+        vol_quote=metrics.vol_quote,
     )
