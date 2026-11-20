@@ -104,8 +104,8 @@ history for that record instead.
 - **Deploy step: add `; docker compose restart app` after the refresh line in
   the crontab** (RUNBOOK §9, §4.1). The app reads the feed once, when it
   starts, so the nightly restart is how it picks up each night's prices and
-  rolls its date forward; it is down for a few seconds at about 21:31 New
-  York. To turn adoption on, set `pricing_feed.adopt` in `config/ips.yaml`,
+  rolls its date forward; it is down for a few seconds, a minute after the
+  refresh. To turn adoption on, set `pricing_feed.adopt` in `config/ips.yaml`,
   rebuild, run the refresh once by hand and restart. To turn it off, remove
   the section or set `adopt: []`.
 - `/monitor`'s spot cross-check warns only on same-session figures: a spot

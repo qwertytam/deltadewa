@@ -62,6 +62,11 @@ The package is layered. Put logic in the lower layers; keep the UI dumb.
 - `state.py` — `ProgramState`, the single shared server-side portfolio + IPS
   state backing the Dash app (dirty-flag autosave to `exports/`, confirm-gated
   destructive ops/import). Not per-session — one hedge program, one instance.
+  It holds **two books**: the typed one (what a human typed, the only one
+  saved) and the priced view (`state.portfolio`, a copy priced on the inputs
+  a `pricing_feed` adopts, read once at start; the typed book itself when
+  nothing is adopted). See its module docstring and `docs/market-data.md`,
+  "Fetched pricing inputs".
 - `visualization/` — chart builders.
 - `persistence.py` — portfolio load/save (YAML/JSON). Round-trip new fields here.
 - Position history (#313) — `portfolio/history.py` (records: `Fill`,

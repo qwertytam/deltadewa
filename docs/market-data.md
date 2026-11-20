@@ -43,7 +43,9 @@ to absorb. See RUNBOOK §9 for the crontab line and §11 to run it by hand.
 
 Notes on the table:
 
-- **Six readings, nine cache files.** `vix`/`vix_history` deliberately
+- **Six index readings and nine cache files** (the two feed rows below the
+  six add `rate_<series>` and `chain_SPX` with its `.prev`, three more files,
+  only with a `pricing_feed` section). `vix`/`vix_history` deliberately
   share `vix_fred`; the term structure fans out to five.
 - **VIX arrives twice, from two sources.** The headline VIX comes from
   FRED (`vix_fred`); the term structure's front leg is CBOE
@@ -173,9 +175,10 @@ does not, and says so.
   (NYSE calendar; a payload overnight, at a weekend or on a holiday belongs
   to the last close). Beyond `pricing_feed.max_quote_age_days` it is not
   used.
-- *Candidates.* A strike the book does not hold (the strike grid, the
-  sizing workbench, the ladder composer, a roll's cost) takes its IV from
-  the same chain: the exact listed contract; else between the two listed
+- *Candidates.* When `adopt` names `volatility` (otherwise they are priced at
+  the book's flat vol, as before the feed), a strike the book does not hold
+  (the strike grid, the sizing workbench, the ladder composer, a roll's cost)
+  takes its IV from the same chain: the exact listed contract; else between the two listed
   strikes either side; else between the two listed expiries either side, in
   total variance. Nothing is extrapolated: outside the listed range the
   candidate uses the book's flat vol and is labelled so.
@@ -293,7 +296,10 @@ confirmed. The one deliberate exception is
 `ProgramState.mark_inputs_reviewed`, confirm-gated, and to /design's
 "Mark pricing inputs reviewed" control): reviewing a book and finding
 every number still correct is itself a confirmation, so this stamps
-unconditionally.
+unconditionally. (With a feed pricing some inputs it stamps only the typed
+values that are in use: a typed number the feed is hiding was not looked at,
+and confirming it would launder it into looking checked for the night the
+feed fails.)
 
 That unconditional stamp is also why the button cannot tell CONFIRM from
 RE-MARK: a flat per-leg IV surface confirms just as green as a skewed one.

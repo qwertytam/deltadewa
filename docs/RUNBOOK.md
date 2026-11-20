@@ -261,7 +261,9 @@ needs one extra step: the new cache folder starts empty, so `/health` reads
 `market_data` `UNAVAILABLE` (and `status` degraded) until the refresh job
 has run once. Run it by hand right after `up -d` (§11; `.env` must already
 carry the SMTP block, §10) instead of waiting for the 02:30 cron, then remove
-the old `exports/marketdata-cache` (§1). Later deploys need neither.
+the old `exports/marketdata-cache` (§1). Later deploys need neither. If the
+policy adopts anything from the feed (§4.1), also `docker compose restart
+app` after that refresh: the app reads the cache once, when it starts.
 
 Host cron drives the market-data refresh, the weekly digest email, and the
 `exports/` backup push automatically — see §9 for the crontab lines, §11 to
@@ -296,19 +298,27 @@ changes nothing on the pages until the next restart (the Pricing inputs panel
 says "a newer chain is cached; restart the app to price on it" when that is
 so). The header on `/monitor` and `/design` says when the prices were read
 and which close they are from. The restart takes a few seconds; the app is
-unavailable for that long at about 21:31 New York.
+unavailable for that long, a minute after the refresh.
 
 **Turning it on** (the first time, or after a deploy that changed policy):
 
 1. Edit `config/ips.yaml` on the droplet: `pricing_feed.adopt: [spot,
    risk_free_rate, volatility]` (any subset; `dividend_yield` is refused).
-   The policy is baked into the image (§4), so rebuild and bring it up:
-   `docker compose build app jobs && docker compose up -d`.
-2. Run the refresh once by hand so there is a cache (§11), then
-   `docker compose restart app`.
+   The policy is baked into the image (§4), so rebuild, validate the baked
+   file before cutover, then bring it up:
+   `docker compose build app jobs`, then
+   `docker compose run --rm app python -m deltadewa.ips_config --check
+   config/ips.yaml` (a missing required `pricing_feed` key shows up here, not
+   as a live "No IPS policy is loaded" page), then
+   `docker compose up -d`.
+2. Run the refresh once by hand so there is a cache (§11; `.env` must carry
+   the SMTP block, §10, or the `jobs` service will not start), then
+   `docker compose restart app`: the app reads the cache once, when it
+   starts, so it prices on nothing it has not been restarted to see.
 3. Check: `curl http://<tailscale-ip>:8050/health` shows
-   `market_data.resolution.adopting: true`, `origins` counting the inputs
-   by where each came from, `resolution_error: null`, and `status: "ok"`;
+   `market_data.resolution.adopting: true`, `book` giving where spot, the
+   rate and the dividend yield each came from and `legs` counting the
+   options by origin, `resolution_error: null`, and `status: "ok"`;
    `/design`'s **Pricing inputs** panel shows, per input, what prices the
    book, where it came from, what you typed and what the feed says now.
 4. Add `; docker compose restart app` after the refresh line in your
@@ -326,8 +336,12 @@ One effective value per input, each labelled with its origin
 |One option's quote has no bid or ask, is wider than `max_spread_pct`, or cannot be solved|That option alone falls back to your typed IV|The panel names the reason; a never-confirmed typed IV alarms through the existing hand-entered rule|
 |The resolving code itself raises|Your typed values, for everything|`/health` `resolution_error` and `status: "degraded"`; the Pricing inputs panel says so; **the app still boots and the weekly email still sends and pings**|
 
-A dead feed does not stop the dead-man's-switch pings: the refresh job
-counts a failed download as having run.
+A feed that is only partly down does not stop the dead-man's-switch pings:
+the refresh job pings on a partial run (exit `1`, §11), so one failed series
+does not read as a dead job. A **total** outage (every series failed, exit
+`2`) pings nothing, and the refresh heartbeat alarms (§13): that is the job
+telling you it fetched nothing, and the book is meanwhile priced on the last
+good data, then on your values (the table above).
 
 **Overriding a number.** On `/design`, **Pricing inputs**: pick the input
 (spot, or one option's IV), type your value (spot as an index level, an IV in
@@ -344,8 +358,9 @@ your own risk-free rate, take `risk_free_rate` out of `adopt`.
 **Editing the dividend yield.** The same panel, **Dividend yield**: it is
 never fetched, so confirm it against the published yield each quarter.
 Changing it re-solves every adopted IV at the new yield. The **Mark pricing
-inputs reviewed** button stamps only the typed values that are pricing the
-book: it will not stamp a typed number the feed is hiding.
+inputs reviewed** button (on the provenance panel, not this one) stamps only
+the typed values that are pricing the book: it will not stamp a typed number
+the feed is hiding.
 
 **Turning it off.** Remove the `pricing_feed:` section (nothing is fetched
 and every input is typed), or set `adopt: []` (the feed is fetched and shown,
@@ -727,12 +742,16 @@ curl http://<new-tailscale-ip>:8050/health   # state_loaded should be true
 # the market-data cache lives in ~/deltadewa/cache, outside the backup, so
 # a restored box starts without it. Populate .env first (§10: the jobs
 # service will not start without its SMTP block, and .env is not part of
-# the backup), run the refresh by hand (§11), and /health reads CACHED —
+# the backup), run the refresh by hand (§11), then restart the app so it
+# reads the cache (it reads it once, at start; §4.1), and /health reads CACHED —
 # a refresh exit of 1 is normal when FRED's VIXCLS lags (§11), so read
 # the market_data.series qualities, not just the exit code. Check
 # boot_wiring.ips_loaded too (§12, #309): /health returns 200 even when
 # degraded, by design, so 200 alone doesn't confirm the restored
-# config/ips.yaml actually loaded.
+# config/ips.yaml actually loaded. If the policy adopts from the feed, also
+# read market_data.resolution: adopting should be true and session_date the
+# latest close; a restored box that was not restarted after the refresh still
+# prices on your typed values, and /health CACHED alone would not show it.
 
 # 5. Confirm the position history came back with exports/ (#313). It
 #    should report the SAME start date as before the outage. Do NOT run
@@ -1071,9 +1090,10 @@ Two crontabs, on purpose — see §10 for why the credentials underneath
 them are kept apart:
 
 ```bash
-# deploy's crontab (crontab -e, as `deploy`) — the two jobs, both run
-# through the `jobs` compose service (see compose.yaml). The digest line
-# is scheduled AFTER the refresh line so it reads freshly-warmed data.
+# deploy's crontab (crontab -e, as `deploy`) — the two jobs run through the
+# `jobs` compose service (see compose.yaml); the restart after the refresh
+# is the `app` service. The digest line is scheduled AFTER the refresh line
+# so it reads freshly-warmed data.
 mkdir -p ~/deltadewa/logs
 
 crontab -e

@@ -12,6 +12,7 @@ import math
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -50,8 +51,10 @@ _EXAMPLE_IPS = (
 
 #: The program date of every test: the session the chain describes.
 _TODAY = SESSION
-_NOW = datetime(2026, 11, 17, 2, 0, tzinfo=UTC)
-_FETCHED_AT = datetime(2026, 11, 17, 1, 40, tzinfo=UTC)
+# As the program reads them: instants in the program zone, on the session day.
+_NEW_YORK = ZoneInfo("America/New_York")
+_NOW = datetime(2026, 11, 16, 21, 0, tzinfo=_NEW_YORK)
+_FETCHED_AT = datetime(2026, 11, 16, 20, 40, tzinfo=_NEW_YORK)
 
 #: The FRED percent that converts to exactly ``RATE`` continuously.
 _FRED_PCT = 200.0 * (math.exp(RATE / 2.0) - 1.0)
