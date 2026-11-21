@@ -33,10 +33,19 @@ _EXAMPLE_IPS_YAML = (
 )
 
 
-def _app(tmp_path: Path) -> ProgramDashApp:
+def _app(tmp_path: Path, *, chain_source: str = "none") -> ProgramDashApp:
+    """The one-leg book; *chain_source* replaces the example's ``none``."""
+    ips_path = tmp_path / "ips.yaml"
+    ips_path.write_text(
+        _EXAMPLE_IPS_YAML.read_text().replace(
+            "  chain_source: none ",
+            f"  chain_source: {chain_source} ",
+            1,
+        ),
+    )
     state = ProgramState.load(
         tmp_path,
-        ips_path=_EXAMPLE_IPS_YAML,
+        ips_path=ips_path,
         default_exercise_style=ExerciseStyle.EUROPEAN,
     )
     state.add_position(
@@ -236,7 +245,7 @@ def _app_with_chain(
     timestamp: str | None = None,
 ) -> ProgramDashApp:
     """The one-leg book, with a cached chain that lists its contract."""
-    app = _app(tmp_path)
+    app = _app(tmp_path, chain_source="cboe")
     option = app.program_state.portfolio.positions[0].option
     chains = {}
     if with_chain:
@@ -340,7 +349,7 @@ class TestFetchedLiquidity:
             def get_option_chain(self, underlying: str):
                 raise RuntimeError("parser bug")
 
-        app = _app(tmp_path)
+        app = _app(tmp_path, chain_source="cboe")
         _record_liquidity_logic(
             position_id=_leg_id(app),
             bid=10.0,
@@ -388,7 +397,9 @@ class TestFetchedLiquidity:
         self,
         tmp_path: Path,
     ) -> None:
-        app = _app(tmp_path)  # StaticProvider with no chain registered
+        app = _app(
+            tmp_path, chain_source="cboe"
+        )  # StaticProvider with no chain registered
 
         text = _panel_text(app)
 

@@ -57,10 +57,20 @@ def adopting_ips(
     adopt: tuple[str, ...] = ("spot", "risk_free_rate", "volatility"),
     *,
     max_quote_age_days: int = 5,
+    chain_source: str = "cboe",
 ) -> Path:
-    """Write the example IPS with ``adopt`` set; return the file's path."""
+    """Write the example IPS with ``adopt`` set; return the file's path.
+
+    The synthetic chains are in Cboe's format, so the chain source is
+    ``cboe`` unless a test asks for ``none``.
+    """
     text = EXAMPLE_IPS.read_text()
     text = text.replace("  adopt: []", f"  adopt: [{', '.join(adopt)}]", 1)
+    text = text.replace(
+        "  chain_source: none ",
+        f"  chain_source: {chain_source} ",
+        1,
+    )
     text = text.replace(
         "  max_quote_age_days: 5",
         f"  max_quote_age_days: {max_quote_age_days}",

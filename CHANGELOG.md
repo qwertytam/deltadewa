@@ -36,6 +36,14 @@ history for that record instead.
   **Your typed values stay in `program_state.json` untouched, as the override
   and the fallback; a fetched number is never written to it, stamped as
   confirmed, or journaled as a trade.**
+- **`pricing_feed.chain_source` (`none` or `cboe`) — breaking for a live
+  `config/ips.yaml` that has a `pricing_feed:` section: add the key.** Cboe
+  has refused its delayed-quote file to automated clients since about
+  2026-11-19, and its pages prohibit automated extraction of it. With
+  `chain_source: none` the refresh never calls the chain host, a chain left
+  in the cache is never read, the rate can still be adopted and spot comes
+  from the index close; `volatility` in `adopt` is then a validation error.
+  Both shipped templates carry `none`. The Cboe code stays, selectable.
 - **The app reads new prices only when it restarts.** It resolves the feed
   once, when it starts; refreshing a page does not update the prices. Both
   pages say so in the header ("Prices read at <time> from the <date> close...

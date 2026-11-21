@@ -178,12 +178,14 @@ def _feed_payload(
     if ips_config is None or ips_config.pricing_feed is None:
         return None
     feed = ips_config.pricing_feed
-    readings: dict[str, Callable[[], Observation[Any]]] = {
-        "chain": lambda: provider.get_option_chain(
+    readings: dict[str, Callable[[], Observation[Any]]] = {}
+    if feed.fetches_chain:
+        # chain_source: none lists no chain: nothing fetches one, and a
+        # chain an earlier source left in the cache is not read.
+        readings["chain"] = lambda: provider.get_option_chain(
             ips_config.program.instrument
-        ),
-        "rate": lambda: provider.get_rate(feed.rate_series),
-    }
+        )
+    readings["rate"] = lambda: provider.get_rate(feed.rate_series)
     payload: dict[str, Any] = {}
     for name, read in readings.items():
         try:
@@ -227,7 +229,7 @@ def _feed_payload(
         }
     adopt = frozenset(feed.adopt)
     adopted = {
-        "chain": bool(adopt & {"spot", "volatility"}),
+        "chain": bool(adopt & {"spot", "volatility"}) and feed.fetches_chain,
         "rate": "risk_free_rate" in adopt,
     }
     for name, entry in payload.items():

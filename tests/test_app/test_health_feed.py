@@ -47,9 +47,13 @@ def _health(app) -> dict:
 
 
 class TestFeedSeries:
-    """What /health says about the chain and the rate."""
+    """What /health says about the chain and the rate.
 
-    def test_both_series_are_listed_when_the_policy_has_a_feed(
+    The shipped example sets ``chain_source: none``; these tests read a
+    chain, so they load it with ``cboe``.
+    """
+
+    def test_chain_source_none_lists_only_the_rate(
         self,
         tmp_path: Path,
     ) -> None:
@@ -66,6 +70,25 @@ class TestFeedSeries:
 
         feed = _health(app)["market_data"]["feed"]
 
+        assert set(feed) == {"rate"}
+
+    def test_both_series_are_listed_when_the_policy_has_a_feed(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        provider = cached_provider(
+            rates={"DGS1": 4.6},
+            chains={"SPX": parse_cboe_chain(standard_chain())},
+        )
+        state = _fully_wired_state(tmp_path, chain_source="cboe")
+        app = create_app(
+            state=state,
+            market_data=provider,
+            ips_config=state.ips_config,
+        )
+
+        feed = _health(app)["market_data"]["feed"]
+
         assert set(feed) == {"chain", "rate"}
         assert feed["chain"]["quality"] == "STATIC"
         assert feed["rate"]["quality"] == "STATIC"
@@ -74,7 +97,7 @@ class TestFeedSeries:
         self,
         tmp_path: Path,
     ) -> None:
-        state = _fully_wired_state(tmp_path)
+        state = _fully_wired_state(tmp_path, chain_source="cboe")
         app = create_app(
             state=state,
             market_data=cached_provider(),
@@ -94,7 +117,7 @@ class TestFeedSeries:
         self,
         tmp_path: Path,
     ) -> None:
-        state = _fully_wired_state(tmp_path)
+        state = _fully_wired_state(tmp_path, chain_source="cboe")
         app = create_app(
             state=state,
             market_data=cached_provider(),
@@ -127,7 +150,7 @@ class TestFeedSeries:
     ) -> None:
         """Listed, not counted: no input adopts it (the example's adopt: [])."""
         _write_matching_manifest(tmp_path)
-        state = _fully_wired_state(tmp_path)
+        state = _fully_wired_state(tmp_path, chain_source="cboe")
         app = create_app(
             state=state,
             market_data=cached_provider(),
@@ -153,7 +176,7 @@ class TestFeedSeries:
             def get_option_chain(self, underlying: str):
                 raise RuntimeError("parser bug")
 
-        state = _fully_wired_state(tmp_path)
+        state = _fully_wired_state(tmp_path, chain_source="cboe")
         app = create_app(
             state=state,
             market_data=Faulty(spot_prices={"SPX": 5000.0}, vix=18.0),
@@ -203,7 +226,7 @@ class TestFeedSeries:
         ).get_option_chain("SPX")
         write_cache_manifest(cache, {})
         reader = CboeFredProvider(cache_dir=cache, read_only=True)
-        state = _fully_wired_state(tmp_path)
+        state = _fully_wired_state(tmp_path, chain_source="cboe")
         app = create_app(
             state=state,
             market_data=reader,

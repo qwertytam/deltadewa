@@ -294,6 +294,13 @@ pricing_feed:
   rate_series: DGS1              # EXAMPLE VALUE — the FRED constant-maturity
                                  # series standing for the book's one rate.
                                  # DGS1 (1-year) suits 6-18 month options.
+  chain_source: none             # Where the nightly refresh gets the option
+                                 # chain: none or cboe. none fetches no chain,
+                                 # so volatility cannot be adopted (spot then
+                                 # comes from the index close). cboe is Cboe's
+                                 # delayed-quote file, blocked to automated
+                                 # clients since November 2026
+                                 # (docs/market-data.md).
   max_quote_age_days: 5          # EXAMPLE VALUE — calendar days between the
                                  # program's date and the chain's trading
                                  # session beyond which a fetched quote is not

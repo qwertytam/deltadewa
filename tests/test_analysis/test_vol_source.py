@@ -37,7 +37,7 @@ from deltadewa.analysis.vol_source import (
     vol_basis_note,
 )
 from deltadewa.constants import ExerciseStyle, OptionType
-from deltadewa.ips_config import IpsPricingFeed
+from deltadewa.ips_config import ChainSource, IpsPricingFeed
 from deltadewa.marketdata.chain import parse_cboe_chain
 from deltadewa.portfolio.core import OptionPortfolio
 from tests.chain_builders import (
@@ -59,6 +59,7 @@ from tests.test_analysis.test_convexity_agreement import _SPOT, _ips, _portfolio
 _FEED = IpsPricingFeed(
     adopt=("volatility",),
     rate_series="DGS1",
+    chain_source=ChainSource.CBOE,
     max_quote_age_days=5,
     max_spread_pct=25.0,
     override_warn_vol_points=2.0,

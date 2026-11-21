@@ -130,16 +130,21 @@ def _fraction_pct(value: float | None) -> str:
 
 
 def _adopt_text(feed: IpsPricingFeed) -> str:
+    source = (
+        f"Option chain source: {feed.chain_source.value}."
+        if feed.fetches_chain
+        else "Option chain source: none (no chain is fetched)."
+    )
     if not feed.adopt:
         return (
             "Policy adopt: nothing. The feed is fetched and shown here, and "
-            "every number is priced on your typed value."
+            f"every number is priced on your typed value. {source}"
         )
     named = ", ".join(feed.adopt)
     return (
         f"Policy adopt: {named}. These are priced on the feed's value "
         "unless you override them or the feed has nothing usable; "
-        "dividend_yield is never adopted."
+        f"dividend_yield is never adopted. {source}"
     )
 
 

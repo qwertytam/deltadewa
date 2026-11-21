@@ -19,6 +19,7 @@ from deltadewa.ips_config import (
     DEFAULT_TERM_CONTANGO_TOLERANCE,
     DEFAULT_VOL_REGIME_HIGH,
     DEFAULT_VOL_REGIME_LOW,
+    ChainSource,
     IpsConfigError,
     load_ips_config,
     main,
@@ -1626,6 +1627,7 @@ class TestLiquidity:
 _VALID_FEED: dict[str, object] = {
     "adopt": [],
     "rate_series": "DGS1",
+    "chain_source": "none",
     "max_quote_age_days": 5,
     "max_spread_pct": 25.0,
     "override_warn_vol_points": 2.0,
@@ -1656,6 +1658,7 @@ class TestPricingFeed:
             assert feed is not None
             assert feed.adopt == ()
             assert feed.rate_series == "DGS1"
+            assert feed.chain_source is ChainSource.NONE
             assert feed.max_quote_age_days == 5
             assert feed.max_spread_pct == pytest.approx(25.0)
             assert feed.override_warn_vol_points == pytest.approx(2.0)
@@ -1664,6 +1667,7 @@ class TestPricingFeed:
         section = {
             "adopt": ["spot", "risk_free_rate", "volatility"],
             "rate_series": "DGS2",
+            "chain_source": "cboe",
             "max_quote_age_days": 3,
             "max_spread_pct": 15.5,
             "override_warn_vol_points": 1.25,
@@ -1675,6 +1679,7 @@ class TestPricingFeed:
         assert feed is not None
         assert feed.adopt == ("spot", "risk_free_rate", "volatility")
         assert feed.rate_series == "DGS2"
+        assert feed.chain_source is ChainSource.CBOE
         assert feed.max_quote_age_days == 3
         assert feed.max_spread_pct == pytest.approx(15.5)
         assert feed.override_warn_vol_points == pytest.approx(1.25)
@@ -1684,6 +1689,7 @@ class TestPricingFeed:
         [
             "adopt",
             "rate_series",
+            "chain_source",
             "max_quote_age_days",
             "max_spread_pct",
             "override_warn_vol_points",
@@ -1699,6 +1705,29 @@ class TestPricingFeed:
 
         with pytest.raises(IpsConfigError, match=missing):
             load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_volatility_cannot_be_adopted_without_a_chain(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """An IV is solved from the chain: with no chain there is none."""
+        section = {**_VALID_FEED, "adopt": ["volatility"]}
+        config = {**_VALID_CONFIG, "pricing_feed": section}
+
+        with pytest.raises(IpsConfigError, match=r"volatility.*chain_source"):
+            load_ips_config(_write_yaml(tmp_path, config))
+
+    def test_spot_and_the_rate_can_be_adopted_without_a_chain(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        section = {**_VALID_FEED, "adopt": ["spot", "risk_free_rate"]}
+        config = {**_VALID_CONFIG, "pricing_feed": section}
+
+        feed = load_ips_config(_write_yaml(tmp_path, config)).pricing_feed
+
+        assert feed is not None
+        assert feed.fetches_chain is False
 
     def test_dividend_yield_cannot_be_adopted(self, tmp_path: Path) -> None:
         """9b.0: parity cannot isolate the yield, so a feed may not price it."""
@@ -1716,6 +1745,9 @@ class TestPricingFeed:
             ({"adopt": "spot"}, "adopt"),
             ({"rate_series": "DGS2MO"}, "rate_series"),
             ({"rate_series": 1}, "rate_series"),
+            ({"chain_source": "marketdata"}, "chain_source"),
+            ({"chain_source": "Cboe"}, "chain_source"),
+            ({"chain_source": None}, "chain_source"),
             ({"max_quote_age_days": 0}, "max_quote_age_days"),
             ({"max_quote_age_days": 2.5}, "max_quote_age_days"),
             ({"max_quote_age_days": True}, "max_quote_age_days"),

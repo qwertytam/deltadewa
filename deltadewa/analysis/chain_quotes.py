@@ -195,6 +195,12 @@ def read_fetched_chain(
             "ips.yaml has no pricing_feed section, so no option chain is "
             "fetched and every pricing input is hand-entered.",
         )
+    if not ips_config.pricing_feed.fetches_chain:
+        return FetchedChain(
+            None,
+            "pricing_feed.chain_source is none, so no option chain is "
+            "fetched: every option's IV is hand-entered.",
+        )
     try:
         observation = provider.get_option_chain(ips_config.program.instrument)
     except MarketDataError:

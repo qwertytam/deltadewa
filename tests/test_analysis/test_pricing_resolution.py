@@ -27,7 +27,12 @@ from deltadewa.analysis.pricing_resolution import (
     resolve_pricing_inputs,
 )
 from deltadewa.constants import OptionType
-from deltadewa.ips_config import IpsConfig, IpsPricingFeed, load_ips_config
+from deltadewa.ips_config import (
+    ChainSource,
+    IpsConfig,
+    IpsPricingFeed,
+    load_ips_config,
+)
 from deltadewa.marketdata import (
     MarketDataUnavailableError,
     Observation,
@@ -76,6 +81,7 @@ def _policy(
     return IpsPricingFeed(
         adopt=adopt,
         rate_series="DGS1",
+        chain_source=ChainSource.CBOE,
         max_quote_age_days=max_quote_age_days,
         max_spread_pct=25.0,
         override_warn_vol_points=2.0,

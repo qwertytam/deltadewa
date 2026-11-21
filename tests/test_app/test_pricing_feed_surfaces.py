@@ -21,6 +21,7 @@ from deltadewa.analysis.market_environment import (
     assess_market_environment,
 )
 from deltadewa.analysis.pricing_resolution import (
+    InputOrigin,
     OverrideKind,
     newer_cached_session,
 )
@@ -32,6 +33,7 @@ from deltadewa.analysis.provenance import (
 )
 from deltadewa.app.chrome import build_chrome
 from deltadewa.app.factory import create_app
+from deltadewa.app.pages.design.planning import pricing_inputs
 from deltadewa.app.provenance_panel import build_provenance_panel
 from deltadewa.clock import program_trading_date
 from deltadewa.marketdata import Source, write_cache_manifest
@@ -741,3 +743,73 @@ class TestACandidateSurfaceFailureIsLoud:
         assert state.resolution.error is None
         assert state.resolution.legs
         assert all(leg.from_feed for leg in state.resolution.legs.values())
+
+
+class TestNoChainSource:
+    """``chain_source: none``: no chain is read, even one left in the cache.
+
+    Cboe's delayed-quote file has been blocked to automated clients since
+    November 2026, so a program can adopt the rate (and spot, from the
+    index close) with no chain at all. A chain an earlier source cached
+    must not price anything or appear anywhere.
+    """
+
+    @pytest.fixture
+    def state_and_provider(
+        self,
+        tmp_path: Path,
+    ) -> tuple[ProgramState, MarketDataProvider]:
+        ips = adopting_ips(
+            tmp_path,
+            ("spot", "risk_free_rate"),
+            chain_source="none",
+        )
+        write_typed_book(tmp_path, ips)
+        provider = make_provider()  # a chain IS cached; it must be ignored
+        return load_state(tmp_path, ips, provider), provider
+
+    def test_no_chain_prices_anything(
+        self,
+        state_and_provider: tuple[ProgramState, MarketDataProvider],
+    ) -> None:
+        state, _ = state_and_provider
+        resolution = state.resolution
+
+        assert resolution.error is None
+        assert resolution.risk_free_rate.origin is InputOrigin.FETCHED
+        assert all(
+            leg.origin is InputOrigin.ENTERED
+            for leg in resolution.legs.values()
+        )
+        assert state.portfolio.vol_source is None
+
+    def test_health_lists_no_chain(
+        self,
+        state_and_provider: tuple[ProgramState, MarketDataProvider],
+    ) -> None:
+        state, provider = state_and_provider
+
+        body = _health(state, provider)
+
+        feed = body["market_data"]["feed"]
+        assert "chain" not in feed
+        assert feed["rate"]["adopted"] is True
+        assert body["market_data"]["resolution"]["newer_cached_session"] is None
+
+    def test_the_pricing_inputs_panel_says_no_chain_is_fetched(
+        self,
+        state_and_provider: tuple[ProgramState, MarketDataProvider],
+    ) -> None:
+        state, provider = state_and_provider
+        assert state.ips_config is not None
+
+        text = _collect_text(
+            pricing_inputs._render_panel_logic(
+                state=state,
+                ips_config=state.ips_config,
+                market_data=provider,
+            ),
+        )
+
+        assert "chain_source is none" in text
+        assert "Option chain source: none" in text

@@ -303,7 +303,12 @@ unavailable for that long, a minute after the refresh.
 **Turning it on** (the first time, or after a deploy that changed policy):
 
 1. Edit `config/ips.yaml` on the droplet: `pricing_feed.adopt: [spot,
-   risk_free_rate, volatility]` (any subset; `dividend_yield` is refused).
+   risk_free_rate, volatility]` (any subset; `dividend_yield` is refused)
+   and `pricing_feed.chain_source`. **While Cboe blocks its delayed-quote
+   file (since November 2026, `docs/market-data.md`) use
+   `chain_source: none` with `adopt: [spot, risk_free_rate]` or
+   `[risk_free_rate]`**: `volatility` needs a chain, and `none` keeps the
+   refresh from calling the blocked host every night.
    The policy is baked into the image (§4), so rebuild, validate the baked
    file before cutover, then bring it up:
    `docker compose build app jobs`, then
@@ -1332,11 +1337,13 @@ docker compose run --rm --no-deps jobs python -m deltadewa.history_cli status
 ```
 
 **The pricing feed (9b).** With a `pricing_feed:` section in
-`config/ips.yaml` the refresh run has eight series instead of six: the
-Cboe delayed SPX option chain (`chain`, about 13 MB, cached raw in
-`./cache` with the previous night's copy beside it) and the FRED yield the
-policy names (`rate`). A chain download failing is a partial run (exit
-`1`): it does not stop the other series or the heartbeat. After a live
+`config/ips.yaml` the refresh run adds the FRED yield the policy names
+(`rate`), and with `chain_source: cboe` also the Cboe delayed SPX option
+chain (`chain`, about 13 MB, cached raw in `./cache` with the previous
+night's copy beside it): seven or eight series instead of six. With
+`chain_source: none` nothing calls the chain host. A chain download failing
+is a partial run (exit `1`): it does not stop the other series or the
+heartbeat. After a live
 chain fetch the job appends a small daily record to
 `exports/chain-history/`; a failure there is logged and never changes the
 exit code. With no `pricing_feed:` section neither series is fetched and
@@ -1361,7 +1368,8 @@ rm ~/block-cboe.yaml
 
 Every Cboe reading fails (the chain, spot, skew and the VIX term structure);
 FRED's (`vix`, `vix_history`, `rate`) do not. Expect `NOT refreshed` for the
-five Cboe series, `Fetched 3/8 series live`, exit `1` and a heartbeat ping.
+five Cboe series, `Fetched 3/8 series live` (with `chain_source: none`,
+four Cboe series and `Fetched 3/7`), exit `1` and a heartbeat ping.
 The cache files are left as they were. A series reads `STALE` in `/health`
 only once its cache is older than `market_environment.data_ttl_minutes`, so
 the run's own log and the unchanged cache files are the proof, not `/health`

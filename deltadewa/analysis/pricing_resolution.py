@@ -203,8 +203,10 @@ def read_feed(
     """Read, once, the cached series the policy's ``adopt`` list needs.
 
     Reads nothing without a ``pricing_feed`` section, and only the series an
-    adopted input uses. A series nothing has cached is ``None``, not an
-    error: the resolver reads that as "the feed has nothing" and falls back.
+    adopted input uses; never a chain when ``chain_source`` is ``none``
+    (a chain left in the cache by an earlier source is not read). A series
+    nothing has cached is ``None``, not an error: the resolver reads that
+    as "the feed has nothing" and falls back.
 
     Args:
         provider: The market-data provider (read-only in the app).
@@ -220,7 +222,7 @@ def read_feed(
     instrument = ips_config.program.instrument
     adopt = frozenset(policy.adopt)
     chain = None
-    if adopt & {_SPOT, _VOLATILITY}:
+    if adopt & {_SPOT, _VOLATILITY} and policy.fetches_chain:
         try:
             chain = provider.get_option_chain(instrument)
         except MarketDataError:
@@ -266,6 +268,8 @@ def newer_cached_session(
     if ips_config is None or policy is None or not resolution.adopting:
         return None
     if not frozenset(policy.adopt) & {_SPOT, _VOLATILITY}:
+        return None
+    if not policy.fetches_chain:
         return None
     try:
         cached = provider.get_option_chain(ips_config.program.instrument)

@@ -111,8 +111,21 @@ time it quotes a percentile", so every surface does: `/design` reads
 ## Fetched pricing inputs (9b)
 
 **What is fetched.** With a `pricing_feed:` section in `ips.yaml` the
-nightly refresh adds two series to its six. Without the section nothing
+nightly refresh adds the `rate` to its six series, and the `chain` too
+unless `pricing_feed.chain_source` is `none`. Without the section nothing
 below is fetched and every input stays hand-entered.
+
+**The chain source, and Cboe's block.** `chain_source: cboe` reads Cboe's
+delayed-quote file, the JSON behind its website's quote tables. It was
+never an official API, Cboe's pages prohibit automated extraction of the
+quote tables, and since about 2026-11-19 Cloudflare refuses it (HTTP 403,
+"you have been blocked") to automated clients. Until a licensed source is
+wired, run with `chain_source: none`: the rate is still fetched and may be
+adopted, an adopted spot comes from the index close, and every option's IV
+stays hand-entered (`volatility` cannot be adopted without a chain). With
+`none`, a chain an earlier source left in the cache is never read. The
+Cboe code stays, selectable, so a restored or licensed route needs no code
+change.
 
 | Series | Source | Cache key |
 | --- | --- | --- |
