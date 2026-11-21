@@ -99,6 +99,7 @@ from typing import TYPE_CHECKING, Any, Final
 from deltadewa.heartbeat import ping
 from deltadewa.ips_config import (
     DEFAULT_SKEW_LOOKBACK_DAYS,
+    ChainSource,
     IpsConfigError,
     load_ips_config,
 )
@@ -115,6 +116,7 @@ from deltadewa.marketdata.chain_history import (
     append_daily_record,
     read_held_contracts,
 )
+from deltadewa.marketdata.marketdata_chain import MARKETDATA_TOKEN_ENV
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -296,6 +298,7 @@ def verify_read_back(
     skew_lookback_days: int = DEFAULT_SKEW_LOOKBACK_DAYS,
     rate_series: str | None = None,
     fetch_chain: bool = False,
+    chain_source: ChainSource = ChainSource.CBOE,
 ) -> tuple[str, ...]:
     """Confirm each just-refreshed series reads back through the app's own path.
 
@@ -329,6 +332,8 @@ def verify_read_back(
             ``None``; see ``_series``.
         fetch_chain: Whether a chain source is configured; see
             ``_series``.
+        chain_source: Which source's cache entry the chain is read back
+            from (the writer's own).
         live: The series names and ``fetched_at`` timestamps
             ``refresh_all`` reported as freshly written.
 
@@ -340,7 +345,11 @@ def verify_read_back(
     if not live:
         return ()
 
-    reader = CboeFredProvider(cache_dir=cache_dir, read_only=True)
+    reader = CboeFredProvider(
+        cache_dir=cache_dir,
+        read_only=True,
+        chain_source=chain_source,
+    )
     fetch_by_name = dict(
         _series(
             reader,
@@ -439,6 +448,8 @@ def record_chain_history(
     cache_dir: Path,
     symbol: str,
     exports_dir: Path,
+    *,
+    chain_source: ChainSource = ChainSource.CBOE,
 ) -> int:
     """Append the day's chain record; never raises and never fails the run.
 
@@ -451,6 +462,7 @@ def record_chain_history(
         cache_dir: The resolved cache directory the writer just used.
         symbol: The underlying whose chain was fetched.
         exports_dir: The exports directory.
+        chain_source: Which source's cache entry holds the chain.
 
     Returns:
         The number of rows written (``0`` if already recorded, or on any
@@ -462,6 +474,7 @@ def record_chain_history(
             CboeFredProvider(
                 cache_dir=cache_dir,
                 read_only=True,
+                chain_source=chain_source,
             )
             .get_option_chain(symbol)
             .value
@@ -534,6 +547,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     feed = ips_config.pricing_feed if ips_config is not None else None
     rate_series = feed.rate_series if feed is not None else None
     fetch_chain = feed is not None and feed.fetches_chain
+    chain_source = feed.chain_source if feed is not None else ChainSource.NONE
 
     try:
         provider = CboeFredProvider(
@@ -546,6 +560,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             ttl=resolve_data_ttl(ips_config),
             read_only=False,
             force_fetch=True,
+            chain_source=chain_source,
+            # Read here, at the one place that fetches; never logged.
+            marketdata_token=os.environ.get(MARKETDATA_TOKEN_ENV) or None,
         )
 
         skew_lookback_days = (
@@ -569,6 +586,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             skew_lookback_days=skew_lookback_days,
             rate_series=rate_series,
             fetch_chain=fetch_chain,
+            chain_source=chain_source,
         )
         _logger.info(
             "Verified %d/%d fetched series read back through the app's "
@@ -595,7 +613,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _EXIT_FETCH_FAILED
 
     if "chain" in verified:
-        record_chain_history(cache_dir, symbol, args.exports_dir)
+        record_chain_history(
+            cache_dir,
+            symbol,
+            args.exports_dir,
+            chain_source=chain_source,
+        )
 
     try:
         write_cache_manifest(cache_dir, live)

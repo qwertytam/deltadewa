@@ -117,7 +117,7 @@ class TestThePanel:
         assert "Index level (spot)" in text
         assert "5,000.00" in text  # what prices the book
         assert f"{TYPED_SPOT:,.2f}" in text  # what you typed
-        assert "fetched — Cboe index level" in text
+        assert "fetched — chain index level" in text
         assert f"chain, {session:%Y-%m-%d} close" in text
         assert f"DGS1 {FRED_PCT:.2f}% as published" in text
         assert "% continuous" in text

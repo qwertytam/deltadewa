@@ -294,7 +294,7 @@ class ResolvedValue:
     Attributes:
         value: The number the book is priced on.
         origin: Where it came from.
-        detail: The label shown beside it ("Cboe 2026-11-16 close", "your
+        detail: The label shown beside it ("chain 2026-11-16 close", "your
             override", "feed unusable: no bid; your value").
         session: The trading session of a fed value, else ``None``.
         fetched: The feed's own figure, when there is one and it is not what
@@ -637,7 +637,7 @@ def _resolve_spot(  # pylint: disable=too-many-arguments
     return ResolvedValue(
         fetched,
         _feed_origin(source),
-        f"Cboe index level, {session} close"
+        f"chain index level, {session} close"
         if chain_usable
         else f"index close, {session}",
         session=session,

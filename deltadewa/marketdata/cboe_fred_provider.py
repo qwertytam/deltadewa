@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 import pandas as pd
 import requests
 
+from deltadewa.ips_config import ChainSource
 from deltadewa.marketdata._errors import MarketDataError
 from deltadewa.marketdata._observation import Observation, Source
 from deltadewa.marketdata._policy import default_cache_dir, resolve_data_ttl
@@ -22,9 +24,19 @@ from deltadewa.marketdata.chain import (
     parse_cboe_chain,
     payload_session_date,
 )
+from deltadewa.marketdata.marketdata_chain import (
+    fetch_marketdata_chain,
+    marketdata_session_date,
+    parse_marketdata_chain,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from datetime import date
+
     from deltadewa.ips_config import IpsConfig
+
+_logger = logging.getLogger(__name__)
 
 _CBOE_HISTORY_URL = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{symbol}_History.csv"
 _FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
@@ -75,21 +87,35 @@ def _parse_as_of(raw: str) -> datetime:
     return pd.Timestamp(raw).to_pydatetime().replace(tzinfo=UTC)
 
 
-def _is_new_session(existing: Any, new: Any) -> bool:  # ruff: ignore[any-type]  # raw cached payloads
-    """Whether *new* is a different trading session from *existing*.
+def _new_session_rule(
+    session_of: Callable[[Mapping[str, Any]], date | None],
+) -> Callable[[Any, Any], bool]:
+    """Build the ``.prev`` rotation rule for one chain source's payloads."""
 
-    The rotation rule for the option chain's ``.prev`` copy. An unreadable
-    existing payload has no session, so it is not worth keeping; a new
-    payload that cannot be dated (it was parsed before it got here, so this
-    is unreachable in the job) rotates, the safe side of "keep one more".
-    """
-    old_session = (
-        payload_session_date(existing) if isinstance(existing, dict) else None
-    )
-    if old_session is None:
-        return False
-    new_session = payload_session_date(new) if isinstance(new, dict) else None
-    return new_session is None or new_session != old_session
+    def is_new_session(existing: Any, new: Any) -> bool:  # ruff: ignore[any-type]  # raw cached payloads
+        """Whether *new* is a different trading session from *existing*.
+
+        An unreadable existing payload has no session, so it is not worth
+        keeping; a new payload that cannot be dated (it was parsed before it
+        got here, so this is unreachable in the job) rotates, the safe side
+        of "keep one more".
+        """
+        old_session = (
+            session_of(existing) if isinstance(existing, dict) else None
+        )
+        if old_session is None:
+            return False
+        new_session = session_of(new) if isinstance(new, dict) else None
+        return new_session is None or new_session != old_session
+
+    return is_new_session
+
+
+#: The rotation rule for Cboe's payloads (dated by their ``timestamp``).
+_is_new_session = _new_session_rule(payload_session_date)
+
+#: The rotation rule for MarketData payloads (dated by the session asked for).
+_is_new_md_session = _new_session_rule(marketdata_session_date)
 
 
 @dataclass(frozen=True)
@@ -281,6 +307,8 @@ class CboeFredProvider:
         *,
         read_only: bool = False,
         force_fetch: bool = False,
+        chain_source: ChainSource = ChainSource.CBOE,
+        marketdata_token: str | None = None,
     ) -> None:
         """Initialize the provider.
 
@@ -314,6 +342,13 @@ class CboeFredProvider:
                 process whose entire job is to re-observe. Mutually
                 exclusive with *read_only* — there is nothing to force
                 when live fetches are structurally disabled.
+            chain_source: Where :meth:`get_option_chain` fetches from and
+                which cache entry it reads (``pricing_feed.chain_source``;
+                :func:`read_only_provider_for` and the refresh job pass the
+                policy's value). ``none`` makes it raise.
+            marketdata_token: The MarketData.app API token, needed only to
+                *fetch* with ``chain_source: marketdata``; a read-only
+                provider never needs it.
 
         Raises:
             ValueError: If both *force_fetch* and *read_only* are
@@ -332,6 +367,8 @@ class CboeFredProvider:
         self._fred_api_key = fred_api_key
         self._read_only = read_only
         self._force_fetch = force_fetch
+        self._chain_source = chain_source
+        self._marketdata_token = marketdata_token
         self._chain_memo: dict[
             str,
             tuple[tuple[int, int] | None, datetime, ChainSnapshot],
@@ -457,18 +494,22 @@ class CboeFredProvider:
         return fetched.observe(float(rows[-1][1]), rows)
 
     def get_option_chain(self, underlying: str) -> Observation[ChainSnapshot]:
-        """Return Cboe's delayed-quote option chain for *underlying*.
+        """Return the option chain for *underlying*, from the chain source.
 
-        The raw payload is cached (``chain_<UND>.json``, with the previous
-        night's copy kept as ``chain_<UND>.prev.json``) and parsed on read.
-        A payload that fails to parse never replaces a good cache entry: the
-        parse runs inside the fetch, before the write. The parsed snapshot
-        is memoised on the cache file's identity, so a read-only app does
-        not decode 13 MB on every page render.
+        ``cboe``: Cboe's delayed-quote payload, cached as ``chain_<UND>``.
+        ``marketdata``: MarketData.app's chain for the last fully closed
+        session (``deltadewa.marketdata.marketdata_chain``), cached as
+        ``mdchain_<UND>``. Each source has its own entry, so a chain one
+        source left behind is never read as the other's. The raw payload is
+        cached, with the previous session's copy kept as ``.prev``, and
+        parsed on read. A payload that fails to parse never replaces a good
+        cache entry: the parse runs inside the fetch, before the write. The
+        parsed snapshot is memoised on the cache file's identity, so a
+        read-only app does not decode megabytes on every page render.
 
         Raises:
-            MarketDataError: If *underlying* is not ``SPX``, or no chain can
-                be fetched or read from cache.
+            MarketDataError: If *underlying* is not ``SPX``, the chain source
+                is ``none``, or no chain can be fetched or read from cache.
 
         """
         if underlying != _CHAIN_UNDERLYING:
@@ -476,26 +517,51 @@ class CboeFredProvider:
                 f"option chains are supported for {_CHAIN_UNDERLYING} only, "
                 f"not {underlying!r}",
             )
-        key = f"chain_{underlying}"
+        if self._chain_source is ChainSource.NONE:
+            raise MarketDataError(
+                "no option chain source is configured "
+                "(pricing_feed.chain_source: none)",
+            )
+        if self._chain_source is ChainSource.MARKETDATA:
+            key = f"mdchain_{underlying}"
+            parse = parse_marketdata_chain
+            rotate = _is_new_md_session
+
+            def download() -> dict[str, Any]:
+                return fetch_marketdata_chain(
+                    self._session,
+                    token=self._marketdata_token,
+                    underlying=underlying,
+                    now=datetime.now(tz=UTC),
+                )
+
+        else:
+            key = f"chain_{underlying}"
+            parse = parse_cboe_chain
+            rotate = _is_new_session
+
+            def download() -> dict[str, Any]:
+                return self._download_chain(underlying)
+
         memoised = self._memoised_chain(key)
         if memoised is not None:
             return memoised
         parsed: dict[str, ChainSnapshot] = {}
 
         def fetch() -> dict[str, Any]:
-            payload = self._download_chain(underlying)
-            parsed["snapshot"] = parse_cboe_chain(payload)
+            payload = download()
+            parsed["snapshot"] = parse(payload)
             return payload
 
         resolved = self._resolve(
             key,
             fetch,
             decode=lambda raw: raw,
-            keep_previous=_is_new_session,
+            keep_previous=rotate,
         )
         snapshot = parsed.get("snapshot")
         if snapshot is None:
-            snapshot = parse_cboe_chain(resolved.value)
+            snapshot = parse(resolved.value)
         self._chain_memo[key] = (
             self._cache.signature(key),
             resolved.fetched_at,
@@ -662,15 +728,25 @@ class CboeFredProvider:
         try:
             value = fetch()
         except (requests.RequestException, MarketDataError) as exc:
+            # The cause is kept: "could not fetch" alone left an operator
+            # reading the refresh log with no way to tell a vendor block
+            # from a missing token (9b). No error raised here carries a
+            # credential: the one token is only ever sent in a header.
             stale = self._cache.get_stale(cache_key)
             if stale is not None:
+                _logger.warning(
+                    "%s: live fetch failed (%s); keeping the last cached value",
+                    cache_key,
+                    exc,
+                )
                 return _Resolved(
                     value=decode(stale.value),
                     source=Source.STALE,
                     fetched_at=stale.fetched_at,
                 )
             raise MarketDataError(
-                f"Could not fetch '{cache_key}' and no cached value exists",
+                f"Could not fetch '{cache_key}' and no cached value "
+                f"exists: {exc}",
             ) from exc
 
         fetched_at = self._cache.set(
@@ -691,11 +767,16 @@ def read_only_provider_for(ips_config: IpsConfig | None) -> CboeFredProvider:
     The app, the weekly digest and the history CLI all read what the nightly
     refresh cached and must never fetch: same cache directory
     (``DELTADEWA_CACHE_DIR``), same freshness window (the IPS's
-    ``data_ttl_minutes``, or the default without one). One construction, so
-    the three cannot disagree about either.
+    ``data_ttl_minutes``, or the default without one), same chain source
+    (``pricing_feed.chain_source``; ``none`` without the section). One
+    construction, so the three cannot disagree about any of them.
     """
+    feed = ips_config.pricing_feed if ips_config is not None else None
     return CboeFredProvider(
         cache_dir=default_cache_dir(),
         ttl=resolve_data_ttl(ips_config),
         read_only=True,
+        chain_source=(
+            feed.chain_source if feed is not None else ChainSource.NONE
+        ),
     )

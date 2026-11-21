@@ -73,9 +73,9 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD in .env — see .env.example}
       REPORT_EMAIL_TO: ${REPORT_EMAIL_TO:?Set REPORT_EMAIL_TO in .env — see .env.example}
       REPORT_EMAIL_FROM: ${REPORT_EMAIL_FROM:?Set REPORT_EMAIL_FROM in .env — see .env.example}
-    # Carries the rest through as-is (FRED_API_KEY, the two heartbeat
-    # URLs) — secrets live only in this gitignored file, never in the
-    # image or in compose.yaml itself.
+    # Carries the rest through as-is (FRED_API_KEY, MARKETDATA_TOKEN, the
+    # two heartbeat URLs) — secrets live only in this gitignored file,
+    # never in the image or in compose.yaml itself.
     env_file: .env
     volumes:
       - ./exports:/app/exports

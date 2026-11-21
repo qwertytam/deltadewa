@@ -45,7 +45,11 @@ __all__ = [
     "ChainQuote",
     "ChainSnapshot",
     "MatchFlag",
+    "OccTerms",
+    "finite_number",
+    "is_trading_day",
     "parse_cboe_chain",
+    "parse_occ_symbol",
     "payload_session_date",
     "quote_session_date",
     "session_close",
@@ -269,7 +273,7 @@ class ChainSnapshot:
         )
 
 
-def _is_trading_day(day: date) -> bool:
+def is_trading_day(day: date) -> bool:
     """Whether the NYSE is open on *day*."""
     return bool(
         _NYSE.isBusinessDay(QtLib.Date(day.day, day.month, day.year)),
@@ -304,13 +308,17 @@ def quote_session_date(quoted_at: datetime) -> date:
     day = local.date()
     if local.time() < _SESSION_OPEN:
         day -= timedelta(days=1)
-    while not _is_trading_day(day):
+    while not is_trading_day(day):
         day -= timedelta(days=1)
     return day
 
 
-def _number(raw: Any, field: str, symbol: str) -> float:  # ruff: ignore[any-type]  # JSON scalar
-    """Read a numeric contract field, treating null as zero."""
+def finite_number(raw: Any, field: str, symbol: str) -> float:  # ruff: ignore[any-type]  # JSON scalar
+    """Read a numeric contract field, treating null as zero.
+
+    Shared by every vendor's parser, so a non-finite or non-numeric field
+    is a ``MarketDataError`` whichever chain it came from.
+    """
     if raw is None:
         return 0.0
     try:
@@ -328,9 +336,27 @@ def _number(raw: Any, field: str, symbol: str) -> float:  # ruff: ignore[any-typ
     return value
 
 
-def _parse_quote(raw: Mapping[str, Any]) -> ChainQuote | None:
-    """Parse one contract, or return ``None`` for a dropped root."""
-    symbol = str(raw["option"])
+@dataclass(frozen=True, slots=True)
+class OccTerms:
+    """A contract's terms, read from its OCC symbol (never computed)."""
+
+    root: str
+    expiry: date
+    option_type: OptionType
+    strike: float
+
+
+def parse_occ_symbol(symbol: str) -> OccTerms | None:
+    """Read root, expiry, right and strike from an OCC symbol.
+
+    Returns:
+        The terms, or ``None`` for a root that is not kept (``SPXO``).
+
+    Raises:
+        MarketDataError: If the symbol is not in OCC form or its date is
+            invalid.
+
+    """
     found = _OCC.match(symbol)
     if found is None:
         raise MarketDataError(
@@ -349,22 +375,42 @@ def _parse_quote(raw: Mapping[str, Any]) -> ChainQuote | None:
         raise MarketDataError(
             f"chain contract symbol {symbol!r} has an invalid date",
         ) from exc
-    iv = _number(raw.get("iv"), "iv", symbol)
-    oi = raw.get("open_interest")
-    volume = raw.get("volume")
-    return ChainQuote(
-        symbol=symbol,
+    return OccTerms(
         root=root,
         expiry=expiry,
         option_type=(
             OptionType.CALL if found["right"] == "C" else OptionType.PUT
         ),
         strike=int(found["strike"]) / _STRIKE_SCALE,
-        bid=_number(raw.get("bid"), "bid", symbol),
-        ask=_number(raw.get("ask"), "ask", symbol),
+    )
+
+
+def _parse_quote(raw: Mapping[str, Any]) -> ChainQuote | None:
+    """Parse one contract, or return ``None`` for a dropped root."""
+    symbol = str(raw["option"])
+    terms = parse_occ_symbol(symbol)
+    if terms is None:
+        return None
+    iv = finite_number(raw.get("iv"), "iv", symbol)
+    oi = raw.get("open_interest")
+    volume = raw.get("volume")
+    return ChainQuote(
+        symbol=symbol,
+        root=terms.root,
+        expiry=terms.expiry,
+        option_type=terms.option_type,
+        strike=terms.strike,
+        bid=finite_number(raw.get("bid"), "bid", symbol),
+        ask=finite_number(raw.get("ask"), "ask", symbol),
         vendor_iv=iv if iv > 0.0 else None,
-        open_interest=None if oi is None else int(_number(oi, "oi", symbol)),
-        volume=None if volume is None else int(_number(volume, "vol", symbol)),
+        open_interest=(
+            None if oi is None else int(finite_number(oi, "oi", symbol))
+        ),
+        volume=(
+            None
+            if volume is None
+            else int(finite_number(volume, "vol", symbol))
+        ),
     )
 
 

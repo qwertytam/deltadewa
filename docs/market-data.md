@@ -115,21 +115,40 @@ nightly refresh adds the `rate` to its six series, and the `chain` too
 unless `pricing_feed.chain_source` is `none`. Without the section nothing
 below is fetched and every input stays hand-entered.
 
-**The chain source, and Cboe's block.** `chain_source: cboe` reads Cboe's
-delayed-quote file, the JSON behind its website's quote tables. It was
-never an official API, Cboe's pages prohibit automated extraction of the
-quote tables, and since about 2026-11-19 Cloudflare refuses it (HTTP 403,
-"you have been blocked") to automated clients. Until a licensed source is
-wired, run with `chain_source: none`: the rate is still fetched and may be
-adopted, an adopted spot comes from the index close, and every option's IV
-stays hand-entered (`volatility` cannot be adopted without a chain). With
-`none`, a chain an earlier source left in the cache is never read. The
-Cboe code stays, selectable, so a restored or licensed route needs no code
-change.
+**The chain source.** `pricing_feed.chain_source` names it, and each
+source has its own cache entry, so a chain one source left behind is never
+read as another's.
+
+- **`marketdata`: MarketData.app** (`deltadewa/marketdata/marketdata_chain.py`),
+  a paid API licensed for internal use (no redistribution; this program's
+  private app and encrypted backup are internal). One request a run, for
+  the whole chain (both roots, every expiry) **of the last fully closed
+  session**: `?date=<session>&expiration=all`, about 25 credits (the vendor's
+  daily credit allowance depends on the plan; see its pricing page). A session is served from 09:30 New York on the
+  next trading day, so the refresh runs in the morning (RUNBOOK §9) and the
+  book is priced, all day, on the previous session's close; over a weekend,
+  on Thursday's until Monday 09:30. The quotes are the session's close and
+  `underlyingPrice` is the index's official close (checked against Cboe's
+  published close in the spike). A dated response carries no vendor IV;
+  every IV here is solved by this program's engine anyway. If the vendor
+  says a session is not yet released and names the latest it serves, that
+  one is fetched instead, once. The token is `MARKETDATA_TOKEN` in the
+  jobs container's `.env`, sent only in a header, never logged; the account
+  allows one IP address at a time. A missing or rejected token fails the
+  `chain` series alone, with the cause in the refresh log.
+- **`none`**: no chain is fetched or read. The rate can still be adopted,
+  an adopted spot comes from the index close, and `volatility` cannot be
+  adopted (a validation error).
+- **`cboe`**: Cboe's delayed-quote file, the JSON behind its website's
+  quote tables. It was never an official API, Cboe's pages prohibit
+  automated extraction of the quote tables, and since about 2026-11-19
+  Cloudflare refuses it (HTTP 403, "you have been blocked") to automated
+  clients. The code stays, selectable, so a restored route needs no code
+  change.
 
 | Series | Source | Cache key |
 | --- | --- | --- |
-| `chain` | Cboe delayed-quote SPX option chain (about 13 MB), cached **raw** | `chain_SPX` (last night's copy kept as `chain_SPX.prev`) |
+| `chain` | the SPX option chain from `pricing_feed.chain_source`, cached **raw**: MarketData.app's chain for the last fully closed session (a few MB), or Cboe's delayed-quote file (about 13 MB) | `mdchain_SPX` or `chain_SPX` (the previous session's copy kept as `.prev`) |
 | `rate` | the FRED constant-maturity series the policy names (`pricing_feed.rate_series`) | `rate_<series>` |
 
 Both live in the **cache folder**, `./cache` on the host (`/app/cache` in

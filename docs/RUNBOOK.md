@@ -304,11 +304,11 @@ unavailable for that long, a minute after the refresh.
 
 1. Edit `config/ips.yaml` on the droplet: `pricing_feed.adopt: [spot,
    risk_free_rate, volatility]` (any subset; `dividend_yield` is refused)
-   and `pricing_feed.chain_source`. **While Cboe blocks its delayed-quote
-   file (since November 2026, `docs/market-data.md`) use
-   `chain_source: none` with `adopt: [spot, risk_free_rate]` or
-   `[risk_free_rate]`**: `volatility` needs a chain, and `none` keeps the
-   refresh from calling the blocked host every night.
+   and `pricing_feed.chain_source`: `marketdata` (MarketData.app, the
+   licensed source; needs `MARKETDATA_TOKEN` in `.env`, §10), `none` (no
+   chain: `volatility` cannot be adopted, spot comes from the index close)
+   or `cboe` (Cboe's delayed-quote file, **blocked to automated clients
+   since November 2026**, `docs/market-data.md`).
    The policy is baked into the image (§4), so rebuild, validate the baked
    file before cutover, then bring it up:
    `docker compose build app jobs`, then
@@ -327,7 +327,24 @@ unavailable for that long, a minute after the refresh.
    `/design`'s **Pricing inputs** panel shows, per input, what prices the
    book, where it came from, what you typed and what the feed says now.
 4. Add `; docker compose restart app` after the refresh line in your
-   crontab (§9) if you have not already.
+   crontab (§9) if you have not already. **With `chain_source:
+   marketdata`, move that line to the morning** (§9): MarketData serves a
+   session only from 09:30 New York the next trading day, so a run then
+   prices the day on the previous close, and a 21:30 run would price it on
+   the close before that.
+
+**MarketData.app, once** (with `chain_source: marketdata`): put the API
+token in the host's `.env` as `MARKETDATA_TOKEN=...` (§10; the `jobs`
+container reads it, the app never needs it), then run the refresh by hand
+(§11) and look for `chain: refreshed live` and `mdchain_SPX` in `./cache`.
+The account allows **one IP address at a time**: a request from another
+address blocks the token for five minutes, so use it from the droplet only.
+A missing or rejected token is a failed `chain` series (exit `1`, the
+heartbeat still pings) whose log line names the cause; the book then
+prices on the last good chain, and then on your values (the table below).
+The chain is the **last fully closed session**: on a trading day after
+09:30 New York that is yesterday's close; over a weekend it is Thursday's
+until Monday 09:30. The header says which close the book is priced on.
 
 **What each input is priced on, and what you are told when the feed fails.**
 One effective value per input, each labelled with its origin
@@ -1111,6 +1128,10 @@ crontab -e
 # `;` not `&&`: restart even when the refresh failed, so the app's date
 # still rolls forward and it still prices on the last good data.
 30 2 * * * cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh >> /home/deploy/deltadewa/logs/refresh.log 2>&1 ; docker compose restart app >> /home/deploy/deltadewa/logs/refresh.log 2>&1
+# With pricing_feed.chain_source: marketdata, run it at 15:00 UTC instead
+# (10:00 New York in winter, 11:00 in summer: always after the 09:30
+# release of the previous session's chain, §4.1). One line, not both.
+# 0 15 * * * cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.marketdata.refresh >> /home/deploy/deltadewa/logs/refresh.log 2>&1 ; docker compose restart app >> /home/deploy/deltadewa/logs/refresh.log 2>&1
 
 # Weekly digest, with delivery — Sundays 03:00 UTC, after the refresh above.
 0 3 * * 0 cd /home/deploy/deltadewa && docker compose run --rm --no-deps jobs python -m deltadewa.reporting.weekly_report --send-email >> /home/deploy/deltadewa/logs/weekly_report.log 2>&1
@@ -1151,7 +1172,9 @@ needed here.
   needs: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`,
   `REPORT_EMAIL_TO`, `REPORT_EMAIL_FROM`, `REPORT_EMAIL_FROM_NAME`
   (optional, #319 — a friendlier digest From display name; see below),
-  `FRED_API_KEY` (reserved, safe to leave blank),
+  `FRED_API_KEY` (reserved, safe to leave blank), `MARKETDATA_TOKEN` (the
+  MarketData.app API token, only with `pricing_feed.chain_source:
+  marketdata`, §4.1; read by the refresh job alone, never logged),
   `REFRESH_HEARTBEAT_URL`, `DIGEST_HEARTBEAT_URL`. Read into the `jobs`
   container via `env_file: .env`; the six required-for-email vars (not
   `REPORT_EMAIL_FROM_NAME`, which is cosmetic-only) are also declared
@@ -1338,10 +1361,12 @@ docker compose run --rm --no-deps jobs python -m deltadewa.history_cli status
 
 **The pricing feed (9b).** With a `pricing_feed:` section in
 `config/ips.yaml` the refresh run adds the FRED yield the policy names
-(`rate`), and with `chain_source: cboe` also the Cboe delayed SPX option
-chain (`chain`, about 13 MB, cached raw in `./cache` with the previous
-night's copy beside it): seven or eight series instead of six. With
-`chain_source: none` nothing calls the chain host. A chain download failing
+(`rate`), and with a chain source also the SPX option chain (`chain`):
+seven or eight series instead of six. With `marketdata` the chain is the
+last fully closed session, cached raw as `mdchain_SPX` (a few MB); with
+`cboe`, Cboe's delayed-quote file, cached as `chain_SPX` (about 13 MB);
+either keeps the previous session's copy beside it as `.prev`. With
+`chain_source: none` nothing calls a chain host. A chain download failing
 is a partial run (exit `1`): it does not stop the other series or the
 heartbeat. After a live
 chain fetch the job appends a small daily record to
